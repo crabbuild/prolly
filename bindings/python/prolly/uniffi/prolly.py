@@ -512,6 +512,10 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_default_content_graph_limits() != 63706:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits() != 15978:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_default_hnsw_config() != 11115:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_default_large_value_config() != 35784:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_default_parallel_config() != 39626:
@@ -738,6 +742,18 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_config() != 7633:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical() != 22092:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest() != 17361:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search() != 59719:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search() != 59229:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor() != 54794:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new() != 46129:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337:
@@ -910,6 +926,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll() != 36190:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw() != 15873:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache() != 42240:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_config() != 38616:
@@ -923,6 +941,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_fast_handle() != 63102:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_get() != 51400:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw() != 8586:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate() != 39394:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1785,6 +1805,16 @@ _UniffiLib.ffi_prolly_bindings_rust_future_free_void.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.ffi_prolly_bindings_rust_future_free_void.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_bindinghnswindex.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_bindinghnswindex.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_bindinghnswindex.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_bindinghnswindex.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_bindingindexregistry.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -2311,6 +2341,14 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_default_content_graph_limits.argtypes 
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_default_content_graph_limits.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_build_limits.argtypes = (
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_build_limits.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_config.argtypes = (
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_config.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_func_default_large_value_config.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -2915,6 +2953,41 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_config.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_config.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical.restype = ctypes.c_int8
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_constructor_bindingindexregistry_new.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -3435,6 +3508,13 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll.argtypes
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3472,6 +3552,12 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_get.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_get.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -5560,6 +5646,12 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_default_config.restype = ctypes.
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_content_graph_limits.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_content_graph_limits.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_hnsw_config.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_default_hnsw_config.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_large_value_config.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_default_large_value_config.restype = ctypes.c_uint16
@@ -5899,6 +5991,24 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_require_schema.r
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_config.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_config.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_search.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new.restype = ctypes.c_uint16
@@ -6157,6 +6267,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_last_se
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingmapsubscription_poll.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache.restype = ctypes.c_uint16
@@ -6178,6 +6291,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_fast_handl
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_get.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate.restype = ctypes.c_uint16
@@ -9880,6 +9996,3076 @@ class _UniffiFfiConverterTypeGcSweepRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.deleted_nodes, buf)
         _UniffiFfiConverterUInt64.write(value.deleted_bytes, buf)
 
+@dataclass
+class HnswBuildLimitsRecord:
+    def __init__(self, *, max_records:typing.Optional[int], max_owned_bytes:typing.Optional[int], max_distance_evaluations:typing.Optional[int], worker_threads:int, max_encoded_graph_bytes:typing.Optional[int]):
+        self.max_records = max_records
+        self.max_owned_bytes = max_owned_bytes
+        self.max_distance_evaluations = max_distance_evaluations
+        self.worker_threads = worker_threads
+        self.max_encoded_graph_bytes = max_encoded_graph_bytes
+
+
+
+
+    def __str__(self):
+        return "HnswBuildLimitsRecord(max_records={}, max_owned_bytes={}, max_distance_evaluations={}, worker_threads={}, max_encoded_graph_bytes={})".format(self.max_records, self.max_owned_bytes, self.max_distance_evaluations, self.worker_threads, self.max_encoded_graph_bytes)
+    def __eq__(self, other):
+        if self.max_records != other.max_records:
+            return False
+        if self.max_owned_bytes != other.max_owned_bytes:
+            return False
+        if self.max_distance_evaluations != other.max_distance_evaluations:
+            return False
+        if self.worker_threads != other.worker_threads:
+            return False
+        if self.max_encoded_graph_bytes != other.max_encoded_graph_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeHnswBuildLimitsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return HnswBuildLimitsRecord(
+            max_records=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_owned_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_distance_evaluations=_UniffiFfiConverterOptionalUInt64.read(buf),
+            worker_threads=_UniffiFfiConverterUInt64.read(buf),
+            max_encoded_graph_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_records)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_owned_bytes)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_distance_evaluations)
+        _UniffiFfiConverterUInt64.check_lower(value.worker_threads)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_encoded_graph_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalUInt64.write(value.max_records, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_owned_bytes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_distance_evaluations, buf)
+        _UniffiFfiConverterUInt64.write(value.worker_threads, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_encoded_graph_bytes, buf)
+
+class _UniffiFfiConverterUInt16(_UniffiConverterPrimitiveInt):
+    CLASS_NAME = "u16"
+    VALUE_MIN = 0
+    VALUE_MAX = 2**16
+
+    @staticmethod
+    def read(buf):
+        return buf.read_u16()
+
+    @staticmethod
+    def write(value, buf):
+        buf.write_u16(value)
+
+
+
+
+
+
+class HnswRoutingVectorEncodingRecord(enum.Enum):
+
+    FULL_F32 = 0
+
+
+
+class _UniffiFfiConverterTypeHnswRoutingVectorEncodingRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return HnswRoutingVectorEncodingRecord.FULL_F32
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == HnswRoutingVectorEncodingRecord.FULL_F32:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == HnswRoutingVectorEncodingRecord.FULL_F32:
+            buf.write_i32(1)
+
+
+
+@dataclass
+class HnswConfigRecord:
+    def __init__(self, *, max_connections:int, ef_construction:int, ef_search:int, level_bits:int, overfetch_multiplier:int, seed:int, routing_vector_encoding:HnswRoutingVectorEncodingRecord):
+        self.max_connections = max_connections
+        self.ef_construction = ef_construction
+        self.ef_search = ef_search
+        self.level_bits = level_bits
+        self.overfetch_multiplier = overfetch_multiplier
+        self.seed = seed
+        self.routing_vector_encoding = routing_vector_encoding
+
+
+
+
+    def __str__(self):
+        return "HnswConfigRecord(max_connections={}, ef_construction={}, ef_search={}, level_bits={}, overfetch_multiplier={}, seed={}, routing_vector_encoding={})".format(self.max_connections, self.ef_construction, self.ef_search, self.level_bits, self.overfetch_multiplier, self.seed, self.routing_vector_encoding)
+    def __eq__(self, other):
+        if self.max_connections != other.max_connections:
+            return False
+        if self.ef_construction != other.ef_construction:
+            return False
+        if self.ef_search != other.ef_search:
+            return False
+        if self.level_bits != other.level_bits:
+            return False
+        if self.overfetch_multiplier != other.overfetch_multiplier:
+            return False
+        if self.seed != other.seed:
+            return False
+        if self.routing_vector_encoding != other.routing_vector_encoding:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeHnswConfigRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return HnswConfigRecord(
+            max_connections=_UniffiFfiConverterUInt16.read(buf),
+            ef_construction=_UniffiFfiConverterUInt32.read(buf),
+            ef_search=_UniffiFfiConverterUInt32.read(buf),
+            level_bits=_UniffiFfiConverterUInt8.read(buf),
+            overfetch_multiplier=_UniffiFfiConverterUInt32.read(buf),
+            seed=_UniffiFfiConverterUInt64.read(buf),
+            routing_vector_encoding=_UniffiFfiConverterTypeHnswRoutingVectorEncodingRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt16.check_lower(value.max_connections)
+        _UniffiFfiConverterUInt32.check_lower(value.ef_construction)
+        _UniffiFfiConverterUInt32.check_lower(value.ef_search)
+        _UniffiFfiConverterUInt8.check_lower(value.level_bits)
+        _UniffiFfiConverterUInt32.check_lower(value.overfetch_multiplier)
+        _UniffiFfiConverterUInt64.check_lower(value.seed)
+        _UniffiFfiConverterTypeHnswRoutingVectorEncodingRecord.check_lower(value.routing_vector_encoding)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt16.write(value.max_connections, buf)
+        _UniffiFfiConverterUInt32.write(value.ef_construction, buf)
+        _UniffiFfiConverterUInt32.write(value.ef_search, buf)
+        _UniffiFfiConverterUInt8.write(value.level_bits, buf)
+        _UniffiFfiConverterUInt32.write(value.overfetch_multiplier, buf)
+        _UniffiFfiConverterUInt64.write(value.seed, buf)
+        _UniffiFfiConverterTypeHnswRoutingVectorEncodingRecord.write(value.routing_vector_encoding, buf)
+
+
+
+# ProllyBindingError
+# We want to define each variant as a nested class that's also a subclass,
+# which is tricky in Python.  To accomplish this we're going to create each
+# class separately, then manually add the child classes to the base class's
+# __dict__.  All of this happens in dummy class to avoid polluting the module
+# namespace.
+class ProllyBindingError(Exception):
+    pass
+
+_UniffiTempProllyBindingError = ProllyBindingError
+
+class ProllyBindingError:  # type: ignore
+
+    class InvalidArgument(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.InvalidArgument({})".format(str(self))
+    _UniffiTempProllyBindingError.InvalidArgument = InvalidArgument # type: ignore
+    class InvalidCid(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.InvalidCid({})".format(str(self))
+    _UniffiTempProllyBindingError.InvalidCid = InvalidCid # type: ignore
+    class InvalidNode(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.InvalidNode({})".format(str(self))
+    _UniffiTempProllyBindingError.InvalidNode = InvalidNode # type: ignore
+    class NotFound(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.NotFound({})".format(str(self))
+    _UniffiTempProllyBindingError.NotFound = NotFound # type: ignore
+    class Conflict(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.Conflict({})".format(str(self))
+    _UniffiTempProllyBindingError.Conflict = Conflict # type: ignore
+    class Store(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.Store({})".format(str(self))
+    _UniffiTempProllyBindingError.Store = Store # type: ignore
+    class Serialization(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.Serialization({})".format(str(self))
+    _UniffiTempProllyBindingError.Serialization = Serialization # type: ignore
+    class Internal(_UniffiTempProllyBindingError):
+
+        def __init__(self, reason):
+            super().__init__(", ".join([
+                "reason={!r}".format(reason),
+            ]))
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.Internal({})".format(str(self))
+    _UniffiTempProllyBindingError.Internal = Internal # type: ignore
+
+ProllyBindingError = _UniffiTempProllyBindingError # type: ignore
+del _UniffiTempProllyBindingError
+
+
+class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return ProllyBindingError.InvalidArgument(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 2:
+            return ProllyBindingError.InvalidCid(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 3:
+            return ProllyBindingError.InvalidNode(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 4:
+            return ProllyBindingError.NotFound(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 5:
+            return ProllyBindingError.Conflict(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 6:
+            return ProllyBindingError.Store(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 7:
+            return ProllyBindingError.Serialization(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 8:
+            return ProllyBindingError.Internal(
+                _UniffiFfiConverterString.read(buf),
+            )
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if isinstance(value, ProllyBindingError.InvalidArgument):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.InvalidCid):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.InvalidNode):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.NotFound):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.Conflict):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.Store):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.Serialization):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.Internal):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+
+    @staticmethod
+    def write(value, buf):
+        if isinstance(value, ProllyBindingError.InvalidArgument):
+            buf.write_i32(1)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.InvalidCid):
+            buf.write_i32(2)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.InvalidNode):
+            buf.write_i32(3)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.NotFound):
+            buf.write_i32(4)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.Conflict):
+            buf.write_i32(5)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.Store):
+            buf.write_i32(6)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.Serialization):
+            buf.write_i32(7)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.Internal):
+            buf.write_i32(8)
+            _UniffiFfiConverterString.write(value.reason, buf)
+
+
+
+
+
+
+class DistanceMetricRecord(enum.Enum):
+
+    L2_SQUARED = 0
+
+    COSINE = 1
+
+    INNER_PRODUCT = 2
+
+
+
+class _UniffiFfiConverterTypeDistanceMetricRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return DistanceMetricRecord.L2_SQUARED
+        if variant == 2:
+            return DistanceMetricRecord.COSINE
+        if variant == 3:
+            return DistanceMetricRecord.INNER_PRODUCT
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == DistanceMetricRecord.L2_SQUARED:
+            return
+        if value == DistanceMetricRecord.COSINE:
+            return
+        if value == DistanceMetricRecord.INNER_PRODUCT:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == DistanceMetricRecord.L2_SQUARED:
+            buf.write_i32(1)
+        if value == DistanceMetricRecord.COSINE:
+            buf.write_i32(2)
+        if value == DistanceMetricRecord.INNER_PRODUCT:
+            buf.write_i32(3)
+
+
+
+class _UniffiFfiConverterOptionalUInt32(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterUInt32.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterUInt32.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterUInt32.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class ProximityConfigRecord:
+    def __init__(self, *, dimensions:int, metric:DistanceMetricRecord, log_chunk_size:int, level_hash_seed:int, min_page_bytes:int, target_page_bytes:int, max_page_bytes:int, overflow_hash_seed:int, inline_threshold_bytes:int, scalar_quantization_group_size:typing.Optional[int]):
+        self.dimensions = dimensions
+        self.metric = metric
+        self.log_chunk_size = log_chunk_size
+        self.level_hash_seed = level_hash_seed
+        self.min_page_bytes = min_page_bytes
+        self.target_page_bytes = target_page_bytes
+        self.max_page_bytes = max_page_bytes
+        self.overflow_hash_seed = overflow_hash_seed
+        self.inline_threshold_bytes = inline_threshold_bytes
+        self.scalar_quantization_group_size = scalar_quantization_group_size
+
+
+
+
+    def __str__(self):
+        return "ProximityConfigRecord(dimensions={}, metric={}, log_chunk_size={}, level_hash_seed={}, min_page_bytes={}, target_page_bytes={}, max_page_bytes={}, overflow_hash_seed={}, inline_threshold_bytes={}, scalar_quantization_group_size={})".format(self.dimensions, self.metric, self.log_chunk_size, self.level_hash_seed, self.min_page_bytes, self.target_page_bytes, self.max_page_bytes, self.overflow_hash_seed, self.inline_threshold_bytes, self.scalar_quantization_group_size)
+    def __eq__(self, other):
+        if self.dimensions != other.dimensions:
+            return False
+        if self.metric != other.metric:
+            return False
+        if self.log_chunk_size != other.log_chunk_size:
+            return False
+        if self.level_hash_seed != other.level_hash_seed:
+            return False
+        if self.min_page_bytes != other.min_page_bytes:
+            return False
+        if self.target_page_bytes != other.target_page_bytes:
+            return False
+        if self.max_page_bytes != other.max_page_bytes:
+            return False
+        if self.overflow_hash_seed != other.overflow_hash_seed:
+            return False
+        if self.inline_threshold_bytes != other.inline_threshold_bytes:
+            return False
+        if self.scalar_quantization_group_size != other.scalar_quantization_group_size:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityConfigRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityConfigRecord(
+            dimensions=_UniffiFfiConverterUInt32.read(buf),
+            metric=_UniffiFfiConverterTypeDistanceMetricRecord.read(buf),
+            log_chunk_size=_UniffiFfiConverterUInt8.read(buf),
+            level_hash_seed=_UniffiFfiConverterUInt64.read(buf),
+            min_page_bytes=_UniffiFfiConverterUInt32.read(buf),
+            target_page_bytes=_UniffiFfiConverterUInt32.read(buf),
+            max_page_bytes=_UniffiFfiConverterUInt32.read(buf),
+            overflow_hash_seed=_UniffiFfiConverterUInt64.read(buf),
+            inline_threshold_bytes=_UniffiFfiConverterUInt32.read(buf),
+            scalar_quantization_group_size=_UniffiFfiConverterOptionalUInt32.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.dimensions)
+        _UniffiFfiConverterTypeDistanceMetricRecord.check_lower(value.metric)
+        _UniffiFfiConverterUInt8.check_lower(value.log_chunk_size)
+        _UniffiFfiConverterUInt64.check_lower(value.level_hash_seed)
+        _UniffiFfiConverterUInt32.check_lower(value.min_page_bytes)
+        _UniffiFfiConverterUInt32.check_lower(value.target_page_bytes)
+        _UniffiFfiConverterUInt32.check_lower(value.max_page_bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.overflow_hash_seed)
+        _UniffiFfiConverterUInt32.check_lower(value.inline_threshold_bytes)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.scalar_quantization_group_size)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.dimensions, buf)
+        _UniffiFfiConverterTypeDistanceMetricRecord.write(value.metric, buf)
+        _UniffiFfiConverterUInt8.write(value.log_chunk_size, buf)
+        _UniffiFfiConverterUInt64.write(value.level_hash_seed, buf)
+        _UniffiFfiConverterUInt32.write(value.min_page_bytes, buf)
+        _UniffiFfiConverterUInt32.write(value.target_page_bytes, buf)
+        _UniffiFfiConverterUInt32.write(value.max_page_bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.overflow_hash_seed, buf)
+        _UniffiFfiConverterUInt32.write(value.inline_threshold_bytes, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.scalar_quantization_group_size, buf)
+
+class _UniffiFfiConverterOptionalTypeExactProximityRecordRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeExactProximityRecordRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeExactProximityRecordRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeExactProximityRecordRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+class _UniffiFfiConverterOptionalSequenceFloat32(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterSequenceFloat32.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterSequenceFloat32.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterSequenceFloat32.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class ProximityMutationRecord:
+    def __init__(self, *, key:bytes, vector:typing.Optional[typing.List[float]], value:typing.Optional[bytes]):
+        self.key = key
+        self.vector = vector
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "ProximityMutationRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.vector != other.vector:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMutationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMutationRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            vector=_UniffiFfiConverterOptionalSequenceFloat32.read(buf),
+            value=_UniffiFfiConverterOptionalBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterOptionalSequenceFloat32.check_lower(value.vector)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterOptionalSequenceFloat32.write(value.vector, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeProximityMutationRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeProximityMutationRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeProximityMutationRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeProximityMutationRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class ProximityMutationStatsRecord:
+    def __init__(self, *, directory_entries_scanned:int, directory_nodes_read:int, directory_nodes_rebuilt:int, directory_nodes_written:int, directory_nodes_reused:int, directory_levels_rebuilt:int, directory_right_edge_rebuilt:bool, nodes_read:int, nodes_written:int, nodes_reused:int, records_rebuilt:int, distance_evaluations:int, full_proximity_rebuild:bool):
+        self.directory_entries_scanned = directory_entries_scanned
+        self.directory_nodes_read = directory_nodes_read
+        self.directory_nodes_rebuilt = directory_nodes_rebuilt
+        self.directory_nodes_written = directory_nodes_written
+        self.directory_nodes_reused = directory_nodes_reused
+        self.directory_levels_rebuilt = directory_levels_rebuilt
+        self.directory_right_edge_rebuilt = directory_right_edge_rebuilt
+        self.nodes_read = nodes_read
+        self.nodes_written = nodes_written
+        self.nodes_reused = nodes_reused
+        self.records_rebuilt = records_rebuilt
+        self.distance_evaluations = distance_evaluations
+        self.full_proximity_rebuild = full_proximity_rebuild
+
+
+
+
+    def __str__(self):
+        return "ProximityMutationStatsRecord(directory_entries_scanned={}, directory_nodes_read={}, directory_nodes_rebuilt={}, directory_nodes_written={}, directory_nodes_reused={}, directory_levels_rebuilt={}, directory_right_edge_rebuilt={}, nodes_read={}, nodes_written={}, nodes_reused={}, records_rebuilt={}, distance_evaluations={}, full_proximity_rebuild={})".format(self.directory_entries_scanned, self.directory_nodes_read, self.directory_nodes_rebuilt, self.directory_nodes_written, self.directory_nodes_reused, self.directory_levels_rebuilt, self.directory_right_edge_rebuilt, self.nodes_read, self.nodes_written, self.nodes_reused, self.records_rebuilt, self.distance_evaluations, self.full_proximity_rebuild)
+    def __eq__(self, other):
+        if self.directory_entries_scanned != other.directory_entries_scanned:
+            return False
+        if self.directory_nodes_read != other.directory_nodes_read:
+            return False
+        if self.directory_nodes_rebuilt != other.directory_nodes_rebuilt:
+            return False
+        if self.directory_nodes_written != other.directory_nodes_written:
+            return False
+        if self.directory_nodes_reused != other.directory_nodes_reused:
+            return False
+        if self.directory_levels_rebuilt != other.directory_levels_rebuilt:
+            return False
+        if self.directory_right_edge_rebuilt != other.directory_right_edge_rebuilt:
+            return False
+        if self.nodes_read != other.nodes_read:
+            return False
+        if self.nodes_written != other.nodes_written:
+            return False
+        if self.nodes_reused != other.nodes_reused:
+            return False
+        if self.records_rebuilt != other.records_rebuilt:
+            return False
+        if self.distance_evaluations != other.distance_evaluations:
+            return False
+        if self.full_proximity_rebuild != other.full_proximity_rebuild:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMutationStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMutationStatsRecord(
+            directory_entries_scanned=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_rebuilt=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            directory_nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            directory_levels_rebuilt=_UniffiFfiConverterUInt64.read(buf),
+            directory_right_edge_rebuilt=_UniffiFfiConverterBoolean.read(buf),
+            nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            nodes_written=_UniffiFfiConverterUInt64.read(buf),
+            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            records_rebuilt=_UniffiFfiConverterUInt64.read(buf),
+            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            full_proximity_rebuild=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.directory_entries_scanned)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_rebuilt)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.directory_levels_rebuilt)
+        _UniffiFfiConverterBoolean.check_lower(value.directory_right_edge_rebuilt)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.records_rebuilt)
+        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
+        _UniffiFfiConverterBoolean.check_lower(value.full_proximity_rebuild)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.directory_entries_scanned, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_rebuilt, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.directory_levels_rebuilt, buf)
+        _UniffiFfiConverterBoolean.write(value.directory_right_edge_rebuilt, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.records_rebuilt, buf)
+        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
+        _UniffiFfiConverterBoolean.write(value.full_proximity_rebuild, buf)
+
+@dataclass
+class ProximityMutationResultRecord:
+    def __init__(self, *, map:BindingProximityMap, stats:ProximityMutationStatsRecord):
+        self.map = map
+        self.stats = stats
+
+
+
+
+    def __str__(self):
+        return "ProximityMutationResultRecord(map={}, stats={})".format(self.map, self.stats)
+    def __eq__(self, other):
+        if self.map != other.map:
+            return False
+        if self.stats != other.stats:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMutationResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMutationResultRecord(
+            map=_UniffiFfiConverterTypeBindingProximityMap.read(buf),
+            stats=_UniffiFfiConverterTypeProximityMutationStatsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(value.map)
+        _UniffiFfiConverterTypeProximityMutationStatsRecord.check_lower(value.stats)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeBindingProximityMap.write(value.map, buf)
+        _UniffiFfiConverterTypeProximityMutationStatsRecord.write(value.stats, buf)
+
+@dataclass
+class ProximityMembershipProofRecord:
+    def __init__(self, *, descriptor:bytes, descriptor_bytes:bytes, directory_proof:KeyProofRecord, record_bytes:typing.Optional[bytes]):
+        self.descriptor = descriptor
+        self.descriptor_bytes = descriptor_bytes
+        self.directory_proof = directory_proof
+        self.record_bytes = record_bytes
+
+
+
+
+    def __str__(self):
+        return "ProximityMembershipProofRecord(descriptor={}, descriptor_bytes={}, directory_proof={}, record_bytes={})".format(self.descriptor, self.descriptor_bytes, self.directory_proof, self.record_bytes)
+    def __eq__(self, other):
+        if self.descriptor != other.descriptor:
+            return False
+        if self.descriptor_bytes != other.descriptor_bytes:
+            return False
+        if self.directory_proof != other.directory_proof:
+            return False
+        if self.record_bytes != other.record_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityMembershipProofRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityMembershipProofRecord(
+            descriptor=_UniffiFfiConverterBytes.read(buf),
+            descriptor_bytes=_UniffiFfiConverterBytes.read(buf),
+            directory_proof=_UniffiFfiConverterTypeKeyProofRecord.read(buf),
+            record_bytes=_UniffiFfiConverterOptionalBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.descriptor)
+        _UniffiFfiConverterBytes.check_lower(value.descriptor_bytes)
+        _UniffiFfiConverterTypeKeyProofRecord.check_lower(value.directory_proof)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.record_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.descriptor, buf)
+        _UniffiFfiConverterBytes.write(value.descriptor_bytes, buf)
+        _UniffiFfiConverterTypeKeyProofRecord.write(value.directory_proof, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.record_bytes, buf)
+
+
+
+
+
+
+class SearchPolicyKind(enum.Enum):
+
+    EXACT = 0
+
+    FIXED_BUDGET = 1
+
+    ADAPTIVE = 2
+
+
+
+class _UniffiFfiConverterTypeSearchPolicyKind(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return SearchPolicyKind.EXACT
+        if variant == 2:
+            return SearchPolicyKind.FIXED_BUDGET
+        if variant == 3:
+            return SearchPolicyKind.ADAPTIVE
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == SearchPolicyKind.EXACT:
+            return
+        if value == SearchPolicyKind.FIXED_BUDGET:
+            return
+        if value == SearchPolicyKind.ADAPTIVE:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == SearchPolicyKind.EXACT:
+            buf.write_i32(1)
+        if value == SearchPolicyKind.FIXED_BUDGET:
+            buf.write_i32(2)
+        if value == SearchPolicyKind.ADAPTIVE:
+            buf.write_i32(3)
+
+
+
+
+
+
+
+
+class AdaptiveQualityRecord(enum.Enum):
+
+    FAST = 0
+
+    BALANCED = 1
+
+    HIGH_RECALL = 2
+
+
+
+class _UniffiFfiConverterTypeAdaptiveQualityRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return AdaptiveQualityRecord.FAST
+        if variant == 2:
+            return AdaptiveQualityRecord.BALANCED
+        if variant == 3:
+            return AdaptiveQualityRecord.HIGH_RECALL
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == AdaptiveQualityRecord.FAST:
+            return
+        if value == AdaptiveQualityRecord.BALANCED:
+            return
+        if value == AdaptiveQualityRecord.HIGH_RECALL:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == AdaptiveQualityRecord.FAST:
+            buf.write_i32(1)
+        if value == AdaptiveQualityRecord.BALANCED:
+            buf.write_i32(2)
+        if value == AdaptiveQualityRecord.HIGH_RECALL:
+            buf.write_i32(3)
+
+
+
+class _UniffiFfiConverterOptionalTypeAdaptiveQualityRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeAdaptiveQualityRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeAdaptiveQualityRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeAdaptiveQualityRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class SearchBudgetRecord:
+    def __init__(self, *, max_nodes:typing.Optional[int], max_committed_bytes:typing.Optional[int], max_distance_evaluations:typing.Optional[int], max_frontier_entries:typing.Optional[int]):
+        self.max_nodes = max_nodes
+        self.max_committed_bytes = max_committed_bytes
+        self.max_distance_evaluations = max_distance_evaluations
+        self.max_frontier_entries = max_frontier_entries
+
+
+
+
+    def __str__(self):
+        return "SearchBudgetRecord(max_nodes={}, max_committed_bytes={}, max_distance_evaluations={}, max_frontier_entries={})".format(self.max_nodes, self.max_committed_bytes, self.max_distance_evaluations, self.max_frontier_entries)
+    def __eq__(self, other):
+        if self.max_nodes != other.max_nodes:
+            return False
+        if self.max_committed_bytes != other.max_committed_bytes:
+            return False
+        if self.max_distance_evaluations != other.max_distance_evaluations:
+            return False
+        if self.max_frontier_entries != other.max_frontier_entries:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeSearchBudgetRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return SearchBudgetRecord(
+            max_nodes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_committed_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_distance_evaluations=_UniffiFfiConverterOptionalUInt64.read(buf),
+            max_frontier_entries=_UniffiFfiConverterOptionalUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_nodes)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_committed_bytes)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_distance_evaluations)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_frontier_entries)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalUInt64.write(value.max_nodes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_committed_bytes, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_distance_evaluations, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_frontier_entries, buf)
+
+
+
+
+
+
+class ProximityFilterKind(enum.Enum):
+
+    ALL = 0
+
+    KEY_RANGE = 1
+
+    PREFIX = 2
+
+    ELIGIBLE_KEYS = 3
+
+
+
+class _UniffiFfiConverterTypeProximityFilterKind(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return ProximityFilterKind.ALL
+        if variant == 2:
+            return ProximityFilterKind.KEY_RANGE
+        if variant == 3:
+            return ProximityFilterKind.PREFIX
+        if variant == 4:
+            return ProximityFilterKind.ELIGIBLE_KEYS
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == ProximityFilterKind.ALL:
+            return
+        if value == ProximityFilterKind.KEY_RANGE:
+            return
+        if value == ProximityFilterKind.PREFIX:
+            return
+        if value == ProximityFilterKind.ELIGIBLE_KEYS:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == ProximityFilterKind.ALL:
+            buf.write_i32(1)
+        if value == ProximityFilterKind.KEY_RANGE:
+            buf.write_i32(2)
+        if value == ProximityFilterKind.PREFIX:
+            buf.write_i32(3)
+        if value == ProximityFilterKind.ELIGIBLE_KEYS:
+            buf.write_i32(4)
+
+
+
+@dataclass
+class ProximityFilterRecord:
+    def __init__(self, *, kind:ProximityFilterKind, start:typing.Optional[bytes], range_end:typing.Optional[bytes], prefix:typing.Optional[bytes], eligible_keys:typing.List[bytes]):
+        self.kind = kind
+        self.start = start
+        self.range_end = range_end
+        self.prefix = prefix
+        self.eligible_keys = eligible_keys
+
+
+
+
+    def __str__(self):
+        return "ProximityFilterRecord(kind={}, start={}, range_end={}, prefix={}, eligible_keys={})".format(self.kind, self.start, self.range_end, self.prefix, self.eligible_keys)
+    def __eq__(self, other):
+        if self.kind != other.kind:
+            return False
+        if self.start != other.start:
+            return False
+        if self.range_end != other.range_end:
+            return False
+        if self.prefix != other.prefix:
+            return False
+        if self.eligible_keys != other.eligible_keys:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityFilterRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityFilterRecord(
+            kind=_UniffiFfiConverterTypeProximityFilterKind.read(buf),
+            start=_UniffiFfiConverterOptionalBytes.read(buf),
+            range_end=_UniffiFfiConverterOptionalBytes.read(buf),
+            prefix=_UniffiFfiConverterOptionalBytes.read(buf),
+            eligible_keys=_UniffiFfiConverterSequenceBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeProximityFilterKind.check_lower(value.kind)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.start)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.range_end)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.prefix)
+        _UniffiFfiConverterSequenceBytes.check_lower(value.eligible_keys)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeProximityFilterKind.write(value.kind, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.start, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.range_end, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.prefix, buf)
+        _UniffiFfiConverterSequenceBytes.write(value.eligible_keys, buf)
+
+
+
+
+
+
+class QueryKernelRecord(enum.Enum):
+
+    SCALAR_DETERMINISTIC = 0
+
+    SIMD_DETERMINISTIC = 1
+
+    AUTO_DETERMINISTIC = 2
+
+
+
+class _UniffiFfiConverterTypeQueryKernelRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return QueryKernelRecord.SCALAR_DETERMINISTIC
+        if variant == 2:
+            return QueryKernelRecord.SIMD_DETERMINISTIC
+        if variant == 3:
+            return QueryKernelRecord.AUTO_DETERMINISTIC
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == QueryKernelRecord.SCALAR_DETERMINISTIC:
+            return
+        if value == QueryKernelRecord.SIMD_DETERMINISTIC:
+            return
+        if value == QueryKernelRecord.AUTO_DETERMINISTIC:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == QueryKernelRecord.SCALAR_DETERMINISTIC:
+            buf.write_i32(1)
+        if value == QueryKernelRecord.SIMD_DETERMINISTIC:
+            buf.write_i32(2)
+        if value == QueryKernelRecord.AUTO_DETERMINISTIC:
+            buf.write_i32(3)
+
+
+
+
+
+
+
+
+class SearchBackendRecord(enum.Enum):
+
+    NATIVE = 0
+
+    PRODUCT_QUANTIZED = 1
+
+    HNSW = 2
+
+    COMPOSITE = 3
+
+    AUTO = 4
+
+
+
+class _UniffiFfiConverterTypeSearchBackendRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return SearchBackendRecord.NATIVE
+        if variant == 2:
+            return SearchBackendRecord.PRODUCT_QUANTIZED
+        if variant == 3:
+            return SearchBackendRecord.HNSW
+        if variant == 4:
+            return SearchBackendRecord.COMPOSITE
+        if variant == 5:
+            return SearchBackendRecord.AUTO
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == SearchBackendRecord.NATIVE:
+            return
+        if value == SearchBackendRecord.PRODUCT_QUANTIZED:
+            return
+        if value == SearchBackendRecord.HNSW:
+            return
+        if value == SearchBackendRecord.COMPOSITE:
+            return
+        if value == SearchBackendRecord.AUTO:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == SearchBackendRecord.NATIVE:
+            buf.write_i32(1)
+        if value == SearchBackendRecord.PRODUCT_QUANTIZED:
+            buf.write_i32(2)
+        if value == SearchBackendRecord.HNSW:
+            buf.write_i32(3)
+        if value == SearchBackendRecord.COMPOSITE:
+            buf.write_i32(4)
+        if value == SearchBackendRecord.AUTO:
+            buf.write_i32(5)
+
+
+
+class _UniffiFfiConverterOptionalUInt16(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterUInt16.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterUInt16.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterUInt16.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class ProximitySearchRequestRecord:
+    def __init__(self, *, query:typing.List[float], k:int, policy:SearchPolicyKind, adaptive_quality:typing.Optional[AdaptiveQualityRecord], budget:SearchBudgetRecord, filter:ProximityFilterRecord, kernel:QueryKernelRecord, backend:SearchBackendRecord, hnsw_ef_search:typing.Optional[int], pq_rerank_multiplier:typing.Optional[int]):
+        self.query = query
+        self.k = k
+        self.policy = policy
+        self.adaptive_quality = adaptive_quality
+        self.budget = budget
+        self.filter = filter
+        self.kernel = kernel
+        self.backend = backend
+        self.hnsw_ef_search = hnsw_ef_search
+        self.pq_rerank_multiplier = pq_rerank_multiplier
+
+
+
+
+    def __str__(self):
+        return "ProximitySearchRequestRecord(query={}, k={}, policy={}, adaptive_quality={}, budget={}, filter={}, kernel={}, backend={}, hnsw_ef_search={}, pq_rerank_multiplier={})".format(self.query, self.k, self.policy, self.adaptive_quality, self.budget, self.filter, self.kernel, self.backend, self.hnsw_ef_search, self.pq_rerank_multiplier)
+    def __eq__(self, other):
+        if self.query != other.query:
+            return False
+        if self.k != other.k:
+            return False
+        if self.policy != other.policy:
+            return False
+        if self.adaptive_quality != other.adaptive_quality:
+            return False
+        if self.budget != other.budget:
+            return False
+        if self.filter != other.filter:
+            return False
+        if self.kernel != other.kernel:
+            return False
+        if self.backend != other.backend:
+            return False
+        if self.hnsw_ef_search != other.hnsw_ef_search:
+            return False
+        if self.pq_rerank_multiplier != other.pq_rerank_multiplier:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximitySearchRequestRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximitySearchRequestRecord(
+            query=_UniffiFfiConverterSequenceFloat32.read(buf),
+            k=_UniffiFfiConverterUInt64.read(buf),
+            policy=_UniffiFfiConverterTypeSearchPolicyKind.read(buf),
+            adaptive_quality=_UniffiFfiConverterOptionalTypeAdaptiveQualityRecord.read(buf),
+            budget=_UniffiFfiConverterTypeSearchBudgetRecord.read(buf),
+            filter=_UniffiFfiConverterTypeProximityFilterRecord.read(buf),
+            kernel=_UniffiFfiConverterTypeQueryKernelRecord.read(buf),
+            backend=_UniffiFfiConverterTypeSearchBackendRecord.read(buf),
+            hnsw_ef_search=_UniffiFfiConverterOptionalUInt32.read(buf),
+            pq_rerank_multiplier=_UniffiFfiConverterOptionalUInt16.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceFloat32.check_lower(value.query)
+        _UniffiFfiConverterUInt64.check_lower(value.k)
+        _UniffiFfiConverterTypeSearchPolicyKind.check_lower(value.policy)
+        _UniffiFfiConverterOptionalTypeAdaptiveQualityRecord.check_lower(value.adaptive_quality)
+        _UniffiFfiConverterTypeSearchBudgetRecord.check_lower(value.budget)
+        _UniffiFfiConverterTypeProximityFilterRecord.check_lower(value.filter)
+        _UniffiFfiConverterTypeQueryKernelRecord.check_lower(value.kernel)
+        _UniffiFfiConverterTypeSearchBackendRecord.check_lower(value.backend)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.hnsw_ef_search)
+        _UniffiFfiConverterOptionalUInt16.check_lower(value.pq_rerank_multiplier)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceFloat32.write(value.query, buf)
+        _UniffiFfiConverterUInt64.write(value.k, buf)
+        _UniffiFfiConverterTypeSearchPolicyKind.write(value.policy, buf)
+        _UniffiFfiConverterOptionalTypeAdaptiveQualityRecord.write(value.adaptive_quality, buf)
+        _UniffiFfiConverterTypeSearchBudgetRecord.write(value.budget, buf)
+        _UniffiFfiConverterTypeProximityFilterRecord.write(value.filter, buf)
+        _UniffiFfiConverterTypeQueryKernelRecord.write(value.kernel, buf)
+        _UniffiFfiConverterTypeSearchBackendRecord.write(value.backend, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.hnsw_ef_search, buf)
+        _UniffiFfiConverterOptionalUInt16.write(value.pq_rerank_multiplier, buf)
+
+class _UniffiFfiConverterFloat64(_UniffiConverterPrimitiveFloat):
+    @staticmethod
+    def read(buf):
+        return buf.read_double()
+
+    @staticmethod
+    def write(value, buf):
+        buf.write_double(value)
+
+@dataclass
+class ProximityNeighborRecord:
+    def __init__(self, *, key:bytes, value:bytes, distance:float):
+        self.key = key
+        self.value = value
+        self.distance = distance
+
+
+
+
+    def __str__(self):
+        return "ProximityNeighborRecord(key={}, value={}, distance={})".format(self.key, self.value, self.distance)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.value != other.value:
+            return False
+        if self.distance != other.distance:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityNeighborRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityNeighborRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+            distance=_UniffiFfiConverterFloat64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+        _UniffiFfiConverterFloat64.check_lower(value.distance)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+        _UniffiFfiConverterFloat64.write(value.distance, buf)
+
+class _UniffiFfiConverterSequenceTypeProximityNeighborRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeProximityNeighborRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeProximityNeighborRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeProximityNeighborRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class ProximitySearchStatsRecord:
+    def __init__(self, *, levels_visited:int, nodes_read:int, bytes_read:int, physical_bytes_read:int, committed_bytes:int, distance_evaluations:int, quantized_distance_evaluations:int, reranked_candidates:int, frontier_peak:int, candidate_handles_peak:int, candidate_retained_bytes_peak:int):
+        self.levels_visited = levels_visited
+        self.nodes_read = nodes_read
+        self.bytes_read = bytes_read
+        self.physical_bytes_read = physical_bytes_read
+        self.committed_bytes = committed_bytes
+        self.distance_evaluations = distance_evaluations
+        self.quantized_distance_evaluations = quantized_distance_evaluations
+        self.reranked_candidates = reranked_candidates
+        self.frontier_peak = frontier_peak
+        self.candidate_handles_peak = candidate_handles_peak
+        self.candidate_retained_bytes_peak = candidate_retained_bytes_peak
+
+
+
+
+    def __str__(self):
+        return "ProximitySearchStatsRecord(levels_visited={}, nodes_read={}, bytes_read={}, physical_bytes_read={}, committed_bytes={}, distance_evaluations={}, quantized_distance_evaluations={}, reranked_candidates={}, frontier_peak={}, candidate_handles_peak={}, candidate_retained_bytes_peak={})".format(self.levels_visited, self.nodes_read, self.bytes_read, self.physical_bytes_read, self.committed_bytes, self.distance_evaluations, self.quantized_distance_evaluations, self.reranked_candidates, self.frontier_peak, self.candidate_handles_peak, self.candidate_retained_bytes_peak)
+    def __eq__(self, other):
+        if self.levels_visited != other.levels_visited:
+            return False
+        if self.nodes_read != other.nodes_read:
+            return False
+        if self.bytes_read != other.bytes_read:
+            return False
+        if self.physical_bytes_read != other.physical_bytes_read:
+            return False
+        if self.committed_bytes != other.committed_bytes:
+            return False
+        if self.distance_evaluations != other.distance_evaluations:
+            return False
+        if self.quantized_distance_evaluations != other.quantized_distance_evaluations:
+            return False
+        if self.reranked_candidates != other.reranked_candidates:
+            return False
+        if self.frontier_peak != other.frontier_peak:
+            return False
+        if self.candidate_handles_peak != other.candidate_handles_peak:
+            return False
+        if self.candidate_retained_bytes_peak != other.candidate_retained_bytes_peak:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximitySearchStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximitySearchStatsRecord(
+            levels_visited=_UniffiFfiConverterUInt64.read(buf),
+            nodes_read=_UniffiFfiConverterUInt64.read(buf),
+            bytes_read=_UniffiFfiConverterUInt64.read(buf),
+            physical_bytes_read=_UniffiFfiConverterUInt64.read(buf),
+            committed_bytes=_UniffiFfiConverterUInt64.read(buf),
+            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            quantized_distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            reranked_candidates=_UniffiFfiConverterUInt64.read(buf),
+            frontier_peak=_UniffiFfiConverterUInt64.read(buf),
+            candidate_handles_peak=_UniffiFfiConverterUInt64.read(buf),
+            candidate_retained_bytes_peak=_UniffiFfiConverterUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.levels_visited)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.bytes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.physical_bytes_read)
+        _UniffiFfiConverterUInt64.check_lower(value.committed_bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
+        _UniffiFfiConverterUInt64.check_lower(value.quantized_distance_evaluations)
+        _UniffiFfiConverterUInt64.check_lower(value.reranked_candidates)
+        _UniffiFfiConverterUInt64.check_lower(value.frontier_peak)
+        _UniffiFfiConverterUInt64.check_lower(value.candidate_handles_peak)
+        _UniffiFfiConverterUInt64.check_lower(value.candidate_retained_bytes_peak)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.levels_visited, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.bytes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.physical_bytes_read, buf)
+        _UniffiFfiConverterUInt64.write(value.committed_bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
+        _UniffiFfiConverterUInt64.write(value.quantized_distance_evaluations, buf)
+        _UniffiFfiConverterUInt64.write(value.reranked_candidates, buf)
+        _UniffiFfiConverterUInt64.write(value.frontier_peak, buf)
+        _UniffiFfiConverterUInt64.write(value.candidate_handles_peak, buf)
+        _UniffiFfiConverterUInt64.write(value.candidate_retained_bytes_peak, buf)
+
+
+
+
+
+
+class SearchCompletionRecord(enum.Enum):
+
+    EXACT = 0
+
+    APPROXIMATE_POLICY_SATISFIED = 1
+
+    BUDGET_EXHAUSTED = 2
+
+    CANCELLED = 3
+
+    DEADLINE_EXCEEDED = 4
+
+
+
+class _UniffiFfiConverterTypeSearchCompletionRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return SearchCompletionRecord.EXACT
+        if variant == 2:
+            return SearchCompletionRecord.APPROXIMATE_POLICY_SATISFIED
+        if variant == 3:
+            return SearchCompletionRecord.BUDGET_EXHAUSTED
+        if variant == 4:
+            return SearchCompletionRecord.CANCELLED
+        if variant == 5:
+            return SearchCompletionRecord.DEADLINE_EXCEEDED
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == SearchCompletionRecord.EXACT:
+            return
+        if value == SearchCompletionRecord.APPROXIMATE_POLICY_SATISFIED:
+            return
+        if value == SearchCompletionRecord.BUDGET_EXHAUSTED:
+            return
+        if value == SearchCompletionRecord.CANCELLED:
+            return
+        if value == SearchCompletionRecord.DEADLINE_EXCEEDED:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == SearchCompletionRecord.EXACT:
+            buf.write_i32(1)
+        if value == SearchCompletionRecord.APPROXIMATE_POLICY_SATISFIED:
+            buf.write_i32(2)
+        if value == SearchCompletionRecord.BUDGET_EXHAUSTED:
+            buf.write_i32(3)
+        if value == SearchCompletionRecord.CANCELLED:
+            buf.write_i32(4)
+        if value == SearchCompletionRecord.DEADLINE_EXCEEDED:
+            buf.write_i32(5)
+
+
+
+@dataclass
+class ProximitySearchResultRecord:
+    def __init__(self, *, neighbors:typing.List[ProximityNeighborRecord], stats:ProximitySearchStatsRecord, completion:SearchCompletionRecord, backend:SearchBackendRecord, plan_format_version:int):
+        self.neighbors = neighbors
+        self.stats = stats
+        self.completion = completion
+        self.backend = backend
+        self.plan_format_version = plan_format_version
+
+
+
+
+    def __str__(self):
+        return "ProximitySearchResultRecord(neighbors={}, stats={}, completion={}, backend={}, plan_format_version={})".format(self.neighbors, self.stats, self.completion, self.backend, self.plan_format_version)
+    def __eq__(self, other):
+        if self.neighbors != other.neighbors:
+            return False
+        if self.stats != other.stats:
+            return False
+        if self.completion != other.completion:
+            return False
+        if self.backend != other.backend:
+            return False
+        if self.plan_format_version != other.plan_format_version:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximitySearchResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximitySearchResultRecord(
+            neighbors=_UniffiFfiConverterSequenceTypeProximityNeighborRecord.read(buf),
+            stats=_UniffiFfiConverterTypeProximitySearchStatsRecord.read(buf),
+            completion=_UniffiFfiConverterTypeSearchCompletionRecord.read(buf),
+            backend=_UniffiFfiConverterTypeSearchBackendRecord.read(buf),
+            plan_format_version=_UniffiFfiConverterUInt8.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceTypeProximityNeighborRecord.check_lower(value.neighbors)
+        _UniffiFfiConverterTypeProximitySearchStatsRecord.check_lower(value.stats)
+        _UniffiFfiConverterTypeSearchCompletionRecord.check_lower(value.completion)
+        _UniffiFfiConverterTypeSearchBackendRecord.check_lower(value.backend)
+        _UniffiFfiConverterUInt8.check_lower(value.plan_format_version)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceTypeProximityNeighborRecord.write(value.neighbors, buf)
+        _UniffiFfiConverterTypeProximitySearchStatsRecord.write(value.stats, buf)
+        _UniffiFfiConverterTypeSearchCompletionRecord.write(value.completion, buf)
+        _UniffiFfiConverterTypeSearchBackendRecord.write(value.backend, buf)
+        _UniffiFfiConverterUInt8.write(value.plan_format_version, buf)
+
+
+
+
+
+
+class ProximitySearchClaimKindRecord(enum.Enum):
+
+    EXACT_L2_OPTIMAL = 0
+
+    HONEST_EXECUTION = 1
+
+
+
+class _UniffiFfiConverterTypeProximitySearchClaimKindRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return ProximitySearchClaimKindRecord.EXACT_L2_OPTIMAL
+        if variant == 2:
+            return ProximitySearchClaimKindRecord.HONEST_EXECUTION
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == ProximitySearchClaimKindRecord.EXACT_L2_OPTIMAL:
+            return
+        if value == ProximitySearchClaimKindRecord.HONEST_EXECUTION:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == ProximitySearchClaimKindRecord.EXACT_L2_OPTIMAL:
+            buf.write_i32(1)
+        if value == ProximitySearchClaimKindRecord.HONEST_EXECUTION:
+            buf.write_i32(2)
+
+
+
+class _UniffiFfiConverterOptionalFloat64(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterFloat64.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterFloat64.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterFloat64.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class ProximitySearchClaimRecord:
+    def __init__(self, *, kind:ProximitySearchClaimKindRecord, terminal_lower_bound:typing.Optional[float]):
+        self.kind = kind
+        self.terminal_lower_bound = terminal_lower_bound
+
+
+
+
+    def __str__(self):
+        return "ProximitySearchClaimRecord(kind={}, terminal_lower_bound={})".format(self.kind, self.terminal_lower_bound)
+    def __eq__(self, other):
+        if self.kind != other.kind:
+            return False
+        if self.terminal_lower_bound != other.terminal_lower_bound:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximitySearchClaimRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximitySearchClaimRecord(
+            kind=_UniffiFfiConverterTypeProximitySearchClaimKindRecord.read(buf),
+            terminal_lower_bound=_UniffiFfiConverterOptionalFloat64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeProximitySearchClaimKindRecord.check_lower(value.kind)
+        _UniffiFfiConverterOptionalFloat64.check_lower(value.terminal_lower_bound)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeProximitySearchClaimKindRecord.write(value.kind, buf)
+        _UniffiFfiConverterOptionalFloat64.write(value.terminal_lower_bound, buf)
+
+@dataclass
+class ProximitySearchVerificationRecord:
+    def __init__(self, *, result:ProximitySearchResultRecord, claim:ProximitySearchClaimRecord, replayed_events:int):
+        self.result = result
+        self.claim = claim
+        self.replayed_events = replayed_events
+
+
+
+
+    def __str__(self):
+        return "ProximitySearchVerificationRecord(result={}, claim={}, replayed_events={})".format(self.result, self.claim, self.replayed_events)
+    def __eq__(self, other):
+        if self.result != other.result:
+            return False
+        if self.claim != other.claim:
+            return False
+        if self.replayed_events != other.replayed_events:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximitySearchVerificationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximitySearchVerificationRecord(
+            result=_UniffiFfiConverterTypeProximitySearchResultRecord.read(buf),
+            claim=_UniffiFfiConverterTypeProximitySearchClaimRecord.read(buf),
+            replayed_events=_UniffiFfiConverterUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeProximitySearchResultRecord.check_lower(value.result)
+        _UniffiFfiConverterTypeProximitySearchClaimRecord.check_lower(value.claim)
+        _UniffiFfiConverterUInt64.check_lower(value.replayed_events)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeProximitySearchResultRecord.write(value.result, buf)
+        _UniffiFfiConverterTypeProximitySearchClaimRecord.write(value.claim, buf)
+        _UniffiFfiConverterUInt64.write(value.replayed_events, buf)
+
+
+class BindingProximitySearchProofProtocol(typing.Protocol):
+
+    def source_descriptor(self, ) -> bytes:
+        raise NotImplementedError
+    def verify(self, expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximitySearchVerificationRecord:
+        raise NotImplementedError
+
+class BindingProximitySearchProof(BindingProximitySearchProofProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitysearchproof, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def source_descriptor(self, ) -> bytes:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def verify(self, expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximitySearchVerificationRecord:
+
+        _UniffiFfiConverterOptionalBytes.check_lower(expected_descriptor)
+
+        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterOptionalBytes.lower(expected_descriptor),
+            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchVerificationRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeBindingProximitySearchProof:
+    @staticmethod
+    def lift(value: int) -> BindingProximitySearchProof:
+        return BindingProximitySearchProof._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: BindingProximitySearchProof):
+        if not isinstance(value, BindingProximitySearchProof):
+            raise TypeError("Expected BindingProximitySearchProof instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: BindingProximitySearchProof) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> BindingProximitySearchProof:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: BindingProximitySearchProof, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+
+
+
+
+class ContentObjectKindRecord(enum.Enum):
+
+    ORDERED_NODE = 0
+
+    PROXIMITY_DESCRIPTOR = 1
+
+    PROXIMITY_NODE = 2
+
+    OVERFLOW_DIRECTORY = 3
+
+    OVERFLOW_PAGE = 4
+
+    EXTERNAL_VECTOR = 5
+
+    SCALAR_QUANTIZATION = 6
+
+    PRODUCT_QUANTIZATION = 7
+
+    HNSW_MANIFEST = 8
+
+    HNSW_PAGE = 9
+
+    COMPOSITE_ACCELERATOR = 10
+
+    ACCELERATOR_CATALOG = 11
+
+
+
+class _UniffiFfiConverterTypeContentObjectKindRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return ContentObjectKindRecord.ORDERED_NODE
+        if variant == 2:
+            return ContentObjectKindRecord.PROXIMITY_DESCRIPTOR
+        if variant == 3:
+            return ContentObjectKindRecord.PROXIMITY_NODE
+        if variant == 4:
+            return ContentObjectKindRecord.OVERFLOW_DIRECTORY
+        if variant == 5:
+            return ContentObjectKindRecord.OVERFLOW_PAGE
+        if variant == 6:
+            return ContentObjectKindRecord.EXTERNAL_VECTOR
+        if variant == 7:
+            return ContentObjectKindRecord.SCALAR_QUANTIZATION
+        if variant == 8:
+            return ContentObjectKindRecord.PRODUCT_QUANTIZATION
+        if variant == 9:
+            return ContentObjectKindRecord.HNSW_MANIFEST
+        if variant == 10:
+            return ContentObjectKindRecord.HNSW_PAGE
+        if variant == 11:
+            return ContentObjectKindRecord.COMPOSITE_ACCELERATOR
+        if variant == 12:
+            return ContentObjectKindRecord.ACCELERATOR_CATALOG
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == ContentObjectKindRecord.ORDERED_NODE:
+            return
+        if value == ContentObjectKindRecord.PROXIMITY_DESCRIPTOR:
+            return
+        if value == ContentObjectKindRecord.PROXIMITY_NODE:
+            return
+        if value == ContentObjectKindRecord.OVERFLOW_DIRECTORY:
+            return
+        if value == ContentObjectKindRecord.OVERFLOW_PAGE:
+            return
+        if value == ContentObjectKindRecord.EXTERNAL_VECTOR:
+            return
+        if value == ContentObjectKindRecord.SCALAR_QUANTIZATION:
+            return
+        if value == ContentObjectKindRecord.PRODUCT_QUANTIZATION:
+            return
+        if value == ContentObjectKindRecord.HNSW_MANIFEST:
+            return
+        if value == ContentObjectKindRecord.HNSW_PAGE:
+            return
+        if value == ContentObjectKindRecord.COMPOSITE_ACCELERATOR:
+            return
+        if value == ContentObjectKindRecord.ACCELERATOR_CATALOG:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == ContentObjectKindRecord.ORDERED_NODE:
+            buf.write_i32(1)
+        if value == ContentObjectKindRecord.PROXIMITY_DESCRIPTOR:
+            buf.write_i32(2)
+        if value == ContentObjectKindRecord.PROXIMITY_NODE:
+            buf.write_i32(3)
+        if value == ContentObjectKindRecord.OVERFLOW_DIRECTORY:
+            buf.write_i32(4)
+        if value == ContentObjectKindRecord.OVERFLOW_PAGE:
+            buf.write_i32(5)
+        if value == ContentObjectKindRecord.EXTERNAL_VECTOR:
+            buf.write_i32(6)
+        if value == ContentObjectKindRecord.SCALAR_QUANTIZATION:
+            buf.write_i32(7)
+        if value == ContentObjectKindRecord.PRODUCT_QUANTIZATION:
+            buf.write_i32(8)
+        if value == ContentObjectKindRecord.HNSW_MANIFEST:
+            buf.write_i32(9)
+        if value == ContentObjectKindRecord.HNSW_PAGE:
+            buf.write_i32(10)
+        if value == ContentObjectKindRecord.COMPOSITE_ACCELERATOR:
+            buf.write_i32(11)
+        if value == ContentObjectKindRecord.ACCELERATOR_CATALOG:
+            buf.write_i32(12)
+
+
+
+@dataclass
+class TypedContentObjectRecord:
+    def __init__(self, *, kind:ContentObjectKindRecord, cid:bytes, dimensions:typing.Optional[int], bytes:bytes, depth:int):
+        self.kind = kind
+        self.cid = cid
+        self.dimensions = dimensions
+        self.bytes = bytes
+        self.depth = depth
+
+
+
+
+    def __str__(self):
+        return "TypedContentObjectRecord(kind={}, cid={}, dimensions={}, bytes={}, depth={})".format(self.kind, self.cid, self.dimensions, self.bytes, self.depth)
+    def __eq__(self, other):
+        if self.kind != other.kind:
+            return False
+        if self.cid != other.cid:
+            return False
+        if self.dimensions != other.dimensions:
+            return False
+        if self.bytes != other.bytes:
+            return False
+        if self.depth != other.depth:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeTypedContentObjectRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return TypedContentObjectRecord(
+            kind=_UniffiFfiConverterTypeContentObjectKindRecord.read(buf),
+            cid=_UniffiFfiConverterBytes.read(buf),
+            dimensions=_UniffiFfiConverterOptionalUInt32.read(buf),
+            bytes=_UniffiFfiConverterBytes.read(buf),
+            depth=_UniffiFfiConverterUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeContentObjectKindRecord.check_lower(value.kind)
+        _UniffiFfiConverterBytes.check_lower(value.cid)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.dimensions)
+        _UniffiFfiConverterBytes.check_lower(value.bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.depth)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeContentObjectKindRecord.write(value.kind, buf)
+        _UniffiFfiConverterBytes.write(value.cid, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.dimensions, buf)
+        _UniffiFfiConverterBytes.write(value.bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.depth, buf)
+
+class _UniffiFfiConverterSequenceTypeTypedContentObjectRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeTypedContentObjectRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeTypedContentObjectRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeTypedContentObjectRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class ProximityStructuralProofRecord:
+    def __init__(self, *, descriptor:bytes, objects:typing.List[TypedContentObjectRecord]):
+        self.descriptor = descriptor
+        self.objects = objects
+
+
+
+
+    def __str__(self):
+        return "ProximityStructuralProofRecord(descriptor={}, objects={})".format(self.descriptor, self.objects)
+    def __eq__(self, other):
+        if self.descriptor != other.descriptor:
+            return False
+        if self.objects != other.objects:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityStructuralProofRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityStructuralProofRecord(
+            descriptor=_UniffiFfiConverterBytes.read(buf),
+            objects=_UniffiFfiConverterSequenceTypeTypedContentObjectRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.descriptor)
+        _UniffiFfiConverterSequenceTypeTypedContentObjectRecord.check_lower(value.objects)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.descriptor, buf)
+        _UniffiFfiConverterSequenceTypeTypedContentObjectRecord.write(value.objects, buf)
+
+@dataclass
+class ProximityRecordRecord:
+    def __init__(self, *, key:bytes, vector:typing.List[float], value:bytes):
+        self.key = key
+        self.vector = vector
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "ProximityRecordRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.vector != other.vector:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityRecordRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityRecordRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            vector=_UniffiFfiConverterSequenceFloat32.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterSequenceFloat32.check_lower(value.vector)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterSequenceFloat32.write(value.vector, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+
+class ProximityRecordVisitorCallback():
+
+    def visit(self, record: ProximityRecordRecord) -> bool:
+        raise NotImplementedError
+
+class ProximityRecordVisitorCallbackImpl(ProximityRecordVisitorCallback):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_proximityrecordvisitorcallback, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def visit(self, record: ProximityRecordRecord) -> bool:
+
+        _UniffiFfiConverterTypeProximityRecordRecord.check_lower(record)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximityRecordRecord.lower(record),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_proximityrecordvisitorcallback_visit,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+# Put all the bits inside a class to keep the top-level namespace clean
+class _UniffiTraitImplProximityRecordVisitorCallbackImpl:
+    # For each method, generate a callback function to pass to Rust
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_PROXIMITY_RECORD_VISITOR_CALLBACK_METHOD0
+    def visit(
+            uniffi_handle,
+            record,
+            uniffi_out_return,
+            uniffi_call_status_ptr,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterTypeProximityRecordRecord.lift(record), )
+            uniffi_method = uniffi_obj.visit
+            return uniffi_method(*uniffi_args)
+        def write_return_value(v):
+            uniffi_out_return[0] = _UniffiFfiConverterBoolean.lower(v)
+        _uniffi_trait_interface_call(
+                uniffi_call_status_ptr.contents,
+                make_call,
+                write_return_value,
+        )
+
+    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_PROXIMITY_RECORD_VISITOR_CALLBACK
+    def _uniffi_free(uniffi_handle):
+        _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.remove(uniffi_handle)
+
+    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_PROXIMITY_RECORD_VISITOR_CALLBACK
+    def _uniffi_clone(uniffi_handle):
+        return _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.clone(uniffi_handle)
+
+    # Generate the FFI VTable.  This has a field for each callback interface method.
+    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyProximityRecordVisitorCallback(
+        _uniffi_free,
+        _uniffi_clone,
+        visit,
+    )
+    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
+    # or else bad things will happen when Rust tries to access it.
+    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_proximityrecordvisitorcallback(ctypes.byref(_uniffi_vtable))
+
+class _UniffiFfiConverterTypeProximityRecordVisitorCallback:
+    _handle_map = _UniffiHandleMap()
+
+    @staticmethod
+    def lift(value: int):
+        if (value & 1) == 0:
+            # Rust-generated handle, construct a new class that uses the handle to implement the
+            # interface
+            return ProximityRecordVisitorCallbackImpl._uniffi_make_instance(value)
+        else:
+            # Python-generated handle, get the object from the handle map
+            return _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.remove(value)
+
+    @staticmethod
+    def check_lower(value: ProximityRecordVisitorCallback):
+        if not isinstance(value, ProximityRecordVisitorCallback):
+            raise TypeError("Expected ProximityRecordVisitorCallback subclass, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: ProximityRecordVisitorCallback):
+         if isinstance(value, ProximityRecordVisitorCallbackImpl):
+            # Rust-implementated object.  Clone the handle and return it
+            return value._uniffi_clone_handle()
+         else:
+            # Python-implementated object, generate a new vtable handle and return that.
+            return _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.insert(value)
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer):
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: ProximityRecordVisitorCallback, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+class BindingProximityReadSessionProtocol(typing.Protocol):
+
+    def contains_key(self, key: bytes) -> bool:
+        raise NotImplementedError
+    def fast_handle(self, ) -> int:
+        raise NotImplementedError
+    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
+        raise NotImplementedError
+    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
+        raise NotImplementedError
+    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+
+class BindingProximityReadSession(BindingProximityReadSessionProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximityreadsession, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximityreadsession, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def contains_key(self, key: bytes) -> bool:
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def fast_handle(self, ) -> int:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeExactProximityRecordRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
+
+        _UniffiFfiConverterTypeProximityRecordVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximityRecordVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeBindingProximityReadSession:
+    @staticmethod
+    def lift(value: int) -> BindingProximityReadSession:
+        return BindingProximityReadSession._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: BindingProximityReadSession):
+        if not isinstance(value, BindingProximityReadSession):
+            raise TypeError("Expected BindingProximityReadSession instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: BindingProximityReadSession) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> BindingProximityReadSession:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: BindingProximityReadSession, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+@dataclass
+class ProximityVerificationRecord:
+    def __init__(self, *, record_count:int, proximity_node_count:int, external_vector_count:int, quantized_node_count:int, scalar_quantizer_count:int, overflow_page_count:int, overflow_directory_count:int, maximum_level:int, maximum_node_bytes:int, distance_checks:int):
+        self.record_count = record_count
+        self.proximity_node_count = proximity_node_count
+        self.external_vector_count = external_vector_count
+        self.quantized_node_count = quantized_node_count
+        self.scalar_quantizer_count = scalar_quantizer_count
+        self.overflow_page_count = overflow_page_count
+        self.overflow_directory_count = overflow_directory_count
+        self.maximum_level = maximum_level
+        self.maximum_node_bytes = maximum_node_bytes
+        self.distance_checks = distance_checks
+
+
+
+
+    def __str__(self):
+        return "ProximityVerificationRecord(record_count={}, proximity_node_count={}, external_vector_count={}, quantized_node_count={}, scalar_quantizer_count={}, overflow_page_count={}, overflow_directory_count={}, maximum_level={}, maximum_node_bytes={}, distance_checks={})".format(self.record_count, self.proximity_node_count, self.external_vector_count, self.quantized_node_count, self.scalar_quantizer_count, self.overflow_page_count, self.overflow_directory_count, self.maximum_level, self.maximum_node_bytes, self.distance_checks)
+    def __eq__(self, other):
+        if self.record_count != other.record_count:
+            return False
+        if self.proximity_node_count != other.proximity_node_count:
+            return False
+        if self.external_vector_count != other.external_vector_count:
+            return False
+        if self.quantized_node_count != other.quantized_node_count:
+            return False
+        if self.scalar_quantizer_count != other.scalar_quantizer_count:
+            return False
+        if self.overflow_page_count != other.overflow_page_count:
+            return False
+        if self.overflow_directory_count != other.overflow_directory_count:
+            return False
+        if self.maximum_level != other.maximum_level:
+            return False
+        if self.maximum_node_bytes != other.maximum_node_bytes:
+            return False
+        if self.distance_checks != other.distance_checks:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeProximityVerificationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ProximityVerificationRecord(
+            record_count=_UniffiFfiConverterUInt64.read(buf),
+            proximity_node_count=_UniffiFfiConverterUInt64.read(buf),
+            external_vector_count=_UniffiFfiConverterUInt64.read(buf),
+            quantized_node_count=_UniffiFfiConverterUInt64.read(buf),
+            scalar_quantizer_count=_UniffiFfiConverterUInt64.read(buf),
+            overflow_page_count=_UniffiFfiConverterUInt64.read(buf),
+            overflow_directory_count=_UniffiFfiConverterUInt64.read(buf),
+            maximum_level=_UniffiFfiConverterUInt8.read(buf),
+            maximum_node_bytes=_UniffiFfiConverterUInt64.read(buf),
+            distance_checks=_UniffiFfiConverterUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.record_count)
+        _UniffiFfiConverterUInt64.check_lower(value.proximity_node_count)
+        _UniffiFfiConverterUInt64.check_lower(value.external_vector_count)
+        _UniffiFfiConverterUInt64.check_lower(value.quantized_node_count)
+        _UniffiFfiConverterUInt64.check_lower(value.scalar_quantizer_count)
+        _UniffiFfiConverterUInt64.check_lower(value.overflow_page_count)
+        _UniffiFfiConverterUInt64.check_lower(value.overflow_directory_count)
+        _UniffiFfiConverterUInt8.check_lower(value.maximum_level)
+        _UniffiFfiConverterUInt64.check_lower(value.maximum_node_bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.distance_checks)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.record_count, buf)
+        _UniffiFfiConverterUInt64.write(value.proximity_node_count, buf)
+        _UniffiFfiConverterUInt64.write(value.external_vector_count, buf)
+        _UniffiFfiConverterUInt64.write(value.quantized_node_count, buf)
+        _UniffiFfiConverterUInt64.write(value.scalar_quantizer_count, buf)
+        _UniffiFfiConverterUInt64.write(value.overflow_page_count, buf)
+        _UniffiFfiConverterUInt64.write(value.overflow_directory_count, buf)
+        _UniffiFfiConverterUInt8.write(value.maximum_level, buf)
+        _UniffiFfiConverterUInt64.write(value.maximum_node_bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.distance_checks, buf)
+
+
+class BindingProximityMapProtocol(typing.Protocol):
+
+    def build_hnsw(self, config: HnswConfigRecord,limits: HnswBuildLimitsRecord) -> HnswBuildResultRecord:
+        raise NotImplementedError
+    def clear_content_cache(self, ) -> None:
+        raise NotImplementedError
+    def config(self, ) -> ProximityConfigRecord:
+        raise NotImplementedError
+    def contains_key(self, key: bytes) -> bool:
+        raise NotImplementedError
+    def count(self, ) -> int:
+        raise NotImplementedError
+    def descriptor(self, ) -> bytes:
+        raise NotImplementedError
+    def fast_handle(self, ) -> int:
+        raise NotImplementedError
+    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
+        raise NotImplementedError
+    def load_hnsw(self, manifest: bytes) -> BindingHnswIndex:
+        raise NotImplementedError
+    def mutate(self, mutations: typing.List[ProximityMutationRecord]) -> ProximityMutationResultRecord:
+        raise NotImplementedError
+    def prove_membership(self, key: bytes) -> ProximityMembershipProofRecord:
+        raise NotImplementedError
+    def prove_search(self, request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
+        raise NotImplementedError
+    def prove_structure(self, limits: ContentGraphLimitsRecord) -> ProximityStructuralProofRecord:
+        raise NotImplementedError
+    def read_session(self, ) -> BindingProximityReadSession:
+        raise NotImplementedError
+    def rebuild(self, mutations: typing.List[ProximityMutationRecord]) -> BindingProximityMap:
+        raise NotImplementedError
+    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
+        raise NotImplementedError
+    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+    def verify(self, ) -> ProximityVerificationRecord:
+        raise NotImplementedError
+
+class BindingProximityMap(BindingProximityMapProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitymap, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitymap, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def build_hnsw(self, config: HnswConfigRecord,limits: HnswBuildLimitsRecord) -> HnswBuildResultRecord:
+
+        _UniffiFfiConverterTypeHnswConfigRecord.check_lower(config)
+
+        _UniffiFfiConverterTypeHnswBuildLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeHnswConfigRecord.lower(config),
+            _UniffiFfiConverterTypeHnswBuildLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeHnswBuildResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def clear_content_cache(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def config(self, ) -> ProximityConfigRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximityConfigRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_config,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def contains_key(self, key: bytes) -> bool:
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def count(self, ) -> int:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_count,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def descriptor(self, ) -> bytes:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def fast_handle(self, ) -> int:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeExactProximityRecordRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_get,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def load_hnsw(self, manifest: bytes) -> BindingHnswIndex:
+
+        _UniffiFfiConverterBytes.check_lower(manifest)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(manifest),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingHnswIndex.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def mutate(self, mutations: typing.List[ProximityMutationRecord]) -> ProximityMutationResultRecord:
+
+        _UniffiFfiConverterSequenceTypeProximityMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeProximityMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximityMutationResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def prove_membership(self, key: bytes) -> ProximityMembershipProofRecord:
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximityMembershipProofRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def prove_search(self, request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximitySearchProof.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def prove_structure(self, limits: ContentGraphLimitsRecord) -> ProximityStructuralProofRecord:
+
+        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximityStructuralProofRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def read_session(self, ) -> BindingProximityReadSession:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximityReadSession.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def rebuild(self, mutations: typing.List[ProximityMutationRecord]) -> BindingProximityMap:
+
+        _UniffiFfiConverterSequenceTypeProximityMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeProximityMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximityMap.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
+
+        _UniffiFfiConverterTypeProximityRecordVisitorCallback.check_lower(visitor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximityRecordVisitorCallback.lower(visitor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def verify(self, ) -> ProximityVerificationRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximityVerificationRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_verify,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeBindingProximityMap:
+    @staticmethod
+    def lift(value: int) -> BindingProximityMap:
+        return BindingProximityMap._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: BindingProximityMap):
+        if not isinstance(value, BindingProximityMap):
+            raise TypeError("Expected BindingProximityMap instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: BindingProximityMap) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> BindingProximityMap:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: BindingProximityMap, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+class BindingHnswIndexProtocol(typing.Protocol):
+
+    def config(self, ) -> HnswConfigRecord:
+        raise NotImplementedError
+    def is_canonical(self, ) -> bool:
+        raise NotImplementedError
+    def manifest(self, ) -> bytes:
+        raise NotImplementedError
+    def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
+        raise NotImplementedError
+    def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+        raise NotImplementedError
+    def source_descriptor(self, ) -> bytes:
+        raise NotImplementedError
+
+class BindingHnswIndex(BindingHnswIndexProtocol):
+
+    _handle: ctypes.c_uint64
+
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindinghnswindex, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindinghnswindex, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    def config(self, ) -> HnswConfigRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeHnswConfigRecord.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_config,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def is_canonical(self, ) -> bool:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def manifest(self, ) -> bytes:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+
+        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximitySearchProof.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
+
+        _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
+
+        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeBindingProximityMap.lower(map),
+            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_search,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def source_descriptor(self, ) -> bytes:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+
+
+
+
+
+class _UniffiFfiConverterTypeBindingHnswIndex:
+    @staticmethod
+    def lift(value: int) -> BindingHnswIndex:
+        return BindingHnswIndex._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: BindingHnswIndex):
+        if not isinstance(value, BindingHnswIndex):
+            raise TypeError("Expected BindingHnswIndex instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: BindingHnswIndex) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> BindingHnswIndex:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: BindingHnswIndex, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+@dataclass
+class HnswBuildStatsRecord:
+    def __init__(self, *, records:int, distance_evaluations:int, directed_edges:int, maximum_level:int, owned_bytes:int, encoded_graph_bytes:int):
+        self.records = records
+        self.distance_evaluations = distance_evaluations
+        self.directed_edges = directed_edges
+        self.maximum_level = maximum_level
+        self.owned_bytes = owned_bytes
+        self.encoded_graph_bytes = encoded_graph_bytes
+
+
+
+
+    def __str__(self):
+        return "HnswBuildStatsRecord(records={}, distance_evaluations={}, directed_edges={}, maximum_level={}, owned_bytes={}, encoded_graph_bytes={})".format(self.records, self.distance_evaluations, self.directed_edges, self.maximum_level, self.owned_bytes, self.encoded_graph_bytes)
+    def __eq__(self, other):
+        if self.records != other.records:
+            return False
+        if self.distance_evaluations != other.distance_evaluations:
+            return False
+        if self.directed_edges != other.directed_edges:
+            return False
+        if self.maximum_level != other.maximum_level:
+            return False
+        if self.owned_bytes != other.owned_bytes:
+            return False
+        if self.encoded_graph_bytes != other.encoded_graph_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeHnswBuildStatsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return HnswBuildStatsRecord(
+            records=_UniffiFfiConverterUInt64.read(buf),
+            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
+            directed_edges=_UniffiFfiConverterUInt64.read(buf),
+            maximum_level=_UniffiFfiConverterUInt8.read(buf),
+            owned_bytes=_UniffiFfiConverterUInt64.read(buf),
+            encoded_graph_bytes=_UniffiFfiConverterUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt64.check_lower(value.records)
+        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
+        _UniffiFfiConverterUInt64.check_lower(value.directed_edges)
+        _UniffiFfiConverterUInt8.check_lower(value.maximum_level)
+        _UniffiFfiConverterUInt64.check_lower(value.owned_bytes)
+        _UniffiFfiConverterUInt64.check_lower(value.encoded_graph_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt64.write(value.records, buf)
+        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
+        _UniffiFfiConverterUInt64.write(value.directed_edges, buf)
+        _UniffiFfiConverterUInt8.write(value.maximum_level, buf)
+        _UniffiFfiConverterUInt64.write(value.owned_bytes, buf)
+        _UniffiFfiConverterUInt64.write(value.encoded_graph_bytes, buf)
+
+@dataclass
+class HnswBuildResultRecord:
+    def __init__(self, *, index:BindingHnswIndex, stats:HnswBuildStatsRecord):
+        self.index = index
+        self.stats = stats
+
+
+
+
+    def __str__(self):
+        return "HnswBuildResultRecord(index={}, stats={})".format(self.index, self.stats)
+    def __eq__(self, other):
+        if self.index != other.index:
+            return False
+        if self.stats != other.stats:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeHnswBuildResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return HnswBuildResultRecord(
+            index=_UniffiFfiConverterTypeBindingHnswIndex.read(buf),
+            stats=_UniffiFfiConverterTypeHnswBuildStatsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeBindingHnswIndex.check_lower(value.index)
+        _UniffiFfiConverterTypeHnswBuildStatsRecord.check_lower(value.stats)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeBindingHnswIndex.write(value.index, buf)
+        _UniffiFfiConverterTypeHnswBuildStatsRecord.write(value.stats, buf)
+
 class _UniffiFfiConverterSequenceOptionalBytes(_UniffiConverterRustBuffer):
     @classmethod
     def check_lower(cls, value):
@@ -13083,346 +16269,6 @@ class _UniffiFfiConverterTypeProvedRangePageRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeRangePageRecord.write(value.page, buf)
         _UniffiFfiConverterTypeRangePageProofRecord.write(value.proof, buf)
 
-
-
-
-
-
-class DistanceMetricRecord(enum.Enum):
-
-    L2_SQUARED = 0
-
-    COSINE = 1
-
-    INNER_PRODUCT = 2
-
-
-
-class _UniffiFfiConverterTypeDistanceMetricRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return DistanceMetricRecord.L2_SQUARED
-        if variant == 2:
-            return DistanceMetricRecord.COSINE
-        if variant == 3:
-            return DistanceMetricRecord.INNER_PRODUCT
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == DistanceMetricRecord.L2_SQUARED:
-            return
-        if value == DistanceMetricRecord.COSINE:
-            return
-        if value == DistanceMetricRecord.INNER_PRODUCT:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == DistanceMetricRecord.L2_SQUARED:
-            buf.write_i32(1)
-        if value == DistanceMetricRecord.COSINE:
-            buf.write_i32(2)
-        if value == DistanceMetricRecord.INNER_PRODUCT:
-            buf.write_i32(3)
-
-
-
-class _UniffiFfiConverterOptionalUInt32(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterUInt32.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterUInt32.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterUInt32.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
-@dataclass
-class ProximityConfigRecord:
-    def __init__(self, *, dimensions:int, metric:DistanceMetricRecord, log_chunk_size:int, level_hash_seed:int, min_page_bytes:int, target_page_bytes:int, max_page_bytes:int, overflow_hash_seed:int, inline_threshold_bytes:int, scalar_quantization_group_size:typing.Optional[int]):
-        self.dimensions = dimensions
-        self.metric = metric
-        self.log_chunk_size = log_chunk_size
-        self.level_hash_seed = level_hash_seed
-        self.min_page_bytes = min_page_bytes
-        self.target_page_bytes = target_page_bytes
-        self.max_page_bytes = max_page_bytes
-        self.overflow_hash_seed = overflow_hash_seed
-        self.inline_threshold_bytes = inline_threshold_bytes
-        self.scalar_quantization_group_size = scalar_quantization_group_size
-
-
-
-
-    def __str__(self):
-        return "ProximityConfigRecord(dimensions={}, metric={}, log_chunk_size={}, level_hash_seed={}, min_page_bytes={}, target_page_bytes={}, max_page_bytes={}, overflow_hash_seed={}, inline_threshold_bytes={}, scalar_quantization_group_size={})".format(self.dimensions, self.metric, self.log_chunk_size, self.level_hash_seed, self.min_page_bytes, self.target_page_bytes, self.max_page_bytes, self.overflow_hash_seed, self.inline_threshold_bytes, self.scalar_quantization_group_size)
-    def __eq__(self, other):
-        if self.dimensions != other.dimensions:
-            return False
-        if self.metric != other.metric:
-            return False
-        if self.log_chunk_size != other.log_chunk_size:
-            return False
-        if self.level_hash_seed != other.level_hash_seed:
-            return False
-        if self.min_page_bytes != other.min_page_bytes:
-            return False
-        if self.target_page_bytes != other.target_page_bytes:
-            return False
-        if self.max_page_bytes != other.max_page_bytes:
-            return False
-        if self.overflow_hash_seed != other.overflow_hash_seed:
-            return False
-        if self.inline_threshold_bytes != other.inline_threshold_bytes:
-            return False
-        if self.scalar_quantization_group_size != other.scalar_quantization_group_size:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityConfigRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityConfigRecord(
-            dimensions=_UniffiFfiConverterUInt32.read(buf),
-            metric=_UniffiFfiConverterTypeDistanceMetricRecord.read(buf),
-            log_chunk_size=_UniffiFfiConverterUInt8.read(buf),
-            level_hash_seed=_UniffiFfiConverterUInt64.read(buf),
-            min_page_bytes=_UniffiFfiConverterUInt32.read(buf),
-            target_page_bytes=_UniffiFfiConverterUInt32.read(buf),
-            max_page_bytes=_UniffiFfiConverterUInt32.read(buf),
-            overflow_hash_seed=_UniffiFfiConverterUInt64.read(buf),
-            inline_threshold_bytes=_UniffiFfiConverterUInt32.read(buf),
-            scalar_quantization_group_size=_UniffiFfiConverterOptionalUInt32.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterUInt32.check_lower(value.dimensions)
-        _UniffiFfiConverterTypeDistanceMetricRecord.check_lower(value.metric)
-        _UniffiFfiConverterUInt8.check_lower(value.log_chunk_size)
-        _UniffiFfiConverterUInt64.check_lower(value.level_hash_seed)
-        _UniffiFfiConverterUInt32.check_lower(value.min_page_bytes)
-        _UniffiFfiConverterUInt32.check_lower(value.target_page_bytes)
-        _UniffiFfiConverterUInt32.check_lower(value.max_page_bytes)
-        _UniffiFfiConverterUInt64.check_lower(value.overflow_hash_seed)
-        _UniffiFfiConverterUInt32.check_lower(value.inline_threshold_bytes)
-        _UniffiFfiConverterOptionalUInt32.check_lower(value.scalar_quantization_group_size)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterUInt32.write(value.dimensions, buf)
-        _UniffiFfiConverterTypeDistanceMetricRecord.write(value.metric, buf)
-        _UniffiFfiConverterUInt8.write(value.log_chunk_size, buf)
-        _UniffiFfiConverterUInt64.write(value.level_hash_seed, buf)
-        _UniffiFfiConverterUInt32.write(value.min_page_bytes, buf)
-        _UniffiFfiConverterUInt32.write(value.target_page_bytes, buf)
-        _UniffiFfiConverterUInt32.write(value.max_page_bytes, buf)
-        _UniffiFfiConverterUInt64.write(value.overflow_hash_seed, buf)
-        _UniffiFfiConverterUInt32.write(value.inline_threshold_bytes, buf)
-        _UniffiFfiConverterOptionalUInt32.write(value.scalar_quantization_group_size, buf)
-
-
-
-
-
-
-class ProximityFilterKind(enum.Enum):
-
-    ALL = 0
-
-    KEY_RANGE = 1
-
-    PREFIX = 2
-
-    ELIGIBLE_KEYS = 3
-
-
-
-class _UniffiFfiConverterTypeProximityFilterKind(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return ProximityFilterKind.ALL
-        if variant == 2:
-            return ProximityFilterKind.KEY_RANGE
-        if variant == 3:
-            return ProximityFilterKind.PREFIX
-        if variant == 4:
-            return ProximityFilterKind.ELIGIBLE_KEYS
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == ProximityFilterKind.ALL:
-            return
-        if value == ProximityFilterKind.KEY_RANGE:
-            return
-        if value == ProximityFilterKind.PREFIX:
-            return
-        if value == ProximityFilterKind.ELIGIBLE_KEYS:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == ProximityFilterKind.ALL:
-            buf.write_i32(1)
-        if value == ProximityFilterKind.KEY_RANGE:
-            buf.write_i32(2)
-        if value == ProximityFilterKind.PREFIX:
-            buf.write_i32(3)
-        if value == ProximityFilterKind.ELIGIBLE_KEYS:
-            buf.write_i32(4)
-
-
-
-@dataclass
-class ProximityFilterRecord:
-    def __init__(self, *, kind:ProximityFilterKind, start:typing.Optional[bytes], range_end:typing.Optional[bytes], prefix:typing.Optional[bytes], eligible_keys:typing.List[bytes]):
-        self.kind = kind
-        self.start = start
-        self.range_end = range_end
-        self.prefix = prefix
-        self.eligible_keys = eligible_keys
-
-
-
-
-    def __str__(self):
-        return "ProximityFilterRecord(kind={}, start={}, range_end={}, prefix={}, eligible_keys={})".format(self.kind, self.start, self.range_end, self.prefix, self.eligible_keys)
-    def __eq__(self, other):
-        if self.kind != other.kind:
-            return False
-        if self.start != other.start:
-            return False
-        if self.range_end != other.range_end:
-            return False
-        if self.prefix != other.prefix:
-            return False
-        if self.eligible_keys != other.eligible_keys:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityFilterRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityFilterRecord(
-            kind=_UniffiFfiConverterTypeProximityFilterKind.read(buf),
-            start=_UniffiFfiConverterOptionalBytes.read(buf),
-            range_end=_UniffiFfiConverterOptionalBytes.read(buf),
-            prefix=_UniffiFfiConverterOptionalBytes.read(buf),
-            eligible_keys=_UniffiFfiConverterSequenceBytes.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeProximityFilterKind.check_lower(value.kind)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.start)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.range_end)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.prefix)
-        _UniffiFfiConverterSequenceBytes.check_lower(value.eligible_keys)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeProximityFilterKind.write(value.kind, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.start, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.range_end, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.prefix, buf)
-        _UniffiFfiConverterSequenceBytes.write(value.eligible_keys, buf)
-
-@dataclass
-class ProximityMembershipProofRecord:
-    def __init__(self, *, descriptor:bytes, descriptor_bytes:bytes, directory_proof:KeyProofRecord, record_bytes:typing.Optional[bytes]):
-        self.descriptor = descriptor
-        self.descriptor_bytes = descriptor_bytes
-        self.directory_proof = directory_proof
-        self.record_bytes = record_bytes
-
-
-
-
-    def __str__(self):
-        return "ProximityMembershipProofRecord(descriptor={}, descriptor_bytes={}, directory_proof={}, record_bytes={})".format(self.descriptor, self.descriptor_bytes, self.directory_proof, self.record_bytes)
-    def __eq__(self, other):
-        if self.descriptor != other.descriptor:
-            return False
-        if self.descriptor_bytes != other.descriptor_bytes:
-            return False
-        if self.directory_proof != other.directory_proof:
-            return False
-        if self.record_bytes != other.record_bytes:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMembershipProofRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMembershipProofRecord(
-            descriptor=_UniffiFfiConverterBytes.read(buf),
-            descriptor_bytes=_UniffiFfiConverterBytes.read(buf),
-            directory_proof=_UniffiFfiConverterTypeKeyProofRecord.read(buf),
-            record_bytes=_UniffiFfiConverterOptionalBytes.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.descriptor)
-        _UniffiFfiConverterBytes.check_lower(value.descriptor_bytes)
-        _UniffiFfiConverterTypeKeyProofRecord.check_lower(value.directory_proof)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.record_bytes)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.descriptor, buf)
-        _UniffiFfiConverterBytes.write(value.descriptor_bytes, buf)
-        _UniffiFfiConverterTypeKeyProofRecord.write(value.directory_proof, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.record_bytes, buf)
-
-class _UniffiFfiConverterOptionalTypeExactProximityRecordRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterTypeExactProximityRecordRecord.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterTypeExactProximityRecordRecord.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterTypeExactProximityRecordRecord.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
 @dataclass
 class ProximityMembershipVerificationRecord:
     def __init__(self, *, descriptor:bytes, key:bytes, record:typing.Optional[ExactProximityRecordRecord]):
@@ -13464,2294 +16310,6 @@ class _UniffiFfiConverterTypeProximityMembershipVerificationRecord(_UniffiConver
         _UniffiFfiConverterBytes.write(value.descriptor, buf)
         _UniffiFfiConverterBytes.write(value.key, buf)
         _UniffiFfiConverterOptionalTypeExactProximityRecordRecord.write(value.record, buf)
-
-class _UniffiFfiConverterOptionalSequenceFloat32(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterSequenceFloat32.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterSequenceFloat32.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterSequenceFloat32.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
-@dataclass
-class ProximityMutationRecord:
-    def __init__(self, *, key:bytes, vector:typing.Optional[typing.List[float]], value:typing.Optional[bytes]):
-        self.key = key
-        self.vector = vector
-        self.value = value
-
-
-
-
-    def __str__(self):
-        return "ProximityMutationRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
-    def __eq__(self, other):
-        if self.key != other.key:
-            return False
-        if self.vector != other.vector:
-            return False
-        if self.value != other.value:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMutationRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMutationRecord(
-            key=_UniffiFfiConverterBytes.read(buf),
-            vector=_UniffiFfiConverterOptionalSequenceFloat32.read(buf),
-            value=_UniffiFfiConverterOptionalBytes.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.key)
-        _UniffiFfiConverterOptionalSequenceFloat32.check_lower(value.vector)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.value)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.key, buf)
-        _UniffiFfiConverterOptionalSequenceFloat32.write(value.vector, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.value, buf)
-
-
-
-# ProllyBindingError
-# We want to define each variant as a nested class that's also a subclass,
-# which is tricky in Python.  To accomplish this we're going to create each
-# class separately, then manually add the child classes to the base class's
-# __dict__.  All of this happens in dummy class to avoid polluting the module
-# namespace.
-class ProllyBindingError(Exception):
-    pass
-
-_UniffiTempProllyBindingError = ProllyBindingError
-
-class ProllyBindingError:  # type: ignore
-
-    class InvalidArgument(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.InvalidArgument({})".format(str(self))
-    _UniffiTempProllyBindingError.InvalidArgument = InvalidArgument # type: ignore
-    class InvalidCid(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.InvalidCid({})".format(str(self))
-    _UniffiTempProllyBindingError.InvalidCid = InvalidCid # type: ignore
-    class InvalidNode(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.InvalidNode({})".format(str(self))
-    _UniffiTempProllyBindingError.InvalidNode = InvalidNode # type: ignore
-    class NotFound(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.NotFound({})".format(str(self))
-    _UniffiTempProllyBindingError.NotFound = NotFound # type: ignore
-    class Conflict(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.Conflict({})".format(str(self))
-    _UniffiTempProllyBindingError.Conflict = Conflict # type: ignore
-    class Store(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.Store({})".format(str(self))
-    _UniffiTempProllyBindingError.Store = Store # type: ignore
-    class Serialization(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.Serialization({})".format(str(self))
-    _UniffiTempProllyBindingError.Serialization = Serialization # type: ignore
-    class Internal(_UniffiTempProllyBindingError):
-
-        def __init__(self, reason):
-            super().__init__(", ".join([
-                "reason={!r}".format(reason),
-            ]))
-            self.reason = reason
-
-        def __repr__(self):
-            return "ProllyBindingError.Internal({})".format(str(self))
-    _UniffiTempProllyBindingError.Internal = Internal # type: ignore
-
-ProllyBindingError = _UniffiTempProllyBindingError # type: ignore
-del _UniffiTempProllyBindingError
-
-
-class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return ProllyBindingError.InvalidArgument(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 2:
-            return ProllyBindingError.InvalidCid(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 3:
-            return ProllyBindingError.InvalidNode(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 4:
-            return ProllyBindingError.NotFound(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 5:
-            return ProllyBindingError.Conflict(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 6:
-            return ProllyBindingError.Store(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 7:
-            return ProllyBindingError.Serialization(
-                _UniffiFfiConverterString.read(buf),
-            )
-        if variant == 8:
-            return ProllyBindingError.Internal(
-                _UniffiFfiConverterString.read(buf),
-            )
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if isinstance(value, ProllyBindingError.InvalidArgument):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.InvalidCid):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.InvalidNode):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.NotFound):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.Conflict):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.Store):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.Serialization):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-        if isinstance(value, ProllyBindingError.Internal):
-            _UniffiFfiConverterString.check_lower(value.reason)
-            return
-
-    @staticmethod
-    def write(value, buf):
-        if isinstance(value, ProllyBindingError.InvalidArgument):
-            buf.write_i32(1)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.InvalidCid):
-            buf.write_i32(2)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.InvalidNode):
-            buf.write_i32(3)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.NotFound):
-            buf.write_i32(4)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.Conflict):
-            buf.write_i32(5)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.Store):
-            buf.write_i32(6)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.Serialization):
-            buf.write_i32(7)
-            _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.Internal):
-            buf.write_i32(8)
-            _UniffiFfiConverterString.write(value.reason, buf)
-
-class _UniffiFfiConverterSequenceTypeProximityMutationRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeProximityMutationRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeProximityMutationRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeProximityMutationRecord.read(buf) for i in range(count)
-        ]
-
-
-
-
-
-
-class SearchPolicyKind(enum.Enum):
-
-    EXACT = 0
-
-    FIXED_BUDGET = 1
-
-    ADAPTIVE = 2
-
-
-
-class _UniffiFfiConverterTypeSearchPolicyKind(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return SearchPolicyKind.EXACT
-        if variant == 2:
-            return SearchPolicyKind.FIXED_BUDGET
-        if variant == 3:
-            return SearchPolicyKind.ADAPTIVE
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == SearchPolicyKind.EXACT:
-            return
-        if value == SearchPolicyKind.FIXED_BUDGET:
-            return
-        if value == SearchPolicyKind.ADAPTIVE:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == SearchPolicyKind.EXACT:
-            buf.write_i32(1)
-        if value == SearchPolicyKind.FIXED_BUDGET:
-            buf.write_i32(2)
-        if value == SearchPolicyKind.ADAPTIVE:
-            buf.write_i32(3)
-
-
-
-
-
-
-
-
-class AdaptiveQualityRecord(enum.Enum):
-
-    FAST = 0
-
-    BALANCED = 1
-
-    HIGH_RECALL = 2
-
-
-
-class _UniffiFfiConverterTypeAdaptiveQualityRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return AdaptiveQualityRecord.FAST
-        if variant == 2:
-            return AdaptiveQualityRecord.BALANCED
-        if variant == 3:
-            return AdaptiveQualityRecord.HIGH_RECALL
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == AdaptiveQualityRecord.FAST:
-            return
-        if value == AdaptiveQualityRecord.BALANCED:
-            return
-        if value == AdaptiveQualityRecord.HIGH_RECALL:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == AdaptiveQualityRecord.FAST:
-            buf.write_i32(1)
-        if value == AdaptiveQualityRecord.BALANCED:
-            buf.write_i32(2)
-        if value == AdaptiveQualityRecord.HIGH_RECALL:
-            buf.write_i32(3)
-
-
-
-class _UniffiFfiConverterOptionalTypeAdaptiveQualityRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterTypeAdaptiveQualityRecord.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterTypeAdaptiveQualityRecord.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterTypeAdaptiveQualityRecord.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
-@dataclass
-class SearchBudgetRecord:
-    def __init__(self, *, max_nodes:typing.Optional[int], max_committed_bytes:typing.Optional[int], max_distance_evaluations:typing.Optional[int], max_frontier_entries:typing.Optional[int]):
-        self.max_nodes = max_nodes
-        self.max_committed_bytes = max_committed_bytes
-        self.max_distance_evaluations = max_distance_evaluations
-        self.max_frontier_entries = max_frontier_entries
-
-
-
-
-    def __str__(self):
-        return "SearchBudgetRecord(max_nodes={}, max_committed_bytes={}, max_distance_evaluations={}, max_frontier_entries={})".format(self.max_nodes, self.max_committed_bytes, self.max_distance_evaluations, self.max_frontier_entries)
-    def __eq__(self, other):
-        if self.max_nodes != other.max_nodes:
-            return False
-        if self.max_committed_bytes != other.max_committed_bytes:
-            return False
-        if self.max_distance_evaluations != other.max_distance_evaluations:
-            return False
-        if self.max_frontier_entries != other.max_frontier_entries:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeSearchBudgetRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return SearchBudgetRecord(
-            max_nodes=_UniffiFfiConverterOptionalUInt64.read(buf),
-            max_committed_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
-            max_distance_evaluations=_UniffiFfiConverterOptionalUInt64.read(buf),
-            max_frontier_entries=_UniffiFfiConverterOptionalUInt64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_nodes)
-        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_committed_bytes)
-        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_distance_evaluations)
-        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_frontier_entries)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterOptionalUInt64.write(value.max_nodes, buf)
-        _UniffiFfiConverterOptionalUInt64.write(value.max_committed_bytes, buf)
-        _UniffiFfiConverterOptionalUInt64.write(value.max_distance_evaluations, buf)
-        _UniffiFfiConverterOptionalUInt64.write(value.max_frontier_entries, buf)
-
-
-
-
-
-
-class QueryKernelRecord(enum.Enum):
-
-    SCALAR_DETERMINISTIC = 0
-
-    SIMD_DETERMINISTIC = 1
-
-    AUTO_DETERMINISTIC = 2
-
-
-
-class _UniffiFfiConverterTypeQueryKernelRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return QueryKernelRecord.SCALAR_DETERMINISTIC
-        if variant == 2:
-            return QueryKernelRecord.SIMD_DETERMINISTIC
-        if variant == 3:
-            return QueryKernelRecord.AUTO_DETERMINISTIC
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == QueryKernelRecord.SCALAR_DETERMINISTIC:
-            return
-        if value == QueryKernelRecord.SIMD_DETERMINISTIC:
-            return
-        if value == QueryKernelRecord.AUTO_DETERMINISTIC:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == QueryKernelRecord.SCALAR_DETERMINISTIC:
-            buf.write_i32(1)
-        if value == QueryKernelRecord.SIMD_DETERMINISTIC:
-            buf.write_i32(2)
-        if value == QueryKernelRecord.AUTO_DETERMINISTIC:
-            buf.write_i32(3)
-
-
-
-
-
-
-
-
-class SearchBackendRecord(enum.Enum):
-
-    NATIVE = 0
-
-    PRODUCT_QUANTIZED = 1
-
-    HNSW = 2
-
-    COMPOSITE = 3
-
-    AUTO = 4
-
-
-
-class _UniffiFfiConverterTypeSearchBackendRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return SearchBackendRecord.NATIVE
-        if variant == 2:
-            return SearchBackendRecord.PRODUCT_QUANTIZED
-        if variant == 3:
-            return SearchBackendRecord.HNSW
-        if variant == 4:
-            return SearchBackendRecord.COMPOSITE
-        if variant == 5:
-            return SearchBackendRecord.AUTO
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == SearchBackendRecord.NATIVE:
-            return
-        if value == SearchBackendRecord.PRODUCT_QUANTIZED:
-            return
-        if value == SearchBackendRecord.HNSW:
-            return
-        if value == SearchBackendRecord.COMPOSITE:
-            return
-        if value == SearchBackendRecord.AUTO:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == SearchBackendRecord.NATIVE:
-            buf.write_i32(1)
-        if value == SearchBackendRecord.PRODUCT_QUANTIZED:
-            buf.write_i32(2)
-        if value == SearchBackendRecord.HNSW:
-            buf.write_i32(3)
-        if value == SearchBackendRecord.COMPOSITE:
-            buf.write_i32(4)
-        if value == SearchBackendRecord.AUTO:
-            buf.write_i32(5)
-
-
-
-class _UniffiFfiConverterUInt16(_UniffiConverterPrimitiveInt):
-    CLASS_NAME = "u16"
-    VALUE_MIN = 0
-    VALUE_MAX = 2**16
-
-    @staticmethod
-    def read(buf):
-        return buf.read_u16()
-
-    @staticmethod
-    def write(value, buf):
-        buf.write_u16(value)
-
-class _UniffiFfiConverterOptionalUInt16(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterUInt16.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterUInt16.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterUInt16.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
-@dataclass
-class ProximitySearchRequestRecord:
-    def __init__(self, *, query:typing.List[float], k:int, policy:SearchPolicyKind, adaptive_quality:typing.Optional[AdaptiveQualityRecord], budget:SearchBudgetRecord, filter:ProximityFilterRecord, kernel:QueryKernelRecord, backend:SearchBackendRecord, hnsw_ef_search:typing.Optional[int], pq_rerank_multiplier:typing.Optional[int]):
-        self.query = query
-        self.k = k
-        self.policy = policy
-        self.adaptive_quality = adaptive_quality
-        self.budget = budget
-        self.filter = filter
-        self.kernel = kernel
-        self.backend = backend
-        self.hnsw_ef_search = hnsw_ef_search
-        self.pq_rerank_multiplier = pq_rerank_multiplier
-
-
-
-
-    def __str__(self):
-        return "ProximitySearchRequestRecord(query={}, k={}, policy={}, adaptive_quality={}, budget={}, filter={}, kernel={}, backend={}, hnsw_ef_search={}, pq_rerank_multiplier={})".format(self.query, self.k, self.policy, self.adaptive_quality, self.budget, self.filter, self.kernel, self.backend, self.hnsw_ef_search, self.pq_rerank_multiplier)
-    def __eq__(self, other):
-        if self.query != other.query:
-            return False
-        if self.k != other.k:
-            return False
-        if self.policy != other.policy:
-            return False
-        if self.adaptive_quality != other.adaptive_quality:
-            return False
-        if self.budget != other.budget:
-            return False
-        if self.filter != other.filter:
-            return False
-        if self.kernel != other.kernel:
-            return False
-        if self.backend != other.backend:
-            return False
-        if self.hnsw_ef_search != other.hnsw_ef_search:
-            return False
-        if self.pq_rerank_multiplier != other.pq_rerank_multiplier:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximitySearchRequestRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximitySearchRequestRecord(
-            query=_UniffiFfiConverterSequenceFloat32.read(buf),
-            k=_UniffiFfiConverterUInt64.read(buf),
-            policy=_UniffiFfiConverterTypeSearchPolicyKind.read(buf),
-            adaptive_quality=_UniffiFfiConverterOptionalTypeAdaptiveQualityRecord.read(buf),
-            budget=_UniffiFfiConverterTypeSearchBudgetRecord.read(buf),
-            filter=_UniffiFfiConverterTypeProximityFilterRecord.read(buf),
-            kernel=_UniffiFfiConverterTypeQueryKernelRecord.read(buf),
-            backend=_UniffiFfiConverterTypeSearchBackendRecord.read(buf),
-            hnsw_ef_search=_UniffiFfiConverterOptionalUInt32.read(buf),
-            pq_rerank_multiplier=_UniffiFfiConverterOptionalUInt16.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterSequenceFloat32.check_lower(value.query)
-        _UniffiFfiConverterUInt64.check_lower(value.k)
-        _UniffiFfiConverterTypeSearchPolicyKind.check_lower(value.policy)
-        _UniffiFfiConverterOptionalTypeAdaptiveQualityRecord.check_lower(value.adaptive_quality)
-        _UniffiFfiConverterTypeSearchBudgetRecord.check_lower(value.budget)
-        _UniffiFfiConverterTypeProximityFilterRecord.check_lower(value.filter)
-        _UniffiFfiConverterTypeQueryKernelRecord.check_lower(value.kernel)
-        _UniffiFfiConverterTypeSearchBackendRecord.check_lower(value.backend)
-        _UniffiFfiConverterOptionalUInt32.check_lower(value.hnsw_ef_search)
-        _UniffiFfiConverterOptionalUInt16.check_lower(value.pq_rerank_multiplier)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterSequenceFloat32.write(value.query, buf)
-        _UniffiFfiConverterUInt64.write(value.k, buf)
-        _UniffiFfiConverterTypeSearchPolicyKind.write(value.policy, buf)
-        _UniffiFfiConverterOptionalTypeAdaptiveQualityRecord.write(value.adaptive_quality, buf)
-        _UniffiFfiConverterTypeSearchBudgetRecord.write(value.budget, buf)
-        _UniffiFfiConverterTypeProximityFilterRecord.write(value.filter, buf)
-        _UniffiFfiConverterTypeQueryKernelRecord.write(value.kernel, buf)
-        _UniffiFfiConverterTypeSearchBackendRecord.write(value.backend, buf)
-        _UniffiFfiConverterOptionalUInt32.write(value.hnsw_ef_search, buf)
-        _UniffiFfiConverterOptionalUInt16.write(value.pq_rerank_multiplier, buf)
-
-class _UniffiFfiConverterFloat64(_UniffiConverterPrimitiveFloat):
-    @staticmethod
-    def read(buf):
-        return buf.read_double()
-
-    @staticmethod
-    def write(value, buf):
-        buf.write_double(value)
-
-@dataclass
-class ProximityNeighborRecord:
-    def __init__(self, *, key:bytes, value:bytes, distance:float):
-        self.key = key
-        self.value = value
-        self.distance = distance
-
-
-
-
-    def __str__(self):
-        return "ProximityNeighborRecord(key={}, value={}, distance={})".format(self.key, self.value, self.distance)
-    def __eq__(self, other):
-        if self.key != other.key:
-            return False
-        if self.value != other.value:
-            return False
-        if self.distance != other.distance:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityNeighborRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityNeighborRecord(
-            key=_UniffiFfiConverterBytes.read(buf),
-            value=_UniffiFfiConverterBytes.read(buf),
-            distance=_UniffiFfiConverterFloat64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.key)
-        _UniffiFfiConverterBytes.check_lower(value.value)
-        _UniffiFfiConverterFloat64.check_lower(value.distance)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.key, buf)
-        _UniffiFfiConverterBytes.write(value.value, buf)
-        _UniffiFfiConverterFloat64.write(value.distance, buf)
-
-class _UniffiFfiConverterSequenceTypeProximityNeighborRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeProximityNeighborRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeProximityNeighborRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeProximityNeighborRecord.read(buf) for i in range(count)
-        ]
-
-@dataclass
-class ProximitySearchStatsRecord:
-    def __init__(self, *, levels_visited:int, nodes_read:int, bytes_read:int, physical_bytes_read:int, committed_bytes:int, distance_evaluations:int, quantized_distance_evaluations:int, reranked_candidates:int, frontier_peak:int, candidate_handles_peak:int, candidate_retained_bytes_peak:int):
-        self.levels_visited = levels_visited
-        self.nodes_read = nodes_read
-        self.bytes_read = bytes_read
-        self.physical_bytes_read = physical_bytes_read
-        self.committed_bytes = committed_bytes
-        self.distance_evaluations = distance_evaluations
-        self.quantized_distance_evaluations = quantized_distance_evaluations
-        self.reranked_candidates = reranked_candidates
-        self.frontier_peak = frontier_peak
-        self.candidate_handles_peak = candidate_handles_peak
-        self.candidate_retained_bytes_peak = candidate_retained_bytes_peak
-
-
-
-
-    def __str__(self):
-        return "ProximitySearchStatsRecord(levels_visited={}, nodes_read={}, bytes_read={}, physical_bytes_read={}, committed_bytes={}, distance_evaluations={}, quantized_distance_evaluations={}, reranked_candidates={}, frontier_peak={}, candidate_handles_peak={}, candidate_retained_bytes_peak={})".format(self.levels_visited, self.nodes_read, self.bytes_read, self.physical_bytes_read, self.committed_bytes, self.distance_evaluations, self.quantized_distance_evaluations, self.reranked_candidates, self.frontier_peak, self.candidate_handles_peak, self.candidate_retained_bytes_peak)
-    def __eq__(self, other):
-        if self.levels_visited != other.levels_visited:
-            return False
-        if self.nodes_read != other.nodes_read:
-            return False
-        if self.bytes_read != other.bytes_read:
-            return False
-        if self.physical_bytes_read != other.physical_bytes_read:
-            return False
-        if self.committed_bytes != other.committed_bytes:
-            return False
-        if self.distance_evaluations != other.distance_evaluations:
-            return False
-        if self.quantized_distance_evaluations != other.quantized_distance_evaluations:
-            return False
-        if self.reranked_candidates != other.reranked_candidates:
-            return False
-        if self.frontier_peak != other.frontier_peak:
-            return False
-        if self.candidate_handles_peak != other.candidate_handles_peak:
-            return False
-        if self.candidate_retained_bytes_peak != other.candidate_retained_bytes_peak:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximitySearchStatsRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximitySearchStatsRecord(
-            levels_visited=_UniffiFfiConverterUInt64.read(buf),
-            nodes_read=_UniffiFfiConverterUInt64.read(buf),
-            bytes_read=_UniffiFfiConverterUInt64.read(buf),
-            physical_bytes_read=_UniffiFfiConverterUInt64.read(buf),
-            committed_bytes=_UniffiFfiConverterUInt64.read(buf),
-            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
-            quantized_distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
-            reranked_candidates=_UniffiFfiConverterUInt64.read(buf),
-            frontier_peak=_UniffiFfiConverterUInt64.read(buf),
-            candidate_handles_peak=_UniffiFfiConverterUInt64.read(buf),
-            candidate_retained_bytes_peak=_UniffiFfiConverterUInt64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterUInt64.check_lower(value.levels_visited)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.bytes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.physical_bytes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.committed_bytes)
-        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
-        _UniffiFfiConverterUInt64.check_lower(value.quantized_distance_evaluations)
-        _UniffiFfiConverterUInt64.check_lower(value.reranked_candidates)
-        _UniffiFfiConverterUInt64.check_lower(value.frontier_peak)
-        _UniffiFfiConverterUInt64.check_lower(value.candidate_handles_peak)
-        _UniffiFfiConverterUInt64.check_lower(value.candidate_retained_bytes_peak)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterUInt64.write(value.levels_visited, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.bytes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.physical_bytes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.committed_bytes, buf)
-        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
-        _UniffiFfiConverterUInt64.write(value.quantized_distance_evaluations, buf)
-        _UniffiFfiConverterUInt64.write(value.reranked_candidates, buf)
-        _UniffiFfiConverterUInt64.write(value.frontier_peak, buf)
-        _UniffiFfiConverterUInt64.write(value.candidate_handles_peak, buf)
-        _UniffiFfiConverterUInt64.write(value.candidate_retained_bytes_peak, buf)
-
-
-
-
-
-
-class SearchCompletionRecord(enum.Enum):
-
-    EXACT = 0
-
-    APPROXIMATE_POLICY_SATISFIED = 1
-
-    BUDGET_EXHAUSTED = 2
-
-    CANCELLED = 3
-
-    DEADLINE_EXCEEDED = 4
-
-
-
-class _UniffiFfiConverterTypeSearchCompletionRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return SearchCompletionRecord.EXACT
-        if variant == 2:
-            return SearchCompletionRecord.APPROXIMATE_POLICY_SATISFIED
-        if variant == 3:
-            return SearchCompletionRecord.BUDGET_EXHAUSTED
-        if variant == 4:
-            return SearchCompletionRecord.CANCELLED
-        if variant == 5:
-            return SearchCompletionRecord.DEADLINE_EXCEEDED
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == SearchCompletionRecord.EXACT:
-            return
-        if value == SearchCompletionRecord.APPROXIMATE_POLICY_SATISFIED:
-            return
-        if value == SearchCompletionRecord.BUDGET_EXHAUSTED:
-            return
-        if value == SearchCompletionRecord.CANCELLED:
-            return
-        if value == SearchCompletionRecord.DEADLINE_EXCEEDED:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == SearchCompletionRecord.EXACT:
-            buf.write_i32(1)
-        if value == SearchCompletionRecord.APPROXIMATE_POLICY_SATISFIED:
-            buf.write_i32(2)
-        if value == SearchCompletionRecord.BUDGET_EXHAUSTED:
-            buf.write_i32(3)
-        if value == SearchCompletionRecord.CANCELLED:
-            buf.write_i32(4)
-        if value == SearchCompletionRecord.DEADLINE_EXCEEDED:
-            buf.write_i32(5)
-
-
-
-@dataclass
-class ProximitySearchResultRecord:
-    def __init__(self, *, neighbors:typing.List[ProximityNeighborRecord], stats:ProximitySearchStatsRecord, completion:SearchCompletionRecord, backend:SearchBackendRecord, plan_format_version:int):
-        self.neighbors = neighbors
-        self.stats = stats
-        self.completion = completion
-        self.backend = backend
-        self.plan_format_version = plan_format_version
-
-
-
-
-    def __str__(self):
-        return "ProximitySearchResultRecord(neighbors={}, stats={}, completion={}, backend={}, plan_format_version={})".format(self.neighbors, self.stats, self.completion, self.backend, self.plan_format_version)
-    def __eq__(self, other):
-        if self.neighbors != other.neighbors:
-            return False
-        if self.stats != other.stats:
-            return False
-        if self.completion != other.completion:
-            return False
-        if self.backend != other.backend:
-            return False
-        if self.plan_format_version != other.plan_format_version:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximitySearchResultRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximitySearchResultRecord(
-            neighbors=_UniffiFfiConverterSequenceTypeProximityNeighborRecord.read(buf),
-            stats=_UniffiFfiConverterTypeProximitySearchStatsRecord.read(buf),
-            completion=_UniffiFfiConverterTypeSearchCompletionRecord.read(buf),
-            backend=_UniffiFfiConverterTypeSearchBackendRecord.read(buf),
-            plan_format_version=_UniffiFfiConverterUInt8.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterSequenceTypeProximityNeighborRecord.check_lower(value.neighbors)
-        _UniffiFfiConverterTypeProximitySearchStatsRecord.check_lower(value.stats)
-        _UniffiFfiConverterTypeSearchCompletionRecord.check_lower(value.completion)
-        _UniffiFfiConverterTypeSearchBackendRecord.check_lower(value.backend)
-        _UniffiFfiConverterUInt8.check_lower(value.plan_format_version)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterSequenceTypeProximityNeighborRecord.write(value.neighbors, buf)
-        _UniffiFfiConverterTypeProximitySearchStatsRecord.write(value.stats, buf)
-        _UniffiFfiConverterTypeSearchCompletionRecord.write(value.completion, buf)
-        _UniffiFfiConverterTypeSearchBackendRecord.write(value.backend, buf)
-        _UniffiFfiConverterUInt8.write(value.plan_format_version, buf)
-
-
-
-
-
-
-class ProximitySearchClaimKindRecord(enum.Enum):
-
-    EXACT_L2_OPTIMAL = 0
-
-    HONEST_EXECUTION = 1
-
-
-
-class _UniffiFfiConverterTypeProximitySearchClaimKindRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return ProximitySearchClaimKindRecord.EXACT_L2_OPTIMAL
-        if variant == 2:
-            return ProximitySearchClaimKindRecord.HONEST_EXECUTION
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == ProximitySearchClaimKindRecord.EXACT_L2_OPTIMAL:
-            return
-        if value == ProximitySearchClaimKindRecord.HONEST_EXECUTION:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == ProximitySearchClaimKindRecord.EXACT_L2_OPTIMAL:
-            buf.write_i32(1)
-        if value == ProximitySearchClaimKindRecord.HONEST_EXECUTION:
-            buf.write_i32(2)
-
-
-
-class _UniffiFfiConverterOptionalFloat64(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        if value is not None:
-            _UniffiFfiConverterFloat64.check_lower(value)
-
-    @classmethod
-    def write(cls, value, buf):
-        if value is None:
-            buf.write_u8(0)
-            return
-
-        buf.write_u8(1)
-        _UniffiFfiConverterFloat64.write(value, buf)
-
-    @classmethod
-    def read(cls, buf):
-        flag = buf.read_u8()
-        if flag == 0:
-            return None
-        elif flag == 1:
-            return _UniffiFfiConverterFloat64.read(buf)
-        else:
-            raise InternalError("Unexpected flag byte for optional type")
-
-@dataclass
-class ProximitySearchClaimRecord:
-    def __init__(self, *, kind:ProximitySearchClaimKindRecord, terminal_lower_bound:typing.Optional[float]):
-        self.kind = kind
-        self.terminal_lower_bound = terminal_lower_bound
-
-
-
-
-    def __str__(self):
-        return "ProximitySearchClaimRecord(kind={}, terminal_lower_bound={})".format(self.kind, self.terminal_lower_bound)
-    def __eq__(self, other):
-        if self.kind != other.kind:
-            return False
-        if self.terminal_lower_bound != other.terminal_lower_bound:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximitySearchClaimRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximitySearchClaimRecord(
-            kind=_UniffiFfiConverterTypeProximitySearchClaimKindRecord.read(buf),
-            terminal_lower_bound=_UniffiFfiConverterOptionalFloat64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeProximitySearchClaimKindRecord.check_lower(value.kind)
-        _UniffiFfiConverterOptionalFloat64.check_lower(value.terminal_lower_bound)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeProximitySearchClaimKindRecord.write(value.kind, buf)
-        _UniffiFfiConverterOptionalFloat64.write(value.terminal_lower_bound, buf)
-
-@dataclass
-class ProximitySearchVerificationRecord:
-    def __init__(self, *, result:ProximitySearchResultRecord, claim:ProximitySearchClaimRecord, replayed_events:int):
-        self.result = result
-        self.claim = claim
-        self.replayed_events = replayed_events
-
-
-
-
-    def __str__(self):
-        return "ProximitySearchVerificationRecord(result={}, claim={}, replayed_events={})".format(self.result, self.claim, self.replayed_events)
-    def __eq__(self, other):
-        if self.result != other.result:
-            return False
-        if self.claim != other.claim:
-            return False
-        if self.replayed_events != other.replayed_events:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximitySearchVerificationRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximitySearchVerificationRecord(
-            result=_UniffiFfiConverterTypeProximitySearchResultRecord.read(buf),
-            claim=_UniffiFfiConverterTypeProximitySearchClaimRecord.read(buf),
-            replayed_events=_UniffiFfiConverterUInt64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeProximitySearchResultRecord.check_lower(value.result)
-        _UniffiFfiConverterTypeProximitySearchClaimRecord.check_lower(value.claim)
-        _UniffiFfiConverterUInt64.check_lower(value.replayed_events)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeProximitySearchResultRecord.write(value.result, buf)
-        _UniffiFfiConverterTypeProximitySearchClaimRecord.write(value.claim, buf)
-        _UniffiFfiConverterUInt64.write(value.replayed_events, buf)
-
-
-class BindingProximitySearchProofProtocol(typing.Protocol):
-
-    def source_descriptor(self, ) -> bytes:
-        raise NotImplementedError
-    def verify(self, expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximitySearchVerificationRecord:
-        raise NotImplementedError
-
-class BindingProximitySearchProof(BindingProximitySearchProofProtocol):
-
-    _handle: ctypes.c_uint64
-
-    def __init__(self, *args, **kwargs):
-        raise ValueError("This class has no default constructor")
-
-    def __del__(self):
-        # In case of partial initialization of instances.
-        handle = getattr(self, "_handle", None)
-        if handle is not None:
-            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitysearchproof, handle)
-
-    def _uniffi_clone_handle(self):
-        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitysearchproof, self._handle)
-
-    # Used by alternative constructors or any methods which return this type.
-    @classmethod
-    def _uniffi_make_instance(cls, handle):
-        # Lightly yucky way to bypass the usual __init__ logic
-        # and just create a new instance with the required handle.
-        inst = cls.__new__(cls)
-        inst._handle = handle
-        return inst
-    def source_descriptor(self, ) -> bytes:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
-        _uniffi_error_converter = None
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def verify(self, expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximitySearchVerificationRecord:
-
-        _UniffiFfiConverterOptionalBytes.check_lower(expected_descriptor)
-
-        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterOptionalBytes.lower(expected_descriptor),
-            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchVerificationRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-
-
-
-
-
-class _UniffiFfiConverterTypeBindingProximitySearchProof:
-    @staticmethod
-    def lift(value: int) -> BindingProximitySearchProof:
-        return BindingProximitySearchProof._uniffi_make_instance(value)
-
-    @staticmethod
-    def check_lower(value: BindingProximitySearchProof):
-        if not isinstance(value, BindingProximitySearchProof):
-            raise TypeError("Expected BindingProximitySearchProof instance, {} found".format(type(value).__name__))
-
-    @staticmethod
-    def lower(value: BindingProximitySearchProof) -> ctypes.c_uint64:
-        return value._uniffi_clone_handle()
-
-    @classmethod
-    def read(cls, buf: _UniffiRustBuffer) -> BindingProximitySearchProof:
-        ptr = buf.read_u64()
-        if ptr == 0:
-            raise InternalError("Raw handle value was null")
-        return cls.lift(ptr)
-
-    @classmethod
-    def write(cls, value: BindingProximitySearchProof, buf: _UniffiRustBuffer):
-        buf.write_u64(cls.lower(value))
-
-
-
-
-
-
-class ContentObjectKindRecord(enum.Enum):
-
-    ORDERED_NODE = 0
-
-    PROXIMITY_DESCRIPTOR = 1
-
-    PROXIMITY_NODE = 2
-
-    OVERFLOW_DIRECTORY = 3
-
-    OVERFLOW_PAGE = 4
-
-    EXTERNAL_VECTOR = 5
-
-    SCALAR_QUANTIZATION = 6
-
-    PRODUCT_QUANTIZATION = 7
-
-    HNSW_MANIFEST = 8
-
-    HNSW_PAGE = 9
-
-    COMPOSITE_ACCELERATOR = 10
-
-    ACCELERATOR_CATALOG = 11
-
-
-
-class _UniffiFfiConverterTypeContentObjectKindRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        variant = buf.read_i32()
-        if variant == 1:
-            return ContentObjectKindRecord.ORDERED_NODE
-        if variant == 2:
-            return ContentObjectKindRecord.PROXIMITY_DESCRIPTOR
-        if variant == 3:
-            return ContentObjectKindRecord.PROXIMITY_NODE
-        if variant == 4:
-            return ContentObjectKindRecord.OVERFLOW_DIRECTORY
-        if variant == 5:
-            return ContentObjectKindRecord.OVERFLOW_PAGE
-        if variant == 6:
-            return ContentObjectKindRecord.EXTERNAL_VECTOR
-        if variant == 7:
-            return ContentObjectKindRecord.SCALAR_QUANTIZATION
-        if variant == 8:
-            return ContentObjectKindRecord.PRODUCT_QUANTIZATION
-        if variant == 9:
-            return ContentObjectKindRecord.HNSW_MANIFEST
-        if variant == 10:
-            return ContentObjectKindRecord.HNSW_PAGE
-        if variant == 11:
-            return ContentObjectKindRecord.COMPOSITE_ACCELERATOR
-        if variant == 12:
-            return ContentObjectKindRecord.ACCELERATOR_CATALOG
-        raise InternalError("Raw enum value doesn't match any cases")
-
-    @staticmethod
-    def check_lower(value):
-        if value == ContentObjectKindRecord.ORDERED_NODE:
-            return
-        if value == ContentObjectKindRecord.PROXIMITY_DESCRIPTOR:
-            return
-        if value == ContentObjectKindRecord.PROXIMITY_NODE:
-            return
-        if value == ContentObjectKindRecord.OVERFLOW_DIRECTORY:
-            return
-        if value == ContentObjectKindRecord.OVERFLOW_PAGE:
-            return
-        if value == ContentObjectKindRecord.EXTERNAL_VECTOR:
-            return
-        if value == ContentObjectKindRecord.SCALAR_QUANTIZATION:
-            return
-        if value == ContentObjectKindRecord.PRODUCT_QUANTIZATION:
-            return
-        if value == ContentObjectKindRecord.HNSW_MANIFEST:
-            return
-        if value == ContentObjectKindRecord.HNSW_PAGE:
-            return
-        if value == ContentObjectKindRecord.COMPOSITE_ACCELERATOR:
-            return
-        if value == ContentObjectKindRecord.ACCELERATOR_CATALOG:
-            return
-        raise ValueError(value)
-
-    @staticmethod
-    def write(value, buf):
-        if value == ContentObjectKindRecord.ORDERED_NODE:
-            buf.write_i32(1)
-        if value == ContentObjectKindRecord.PROXIMITY_DESCRIPTOR:
-            buf.write_i32(2)
-        if value == ContentObjectKindRecord.PROXIMITY_NODE:
-            buf.write_i32(3)
-        if value == ContentObjectKindRecord.OVERFLOW_DIRECTORY:
-            buf.write_i32(4)
-        if value == ContentObjectKindRecord.OVERFLOW_PAGE:
-            buf.write_i32(5)
-        if value == ContentObjectKindRecord.EXTERNAL_VECTOR:
-            buf.write_i32(6)
-        if value == ContentObjectKindRecord.SCALAR_QUANTIZATION:
-            buf.write_i32(7)
-        if value == ContentObjectKindRecord.PRODUCT_QUANTIZATION:
-            buf.write_i32(8)
-        if value == ContentObjectKindRecord.HNSW_MANIFEST:
-            buf.write_i32(9)
-        if value == ContentObjectKindRecord.HNSW_PAGE:
-            buf.write_i32(10)
-        if value == ContentObjectKindRecord.COMPOSITE_ACCELERATOR:
-            buf.write_i32(11)
-        if value == ContentObjectKindRecord.ACCELERATOR_CATALOG:
-            buf.write_i32(12)
-
-
-
-@dataclass
-class TypedContentObjectRecord:
-    def __init__(self, *, kind:ContentObjectKindRecord, cid:bytes, dimensions:typing.Optional[int], bytes:bytes, depth:int):
-        self.kind = kind
-        self.cid = cid
-        self.dimensions = dimensions
-        self.bytes = bytes
-        self.depth = depth
-
-
-
-
-    def __str__(self):
-        return "TypedContentObjectRecord(kind={}, cid={}, dimensions={}, bytes={}, depth={})".format(self.kind, self.cid, self.dimensions, self.bytes, self.depth)
-    def __eq__(self, other):
-        if self.kind != other.kind:
-            return False
-        if self.cid != other.cid:
-            return False
-        if self.dimensions != other.dimensions:
-            return False
-        if self.bytes != other.bytes:
-            return False
-        if self.depth != other.depth:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeTypedContentObjectRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return TypedContentObjectRecord(
-            kind=_UniffiFfiConverterTypeContentObjectKindRecord.read(buf),
-            cid=_UniffiFfiConverterBytes.read(buf),
-            dimensions=_UniffiFfiConverterOptionalUInt32.read(buf),
-            bytes=_UniffiFfiConverterBytes.read(buf),
-            depth=_UniffiFfiConverterUInt64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeContentObjectKindRecord.check_lower(value.kind)
-        _UniffiFfiConverterBytes.check_lower(value.cid)
-        _UniffiFfiConverterOptionalUInt32.check_lower(value.dimensions)
-        _UniffiFfiConverterBytes.check_lower(value.bytes)
-        _UniffiFfiConverterUInt64.check_lower(value.depth)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeContentObjectKindRecord.write(value.kind, buf)
-        _UniffiFfiConverterBytes.write(value.cid, buf)
-        _UniffiFfiConverterOptionalUInt32.write(value.dimensions, buf)
-        _UniffiFfiConverterBytes.write(value.bytes, buf)
-        _UniffiFfiConverterUInt64.write(value.depth, buf)
-
-class _UniffiFfiConverterSequenceTypeTypedContentObjectRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeTypedContentObjectRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeTypedContentObjectRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeTypedContentObjectRecord.read(buf) for i in range(count)
-        ]
-
-@dataclass
-class ProximityStructuralProofRecord:
-    def __init__(self, *, descriptor:bytes, objects:typing.List[TypedContentObjectRecord]):
-        self.descriptor = descriptor
-        self.objects = objects
-
-
-
-
-    def __str__(self):
-        return "ProximityStructuralProofRecord(descriptor={}, objects={})".format(self.descriptor, self.objects)
-    def __eq__(self, other):
-        if self.descriptor != other.descriptor:
-            return False
-        if self.objects != other.objects:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityStructuralProofRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityStructuralProofRecord(
-            descriptor=_UniffiFfiConverterBytes.read(buf),
-            objects=_UniffiFfiConverterSequenceTypeTypedContentObjectRecord.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.descriptor)
-        _UniffiFfiConverterSequenceTypeTypedContentObjectRecord.check_lower(value.objects)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.descriptor, buf)
-        _UniffiFfiConverterSequenceTypeTypedContentObjectRecord.write(value.objects, buf)
-
-@dataclass
-class ProximityRecordRecord:
-    def __init__(self, *, key:bytes, vector:typing.List[float], value:bytes):
-        self.key = key
-        self.vector = vector
-        self.value = value
-
-
-
-
-    def __str__(self):
-        return "ProximityRecordRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
-    def __eq__(self, other):
-        if self.key != other.key:
-            return False
-        if self.vector != other.vector:
-            return False
-        if self.value != other.value:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityRecordRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityRecordRecord(
-            key=_UniffiFfiConverterBytes.read(buf),
-            vector=_UniffiFfiConverterSequenceFloat32.read(buf),
-            value=_UniffiFfiConverterBytes.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.key)
-        _UniffiFfiConverterSequenceFloat32.check_lower(value.vector)
-        _UniffiFfiConverterBytes.check_lower(value.value)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.key, buf)
-        _UniffiFfiConverterSequenceFloat32.write(value.vector, buf)
-        _UniffiFfiConverterBytes.write(value.value, buf)
-
-
-class ProximityRecordVisitorCallback():
-
-    def visit(self, record: ProximityRecordRecord) -> bool:
-        raise NotImplementedError
-
-class ProximityRecordVisitorCallbackImpl(ProximityRecordVisitorCallback):
-
-    _handle: ctypes.c_uint64
-
-    def __init__(self, *args, **kwargs):
-        raise ValueError("This class has no default constructor")
-
-    def __del__(self):
-        # In case of partial initialization of instances.
-        handle = getattr(self, "_handle", None)
-        if handle is not None:
-            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_proximityrecordvisitorcallback, handle)
-
-    def _uniffi_clone_handle(self):
-        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback, self._handle)
-
-    # Used by alternative constructors or any methods which return this type.
-    @classmethod
-    def _uniffi_make_instance(cls, handle):
-        # Lightly yucky way to bypass the usual __init__ logic
-        # and just create a new instance with the required handle.
-        inst = cls.__new__(cls)
-        inst._handle = handle
-        return inst
-    def visit(self, record: ProximityRecordRecord) -> bool:
-
-        _UniffiFfiConverterTypeProximityRecordRecord.check_lower(record)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeProximityRecordRecord.lower(record),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
-        _uniffi_error_converter = None
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_proximityrecordvisitorcallback_visit,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-
-
-
-
-# Put all the bits inside a class to keep the top-level namespace clean
-class _UniffiTraitImplProximityRecordVisitorCallbackImpl:
-    # For each method, generate a callback function to pass to Rust
-
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_PROXIMITY_RECORD_VISITOR_CALLBACK_METHOD0
-    def visit(
-            uniffi_handle,
-            record,
-            uniffi_out_return,
-            uniffi_call_status_ptr,
-        ):
-        uniffi_obj = _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.get(uniffi_handle)
-        def make_call():
-            uniffi_args = (_UniffiFfiConverterTypeProximityRecordRecord.lift(record), )
-            uniffi_method = uniffi_obj.visit
-            return uniffi_method(*uniffi_args)
-        def write_return_value(v):
-            uniffi_out_return[0] = _UniffiFfiConverterBoolean.lower(v)
-        _uniffi_trait_interface_call(
-                uniffi_call_status_ptr.contents,
-                make_call,
-                write_return_value,
-        )
-
-    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_PROXIMITY_RECORD_VISITOR_CALLBACK
-    def _uniffi_free(uniffi_handle):
-        _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.remove(uniffi_handle)
-
-    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_PROXIMITY_RECORD_VISITOR_CALLBACK
-    def _uniffi_clone(uniffi_handle):
-        return _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.clone(uniffi_handle)
-
-    # Generate the FFI VTable.  This has a field for each callback interface method.
-    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyProximityRecordVisitorCallback(
-        _uniffi_free,
-        _uniffi_clone,
-        visit,
-    )
-    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
-    # or else bad things will happen when Rust tries to access it.
-    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_proximityrecordvisitorcallback(ctypes.byref(_uniffi_vtable))
-
-class _UniffiFfiConverterTypeProximityRecordVisitorCallback:
-    _handle_map = _UniffiHandleMap()
-
-    @staticmethod
-    def lift(value: int):
-        if (value & 1) == 0:
-            # Rust-generated handle, construct a new class that uses the handle to implement the
-            # interface
-            return ProximityRecordVisitorCallbackImpl._uniffi_make_instance(value)
-        else:
-            # Python-generated handle, get the object from the handle map
-            return _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.remove(value)
-
-    @staticmethod
-    def check_lower(value: ProximityRecordVisitorCallback):
-        if not isinstance(value, ProximityRecordVisitorCallback):
-            raise TypeError("Expected ProximityRecordVisitorCallback subclass, {} found".format(type(value).__name__))
-
-    @staticmethod
-    def lower(value: ProximityRecordVisitorCallback):
-         if isinstance(value, ProximityRecordVisitorCallbackImpl):
-            # Rust-implementated object.  Clone the handle and return it
-            return value._uniffi_clone_handle()
-         else:
-            # Python-implementated object, generate a new vtable handle and return that.
-            return _UniffiFfiConverterTypeProximityRecordVisitorCallback._handle_map.insert(value)
-
-    @classmethod
-    def read(cls, buf: _UniffiRustBuffer):
-        ptr = buf.read_u64()
-        if ptr == 0:
-            raise InternalError("Raw handle value was null")
-        return cls.lift(ptr)
-
-    @classmethod
-    def write(cls, value: ProximityRecordVisitorCallback, buf: _UniffiRustBuffer):
-        buf.write_u64(cls.lower(value))
-
-
-class BindingProximityReadSessionProtocol(typing.Protocol):
-
-    def contains_key(self, key: bytes) -> bool:
-        raise NotImplementedError
-    def fast_handle(self, ) -> int:
-        raise NotImplementedError
-    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
-        raise NotImplementedError
-    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
-        raise NotImplementedError
-    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-        raise NotImplementedError
-
-class BindingProximityReadSession(BindingProximityReadSessionProtocol):
-
-    _handle: ctypes.c_uint64
-
-    def __init__(self, *args, **kwargs):
-        raise ValueError("This class has no default constructor")
-
-    def __del__(self):
-        # In case of partial initialization of instances.
-        handle = getattr(self, "_handle", None)
-        if handle is not None:
-            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximityreadsession, handle)
-
-    def _uniffi_clone_handle(self):
-        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximityreadsession, self._handle)
-
-    # Used by alternative constructors or any methods which return this type.
-    @classmethod
-    def _uniffi_make_instance(cls, handle):
-        # Lightly yucky way to bypass the usual __init__ logic
-        # and just create a new instance with the required handle.
-        inst = cls.__new__(cls)
-        inst._handle = handle
-        return inst
-    def contains_key(self, key: bytes) -> bool:
-
-        _UniffiFfiConverterBytes.check_lower(key)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterBytes.lower(key),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def fast_handle(self, ) -> int:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
-        _uniffi_error_converter = None
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
-
-        _UniffiFfiConverterBytes.check_lower(key)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterBytes.lower(key),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeExactProximityRecordRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
-
-        _UniffiFfiConverterTypeProximityRecordVisitorCallback.check_lower(visitor)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeProximityRecordVisitorCallback.lower(visitor),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
-        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-
-
-
-
-
-class _UniffiFfiConverterTypeBindingProximityReadSession:
-    @staticmethod
-    def lift(value: int) -> BindingProximityReadSession:
-        return BindingProximityReadSession._uniffi_make_instance(value)
-
-    @staticmethod
-    def check_lower(value: BindingProximityReadSession):
-        if not isinstance(value, BindingProximityReadSession):
-            raise TypeError("Expected BindingProximityReadSession instance, {} found".format(type(value).__name__))
-
-    @staticmethod
-    def lower(value: BindingProximityReadSession) -> ctypes.c_uint64:
-        return value._uniffi_clone_handle()
-
-    @classmethod
-    def read(cls, buf: _UniffiRustBuffer) -> BindingProximityReadSession:
-        ptr = buf.read_u64()
-        if ptr == 0:
-            raise InternalError("Raw handle value was null")
-        return cls.lift(ptr)
-
-    @classmethod
-    def write(cls, value: BindingProximityReadSession, buf: _UniffiRustBuffer):
-        buf.write_u64(cls.lower(value))
-
-@dataclass
-class ProximityVerificationRecord:
-    def __init__(self, *, record_count:int, proximity_node_count:int, external_vector_count:int, quantized_node_count:int, scalar_quantizer_count:int, overflow_page_count:int, overflow_directory_count:int, maximum_level:int, maximum_node_bytes:int, distance_checks:int):
-        self.record_count = record_count
-        self.proximity_node_count = proximity_node_count
-        self.external_vector_count = external_vector_count
-        self.quantized_node_count = quantized_node_count
-        self.scalar_quantizer_count = scalar_quantizer_count
-        self.overflow_page_count = overflow_page_count
-        self.overflow_directory_count = overflow_directory_count
-        self.maximum_level = maximum_level
-        self.maximum_node_bytes = maximum_node_bytes
-        self.distance_checks = distance_checks
-
-
-
-
-    def __str__(self):
-        return "ProximityVerificationRecord(record_count={}, proximity_node_count={}, external_vector_count={}, quantized_node_count={}, scalar_quantizer_count={}, overflow_page_count={}, overflow_directory_count={}, maximum_level={}, maximum_node_bytes={}, distance_checks={})".format(self.record_count, self.proximity_node_count, self.external_vector_count, self.quantized_node_count, self.scalar_quantizer_count, self.overflow_page_count, self.overflow_directory_count, self.maximum_level, self.maximum_node_bytes, self.distance_checks)
-    def __eq__(self, other):
-        if self.record_count != other.record_count:
-            return False
-        if self.proximity_node_count != other.proximity_node_count:
-            return False
-        if self.external_vector_count != other.external_vector_count:
-            return False
-        if self.quantized_node_count != other.quantized_node_count:
-            return False
-        if self.scalar_quantizer_count != other.scalar_quantizer_count:
-            return False
-        if self.overflow_page_count != other.overflow_page_count:
-            return False
-        if self.overflow_directory_count != other.overflow_directory_count:
-            return False
-        if self.maximum_level != other.maximum_level:
-            return False
-        if self.maximum_node_bytes != other.maximum_node_bytes:
-            return False
-        if self.distance_checks != other.distance_checks:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityVerificationRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityVerificationRecord(
-            record_count=_UniffiFfiConverterUInt64.read(buf),
-            proximity_node_count=_UniffiFfiConverterUInt64.read(buf),
-            external_vector_count=_UniffiFfiConverterUInt64.read(buf),
-            quantized_node_count=_UniffiFfiConverterUInt64.read(buf),
-            scalar_quantizer_count=_UniffiFfiConverterUInt64.read(buf),
-            overflow_page_count=_UniffiFfiConverterUInt64.read(buf),
-            overflow_directory_count=_UniffiFfiConverterUInt64.read(buf),
-            maximum_level=_UniffiFfiConverterUInt8.read(buf),
-            maximum_node_bytes=_UniffiFfiConverterUInt64.read(buf),
-            distance_checks=_UniffiFfiConverterUInt64.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterUInt64.check_lower(value.record_count)
-        _UniffiFfiConverterUInt64.check_lower(value.proximity_node_count)
-        _UniffiFfiConverterUInt64.check_lower(value.external_vector_count)
-        _UniffiFfiConverterUInt64.check_lower(value.quantized_node_count)
-        _UniffiFfiConverterUInt64.check_lower(value.scalar_quantizer_count)
-        _UniffiFfiConverterUInt64.check_lower(value.overflow_page_count)
-        _UniffiFfiConverterUInt64.check_lower(value.overflow_directory_count)
-        _UniffiFfiConverterUInt8.check_lower(value.maximum_level)
-        _UniffiFfiConverterUInt64.check_lower(value.maximum_node_bytes)
-        _UniffiFfiConverterUInt64.check_lower(value.distance_checks)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterUInt64.write(value.record_count, buf)
-        _UniffiFfiConverterUInt64.write(value.proximity_node_count, buf)
-        _UniffiFfiConverterUInt64.write(value.external_vector_count, buf)
-        _UniffiFfiConverterUInt64.write(value.quantized_node_count, buf)
-        _UniffiFfiConverterUInt64.write(value.scalar_quantizer_count, buf)
-        _UniffiFfiConverterUInt64.write(value.overflow_page_count, buf)
-        _UniffiFfiConverterUInt64.write(value.overflow_directory_count, buf)
-        _UniffiFfiConverterUInt8.write(value.maximum_level, buf)
-        _UniffiFfiConverterUInt64.write(value.maximum_node_bytes, buf)
-        _UniffiFfiConverterUInt64.write(value.distance_checks, buf)
-
-
-class BindingProximityMapProtocol(typing.Protocol):
-
-    def clear_content_cache(self, ) -> None:
-        raise NotImplementedError
-    def config(self, ) -> ProximityConfigRecord:
-        raise NotImplementedError
-    def contains_key(self, key: bytes) -> bool:
-        raise NotImplementedError
-    def count(self, ) -> int:
-        raise NotImplementedError
-    def descriptor(self, ) -> bytes:
-        raise NotImplementedError
-    def fast_handle(self, ) -> int:
-        raise NotImplementedError
-    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
-        raise NotImplementedError
-    def mutate(self, mutations: typing.List[ProximityMutationRecord]) -> ProximityMutationResultRecord:
-        raise NotImplementedError
-    def prove_membership(self, key: bytes) -> ProximityMembershipProofRecord:
-        raise NotImplementedError
-    def prove_search(self, request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-        raise NotImplementedError
-    def prove_structure(self, limits: ContentGraphLimitsRecord) -> ProximityStructuralProofRecord:
-        raise NotImplementedError
-    def read_session(self, ) -> BindingProximityReadSession:
-        raise NotImplementedError
-    def rebuild(self, mutations: typing.List[ProximityMutationRecord]) -> BindingProximityMap:
-        raise NotImplementedError
-    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
-        raise NotImplementedError
-    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-        raise NotImplementedError
-    def verify(self, ) -> ProximityVerificationRecord:
-        raise NotImplementedError
-
-class BindingProximityMap(BindingProximityMapProtocol):
-
-    _handle: ctypes.c_uint64
-
-    def __init__(self, *args, **kwargs):
-        raise ValueError("This class has no default constructor")
-
-    def __del__(self):
-        # In case of partial initialization of instances.
-        handle = getattr(self, "_handle", None)
-        if handle is not None:
-            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_bindingproximitymap, handle)
-
-    def _uniffi_clone_handle(self):
-        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_bindingproximitymap, self._handle)
-
-    # Used by alternative constructors or any methods which return this type.
-    @classmethod
-    def _uniffi_make_instance(cls, handle):
-        # Lightly yucky way to bypass the usual __init__ logic
-        # and just create a new instance with the required handle.
-        inst = cls.__new__(cls)
-        inst._handle = handle
-        return inst
-    def clear_content_cache(self, ) -> None:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = lambda val: None
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def config(self, ) -> ProximityConfigRecord:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximityConfigRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_config,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def contains_key(self, key: bytes) -> bool:
-
-        _UniffiFfiConverterBytes.check_lower(key)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterBytes.lower(key),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def count(self, ) -> int:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_count,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def descriptor(self, ) -> bytes:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterBytes.lift
-        _uniffi_error_converter = None
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def fast_handle(self, ) -> int:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
-        _uniffi_error_converter = None
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
-
-        _UniffiFfiConverterBytes.check_lower(key)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterBytes.lower(key),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeExactProximityRecordRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_get,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def mutate(self, mutations: typing.List[ProximityMutationRecord]) -> ProximityMutationResultRecord:
-
-        _UniffiFfiConverterSequenceTypeProximityMutationRecord.check_lower(mutations)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterSequenceTypeProximityMutationRecord.lower(mutations),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximityMutationResultRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def prove_membership(self, key: bytes) -> ProximityMembershipProofRecord:
-
-        _UniffiFfiConverterBytes.check_lower(key)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterBytes.lower(key),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximityMembershipProofRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def prove_search(self, request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-
-        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
-
-        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
-            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximitySearchProof.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def prove_structure(self, limits: ContentGraphLimitsRecord) -> ProximityStructuralProofRecord:
-
-        _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeContentGraphLimitsRecord.lower(limits),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximityStructuralProofRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def read_session(self, ) -> BindingProximityReadSession:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximityReadSession.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def rebuild(self, mutations: typing.List[ProximityMutationRecord]) -> BindingProximityMap:
-
-        _UniffiFfiConverterSequenceTypeProximityMutationRecord.check_lower(mutations)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterSequenceTypeProximityMutationRecord.lower(mutations),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeBindingProximityMap.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
-
-        _UniffiFfiConverterTypeProximityRecordVisitorCallback.check_lower(visitor)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeProximityRecordVisitorCallback.lower(visitor),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterUInt64.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
-        _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-            _UniffiFfiConverterTypeProximitySearchRequestRecord.lower(request),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximitySearchResultRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_search,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-    def verify(self, ) -> ProximityVerificationRecord:
-        _uniffi_lowered_args = (
-            self._uniffi_clone_handle(),
-        )
-        _uniffi_lift_return = _UniffiFfiConverterTypeProximityVerificationRecord.lift
-        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
-        _uniffi_ffi_result = _uniffi_rust_call_with_error(
-            _uniffi_error_converter,
-            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_verify,
-            *_uniffi_lowered_args,
-        )
-        return _uniffi_lift_return(_uniffi_ffi_result)
-
-
-
-
-
-class _UniffiFfiConverterTypeBindingProximityMap:
-    @staticmethod
-    def lift(value: int) -> BindingProximityMap:
-        return BindingProximityMap._uniffi_make_instance(value)
-
-    @staticmethod
-    def check_lower(value: BindingProximityMap):
-        if not isinstance(value, BindingProximityMap):
-            raise TypeError("Expected BindingProximityMap instance, {} found".format(type(value).__name__))
-
-    @staticmethod
-    def lower(value: BindingProximityMap) -> ctypes.c_uint64:
-        return value._uniffi_clone_handle()
-
-    @classmethod
-    def read(cls, buf: _UniffiRustBuffer) -> BindingProximityMap:
-        ptr = buf.read_u64()
-        if ptr == 0:
-            raise InternalError("Raw handle value was null")
-        return cls.lift(ptr)
-
-    @classmethod
-    def write(cls, value: BindingProximityMap, buf: _UniffiRustBuffer):
-        buf.write_u64(cls.lower(value))
-
-@dataclass
-class ProximityMutationStatsRecord:
-    def __init__(self, *, directory_entries_scanned:int, directory_nodes_read:int, directory_nodes_rebuilt:int, directory_nodes_written:int, directory_nodes_reused:int, directory_levels_rebuilt:int, directory_right_edge_rebuilt:bool, nodes_read:int, nodes_written:int, nodes_reused:int, records_rebuilt:int, distance_evaluations:int, full_proximity_rebuild:bool):
-        self.directory_entries_scanned = directory_entries_scanned
-        self.directory_nodes_read = directory_nodes_read
-        self.directory_nodes_rebuilt = directory_nodes_rebuilt
-        self.directory_nodes_written = directory_nodes_written
-        self.directory_nodes_reused = directory_nodes_reused
-        self.directory_levels_rebuilt = directory_levels_rebuilt
-        self.directory_right_edge_rebuilt = directory_right_edge_rebuilt
-        self.nodes_read = nodes_read
-        self.nodes_written = nodes_written
-        self.nodes_reused = nodes_reused
-        self.records_rebuilt = records_rebuilt
-        self.distance_evaluations = distance_evaluations
-        self.full_proximity_rebuild = full_proximity_rebuild
-
-
-
-
-    def __str__(self):
-        return "ProximityMutationStatsRecord(directory_entries_scanned={}, directory_nodes_read={}, directory_nodes_rebuilt={}, directory_nodes_written={}, directory_nodes_reused={}, directory_levels_rebuilt={}, directory_right_edge_rebuilt={}, nodes_read={}, nodes_written={}, nodes_reused={}, records_rebuilt={}, distance_evaluations={}, full_proximity_rebuild={})".format(self.directory_entries_scanned, self.directory_nodes_read, self.directory_nodes_rebuilt, self.directory_nodes_written, self.directory_nodes_reused, self.directory_levels_rebuilt, self.directory_right_edge_rebuilt, self.nodes_read, self.nodes_written, self.nodes_reused, self.records_rebuilt, self.distance_evaluations, self.full_proximity_rebuild)
-    def __eq__(self, other):
-        if self.directory_entries_scanned != other.directory_entries_scanned:
-            return False
-        if self.directory_nodes_read != other.directory_nodes_read:
-            return False
-        if self.directory_nodes_rebuilt != other.directory_nodes_rebuilt:
-            return False
-        if self.directory_nodes_written != other.directory_nodes_written:
-            return False
-        if self.directory_nodes_reused != other.directory_nodes_reused:
-            return False
-        if self.directory_levels_rebuilt != other.directory_levels_rebuilt:
-            return False
-        if self.directory_right_edge_rebuilt != other.directory_right_edge_rebuilt:
-            return False
-        if self.nodes_read != other.nodes_read:
-            return False
-        if self.nodes_written != other.nodes_written:
-            return False
-        if self.nodes_reused != other.nodes_reused:
-            return False
-        if self.records_rebuilt != other.records_rebuilt:
-            return False
-        if self.distance_evaluations != other.distance_evaluations:
-            return False
-        if self.full_proximity_rebuild != other.full_proximity_rebuild:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMutationStatsRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMutationStatsRecord(
-            directory_entries_scanned=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_read=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_rebuilt=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            directory_nodes_reused=_UniffiFfiConverterUInt64.read(buf),
-            directory_levels_rebuilt=_UniffiFfiConverterUInt64.read(buf),
-            directory_right_edge_rebuilt=_UniffiFfiConverterBoolean.read(buf),
-            nodes_read=_UniffiFfiConverterUInt64.read(buf),
-            nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
-            records_rebuilt=_UniffiFfiConverterUInt64.read(buf),
-            distance_evaluations=_UniffiFfiConverterUInt64.read(buf),
-            full_proximity_rebuild=_UniffiFfiConverterBoolean.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterUInt64.check_lower(value.directory_entries_scanned)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_rebuilt)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_nodes_reused)
-        _UniffiFfiConverterUInt64.check_lower(value.directory_levels_rebuilt)
-        _UniffiFfiConverterBoolean.check_lower(value.directory_right_edge_rebuilt)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
-        _UniffiFfiConverterUInt64.check_lower(value.records_rebuilt)
-        _UniffiFfiConverterUInt64.check_lower(value.distance_evaluations)
-        _UniffiFfiConverterBoolean.check_lower(value.full_proximity_rebuild)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterUInt64.write(value.directory_entries_scanned, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_rebuilt, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_nodes_reused, buf)
-        _UniffiFfiConverterUInt64.write(value.directory_levels_rebuilt, buf)
-        _UniffiFfiConverterBoolean.write(value.directory_right_edge_rebuilt, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
-        _UniffiFfiConverterUInt64.write(value.records_rebuilt, buf)
-        _UniffiFfiConverterUInt64.write(value.distance_evaluations, buf)
-        _UniffiFfiConverterBoolean.write(value.full_proximity_rebuild, buf)
-
-@dataclass
-class ProximityMutationResultRecord:
-    def __init__(self, *, map:BindingProximityMap, stats:ProximityMutationStatsRecord):
-        self.map = map
-        self.stats = stats
-
-
-
-
-    def __str__(self):
-        return "ProximityMutationResultRecord(map={}, stats={})".format(self.map, self.stats)
-    def __eq__(self, other):
-        if self.map != other.map:
-            return False
-        if self.stats != other.stats:
-            return False
-        return True
-
-class _UniffiFfiConverterTypeProximityMutationResultRecord(_UniffiConverterRustBuffer):
-    @staticmethod
-    def read(buf):
-        return ProximityMutationResultRecord(
-            map=_UniffiFfiConverterTypeBindingProximityMap.read(buf),
-            stats=_UniffiFfiConverterTypeProximityMutationStatsRecord.read(buf),
-        )
-
-    @staticmethod
-    def check_lower(value):
-        _UniffiFfiConverterTypeBindingProximityMap.check_lower(value.map)
-        _UniffiFfiConverterTypeProximityMutationStatsRecord.check_lower(value.stats)
-
-    @staticmethod
-    def write(value, buf):
-        _UniffiFfiConverterTypeBindingProximityMap.write(value.map, buf)
-        _UniffiFfiConverterTypeProximityMutationStatsRecord.write(value.stats, buf)
 
 @dataclass
 class ProximityStructuralVerificationRecord:
@@ -28634,6 +29192,28 @@ def default_content_graph_limits() -> ContentGraphLimitsRecord:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+def default_hnsw_build_limits() -> HnswBuildLimitsRecord:
+    _uniffi_lowered_args = (
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeHnswBuildLimitsRecord.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_build_limits,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
+def default_hnsw_config() -> HnswConfigRecord:
+    _uniffi_lowered_args = (
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeHnswConfigRecord.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_default_hnsw_config,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
 def default_large_value_config() -> LargeValueConfigRecord:
     _uniffi_lowered_args = (
     )
@@ -30342,6 +30922,17 @@ __all__ = [
     "CrdtDeletePolicyKind",
     "CrdtResolutionKind",
     "DiffKind",
+    "HnswRoutingVectorEncodingRecord",
+    "ProllyBindingError",
+    "DistanceMetricRecord",
+    "SearchPolicyKind",
+    "AdaptiveQualityRecord",
+    "ProximityFilterKind",
+    "QueryKernelRecord",
+    "SearchBackendRecord",
+    "SearchCompletionRecord",
+    "ProximitySearchClaimKindRecord",
+    "ContentObjectKindRecord",
     "IndexedUpdateKind",
     "MapUpdateKind",
     "MergeTraceEventKind",
@@ -30352,16 +30943,6 @@ __all__ = [
     "MergeFallbackReasonKind",
     "MutationKind",
     "NamedRootRetentionKind",
-    "DistanceMetricRecord",
-    "ProximityFilterKind",
-    "ProllyBindingError",
-    "SearchPolicyKind",
-    "AdaptiveQualityRecord",
-    "QueryKernelRecord",
-    "SearchBackendRecord",
-    "SearchCompletionRecord",
-    "ProximitySearchClaimKindRecord",
-    "ContentObjectKindRecord",
     "ResolutionKind",
     "SnapshotNamespaceKind",
     "StructuralDiffMarkerKind",
@@ -30405,6 +30986,27 @@ __all__ = [
     "GcReachabilityRecord",
     "GcPlanRecord",
     "GcSweepRecord",
+    "HnswBuildLimitsRecord",
+    "HnswConfigRecord",
+    "ProximityConfigRecord",
+    "ProximityMutationRecord",
+    "ProximityMutationStatsRecord",
+    "ProximityMutationResultRecord",
+    "ProximityMembershipProofRecord",
+    "SearchBudgetRecord",
+    "ProximityFilterRecord",
+    "ProximitySearchRequestRecord",
+    "ProximityNeighborRecord",
+    "ProximitySearchStatsRecord",
+    "ProximitySearchResultRecord",
+    "ProximitySearchClaimRecord",
+    "ProximitySearchVerificationRecord",
+    "TypedContentObjectRecord",
+    "ProximityStructuralProofRecord",
+    "ProximityRecordRecord",
+    "ProximityVerificationRecord",
+    "HnswBuildStatsRecord",
+    "HnswBuildResultRecord",
     "HostStoreBatchGetResultRecord",
     "HostStoreBoolResultRecord",
     "HostStoreBytesResultRecord",
@@ -30452,24 +31054,7 @@ __all__ = [
     "ProvedDiffPageRecord",
     "RangePageRecord",
     "ProvedRangePageRecord",
-    "ProximityConfigRecord",
-    "ProximityFilterRecord",
-    "ProximityMembershipProofRecord",
     "ProximityMembershipVerificationRecord",
-    "ProximityMutationRecord",
-    "SearchBudgetRecord",
-    "ProximitySearchRequestRecord",
-    "ProximityNeighborRecord",
-    "ProximitySearchStatsRecord",
-    "ProximitySearchResultRecord",
-    "ProximitySearchClaimRecord",
-    "ProximitySearchVerificationRecord",
-    "TypedContentObjectRecord",
-    "ProximityStructuralProofRecord",
-    "ProximityRecordRecord",
-    "ProximityVerificationRecord",
-    "ProximityMutationStatsRecord",
-    "ProximityMutationResultRecord",
     "ProximityStructuralVerificationRecord",
     "RangeBoundsRecord",
     "RangePageProofVerificationRecord",
@@ -30529,6 +31114,8 @@ __all__ = [
     "decode_segments",
     "default_config",
     "default_content_graph_limits",
+    "default_hnsw_build_limits",
+    "default_hnsw_config",
     "default_large_value_config",
     "default_parallel_config",
     "default_proximity_config",
@@ -30650,6 +31237,8 @@ __all__ = [
     "BindingProximityReadSessionProtocol",
     "BindingProximityMap",
     "BindingProximityMapProtocol",
+    "BindingHnswIndex",
+    "BindingHnswIndexProtocol",
     "SecondaryIndexExtractorCallbackImpl",
     "SecondaryIndexExtractorCallback",
     "BindingIndexRegistry",

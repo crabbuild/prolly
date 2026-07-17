@@ -16,6 +16,7 @@ from prolly import (
     SearchBackendRecord,
     SearchBudgetRecord,
     SearchPolicyKind,
+    exact_proximity_search_request,
     verify_key_proof,
     verify_multi_key_proof,
     verify_range_page_proof,
@@ -26,6 +27,41 @@ from prolly import (
 
 
 class PortableParityTests(unittest.TestCase):
+    def test_hnsw_accelerator_lifecycle_is_portable(self):
+        with Engine.memory() as engine:
+            proximity = engine.build_proximity(
+                dimensions=2,
+                records=[
+                    ProximityRecord(
+                        f"vector-{index:02}".encode(),
+                        [float(index), 0.0],
+                        f"value-{index:02}".encode(),
+                    )
+                    for index in range(16)
+                ],
+            )
+            built = proximity.build_hnsw()
+            self.assertEqual(built.stats.records, 16)
+            request = exact_proximity_search_request([0.0, 0.0], 3)
+            request.policy = SearchPolicyKind.FIXED_BUDGET
+            request.backend = SearchBackendRecord.HNSW
+
+            with built.index as index:
+                self.assertTrue(index.is_canonical)
+                self.assertEqual(index.source_descriptor, proximity.descriptor)
+                result = index.search(proximity, request)
+                self.assertEqual(result.backend, SearchBackendRecord.HNSW)
+                self.assertEqual(result.neighbors[0].key, b"vector-00")
+                manifest = index.manifest
+                with index.prove_search(proximity, request) as proof:
+                    self.assertEqual(
+                        proof.verify(proximity.descriptor).result.backend,
+                        SearchBackendRecord.HNSW,
+                    )
+
+            with proximity.load_hnsw(manifest) as loaded:
+                self.assertEqual(loaded.manifest, manifest)
+
     def test_proximity_rich_search_request_is_shared_by_map_session_and_proof(self):
         with Engine.memory() as engine:
             proximity = engine.build_proximity(

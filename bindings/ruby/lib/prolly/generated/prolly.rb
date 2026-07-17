@@ -833,6 +833,98 @@ end
     end
   end
 
+  # The Record type HnswBuildLimitsRecord.
+
+  def self.check_lower_TypeHnswBuildLimitsRecord(v)
+    RustBuffer.check_lower_Optionalu64(v.max_records)
+    RustBuffer.check_lower_Optionalu64(v.max_owned_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_distance_evaluations)
+
+    RustBuffer.check_lower_Optionalu64(v.max_encoded_graph_bytes)
+  end
+
+  def self.alloc_from_TypeHnswBuildLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeHnswBuildLimitsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeHnswBuildLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeHnswBuildLimitsRecord
+    end
+  end
+
+  # The Record type HnswBuildResultRecord.
+
+  def self.check_lower_TypeHnswBuildResultRecord(v)
+    (BindingHnswIndex.uniffi_check_lower v.index)
+    RustBuffer.check_lower_TypeHnswBuildStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeHnswBuildResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeHnswBuildResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeHnswBuildResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeHnswBuildResultRecord
+    end
+  end
+
+  # The Record type HnswBuildStatsRecord.
+
+  def self.check_lower_TypeHnswBuildStatsRecord(v)
+
+
+
+
+
+
+  end
+
+  def self.alloc_from_TypeHnswBuildStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeHnswBuildStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeHnswBuildStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeHnswBuildStatsRecord
+    end
+  end
+
+  # The Record type HnswConfigRecord.
+
+  def self.check_lower_TypeHnswConfigRecord(v)
+
+
+
+
+
+
+    RustBuffer.check_lower_TypeHnswRoutingVectorEncodingRecord(v.routing_vector_encoding)
+  end
+
+  def self.alloc_from_TypeHnswConfigRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeHnswConfigRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeHnswConfigRecord
+    consumeWithStream do |stream|
+      return stream.readTypeHnswConfigRecord
+    end
+  end
+
   # The Record type HostStoreBatchGetResultRecord.
 
   def self.check_lower_TypeHostStoreBatchGetResultRecord(v)
@@ -3627,6 +3719,25 @@ end
   end
 
 
+  # The Enum type HnswRoutingVectorEncodingRecord.
+
+  def self.check_lower_TypeHnswRoutingVectorEncodingRecord(v)
+  end
+
+  def self.alloc_from_TypeHnswRoutingVectorEncodingRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeHnswRoutingVectorEncodingRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeHnswRoutingVectorEncodingRecord
+    consumeWithStream do |stream|
+      return stream.readTypeHnswRoutingVectorEncodingRecord
+    end
+  end
+
+
   # The Enum type IndexProjectionRecord.
 
   def self.check_lower_TypeIndexProjectionRecord(v)
@@ -5683,6 +5794,13 @@ class RustBufferStream
     read(size).force_encoding(Encoding::BINARY)
   end
 
+  # The Object type BindingHnswIndex.
+
+  def readTypeBindingHnswIndex
+    handle = unpack_from 8, 'Q>'
+    return BindingHnswIndex.uniffi_allocate(handle)
+  end
+
   # The Object type BindingIndexRegistry.
 
   def readTypeBindingIndexRegistry
@@ -6228,6 +6346,54 @@ class RustBufferStream
       plan: readTypeGcPlanRecord,
       deleted_nodes: readU64,
       deleted_bytes: readU64
+    )
+  end
+
+  # The Record type HnswBuildLimitsRecord.
+
+  def readTypeHnswBuildLimitsRecord
+    HnswBuildLimitsRecord.new(
+      max_records: readOptionalu64,
+      max_owned_bytes: readOptionalu64,
+      max_distance_evaluations: readOptionalu64,
+      worker_threads: readU64,
+      max_encoded_graph_bytes: readOptionalu64
+    )
+  end
+
+  # The Record type HnswBuildResultRecord.
+
+  def readTypeHnswBuildResultRecord
+    HnswBuildResultRecord.new(
+      index: readTypeBindingHnswIndex,
+      stats: readTypeHnswBuildStatsRecord
+    )
+  end
+
+  # The Record type HnswBuildStatsRecord.
+
+  def readTypeHnswBuildStatsRecord
+    HnswBuildStatsRecord.new(
+      records: readU64,
+      distance_evaluations: readU64,
+      directed_edges: readU64,
+      maximum_level: readU8,
+      owned_bytes: readU64,
+      encoded_graph_bytes: readU64
+    )
+  end
+
+  # The Record type HnswConfigRecord.
+
+  def readTypeHnswConfigRecord
+    HnswConfigRecord.new(
+      max_connections: readU16,
+      ef_construction: readU32,
+      ef_search: readU32,
+      level_bits: readU8,
+      overfetch_multiplier: readU32,
+      seed: readU64,
+      routing_vector_encoding: readTypeHnswRoutingVectorEncodingRecord
     )
   end
 
@@ -7790,6 +7956,22 @@ class RustBufferStream
     end
 
     raise InternalError, 'Unexpected variant tag for TypeEncodingKind'
+  end
+
+
+
+
+
+  # The Enum type HnswRoutingVectorEncodingRecord.
+
+  def readTypeHnswRoutingVectorEncodingRecord
+    variant = unpack_from 4, 'l>'
+
+    if variant == 1
+      return HnswRoutingVectorEncodingRecord::FULL_F32
+    end
+
+    raise InternalError, 'Unexpected variant tag for TypeHnswRoutingVectorEncodingRecord'
   end
 
 
@@ -9573,6 +9755,13 @@ class RustBufferBuilder
     write v
   end
 
+  # The Object type BindingHnswIndex.
+
+  def write_TypeBindingHnswIndex(obj)
+    handle = BindingHnswIndex.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type BindingIndexRegistry.
 
   def write_TypeBindingIndexRegistry(obj)
@@ -10057,6 +10246,46 @@ class RustBufferBuilder
     self.write_TypeGcPlanRecord(v.plan)
     self.write_U64(v.deleted_nodes)
     self.write_U64(v.deleted_bytes)
+  end
+
+  # The Record type HnswBuildLimitsRecord.
+
+  def write_TypeHnswBuildLimitsRecord(v)
+    self.write_Optionalu64(v.max_records)
+    self.write_Optionalu64(v.max_owned_bytes)
+    self.write_Optionalu64(v.max_distance_evaluations)
+    self.write_U64(v.worker_threads)
+    self.write_Optionalu64(v.max_encoded_graph_bytes)
+  end
+
+  # The Record type HnswBuildResultRecord.
+
+  def write_TypeHnswBuildResultRecord(v)
+    self.write_TypeBindingHnswIndex(v.index)
+    self.write_TypeHnswBuildStatsRecord(v.stats)
+  end
+
+  # The Record type HnswBuildStatsRecord.
+
+  def write_TypeHnswBuildStatsRecord(v)
+    self.write_U64(v.records)
+    self.write_U64(v.distance_evaluations)
+    self.write_U64(v.directed_edges)
+    self.write_U8(v.maximum_level)
+    self.write_U64(v.owned_bytes)
+    self.write_U64(v.encoded_graph_bytes)
+  end
+
+  # The Record type HnswConfigRecord.
+
+  def write_TypeHnswConfigRecord(v)
+    self.write_U16(v.max_connections)
+    self.write_U32(v.ef_construction)
+    self.write_U32(v.ef_search)
+    self.write_U8(v.level_bits)
+    self.write_U32(v.overfetch_multiplier)
+    self.write_U64(v.seed)
+    self.write_TypeHnswRoutingVectorEncodingRecord(v.routing_vector_encoding)
   end
 
   # The Record type HostStoreBatchGetResultRecord.
@@ -11249,6 +11478,13 @@ class RustBufferBuilder
  end
 
 
+  # The Enum type HnswRoutingVectorEncodingRecord.
+
+  def write_TypeHnswRoutingVectorEncodingRecord(v)
+    pack_into(4, 'l>', v)
+ end
+
+
   # The Enum type IndexProjectionRecord.
 
   def write_TypeIndexProjectionRecord(v)
@@ -12357,6 +12593,7 @@ end
 
 
 
+
 # Map error modules to the RustBuffer method name that reads them
 ERROR_MODULE_TO_READER_METHOD = {
 
@@ -12374,6 +12611,7 @@ ERROR_MODULE_TO_READER_METHOD = {
 
 
   ProllyBindingError => :readTypeProllyBindingError,
+
 
 
 
@@ -13253,12 +13491,39 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindinghnswindex,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindinghnswindex,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_config,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical,
+    [:uint64, RustCallStatus.by_ref],
+    :int8
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitymap,
     [:uint64, RustCallStatus.by_ref],
     :uint64
   attach_function :uniffi_prolly_bindings_fn_free_bindingproximitymap,
     [:uint64, RustCallStatus.by_ref],
     :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,
+    [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,
     [:uint64, RustCallStatus.by_ref],
     :void
@@ -13280,6 +13545,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_get,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -14189,6 +14457,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_default_content_graph_limits,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_hnsw_build_limits,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_hnsw_config,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_default_proximity_config,
     [:uint32, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -14583,6 +14857,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_content_graph_limits,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_hnsw_build_limits,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_hnsw_config,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_proximity_config,
@@ -15242,6 +15522,27 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallback_extract,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_is_canonical,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_prove_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache,
     [RustCallStatus.by_ref],
     :uint16
@@ -15261,6 +15562,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_get,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate,
@@ -16072,6 +16376,16 @@ class DistanceMetricRecord
   L2_SQUARED = 1
   COSINE = 2
   INNER_PRODUCT = 3
+
+end
+
+
+
+
+
+
+class HnswRoutingVectorEncodingRecord
+  FULL_F32 = 1
 
 end
 
@@ -20058,6 +20372,138 @@ class ExactProximityRecordRecord
   end
 end
 
+  # Record type HnswBuildLimitsRecord
+class HnswBuildLimitsRecord
+  attr_reader :max_records, :max_owned_bytes, :max_distance_evaluations, :worker_threads, :max_encoded_graph_bytes
+
+  def initialize(max_records:, max_owned_bytes:, max_distance_evaluations:, worker_threads:, max_encoded_graph_bytes:)
+    @max_records = max_records
+    @max_owned_bytes = max_owned_bytes
+    @max_distance_evaluations = max_distance_evaluations
+    @worker_threads = worker_threads
+    @max_encoded_graph_bytes = max_encoded_graph_bytes
+  end
+
+  def ==(other)
+    if @max_records != other.max_records
+      return false
+    end
+    if @max_owned_bytes != other.max_owned_bytes
+      return false
+    end
+    if @max_distance_evaluations != other.max_distance_evaluations
+      return false
+    end
+    if @worker_threads != other.worker_threads
+      return false
+    end
+    if @max_encoded_graph_bytes != other.max_encoded_graph_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type HnswBuildResultRecord
+class HnswBuildResultRecord
+  attr_reader :index, :stats
+
+  def initialize(index:, stats:)
+    @index = index
+    @stats = stats
+  end
+
+  def ==(other)
+    if @index != other.index
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type HnswBuildStatsRecord
+class HnswBuildStatsRecord
+  attr_reader :records, :distance_evaluations, :directed_edges, :maximum_level, :owned_bytes, :encoded_graph_bytes
+
+  def initialize(records:, distance_evaluations:, directed_edges:, maximum_level:, owned_bytes:, encoded_graph_bytes:)
+    @records = records
+    @distance_evaluations = distance_evaluations
+    @directed_edges = directed_edges
+    @maximum_level = maximum_level
+    @owned_bytes = owned_bytes
+    @encoded_graph_bytes = encoded_graph_bytes
+  end
+
+  def ==(other)
+    if @records != other.records
+      return false
+    end
+    if @distance_evaluations != other.distance_evaluations
+      return false
+    end
+    if @directed_edges != other.directed_edges
+      return false
+    end
+    if @maximum_level != other.maximum_level
+      return false
+    end
+    if @owned_bytes != other.owned_bytes
+      return false
+    end
+    if @encoded_graph_bytes != other.encoded_graph_bytes
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type HnswConfigRecord
+class HnswConfigRecord
+  attr_reader :max_connections, :ef_construction, :ef_search, :level_bits, :overfetch_multiplier, :seed, :routing_vector_encoding
+
+  def initialize(max_connections:, ef_construction:, ef_search:, level_bits:, overfetch_multiplier:, seed:, routing_vector_encoding:)
+    @max_connections = max_connections
+    @ef_construction = ef_construction
+    @ef_search = ef_search
+    @level_bits = level_bits
+    @overfetch_multiplier = overfetch_multiplier
+    @seed = seed
+    @routing_vector_encoding = routing_vector_encoding
+  end
+
+  def ==(other)
+    if @max_connections != other.max_connections
+      return false
+    end
+    if @ef_construction != other.ef_construction
+      return false
+    end
+    if @ef_search != other.ef_search
+      return false
+    end
+    if @level_bits != other.level_bits
+      return false
+    end
+    if @overfetch_multiplier != other.overfetch_multiplier
+      return false
+    end
+    if @seed != other.seed
+      return false
+    end
+    if @routing_vector_encoding != other.routing_vector_encoding
+      return false
+    end
+
+    true
+  end
+end
+
   # Record type ProximityConfigRecord
 class ProximityConfigRecord
   attr_reader :dimensions, :metric, :log_chunk_size, :level_hash_seed, :min_page_bytes, :target_page_bytes, :max_page_bytes, :overflow_hash_seed, :inline_threshold_bytes, :scalar_quantization_group_size
@@ -22470,6 +22916,24 @@ end
 def self.default_content_graph_limits()
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_content_graph_limits,)
   return result.consumeIntoTypeContentGraphLimitsRecord
+end
+
+
+
+
+
+def self.default_hnsw_build_limits()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_hnsw_build_limits,)
+  return result.consumeIntoTypeHnswBuildLimitsRecord
+end
+
+
+
+
+
+def self.default_hnsw_config()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_hnsw_config,)
+  return result.consumeIntoTypeHnswConfigRecord
 end
 
 
@@ -25111,6 +25575,88 @@ end
 
 end
 
+  class BindingHnswIndex
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindinghnswindex,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingHnswIndex instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindinghnswindex,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+
+
+  def config()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindinghnswindex_config,uniffi_clone_handle(),)
+    return result.consumeIntoTypeHnswConfigRecord
+  end
+  def is_canonical()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical,uniffi_clone_handle(),)
+    return 1 == result
+  end
+  def manifest()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def prove_search(map, request, limits)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return BindingProximitySearchProof.uniffi_allocate(result)
+  end
+  def search(map, request)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindinghnswindex_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
+  def source_descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+
+end
+
   class BindingProximityMap
 
   # A private helper for initializing instances of the class from a raw handle,
@@ -25156,6 +25702,14 @@ end
 
 
 
+  def build_hnsw(config, limits)
+        config = config
+        RustBuffer.check_lower_TypeHnswConfigRecord(config)
+        limits = limits
+        RustBuffer.check_lower_TypeHnswBuildLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,uniffi_clone_handle(),RustBuffer.alloc_from_TypeHnswConfigRecord(config),RustBuffer.alloc_from_TypeHnswBuildLimitsRecord(limits))
+    return result.consumeIntoTypeHnswBuildResultRecord
+  end
   def clear_content_cache()
       Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,uniffi_clone_handle(),)
   end
@@ -25187,6 +25741,12 @@ end
 
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_get,uniffi_clone_handle(),RustBuffer.allocFromBytes(key))
     return result.consumeIntoOptionalTypeExactProximityRecordRecord
+  end
+  def load_hnsw(manifest)
+        manifest = Prolly::uniffi_bytes(manifest)
+
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,uniffi_clone_handle(),RustBuffer.allocFromBytes(manifest))
+    return BindingHnswIndex.uniffi_allocate(result)
   end
   def mutate(mutations)
         mutations = mutations
