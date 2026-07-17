@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use super::boundary::{entry_count_boundary, BoundaryDetector};
-use super::builder::{BatchBuilder, EncodedNodeSizer, NodeSummary};
+use super::boundary::entry_count_boundary;
+use super::builder::{BatchBuilder, EmittedNode, LevelEmitter, NodeSummary};
 use super::cid::Cid;
 use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
@@ -42,84 +42,42 @@ struct EmittedInternal {
     node: Node,
 }
 
-pub(crate) struct LeafEmitter<'a> {
-    config: &'a super::config::Config,
-    detector: BoundaryDetector,
-    current: Node,
+pub(crate) struct LeafEmitter {
+    emitter: LevelEmitter,
     pub(crate) emitted: Vec<EmittedLeaf>,
-    sizer: EncodedNodeSizer,
 }
 
-impl<'a> LeafEmitter<'a> {
-    pub(crate) fn new(config: &'a super::config::Config) -> Result<Self, Error> {
+impl LeafEmitter {
+    pub(crate) fn new(config: &super::config::Config) -> Result<Self, Error> {
         Ok(Self {
-            config,
-            detector: BoundaryDetector::new(config.format.chunking.clone(), 0)?,
-            current: Node::builder()
-                .leaf(true)
-                .level(0)
-                .tree_format(config.format.clone())
-                .build(),
+            emitter: LevelEmitter::new(config.clone(), true, 0)?,
             emitted: Vec::new(),
-            sizer: EncodedNodeSizer::new(config.format.clone(), true, 0)?,
         })
     }
 
     pub(crate) fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
-        let hard_max = self.config.format.chunking.hard_max_node_bytes;
-        let mut encoded_size = self.sizer.size_after(&key, &value, None)?;
-        if !self.current.is_empty() && encoded_size > hard_max {
-            self.flush();
-            self.detector.reset();
-            encoded_size = self.sizer.size_after(&key, &value, None)?;
-        }
-        if encoded_size > hard_max {
-            return Err(Error::EntryTooLarge {
-                encoded_bytes: encoded_size,
-                limit: hard_max,
-            });
-        }
-        let encoded_entry_bytes = encoded_size.saturating_sub(self.sizer.size());
-        self.sizer.push_sized(&key, &value, None, encoded_size)?;
-        let boundary = self
-            .detector
-            .observe(&key, &value, encoded_entry_bytes as usize)?;
-        self.current.keys.push(key);
-        self.current.vals.push(value);
-        if boundary {
-            self.flush();
-        }
+        let emitted = self.emitter.push_leaf(key, value)?;
+        self.collect(emitted);
         Ok(())
     }
 
     pub(crate) fn flush(&mut self) {
-        if self.current.is_empty() {
-            return;
+        if let Some(emitted) = self.emitter.finish() {
+            self.collect(vec![emitted]);
         }
-        let node = std::mem::replace(
-            &mut self.current,
-            Node::builder()
-                .leaf(true)
-                .level(0)
-                .tree_format(self.config.format.clone())
-                .build(),
-        );
-        let bytes = node.to_bytes();
-        debug_assert!(bytes.len() as u64 <= self.config.format.chunking.hard_max_node_bytes);
-        self.emitted.push(EmittedLeaf {
-            summary: NodeSummary {
-                cid: Cid::from_bytes(&bytes),
-                first_key: node.keys[0].clone(),
-                count: node.keys.len() as u64,
-            },
-            bytes,
-            node,
-        });
-        self.sizer.reset();
+    }
+
+    fn collect(&mut self, emitted: Vec<EmittedNode>) {
+        self.emitted
+            .extend(emitted.into_iter().map(|emitted| EmittedLeaf {
+                summary: emitted.summary,
+                bytes: emitted.bytes,
+                node: emitted.node,
+            }));
     }
 
     pub(crate) fn is_aligned_with(&self, old: &NodeSummary) -> bool {
-        self.current.is_empty()
+        self.emitter.is_empty()
             && self
                 .emitted
                 .last()

@@ -28,8 +28,13 @@ pub struct BoundaryDetector {
 
 impl BoundaryDetector {
     /// Create a detector for a persisted policy and tree level.
-    pub fn new(spec: ChunkingSpec, level: u16) -> Result<Self, Error> {
+    pub fn new(mut spec: ChunkingSpec, level: u16) -> Result<Self, Error> {
         spec.validate()?;
+        if level > 0 && spec.min < 2 {
+            spec.min = 2;
+            spec.target = spec.target.max(2);
+            spec.max = spec.max.max(2);
+        }
         let seed = if spec.level_salt {
             spec.hash_seed ^ u64::from(level).wrapping_mul(LEVEL_SALT)
         } else {

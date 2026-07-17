@@ -16,6 +16,8 @@ use rayon::prelude::*;
 
 mod size;
 pub(crate) use size::EncodedNodeSizer;
+mod streaming;
+pub(crate) use streaming::{EmittedNode, HierarchicalEmitter, LevelEmitter};
 
 const SORTED_BUILDER_NODE_BATCH: usize = 256;
 const PARALLEL_BOUNDARY_HASH_MIN_ENTRIES: usize = 1_024;
@@ -78,12 +80,9 @@ pub struct BatchBuilder<S: Store> {
 pub struct SortedBatchBuilder<S: Store> {
     store: S,
     config: Config,
-    current: Node,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
-    leaf_nodes: Vec<NodeSummary>,
     pending_nodes: Vec<BuiltNode>,
-    detector: BoundaryDetector,
-    sizer: EncodedNodeSizer,
+    hierarchy: HierarchicalEmitter,
 }
 
 impl<S: Store + Clone + Send + Sync> BatchBuilder<S>
@@ -456,20 +455,14 @@ where
 {
     /// Create a sorted streaming builder.
     pub fn new(store: S, config: Config) -> Self {
-        let current = new_builder_node(&config, true, INIT_LEVEL);
-        let detector = BoundaryDetector::new(config.format.chunking.clone(), INIT_LEVEL.into())
-            .expect("configuration contains a valid persisted chunking policy");
-        let sizer = EncodedNodeSizer::new(config.format.clone(), true, INIT_LEVEL)
-            .expect("configuration contains a registered persisted node layout");
+        let hierarchy = HierarchicalEmitter::new(config.clone())
+            .expect("configuration contains a registered persisted tree format");
         Self {
             store,
             config,
-            current,
             pending_entry: None,
-            leaf_nodes: Vec::new(),
             pending_nodes: Vec::new(),
-            detector,
-            sizer,
+            hierarchy,
         }
     }
 
@@ -501,67 +494,31 @@ where
         let Some((key, val)) = self.pending_entry.take() else {
             return Ok(());
         };
-        let hard_max = self.config.format.chunking.hard_max_node_bytes;
-        let mut encoded_size = self.sizer.size_after(&key, &val, None)?;
-        if !self.current.is_empty() && encoded_size > hard_max {
-            self.flush_leaf()?;
-            self.detector.reset();
-            encoded_size = self.sizer.size_after(&key, &val, None)?;
-        }
-        if encoded_size > hard_max {
-            return Err(Error::EntryTooLarge {
-                encoded_bytes: encoded_size,
-                limit: hard_max,
-            });
-        }
-        let encoded_entry_bytes = encoded_size.saturating_sub(self.sizer.size());
-        self.sizer.push_sized(&key, &val, None, encoded_size)?;
-        let is_boundary = self
-            .detector
-            .observe(&key, &val, encoded_entry_bytes as usize)?;
-        self.current.keys.push(key);
-        self.current.vals.push(val);
-
-        if is_boundary {
-            self.flush_leaf()?;
-        }
+        let emitted = self.hierarchy.push_leaf(key, val)?;
+        self.collect_emitted(emitted)?;
         Ok(())
     }
 
     /// Build a tree from the streamed entries.
     pub fn build(mut self) -> Result<Tree, Error> {
         self.flush_pending_entry()?;
-        self.flush_leaf()?;
+        let (root, emitted) = self.hierarchy.finish()?;
+        self.collect_emitted(emitted)?;
         self.flush_pending_nodes()?;
-        let builder = BatchBuilder::new(self.store.clone(), self.config.clone());
-        builder.build_from_chunks(self.leaf_nodes)
+        Ok(Tree {
+            root: root.map(|summary| summary.cid),
+            config: self.config,
+        })
     }
 
-    fn flush_leaf(&mut self) -> Result<(), Error> {
-        if self.current.keys.is_empty() {
-            return Ok(());
-        }
-
-        let node = std::mem::replace(
-            &mut self.current,
-            new_builder_node(&self.config, true, INIT_LEVEL),
-        );
-        let first_key = node.keys.first().cloned().unwrap_or_default();
-        let bytes = node.to_bytes();
-        debug_assert!(bytes.len() as u64 <= self.config.format.chunking.hard_max_node_bytes);
-        let cid = Cid::from_bytes(&bytes);
-        self.leaf_nodes.push(NodeSummary {
-            cid: cid.clone(),
-            first_key: first_key.clone(),
-            count: node.keys.len() as u64,
-        });
-        self.pending_nodes.push(BuiltNode {
-            cid,
-            first_key,
-            count: node.keys.len() as u64,
-            bytes,
-        });
-        self.sizer.reset();
+    fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
+        self.pending_nodes
+            .extend(emitted.into_iter().map(|emitted| BuiltNode {
+                cid: emitted.summary.cid,
+                first_key: emitted.summary.first_key,
+                count: emitted.summary.count,
+                bytes: emitted.bytes,
+            }));
         if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
             self.flush_pending_nodes()?;
         }
@@ -1186,5 +1143,37 @@ mod tests {
         let err = builder.add(b"a".to_vec(), b"2".to_vec()).unwrap_err();
 
         assert!(matches!(err, Error::UnsortedInput { .. }));
+    }
+
+    #[test]
+    fn sorted_builder_keeps_only_height_bounded_hierarchy_state() {
+        let store = CountingStore::default();
+        let config = Config::builder()
+            .min_chunk_size(8)
+            .max_chunk_size(16)
+            .chunking_factor(16)
+            .build();
+        let mut builder = SortedBatchBuilder::new(store, config);
+        let mut max_levels = 0;
+        let mut max_buffered_entries = 0;
+
+        for index in 0..100_000 {
+            builder
+                .add(
+                    format!("key-{index:08}").into_bytes(),
+                    format!("value-{index:08}").into_bytes(),
+                )
+                .unwrap();
+            max_levels = max_levels.max(builder.hierarchy.active_levels());
+            max_buffered_entries = max_buffered_entries.max(builder.hierarchy.buffered_entries());
+        }
+
+        let tree = builder.build().unwrap();
+        assert!(tree.root.is_some());
+        assert!(max_levels <= 8, "active levels={max_levels}");
+        assert!(
+            max_buffered_entries <= max_levels * 16,
+            "buffered entries={max_buffered_entries}, active levels={max_levels}"
+        );
     }
 }
