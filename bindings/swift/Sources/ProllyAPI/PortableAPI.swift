@@ -113,6 +113,18 @@ public final class VersionedMap: @unchecked Sendable {
     public func snapshot() throws -> MapSnapshot? {
         try open { try native.snapshot().map(MapSnapshot.init(native:)) }
     }
+    public func backup() throws -> Data { try open { try native.backup() } }
+    public func restoreBackup(_ bundle: Data) throws -> MapVersionRecord {
+        try open { try native.restoreBackup(bytes: Data(bundle)) }
+    }
+    public func keepLast(_ count: UInt64) throws -> VersionPruneRecord {
+        try open { try native.keepLast(count: count) }
+    }
+    public func verifyCatalog() throws -> MapCatalogVerificationRecord {
+        try open { try native.verifyCatalog() }
+    }
+    public func planGC() throws -> GcPlanRecord { try open { try native.planGc() } }
+    public func sweepGC() throws -> GcSweepRecord { try open { try native.sweepGc() } }
 
     public func putAsync(_ key: Data, value: Data) -> Task<MapVersionRecord, Error> {
         let copiedKey = Data(key)
@@ -131,13 +143,46 @@ public final class VersionedMap: @unchecked Sendable {
 
 public final class MapSnapshot: @unchecked Sendable {
     let native: BindingMapSnapshot
+    private var closed = false
     init(native: BindingMapSnapshot) { self.native = native }
+    public func close() { closed = true }
     public var id: Data { native.id() }
-    public func get(_ key: Data) throws -> Data? { try native.get(key: Data(key)) }
+    public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
     public func range(from start: Data = Data(), to end: Data? = nil) throws -> [EntryRecord] {
-        try native.range(start: Data(start), rangeEnd: end.map { Data($0) })
+        try open { try native.range(start: Data(start), rangeEnd: end.map { Data($0) }) }
     }
-    public func proveKey(_ key: Data) throws -> KeyProofRecord { try native.proveKey(key: Data(key)) }
+    public func proveKey(_ key: Data) throws -> KeyProofRecord {
+        try open { try native.proveKey(key: Data(key)) }
+    }
+    public func proveKeys(_ keys: [Data]) throws -> MultiKeyProofRecord {
+        try open { try native.proveKeys(keys: keys.map { Data($0) }) }
+    }
+    public func proveRange(from start: Data = Data(), to end: Data? = nil) throws -> RangeProofRecord {
+        try open { try native.proveRange(start: Data(start), rangeEnd: end.map { Data($0) }) }
+    }
+    public func stats() throws -> TreeStatsRecord { try open { try native.stats() } }
+    public func export() throws -> SnapshotBundleRecord { try open { try native.export() } }
+    public func read() throws -> ReadSession { try open { ReadSession(native: try native.readSession()) } }
+
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("MapSnapshot") }
+        return try body()
+    }
+}
+
+public final class ReadSession: @unchecked Sendable {
+    let native: ProllyReadSession
+    private var closed = false
+    init(native: ProllyReadSession) { self.native = native }
+    public func close() { closed = true }
+    public func get(_ key: Data) throws -> Data? { try open { try native.get(key: Data(key)) } }
+    public func getMany(_ keys: [Data]) throws -> [Data?] {
+        try open { try native.getMany(keys: keys.map { Data($0) }) }
+    }
+    private func open<R>(_ body: () throws -> R) throws -> R {
+        if closed { throw PortableAPIError.closed("ReadSession") }
+        return try body()
+    }
 }
 
 private final class ExtractorAdapter: SecondaryIndexExtractorCallback, @unchecked Sendable {
@@ -181,6 +226,23 @@ public final class IndexedMap: @unchecked Sendable {
     public func delete(_ key: Data) throws -> IndexedVersionRecord { try native.delete(key: Data(key)) }
     public func snapshot() throws -> IndexedSnapshot { IndexedSnapshot(native: try native.snapshot()) }
     public func health() throws -> IndexedMapHealthRecord { try native.health() }
+    public func metrics() throws -> IndexedMapMetricsRecord { try native.metrics() }
+    public func verifyIndex(_ name: Data, sourceVersion: Data) throws -> IndexVerificationRecord {
+        try native.verifyIndex(name: Data(name), sourceVersion: Data(sourceVersion))
+    }
+    public func verifyAll(sourceVersion: Data) throws -> [IndexVerificationRecord] {
+        try native.verifyAll(sourceVersion: Data(sourceVersion))
+    }
+    public func repairIndex(_ name: Data, sourceVersion: Data) throws -> IndexVerificationRecord {
+        try native.repairIndex(name: Data(name), sourceVersion: Data(sourceVersion))
+    }
+    public func exportCurrent() throws -> Data { try native.exportCurrent() }
+    public func importCurrent(_ bundle: Data, expectedSource: Data? = nil) throws -> IndexedVersionRecord {
+        try native.importCurrent(bundle: Data(bundle), expectedSource: expectedSource.map { Data($0) })
+    }
+    public func keepLast(_ count: UInt64) throws -> IndexedRetentionRecord {
+        try native.keepLast(count: count)
+    }
 }
 
 public final class IndexedSnapshot: @unchecked Sendable {
@@ -247,6 +309,15 @@ public final class ProximityMap: @unchecked Sendable {
     }
     public func read() throws -> ProximityReadSession { ProximityReadSession(native: try native.readSession()) }
     public func verify() throws -> ProximityVerificationRecord { try native.verify() }
+    public func proveMembership(_ key: Data) throws -> ProximityMembershipProofRecord {
+        try native.proveMembership(key: Data(key))
+    }
+    public func proveStructure(
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximityStructuralProofRecord {
+        try native.proveStructure(limits: limits)
+    }
+    public func clearCache() throws { try native.clearContentCache() }
 
     public func withSearchView<R>(
         query: [Float],
@@ -311,6 +382,22 @@ public final class ProximityReadSession: @unchecked Sendable {
     init(native: BindingProximityReadSession) { self.native = native }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
     public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
+}
+
+public enum Proofs {
+    public static func verify(_ proof: KeyProofRecord) throws -> KeyProofVerificationRecord {
+        try verifyKeyProof(proof: proof)
+    }
+
+    public static func verify(
+        _ proof: ProximityMembershipProofRecord,
+        expectedDescriptor: Data? = nil
+    ) throws -> ProximityMembershipVerificationRecord {
+        try verifyProximityMembershipProof(
+            proof: proof,
+            expectedDescriptor: expectedDescriptor.map { Data($0) }
+        )
+    }
 }
 
 private func readUInt16(_ bytes: UnsafeRawBufferPointer, _ offset: Int) -> UInt16 {

@@ -204,6 +204,13 @@ module Prolly
     def put(key, value) = open! { @native.put(key.b, value.b) }
     def delete(key) = open! { @native.delete(key.b) }
     def health = open! { @native.health }
+    def metrics = open! { @native.metrics }
+    def verify_index(name, source_version) = open! { @native.verify_index(name.b, source_version.b) }
+    def verify_all(source_version) = open! { @native.verify_all(source_version.b) }
+    def repair_index(name, source_version) = open! { @native.repair_index(name.b, source_version.b) }
+    def export_current = open! { @native.export_current }
+    def import_current(bundle, expected_source = nil) = open! { @native.import_current(bundle.b, expected_source&.b) }
+    def keep_last(count) = open! { @native.keep_last(count) }
     def snapshot = open! { IndexedSnapshot.new(@native.snapshot) }
     def close = @closed = true
 
@@ -240,7 +247,13 @@ module Prolly
     def get(key) = open! { @native.get(key.b) }
     def put(key, value) = open! { @native.put(key.b, value.b) }
     def delete(key) = open! { @native.delete(key.b) }
-    def snapshot = open! { @native.snapshot }
+    def snapshot = open! { @native.snapshot&.then { |value| MapSnapshot.new(value) } }
+    def backup = open! { @native.backup }
+    def restore_backup(bundle) = open! { @native.restore_backup(bundle.b) }
+    def keep_last(count) = open! { @native.keep_last(count) }
+    def verify_catalog = open! { @native.verify_catalog }
+    def plan_gc = open! { @native.plan_gc }
+    def sweep_gc = open! { @native.sweep_gc }
 
     def put_async(key, value)
       copied_key = key.b.dup
@@ -258,6 +271,60 @@ module Prolly
     end
   end
 
+  class MapSnapshot
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def id = open! { @native.id }
+    def get(key) = open! { @native.get(key.b) }
+    def range(start = ''.b, range_end = nil) = open! { @native.range(start.b, range_end&.b) }
+    def prove_key(key) = open! { @native.prove_key(key.b) }
+    def prove_keys(keys) = open! { @native.prove_keys(keys.map(&:b)) }
+    def prove_range(start = ''.b, range_end = nil) = open! { @native.prove_range(start.b, range_end&.b) }
+    def stats = open! { @native.stats }
+    def export = open! { @native.export }
+    def read = open! { ReadSession.new(@native.read_session) }
+    def close = @closed = true
+
+    private
+
+    def open!
+      raise 'map snapshot is closed' if @closed
+      yield
+    end
+  end
+
+  class ReadSession
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def get(key) = open! { @native.get(key.b) }
+    def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def close = @closed = true
+
+    def use
+      raise 'read session is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def open!
+      raise 'read session is closed' if @closed
+      yield
+    end
+  end
+
   class ProximityMap
     def initialize(native)
       @native = native
@@ -265,7 +332,12 @@ module Prolly
     end
 
     def get(key) = open! { @native.get(key.b) }
+    def descriptor = open! { @native.descriptor }
     def verify = open! { @native.verify }
+    def prove_membership(key) = open! { @native.prove_membership(key.b) }
+    def prove_structure(limits = Prolly.default_content_graph_limits) = open! { @native.prove_structure(limits) }
+    def clear_cache = open! { @native.clear_content_cache }
+    def read = open! { ProximityReadSession.new(@native.read_session) }
 
     def search_exact(query, k)
       open! { @native.search(Prolly.exact_proximity_search_request(query, k)) }
@@ -283,6 +355,24 @@ module Prolly
 
     def open!
       raise 'proximity map is closed' if @closed
+      yield
+    end
+  end
+
+  class ProximityReadSession
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def get(key) = open! { @native.get(key.b) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def close = @closed = true
+
+    private
+
+    def open!
+      raise 'proximity read session is closed' if @closed
       yield
     end
   end

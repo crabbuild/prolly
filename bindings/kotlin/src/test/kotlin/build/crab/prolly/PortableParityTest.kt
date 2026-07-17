@@ -2,6 +2,8 @@ package build.crab.prolly
 
 import build.crab.prolly.api.Engine
 import build.crab.prolly.api.ProximityRecord
+import build.crab.prolly.api.verifyKeyProof
+import build.crab.prolly.api.verifyProximityMembershipProof
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -74,6 +76,60 @@ class PortableParityTest {
                 versioned.putAsync(key, "v".bytes())
                 key[0] = 'x'.code.toByte()
                 assertArrayEquals("v".bytes(), versioned.get("k".bytes()))
+            }
+        }
+    }
+
+    @Test
+    fun proofsSessionsAndMaintenanceAreApplicationFacing() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("proofs".bytes()).use { versioned ->
+                versioned.initialize()
+                versioned.put("k".bytes(), "v".bytes())
+                versioned.snapshot()!!.use { snapshot ->
+                    val verified = verifyKeyProof(snapshot.proveKey("k".bytes()))
+                    assertEquals(true, verified.valid)
+                    assertArrayEquals("v".bytes(), verified.value)
+                    assertEquals(1uL, snapshot.stats().totalKeyValuePairs)
+                    assertEquals(true, snapshot.export().nodes.isNotEmpty())
+                    snapshot.read().use { session ->
+                        assertArrayEquals("v".bytes(), session.get("k".bytes()))
+                    }
+                }
+                assertEquals(true, versioned.verifyCatalog().versionCount >= 2uL)
+                assertEquals(true, versioned.backup().isNotEmpty())
+                assertEquals(true, versioned.planGc().reachability.liveCids.isNotEmpty())
+            }
+
+            engine.indexRegistry().use { registry ->
+                registry.register(
+                    "by_value".bytes(), 1uL, "value-v1", IndexProjectionRecord.ALL,
+                    object : SecondaryIndexExtractorCallback {
+                        override fun extract(primaryKey: ByteArray, sourceValue: ByteArray) =
+                            listOf(IndexEntryRecord(sourceValue.copyOf(), null))
+                    },
+                )
+                engine.indexedMap("indexed-maintenance".bytes(), registry).use { indexed ->
+                    val version = indexed.put("k".bytes(), "term".bytes())
+                    indexed.ensureIndex("by_value".bytes())
+                    assertEquals(true, indexed.verifyIndex("by_value".bytes(), version.sourceVersion).valid)
+                    assertEquals(true, indexed.metrics().buildAttempts >= 1uL)
+                    assertEquals(true, indexed.exportCurrent().isNotEmpty())
+                    assertEquals(true, indexed.keepLast(1uL).retainedSourceVersions.isNotEmpty())
+                }
+            }
+
+            engine.buildProximity(
+                2u,
+                listOf(ProximityRecord("p".bytes(), listOf(0.0f, 0.0f), "payload".bytes())),
+            ).use { proximity ->
+                val verified = verifyProximityMembershipProof(
+                    proximity.proveMembership("p".bytes()),
+                    proximity.descriptor,
+                )
+                assertArrayEquals("payload".bytes(), verified.record!!.value)
+                assertEquals(1uL, proximity.verify().recordCount)
             }
         }
     }

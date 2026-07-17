@@ -9,15 +9,23 @@ import build.crab.prolly.BindingSecondaryIndexSnapshot
 import build.crab.prolly.BindingVersionedMap
 import build.crab.prolly.BindingMapSnapshot
 import build.crab.prolly.ConfigRecord
+import build.crab.prolly.ContentGraphLimitsRecord
 import build.crab.prolly.IndexProjectionRecord
+import build.crab.prolly.KeyProofRecord
 import build.crab.prolly.ProllyEngine
+import build.crab.prolly.ProllyReadSession
+import build.crab.prolly.ProximityMembershipProofRecord
 import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximityConfigRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
+import build.crab.prolly.SnapshotBundleRecord
 import build.crab.prolly.defaultConfig
+import build.crab.prolly.defaultContentGraphLimits
 import build.crab.prolly.defaultProximityConfig
 import build.crab.prolly.exactProximitySearchRequest
+import build.crab.prolly.verifyKeyProof as verifyNativeKeyProof
+import build.crab.prolly.verifyProximityMembershipProof as verifyNativeProximityMembershipProof
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -63,6 +71,13 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
     fun delete(key: ByteArray) = native.delete(key.copyOf())
     fun snapshot() = native.snapshot()?.let(::MapSnapshot)
     fun versions() = native.versions()
+    fun backup() = native.backup()
+    fun restoreBackup(bundle: ByteArray) = native.restoreBackup(bundle.copyOf())
+    fun importAsHead(bundle: SnapshotBundleRecord) = native.importAsHead(bundle)
+    fun keepLast(count: ULong) = native.keepLast(count)
+    fun verifyCatalog() = native.verifyCatalog()
+    fun planGc() = native.planGc()
+    fun sweepGc() = native.sweepGc()
     suspend fun putAsync(key: ByteArray, value: ByteArray) =
         key.copyOf().let { copiedKey ->
             value.copyOf().let { copiedValue ->
@@ -78,6 +93,18 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
     fun range(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
         native.range(start.copyOf(), end?.copyOf())
     fun proveKey(key: ByteArray) = native.proveKey(key.copyOf())
+    fun proveKeys(keys: List<ByteArray>) = native.proveKeys(keys.map(ByteArray::copyOf))
+    fun proveRange(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
+        native.proveRange(start.copyOf(), end?.copyOf())
+    fun stats() = native.stats()
+    fun export() = native.export()
+    fun read() = ReadSession(native.readSession())
+    override fun close() = native.close()
+}
+
+class ReadSession(internal val native: ProllyReadSession) : AutoCloseable {
+    fun get(key: ByteArray) = native.get(key.copyOf())
+    fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
     override fun close() = native.close()
 }
 
@@ -99,6 +126,16 @@ class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
     fun delete(key: ByteArray) = native.delete(key.copyOf())
     fun snapshot() = IndexedSnapshot(native.snapshot())
     fun health() = native.health()
+    fun metrics() = native.metrics()
+    fun verifyIndex(name: ByteArray, sourceVersion: ByteArray) =
+        native.verifyIndex(name.copyOf(), sourceVersion.copyOf())
+    fun verifyAll(sourceVersion: ByteArray) = native.verifyAll(sourceVersion.copyOf())
+    fun repairIndex(name: ByteArray, sourceVersion: ByteArray) =
+        native.repairIndex(name.copyOf(), sourceVersion.copyOf())
+    fun exportCurrent() = native.exportCurrent()
+    fun importCurrent(bundle: ByteArray, expectedSource: ByteArray? = null) =
+        native.importCurrent(bundle.copyOf(), expectedSource?.copyOf())
+    fun keepLast(count: ULong) = native.keepLast(count)
     override fun close() = native.close()
 }
 
@@ -123,6 +160,7 @@ class SecondaryIndex(internal val native: BindingSecondaryIndexSnapshot) : AutoC
 }
 
 class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
+    val descriptor: ByteArray get() = native.descriptor()
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         native.search(exactProximitySearchRequest(query.toList(), k))
@@ -133,6 +171,10 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         block: (List<NeighborView>) -> R,
     ): R = PackedPages.withProximitySearch(native.fastHandle(), query, k, block)
     fun verify() = native.verify()
+    fun proveMembership(key: ByteArray) = native.proveMembership(key.copyOf())
+    fun proveStructure(limits: ContentGraphLimitsRecord = defaultContentGraphLimits()) =
+        native.proveStructure(limits)
+    fun clearCache() = native.clearContentCache()
     override fun close() = native.close()
 }
 
@@ -141,3 +183,10 @@ class ProximityReadSession(internal val native: BindingProximityReadSession) : A
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     override fun close() = native.close()
 }
+
+fun verifyKeyProof(proof: KeyProofRecord) = verifyNativeKeyProof(proof)
+
+fun verifyProximityMembershipProof(
+    proof: ProximityMembershipProofRecord,
+    expectedDescriptor: ByteArray? = null,
+) = verifyNativeProximityMembershipProof(proof, expectedDescriptor?.copyOf())

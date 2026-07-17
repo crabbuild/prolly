@@ -43,4 +43,45 @@ class PortableParityTest < Minitest::Test
       assert_equal 'v'.b, versioned.get('k'.b)
     end
   end
+
+  def test_proofs_sessions_and_maintenance_are_application_facing
+    Prolly::Engine.memory.use do |engine|
+      versioned = engine.versioned_map('proofs'.b)
+      versioned.initialize_map
+      versioned.put('k'.b, 'v'.b)
+      snapshot = versioned.snapshot
+      verified = Prolly.verify_key_proof(snapshot.prove_key('k'.b))
+      assert verified.valid
+      assert_equal 'v'.b, verified.value
+      assert_equal 1, snapshot.stats.total_key_value_pairs
+      refute_empty snapshot.export.nodes
+      snapshot.read.use { |session| assert_equal 'v'.b, session.get('k'.b) }
+      assert_operator versioned.verify_catalog.version_count, :>=, 2
+      refute_empty versioned.backup
+      refute_empty versioned.plan_gc.reachability.live_cids
+
+      registry = engine.index_registry
+      registry.register(
+        'by_value'.b, 1, 'value-v1', Prolly::IndexProjectionRecord::ALL,
+        ->(_key, value) { [[value, nil]] }
+      )
+      indexed = engine.indexed_map('indexed-maintenance'.b, registry)
+      version = indexed.put('k'.b, 'term'.b)
+      indexed.ensure_index('by_value'.b)
+      assert indexed.verify_index('by_value'.b, version.source_version).valid
+      assert_operator indexed.metrics.build_attempts, :>=, 1
+      refute_empty indexed.export_current
+      refute_empty indexed.keep_last(1).retained_source_versions
+
+      proximity = engine.build_proximity(
+        dimensions: 2,
+        records: [Prolly::ProximityRecord.new(key: 'p'.b, vector: [0.0, 0.0], value: 'payload'.b)]
+      )
+      membership = Prolly.verify_proximity_membership_proof(
+        proximity.prove_membership('p'.b), proximity.descriptor
+      )
+      assert_equal 'payload'.b, membership.record.value
+      assert_equal 1, proximity.verify.record_count
+    end
+  end
 end

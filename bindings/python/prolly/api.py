@@ -149,6 +149,26 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.verify_catalog()
 
+    def backup(self) -> bytes:
+        self._open()
+        return self._inner.backup()
+
+    def restore_backup(self, bundle: bytes):
+        self._open()
+        return self._inner.restore_backup(bytes(bundle))
+
+    def import_as_head(self, bundle):
+        self._open()
+        return self._inner.import_as_head(bundle)
+
+    def plan_gc(self):
+        self._open()
+        return self._inner.plan_gc()
+
+    def sweep_gc(self):
+        self._open()
+        return self._inner.sweep_gc()
+
     def put_async(self, key: bytes, value: bytes):
         copied_key, copied_value = bytes(key), bytes(value)
 
@@ -180,6 +200,40 @@ class MapSnapshot(_Scoped):
     def prove_key(self, key: bytes):
         self._open()
         return self._inner.prove_key(bytes(key))
+
+    def prove_keys(self, keys: Iterable[bytes]):
+        self._open()
+        return self._inner.prove_keys([bytes(key) for key in keys])
+
+    def prove_range(self, start: bytes = b"", end: bytes | None = None):
+        self._open()
+        return self._inner.prove_range(bytes(start), None if end is None else bytes(end))
+
+    def stats(self):
+        self._open()
+        return self._inner.stats()
+
+    def export(self):
+        self._open()
+        return self._inner.export()
+
+    def read(self) -> "ReadSession":
+        self._open()
+        return ReadSession(self._inner.read_session())
+
+
+class ReadSession(_Scoped):
+    def __init__(self, inner: _native.ProllyReadSession):
+        super().__init__()
+        self._inner = inner
+
+    def get(self, key: bytes):
+        self._open()
+        return self._inner.get(bytes(key))
+
+    def get_many(self, keys: Iterable[bytes]):
+        self._open()
+        return self._inner.get_many([bytes(key) for key in keys])
 
 
 class IndexRegistry:
@@ -239,6 +293,32 @@ class IndexedMap(_Scoped):
     def verify_index(self, name: bytes, source_version: bytes):
         self._open()
         return self._inner.verify_index(bytes(name), bytes(source_version))
+
+    def verify_all(self, source_version: bytes):
+        self._open()
+        return self._inner.verify_all(bytes(source_version))
+
+    def repair_index(self, name: bytes, source_version: bytes):
+        self._open()
+        return self._inner.repair_index(bytes(name), bytes(source_version))
+
+    def metrics(self):
+        self._open()
+        return self._inner.metrics()
+
+    def export_current(self) -> bytes:
+        self._open()
+        return self._inner.export_current()
+
+    def import_current(self, bundle: bytes, expected_source: bytes | None = None):
+        self._open()
+        return self._inner.import_current(
+            bytes(bundle), None if expected_source is None else bytes(expected_source)
+        )
+
+    def keep_last(self, count: int):
+        self._open()
+        return self._inner.keep_last(count)
 
 
 class IndexedSnapshot(_Scoped):
@@ -325,6 +405,16 @@ class ProximityMap(_Scoped):
         self._open()
         return self._inner.prove_membership(bytes(key))
 
+    def prove_structure(self, limits=None):
+        self._open()
+        return self._inner.prove_structure(
+            limits or _native.default_content_graph_limits()
+        )
+
+    def clear_cache(self) -> None:
+        self._open()
+        self._inner.clear_content_cache()
+
 
 class ProximityReadSession(_Scoped):
     def __init__(self, inner: _native.BindingProximityReadSession):
@@ -340,6 +430,27 @@ class ProximityReadSession(_Scoped):
         return self._inner.contains_key(bytes(key))
 
 
+def verify_key_proof(proof):
+    return _native.verify_key_proof(proof)
+
+
+def verify_proximity_membership_proof(proof, expected_descriptor: bytes | None = None):
+    return _native.verify_proximity_membership_proof(
+        proof,
+        None if expected_descriptor is None else bytes(expected_descriptor),
+    )
+
+
+def verify_proximity_structure_proof(
+    proof, expected_descriptor: bytes | None = None, limits=None
+):
+    return _native.verify_proximity_structure_proof(
+        proof,
+        None if expected_descriptor is None else bytes(expected_descriptor),
+        limits or _native.default_content_graph_limits(),
+    )
+
+
 __all__ = [
     "Engine",
     "IndexProjection",
@@ -353,5 +464,9 @@ __all__ = [
     "ProximityRecord",
     "SecondaryIndex",
     "ScopedBytes",
+    "ReadSession",
     "VersionedMap",
+    "verify_key_proof",
+    "verify_proximity_membership_proof",
+    "verify_proximity_structure_proof",
 ]

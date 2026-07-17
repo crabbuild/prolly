@@ -34,4 +34,48 @@ final class PortableParityTests: XCTestCase {
             XCTAssertEqual(try versioned.get(Data("k".utf8)), Data("v".utf8))
         }
     }
+
+    func testProofsSessionsAndMaintenanceAreApplicationFacing() throws {
+        try Engine.withMemory { engine in
+            let versioned = try engine.versionedMap(Data("proofs".utf8))
+            _ = try versioned.initialize()
+            _ = try versioned.put(Data("k".utf8), value: Data("v".utf8))
+            let snapshot = try XCTUnwrap(versioned.snapshot())
+            let verified = try Proofs.verify(snapshot.proveKey(Data("k".utf8)))
+            XCTAssertTrue(verified.valid)
+            XCTAssertEqual(verified.value, Data("v".utf8))
+            XCTAssertEqual(try snapshot.stats().totalKeyValuePairs, 1)
+            XCTAssertFalse(try snapshot.export().nodes.isEmpty)
+            let session = try snapshot.read()
+            XCTAssertEqual(try session.get(Data("k".utf8)), Data("v".utf8))
+            session.close()
+            XCTAssertGreaterThanOrEqual(try versioned.verifyCatalog().versionCount, 2)
+            XCTAssertFalse(try versioned.backup().isEmpty)
+            XCTAssertFalse(try versioned.planGC().reachability.liveCids.isEmpty)
+
+            let registry = try engine.indexRegistry()
+            try registry.register(
+                name: Data("by_value".utf8), generation: 1, extractorID: "value-v1",
+                projection: .all
+            ) { _, value in [IndexEntryRecord(term: Data(value), projection: nil)] }
+            let indexed = try engine.indexedMap(Data("indexed-maintenance".utf8), registry: registry)
+            let version = try indexed.put(Data("k".utf8), value: Data("term".utf8))
+            _ = try indexed.ensureIndex(Data("by_value".utf8))
+            XCTAssertTrue(try indexed.verifyIndex(Data("by_value".utf8), sourceVersion: version.sourceVersion).valid)
+            XCTAssertGreaterThanOrEqual(try indexed.metrics().buildAttempts, 1)
+            XCTAssertFalse(try indexed.exportCurrent().isEmpty)
+            XCTAssertFalse(try indexed.keepLast(1).retainedSourceVersions.isEmpty)
+
+            let proximity = try engine.buildProximity(
+                dimensions: 2,
+                records: [ProximityRecord(key: Data("p".utf8), vector: [0, 0], value: Data("payload".utf8))]
+            )
+            let membership = try Proofs.verify(
+                proximity.proveMembership(Data("p".utf8)),
+                expectedDescriptor: proximity.descriptor
+            )
+            XCTAssertEqual(membership.record?.value, Data("payload".utf8))
+            XCTAssertEqual(try proximity.verify().recordCount, 1)
+        }
+    }
 }
