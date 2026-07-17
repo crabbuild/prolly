@@ -848,6 +848,16 @@ fn index_lifecycle_verifies_replaces_repairs_and_deactivates_safely() {
     assert_eq!(replaced.generation, 2);
     assert_eq!(
         indexed
+            .snapshot_by_id(&old_id)
+            .unwrap()
+            .index(b"by-tag")
+            .unwrap()
+            .primary_keys(b"red")
+            .unwrap(),
+        vec![b"user-1".to_vec()]
+    );
+    assert_eq!(
+        indexed
             .snapshot()
             .unwrap()
             .index(b"by-tag")

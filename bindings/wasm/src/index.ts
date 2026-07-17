@@ -2205,6 +2205,27 @@ export class WasmIndexedMap implements Disposable {
       };
     });
   }
+  replaceIndex(registration: PortableIndexRegistration, signal?: AbortSignal): Promise<PortableIndexBuildResult> {
+    const native = this.#open();
+    const name = ownedPortableBytes(registration.name);
+    return portablePromise(signal, () => {
+      const value = native.replaceIndex(
+        name,
+        registration.generation,
+        registration.extractorId,
+        registration.projection,
+        (key: Uint8Array, sourceValue: Uint8Array) => registration.extract(key, sourceValue).map((entry) => ({
+          term: ownedPortableBytes(entry.term),
+          projection: entry.projection == null ? undefined : ownedPortableBytes(entry.projection),
+        })),
+      );
+      return {
+        sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
+        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
+      };
+    });
+  }
   snapshot(signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
     const native = this.#open();
     return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshot()));

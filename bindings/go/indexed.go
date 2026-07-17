@@ -375,6 +375,33 @@ func (m *IndexedMap) EnsureIndex(name []byte) (IndexBuildResult, error) {
 	return decodeIndexBuildResult(raw)
 }
 
+// ReplaceIndex shadow-builds a newer generation and atomically activates it.
+// Retired extractor generations remain retained by the native map so exact
+// historical snapshots can still be reopened through this handle.
+func (m *IndexedMap) ReplaceIndex(name []byte, generation uint64, extractorID string, projection IndexProjection, limits *SecondaryIndexLimits, extractor IndexExtractor) (IndexBuildResult, error) {
+	if extractor == nil {
+		return IndexBuildResult{}, errors.New("nil secondary index extractor")
+	}
+	if projection < IndexProjectionKeysOnly || projection > IndexProjectionAll {
+		return IndexBuildResult{}, errors.New("invalid index projection")
+	}
+	handle, unlock, err := m.withHandle()
+	if err != nil {
+		return IndexBuildResult{}, err
+	}
+	defer unlock()
+	callback := registerGoIndexExtractor(extractor)
+	raw, err := ffiIndexedMapReplaceIndex(
+		handle, append([]byte(nil), name...), generation, extractorID,
+		int32(projection), encodeOptionalSecondaryIndexLimits(limits), callback,
+	)
+	if err != nil {
+		removeGoIndexExtractor(callback)
+		return IndexBuildResult{}, err
+	}
+	return decodeIndexBuildResult(raw)
+}
+
 func (m *IndexedMap) Health() (IndexedMapHealth, error) {
 	handle, unlock, err := m.withHandle()
 	if err != nil {

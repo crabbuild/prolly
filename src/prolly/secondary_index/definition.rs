@@ -462,6 +462,7 @@ impl SecondaryIndexBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct SecondaryIndexRegistry {
     indexes: BTreeMap<Vec<u8>, SecondaryIndex>,
+    historical: BTreeMap<Vec<u8>, Vec<SecondaryIndex>>,
 }
 
 impl SecondaryIndexRegistry {
@@ -481,6 +482,31 @@ impl SecondaryIndexRegistry {
         Ok(self)
     }
 
+    /// Replace the active runtime definition while retaining the previous
+    /// generation for exact historical snapshot reopening.
+    pub fn replace(mut self, index: SecondaryIndex) -> Result<Self, Error> {
+        let name = index.name.clone();
+        let current = self
+            .indexes
+            .remove(&name)
+            .ok_or_else(|| Error::InvalidIndexDefinition {
+                reason: format!("cannot replace unregistered index name {:?}", name),
+            })?;
+        if index.generation() <= current.generation() {
+            self.indexes.insert(name, current);
+            return Err(Error::InvalidIndexDefinition {
+                reason: "replacement generation must be strictly greater than active generation"
+                    .to_string(),
+            });
+        }
+        self.historical
+            .entry(name.clone())
+            .or_default()
+            .push(current);
+        self.indexes.insert(name, index);
+        Ok(self)
+    }
+
     /// Borrow a definition by its exact raw name.
     pub fn get(&self, name: &[u8]) -> Option<&SecondaryIndex> {
         self.indexes.get(name)
@@ -488,6 +514,20 @@ impl SecondaryIndexRegistry {
     /// Iterate definitions in raw-name order.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &SecondaryIndex> {
         self.indexes.values()
+    }
+
+    pub(crate) fn definitions_for_name(&self, name: &[u8]) -> Vec<SecondaryIndex> {
+        self.indexes
+            .get(name)
+            .into_iter()
+            .chain(
+                self.historical
+                    .get(name)
+                    .into_iter()
+                    .flat_map(|definitions| definitions.iter()),
+            )
+            .cloned()
+            .collect()
     }
     /// Number of definitions in the registry.
     pub fn len(&self) -> usize {

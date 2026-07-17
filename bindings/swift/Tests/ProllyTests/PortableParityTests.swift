@@ -509,6 +509,14 @@ final class PortableParityTests: XCTestCase {
             let indexed = try engine.indexedMap(Data("indexed-maintenance".utf8), registry: registry)
             let version = try indexed.put(Data("k".utf8), value: Data("term".utf8))
             _ = try indexed.ensureIndex(Data("by_value".utf8))
+            let oldSnapshotID = try indexed.snapshot().id
+            let replacement = try indexed.replaceIndex(
+                Data("by_value".utf8), generation: 2, extractorID: "value-v2", projection: .all
+            ) { _, value in [IndexEntryRecord(term: Data(value), projection: nil)] }
+            XCTAssertEqual(replacement.generation, 2)
+            XCTAssertEqual(try indexed.health().activeIndexes.first?.generation, 2)
+            let oldIndex = try indexed.snapshot(id: oldSnapshotID).index(Data("by_value".utf8))
+            XCTAssertEqual(try oldIndex.exact(Data("term".utf8)).count, 1)
             XCTAssertEqual(indexed.id, Data("indexed-maintenance".utf8))
             let applied = try indexed.apply([
                 MutationRecord(kind: .upsert, key: Data("k2".utf8), value: Data("term".utf8))

@@ -1430,6 +1430,8 @@ public protocol BindingIndexedMapProtocol: AnyObject, Sendable {
 
     func repairIndex(name: Data, sourceVersion: Data) throws  -> IndexVerificationRecord
 
+    func replaceIndex(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback) throws  -> IndexBuildResultRecord
+
     func snapshot() throws  -> BindingIndexedSnapshot
 
     func snapshotAt(sourceVersion: Data) throws  -> BindingIndexedSnapshot
@@ -1634,6 +1636,20 @@ open func repairIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificati
             self.uniffiCloneHandle(),
         FfiConverterData.lower(name),
         FfiConverterData.lower(sourceVersion),$0
+    )
+})
+}
+
+open func replaceIndex(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback)throws  -> IndexBuildResultRecord  {
+    return try  FfiConverterTypeIndexBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(name),
+        FfiConverterUInt64.lower(generation),
+        FfiConverterString.lower(extractorId),
+        FfiConverterTypeIndexProjectionRecord_lower(projection),
+        FfiConverterOptionTypeSecondaryIndexLimitsRecord.lower(limits),
+        FfiConverterTypeSecondaryIndexExtractorCallback_lower(extractor),$0
     )
 })
 }
@@ -28025,6 +28041,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index() != 41978) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index() != 60542) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot() != 23616) {

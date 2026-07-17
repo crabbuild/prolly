@@ -1553,6 +1553,42 @@ func TestPortableIndexedProofAndMaintenance(t *testing.T) {
 	if _, err := indexed.EnsureIndex([]byte("by_team")); err != nil {
 		t.Fatal(err)
 	}
+	oldSnapshot, err := indexed.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldID, err := oldSnapshot.ID()
+	oldSnapshot.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := indexed.ReplaceIndex(
+		[]byte("by_team"), 2, "team-v2", IndexProjectionAll, nil,
+		IndexExtractorFunc(func(_ []byte, source []byte) ([]IndexEntry, error) {
+			return []IndexEntry{{Term: bytes.Clone(source)}}, nil
+		}),
+	)
+	if err != nil || replacement.Generation != 2 {
+		t.Fatalf("replacement = %+v, %v", replacement, err)
+	}
+	health, err := indexed.Health()
+	if err != nil || len(health.ActiveIndexes) != 1 || health.ActiveIndexes[0].Generation != 2 {
+		t.Fatalf("replacement health = %+v, %v", health, err)
+	}
+	reopened, err := indexed.SnapshotByID(oldID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldIndex, err := reopened.Index([]byte("by_team"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, err := oldIndex.Exact([]byte("red"))
+	oldIndex.Close()
+	reopened.Close()
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("historical replacement matches = %+v, %v", matches, err)
+	}
 	verification, err := indexed.VerifyIndex([]byte("by_team"), version.SourceVersion)
 	if err != nil || !verification.Valid || !verification.Canonical {
 		t.Fatalf("verification = %+v, %v", verification, err)

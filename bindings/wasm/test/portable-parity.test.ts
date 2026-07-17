@@ -542,6 +542,15 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   const indexed = engine.indexedMap(bytes("indexed-maintenance"), registry);
   const version: any = await indexed.put(bytes("k"), bytes("term"));
   await indexed.ensureIndex(bytes("by_value"));
+  const oldSnapshotId = (await indexed.snapshot()).id();
+  const replacement = await indexed.replaceIndex({
+    name: bytes("by_value"), generation: 2n, extractorId: "value-v2", projection: "all",
+    extract: (_key: Uint8Array, value: Uint8Array) => [{ term: Uint8Array.from(value) }],
+  });
+  assert.equal(replacement.generation, 2n);
+  assert.equal(indexed.health().activeIndexes[0].generation, 2n);
+  const historicalIndex = (await indexed.snapshotById(oldSnapshotId)).index(bytes("by_value"));
+  assert.equal((await historicalIndex.exact(bytes("term"))).length, 1);
   assert.equal(indexed.verifyIndex(bytes("by_value"), version.sourceVersion).valid, true);
   assert.ok(indexed.metrics().buildAttempts >= 1n);
   assert.ok(indexed.exportCurrent().byteLength > 0);

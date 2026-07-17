@@ -58,6 +58,7 @@ import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ProximityConfigRecord
 import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
+import build.crab.prolly.SecondaryIndexLimitsRecord
 import build.crab.prolly.SnapshotBundleRecord
 import build.crab.prolly.defaultConfig
 import build.crab.prolly.defaultCompositeAcceleratorConfig
@@ -499,6 +500,14 @@ class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
     fun verifyAll(sourceVersion: ByteArray) = native.verifyAll(sourceVersion.copyOf())
     fun repairIndex(name: ByteArray, sourceVersion: ByteArray) =
         native.repairIndex(name.copyOf(), sourceVersion.copyOf())
+    fun replaceIndex(
+        name: ByteArray,
+        generation: ULong,
+        extractorId: String,
+        projection: IndexProjectionRecord,
+        extractor: SecondaryIndexExtractorCallback,
+        limits: SecondaryIndexLimitsRecord? = null,
+    ) = native.replaceIndex(name.copyOf(), generation, extractorId, projection, limits, extractor)
     fun deactivateIndex(name: ByteArray) = native.deactivateIndex(name.copyOf())
     fun exportCurrent() = native.exportCurrent()
     fun importCurrent(bundle: ByteArray, expectedSource: ByteArray? = null) =

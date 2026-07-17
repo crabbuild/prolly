@@ -556,6 +556,21 @@ class PortableParityTest {
                 engine.indexedMap("indexed-maintenance".bytes(), registry).use { indexed ->
                     val version = indexed.put("k".bytes(), "term".bytes())
                     indexed.ensureIndex("by_value".bytes())
+                    val oldSnapshotId = indexed.snapshot().use { it.id }
+                    val replacement = indexed.replaceIndex(
+                        "by_value".bytes(), 2uL, "value-v2", IndexProjectionRecord.ALL,
+                        object : SecondaryIndexExtractorCallback {
+                            override fun extract(primaryKey: ByteArray, sourceValue: ByteArray) =
+                                listOf(IndexEntryRecord(sourceValue.copyOf(), null))
+                        },
+                    )
+                    assertEquals(2uL, replacement.generation)
+                    assertEquals(2uL, indexed.health().activeIndexes.single().generation)
+                    indexed.snapshotById(oldSnapshotId).use { historical ->
+                        historical.index("by_value".bytes()).use { index ->
+                            assertEquals(1, index.exact("term".bytes()).size)
+                        }
+                    }
                     assertEquals(true, indexed.verifyIndex("by_value".bytes(), version.sourceVersion).valid)
                     assertEquals(true, indexed.metrics().buildAttempts >= 1uL)
                     assertEquals(true, indexed.exportCurrent().isNotEmpty())

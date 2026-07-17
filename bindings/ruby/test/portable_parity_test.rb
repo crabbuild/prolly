@@ -531,6 +531,14 @@ class PortableParityTest < Minitest::Test
       indexed = engine.indexed_map('indexed-maintenance'.b, registry)
       version = indexed.put('k'.b, 'term'.b)
       indexed.ensure_index('by_value'.b)
+      old_snapshot_id = indexed.snapshot.id
+      replacement = indexed.replace_index(
+        'by_value'.b, 2, 'value-v2', Prolly::IndexProjectionRecord::ALL,
+        ->(_key, value) { [[value, nil]] }
+      )
+      assert_equal 2, replacement.generation
+      assert_equal 2, indexed.health.active_indexes.first.generation
+      assert_equal 1, indexed.snapshot_by_id(old_snapshot_id).index('by_value'.b).exact('term'.b).size
       assert indexed.verify_index('by_value'.b, version.source_version).valid
       assert_operator indexed.metrics.build_attempts, :>=, 1
       refute_empty indexed.export_current

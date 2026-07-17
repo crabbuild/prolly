@@ -780,6 +780,7 @@ public final class IndexRegistry: @unchecked Sendable {
 
 public final class IndexedMap: @unchecked Sendable {
     let native: BindingIndexedMap
+    private var extractors: [ExtractorAdapter] = []
     init(native: BindingIndexedMap) { self.native = native }
     public var id: Data { native.id() }
     public func ensureIndex(_ name: Data) throws -> IndexBuildResultRecord { try native.ensureIndex(name: Data(name)) }
@@ -811,6 +812,21 @@ public final class IndexedMap: @unchecked Sendable {
     }
     public func repairIndex(_ name: Data, sourceVersion: Data) throws -> IndexVerificationRecord {
         try native.repairIndex(name: Data(name), sourceVersion: Data(sourceVersion))
+    }
+    public func replaceIndex(
+        _ name: Data,
+        generation: UInt64,
+        extractorID: String,
+        projection: IndexProjectionRecord,
+        limits: SecondaryIndexLimitsRecord? = nil,
+        extractor: @escaping @Sendable (Data, Data) throws -> [IndexEntryRecord]
+    ) throws -> IndexBuildResultRecord {
+        let adapter = ExtractorAdapter(body: extractor)
+        extractors.append(adapter)
+        return try native.replaceIndex(
+            name: Data(name), generation: generation, extractorId: extractorID,
+            projection: projection, limits: limits, extractor: adapter
+        )
     }
     public func deactivateIndex(_ name: Data) throws -> IndexedVersionRecord {
         try native.deactivateIndex(name: Data(name))

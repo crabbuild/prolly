@@ -3,11 +3,16 @@ package build.crab.prolly.javaapi;
 import build.crab.prolly.api.JavaIndexedMutation;
 import build.crab.prolly.api.JavaPortableBridge;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import build.crab.prolly.IndexEntryRecord;
+import build.crab.prolly.SecondaryIndexExtractorCallback;
 
 public final class IndexedMap implements AutoCloseable {
     private build.crab.prolly.api.IndexedMap nativeMap;
+    private final List<SecondaryIndexExtractorCallback> extractors = new ArrayList<>();
 
     IndexedMap(build.crab.prolly.api.IndexedMap nativeMap) { this.nativeMap = nativeMap; }
 
@@ -84,6 +89,23 @@ public final class IndexedMap implements AutoCloseable {
     public IndexVerification repairIndex(byte[] name, byte[] sourceVersion) {
         return IndexVerification.fromNative(JavaPortableBridge.repairIndex(
                 open(), name.clone(), sourceVersion.clone()));
+    }
+
+    public IndexBuildResult replaceIndex(
+            byte[] name,
+            long generation,
+            String extractorId,
+            IndexProjection projection,
+            IndexExtractor extractor) {
+        Objects.requireNonNull(extractor, "extractor");
+        SecondaryIndexExtractorCallback callback = (primaryKey, sourceValue) ->
+                extractor.extract(primaryKey.clone(), sourceValue.clone()).stream()
+                        .map(entry -> new IndexEntryRecord(entry.term(), entry.projection()))
+                        .toList();
+        extractors.add(callback);
+        return IndexBuildResult.fromNative(JavaPortableBridge.replaceIndex(
+                open(), name.clone(), generation, extractorId,
+                Objects.requireNonNull(projection).nativeValue, callback));
     }
 
     public IndexedVersion deactivateIndex(byte[] name) {

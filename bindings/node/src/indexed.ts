@@ -217,6 +217,13 @@ interface NativeIndexedMap {
   verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): NativeIndexVerification;
   verifyAll(sourceVersion: Uint8Array): NativeIndexVerification[];
   repairIndex(name: Uint8Array, sourceVersion: Uint8Array): NativeIndexVerification;
+  replaceIndex(
+    name: Uint8Array,
+    generation: string,
+    extractorId: string,
+    projection: IndexProjection,
+    extractor: (request: { primaryKey: Uint8Array; sourceValue: Uint8Array }) => IndexEntry[],
+  ): NativeIndexBuildResult;
   deactivateIndex(name: Uint8Array): NativeIndexedVersion;
   exportCurrent(): Uint8Array;
   importCurrent(bundle: Uint8Array, expectedSource?: Uint8Array): NativeIndexedVersion;
@@ -327,6 +334,27 @@ export class IndexedMap implements Disposable {
     const native = this.#open(); name = ownedBytes(name);
     return nativePromise(signal, () => {
       const value = native.ensureIndex(name);
+      return {
+        sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
+        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
+      };
+    });
+  }
+  replaceIndex(registration: IndexRegistration, signal?: AbortSignal): Promise<IndexBuildResult> {
+    const native = this.#open();
+    const name = ownedBytes(registration.name);
+    return nativePromise(signal, () => {
+      const value = native.replaceIndex(
+        name,
+        registration.generation.toString(),
+        registration.extractorId,
+        registration.projection,
+        ({ primaryKey, sourceValue }) => registration.extract(primaryKey, sourceValue).map((entry) => ({
+          term: ownedBytes(entry.term),
+          projection: entry.projection == null ? undefined : ownedBytes(entry.projection),
+        })),
+      );
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
         catalogVersion: value.catalogVersion, generation: BigInt(value.generation),

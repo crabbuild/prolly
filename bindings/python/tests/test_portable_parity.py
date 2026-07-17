@@ -638,6 +638,17 @@ class PortableParityTests(unittest.TestCase):
             indexed = engine.indexed_map(b"indexed-maintenance", registry)
             version = indexed.put(b"k", b"term")
             indexed.ensure_index(b"by_value")
+            old_snapshot_id = indexed.snapshot().id
+            replacement = indexed.replace_index(
+                b"by_value", 2, "value-v2", IndexProjection.ALL,
+                lambda _key, value: [(value, None)],
+            )
+            self.assertEqual(replacement.generation, 2)
+            self.assertEqual(indexed.health().active_indexes[0].generation, 2)
+            self.assertEqual(
+                len(indexed.snapshot_by_id(old_snapshot_id).index(b"by_value").exact(b"term")),
+                1,
+            )
             self.assertTrue(indexed.verify_index(b"by_value", version.source_version).valid)
             self.assertGreaterEqual(indexed.metrics().build_attempts, 1)
             self.assertGreater(len(indexed.export_current()), 0)

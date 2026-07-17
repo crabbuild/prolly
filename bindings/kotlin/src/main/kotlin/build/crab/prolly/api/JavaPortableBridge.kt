@@ -1387,6 +1387,18 @@ object JavaPortableBridge {
         map.ensureIndex(name.copyOf()).toJava()
 
     @JvmStatic
+    fun replaceIndex(
+        map: IndexedMap,
+        name: ByteArray,
+        generation: Long,
+        extractorId: String,
+        projection: IndexProjectionRecord,
+        extractor: SecondaryIndexExtractorCallback,
+    ): JavaIndexBuildResult = map.replaceIndex(
+        name.copyOf(), generation.toULong(), extractorId, projection, extractor,
+    ).toJava()
+
+    @JvmStatic
     fun applyIndexed(map: IndexedMap, mutations: List<JavaIndexedMutation>): JavaIndexedVersion =
         map.apply(mutations.map { it.toNative() }).toJava()
 
