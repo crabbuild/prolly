@@ -9,9 +9,29 @@ export interface ProximityRecord {
 export interface SearchRequest {
   vector: Float32Array;
   topK: number;
-  policy: "exact";
+  policy: "exact" | "fixed_budget" | "adaptive";
+  adaptiveQuality?: "fast" | "balanced" | "high_recall";
+  budget?: SearchBudget;
+  filter?: SearchFilter;
+  kernel?: "scalar_deterministic" | "simd_deterministic" | "auto_deterministic";
+  backend?: "native" | "product_quantized" | "hnsw" | "composite" | "auto";
+  hnswEfSearch?: number;
+  pqRerankMultiplier?: number;
   signal?: AbortSignal;
 }
+
+export interface SearchBudget {
+  maxNodes?: bigint;
+  maxCommittedBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  maxFrontierEntries?: bigint;
+}
+
+export type SearchFilter =
+  | { kind: "all" }
+  | { kind: "key_range"; start?: Uint8Array; rangeEnd?: Uint8Array }
+  | { kind: "prefix"; prefix: Uint8Array }
+  | { kind: "eligible_keys"; eligibleKeys: Uint8Array[] };
 
 export function exactSearch(vector: Float32Array, topK: number, signal?: AbortSignal): SearchRequest {
   return { vector: new Float32Array(vector), topK, policy: "exact", signal };
@@ -25,8 +45,24 @@ export interface Neighbor {
 
 export interface SearchResult {
   neighbors: Neighbor[];
+  stats: SearchStats;
   completion: string;
   backend: string;
+  planFormatVersion: number;
+}
+
+export interface SearchStats {
+  levelsVisited: bigint;
+  nodesRead: bigint;
+  bytesRead: bigint;
+  physicalBytesRead: bigint;
+  committedBytes: bigint;
+  distanceEvaluations: bigint;
+  quantizedDistanceEvaluations: bigint;
+  rerankedCandidates: bigint;
+  frontierPeak: bigint;
+  candidateHandlesPeak: bigint;
+  candidateRetainedBytesPeak: bigint;
 }
 
 export interface ProximityConfig {
@@ -101,9 +137,42 @@ interface NativeProximityMutationResult {
   stats(): NativeProximityMutationStats;
 }
 
+interface NativeSearchRequest {
+  query: Float32Array;
+  k: string;
+  policy: SearchRequest["policy"];
+  adaptiveQuality?: SearchRequest["adaptiveQuality"];
+  budget: {
+    maxNodes?: string; maxCommittedBytes?: string;
+    maxDistanceEvaluations?: string; maxFrontierEntries?: string;
+  };
+  filter: {
+    kind: SearchFilter["kind"];
+    start?: Uint8Array; rangeEnd?: Uint8Array; prefix?: Uint8Array;
+    eligibleKeys: Uint8Array[];
+  };
+  kernel: NonNullable<SearchRequest["kernel"]>;
+  backend: NonNullable<SearchRequest["backend"]>;
+  hnswEfSearch?: number;
+  pqRerankMultiplier?: number;
+}
+
+interface NativeSearchResult {
+  neighbors: Neighbor[];
+  stats: {
+    levelsVisited: string; nodesRead: string; bytesRead: string; physicalBytesRead: string;
+    committedBytes: string; distanceEvaluations: string; quantizedDistanceEvaluations: string;
+    rerankedCandidates: string; frontierPeak: string; candidateHandlesPeak: string;
+    candidateRetainedBytesPeak: string;
+  };
+  completion: string;
+  backend: string;
+  planFormatVersion: number;
+}
+
 interface NativeProximityMap {
   read(): NativeProximityReadSession;
-  search(vector: Float32Array, topK: string): SearchResult;
+  search(request: NativeSearchRequest): NativeSearchResult;
   count(): string;
   config(): NativeProximityConfig;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
@@ -113,11 +182,11 @@ interface NativeProximityMap {
   descriptor(): Uint8Array;
   verify(): NativeProximityVerification;
   proveMembership(key: Uint8Array): NativeProximityProof;
-  proveSearch(vector: Float32Array, topK: string): NativeProximitySearchProof;
+  proveSearch(request: NativeSearchRequest): NativeProximitySearchProof;
   proveStructure(): NativeProximityStructuralProof;
 }
 interface NativeProximityReadSession {
-  search(vector: Float32Array, topK: string): SearchResult;
+  search(request: NativeSearchRequest): NativeSearchResult;
   get(key: Uint8Array): { vector: number[]; value: Uint8Array } | null;
   contains(key: Uint8Array): boolean;
   fastHandle(): string;
@@ -125,10 +194,87 @@ interface NativeProximityReadSession {
 interface NativeProximityProof { verify(expectedDescriptor?: Uint8Array): Uint8Array | null; }
 interface NativeProximitySearchProof {
   verify(expectedDescriptor?: Uint8Array): {
-    result: SearchResult;
+    result: NativeSearchResult;
     claim: string;
     terminalLowerBound?: number;
     replayedEvents: string;
+  };
+}
+
+function ownSearchRequest(request: SearchRequest): NativeSearchRequest {
+  if (!Number.isSafeInteger(request.topK) || request.topK <= 0) {
+    throw new RangeError("topK must be a positive safe integer");
+  }
+  if (request.policy === "adaptive" && request.adaptiveQuality == null) {
+    throw new TypeError("adaptive search requires adaptiveQuality");
+  }
+  const budget = request.budget ?? {};
+  const filter = request.filter ?? { kind: "all" as const };
+  let nativeFilter: NativeSearchRequest["filter"];
+  switch (filter.kind) {
+    case "all":
+      nativeFilter = { kind: "all", eligibleKeys: [] };
+      break;
+    case "key_range":
+      nativeFilter = {
+        kind: "key_range",
+        start: filter.start == null ? undefined : ownedBytes(filter.start),
+        rangeEnd: filter.rangeEnd == null ? undefined : ownedBytes(filter.rangeEnd),
+        eligibleKeys: [],
+      };
+      break;
+    case "prefix":
+      nativeFilter = { kind: "prefix", prefix: ownedBytes(filter.prefix), eligibleKeys: [] };
+      break;
+    case "eligible_keys":
+      nativeFilter = {
+        kind: "eligible_keys",
+        eligibleKeys: filter.eligibleKeys.map(ownedBytes),
+      };
+      break;
+  }
+  return {
+    query: new Float32Array(request.vector),
+    k: request.topK.toString(),
+    policy: request.policy,
+    adaptiveQuality: request.adaptiveQuality,
+    budget: {
+      maxNodes: budget.maxNodes?.toString(),
+      maxCommittedBytes: budget.maxCommittedBytes?.toString(),
+      maxDistanceEvaluations: budget.maxDistanceEvaluations?.toString(),
+      maxFrontierEntries: budget.maxFrontierEntries?.toString(),
+    },
+    filter: nativeFilter,
+    kernel: request.kernel ?? "auto_deterministic",
+    backend: request.backend ?? "native",
+    hnswEfSearch: request.hnswEfSearch,
+    pqRerankMultiplier: request.pqRerankMultiplier,
+  };
+}
+
+function searchResult(value: NativeSearchResult): SearchResult {
+  return {
+    neighbors: value.neighbors.map((neighbor) => ({
+      key: ownedBytes(neighbor.key),
+      value: ownedBytes(neighbor.value),
+      distance: neighbor.distance,
+    })),
+    stats: {
+      levelsVisited: BigInt(value.stats.levelsVisited),
+      nodesRead: BigInt(value.stats.nodesRead),
+      bytesRead: BigInt(value.stats.bytesRead),
+      physicalBytesRead: BigInt(value.stats.physicalBytesRead),
+      committedBytes: BigInt(value.stats.committedBytes),
+      distanceEvaluations: BigInt(value.stats.distanceEvaluations),
+      quantizedDistanceEvaluations: BigInt(value.stats.quantizedDistanceEvaluations),
+      rerankedCandidates: BigInt(value.stats.rerankedCandidates),
+      frontierPeak: BigInt(value.stats.frontierPeak),
+      candidateHandlesPeak: BigInt(value.stats.candidateHandlesPeak),
+      candidateRetainedBytesPeak: BigInt(value.stats.candidateRetainedBytesPeak),
+    },
+    completion: value.completion,
+    backend: value.backend,
+    planFormatVersion: value.planFormatVersion,
   };
 }
 interface NativeProximityStructuralProof {
@@ -211,7 +357,7 @@ export class ProximityMap implements Disposable {
   }
   proveSearch(request: SearchRequest): ProximitySearchProof {
     return new ProximitySearchProof(
-      this.nativeHandle().proveSearch(new Float32Array(request.vector), request.topK.toString()),
+      this.nativeHandle().proveSearch(ownSearchRequest(request)),
     );
   }
   proveStructure(): ProximityStructuralProof {
@@ -263,7 +409,7 @@ export class ProximitySearchProof implements Disposable {
     const value = this.#native.verify(
       expectedDescriptor == null ? undefined : ownedBytes(expectedDescriptor));
     return {
-      result: value.result,
+      result: searchResult(value.result),
       claim: value.claim,
       terminalLowerBound: value.terminalLowerBound,
       replayedEvents: BigInt(value.replayedEvents),
@@ -291,8 +437,8 @@ export class ProximityReadSession implements Disposable {
   search(request: SearchRequest): Promise<SearchResult> {
     if (this.#native == null) return Promise.reject(new Error("proximity session is closed"));
     const native = this.#native;
-    const vector = new Float32Array(request.vector);
-    return nativePromise(request.signal, () => native.search(vector, request.topK.toString()));
+    const owned = ownSearchRequest(request);
+    return nativePromise(request.signal, () => searchResult(native.search(owned)));
   }
   fastHandle(): bigint {
     if (this.#native == null) throw new Error("proximity session is closed");

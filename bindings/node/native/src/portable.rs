@@ -10,24 +10,25 @@ use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Resul
 use napi::JsObject;
 use napi_derive::napi;
 use prolly_bindings::{
-    default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
-    verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
-    verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
-    ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
-    BindingMapComparison, BindingMapMerge, BindingMapSnapshot, BindingMapSubscription,
-    BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
-    BindingSecondaryIndexSnapshot, BindingVersionedMap, BindingVersionedTransaction,
-    DistanceMetricRecord, ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord,
-    IndexMatchRecord, IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord,
-    IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
-    IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
-    IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord,
-    MultiKeyProofRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
-    ProximityConfigRecord, ProximityMembershipProofRecord, ProximityMutationRecord,
-    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
-    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
-    ProximityVerificationRecord, RangeProofRecord, SearchBackendRecord, SearchCompletionRecord,
-    SecondaryIndexExtractorCallback, VersionPruneRecord,
+    default_content_graph_limits, default_proximity_config, verify_key_proof,
+    verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
+    verify_range_page_proof, verify_range_proof, ActiveIndexHealthRecord, AdaptiveQualityRecord,
+    BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot, BindingMapComparison,
+    BindingMapMerge, BindingMapSnapshot, BindingMapSubscription, BindingProximityMap,
+    BindingProximityReadSession, BindingProximitySearchProof, BindingSecondaryIndexSnapshot,
+    BindingVersionedMap, BindingVersionedTransaction, DistanceMetricRecord,
+    ExactProximityRecordRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
+    IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
+    MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProllyBindingError, ProllyReadSession,
+    ProvedRangePageRecord, ProximityConfigRecord, ProximityFilterKind, ProximityFilterRecord,
+    ProximityMembershipProofRecord, ProximityMutationRecord, ProximityMutationStatsRecord,
+    ProximityNeighborRecord, ProximityRecordRecord, ProximitySearchClaimKindRecord,
+    ProximitySearchRequestRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
+    ProximityVerificationRecord, QueryKernelRecord, RangeProofRecord, SearchBackendRecord,
+    SearchBudgetRecord, SearchCompletionRecord, SearchPolicyKind, SecondaryIndexExtractorCallback,
+    VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -608,6 +609,165 @@ pub struct NodePortableNeighbor {
     pub distance: f64,
 }
 
+#[napi(object)]
+pub struct NodePortableSearchBudget {
+    pub max_nodes: Option<String>,
+    pub max_committed_bytes: Option<String>,
+    pub max_distance_evaluations: Option<String>,
+    pub max_frontier_entries: Option<String>,
+}
+
+#[napi(object)]
+pub struct NodePortableSearchFilter {
+    pub kind: String,
+    pub start: Option<Buffer>,
+    pub range_end: Option<Buffer>,
+    pub prefix: Option<Buffer>,
+    pub eligible_keys: Vec<Buffer>,
+}
+
+#[napi(object)]
+pub struct NodePortableSearchRequest {
+    pub query: Float32Array,
+    pub k: String,
+    pub policy: String,
+    pub adaptive_quality: Option<String>,
+    pub budget: NodePortableSearchBudget,
+    pub filter: NodePortableSearchFilter,
+    pub kernel: String,
+    pub backend: String,
+    pub hnsw_ef_search: Option<u32>,
+    pub pq_rerank_multiplier: Option<u16>,
+}
+
+fn parse_u64(value: String, name: &str) -> Result<u64> {
+    value
+        .parse::<u64>()
+        .map_err(|error| Error::new(Status::InvalidArg, format!("invalid {name} value: {error}")))
+}
+
+fn parse_optional_u64(value: Option<String>, name: &str) -> Result<Option<u64>> {
+    value.map(|value| parse_u64(value, name)).transpose()
+}
+
+impl TryFrom<NodePortableSearchRequest> for ProximitySearchRequestRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableSearchRequest) -> Result<Self> {
+        let policy = match value.policy.as_str() {
+            "exact" => SearchPolicyKind::Exact,
+            "fixed_budget" => SearchPolicyKind::FixedBudget,
+            "adaptive" => SearchPolicyKind::Adaptive,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown search policy: {other}"),
+                ))
+            }
+        };
+        let adaptive_quality = value
+            .adaptive_quality
+            .map(|quality| match quality.as_str() {
+                "fast" => Ok(AdaptiveQualityRecord::Fast),
+                "balanced" => Ok(AdaptiveQualityRecord::Balanced),
+                "high_recall" => Ok(AdaptiveQualityRecord::HighRecall),
+                other => Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown adaptive quality: {other}"),
+                )),
+            })
+            .transpose()?;
+        let filter = ProximityFilterRecord {
+            kind: match value.filter.kind.as_str() {
+                "all" => ProximityFilterKind::All,
+                "key_range" => ProximityFilterKind::KeyRange,
+                "prefix" => ProximityFilterKind::Prefix,
+                "eligible_keys" => ProximityFilterKind::EligibleKeys,
+                other => {
+                    return Err(Error::new(
+                        Status::InvalidArg,
+                        format!("unknown proximity filter: {other}"),
+                    ))
+                }
+            },
+            start: value.filter.start.map(|value| value.to_vec()),
+            range_end: value.filter.range_end.map(|value| value.to_vec()),
+            prefix: value.filter.prefix.map(|value| value.to_vec()),
+            eligible_keys: value
+                .filter
+                .eligible_keys
+                .into_iter()
+                .map(|value| value.to_vec())
+                .collect(),
+        };
+        let kernel = match value.kernel.as_str() {
+            "scalar_deterministic" => QueryKernelRecord::ScalarDeterministic,
+            "simd_deterministic" => QueryKernelRecord::SimdDeterministic,
+            "auto_deterministic" => QueryKernelRecord::AutoDeterministic,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown query kernel: {other}"),
+                ))
+            }
+        };
+        let backend = match value.backend.as_str() {
+            "native" => SearchBackendRecord::Native,
+            "product_quantized" => SearchBackendRecord::ProductQuantized,
+            "hnsw" => SearchBackendRecord::Hnsw,
+            "composite" => SearchBackendRecord::Composite,
+            "auto" => SearchBackendRecord::Auto,
+            other => {
+                return Err(Error::new(
+                    Status::InvalidArg,
+                    format!("unknown search backend: {other}"),
+                ))
+            }
+        };
+        Ok(Self {
+            query: value.query.to_vec(),
+            k: parse_u64(value.k, "top-k")?,
+            policy,
+            adaptive_quality,
+            budget: SearchBudgetRecord {
+                max_nodes: parse_optional_u64(value.budget.max_nodes, "max_nodes")?,
+                max_committed_bytes: parse_optional_u64(
+                    value.budget.max_committed_bytes,
+                    "max_committed_bytes",
+                )?,
+                max_distance_evaluations: parse_optional_u64(
+                    value.budget.max_distance_evaluations,
+                    "max_distance_evaluations",
+                )?,
+                max_frontier_entries: parse_optional_u64(
+                    value.budget.max_frontier_entries,
+                    "max_frontier_entries",
+                )?,
+            },
+            filter,
+            kernel,
+            backend,
+            hnsw_ef_search: value.hnsw_ef_search,
+            pq_rerank_multiplier: value.pq_rerank_multiplier,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableSearchStats {
+    pub levels_visited: String,
+    pub nodes_read: String,
+    pub bytes_read: String,
+    pub physical_bytes_read: String,
+    pub committed_bytes: String,
+    pub distance_evaluations: String,
+    pub quantized_distance_evaluations: String,
+    pub reranked_candidates: String,
+    pub frontier_peak: String,
+    pub candidate_handles_peak: String,
+    pub candidate_retained_bytes_peak: String,
+}
+
 impl From<ProximityNeighborRecord> for NodePortableNeighbor {
     fn from(value: ProximityNeighborRecord) -> Self {
         Self {
@@ -621,8 +781,10 @@ impl From<ProximityNeighborRecord> for NodePortableNeighbor {
 #[napi(object)]
 pub struct NodePortableSearchResult {
     pub neighbors: Vec<NodePortableNeighbor>,
+    pub stats: NodePortableSearchStats,
     pub completion: String,
     pub backend: String,
+    pub plan_format_version: u8,
 }
 
 #[napi(object)]
@@ -699,8 +861,28 @@ impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
         };
         Self {
             neighbors: value.neighbors.into_iter().map(Into::into).collect(),
+            stats: NodePortableSearchStats {
+                levels_visited: value.stats.levels_visited.to_string(),
+                nodes_read: value.stats.nodes_read.to_string(),
+                bytes_read: value.stats.bytes_read.to_string(),
+                physical_bytes_read: value.stats.physical_bytes_read.to_string(),
+                committed_bytes: value.stats.committed_bytes.to_string(),
+                distance_evaluations: value.stats.distance_evaluations.to_string(),
+                quantized_distance_evaluations: value
+                    .stats
+                    .quantized_distance_evaluations
+                    .to_string(),
+                reranked_candidates: value.stats.reranked_candidates.to_string(),
+                frontier_peak: value.stats.frontier_peak.to_string(),
+                candidate_handles_peak: value.stats.candidate_handles_peak.to_string(),
+                candidate_retained_bytes_peak: value
+                    .stats
+                    .candidate_retained_bytes_peak
+                    .to_string(),
+            },
             completion: completion.to_string(),
             backend: backend.to_string(),
+            plan_format_version: value.plan_format_version,
         }
     }
 }
@@ -2489,12 +2671,9 @@ impl NativePortableProximityMap {
     }
 
     #[napi]
-    pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
-        let k = k.parse::<u64>().map_err(|error| {
-            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
-        })?;
+    pub fn search(&self, request: NodePortableSearchRequest) -> Result<NodePortableSearchResult> {
         self.inner
-            .search(exact_proximity_search_request(query.to_vec(), k))
+            .search(request.try_into()?)
             .map(Into::into)
             .map_err(to_napi_error)
     }
@@ -2571,17 +2750,10 @@ impl NativePortableProximityMap {
     #[napi(js_name = "proveSearch")]
     pub fn prove_search(
         &self,
-        query: Float32Array,
-        k: String,
+        request: NodePortableSearchRequest,
     ) -> Result<NativePortableProximitySearchProof> {
-        let k = k.parse::<u64>().map_err(|error| {
-            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
-        })?;
         self.inner
-            .prove_search(
-                exact_proximity_search_request(query.to_vec(), k),
-                default_content_graph_limits(),
-            )
+            .prove_search(request.try_into()?, default_content_graph_limits())
             .map(|inner| NativePortableProximitySearchProof { inner })
             .map_err(to_napi_error)
     }
@@ -2621,12 +2793,9 @@ pub struct NativePortableProximityReadSession {
 #[napi]
 impl NativePortableProximityReadSession {
     #[napi]
-    pub fn search(&self, query: Float32Array, k: String) -> Result<NodePortableSearchResult> {
-        let k = k.parse::<u64>().map_err(|error| {
-            Error::new(Status::InvalidArg, format!("invalid top-k value: {error}"))
-        })?;
+    pub fn search(&self, request: NodePortableSearchRequest) -> Result<NodePortableSearchResult> {
         self.inner
-            .search(exact_proximity_search_request(query.to_vec(), k))
+            .search(request.try_into()?)
             .map(Into::into)
             .map_err(to_napi_error)
     }

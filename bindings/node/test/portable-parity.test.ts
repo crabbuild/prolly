@@ -5,6 +5,51 @@ import { Engine, exactSearch } from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
 
+test("rich proximity search preserves policy filter stats session and proof", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: new Float32Array([0, 0]), value: bytes("alpha") },
+      { key: bytes("ab"), vector: new Float32Array([1, 0]), value: bytes("alphabet") },
+      { key: bytes("b"), vector: new Float32Array([0.1, 0]), value: bytes("beta") },
+    ]);
+    const request = {
+      vector: new Float32Array([0, 0]),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      budget: {
+        maxNodes: 1_000n,
+        maxCommittedBytes: 1_000_000n,
+        maxDistanceEvaluations: 1_000n,
+        maxFrontierEntries: 1_000n,
+      },
+      filter: { kind: "prefix" as const, prefix: bytes("a") },
+      kernel: "scalar_deterministic" as const,
+      backend: "auto" as const,
+    };
+
+    const result = await proximity.search(request);
+    assert.deepEqual(result.neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()), ["a", "ab"]);
+    assert.ok(result.stats.distanceEvaluations > 0n);
+    assert.ok(result.planFormatVersion > 0);
+    const session = proximity.read();
+    assert.deepEqual(
+      (await session.search(request)).neighbors.map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    session.close();
+    const proof = proximity.proveSearch(request);
+    assert.deepEqual(
+      proof.verify(proximity.descriptor()).result.neighbors
+        .map((neighbor) => Buffer.from(neighbor.key).toString()),
+      ["a", "ab"],
+    );
+    proof.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("portable versioned, indexed, and proximity maps stay native", async () => {
   const engine = await Engine.memory();
   try {

@@ -178,10 +178,50 @@ export interface NodePortableNeighbor {
   value: Buffer
   distance: number
 }
+export interface NodePortableSearchBudget {
+  maxNodes?: string
+  maxCommittedBytes?: string
+  maxDistanceEvaluations?: string
+  maxFrontierEntries?: string
+}
+export interface NodePortableSearchFilter {
+  kind: string
+  start?: Buffer
+  rangeEnd?: Buffer
+  prefix?: Buffer
+  eligibleKeys: Array<Buffer>
+}
+export interface NodePortableSearchRequest {
+  query: Float32Array
+  k: string
+  policy: string
+  adaptiveQuality?: string
+  budget: NodePortableSearchBudget
+  filter: NodePortableSearchFilter
+  kernel: string
+  backend: string
+  hnswEfSearch?: number
+  pqRerankMultiplier?: number
+}
+export interface NodePortableSearchStats {
+  levelsVisited: string
+  nodesRead: string
+  bytesRead: string
+  physicalBytesRead: string
+  committedBytes: string
+  distanceEvaluations: string
+  quantizedDistanceEvaluations: string
+  rerankedCandidates: string
+  frontierPeak: string
+  candidateHandlesPeak: string
+  candidateRetainedBytesPeak: string
+}
 export interface NodePortableSearchResult {
   neighbors: Array<NodePortableNeighbor>
+  stats: NodePortableSearchStats
   completion: string
   backend: string
+  planFormatVersion: number
 }
 export interface NodePortableSearchProofVerification {
   result: NodePortableSearchResult
@@ -1094,20 +1134,20 @@ export declare class NativePortableProximityMap {
   config(): NodePortableProximityConfig
   get(key: Buffer): NodePortableExactProximityRecord | null
   contains(key: Buffer): boolean
-  search(query: Float32Array, k: string): NodePortableSearchResult
+  search(request: NodePortableSearchRequest): NodePortableSearchResult
   descriptor(): Buffer
   verify(): NodePortableProximityVerification
   mutate(mutations: Array<NodePortableProximityMutation>): NodePortableProximityMutationResult
   rebuild(mutations: Array<NodePortableProximityMutation>): NativePortableProximityMap
   proveMembership(key: Buffer): NativePortableProximityProof
   proveStructure(): NativePortableProximityStructuralProof
-  proveSearch(query: Float32Array, k: string): NativePortableProximitySearchProof
+  proveSearch(request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
 export declare class NativePortableProximityStructuralProof {
   verify(expectedDescriptor?: Buffer | undefined | null): NodePortableStructuralVerification
 }
 export declare class NativePortableProximityReadSession {
-  search(query: Float32Array, k: string): NodePortableSearchResult
+  search(request: NodePortableSearchRequest): NodePortableSearchResult
   get(key: Buffer): NodePortableExactProximityRecord | null
   contains(key: Buffer): boolean
   fastHandle(): string
