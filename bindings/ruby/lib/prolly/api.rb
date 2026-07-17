@@ -201,6 +201,9 @@ module Prolly
 
     def ensure_index(name) = open! { @native.ensure_index(name.b) }
     def get(key) = open! { @native.get(key.b) }
+    def contains?(key) = open! { @native.contains_key(key.b) }
+    def count = open! { @native.count }
+    def config = open! { @native.config }
     def put(key, value) = open! { @native.put(key.b, value.b) }
     def delete(key) = open! { @native.delete(key.b) }
     def health = open! { @native.health }
@@ -343,6 +346,13 @@ module Prolly
     end
     def prove_structure(limits = Prolly.default_content_graph_limits) = open! { @native.prove_structure(limits) }
     def clear_cache = open! { @native.clear_content_cache }
+    def mutate(mutations)
+      open! do
+        result = @native.mutate(mutations)
+        [ProximityMap.new(result.map), result.stats]
+      end
+    end
+    def rebuild(mutations) = open! { ProximityMap.new(@native.rebuild(mutations)) }
     def read = open! { ProximityReadSession.new(@native.read_session) }
 
     def search_exact(query, k)

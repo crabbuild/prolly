@@ -76,6 +76,20 @@ final class PortableParityTests: XCTestCase {
             )
             XCTAssertEqual(membership.record?.value, Data("payload".utf8))
             XCTAssertEqual(try proximity.verify().recordCount, 1)
+            XCTAssertEqual(try proximity.count, 1)
+            XCTAssertTrue(try proximity.contains(Data("p".utf8)))
+            XCTAssertEqual(try proximity.config.dimensions, 2)
+            let structure = try Proofs.verify(
+                proximity.proveStructure(), expectedDescriptor: proximity.descriptor
+            )
+            XCTAssertEqual(structure.summary.recordCount, 1)
+            let mutation = try proximity.mutate([
+                ProximityMutationRecord(
+                    key: Data("q".utf8), vector: [1, 1], value: Data("second".utf8)
+                )
+            ])
+            XCTAssertEqual(try mutation.map.count, 2)
+            XCTAssertGreaterThanOrEqual(mutation.stats.recordsRebuilt, 1)
             let retained = try proximity.read()
             XCTAssertEqual(
                 try retained.searchExact([0, 0], k: 1).neighbors.first?.key,

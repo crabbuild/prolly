@@ -4,8 +4,10 @@ from prolly import (
     Engine,
     IndexProjection,
     ProximityRecord,
+    ProximityMutationRecord,
     verify_key_proof,
     verify_proximity_membership_proof,
+    verify_proximity_structure_proof,
 )
 
 
@@ -106,6 +108,18 @@ class PortableParityTests(unittest.TestCase):
             )
             self.assertEqual(verified_membership.record.value, b"payload")
             self.assertEqual(proximity.verify().record_count, 1)
+            self.assertEqual(proximity.count, 1)
+            self.assertTrue(proximity.contains(b"p"))
+            self.assertEqual(proximity.config.dimensions, 2)
+            structure = verify_proximity_structure_proof(
+                proximity.prove_structure(), proximity.descriptor
+            )
+            self.assertEqual(structure.summary.record_count, 1)
+            mutated, stats = proximity.mutate([
+                ProximityMutationRecord(key=b"q", vector=[1.0, 1.0], value=b"second")
+            ])
+            self.assertEqual(mutated.count, 2)
+            self.assertGreaterEqual(stats.records_rebuilt, 1)
             with proximity.read() as retained:
                 self.assertEqual(
                     retained.search_exact([0.0, 0.0], 1).neighbors[0].key, b"p"

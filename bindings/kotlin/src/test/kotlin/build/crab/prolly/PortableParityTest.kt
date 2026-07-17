@@ -4,6 +4,7 @@ import build.crab.prolly.api.Engine
 import build.crab.prolly.api.ProximityRecord
 import build.crab.prolly.api.verifyKeyProof
 import build.crab.prolly.api.verifyProximityMembershipProof
+import build.crab.prolly.api.verifyProximityStructureProof
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -130,6 +131,20 @@ class PortableParityTest {
                 )
                 assertArrayEquals("payload".bytes(), verified.record!!.value)
                 assertEquals(1uL, proximity.verify().recordCount)
+                assertEquals(1uL, proximity.count)
+                assertEquals(true, proximity.containsKey("p".bytes()))
+                assertEquals(2u, proximity.config.dimensions)
+                assertEquals(
+                    1uL,
+                    verifyProximityStructureProof(
+                        proximity.proveStructure(), proximity.descriptor,
+                    ).summary.recordCount,
+                )
+                val (mutated, stats) = proximity.mutate(
+                    listOf(ProximityMutationRecord("q".bytes(), listOf(1.0f, 1.0f), "second".bytes())),
+                )
+                mutated.use { assertEquals(2uL, it.count) }
+                assertEquals(true, stats.recordsRebuilt >= 1uL)
                 proximity.read().use { retained ->
                     assertArrayEquals(
                         "p".bytes(),

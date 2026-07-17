@@ -115,6 +115,10 @@ class VersionedMap(_Scoped):
         self._open()
         return self._inner.get(bytes(key))
 
+    def contains(self, key: bytes) -> bool:
+        self._open()
+        return self._inner.contains_key(bytes(key))
+
     def get_many(self, keys: Iterable[bytes]):
         self._open()
         return self._inner.get_many([bytes(key) for key in keys])
@@ -367,6 +371,20 @@ class ProximityMap(_Scoped):
         self._open()
         return self._inner.get(bytes(key))
 
+    def contains(self, key: bytes) -> bool:
+        self._open()
+        return self._inner.contains_key(bytes(key))
+
+    @property
+    def count(self) -> int:
+        self._open()
+        return self._inner.count()
+
+    @property
+    def config(self):
+        self._open()
+        return self._inner.config()
+
     def search(self, request: _native.ProximitySearchRequestRecord):
         with self.read() as session:
             return session.search(request)
@@ -392,6 +410,10 @@ class ProximityMap(_Scoped):
         self._open()
         result = self._inner.mutate(mutations)
         return ProximityMap(result.map), result.stats
+
+    def rebuild(self, mutations):
+        self._open()
+        return ProximityMap(self._inner.rebuild(mutations))
 
     def verify(self):
         self._open()

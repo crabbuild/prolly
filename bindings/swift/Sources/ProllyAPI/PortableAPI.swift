@@ -303,7 +303,10 @@ public final class ProximityMap: @unchecked Sendable {
     init(native: BindingProximityMap) { self.native = native }
 
     public var descriptor: Data { native.descriptor() }
+    public var count: UInt64 { get throws { try native.count() } }
+    public var config: ProximityConfigRecord { get throws { try native.config() } }
     public func get(_ key: Data) throws -> ExactProximityRecordRecord? { try native.get(key: Data(key)) }
+    public func contains(_ key: Data) throws -> Bool { try native.containsKey(key: Data(key)) }
     public func searchExact(_ query: [Float], k: UInt64) throws -> ProximitySearchResultRecord {
         let session = try read()
         defer { session.close() }
@@ -311,6 +314,15 @@ public final class ProximityMap: @unchecked Sendable {
     }
     public func read() throws -> ProximityReadSession { ProximityReadSession(native: try native.readSession()) }
     public func verify() throws -> ProximityVerificationRecord { try native.verify() }
+    public func mutate(
+        _ mutations: [ProximityMutationRecord]
+    ) throws -> (map: ProximityMap, stats: ProximityMutationStatsRecord) {
+        let result = try native.mutate(mutations: mutations)
+        return (ProximityMap(native: result.map), result.stats)
+    }
+    public func rebuild(_ mutations: [ProximityMutationRecord]) throws -> ProximityMap {
+        ProximityMap(native: try native.rebuild(mutations: mutations))
+    }
     public func proveMembership(_ key: Data) throws -> ProximityMembershipProofRecord {
         try native.proveMembership(key: Data(key))
     }
@@ -457,6 +469,18 @@ public enum Proofs {
         try verifyProximityMembershipProof(
             proof: proof,
             expectedDescriptor: expectedDescriptor.map { Data($0) }
+        )
+    }
+
+    public static func verify(
+        _ proof: ProximityStructuralProofRecord,
+        expectedDescriptor: Data? = nil,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximityStructuralVerificationRecord {
+        try verifyProximityStructureProof(
+            proof: proof,
+            expectedDescriptor: expectedDescriptor.map { Data($0) },
+            limits: limits
         )
     }
 }

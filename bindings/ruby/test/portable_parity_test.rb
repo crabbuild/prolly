@@ -82,6 +82,18 @@ class PortableParityTest < Minitest::Test
       )
       assert_equal 'payload'.b, membership.record.value
       assert_equal 1, proximity.verify.record_count
+      assert_equal 1, proximity.count
+      assert proximity.contains?('p'.b)
+      assert_equal 2, proximity.config.dimensions
+      structure = Prolly.verify_proximity_structure_proof(
+        proximity.prove_structure, proximity.descriptor, Prolly.default_content_graph_limits
+      )
+      assert_equal 1, structure.summary.record_count
+      mutated, stats = proximity.mutate([
+        Prolly::ProximityMutationRecord.new(key: 'q'.b, vector: [1.0, 1.0], value: 'second'.b)
+      ])
+      assert_equal 2, mutated.count
+      assert_operator stats.records_rebuilt, :>=, 1
       proximity.read.use do |retained|
         assert_equal 'p'.b, retained.search_exact([0.0, 0.0], 1).neighbors.first.key
         assert_equal 'p'.b, retained.search_view([0.0, 0.0], 1) { |rows| rows.first.key.to_s }

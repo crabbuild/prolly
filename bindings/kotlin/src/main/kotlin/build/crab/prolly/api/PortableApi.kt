@@ -16,10 +16,13 @@ import build.crab.prolly.KeyProofRecord
 import build.crab.prolly.ProllyEngine
 import build.crab.prolly.ProllyReadSession
 import build.crab.prolly.ProximityMembershipProofRecord
+import build.crab.prolly.ProximityMutationRecord
+import build.crab.prolly.ProximityMutationStatsRecord
 import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
 import build.crab.prolly.ProximityConfigRecord
+import build.crab.prolly.ProximityStructuralProofRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
 import build.crab.prolly.SnapshotBundleRecord
 import build.crab.prolly.defaultConfig
@@ -28,6 +31,7 @@ import build.crab.prolly.defaultProximityConfig
 import build.crab.prolly.exactProximitySearchRequest
 import build.crab.prolly.verifyKeyProof as verifyNativeKeyProof
 import build.crab.prolly.verifyProximityMembershipProof as verifyNativeProximityMembershipProof
+import build.crab.prolly.verifyProximityStructureProof as verifyNativeProximityStructureProof
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -163,7 +167,10 @@ class SecondaryIndex(internal val native: BindingSecondaryIndexSnapshot) : AutoC
 
 class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     val descriptor: ByteArray get() = native.descriptor()
+    val count: ULong get() = native.count()
+    val config: ProximityConfigRecord get() = native.config()
     fun get(key: ByteArray) = native.get(key.copyOf())
+    fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun searchExact(query: List<Float>, k: ULong): ProximitySearchResultRecord =
         read().use { it.searchExact(query, k) }
     fun read() = ProximityReadSession(native.readSession())
@@ -173,6 +180,11 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         block: (List<NeighborView>) -> R,
     ): R = read().use { it.withSearchView(query, k, block) }
     fun verify() = native.verify()
+    fun mutate(mutations: List<ProximityMutationRecord>): Pair<ProximityMap, ProximityMutationStatsRecord> {
+        val result = native.mutate(mutations)
+        return ProximityMap(result.map) to result.stats
+    }
+    fun rebuild(mutations: List<ProximityMutationRecord>) = ProximityMap(native.rebuild(mutations))
     fun proveMembership(key: ByteArray) = native.proveMembership(key.copyOf())
     fun proveSearch(
         request: ProximitySearchRequestRecord,
@@ -217,3 +229,9 @@ fun verifyProximityMembershipProof(
     proof: ProximityMembershipProofRecord,
     expectedDescriptor: ByteArray? = null,
 ) = verifyNativeProximityMembershipProof(proof, expectedDescriptor?.copyOf())
+
+fun verifyProximityStructureProof(
+    proof: ProximityStructuralProofRecord,
+    expectedDescriptor: ByteArray? = null,
+    limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+) = verifyNativeProximityStructureProof(proof, expectedDescriptor?.copyOf(), limits)
