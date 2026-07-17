@@ -122,3 +122,36 @@ command adds classification, equivalence, rationale, and documentation metadata
 only. It deliberately preserves `planned`, empty language mappings, and empty
 test evidence until the corresponding host API and conformance coverage have
 been verified.
+
+## Application gap report
+
+Run:
+
+~~~sh
+python3 scripts/binding_api_inventory.py review-audiences
+python3 scripts/binding_api_inventory.py gaps
+~~~
+
+`application-gap-report.json` separates runtime audience review from mapping
+evidence. A function is an application gap candidate only after its audience is
+explicitly reviewed as `application`. The report sections mean:
+
+- `release_complete_application_operations`: strict mapping and test evidence
+  exists;
+- `unmapped_application_operations`: reviewed application behavior has no
+  manifest mapping yet;
+- `mapped_missing_evidence`: at least one mapping exists, but strict language or
+  test evidence is incomplete;
+- `platform_review_required`: a proposed exclusion still needs release evidence;
+- `application_review_required`: runtime behavior has not yet received an
+  audience decision and must not be counted as a missing application API;
+- `non_application_runtime`: reviewed Rust extension, cursor, borrowed-view, or
+  adapter machinery represented by an idiomatic host pattern;
+- `data_model_or_abstraction_debt`: incomplete non-function rows that remain in
+  the strict release audit.
+
+`unmapped_application_operations` means a confirmed application-facing
+*evidence gap*. It is not automatically a confirmed missing implementation;
+source-surface reconciliation must next determine whether the operation is
+already bound under an idiomatic name, grouped into another host operation, or
+actually absent.

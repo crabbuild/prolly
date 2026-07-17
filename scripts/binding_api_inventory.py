@@ -30,6 +30,12 @@ CLASSIFICATIONS = (
     "rust-language-only",
 )
 STATUSES = ("planned", "implemented")
+AUDIENCES = (
+    "application",
+    "supporting-data-model",
+    "rust-extension",
+    "implementation-detail",
+)
 MANIFEST_SCHEMA_VERSION = 2
 REQUIRED_RUST_FEATURES = ("async-store",)
 FEATURE_SENTINELS = {
@@ -371,6 +377,22 @@ _CALLBACK_TYPE_ALIASES = {
     "prolly::Resolver",
     "prolly::TimestampExtractor",
 }
+_NON_APPLICATION_RUNTIME_OWNERS = {
+    "prolly::AsyncRangeIter",
+    "prolly::Cursor",
+    "prolly::CursorIterator",
+    "prolly::DiffCursor",
+    "prolly::IndexedSourceRecordRef",
+    "prolly::ProximityRecordRef",
+    "prolly::ProximityVectorRef",
+    "prolly::RangeCursor",
+    "prolly::RangeIter",
+    "prolly::ReverseCursor",
+    "prolly::SearchIo",
+    "prolly::SecondaryIndexMatchRef",
+    "prolly::StructuralDiffCursor",
+    "prolly::SyncBlobStoreAsAsync",
+}
 
 
 def _abstraction_equivalence(item: ApiItem) -> str | None:
@@ -429,6 +451,11 @@ def review_abstraction_entries(
             if equivalence in {"marker-and-associated-type", "namespace-module"}
             else "idiomatic"
         )
+        audience = (
+            "supporting-data-model"
+            if equivalence == "record-alias"
+            else "rust-extension"
+        )
         entry.update(
             classification=classification,
             equivalence=equivalence,
@@ -438,6 +465,56 @@ def review_abstraction_entries(
                 "Rust declaration."
             ),
             docs=[f"bindings/api/idiomatic-equivalents.json#{equivalence}"],
+            reviewed=True,
+            audience=audience,
+            audience_rationale=(
+                f"{item.rust} supports the portable application API through "
+                f"the {equivalence} contract and is not a separately invoked "
+                "application operation."
+            ),
+        )
+        operations.append(entry)
+    reviewed["operations"] = operations
+    return reviewed
+
+
+def review_runtime_audience_entries(
+    items: dict[str, ApiItem], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Review runtime audiences for the requested non-core domain families."""
+
+    reviewed = dict(manifest)
+    operations: list[Any] = []
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        item = items.get(entry.get("rust"))
+        if (
+            item is None
+            or item.kind != "function"
+            or entry.get("family") == "core"
+            or entry.get("audience") in AUDIENCES
+        ):
+            operations.append(entry)
+            continue
+        if item.owner in _NON_APPLICATION_RUNTIME_OWNERS:
+            audience = "rust-extension"
+            reason = (
+                f"{item.rust} is Rust cursor, borrowed-view, or adapter machinery; "
+                "host applications use the reviewed bounded-page or owned facade."
+            )
+        else:
+            audience = "application"
+            reason = (
+                f"{item.rust} has runtime behavior in the requested "
+                f"{entry.get('family')} application domain and requires direct or "
+                "idiomatic host evidence."
+            )
+        entry.update(
+            audience=audience,
+            audience_rationale=reason,
             reviewed=True,
         )
         operations.append(entry)
@@ -516,6 +593,85 @@ def build_classification_audit(
         ),
         "rows": rows,
     }
+
+
+def _gap_row(item: ApiItem, entry: dict[str, Any]) -> dict[str, Any]:
+    languages = entry.get("languages")
+    exclusions = entry.get("exclusions")
+    covered = set(languages) if isinstance(languages, dict) else set()
+    if isinstance(exclusions, dict):
+        covered.update(exclusions)
+    return {
+        "rust": item.rust,
+        "kind": item.kind,
+        "owner": item.owner,
+        "member_kind": item.member_kind,
+        "family": entry.get("family") or _family(item.rust),
+        "classification": entry.get("classification"),
+        "status": entry.get("status"),
+        "missing_languages": sorted(set(LANGUAGES) - covered),
+        "tests": entry.get("tests") if isinstance(entry.get("tests"), list) else [],
+        "performance": entry.get("performance"),
+        "rationale": entry.get("rationale"),
+        "audience": entry.get("audience"),
+        "audience_rationale": entry.get("audience_rationale"),
+    }
+
+
+def build_application_gap_report(
+    items: dict[str, ApiItem],
+    manifest: dict[str, Any],
+    equivalences: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Separate runtime operation gaps from data-model/classification debt."""
+
+    entries = {
+        entry["rust"]: entry
+        for entry in manifest.get("operations", [])
+        if isinstance(entry, dict) and isinstance(entry.get("rust"), str)
+    }
+    report: dict[str, Any] = {
+        "release_complete_application_operations": [],
+        "unmapped_application_operations": [],
+        "mapped_missing_evidence": [],
+        "platform_review_required": [],
+        "application_review_required": [],
+        "non_application_runtime": [],
+        "data_model_or_abstraction_debt": [],
+    }
+    for rust in sorted(items):
+        item = items[rust]
+        entry = entries.get(rust, {})
+        complete = _complete_release_entry(entry, equivalences)
+        is_application_operation = item.kind == "function"
+        audience = entry.get("audience")
+        if not is_application_operation:
+            if not complete:
+                report["data_model_or_abstraction_debt"].append(
+                    _gap_row(item, entry)
+                )
+            continue
+        if complete:
+            report["release_complete_application_operations"].append(
+                _gap_row(item, entry)
+            )
+            continue
+        if audience not in AUDIENCES:
+            report["application_review_required"].append(_gap_row(item, entry))
+            continue
+        if audience != "application":
+            report["non_application_runtime"].append(_gap_row(item, entry))
+            continue
+        row = _gap_row(item, entry)
+        if entry.get("classification") == "platform-excluded":
+            report["platform_review_required"].append(row)
+        elif entry.get("status") == "implemented" or bool(entry.get("languages")):
+            report["mapped_missing_evidence"].append(row)
+        else:
+            report["unmapped_application_operations"].append(row)
+
+    summary = {name: len(rows) for name, rows in report.items()}
+    return {"summary": summary, **report}
 
 
 def check_manifest(
@@ -711,7 +867,15 @@ def missing_feature_sentinels(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "command", choices=("generate", "check", "audit", "review-abstractions")
+        "command",
+        choices=(
+            "generate",
+            "check",
+            "audit",
+            "gaps",
+            "review-abstractions",
+            "review-audiences",
+        ),
     )
     parser.add_argument("--release", action="store_true")
     parser.add_argument("--rustdoc", type=Path)
@@ -785,6 +949,19 @@ def main(argv: list[str] | None = None) -> int:
             f"to {manifest_path}"
         )
         return 0
+    if args.command == "review-audiences":
+        reviewed = review_runtime_audience_entries(api_items, manifest)
+        _write_json(manifest_path, reviewed)
+        audience_count = sum(
+            1
+            for entry in reviewed["operations"]
+            if isinstance(entry, dict) and entry.get("audience") in AUDIENCES
+        )
+        print(
+            f"wrote {audience_count} reviewed audience classifications "
+            f"to {manifest_path}"
+        )
+        return 0
     if args.command == "audit":
         audit = build_classification_audit(api_items, manifest, equivalences)
         audit = {
@@ -800,6 +977,24 @@ def main(argv: list[str] | None = None) -> int:
         _write_json(output_path, audit)
         print(
             f"wrote classification audit for {len(api_items)} operations "
+            f"to {output_path}"
+        )
+        return 0
+    if args.command == "gaps":
+        report = build_application_gap_report(api_items, manifest, equivalences)
+        report = {
+            "schema_version": 1,
+            "rustdoc_format_version": rustdoc.get("format_version"),
+            "rust_features": list(REQUIRED_RUST_FEATURES),
+            **report,
+        }
+        output_path = (
+            args.output
+            or root / "bindings" / "api" / "application-gap-report.json"
+        )
+        _write_json(output_path, report)
+        print(
+            f"wrote application gap report for {len(api_items)} operations "
             f"to {output_path}"
         )
         return 0
