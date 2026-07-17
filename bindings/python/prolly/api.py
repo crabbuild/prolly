@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Generic, Iterable, Protocol, Sequence, TypeVar
 
 from .packed import (
     EntryView,
     NeighborView,
     ScanOutcome,
     ScopedBytes,
+    ValueRefView,
+    decode_value_ref_view,
     proximity_search_view,
+    point_read_view,
     scan_range_view,
 )
 from .uniffi import prolly as _native
@@ -86,6 +90,127 @@ class CompositeBuildOrRebuildOutcome:
 IndexProjection = _native.IndexProjectionRecord
 ProximitySearchRuntimePolicy = _native.ProximitySearchRuntimePolicyRecord
 ProximitySearchRuntimeStats = _native.ProximitySearchRuntimeStatsRecord
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+Old = TypeVar("Old")
+
+
+class KeyCodec(Protocol[K]):
+    def encode_key(self, key: K) -> bytes: ...
+    def decode_key(self, value: bytes) -> K: ...
+
+
+class ValueCodec(Protocol[V]):
+    def encode(self, value: V) -> bytes: ...
+    def decode(self, value: bytes) -> V: ...
+
+
+class BytesKeyCodec:
+    def encode_key(self, key: bytes) -> bytes:
+        return bytes(key)
+
+    def decode_key(self, value: bytes) -> bytes:
+        return bytes(value)
+
+
+class StringKeyCodec:
+    def encode_key(self, key: str) -> bytes:
+        return key.encode("utf-8")
+
+    def decode_key(self, value: bytes) -> str:
+        return bytes(value).decode("utf-8")
+
+
+class JsonValueCodec(Generic[V]):
+    def encode(self, value: V) -> bytes:
+        return json.dumps(
+            value, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
+
+    def decode(self, value: bytes) -> V:
+        return json.loads(bytes(value).decode("utf-8"))
+
+
+class BytesValueCodec:
+    def encode(self, value: bytes) -> bytes:
+        return bytes(value)
+
+    def decode(self, value: bytes) -> bytes:
+        return bytes(value)
+
+
+@dataclass(frozen=True)
+class TypedMigrationResult:
+    update: Any
+    scanned_values: int
+    rewritten_values: int
+
+
+class TypedVersionedMap(Generic[K, V]):
+    """Typed host facade over the byte-oriented managed map."""
+
+    def __init__(
+        self, raw: "VersionedMap", key_codec: KeyCodec[K], value_codec: ValueCodec[V]
+    ) -> None:
+        self._raw = raw
+        self._key_codec = key_codec
+        self._value_codec = value_codec
+
+    @property
+    def raw(self) -> "VersionedMap":
+        return self._raw
+
+    def get(self, key: K) -> V | None:
+        value = self._raw.get(self._key_codec.encode_key(key))
+        return None if value is None else self._value_codec.decode(value)
+
+    def get_at(self, version_id: bytes, key: K) -> V | None:
+        value = self._raw.get_at(version_id, self._key_codec.encode_key(key))
+        return None if value is None else self._value_codec.decode(value)
+
+    def entries(self) -> list[tuple[K, V]]:
+        return [
+            (
+                self._key_codec.decode_key(entry.key),
+                self._value_codec.decode(entry.value),
+            )
+            for entry in self._raw.range()
+        ]
+
+    def put(self, key: K, value: V):
+        return self._raw.put(
+            self._key_codec.encode_key(key), self._value_codec.encode(value)
+        )
+
+    def put_if(self, expected: bytes | None, key: K, value: V):
+        return self._raw.put_if(
+            expected,
+            self._key_codec.encode_key(key),
+            self._value_codec.encode(value),
+        )
+
+    def delete(self, key: K):
+        return self._raw.delete(self._key_codec.encode_key(key))
+
+    def migrate_from(
+        self,
+        expected: bytes,
+        source_codec: ValueCodec[Old],
+        migrate: Callable[[Old], V],
+    ) -> TypedMigrationResult:
+        entries = self._raw.range_at(expected)
+        mutations = [
+            _native.MutationRecord(
+                kind=_native.MutationKind.UPSERT,
+                key=bytes(entry.key),
+                value=self._value_codec.encode(migrate(source_codec.decode(entry.value))),
+            )
+            for entry in entries
+        ]
+        update = self._raw.apply_if(expected, mutations)
+        return TypedMigrationResult(update, len(entries), len(entries))
 
 
 def default_secondary_index_limits():
@@ -279,6 +404,12 @@ class VersionedMap(_Scoped):
     def initialize(self):
         self._open()
         return self._inner.initialize()
+
+    def typed(
+        self, key_codec: KeyCodec[K], value_codec: ValueCodec[V]
+    ) -> TypedVersionedMap[K, V]:
+        self._open()
+        return TypedVersionedMap(self, key_codec, value_codec)
 
     def initialize_sorted(self, entries):
         self._open()
@@ -976,6 +1107,15 @@ class ReadSession(_Scoped):
     def get_many(self, keys: Iterable[bytes]):
         self._open()
         return self._inner.get_many([bytes(key) for key in keys])
+
+    def get_view(self, key: bytes, visit: Callable[[ScopedBytes], V]) -> tuple[bool, V | None]:
+        self._open()
+        return point_read_view(self._inner.fast_handle(), bytes(key), visit)
+
+    def get_value_ref_view(
+        self, key: bytes, visit: Callable[[ValueRefView], V]
+    ) -> tuple[bool, V | None]:
+        return self.get_view(key, lambda value: visit(decode_value_ref_view(value)))
 
     def get_async(self, key: bytes):
         owned = bytes(key)
@@ -2134,6 +2274,8 @@ def verify_proximity_structure_proof(
 __all__ = [
     "AcceleratorCatalog",
     "BlobStore",
+    "BytesKeyCodec",
+    "BytesValueCodec",
     "CompositeAccelerator",
     "CompositeBuildOrRebuildOutcome",
     "CompositeBuildOutcome",
@@ -2160,10 +2302,17 @@ __all__ = [
     "ProximitySearchProof",
     "ProductQuantizationBuildResult",
     "ProductQuantizer",
+    "JsonValueCodec",
     "SecondaryIndex",
     "ScopedBytes",
     "ReadSession",
     "ScanOutcome",
+    "StringKeyCodec",
+    "TypedMigrationResult",
+    "TypedVersionedMap",
+    "KeyCodec",
+    "ValueCodec",
+    "ValueRefView",
     "VersionedMap",
     "VersionedTransaction",
     "default_secondary_index_limits",

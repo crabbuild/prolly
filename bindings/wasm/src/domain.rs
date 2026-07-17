@@ -1581,6 +1581,25 @@ impl WasmReadSession {
             .map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = withValueView)]
+    pub fn with_value_view(&self, key: Uint8Array, visitor: &Function) -> Result<bool, JsValue> {
+        let key = key.to_vec();
+        let visited = self
+            .inner
+            .get_with(&key, |value| {
+                // SAFETY: JavaScript runs synchronously while the immutable
+                // leaf is borrowed. The TypeScript facade expires the view
+                // before this call returns.
+                let view = unsafe { Uint8Array::view(value) };
+                visitor.call1(&JsValue::UNDEFINED, &view.into()).map(|_| ())
+            })
+            .map_err(js_error)?;
+        match visited {
+            Some(result) => result.map(|()| true),
+            None => Ok(false),
+        }
+    }
+
     #[wasm_bindgen(js_name = scanRangeView)]
     pub fn scan_range_view(
         &self,

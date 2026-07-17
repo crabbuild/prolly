@@ -431,6 +431,15 @@ func TestReadSessionPointReadsOwnResultsAndHandleLargeValues(t *testing.T) {
 	if err != nil || !found || !bytes.Equal(viewed, large) {
 		t.Fatalf("session value view found=%v len=%d err=%v", found, len(viewed), err)
 	}
+	var valueRefKind string
+	var valueRefBytes []byte
+	found, err = session.GetValueRefView([]byte("large"), func(value ValueRefView) {
+		valueRefKind = value.Kind
+		valueRefBytes = append([]byte(nil), value.Inline...)
+	})
+	if err != nil || !found || valueRefKind != "inline" || !bytes.Equal(valueRefBytes, large) {
+		t.Fatalf("session value ref view kind=%s found=%v len=%d err=%v", valueRefKind, found, len(valueRefBytes), err)
+	}
 	emptyVisited := false
 	found, err = session.GetView([]byte("empty"), func(value []byte) {
 		emptyVisited = true

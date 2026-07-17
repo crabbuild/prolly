@@ -3,6 +3,9 @@ package build.crab.prolly
 import build.crab.prolly.api.Engine
 import build.crab.prolly.api.ProximityRecord
 import build.crab.prolly.api.ProximityCancellationToken
+import build.crab.prolly.api.StringKeyCodec
+import build.crab.prolly.api.StringValueCodec
+import build.crab.prolly.api.ValueRefView
 import build.crab.prolly.api.verifyKeyProof
 import build.crab.prolly.api.verifyMultiKeyProof
 import build.crab.prolly.api.verifyRangePageProof
@@ -14,10 +17,37 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineStart
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
+    @Test
+    fun typedVersionedMapIsApplicationFacing() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.versionedMap("typed-users".bytes()).use { raw ->
+                raw.initialize()
+                val typed = raw.typed(StringKeyCodec, StringValueCodec)
+                val first = typed.put("alice", "score:1")
+                assertEquals("score:1", typed.get("alice"))
+                assertEquals("score:1", typed.getAt(first.id, "alice"))
+                assertEquals(listOf("alice" to "score:1"), typed.entries())
+                val updated = typed.putIf(first.id, "alice", "score:2")
+                assertEquals(MapUpdateKind.APPLIED, updated.kind)
+                val migrated = typed.migrateFrom(updated.current!!.id, StringValueCodec) {
+                    value -> "$value:active"
+                }
+                assertEquals(MapUpdateKind.APPLIED, migrated.update.kind)
+                assertEquals(1 to 1, migrated.scannedValues to migrated.rewrittenValues)
+                assertEquals("score:2:active", typed.get("alice"))
+                assertSame(raw, typed.raw)
+                typed.delete("alice")
+                assertEquals(null, typed.get("alice"))
+            }
+        }
+    }
+
     @Test
     fun versionedLargeValuesAndBlobGcAreApplicationFacing() {
         ProllyNative.useLocalDebugLibrary()
@@ -34,6 +64,16 @@ class PortableParityTest {
                         blobs, first.id, "document".bytes(), "new-large-value".bytes(), config,
                     )
                     assertEquals(MapUpdateKind.APPLIED, updated.kind)
+                    versioned.snapshot()!!.use { snapshot ->
+                        snapshot.read().use { session ->
+                            var blob: ValueRefView.Blob? = null
+                            assertEquals(true, session.getValueRefView("document".bytes()) { value ->
+                                if (value is ValueRefView.Blob) blob = value
+                            })
+                            assertEquals(32, blob!!.cid.size)
+                            assertEquals("new-large-value".bytes().size.toULong(), blob!!.length.toULong())
+                        }
+                    }
                     assertEquals(true, versioned.planBlobGc(blobs).reachability.liveBlobCount >= 1uL)
                     assertEquals(true, versioned.sweepBlobGc(blobs).plan.reachability.liveBlobCount >= 1uL)
                 }
@@ -557,6 +597,18 @@ class PortableParityTest {
                     assertEquals(true, snapshot.export().nodes.isNotEmpty())
                     snapshot.read().use { session ->
                         assertArrayEquals("v".bytes(), session.get("k".bytes()))
+                        var copiedValue: ByteArray? = null
+                        assertEquals(true, session.getView("k".bytes()) { copiedValue = it.bytes() })
+                        assertArrayEquals("v".bytes(), copiedValue)
+                        var escapedValue: build.crab.prolly.api.ScopedBytes? = null
+                        session.getView("k".bytes()) { escapedValue = it }
+                        assertThrows<IllegalStateException> { escapedValue!!.bytes() }
+                        assertEquals(false, session.getView("missing".bytes()) {})
+                        var inlineRef: ByteArray? = null
+                        assertEquals(true, session.getValueRefView("k".bytes()) { value ->
+                            inlineRef = (value as build.crab.prolly.api.ValueRefView.Inline).value.bytes()
+                        })
+                        assertArrayEquals("v".bytes(), inlineRef)
                         var escaped: build.crab.prolly.api.ScopedBytes? = null
                         val seen = mutableListOf<String>()
                         val outcome = session.scanRangeView("k".bytes(), "l".bytes()) { entry ->

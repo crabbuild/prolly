@@ -32,7 +32,19 @@ export {
   ProximityReadSession,
   ProximitySearchRuntime,
 } from "./proximity.ts";
-export { BlobStore, MapComparison, MapMerge, MapSubscription, VersionedMap, VersionedTransaction } from "./versioned.ts";
+export {
+  BlobStore,
+  BytesKeyCodec,
+  BytesValueCodec,
+  JsonValueCodec,
+  MapComparison,
+  MapMerge,
+  MapSubscription,
+  StringKeyCodec,
+  TypedVersionedMap,
+  VersionedMap,
+  VersionedTransaction,
+} from "./versioned.ts";
 export { RemoteAsyncProllyEngine } from "./remote-async.ts";
 export * from "./remote-store.ts";
 export type * from "./indexed.ts";

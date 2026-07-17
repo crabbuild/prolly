@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
   HnswBuildResult = Data.define(:index, :stats)
@@ -8,6 +10,90 @@ module Prolly
   CompositeBuildOrRebuildOutcome = Data.define(
     :kind, :composite, :hnsw, :pq, :reasons, :composite_stats, :hnsw_stats, :pq_stats
   )
+  TypedEntry = Data.define(:key, :value)
+  TypedMigrationResult = Data.define(:update, :scanned_values, :rewritten_values)
+
+  class StringKeyCodec
+    def encode_key(key) = key.encode(Encoding::UTF_8).force_encoding(Encoding::BINARY)
+
+    def decode_key(bytes)
+      value = bytes.dup.force_encoding(Encoding::UTF_8)
+      raise EncodingError, 'key is not valid UTF-8' unless value.valid_encoding?
+
+      value
+    end
+  end
+
+  class BytesKeyCodec
+    def encode_key(key) = key.b.dup
+    def decode_key(bytes) = bytes.b.dup
+  end
+
+  class BytesValueCodec
+    def encode(value) = value.b.dup
+    def decode(bytes) = bytes.b.dup
+  end
+
+  class JsonValueCodec
+    def encode(value) = JSON.generate(value).force_encoding(Encoding::BINARY)
+    def decode(bytes) = JSON.parse(bytes)
+  end
+
+  class TypedVersionedMap
+    attr_reader :raw
+
+    def initialize(raw, key_codec, value_codec)
+      @raw = raw
+      @key_codec = key_codec
+      @value_codec = value_codec
+    end
+
+    def get(key)
+      value = @raw.__typed_get(@key_codec.encode_key(key))
+      value.nil? ? nil : @value_codec.decode(value)
+    end
+
+    def get_at(id, key)
+      value = @raw.__typed_get_at(id.b.dup, @key_codec.encode_key(key))
+      value.nil? ? nil : @value_codec.decode(value)
+    end
+
+    def entries
+      @raw.__typed_entries.map do |entry|
+        TypedEntry.new(
+          key: @key_codec.decode_key(entry.key), value: @value_codec.decode(entry.value)
+        )
+      end
+    end
+
+    def put(key, value) = @raw.__typed_put(@key_codec.encode_key(key), @value_codec.encode(value))
+
+    def put_if(expected, key, value)
+      @raw.__typed_put_if(
+        expected&.b&.dup, @key_codec.encode_key(key), @value_codec.encode(value)
+      )
+    end
+
+    def delete(key) = @raw.__typed_delete(@key_codec.encode_key(key))
+
+    def migrate_from(expected, source_codec, migrate = nil, &block)
+      transform = migrate || block
+      raise ArgumentError, 'migrate_from requires a callable' unless transform
+
+      entries = @raw.__typed_entries_at(expected.b.dup)
+      mutations = entries.map do |entry|
+        MutationRecord.new(
+          kind: MutationKind::UPSERT,
+          key: entry.key,
+          value: @value_codec.encode(transform.call(source_codec.decode(entry.value)))
+        )
+      end
+      update = @raw.__typed_apply_if(expected.b.dup, mutations)
+      TypedMigrationResult.new(
+        update: update, scanned_values: entries.length, rewritten_values: entries.length
+      )
+    end
+  end
 
   class BlobStore
     def self.memory = new(ProllyBlobStore.memory)
@@ -446,6 +532,20 @@ module Prolly
       @closed = false
     end
 
+    def typed(key_codec, value_codec) = TypedVersionedMap.new(self, key_codec, value_codec)
+
+    # Codec output is freshly owned, so these internal calls avoid the public API's second copy.
+    def __typed_get(encoded_key) = open! { @native.get(encoded_key) }
+    def __typed_get_at(owned_id, encoded_key) = open! { @native.get_at(owned_id, encoded_key) }
+    def __typed_entries = open! { @native.range(''.b, nil) }
+    def __typed_entries_at(owned_expected) = open! { @native.range_at(owned_expected, ''.b, nil) }
+    def __typed_put(encoded_key, encoded_value) = open! { @native.put(encoded_key, encoded_value) }
+    def __typed_put_if(owned_expected, encoded_key, encoded_value) =
+      open! { @native.put_if(owned_expected, encoded_key, encoded_value) }
+    def __typed_delete(encoded_key) = open! { @native.delete(encoded_key) }
+    def __typed_apply_if(owned_expected, mutations) =
+      open! { @native.apply_if(owned_expected, mutations) }
+
     # Ruby makes `initialize` private even when generated as an FFI method.
     def initialize_map = open! { @native.__send__(:initialize) }
     def initialize_sorted(entries) = open! { @native.initialize_sorted(owned_entries(entries)) }
@@ -788,6 +888,9 @@ module Prolly
 
     def get(key) = open! { @native.get(key.b) }
     def get_many(keys) = open! { @native.get_many(keys.map(&:b)) }
+    def get_view(key, &block) = open! { PackedPage.point_read_view(@native.fast_handle, key.b, &block) }
+    def get_value_ref_view(key, &block) =
+      open! { PackedPage.value_ref_view(@native.fast_handle, key.b, &block) }
     def get_async(key) = Future.new { get(key.b.dup) }
     def get_many_async(keys)
       owned = keys.map { |key| key.b.dup }

@@ -4,6 +4,34 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testTypedVersionedMapIsApplicationFacing() throws {
+        try Engine.withMemory { engine in
+            let raw = try engine.versionedMap(Data("typed-users".utf8))
+            _ = try raw.initialize()
+            let typed = raw.typed(StringKeyCodec(), JSONValueCodec<[String: Int]>())
+            let first = try typed.put("alice", value: ["score": 1])
+            XCTAssertEqual(try typed.get("alice"), ["score": 1])
+            XCTAssertEqual(try typed.get(at: first.id, key: "alice"), ["score": 1])
+            let entries = try typed.entries()
+            XCTAssertEqual(entries.map(\.key), ["alice"])
+            XCTAssertEqual(entries.map(\.value), [["score": 1]])
+            let updated = try typed.putIf(expected: first.id, key: "alice", value: ["score": 2])
+            XCTAssertEqual(updated.kind, .applied)
+            let migrated = try typed.migrateFrom(
+                expected: try XCTUnwrap(updated.current).id,
+                sourceCodec: JSONValueCodec<[String: Int]>()
+            ) { value in
+                ["score": try XCTUnwrap(value["score"]) + 10]
+            }
+            XCTAssertEqual(migrated.update.kind, .applied)
+            XCTAssertEqual([migrated.scannedValues, migrated.rewrittenValues], [1, 1])
+            XCTAssertEqual(try typed.get("alice"), ["score": 12])
+            XCTAssertTrue(typed.raw === raw)
+            _ = try typed.delete("alice")
+            XCTAssertNil(try typed.get("alice"))
+        }
+    }
+
     func testVersionedLargeValuesAndBlobGCAreApplicationFacing() throws {
         try Engine.withMemory { engine in
             let blobs = BlobStore.memory()
@@ -25,6 +53,16 @@ final class PortableParityTests: XCTestCase {
                 value: Data("new-large-value".utf8), config: config
             )
             XCTAssertEqual(updated.kind, .applied)
+            let snapshot = try XCTUnwrap(versioned.snapshot())
+            defer { snapshot.close() }
+            let session = try snapshot.read()
+            defer { session.close() }
+            var blob: (cid: Data, length: UInt64)?
+            XCTAssertTrue(try session.withValueRefView(Data("document".utf8)) { value in
+                if case let .blob(cid, length) = value { blob = (cid, length) }
+            })
+            XCTAssertEqual(blob?.cid.count, 32)
+            XCTAssertEqual(blob?.length, UInt64(Data("new-large-value".utf8).count))
             XCTAssertGreaterThanOrEqual(try versioned.planBlobGC(blobs).reachability.liveBlobCount, 1)
             XCTAssertGreaterThanOrEqual(try versioned.sweepBlobGC(blobs).plan.reachability.liveBlobCount, 1)
         }
@@ -524,6 +562,20 @@ final class PortableParityTests: XCTestCase {
             XCTAssertFalse(try snapshot.export().nodes.isEmpty)
             let session = try snapshot.read()
             XCTAssertEqual(try session.get(Data("k".utf8)), Data("v".utf8))
+            var copiedValue = Data()
+            XCTAssertTrue(try session.withValueView(Data("k".utf8)) { value in
+                copiedValue = Data(value)
+            })
+            XCTAssertEqual(copiedValue, Data("v".utf8))
+            XCTAssertFalse(try session.withValueView(Data("missing".utf8)) { _ in
+                XCTFail("missing value invoked the point-read callback")
+            })
+            var inlineRef = Data()
+            XCTAssertTrue(try session.withValueRefView(Data("k".utf8)) { value in
+                guard case let .inline(bytes) = value else { return XCTFail("expected inline") }
+                inlineRef = Data(bytes)
+            })
+            XCTAssertEqual(inlineRef, Data("v".utf8))
             var seen: [String] = []
             let scan = try session.scanRangeView(
                 from: Data("k".utf8), to: Data("l".utf8)

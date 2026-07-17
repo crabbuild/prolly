@@ -38,6 +38,8 @@ import build.crab.prolly.IndexedSnapshotIdRecord
 import build.crab.prolly.KeyProofRecord
 import build.crab.prolly.LargeValueConfigRecord
 import build.crab.prolly.MutationRecord
+import build.crab.prolly.MutationKind
+import build.crab.prolly.MapUpdateRecord
 import build.crab.prolly.ParallelConfigRecord
 import build.crab.prolly.ProllyEngine
 import build.crab.prolly.ProllyBlobStore
@@ -86,6 +88,8 @@ import build.crab.prolly.verifyProximityStructureProof as verifyNativeProximityS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.util.concurrent.CompletableFuture
 
 private fun ProllyBlobStore.ownedClone() = ProllyBlobStore(UniffiWithHandle, uniffiCloneHandle())
@@ -212,7 +216,95 @@ class Engine private constructor(internal val native: ProllyEngine) : AutoClosea
     override fun close() = native.close()
 }
 
+interface KeyCodec<K> {
+    /** Returns a fresh byte array whose ownership is transferred to the typed map call. */
+    fun encodeKey(key: K): ByteArray
+    fun decodeKey(bytes: ByteArray): K
+}
+
+interface ValueCodec<V> {
+    /** Returns a fresh byte array whose ownership is transferred to the typed map call. */
+    fun encode(value: V): ByteArray
+    fun decode(bytes: ByteArray): V
+}
+
+private fun strictUtf8(bytes: ByteArray): String = Charsets.UTF_8.newDecoder()
+    .onMalformedInput(CodingErrorAction.REPORT)
+    .onUnmappableCharacter(CodingErrorAction.REPORT)
+    .decode(ByteBuffer.wrap(bytes))
+    .toString()
+
+object StringKeyCodec : KeyCodec<String> {
+    override fun encodeKey(key: String) = key.toByteArray(Charsets.UTF_8)
+    override fun decodeKey(bytes: ByteArray) = strictUtf8(bytes)
+}
+
+object BytesKeyCodec : KeyCodec<ByteArray> {
+    override fun encodeKey(key: ByteArray) = key.copyOf()
+    override fun decodeKey(bytes: ByteArray) = bytes.copyOf()
+}
+
+object BytesValueCodec : ValueCodec<ByteArray> {
+    override fun encode(value: ByteArray) = value.copyOf()
+    override fun decode(bytes: ByteArray) = bytes.copyOf()
+}
+
+object StringValueCodec : ValueCodec<String> {
+    override fun encode(value: String) = value.toByteArray(Charsets.UTF_8)
+    override fun decode(bytes: ByteArray) = strictUtf8(bytes)
+}
+
+data class TypedMigrationResult(
+    val update: MapUpdateRecord,
+    val scannedValues: Int,
+    val rewrittenValues: Int,
+)
+
+class TypedVersionedMap<K, V> internal constructor(
+    val raw: VersionedMap,
+    private val keyCodec: KeyCodec<K>,
+    private val valueCodec: ValueCodec<V>,
+) {
+    fun get(key: K): V? = raw.native.get(keyCodec.encodeKey(key))?.let(valueCodec::decode)
+
+    fun getAt(id: ByteArray, key: K): V? =
+        raw.native.getAt(id.copyOf(), keyCodec.encodeKey(key))?.let(valueCodec::decode)
+
+    fun entries(): List<Pair<K, V>> = raw.native.range(ByteArray(0), null).map {
+        keyCodec.decodeKey(it.key) to valueCodec.decode(it.value)
+    }
+
+    fun put(key: K, value: V) =
+        raw.native.put(keyCodec.encodeKey(key), valueCodec.encode(value))
+
+    fun putIf(expected: ByteArray?, key: K, value: V) = raw.native.putIf(
+        expected?.copyOf(), keyCodec.encodeKey(key), valueCodec.encode(value),
+    )
+
+    fun delete(key: K) = raw.native.delete(keyCodec.encodeKey(key))
+
+    fun <Old> migrateFrom(
+        expected: ByteArray,
+        sourceCodec: ValueCodec<Old>,
+        migrate: (Old) -> V,
+    ): TypedMigrationResult {
+        val entries = raw.native.rangeAt(expected.copyOf(), ByteArray(0), null)
+        val mutations = entries.map {
+            MutationRecord(
+                MutationKind.UPSERT,
+                it.key,
+                valueCodec.encode(migrate(sourceCodec.decode(it.value))),
+            )
+        }
+        val update = raw.native.applyIf(expected.copyOf(), mutations)
+        return TypedMigrationResult(update, entries.size, entries.size)
+    }
+}
+
 class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
+    fun <K, V> typed(keyCodec: KeyCodec<K>, valueCodec: ValueCodec<V>) =
+        TypedVersionedMap(this, keyCodec, valueCodec)
+
     val id: ByteArray get() = native.id()
     fun isInitialized() = native.isInitialized()
     fun initialize() = native.initialize()
@@ -557,6 +649,10 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
 class ReadSession(internal val native: ProllyReadSession) : AutoCloseable {
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun getMany(keys: List<ByteArray>) = native.getMany(keys.map(ByteArray::copyOf))
+    fun getView(key: ByteArray, block: (ScopedBytes) -> Unit) =
+        PackedPages.withPointValue(native.fastHandle(), key.copyOf(), block)
+    fun getValueRefView(key: ByteArray, block: (ValueRefView) -> Unit) =
+        PackedPages.withValueRef(native.fastHandle(), key.copyOf(), block)
     suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
         withContext(Dispatchers.IO) { get(owned) }
     }

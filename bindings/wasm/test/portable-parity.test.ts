@@ -26,6 +26,18 @@ test("WASM versioned large values and blob GC are application-facing", { skip: !
     const first = await map.putLargeValue(blobs, bytes("document"), bytes("large-value"), { inlineThreshold: 1n });
     assert.equal(Buffer.from(await map.getLargeValue(blobs, bytes("document")) ?? []).toString(), "large-value");
     assert.equal((await map.putLargeValueIf(blobs, first.id, bytes("document"), bytes("new-large-value"), { inlineThreshold: 1n })).kind, "applied");
+    const snapshot = await map.snapshot();
+    assert.ok(snapshot);
+    const session = snapshot.read();
+    let blob: { kind: "blob"; cid: Uint8Array; length: bigint } | undefined;
+    assert.equal(session.withValueRefView(bytes("document"), (value) => {
+      if (value.kind === "blob") blob = value;
+    }), true);
+    assert.ok(blob);
+    assert.equal(blob.cid.byteLength, 32);
+    assert.equal(blob.length, BigInt(bytes("new-large-value").byteLength));
+    session.close();
+    snapshot.close();
     assert.ok((await map.planBlobGc(blobs)).reachability.liveBlobCount >= 1n);
     const sweep = map.sweepBlobGc(blobs);
     blobs.close();
@@ -441,6 +453,37 @@ test("WASM versioned maps expose identity and historical snapshot lifecycle", { 
   engine.close();
 });
 
+test("WASM typed versioned map is application-facing", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const raw = engine.versionedMap(bytes("typed-users"));
+    await raw.initialize();
+    const typed = raw.typed(
+      new api.StringKeyCodec(),
+      new api.JsonValueCodec<{ score: number }>(),
+    );
+    const first = await typed.put("alice", { score: 1 });
+    assert.deepEqual(await typed.get("alice"), { score: 1 });
+    assert.deepEqual(await typed.getAt(first.id, "alice"), { score: 1 });
+    assert.deepEqual(await typed.entries(), [["alice", { score: 1 }]]);
+    const updated = await typed.putIf(first.id, "alice", { score: 2 });
+    assert.equal(updated.kind, "applied");
+    const migrated = await typed.migrateFrom(
+      updated.current!.id,
+      new api.JsonValueCodec<{ score: number }>(),
+      (value) => ({ score: value.score + 10 }),
+    );
+    assert.equal(migrated.update.kind, "applied");
+    assert.deepEqual([migrated.scannedValues, migrated.rewrittenValues], [1, 1]);
+    assert.deepEqual(await typed.get("alice"), { score: 12 });
+    assert.equal(typed.raw, raw);
+    await typed.delete("alice");
+    assert.equal(await typed.get("alice"), undefined);
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM versioned snapshots expose ordered navigation and bounded pages", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   const map = engine.versionedMap(bytes("versioned-ordered"));
@@ -552,6 +595,19 @@ test("WASM proofs, retained sessions, and maintenance stay in Rust", { skip: !ge
   const session = snapshot.read();
   assert.equal(Buffer.from(await session.getAsync(bytes("k")) ?? []).toString(), "v");
   assert.equal(Buffer.from(session.get(bytes("k")) ?? []).toString(), "v");
+  let copiedValue: Uint8Array | undefined;
+  assert.equal(session.withValueView(bytes("k"), (value) => { copiedValue = new Uint8Array(value); }), true);
+  assert.equal(Buffer.from(copiedValue ?? []).toString(), "v");
+  let escapedValue: Uint8Array | undefined;
+  session.withValueView(bytes("k"), (value) => { escapedValue = value; });
+  assert.throws(() => escapedValue![0], /scope|expired/i);
+  assert.equal(session.withValueView(bytes("missing"), () => assert.fail("missing callback")), false);
+  let inlineRef: Uint8Array | undefined;
+  assert.equal(session.withValueRefView(bytes("k"), (value) => {
+    assert.equal(value.kind, "inline");
+    if (value.kind === "inline") inlineRef = new Uint8Array(value.value);
+  }), true);
+  assert.equal(Buffer.from(inlineRef ?? []).toString(), "v");
   let escaped: Uint8Array | undefined;
   const seen: string[] = [];
   const scan = session.scanRangeView(bytes("k"), bytes("l"), (entry: any) => {

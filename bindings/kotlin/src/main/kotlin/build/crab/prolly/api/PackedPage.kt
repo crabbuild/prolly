@@ -11,6 +11,19 @@ import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 
 internal interface FastAbi : Library {
+    class ValueLeaseResult : Structure(), Structure.ByValue {
+        @JvmField var status: Int = 0
+        @JvmField var found: Byte = 0
+        @JvmField var reserved: ByteArray = ByteArray(3)
+        @JvmField var leaseHandle: Long = 0
+        @JvmField var dataPtr: Pointer? = null
+        @JvmField var dataLen: Long = 0
+
+        override fun getFieldOrder() = listOf(
+            "status", "found", "reserved", "leaseHandle", "dataPtr", "dataLen",
+        )
+    }
+
     class PageResult : Structure(), Structure.ByValue {
         @JvmField var status: Int = 0
         @JvmField var terminal: Byte = 0
@@ -67,6 +80,12 @@ internal interface FastAbi : Library {
     ): PageResult
     fun prolly_fast_scan_close(scanHandle: Long)
     fun prolly_fast_page_release(leaseHandle: Long)
+    fun prolly_fast_read_session_get_lease(
+        sessionHandle: Long,
+        key: Pointer?,
+        keyLen: Long,
+    ): ValueLeaseResult
+    fun prolly_fast_value_release(leaseHandle: Long)
 
     class ScanOpenResult : Structure(), Structure.ByValue {
         @JvmField var status: Int = 0
@@ -110,6 +129,18 @@ class ScopedBytes internal constructor(
         return result
     }
 
+    internal fun subview(start: Int, length: Int): ScopedBytes {
+        scope.check()
+        require(start >= 0 && length >= 0 && start <= size && length <= size - start)
+        return ScopedBytes(source, offset + start, length, scope)
+    }
+
+}
+
+sealed interface ValueRefView {
+    data class Inline(val value: ScopedBytes) : ValueRefView
+    /** Blob length stored as unsigned bits; use toULong() in Kotlin. */
+    data class Blob(val cid: ByteArray, val length: Long) : ValueRefView
 }
 
 /** One callback-scoped entry from a retained packed read scan. */
@@ -160,6 +191,85 @@ internal object PackedPages {
     private const val MAX_ARENA = 64L * 1024 * 1024
     private const val READ_SCAN_ARENA = 4L * 1024 * 1024
     private const val READ_SCAN_RECORDS = 4096
+
+    fun withPointValue(
+        sessionHandle: ULong,
+        key: ByteArray,
+        block: (ScopedBytes) -> Unit,
+    ): Boolean {
+        val keyMemory = Memory(key.size.toLong().coerceAtLeast(1))
+        if (key.isNotEmpty()) keyMemory.write(0, key, 0, key.size)
+        val result = FastAbi.INSTANCE.prolly_fast_read_session_get_lease(
+            sessionHandle.toLong(), if (key.isEmpty()) null else keyMemory, key.size.toLong(),
+        )
+        check(result.status == 0) {
+            "native retained point read failed with status ${result.status}"
+        }
+        if (result.found.toInt() == 0) {
+            check(result.leaseHandle == 0L) { "missing point read returned a value lease" }
+            return false
+        }
+        check(result.leaseHandle != 0L && result.dataLen >= 0 &&
+            (result.dataLen == 0L || result.dataPtr != null)) {
+            "native point read returned an invalid value lease"
+        }
+        val scope = PageScope()
+        try {
+            val buffer = if (result.dataLen == 0L) {
+                ByteBuffer.allocate(0)
+            } else {
+                result.dataPtr!!.getByteBuffer(0, result.dataLen)
+            }
+            block(ScopedBytes(buffer, 0, result.dataLen.toInt(), scope))
+            return true
+        } finally {
+            scope.close()
+            FastAbi.INSTANCE.prolly_fast_value_release(result.leaseHandle)
+        }
+    }
+
+    fun withValueRef(
+        sessionHandle: ULong,
+        key: ByteArray,
+        block: (ValueRefView) -> Unit,
+    ): Boolean = withPointValue(sessionHandle, key) { value ->
+        block(decodeValueRef(value))
+    }
+
+    private fun decodeValueRef(value: ScopedBytes): ValueRefView {
+        val magic = byteArrayOf(0x50, 0x4c, 0x56, 0x42)
+        if (value.size < 4 || magic.indices.any { value[it] != magic[it] }) {
+            return ValueRefView.Inline(value)
+        }
+        require(value.size >= 6 && value[4].toInt() == 1) {
+            "invalid or unsupported value reference header"
+        }
+        return when (value[5].toInt()) {
+            0 -> {
+                require(value.size >= 14) { "inline value reference is truncated" }
+                val length = readBigEndianULong(value, 6)
+                require(length <= Int.MAX_VALUE.toULong() && value.size == 14 + length.toInt()) {
+                    "inline value reference length does not match payload"
+                }
+                ValueRefView.Inline(value.subview(14, length.toInt()))
+            }
+            1 -> {
+                require(value.size == 46) { "blob value reference length is invalid" }
+                ValueRefView.Blob(
+                    value.subview(6, 32).bytes(), readBigEndianULong(value, 38).toLong(),
+                )
+            }
+            else -> error("unknown value reference tag ${value[5]}")
+        }
+    }
+
+    private fun readBigEndianULong(value: ScopedBytes, start: Int): ULong {
+        var result = 0uL
+        repeat(8) { index ->
+            result = (result shl 8) or value[start + index].toUByte().toULong()
+        }
+        return result
+    }
 
     fun <R> withProximitySearch(
         mapHandle: ULong,

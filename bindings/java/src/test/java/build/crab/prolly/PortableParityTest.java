@@ -28,6 +28,9 @@ import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
 import build.crab.prolly.javaapi.ScopedBytes;
 import build.crab.prolly.javaapi.SecondaryIndexLimits;
+import build.crab.prolly.javaapi.StringKeyCodec;
+import build.crab.prolly.javaapi.StringValueCodec;
+import build.crab.prolly.javaapi.ValueRefView;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +38,30 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class PortableParityTest {
+    @Test
+    void typedVersionedMapIsApplicationFacing() {
+        Prolly.useLocalDebugLibrary();
+        try (Engine engine = Engine.memory(); var raw = engine.versionedMap(bytes("typed-users"))) {
+            raw.initialize();
+            var typed = raw.typed(StringKeyCodec.INSTANCE, StringValueCodec.INSTANCE);
+            var first = typed.put("alice", "score:1");
+            assertEquals("score:1", typed.get("alice").orElseThrow());
+            assertEquals("score:1", typed.getAt(first.id(), "alice").orElseThrow());
+            assertEquals(List.of(new build.crab.prolly.javaapi.TypedEntry<>("alice", "score:1")), typed.entries());
+            var updated = typed.putIf(first.id(), "alice", "score:2");
+            assertEquals(MapUpdateKind.APPLIED, updated.kind());
+            var migrated = typed.migrateFrom(
+                    updated.current().id(), StringValueCodec.INSTANCE, value -> value + ":active");
+            assertEquals(MapUpdateKind.APPLIED, migrated.update().kind());
+            assertEquals(1, migrated.scannedValues());
+            assertEquals(1, migrated.rewrittenValues());
+            assertEquals("score:2:active", typed.get("alice").orElseThrow());
+            assertTrue(typed.raw() == raw);
+            typed.delete("alice");
+            assertTrue(typed.get("alice").isEmpty());
+        }
+    }
+
     @Test
     void versionedLargeValuesAndBlobGcAreApplicationFacing() {
         Prolly.useLocalDebugLibrary();
@@ -50,6 +77,15 @@ class PortableParityTest {
             var updated = versioned.putLargeValueIf(
                     blobs, first.id(), bytes("document"), bytes("new-large-value"), 1);
             assertEquals(MapUpdateKind.APPLIED, updated.kind());
+            try (var snapshot = versioned.snapshot(); var session = snapshot.read()) {
+                var captured = new java.util.concurrent.atomic.AtomicReference<ValueRefView.Blob>();
+                assertTrue(session.getValueRefView(bytes("document"), value -> {
+                    if (value instanceof ValueRefView.Blob blob) captured.set(blob);
+                }));
+                var blob = captured.get();
+                assertEquals(32, blob.cid().length);
+                assertEquals(bytes("new-large-value").length, blob.length());
+            }
             assertTrue(versioned.planBlobGc(blobs).reachability().liveBlobCount() >= 1);
             var sweep = versioned.sweepBlobGcAsync(blobs);
             blobs.close();
@@ -491,6 +527,17 @@ class PortableParityTest {
                 assertEquals(2, snapshot.entryCount());
                 assertFalse(snapshot.export().getNodes().isEmpty());
                 assertArrayEquals(bytes("v"), session.get(bytes("k")).orElseThrow());
+                var copiedValue = new AtomicReference<byte[]>();
+                assertTrue(session.getView(bytes("k"), value -> copiedValue.set(value.copy())));
+                assertArrayEquals(bytes("v"), copiedValue.get());
+                var escapedValue = new AtomicReference<ScopedBytes>();
+                assertTrue(session.getView(bytes("k"), escapedValue::set));
+                assertThrows(IllegalStateException.class, () -> escapedValue.get().copy());
+                assertFalse(session.getView(bytes("missing"), value -> {}));
+                var inlineRef = new AtomicReference<byte[]>();
+                assertTrue(session.getValueRefView(bytes("k"), value -> inlineRef.set(
+                        ((build.crab.prolly.javaapi.ValueRefView.Inline) value).value().copy())));
+                assertArrayEquals(bytes("v"), inlineRef.get());
                 var escaped = new AtomicReference<ScopedBytes>();
                 var seen = new ArrayList<String>();
                 var scan = session.scanRangeView(bytes("k"), bytes("l"), entry -> {

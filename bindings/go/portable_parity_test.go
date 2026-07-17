@@ -9,6 +9,68 @@ import (
 	"testing"
 )
 
+func TestTypedVersionedMapIsApplicationFacing(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	raw, err := engine.VersionedMap([]byte("typed-users"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(raw.Close)
+	if _, err = raw.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	typed := NewTypedVersionedMap(raw, StringKeyCodec{}, JSONValueCodec[map[string]int]{})
+	first, err := typed.Put("alice", map[string]int{"score": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, found, err := typed.Get("alice")
+	if err != nil || !found || value["score"] != 1 {
+		t.Fatalf("typed get = %#v, %v, %v", value, found, err)
+	}
+	historical, found, err := typed.GetAt(first.ID, "alice")
+	if err != nil || !found || historical["score"] != 1 {
+		t.Fatalf("typed historical get = %#v, %v, %v", historical, found, err)
+	}
+	entries, err := typed.Entries()
+	if err != nil || len(entries) != 1 || entries[0].Key != "alice" || entries[0].Value["score"] != 1 {
+		t.Fatalf("typed entries = %#v, %v", entries, err)
+	}
+	update, err := typed.PutIf(first.ID, "alice", map[string]int{"score": 2})
+	if err != nil || update.Kind != MapUpdateApplied {
+		t.Fatalf("typed put if = %#v, %v", update, err)
+	}
+	migration, err := MigrateTypedVersionedMap(
+		typed, update.Current.ID, JSONValueCodec[map[string]int]{},
+		func(value map[string]int) (map[string]int, error) {
+			value["score"] += 10
+			return value, nil
+		},
+	)
+	if err != nil || migration.Update.Kind != MapUpdateApplied ||
+		migration.ScannedValues != 1 || migration.RewrittenValues != 1 {
+		t.Fatalf("typed migration = %#v, %v", migration, err)
+	}
+	value, found, err = typed.Get("alice")
+	if err != nil || !found || value["score"] != 12 {
+		t.Fatalf("typed migrated get = %#v, %v, %v", value, found, err)
+	}
+	if typed.Raw() != raw {
+		t.Fatal("typed raw map identity changed")
+	}
+	if _, err = typed.Delete("alice"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRetainedSearchRuntimeReusesValidatedContent(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {
@@ -1528,6 +1590,26 @@ func TestPortableVersionedLargeValuesAndBlobGC(t *testing.T) {
 	updated, err := versioned.PutLargeValueIf(blobs, first.ID, []byte("document"), []byte("new-large-value"), LargeValueConfig{InlineThreshold: 1})
 	if err != nil || updated.Kind != MapUpdateApplied {
 		t.Fatalf("large value CAS = %#v, %v", updated, err)
+	}
+	snapshot, err := versioned.Snapshot()
+	if err != nil || snapshot == nil {
+		t.Fatalf("snapshot = %#v, %v", snapshot, err)
+	}
+	defer snapshot.Close()
+	session, err := snapshot.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	var blob *BlobRef
+	found, err := session.GetValueRefView([]byte("document"), func(value ValueRefView) {
+		if value.Blob != nil {
+			copy := *value.Blob
+			blob = &copy
+		}
+	})
+	if err != nil || !found || blob == nil || len(blob.Cid) != 32 || blob.Len != uint64(len("new-large-value")) {
+		t.Fatalf("blob value reference = %#v, %v, %v", blob, found, err)
 	}
 	plan, err := versioned.PlanBlobGC(blobs)
 	if err != nil || plan.Reachability.LiveBlobCount < 1 {

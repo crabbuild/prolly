@@ -100,6 +100,111 @@ export interface NamedRootRetention {
 }
 
 export interface MapEntry { key: Uint8Array; value: Uint8Array; }
+
+export interface KeyCodec<K> {
+  encodeKey(key: K): Uint8Array;
+  decodeKey(value: Uint8Array): K;
+}
+
+export interface ValueCodec<V> {
+  encode(value: V): Uint8Array;
+  decode(value: Uint8Array): V;
+}
+
+const utf8Encoder = new TextEncoder();
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+export class StringKeyCodec implements KeyCodec<string> {
+  encodeKey(key: string): Uint8Array { return utf8Encoder.encode(key); }
+  decodeKey(value: Uint8Array): string { return utf8Decoder.decode(value); }
+}
+
+export class BytesKeyCodec implements KeyCodec<Uint8Array> {
+  encodeKey(key: Uint8Array): Uint8Array { return ownedBytes(key); }
+  decodeKey(value: Uint8Array): Uint8Array { return ownedBytes(value); }
+}
+
+export class BytesValueCodec implements ValueCodec<Uint8Array> {
+  encode(value: Uint8Array): Uint8Array { return ownedBytes(value); }
+  decode(value: Uint8Array): Uint8Array { return ownedBytes(value); }
+}
+
+export class JsonValueCodec<V> implements ValueCodec<V> {
+  encode(value: V): Uint8Array { return utf8Encoder.encode(JSON.stringify(value)); }
+  decode(value: Uint8Array): V { return JSON.parse(utf8Decoder.decode(value)) as V; }
+}
+
+export interface TypedMigrationResult {
+  update: MapUpdate;
+  scannedValues: number;
+  rewrittenValues: number;
+}
+
+export class TypedVersionedMap<K, V> {
+  readonly raw: VersionedMap;
+  private readonly keyCodec: KeyCodec<K>;
+  private readonly valueCodec: ValueCodec<V>;
+
+  constructor(
+    raw: VersionedMap,
+    keyCodec: KeyCodec<K>,
+    valueCodec: ValueCodec<V>,
+  ) {
+    this.raw = raw;
+    this.keyCodec = keyCodec;
+    this.valueCodec = valueCodec;
+  }
+
+  async get(key: K, signal?: AbortSignal): Promise<V | undefined> {
+    const value = await this.raw.get(this.keyCodec.encodeKey(key), signal);
+    return value == null ? undefined : this.valueCodec.decode(value);
+  }
+
+  async getAt(id: Uint8Array, key: K, signal?: AbortSignal): Promise<V | undefined> {
+    const value = await this.raw.getAt(id, this.keyCodec.encodeKey(key), signal);
+    return value == null ? undefined : this.valueCodec.decode(value);
+  }
+
+  async entries(signal?: AbortSignal): Promise<Array<readonly [K, V]>> {
+    return (await this.raw.range(new Uint8Array(), undefined, signal)).map((entry) => [
+      this.keyCodec.decodeKey(entry.key), this.valueCodec.decode(entry.value),
+    ] as const);
+  }
+
+  put(key: K, value: V, signal?: AbortSignal): Promise<MapVersion> {
+    return this.raw.put(this.keyCodec.encodeKey(key), this.valueCodec.encode(value), signal);
+  }
+
+  putIf(expected: Uint8Array | undefined, key: K, value: V, signal?: AbortSignal): Promise<MapUpdate> {
+    return this.raw.putIf(
+      expected, this.keyCodec.encodeKey(key), this.valueCodec.encode(value), signal,
+    );
+  }
+
+  delete(key: K, signal?: AbortSignal): Promise<MapVersion> {
+    return this.raw.delete(this.keyCodec.encodeKey(key), signal);
+  }
+
+  async migrateFrom<Old>(
+    expected: Uint8Array,
+    sourceCodec: ValueCodec<Old>,
+    migrate: (value: Old) => V,
+    signal?: AbortSignal,
+  ): Promise<TypedMigrationResult> {
+    const entries = await this.raw.rangeAt(expected, new Uint8Array(), undefined, signal);
+    const mutations: MapMutation[] = entries.map((entry) => ({
+      kind: "upsert",
+      key: entry.key,
+      value: this.valueCodec.encode(migrate(sourceCodec.decode(entry.value))),
+    }));
+    const update = await this.raw.applyIf(expected, mutations, signal);
+    return {
+      update,
+      scannedValues: entries.length,
+      rewrittenValues: entries.length,
+    };
+  }
+}
 export interface RangeCursor { afterKey?: Uint8Array; }
 export interface ReverseCursor { beforeKey?: Uint8Array; }
 export interface RangePage { entries: MapEntry[]; nextCursor?: RangeCursor; }
@@ -124,6 +229,9 @@ export interface VersionedTransactionCommit {
 /** Read-only page views that expire when the scan callback returns. */
 export interface MapEntryView { key: Uint8Array; value: Uint8Array; }
 export interface ReadScanOutcome { visited: bigint; stopped: boolean; }
+export type ValueRefView =
+  | { kind: "inline"; value: Uint8Array }
+  | { kind: "blob"; cid: Uint8Array; length: bigint };
 export interface KeyProofVerification {
   valid: boolean;
   exists: boolean;
@@ -310,6 +418,7 @@ interface NativeMapSnapshot {
 }
 interface NativeReadSession {
   get(key: Uint8Array): Uint8Array | null;
+  withValueView(key: Uint8Array, visit: (value: Uint8Array) => void): boolean;
   scanRangePages(
     start: Uint8Array,
     end: Uint8Array | null,
@@ -530,6 +639,11 @@ export class VersionedMap implements Disposable {
   #open(): NativeVersionedMap {
     if (this.#native == null) throw new Error("versioned map is closed");
     return this.#native;
+  }
+
+  typed<K, V>(keyCodec: KeyCodec<K>, valueCodec: ValueCodec<V>): TypedVersionedMap<K, V> {
+    this.#open();
+    return new TypedVersionedMap(this, keyCodec, valueCodec);
   }
 
   id(): Uint8Array { return this.#open().id(); }
@@ -1113,6 +1227,21 @@ export class ReadSession implements Disposable {
     const native = this.#native; const owned = ownedBytes(key);
     return nativePromise(signal, () => native.get(owned) ?? undefined);
   }
+  withValueView(key: Uint8Array, visit: (value: Uint8Array) => void): boolean {
+    if (this.#native == null) throw new Error("read session is closed");
+    if (typeof visit !== "function") throw new TypeError("point-read visitor must be a function");
+    const scope: ViewScope = { alive: true };
+    try {
+      return this.#native.withValueView(ownedBytes(key), (value) => {
+        visit(scopedBytes(value, scope));
+      });
+    } finally {
+      scope.alive = false;
+    }
+  }
+  withValueRefView(key: Uint8Array, visit: (value: ValueRefView) => void): boolean {
+    return this.withValueView(key, (value) => visit(decodeValueRefView(value)));
+  }
   scanRangeView(
     start: Uint8Array,
     end: Uint8Array | undefined,
@@ -1155,6 +1284,32 @@ export class ReadSession implements Disposable {
   }
   close(): void { this.#native = undefined; }
   [Symbol.dispose](): void { this.close(); }
+}
+
+function decodeValueRefView(value: Uint8Array): ValueRefView {
+  if (value.byteLength < 4 || value[0] !== 0x50 || value[1] !== 0x4c || value[2] !== 0x56 || value[3] !== 0x42) {
+    return { kind: "inline", value };
+  }
+  if (value.byteLength < 6 || value[4] !== 1) throw new Error("invalid or unsupported value reference header");
+  if (value[5] === 0) {
+    if (value.byteLength < 14) throw new Error("inline value reference is truncated");
+    const length = readScopedU64(value, 6);
+    if (length > BigInt(Number.MAX_SAFE_INTEGER) || BigInt(value.byteLength) !== 14n + length) {
+      throw new Error("inline value reference length does not match payload");
+    }
+    return { kind: "inline", value: value.subarray(14) };
+  }
+  if (value[5] === 1) {
+    if (value.byteLength !== 46) throw new Error("blob value reference length is invalid");
+    return { kind: "blob", cid: new Uint8Array(value.subarray(6, 38)), length: readScopedU64(value, 38) };
+  }
+  throw new Error(`unknown value reference tag ${value[5]}`);
+}
+
+function readScopedU64(value: Uint8Array, start: number): bigint {
+  let result = 0n;
+  for (let index = 0; index < 8; index += 1) result = (result << 8n) | BigInt(value[start + index]);
+  return result;
 }
 
 function decodePackedReadPage(page: NativePackedReadPage): {

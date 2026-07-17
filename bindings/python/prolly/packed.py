@@ -22,6 +22,17 @@ class _FastPageResult(ctypes.Structure):
     ]
 
 
+class _FastValueLeaseResult(ctypes.Structure):
+    _fields_ = [
+        ("status", ctypes.c_int32),
+        ("found", ctypes.c_uint8),
+        ("reserved", ctypes.c_uint8 * 3),
+        ("lease_handle", ctypes.c_uint64),
+        ("data_ptr", ctypes.POINTER(ctypes.c_uint8)),
+        ("data_len", ctypes.c_uint64),
+    ]
+
+
 class _Scope:
     def __init__(self) -> None:
         self.alive = True
@@ -52,6 +63,18 @@ class ScopedBytes:
     def __bytes__(self) -> bytes:
         self._scope.check()
         return self._view.tobytes()
+
+    def subview(self, start: int, end: int | None = None) -> "ScopedBytes":
+        self._scope.check()
+        return ScopedBytes(self._view[start:end], self._scope)
+
+
+@dataclass(frozen=True)
+class ValueRefView:
+    kind: str
+    inline: ScopedBytes | None = None
+    cid: bytes | None = None
+    length: int | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +192,80 @@ def _decode_entries(
 
 
 _R = TypeVar("_R")
+
+
+def point_read_view(
+    session_handle: int,
+    key: bytes,
+    visit: Callable[[ScopedBytes], _R],
+) -> tuple[bool, _R | None]:
+    """Expose one retained value only for the synchronous callback scope."""
+
+    if not callable(visit):
+        raise TypeError("point-read visitor must be callable")
+    library = _native._UniffiLib
+    get_lease = library.prolly_fast_read_session_get_lease
+    get_lease.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint8),
+        ctypes.c_size_t,
+    ]
+    get_lease.restype = _FastValueLeaseResult
+    release = library.prolly_fast_value_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    key_bytes = bytes(key)
+    key_buffer = (ctypes.c_uint8 * len(key_bytes)).from_buffer_copy(key_bytes)
+    result = get_lease(
+        session_handle, key_buffer if key_bytes else None, len(key_bytes)
+    )
+    if result.status != 0:
+        raise RuntimeError(f"native retained point read failed with status {result.status}")
+    if not result.found:
+        if result.lease_handle:
+            release(result.lease_handle)
+            raise RuntimeError("missing point read returned a value lease")
+        return False, None
+    if not result.lease_handle or (result.data_len and not result.data_ptr):
+        if result.lease_handle:
+            release(result.lease_handle)
+        raise RuntimeError("native point read returned an invalid value lease")
+    scope = _Scope()
+    try:
+        view = memoryview(b"")
+        if result.data_len:
+            raw = (ctypes.c_uint8 * result.data_len).from_address(
+                ctypes.addressof(result.data_ptr.contents)
+            )
+            view = memoryview(raw).cast("B")
+        return True, visit(ScopedBytes(view, scope))
+    finally:
+        scope.close()
+        release(result.lease_handle)
+
+
+def decode_value_ref_view(value: ScopedBytes) -> ValueRefView:
+    if len(value) < 4 or bytes(value.subview(0, 4)) != b"PLVB":
+        return ValueRefView(kind="inline", inline=value)
+    if len(value) < 6 or value[4] != 1:
+        raise ValueError("invalid or unsupported value reference header")
+    tag = value[5]
+    if tag == 0:
+        if len(value) < 14:
+            raise ValueError("inline value reference is truncated")
+        length = int.from_bytes(bytes(value.subview(6, 14)), "big")
+        if len(value) != 14 + length:
+            raise ValueError("inline value reference length does not match payload")
+        return ValueRefView(kind="inline", inline=value.subview(14))
+    if tag == 1:
+        if len(value) != 46:
+            raise ValueError("blob value reference length is invalid")
+        return ValueRefView(
+            kind="blob",
+            cid=bytes(value.subview(6, 38)),
+            length=int.from_bytes(bytes(value.subview(38, 46)), "big"),
+        )
+    raise ValueError(f"unknown value reference tag {tag}")
 
 
 def proximity_search_view(

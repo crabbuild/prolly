@@ -215,6 +215,7 @@ public final class ProximityCancellationToken: @unchecked Sendable {
 public enum PortableAPIError: Error, Equatable {
     case closed(String)
     case packedPage(String)
+    case codec(String)
 }
 
 public final class BlobStore: @unchecked Sendable {
@@ -250,11 +251,169 @@ public final class BlobStore: @unchecked Sendable {
     }
 }
 
+public protocol KeyCodec {
+    associatedtype Key
+    func encodeKey(_ key: Key) throws -> Data
+    func decodeKey(_ bytes: Data) throws -> Key
+}
+
+public protocol ValueCodec {
+    associatedtype Value
+    func encode(_ value: Value) throws -> Data
+    func decode(_ bytes: Data) throws -> Value
+}
+
+public struct StringKeyCodec: KeyCodec {
+    public init() {}
+    public func encodeKey(_ key: String) throws -> Data { Data(key.utf8) }
+    public func decodeKey(_ bytes: Data) throws -> String {
+        guard let value = String(data: bytes, encoding: .utf8) else {
+            throw PortableAPIError.codec("key is not valid UTF-8")
+        }
+        return value
+    }
+}
+
+public struct DataKeyCodec: KeyCodec {
+    public init() {}
+    public func encodeKey(_ key: Data) throws -> Data { key }
+    public func decodeKey(_ bytes: Data) throws -> Data { bytes }
+}
+
+public typealias BytesKeyCodec = DataKeyCodec
+
+public struct DataValueCodec: ValueCodec {
+    public init() {}
+    public func encode(_ value: Data) throws -> Data { value }
+    public func decode(_ bytes: Data) throws -> Data { bytes }
+}
+
+public typealias BytesValueCodec = DataValueCodec
+
+public struct StringValueCodec: ValueCodec {
+    public init() {}
+    public func encode(_ value: String) throws -> Data { Data(value.utf8) }
+    public func decode(_ bytes: Data) throws -> String {
+        guard let value = String(data: bytes, encoding: .utf8) else {
+            throw PortableAPIError.codec("value is not valid UTF-8")
+        }
+        return value
+    }
+}
+
+public struct JSONValueCodec<Value: Codable>: ValueCodec {
+    public init() {}
+    public func encode(_ value: Value) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(value)
+    }
+    public func decode(_ bytes: Data) throws -> Value {
+        try JSONDecoder().decode(Value.self, from: bytes)
+    }
+}
+
+public struct TypedEntry<Key, Value> {
+    public let key: Key
+    public let value: Value
+
+    public init(key: Key, value: Value) {
+        self.key = key
+        self.value = value
+    }
+}
+
+public struct TypedMigrationResult {
+    public let update: MapUpdateRecord
+    public let scannedValues: Int
+    public let rewrittenValues: Int
+
+    public init(update: MapUpdateRecord, scannedValues: Int, rewrittenValues: Int) {
+        self.update = update
+        self.scannedValues = scannedValues
+        self.rewrittenValues = rewrittenValues
+    }
+}
+
+public final class TypedVersionedMap<KC: KeyCodec, VC: ValueCodec> {
+    public let raw: VersionedMap
+    private let keyCodec: KC
+    private let valueCodec: VC
+
+    init(raw: VersionedMap, keyCodec: KC, valueCodec: VC) {
+        self.raw = raw
+        self.keyCodec = keyCodec
+        self.valueCodec = valueCodec
+    }
+
+    public func get(_ key: KC.Key) throws -> VC.Value? {
+        try raw.get(keyCodec.encodeKey(key)).map(valueCodec.decode)
+    }
+
+    public func get(at id: Data, key: KC.Key) throws -> VC.Value? {
+        try raw.get(at: id, key: keyCodec.encodeKey(key)).map(valueCodec.decode)
+    }
+
+    public func entries() throws -> [TypedEntry<KC.Key, VC.Value>] {
+        try raw.range().map {
+            TypedEntry(
+                key: try keyCodec.decodeKey($0.key),
+                value: try valueCodec.decode($0.value)
+            )
+        }
+    }
+
+    public func put(_ key: KC.Key, value: VC.Value) throws -> MapVersionRecord {
+        try raw.put(keyCodec.encodeKey(key), value: valueCodec.encode(value))
+    }
+
+    public func putIf(
+        expected: Data?, key: KC.Key, value: VC.Value
+    ) throws -> MapUpdateRecord {
+        try raw.putIf(
+            expected: expected,
+            key: keyCodec.encodeKey(key),
+            value: valueCodec.encode(value)
+        )
+    }
+
+    public func delete(_ key: KC.Key) throws -> MapVersionRecord {
+        try raw.delete(keyCodec.encodeKey(key))
+    }
+
+    public func migrateFrom<Source: ValueCodec>(
+        expected: Data,
+        sourceCodec: Source,
+        _ migrate: (Source.Value) throws -> VC.Value
+    ) throws -> TypedMigrationResult {
+        let entries = try raw.range(at: expected)
+        let mutations = try entries.map {
+            MutationRecord(
+                kind: .upsert,
+                key: $0.key,
+                value: try valueCodec.encode(migrate(sourceCodec.decode($0.value)))
+            )
+        }
+        let update = try raw.applyIf(expected: expected, mutations: mutations)
+        return TypedMigrationResult(
+            update: update,
+            scannedValues: entries.count,
+            rewrittenValues: entries.count
+        )
+    }
+}
+
 public final class VersionedMap: @unchecked Sendable {
     let native: BindingVersionedMap
     private var closed = false
 
     init(native: BindingVersionedMap) { self.native = native }
+
+    public func typed<KC: KeyCodec, VC: ValueCodec>(
+        _ keyCodec: KC, _ valueCodec: VC
+    ) -> TypedVersionedMap<KC, VC> {
+        TypedVersionedMap(raw: self, keyCodec: keyCodec, valueCodec: valueCodec)
+    }
 
     public func close() { closed = true }
     public var id: Data { native.id() }
@@ -905,6 +1064,18 @@ public final class ReadSession: @unchecked Sendable {
     public func getMany(_ keys: [Data]) throws -> [Data?] {
         try open { try native.getMany(keys: keys.map { Data($0) }) }
     }
+    public func withValueView(
+        _ key: Data,
+        _ body: (ScopedBytes) throws -> Void
+    ) throws -> Bool {
+        try open { try withReadValueView(handle: native.fastHandle(), key: key, body) }
+    }
+    public func withValueRefView(
+        _ key: Data,
+        _ body: (ValueRefView) throws -> Void
+    ) throws -> Bool {
+        try withValueView(key) { value in try body(decodeValueRefView(value)) }
+    }
     public func getAsync(_ key: Data) -> Task<Data?, Error> {
         let owned = Data(key)
         return Task { try Task.checkCancellation(); return try self.get(owned) }
@@ -1112,6 +1283,18 @@ public struct ScopedBytes: RandomAccessCollection {
         precondition(position >= 0 && position < countValue)
         return page[offset + position]
     }
+
+    fileprivate func subview(from start: Int, count: Int? = nil) -> ScopedBytes {
+        precondition(scope.alive, "packed page view escaped its callback scope")
+        let length = count ?? (countValue - start)
+        precondition(start >= 0 && length >= 0 && start <= countValue && length <= countValue - start)
+        return ScopedBytes(page: page, offset: offset + start, count: length, scope: scope)
+    }
+}
+
+public enum ValueRefView {
+    case inline(ScopedBytes)
+    case blob(cid: Data, length: UInt64)
 }
 
 /// Read-only native page views valid only until the scan callback returns.
@@ -1127,6 +1310,80 @@ public struct ReadScanOutcome: Equatable, Sendable {
     public init(visited: UInt64, stopped: Bool) {
         self.visited = visited
         self.stopped = stopped
+    }
+}
+
+private func withReadValueView(
+    handle: UInt64,
+    key: Data,
+    _ body: (ScopedBytes) throws -> Void
+) throws -> Bool {
+    let result = key.withUnsafeBytes { buffer in
+        prolly_fast_read_session_get_lease(
+            handle,
+            buffer.bindMemory(to: UInt8.self).baseAddress,
+            buffer.count
+        )
+    }
+    guard result.status == 0 else {
+        throw PortableAPIError.packedPage(
+            "native retained point read failed with status \(result.status)"
+        )
+    }
+    guard result.found != 0 else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        guard result.lease_handle == 0 else {
+            throw PortableAPIError.packedPage("missing point read returned a value lease")
+        }
+        return false
+    }
+    guard result.lease_handle != 0,
+          result.data_len <= UInt64(Int.max),
+          result.data_len == 0 || result.data_ptr != nil else {
+        if result.lease_handle != 0 { prolly_fast_value_release(result.lease_handle) }
+        throw PortableAPIError.packedPage("native point read returned an invalid value lease")
+    }
+    defer { prolly_fast_value_release(result.lease_handle) }
+    let scope = PageScope()
+    defer { scope.alive = false }
+    let value = UnsafeRawBufferPointer(
+        start: result.data_ptr.map(UnsafeRawPointer.init), count: Int(result.data_len)
+    )
+    try body(ScopedBytes(page: value, offset: 0, count: value.count, scope: scope))
+    return true
+}
+
+private func decodeValueRefView(_ value: ScopedBytes) throws -> ValueRefView {
+    let magic: [UInt8] = [0x50, 0x4c, 0x56, 0x42]
+    if value.count < 4 || !zip(value.prefix(4), magic).allSatisfy({ $0 == $1 }) {
+        return .inline(value)
+    }
+    guard value.count >= 6, value[4] == 1 else {
+        throw PortableAPIError.packedPage("invalid or unsupported value reference header")
+    }
+    switch value[5] {
+    case 0:
+        guard value.count >= 14 else {
+            throw PortableAPIError.packedPage("inline value reference is truncated")
+        }
+        let length = readBigEndianUInt64(value, from: 6)
+        guard length <= UInt64(Int.max), value.count == 14 + Int(length) else {
+            throw PortableAPIError.packedPage("inline value reference length does not match payload")
+        }
+        return .inline(value.subview(from: 14, count: Int(length)))
+    case 1:
+        guard value.count == 46 else {
+            throw PortableAPIError.packedPage("blob value reference length is invalid")
+        }
+        return .blob(cid: Data(value.subview(from: 6, count: 32)), length: readBigEndianUInt64(value, from: 38))
+    default:
+        throw PortableAPIError.packedPage("unknown value reference tag \(value[5])")
+    }
+}
+
+private func readBigEndianUInt64(_ value: ScopedBytes, from start: Int) -> UInt64 {
+    (0..<8).reduce(0) { result, index in
+        (result << 8) | UInt64(value[start + index])
     }
 }
 

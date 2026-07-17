@@ -20,6 +20,46 @@ public final class VersionedMap implements AutoCloseable {
         return nativeMap;
     }
 
+    public <K, V> TypedVersionedMap<K, V> typed(KeyCodec<K> keyCodec, ValueCodec<V> valueCodec) {
+        return new TypedVersionedMap<>(this, keyCodec, valueCodec);
+    }
+
+    Optional<byte[]> getEncoded(byte[] encodedKey) {
+        return Optional.ofNullable(open().get(encodedKey));
+    }
+
+    Optional<byte[]> getEncodedAt(byte[] ownedId, byte[] encodedKey) {
+        return Optional.ofNullable(open().getAt(ownedId, encodedKey));
+    }
+
+    List<EntryRecord> encodedEntries() {
+        return open().range(new byte[0], null);
+    }
+
+    List<EntryRecord> encodedEntriesAt(byte[] ownedExpected) {
+        return open().rangeAt(ownedExpected, new byte[0], null);
+    }
+
+    MapVersion putEncoded(byte[] encodedKey, byte[] encodedValue) {
+        return MapVersion.fromNative(open().put(encodedKey, encodedValue));
+    }
+
+    MapUpdate putEncodedIf(byte[] ownedExpected, byte[] encodedKey, byte[] encodedValue) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.putVersionedIf(
+                open(), ownedExpected, encodedKey, encodedValue));
+    }
+
+    MapUpdate applyEncodedIf(
+            byte[] ownedExpected,
+            List<build.crab.prolly.api.JavaMapMutation> encodedMutations) {
+        return MapUpdate.fromBridge(build.crab.prolly.api.JavaPortableBridge.applyVersionedIf(
+                open(), ownedExpected, encodedMutations));
+    }
+
+    MapVersion deleteEncoded(byte[] encodedKey) {
+        return MapVersion.fromNative(open().delete(encodedKey));
+    }
+
     public MapVersion initialize() {
         return MapVersion.fromNative(open().initialize());
     }
