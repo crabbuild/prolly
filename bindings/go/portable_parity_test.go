@@ -4,8 +4,90 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 )
+
+func TestRichProximitySearchPreservesPolicyFilterStatsSessionAndProof(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	proximity, err := engine.BuildProximity(2, []ProximityRecord{
+		{Key: []byte("a"), Vector: []float32{0, 0}, Value: []byte("alpha")},
+		{Key: []byte("ab"), Vector: []float32{1, 0}, Value: []byte("alphabet")},
+		{Key: []byte("b"), Vector: []float32{0.1, 0}, Value: []byte("beta")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	maxNodes, maxBytes, maxDistances, maxFrontier := uint64(1_000), uint64(1_000_000), uint64(1_000), uint64(1_000)
+	request := SearchRequest{
+		Query:  []float32{0, 0},
+		K:      3,
+		Policy: SearchPolicyFixedBudget,
+		Budget: SearchBudget{
+			MaxNodes: &maxNodes, MaxCommittedBytes: &maxBytes,
+			MaxDistanceEvaluations: &maxDistances, MaxFrontierEntries: &maxFrontier,
+		},
+		Filter:  PrefixFilter([]byte("a")),
+		Kernel:  QueryKernelScalarDeterministic,
+		Backend: SearchBackendAuto,
+	}
+	mapResult, err := proximity.Search(context.Background(), request)
+	if err != nil || len(mapResult.Neighbors) != 2 {
+		t.Fatalf("map search = %#v, %v", mapResult, err)
+	}
+	session, err := proximity.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(session.Close)
+	result, err := session.Search(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Neighbors) != 2 {
+		t.Fatalf("filtered neighbors = %#v", result.Neighbors)
+	}
+	if got := [][]byte{result.Neighbors[0].Key, result.Neighbors[1].Key}; !bytes.Equal(got[0], []byte("a")) || !bytes.Equal(got[1], []byte("ab")) {
+		t.Fatalf("filtered neighbors = %q", got)
+	}
+	if result.Stats.DistanceEvaluations == 0 || result.PlanFormatVersion == 0 {
+		t.Fatalf("incomplete result metadata = %#v", result)
+	}
+	previousProcs := runtime.GOMAXPROCS(1)
+	asyncRequest := cloneSearchRequest(request)
+	future := session.SearchAsync(context.Background(), asyncRequest)
+	asyncRequest.Filter.Prefix[0] = 'b'
+	asyncResult, err := future.Await(context.Background())
+	runtime.GOMAXPROCS(previousProcs)
+	if err != nil || len(asyncResult.Neighbors) != 2 || !bytes.Equal(asyncResult.Neighbors[1].Key, []byte("ab")) {
+		t.Fatalf("async search did not own filter inputs = %#v, %v", asyncResult, err)
+	}
+	proof, err := proximity.ProveSearch(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := proof.Verify(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(verified.Result.Neighbors) != 2 || !bytes.Equal(verified.Result.Neighbors[1].Key, []byte("ab")) {
+		t.Fatalf("verified neighbors = %#v", verified.Result.Neighbors)
+	}
+}
 
 func TestVersionedBulkPublicationUsesNativePerformancePaths(t *testing.T) {
 	config, err := DefaultConfig()
