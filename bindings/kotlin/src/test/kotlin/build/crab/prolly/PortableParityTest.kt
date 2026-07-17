@@ -16,6 +16,58 @@ import org.junit.jupiter.api.assertThrows
 
 class PortableParityTest {
     @Test
+    fun productQuantizerLifecycleIsPortableAndBounded() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                4u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "vector-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), (index % 3).toFloat(), 0f, 1f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                val config = ProductQuantizationConfigRecord(
+                    subquantizers = 2u,
+                    centroidsPerSubquantizer = 4u,
+                    trainingIterations = 2u,
+                    rerankMultiplier = 4u,
+                    seed = ULong.MAX_VALUE,
+                    maxTrainingVectors = 16uL,
+                )
+                val built = proximity.buildPq(config, workerThreads = 2uL)
+                assertEquals(16uL, built.stats.encodedVectors)
+                val request = exactProximitySearchRequest(
+                    listOf(0f, 0f, 0f, 1f), 3uL,
+                ).copy(
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    backend = SearchBackendRecord.PRODUCT_QUANTIZED,
+                )
+                built.index.use { index ->
+                    assertEquals(config, index.config)
+                    assertArrayEquals(proximity.descriptor, index.sourceDescriptor)
+                    assertEquals(true, index.quality.meanSquaredError >= 0.0)
+                    val result = index.search(proximity, request)
+                    assertEquals(SearchBackendRecord.PRODUCT_QUANTIZED, result.backend)
+                    assertArrayEquals("vector-00".bytes(), result.neighbors.first().key)
+                    val manifest = index.manifest
+                    index.proveSearch(proximity, request).use { proof ->
+                        assertEquals(
+                            SearchBackendRecord.PRODUCT_QUANTIZED,
+                            proof.verify(proximity.descriptor).result.backend,
+                        )
+                    }
+                    proximity.loadPq(manifest).use { loaded ->
+                        assertArrayEquals(manifest, loaded.manifest)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun hnswAcceleratorLifecycleIsPortable() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->

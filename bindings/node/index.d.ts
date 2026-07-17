@@ -227,6 +227,34 @@ export interface NodePortableHnswBuildStats {
   ownedBytes: string
   encodedGraphBytes: string
 }
+export interface NodePortablePqConfig {
+  subquantizers: number
+  centroidsPerSubquantizer: number
+  trainingIterations: number
+  rerankMultiplier: number
+  seed: string
+  maxTrainingVectors: string
+}
+export interface NodePortablePqBuildLimits {
+  maxTrainingVectors?: string
+  maxTrainingBytes?: string
+  maxTemporaryCodeBytes?: string
+  maxDistanceEvaluations?: string
+  maxEncodedOutputBytes?: string
+  maxWorkerThreads?: string
+}
+export interface NodePortablePqBuildStats {
+  trainingDistanceEvaluations: string
+  encodingDistanceEvaluations: string
+  encodedVectors: string
+  trainingVectors: string
+  trainingBytes: string
+  encodedOutputBytes: string
+}
+export interface NodePortablePqQuality {
+  meanSquaredError: number
+  maximumSquaredError: number
+}
 export interface NodePortableSearchStats {
   levelsVisited: string
   nodesRead: string
@@ -1252,9 +1280,23 @@ export declare class NativePortableHnswIndex {
   search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
   proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
 }
+export declare class NativePortablePqBuildResult {
+  index(): NativePortableProductQuantizer
+  stats(): NodePortablePqBuildStats
+}
+export declare class NativePortableProductQuantizer {
+  manifest(): Buffer
+  sourceDescriptor(): Buffer
+  config(): NodePortablePqConfig
+  quality(): NodePortablePqQuality
+  search(map: NativePortableProximityMap, request: NodePortableSearchRequest): NodePortableSearchResult
+  proveSearch(map: NativePortableProximityMap, request: NodePortableSearchRequest): NativePortableProximitySearchProof
+}
 export declare class NativePortableProximityMap {
   buildHnsw(config?: NodePortableHnswConfig | undefined | null, limits?: NodePortableHnswBuildLimits | undefined | null): NativePortableHnswBuildResult
   loadHnsw(manifest: Buffer): NativePortableHnswIndex
+  buildPq(config: NodePortablePqConfig | undefined | null, workerThreads: string, limits?: NodePortablePqBuildLimits | undefined | null): NativePortablePqBuildResult
+  loadPq(manifest: Buffer): NativePortableProductQuantizer
   read(): NativePortableProximityReadSession
   count(): string
   config(): NodePortableProximityConfig

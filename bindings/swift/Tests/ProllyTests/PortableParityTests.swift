@@ -4,6 +4,52 @@ import ProllyAPI
 import XCTest
 
 final class PortableParityTests: XCTestCase {
+    func testProductQuantizerLifecycleIsPortableAndBounded() throws {
+        try Engine.withMemory { engine in
+            let proximity = try engine.buildProximity(
+                dimensions: 4,
+                records: (0..<16).map { index in
+                    ProximityRecord(
+                        key: Data(String(format: "vector-%02d", index).utf8),
+                        vector: [Float(index), Float(index % 3), 0, 1],
+                        value: Data(String(format: "value-%02d", index).utf8)
+                    )
+                }
+            )
+            let config = ProductQuantizationConfigRecord(
+                subquantizers: 2,
+                centroidsPerSubquantizer: 4,
+                trainingIterations: 2,
+                rerankMultiplier: 4,
+                seed: .max,
+                maxTrainingVectors: 16
+            )
+            let built = try proximity.buildPq(config: config, workerThreads: 2)
+            XCTAssertEqual(built.stats.encodedVectors, 16)
+            var request = exactProximitySearchRequest(query: [0, 0, 0, 1], k: 3)
+            request.policy = .fixedBudget
+            request.backend = .productQuantized
+            let index = built.index
+            XCTAssertEqual(index.config, config)
+            XCTAssertEqual(index.sourceDescriptor, proximity.descriptor)
+            XCTAssertGreaterThanOrEqual(index.quality.meanSquaredError, 0)
+            let result = try index.search(proximity, request: request)
+            XCTAssertEqual(result.backend, .productQuantized)
+            XCTAssertEqual(result.neighbors.first?.key, Data("vector-00".utf8))
+            let manifest = index.manifest
+            let proof = try index.proveSearch(proximity, request: request)
+            XCTAssertEqual(
+                try proof.verify(expectedDescriptor: proximity.descriptor).result.backend,
+                .productQuantized
+            )
+            proof.close()
+            index.close()
+            let loaded = try proximity.loadPq(manifest)
+            XCTAssertEqual(loaded.manifest, manifest)
+            loaded.close()
+        }
+    }
+
     func testHnswAcceleratorLifecycleIsPortable() throws {
         try Engine.withMemory { engine in
             let proximity = try engine.buildProximity(

@@ -3,6 +3,7 @@
 module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
   HnswBuildResult = Data.define(:index, :stats)
+  ProductQuantizationBuildResult = Data.define(:index, :stats)
 
   def self.owned_proximity_search_request(request)
     budget = request.budget
@@ -569,6 +570,17 @@ module Prolly
       end
     end
     def load_hnsw(manifest) = open! { HnswIndex.new(@native.load_hnsw(manifest.b)) }
+    def build_pq(config: Prolly.default_pq_config, worker_threads: 1,
+                 limits: Prolly.default_pq_build_limits)
+      open! do
+        result = @native.build_pq(config, worker_threads, limits)
+        ProductQuantizationBuildResult.new(
+          index: ProductQuantizer.new(result.index),
+          stats: result.stats
+        )
+      end
+    end
+    def load_pq(manifest) = open! { ProductQuantizer.new(@native.load_pq(manifest.b)) }
     def verify = open! { @native.verify }
     def prove_membership(key) = open! { @native.prove_membership(key.b) }
     def prove_search(request, limits = Prolly.default_content_graph_limits)
@@ -654,6 +666,56 @@ module Prolly
 
     def open!
       raise 'HNSW index is closed' if @closed
+      yield
+    end
+  end
+
+  class ProductQuantizer
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def config = open! { @native.config }
+    def quality = open! { @native.quality }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator),
+          Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request),
+            limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+
+    def use
+      raise 'product quantizer is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def open!
+      raise 'product quantizer is closed' if @closed
       yield
     end
   end

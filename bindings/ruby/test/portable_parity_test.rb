@@ -4,6 +4,60 @@ require 'minitest/autorun'
 require 'prolly'
 
 class PortableParityTest < Minitest::Test
+  def test_product_quantizer_lifecycle_is_portable_and_bounded
+    Prolly::Engine.memory.use do |engine|
+      proximity = engine.build_proximity(
+        dimensions: 4,
+        records: 16.times.map do |index|
+          Prolly::ProximityRecord.new(
+            key: format('vector-%02d', index).b,
+            vector: [index.to_f, (index % 3).to_f, 0.0, 1.0],
+            value: format('value-%02d', index).b
+          )
+        end
+      )
+      config = Prolly::ProductQuantizationConfigRecord.new(
+        subquantizers: 2,
+        centroids_per_subquantizer: 4,
+        training_iterations: 2,
+        rerank_multiplier: 4,
+        seed: (1 << 64) - 1,
+        max_training_vectors: 16
+      )
+      built = proximity.build_pq(config: config, worker_threads: 2)
+      assert_equal 16, built.stats.encoded_vectors
+      exact = Prolly.exact_proximity_search_request([0.0, 0.0, 0.0, 1.0], 3)
+      request = Prolly::ProximitySearchRequestRecord.new(
+        query: exact.query,
+        k: exact.k,
+        policy: Prolly::SearchPolicyKind::FIXED_BUDGET,
+        adaptive_quality: exact.adaptive_quality,
+        budget: exact.budget,
+        filter: exact.filter,
+        kernel: exact.kernel,
+        backend: Prolly::SearchBackendRecord::PRODUCT_QUANTIZED,
+        hnsw_ef_search: exact.hnsw_ef_search,
+        pq_rerank_multiplier: exact.pq_rerank_multiplier
+      )
+      built.index.use do |index|
+        assert_equal config, index.config
+        assert_equal proximity.descriptor, index.source_descriptor
+        assert_operator index.quality.mean_squared_error, :>=, 0.0
+        result = index.search(proximity, request)
+        assert_equal Prolly::SearchBackendRecord::PRODUCT_QUANTIZED, result.backend
+        assert_equal 'vector-00'.b, result.neighbors.first.key
+        manifest = index.manifest
+        index.prove_search(proximity, request).use do |proof|
+          assert_equal Prolly::SearchBackendRecord::PRODUCT_QUANTIZED,
+                       proof.verify(proximity.descriptor).result.backend
+        end
+        proximity.load_pq(manifest).use do |loaded|
+          assert_equal manifest, loaded.manifest
+        end
+      end
+    end
+  end
+
   def test_hnsw_accelerator_lifecycle_is_portable
     Prolly::Engine.memory.use do |engine|
       proximity = engine.build_proximity(

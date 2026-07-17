@@ -2078,6 +2078,118 @@ end
     end
   end
 
+  # The Record type ProductQuantizationBuildLimitsRecord.
+
+  def self.check_lower_TypeProductQuantizationBuildLimitsRecord(v)
+    RustBuffer.check_lower_Optionalu64(v.max_training_vectors)
+    RustBuffer.check_lower_Optionalu64(v.max_training_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_temporary_code_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_distance_evaluations)
+    RustBuffer.check_lower_Optionalu64(v.max_encoded_output_bytes)
+    RustBuffer.check_lower_Optionalu64(v.max_worker_threads)
+  end
+
+  def self.alloc_from_TypeProductQuantizationBuildLimitsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProductQuantizationBuildLimitsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProductQuantizationBuildLimitsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProductQuantizationBuildLimitsRecord
+    end
+  end
+
+  # The Record type ProductQuantizationBuildResultRecord.
+
+  def self.check_lower_TypeProductQuantizationBuildResultRecord(v)
+    (BindingProductQuantizer.uniffi_check_lower v.index)
+    RustBuffer.check_lower_TypeProductQuantizationBuildStatsRecord(v.stats)
+  end
+
+  def self.alloc_from_TypeProductQuantizationBuildResultRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProductQuantizationBuildResultRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProductQuantizationBuildResultRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProductQuantizationBuildResultRecord
+    end
+  end
+
+  # The Record type ProductQuantizationBuildStatsRecord.
+
+  def self.check_lower_TypeProductQuantizationBuildStatsRecord(v)
+    
+    
+    
+    
+    
+    
+  end
+
+  def self.alloc_from_TypeProductQuantizationBuildStatsRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProductQuantizationBuildStatsRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProductQuantizationBuildStatsRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProductQuantizationBuildStatsRecord
+    end
+  end
+
+  # The Record type ProductQuantizationConfigRecord.
+
+  def self.check_lower_TypeProductQuantizationConfigRecord(v)
+    
+    
+    
+    
+    
+    
+  end
+
+  def self.alloc_from_TypeProductQuantizationConfigRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProductQuantizationConfigRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProductQuantizationConfigRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProductQuantizationConfigRecord
+    end
+  end
+
+  # The Record type ProductQuantizationQualityRecord.
+
+  def self.check_lower_TypeProductQuantizationQualityRecord(v)
+    
+    
+  end
+
+  def self.alloc_from_TypeProductQuantizationQualityRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeProductQuantizationQualityRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeProductQuantizationQualityRecord
+    consumeWithStream do |stream|
+      return stream.readTypeProductQuantizationQualityRecord
+    end
+  end
+
   # The Record type ProofBundleSummaryRecord.
 
   def self.check_lower_TypeProofBundleSummaryRecord(v)
@@ -6450,6 +6562,13 @@ class RustBufferStream
     return BindingMapSubscription.uniffi_allocate(handle)
   end
 
+  # The Object type BindingProductQuantizer.
+
+  def readTypeBindingProductQuantizer
+    handle = unpack_from 8, 'Q>'
+    return BindingProductQuantizer.uniffi_allocate(handle)
+  end
+
   # The Object type BindingProximityMap.
 
   def readTypeBindingProximityMap
@@ -7571,6 +7690,63 @@ class RustBufferStream
     ParallelConfigRecord.new(
       max_threads: readU64,
       parallelism_threshold: readU64
+    )
+  end
+
+  # The Record type ProductQuantizationBuildLimitsRecord.
+
+  def readTypeProductQuantizationBuildLimitsRecord
+    ProductQuantizationBuildLimitsRecord.new(
+      max_training_vectors: readOptionalu64,
+      max_training_bytes: readOptionalu64,
+      max_temporary_code_bytes: readOptionalu64,
+      max_distance_evaluations: readOptionalu64,
+      max_encoded_output_bytes: readOptionalu64,
+      max_worker_threads: readOptionalu64
+    )
+  end
+
+  # The Record type ProductQuantizationBuildResultRecord.
+
+  def readTypeProductQuantizationBuildResultRecord
+    ProductQuantizationBuildResultRecord.new(
+      index: readTypeBindingProductQuantizer,
+      stats: readTypeProductQuantizationBuildStatsRecord
+    )
+  end
+
+  # The Record type ProductQuantizationBuildStatsRecord.
+
+  def readTypeProductQuantizationBuildStatsRecord
+    ProductQuantizationBuildStatsRecord.new(
+      training_distance_evaluations: readU64,
+      encoding_distance_evaluations: readU64,
+      encoded_vectors: readU64,
+      training_vectors: readU64,
+      training_bytes: readU64,
+      encoded_output_bytes: readU64
+    )
+  end
+
+  # The Record type ProductQuantizationConfigRecord.
+
+  def readTypeProductQuantizationConfigRecord
+    ProductQuantizationConfigRecord.new(
+      subquantizers: readU32,
+      centroids_per_subquantizer: readU16,
+      training_iterations: readU16,
+      rerank_multiplier: readU32,
+      seed: readU64,
+      max_training_vectors: readU64
+    )
+  end
+
+  # The Record type ProductQuantizationQualityRecord.
+
+  def readTypeProductQuantizationQualityRecord
+    ProductQuantizationQualityRecord.new(
+      mean_squared_error: readF64,
+      maximum_squared_error: readF64
     )
   end
 
@@ -10758,6 +10934,13 @@ class RustBufferBuilder
     pack_into(8, 'Q>', handle)
   end
 
+  # The Object type BindingProductQuantizer.
+
+  def write_TypeBindingProductQuantizer(obj)
+    handle = BindingProductQuantizer.uniffi_lower obj
+    pack_into(8, 'Q>', handle)
+  end
+
   # The Object type BindingProximityMap.
 
   def write_TypeBindingProximityMap(obj)
@@ -11704,6 +11887,53 @@ class RustBufferBuilder
   def write_TypeParallelConfigRecord(v)
     self.write_U64(v.max_threads)
     self.write_U64(v.parallelism_threshold)
+  end
+
+  # The Record type ProductQuantizationBuildLimitsRecord.
+
+  def write_TypeProductQuantizationBuildLimitsRecord(v)
+    self.write_Optionalu64(v.max_training_vectors)
+    self.write_Optionalu64(v.max_training_bytes)
+    self.write_Optionalu64(v.max_temporary_code_bytes)
+    self.write_Optionalu64(v.max_distance_evaluations)
+    self.write_Optionalu64(v.max_encoded_output_bytes)
+    self.write_Optionalu64(v.max_worker_threads)
+  end
+
+  # The Record type ProductQuantizationBuildResultRecord.
+
+  def write_TypeProductQuantizationBuildResultRecord(v)
+    self.write_TypeBindingProductQuantizer(v.index)
+    self.write_TypeProductQuantizationBuildStatsRecord(v.stats)
+  end
+
+  # The Record type ProductQuantizationBuildStatsRecord.
+
+  def write_TypeProductQuantizationBuildStatsRecord(v)
+    self.write_U64(v.training_distance_evaluations)
+    self.write_U64(v.encoding_distance_evaluations)
+    self.write_U64(v.encoded_vectors)
+    self.write_U64(v.training_vectors)
+    self.write_U64(v.training_bytes)
+    self.write_U64(v.encoded_output_bytes)
+  end
+
+  # The Record type ProductQuantizationConfigRecord.
+
+  def write_TypeProductQuantizationConfigRecord(v)
+    self.write_U32(v.subquantizers)
+    self.write_U16(v.centroids_per_subquantizer)
+    self.write_U16(v.training_iterations)
+    self.write_U32(v.rerank_multiplier)
+    self.write_U64(v.seed)
+    self.write_U64(v.max_training_vectors)
+  end
+
+  # The Record type ProductQuantizationQualityRecord.
+
+  def write_TypeProductQuantizationQualityRecord(v)
+    self.write_F64(v.mean_squared_error)
+    self.write_F64(v.maximum_squared_error)
   end
 
   # The Record type ProofBundleSummaryRecord.
@@ -14877,6 +15107,30 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_clone_bindingproductquantizer,
+    [:uint64, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_free_bindingproductquantizer,
+    [:uint64, RustCallStatus.by_ref],
+    :void
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_config,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_search,
+    [:uint64, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor,
+    [:uint64, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_clone_bindingproximitymap,
     [:uint64, RustCallStatus.by_ref],
     :uint64
@@ -14885,6 +15139,9 @@ module UniFFILib
     :void
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,
     [:uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq,
+    [:uint64, RustBuffer.by_value, :uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,
     [:uint64, RustCallStatus.by_ref],
@@ -14908,6 +15165,9 @@ module UniFFILib
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
   attach_function :uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate,
@@ -15828,6 +16088,12 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_default_hnsw_config,
     [RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_pq_build_limits,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_default_pq_config,
+    [RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_func_default_proximity_config,
     [:uint32, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -16231,6 +16497,12 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_hnsw_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_pq_build_limits,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_default_pq_config,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_default_proximity_config,
@@ -17049,7 +17321,28 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_method_bindinghnswindex_source_descriptor,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_config,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_manifest,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_prove_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_quality,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_search,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproductquantizer_source_descriptor,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache,
@@ -17074,6 +17367,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate,
@@ -22483,6 +22779,159 @@ class HnswConfigRecord
   end
 end
   
+  # Record type ProductQuantizationBuildLimitsRecord
+class ProductQuantizationBuildLimitsRecord
+  attr_reader :max_training_vectors, :max_training_bytes, :max_temporary_code_bytes, :max_distance_evaluations, :max_encoded_output_bytes, :max_worker_threads
+
+  def initialize(max_training_vectors:, max_training_bytes:, max_temporary_code_bytes:, max_distance_evaluations:, max_encoded_output_bytes:, max_worker_threads:)
+    @max_training_vectors = max_training_vectors
+    @max_training_bytes = max_training_bytes
+    @max_temporary_code_bytes = max_temporary_code_bytes
+    @max_distance_evaluations = max_distance_evaluations
+    @max_encoded_output_bytes = max_encoded_output_bytes
+    @max_worker_threads = max_worker_threads
+  end
+
+  def ==(other)
+    if @max_training_vectors != other.max_training_vectors
+      return false
+    end
+    if @max_training_bytes != other.max_training_bytes
+      return false
+    end
+    if @max_temporary_code_bytes != other.max_temporary_code_bytes
+      return false
+    end
+    if @max_distance_evaluations != other.max_distance_evaluations
+      return false
+    end
+    if @max_encoded_output_bytes != other.max_encoded_output_bytes
+      return false
+    end
+    if @max_worker_threads != other.max_worker_threads
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type ProductQuantizationBuildResultRecord
+class ProductQuantizationBuildResultRecord
+  attr_reader :index, :stats
+
+  def initialize(index:, stats:)
+    @index = index
+    @stats = stats
+  end
+
+  def ==(other)
+    if @index != other.index
+      return false
+    end
+    if @stats != other.stats
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type ProductQuantizationBuildStatsRecord
+class ProductQuantizationBuildStatsRecord
+  attr_reader :training_distance_evaluations, :encoding_distance_evaluations, :encoded_vectors, :training_vectors, :training_bytes, :encoded_output_bytes
+
+  def initialize(training_distance_evaluations:, encoding_distance_evaluations:, encoded_vectors:, training_vectors:, training_bytes:, encoded_output_bytes:)
+    @training_distance_evaluations = training_distance_evaluations
+    @encoding_distance_evaluations = encoding_distance_evaluations
+    @encoded_vectors = encoded_vectors
+    @training_vectors = training_vectors
+    @training_bytes = training_bytes
+    @encoded_output_bytes = encoded_output_bytes
+  end
+
+  def ==(other)
+    if @training_distance_evaluations != other.training_distance_evaluations
+      return false
+    end
+    if @encoding_distance_evaluations != other.encoding_distance_evaluations
+      return false
+    end
+    if @encoded_vectors != other.encoded_vectors
+      return false
+    end
+    if @training_vectors != other.training_vectors
+      return false
+    end
+    if @training_bytes != other.training_bytes
+      return false
+    end
+    if @encoded_output_bytes != other.encoded_output_bytes
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type ProductQuantizationConfigRecord
+class ProductQuantizationConfigRecord
+  attr_reader :subquantizers, :centroids_per_subquantizer, :training_iterations, :rerank_multiplier, :seed, :max_training_vectors
+
+  def initialize(subquantizers:, centroids_per_subquantizer:, training_iterations:, rerank_multiplier:, seed:, max_training_vectors:)
+    @subquantizers = subquantizers
+    @centroids_per_subquantizer = centroids_per_subquantizer
+    @training_iterations = training_iterations
+    @rerank_multiplier = rerank_multiplier
+    @seed = seed
+    @max_training_vectors = max_training_vectors
+  end
+
+  def ==(other)
+    if @subquantizers != other.subquantizers
+      return false
+    end
+    if @centroids_per_subquantizer != other.centroids_per_subquantizer
+      return false
+    end
+    if @training_iterations != other.training_iterations
+      return false
+    end
+    if @rerank_multiplier != other.rerank_multiplier
+      return false
+    end
+    if @seed != other.seed
+      return false
+    end
+    if @max_training_vectors != other.max_training_vectors
+      return false
+    end
+
+    true
+  end
+end
+  
+  # Record type ProductQuantizationQualityRecord
+class ProductQuantizationQualityRecord
+  attr_reader :mean_squared_error, :maximum_squared_error
+
+  def initialize(mean_squared_error:, maximum_squared_error:)
+    @mean_squared_error = mean_squared_error
+    @maximum_squared_error = maximum_squared_error
+  end
+
+  def ==(other)
+    if @mean_squared_error != other.mean_squared_error
+      return false
+    end
+    if @maximum_squared_error != other.maximum_squared_error
+      return false
+    end
+
+    true
+  end
+end
+  
   # Record type ProximityConfigRecord
 class ProximityConfigRecord
   attr_reader :dimensions, :metric, :log_chunk_size, :level_hash_seed, :min_page_bytes, :target_page_bytes, :max_page_bytes, :overflow_hash_seed, :inline_threshold_bytes, :scalar_quantization_group_size
@@ -24928,6 +25377,24 @@ end
 def self.default_hnsw_config()
   result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_hnsw_config,)
   return result.consumeIntoTypeHnswConfigRecord
+end
+
+
+  
+  
+
+def self.default_pq_build_limits()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_pq_build_limits,)
+  return result.consumeIntoTypeProductQuantizationBuildLimitsRecord
+end
+
+
+  
+  
+
+def self.default_pq_config()
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_default_pq_config,)
+  return result.consumeIntoTypeProductQuantizationConfigRecord
 end
 
 
@@ -28154,6 +28621,88 @@ end
   
 end
   
+  class BindingProductQuantizer
+
+  # A private helper for initializing instances of the class from a raw handle,
+  # bypassing any initialization logic and ensuring they are GC'd properly.
+  def self.uniffi_allocate(handle)
+    inst = allocate
+    inst.instance_variable_set :@handle, handle
+    ObjectSpace.define_finalizer(inst, uniffi_define_finalizer_by_handle(handle, inst.object_id))
+    return inst
+  end
+
+  # A private helper for registering an object finalizer.
+  # N.B. it's important that this does not capture a reference
+  # to the actual instance, only its underlying handle.
+  def self.uniffi_define_finalizer_by_handle(handle, object_id)
+    Proc.new do |_id|
+      Prolly.rust_call(
+        :uniffi_prolly_bindings_fn_free_bindingproductquantizer,
+        handle
+      )
+    end
+  end
+
+  # A private helper for lowering instances into a raw handle.
+  # This does an explicit typecheck, because accidentally lowering a different type of
+  # object in a place where this type is expected, could lead to memory unsafety.
+  def self.uniffi_check_lower(inst)
+    if not inst.is_a? self
+      raise TypeError.new "Expected a BindingProductQuantizer instance, got #{inst}"
+    end
+  end
+
+  def uniffi_clone_handle()
+    return Prolly.rust_call(
+      :uniffi_prolly_bindings_fn_clone_bindingproductquantizer,
+      @handle
+    )
+  end
+
+  def self.uniffi_lower(inst)
+    return inst.uniffi_clone_handle()
+  end
+
+  
+
+  def config()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproductquantizer_config,uniffi_clone_handle(),)
+    return result.consumeIntoTypeProductQuantizationConfigRecord
+  end
+  def manifest()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  def prove_search(map, request, limits)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+        limits = limits
+        RustBuffer.check_lower_TypeContentGraphLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request),RustBuffer.alloc_from_TypeContentGraphLimitsRecord(limits))
+    return BindingProximitySearchProof.uniffi_allocate(result)
+  end
+  def quality()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality,uniffi_clone_handle(),)
+    return result.consumeIntoTypeProductQuantizationQualityRecord
+  end
+  def search(map, request)
+        map = map
+        (BindingProximityMap.uniffi_check_lower map)
+        request = request
+        RustBuffer.check_lower_TypeProximitySearchRequestRecord(request)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproductquantizer_search,uniffi_clone_handle(),(BindingProximityMap.uniffi_lower map),RustBuffer.alloc_from_TypeProximitySearchRequestRecord(request))
+    return result.consumeIntoTypeProximitySearchResultRecord
+  end
+  def source_descriptor()
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor,uniffi_clone_handle(),)
+    return result.consumeIntoBytes
+  end
+  
+end
+  
   class BindingProximityMap
 
   # A private helper for initializing instances of the class from a raw handle,
@@ -28207,6 +28756,16 @@ end
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw,uniffi_clone_handle(),RustBuffer.alloc_from_TypeHnswConfigRecord(config),RustBuffer.alloc_from_TypeHnswBuildLimitsRecord(limits))
     return result.consumeIntoTypeHnswBuildResultRecord
   end
+  def build_pq(config, worker_threads, limits)
+        config = config
+        RustBuffer.check_lower_TypeProductQuantizationConfigRecord(config)
+        worker_threads = Prolly::uniffi_in_range(worker_threads, "u64", 0, 2**64)
+        
+        limits = limits
+        RustBuffer.check_lower_TypeProductQuantizationBuildLimitsRecord(limits)
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq,uniffi_clone_handle(),RustBuffer.alloc_from_TypeProductQuantizationConfigRecord(config),worker_threads,RustBuffer.alloc_from_TypeProductQuantizationBuildLimitsRecord(limits))
+    return result.consumeIntoTypeProductQuantizationBuildResultRecord
+  end
   def clear_content_cache()
       Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache,uniffi_clone_handle(),)
   end
@@ -28244,6 +28803,12 @@ end
         
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw,uniffi_clone_handle(),RustBuffer.allocFromBytes(manifest))
     return BindingHnswIndex.uniffi_allocate(result)
+  end
+  def load_pq(manifest)
+        manifest = Prolly::uniffi_bytes(manifest)
+        
+    result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq,uniffi_clone_handle(),RustBuffer.allocFromBytes(manifest))
+    return BindingProductQuantizer.uniffi_allocate(result)
   end
   def mutate(mutations)
         mutations = mutations

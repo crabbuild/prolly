@@ -7,6 +7,7 @@ import build.crab.prolly.BindingIndexRegistry
 import build.crab.prolly.BindingMapComparison
 import build.crab.prolly.BindingMapMerge
 import build.crab.prolly.BindingMapSubscription
+import build.crab.prolly.BindingProductQuantizer
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
 import build.crab.prolly.BindingProximitySearchProof
@@ -33,6 +34,10 @@ import build.crab.prolly.ProximityMutationStatsRecord
 import build.crab.prolly.ProximityRecordRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchRequestRecord
+import build.crab.prolly.ProductQuantizationBuildLimitsRecord
+import build.crab.prolly.ProductQuantizationBuildStatsRecord
+import build.crab.prolly.ProductQuantizationConfigRecord
+import build.crab.prolly.ProductQuantizationQualityRecord
 import build.crab.prolly.RangeCursorRecord
 import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ProximityConfigRecord
@@ -43,6 +48,8 @@ import build.crab.prolly.defaultConfig
 import build.crab.prolly.defaultContentGraphLimits
 import build.crab.prolly.defaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig
+import build.crab.prolly.defaultPqBuildLimits
+import build.crab.prolly.defaultPqConfig
 import build.crab.prolly.defaultProximityConfig
 import build.crab.prolly.exactProximitySearchRequest
 import build.crab.prolly.verifyKeyProof as verifyNativeKeyProof
@@ -56,6 +63,10 @@ import kotlinx.coroutines.withContext
 
 data class ProximityRecord(val key: ByteArray, val vector: List<Float>, val value: ByteArray)
 data class HnswBuildResult(val index: HnswIndex, val stats: HnswBuildStatsRecord)
+data class ProductQuantizationBuildResult(
+    val index: ProductQuantizer,
+    val stats: ProductQuantizationBuildStatsRecord,
+)
 
 private fun ownedSearchRequest(request: ProximitySearchRequestRecord) = request.copy(
     query = request.query.toList(),
@@ -401,6 +412,15 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         return HnswBuildResult(HnswIndex(result.index), result.stats)
     }
     fun loadHnsw(manifest: ByteArray) = HnswIndex(native.loadHnsw(manifest.copyOf()))
+    fun buildPq(
+        config: ProductQuantizationConfigRecord = defaultPqConfig(),
+        workerThreads: ULong = 1uL,
+        limits: ProductQuantizationBuildLimitsRecord = defaultPqBuildLimits(),
+    ): ProductQuantizationBuildResult {
+        val result = native.buildPq(config, workerThreads, limits)
+        return ProductQuantizationBuildResult(ProductQuantizer(result.index), result.stats)
+    }
+    fun loadPq(manifest: ByteArray) = ProductQuantizer(native.loadPq(manifest.copyOf()))
     fun get(key: ByteArray) = native.get(key.copyOf())
     fun containsKey(key: ByteArray) = native.containsKey(key.copyOf())
     fun search(request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
@@ -440,6 +460,21 @@ class HnswIndex(internal val native: BindingHnswIndex) : AutoCloseable {
     val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
     val config: HnswConfigRecord get() = native.config()
     val isCanonical: Boolean get() = native.isCanonical()
+    fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        native.search(map.native, ownedSearchRequest(request))
+    fun proveSearch(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = ProximitySearchProof(native.proveSearch(map.native, ownedSearchRequest(request), limits))
+    override fun close() = native.close()
+}
+
+class ProductQuantizer(internal val native: BindingProductQuantizer) : AutoCloseable {
+    val manifest: ByteArray get() = native.manifest().copyOf()
+    val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
+    val config: ProductQuantizationConfigRecord get() = native.config()
+    val quality: ProductQuantizationQualityRecord get() = native.quality()
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
     fun proveSearch(

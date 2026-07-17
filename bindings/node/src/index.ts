@@ -10,8 +10,11 @@ export { ViewExpiredError } from "./packed.ts";
 export {
   defaultHnswBuildLimits,
   defaultHnswConfig,
+  defaultPqBuildLimits,
+  defaultPqConfig,
   exactSearch,
   HnswIndex,
+  ProductQuantizer,
   ProximityMap,
   ProximityReadSession,
 } from "./proximity.ts";

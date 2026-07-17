@@ -141,6 +141,57 @@ mod tests {
         let loaded = map.load_hnsw(built.index.manifest()).unwrap();
         assert_eq!(loaded.manifest(), built.index.manifest());
     }
+
+    #[test]
+    fn pq_accelerator_lifecycle_is_portable_bounded_and_source_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..16)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: vec![index as f32, (index % 3) as f32, 0.0, 1.0],
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(4), records, None)
+            .unwrap();
+        let config = ProductQuantizationConfigRecord {
+            subquantizers: 2,
+            centroids_per_subquantizer: 4,
+            training_iterations: 2,
+            rerank_multiplier: 4,
+            seed: u64::MAX,
+            max_training_vectors: 16,
+        };
+        let built = map
+            .build_pq(config.clone(), 2, default_pq_build_limits())
+            .unwrap();
+        assert_eq!(built.stats.encoded_vectors, 16);
+        assert_eq!(built.index.config(), config);
+        assert_eq!(built.index.source_descriptor(), map.descriptor());
+        assert!(built.index.quality().mean_squared_error.is_finite());
+
+        let mut request = ProximitySearchRequestRecord::exact(vec![0.0, 0.0, 0.0, 1.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::ProductQuantized;
+        let result = built.index.search(map.clone(), request.clone()).unwrap();
+        assert_eq!(result.backend, SearchBackendRecord::ProductQuantized);
+        assert_eq!(result.neighbors[0].key, b"vector-00");
+        let proof = built
+            .index
+            .prove_search(map.clone(), request, ContentGraphLimitsRecord::defaults())
+            .unwrap();
+        assert_eq!(
+            proof
+                .verify(Some(map.descriptor()), ContentGraphLimitsRecord::defaults())
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::ProductQuantized
+        );
+        let loaded = map.load_pq(built.index.manifest()).unwrap();
+        assert_eq!(loaded.manifest(), built.index.manifest());
+    }
 }
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -150,12 +201,14 @@ use prolly::{
     AdaptiveQuality, BuildParallelism, ContentGraphLimits, ContentObjectKind, DistanceMetric,
     HierarchyConfig, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
     HnswRoutingVectorEncoding, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy,
-    PqSearchOptions, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
-    ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchClaim,
-    ProximitySearchProof, ProximitySearchStats, ProximityStructuralProof, ProximityVerification,
-    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion,
-    SearchOptions, SearchPolicy, SearchRequest, SearchResult, Store, TypedContentObject,
-    TypedContentRoot, VectorStorageConfig,
+    PqSearchOptions, ProductQuantizationBuildLimits, ProductQuantizationBuildStats,
+    ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityConfig,
+    ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation,
+    ProximityMutationStats, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
+    ProximitySearchStats, ProximityStructuralProof, ProximityVerification, QueryKernel,
+    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchOptions,
+    SearchPolicy, SearchRequest, SearchResult, Store, TypedContentObject, TypedContentRoot,
+    VectorStorageConfig,
 };
 
 use crate::{BindingEngine, KeyProofRecord, ProllyBindingError, ProllyEngine};
@@ -911,6 +964,137 @@ pub fn default_hnsw_build_limits() -> HnswBuildLimitsRecord {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProductQuantizationConfigRecord {
+    pub subquantizers: u32,
+    pub centroids_per_subquantizer: u16,
+    pub training_iterations: u16,
+    pub rerank_multiplier: u32,
+    pub seed: u64,
+    pub max_training_vectors: u64,
+}
+
+impl TryFrom<ProductQuantizationConfigRecord> for ProductQuantizationConfig {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: ProductQuantizationConfigRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: value.centroids_per_subquantizer,
+            training_iterations: value.training_iterations,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed,
+            max_training_vectors: to_usize(value.max_training_vectors, "max_training_vectors")?,
+        })
+    }
+}
+
+impl From<ProductQuantizationConfig> for ProductQuantizationConfigRecord {
+    fn from(value: ProductQuantizationConfig) -> Self {
+        Self {
+            subquantizers: value.subquantizers,
+            centroids_per_subquantizer: value.centroids_per_subquantizer,
+            training_iterations: value.training_iterations,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed,
+            max_training_vectors: value.max_training_vectors as u64,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProductQuantizationBuildLimitsRecord {
+    pub max_training_vectors: Option<u64>,
+    pub max_training_bytes: Option<u64>,
+    pub max_temporary_code_bytes: Option<u64>,
+    pub max_distance_evaluations: Option<u64>,
+    pub max_encoded_output_bytes: Option<u64>,
+    pub max_worker_threads: Option<u64>,
+}
+
+impl TryFrom<ProductQuantizationBuildLimitsRecord> for ProductQuantizationBuildLimits {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: ProductQuantizationBuildLimitsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_training_vectors: optional_usize(
+                value.max_training_vectors,
+                "max_training_vectors",
+            )?,
+            max_training_bytes: optional_usize(value.max_training_bytes, "max_training_bytes")?,
+            max_temporary_code_bytes: optional_usize(
+                value.max_temporary_code_bytes,
+                "max_temporary_code_bytes",
+            )?,
+            max_distance_evaluations: optional_usize(
+                value.max_distance_evaluations,
+                "max_distance_evaluations",
+            )?,
+            max_encoded_output_bytes: optional_usize(
+                value.max_encoded_output_bytes,
+                "max_encoded_output_bytes",
+            )?,
+            max_worker_threads: optional_usize(value.max_worker_threads, "max_worker_threads")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct ProductQuantizationBuildStatsRecord {
+    pub training_distance_evaluations: u64,
+    pub encoding_distance_evaluations: u64,
+    pub encoded_vectors: u64,
+    pub training_vectors: u64,
+    pub training_bytes: u64,
+    pub encoded_output_bytes: u64,
+}
+
+impl From<ProductQuantizationBuildStats> for ProductQuantizationBuildStatsRecord {
+    fn from(value: ProductQuantizationBuildStats) -> Self {
+        Self {
+            training_distance_evaluations: value.training_distance_evaluations as u64,
+            encoding_distance_evaluations: value.encoding_distance_evaluations as u64,
+            encoded_vectors: value.encoded_vectors as u64,
+            training_vectors: value.training_vectors as u64,
+            training_bytes: value.training_bytes as u64,
+            encoded_output_bytes: value.encoded_output_bytes as u64,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, uniffi::Record)]
+pub struct ProductQuantizationQualityRecord {
+    pub mean_squared_error: f64,
+    pub maximum_squared_error: f64,
+}
+
+impl From<ProductQuantizationQuality> for ProductQuantizationQualityRecord {
+    fn from(value: ProductQuantizationQuality) -> Self {
+        Self {
+            mean_squared_error: value.mean_squared_error,
+            maximum_squared_error: value.maximum_squared_error,
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn default_pq_config() -> ProductQuantizationConfigRecord {
+    ProductQuantizationConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn default_pq_build_limits() -> ProductQuantizationBuildLimitsRecord {
+    let value = ProductQuantizationBuildLimits::default();
+    ProductQuantizationBuildLimitsRecord {
+        max_training_vectors: value.max_training_vectors.map(|value| value as u64),
+        max_training_bytes: value.max_training_bytes.map(|value| value as u64),
+        max_temporary_code_bytes: value.max_temporary_code_bytes.map(|value| value as u64),
+        max_distance_evaluations: value.max_distance_evaluations.map(|value| value as u64),
+        max_encoded_output_bytes: value.max_encoded_output_bytes.map(|value| value as u64),
+        max_worker_threads: value.max_worker_threads.map(|value| value as u64),
+    }
+}
+
 impl From<SearchResult> for ProximitySearchResultRecord {
     fn from(value: SearchResult) -> Self {
         Self {
@@ -1219,6 +1403,15 @@ pub struct BindingHnswIndex {
     canonical: bool,
 }
 
+#[derive(uniffi::Object)]
+pub struct BindingProductQuantizer {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    source_descriptor: Vec<u8>,
+    config: ProductQuantizationConfigRecord,
+    quality: ProductQuantizationQualityRecord,
+}
+
 fn search_hnsw<S>(
     store: S,
     manifest: &prolly::Cid,
@@ -1249,6 +1442,42 @@ where
     S::Error: Send + Sync,
 {
     let index = HnswIndex::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+fn search_pq<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = ProductQuantizer::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .search(&map, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn prove_pq_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = ProductQuantizer::load(store.clone(), manifest.clone())?;
     let map = ProximityMap::load(store, source.clone())?;
     index
         .prove_search(&map, request, limits)
@@ -1337,10 +1566,100 @@ impl BindingHnswIndex {
     }
 }
 
+#[uniffi::export]
+impl BindingProductQuantizer {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.source_descriptor.clone()
+    }
+
+    pub fn config(&self) -> ProductQuantizationConfigRecord {
+        self.config.clone()
+    }
+
+    pub fn quality(&self) -> ProductQuantizationQualityRecord {
+        self.quality
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "product quantizer and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_pq(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "product quantizer and proximity map belong to different engines"
+                    .to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::File(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+            BindingEngine::Host(engine) => {
+                prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
+            }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
 #[derive(Clone, uniffi::Record)]
 pub struct HnswBuildResultRecord {
     pub index: Arc<BindingHnswIndex>,
     pub stats: HnswBuildStatsRecord,
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct ProductQuantizationBuildResultRecord {
+    pub index: Arc<BindingProductQuantizer>,
+    pub stats: ProductQuantizationBuildStatsRecord,
 }
 
 impl BindingProximityMap {
@@ -1486,6 +1805,54 @@ impl BindingProximityMap {
                 source_descriptor: index.source_descriptor().0.to_vec(),
                 config: index.config().clone().into(),
                 canonical: index.is_canonical(),
+            }))
+        })
+    }
+
+    pub fn build_pq(
+        &self,
+        config: ProductQuantizationConfigRecord,
+        worker_threads: u64,
+        limits: ProductQuantizationBuildLimitsRecord,
+    ) -> Result<ProductQuantizationBuildResultRecord, ProllyBindingError> {
+        let config = ProductQuantizationConfig::try_from(config)?;
+        let parallelism = BuildParallelism::new(to_usize(worker_threads, "worker_threads")?)?;
+        let limits = ProductQuantizationBuildLimits::try_from(limits)?;
+        with_proximity_map!(self, map, {
+            let (index, stats) =
+                ProductQuantizer::build_with_limits(&map, config, parallelism, limits)?;
+            Ok(ProductQuantizationBuildResultRecord {
+                index: Arc::new(BindingProductQuantizer {
+                    engine: self.engine.clone(),
+                    manifest: index.manifest_cid().0.to_vec(),
+                    source_descriptor: index.source_descriptor().0.to_vec(),
+                    config: index.config().clone().into(),
+                    quality: index.quality().into(),
+                }),
+                stats: stats.into(),
+            })
+        })
+    }
+
+    pub fn load_pq(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingProductQuantizer>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let index = ProductQuantizer::load(store, manifest)?;
+            if index.source_descriptor() != &map.tree().descriptor {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "product quantizer is bound to a different source descriptor"
+                        .to_string(),
+                });
+            }
+            Ok(Arc::new(BindingProductQuantizer {
+                engine: self.engine.clone(),
+                manifest: index.manifest_cid().0.to_vec(),
+                source_descriptor: index.source_descriptor().0.to_vec(),
+                config: index.config().clone().into(),
+                quality: index.quality().into(),
             }))
         })
     }

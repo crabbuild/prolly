@@ -5,6 +5,49 @@ import { Engine, exactSearch } from "../src/index.ts";
 
 const bytes = (value: string): Buffer => Buffer.from(value);
 
+test("product quantizer lifecycle is portable and bounded", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(4, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, index % 3, 0, 1]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const config = {
+      subquantizers: 2,
+      centroidsPerSubquantizer: 4,
+      trainingIterations: 2,
+      rerankMultiplier: 4,
+      seed: (1n << 64n) - 1n,
+      maxTrainingVectors: 16n,
+    };
+    const built = await proximity.buildPq({ config, workerThreads: 2n });
+    assert.equal(built.stats.encodedVectors, 16n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0, 0, 1]), 3),
+      policy: "fixed_budget" as const,
+      backend: "product_quantized" as const,
+    };
+    const index = built.index;
+    assert.deepEqual(index.config(), config);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.ok(index.quality().meanSquaredError >= 0);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "product_quantized");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "vector-00");
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "product_quantized");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadPq(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("HNSW accelerator lifecycle is portable", async () => {
   const engine = await Engine.memory();
   try {

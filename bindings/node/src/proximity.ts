@@ -132,6 +132,65 @@ export function defaultHnswBuildLimits(): HnswBuildLimits {
   return { workerThreads: 1n };
 }
 
+export interface ProductQuantizationConfig {
+  subquantizers: number;
+  centroidsPerSubquantizer: number;
+  trainingIterations: number;
+  rerankMultiplier: number;
+  seed: bigint;
+  maxTrainingVectors: bigint;
+}
+
+export interface ProductQuantizationBuildLimits {
+  maxTrainingVectors?: bigint;
+  maxTrainingBytes?: bigint;
+  maxTemporaryCodeBytes?: bigint;
+  maxDistanceEvaluations?: bigint;
+  maxEncodedOutputBytes?: bigint;
+  maxWorkerThreads?: bigint;
+}
+
+export interface ProductQuantizationBuildStats {
+  trainingDistanceEvaluations: bigint;
+  encodingDistanceEvaluations: bigint;
+  encodedVectors: bigint;
+  trainingVectors: bigint;
+  trainingBytes: bigint;
+  encodedOutputBytes: bigint;
+}
+
+export interface ProductQuantizationQuality {
+  meanSquaredError: number;
+  maximumSquaredError: number;
+}
+
+export interface ProductQuantizationBuildOptions {
+  config?: ProductQuantizationConfig;
+  workerThreads?: bigint;
+  limits?: ProductQuantizationBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface ProductQuantizationBuildResult {
+  index: ProductQuantizer;
+  stats: ProductQuantizationBuildStats;
+}
+
+export function defaultPqConfig(): ProductQuantizationConfig {
+  return {
+    subquantizers: 8,
+    centroidsPerSubquantizer: 256,
+    trainingIterations: 12,
+    rerankMultiplier: 8,
+    seed: 0n,
+    maxTrainingVectors: 65_536n,
+  };
+}
+
+export function defaultPqBuildLimits(): ProductQuantizationBuildLimits {
+  return {};
+}
+
 export interface ProximityMutation {
   key: Uint8Array;
   vector?: Float32Array;
@@ -228,6 +287,43 @@ interface NativeHnswIndex {
   proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
 }
 
+interface NativePqConfig {
+  subquantizers: number;
+  centroidsPerSubquantizer: number;
+  trainingIterations: number;
+  rerankMultiplier: number;
+  seed: string;
+  maxTrainingVectors: string;
+}
+interface NativePqBuildLimits {
+  maxTrainingVectors?: string;
+  maxTrainingBytes?: string;
+  maxTemporaryCodeBytes?: string;
+  maxDistanceEvaluations?: string;
+  maxEncodedOutputBytes?: string;
+  maxWorkerThreads?: string;
+}
+interface NativePqBuildStats {
+  trainingDistanceEvaluations: string;
+  encodingDistanceEvaluations: string;
+  encodedVectors: string;
+  trainingVectors: string;
+  trainingBytes: string;
+  encodedOutputBytes: string;
+}
+interface NativePqBuildResult {
+  index(): NativeProductQuantizer;
+  stats(): NativePqBuildStats;
+}
+interface NativeProductQuantizer {
+  manifest(): Uint8Array;
+  sourceDescriptor(): Uint8Array;
+  config(): NativePqConfig;
+  quality(): ProductQuantizationQuality;
+  search(map: NativeProximityMap, request: NativeSearchRequest): NativeSearchResult;
+  proveSearch(map: NativeProximityMap, request: NativeSearchRequest): NativeProximitySearchProof;
+}
+
 interface NativeSearchRequest {
   query: Float32Array;
   k: string;
@@ -264,6 +360,8 @@ interface NativeSearchResult {
 interface NativeProximityMap {
   buildHnsw(config?: NativeHnswConfig, limits?: NativeHnswBuildLimits): NativeHnswBuildResult;
   loadHnsw(manifest: Uint8Array): NativeHnswIndex;
+  buildPq(config: NativePqConfig | undefined, workerThreads: string, limits?: NativePqBuildLimits): NativePqBuildResult;
+  loadPq(manifest: Uint8Array): NativeProductQuantizer;
   read(): NativeProximityReadSession;
   search(request: NativeSearchRequest): NativeSearchResult;
   count(): string;
@@ -402,6 +500,64 @@ function hnswBuildStats(value: NativeHnswBuildStats): HnswBuildStats {
   };
 }
 
+function ownPqConfig(value: ProductQuantizationConfig | undefined): NativePqConfig | undefined {
+  if (value == null) return undefined;
+  return {
+    subquantizers: requireUnsignedInteger(value.subquantizers, 0xffff_ffff, "subquantizers"),
+    centroidsPerSubquantizer: requireUnsignedInteger(
+      value.centroidsPerSubquantizer, 0xffff, "centroidsPerSubquantizer",
+    ),
+    trainingIterations: requireUnsignedInteger(
+      value.trainingIterations, 0xffff, "trainingIterations",
+    ),
+    rerankMultiplier: requireUnsignedInteger(
+      value.rerankMultiplier, 0xffff_ffff, "rerankMultiplier",
+    ),
+    seed: requireUnsignedBigInt(value.seed, "seed"),
+    maxTrainingVectors: requireUnsignedBigInt(
+      value.maxTrainingVectors, "maxTrainingVectors",
+    ),
+  };
+}
+
+function ownPqBuildLimits(
+  value: ProductQuantizationBuildLimits | undefined,
+): NativePqBuildLimits | undefined {
+  if (value == null) return undefined;
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name);
+  return {
+    maxTrainingVectors: optional(value.maxTrainingVectors, "maxTrainingVectors"),
+    maxTrainingBytes: optional(value.maxTrainingBytes, "maxTrainingBytes"),
+    maxTemporaryCodeBytes: optional(value.maxTemporaryCodeBytes, "maxTemporaryCodeBytes"),
+    maxDistanceEvaluations: optional(value.maxDistanceEvaluations, "maxDistanceEvaluations"),
+    maxEncodedOutputBytes: optional(value.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxWorkerThreads: optional(value.maxWorkerThreads, "maxWorkerThreads"),
+  };
+}
+
+function pqBuildStats(value: NativePqBuildStats): ProductQuantizationBuildStats {
+  return {
+    trainingDistanceEvaluations: BigInt(value.trainingDistanceEvaluations),
+    encodingDistanceEvaluations: BigInt(value.encodingDistanceEvaluations),
+    encodedVectors: BigInt(value.encodedVectors),
+    trainingVectors: BigInt(value.trainingVectors),
+    trainingBytes: BigInt(value.trainingBytes),
+    encodedOutputBytes: BigInt(value.encodedOutputBytes),
+  };
+}
+
+function pqConfig(value: NativePqConfig): ProductQuantizationConfig {
+  return {
+    subquantizers: value.subquantizers,
+    centroidsPerSubquantizer: value.centroidsPerSubquantizer,
+    trainingIterations: value.trainingIterations,
+    rerankMultiplier: value.rerankMultiplier,
+    seed: BigInt(value.seed),
+    maxTrainingVectors: BigInt(value.maxTrainingVectors),
+  };
+}
+
 function searchResult(value: NativeSearchResult): SearchResult {
   return {
     neighbors: value.neighbors.map((neighbor) => ({
@@ -484,6 +640,22 @@ export class ProximityMap implements Disposable {
   loadHnsw(manifest: Uint8Array): HnswIndex {
     return new HnswIndex(this.nativeHandle().loadHnsw(ownedBytes(manifest)));
   }
+  buildPq(options: ProductQuantizationBuildOptions = {}): Promise<ProductQuantizationBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownPqConfig(options.config);
+    const limits = ownPqBuildLimits(options.limits);
+    const workerThreads = requireUnsignedBigInt(options.workerThreads ?? 1n, "workerThreads");
+    return nativePromise(options.signal, () => {
+      const result = native.buildPq(config, workerThreads, limits);
+      return {
+        index: new ProductQuantizer(result.index()),
+        stats: pqBuildStats(result.stats()),
+      };
+    });
+  }
+  loadPq(manifest: Uint8Array): ProductQuantizer {
+    return new ProductQuantizer(this.nativeHandle().loadPq(ownedBytes(manifest)));
+  }
   count(): bigint { return BigInt(this.nativeHandle().count()); }
   config(): ProximityConfig {
     const value = this.nativeHandle().config();
@@ -551,6 +723,32 @@ export class HnswIndex implements Disposable {
     };
   }
   isCanonical(): boolean { return this.#open().isCanonical(); }
+  search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const owned = ownSearchRequest(request);
+    return nativePromise(request.signal, () => searchResult(native.search(nativeMap, owned)));
+  }
+  proveSearch(map: ProximityMap, request: SearchRequest): ProximitySearchProof {
+    return new ProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class ProductQuantizer implements Disposable {
+  #native?: NativeProductQuantizer;
+  constructor(native: NativeProductQuantizer) { this.#native = native; }
+  #open(): NativeProductQuantizer {
+    if (this.#native == null) throw new Error("product quantizer is closed");
+    return this.#native;
+  }
+  manifest(): Uint8Array { return ownedBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedBytes(this.#open().sourceDescriptor()); }
+  config(): ProductQuantizationConfig { return pqConfig(this.#open().config()); }
+  quality(): ProductQuantizationQuality { return this.#open().quality(); }
   search(map: ProximityMap, request: SearchRequest): Promise<SearchResult> {
     const native = this.#open();
     const nativeMap = map.nativeHandle();

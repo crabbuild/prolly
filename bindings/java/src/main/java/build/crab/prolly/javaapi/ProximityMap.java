@@ -36,6 +36,27 @@ public final class ProximityMap implements AutoCloseable {
     public HnswIndex loadHnsw(byte[] manifest) {
         return new HnswIndex(JavaPortableBridge.loadHnsw(open(), manifest.clone()));
     }
+    public ProductQuantizationBuildResult buildPq() {
+        return buildPq(ProductQuantizationConfig.defaults(), 1, ProductQuantizationBuildLimits.defaults());
+    }
+    public ProductQuantizationBuildResult buildPq(
+            ProductQuantizationConfig config, long workerThreads) {
+        return buildPq(config, workerThreads, ProductQuantizationBuildLimits.defaults());
+    }
+    public ProductQuantizationBuildResult buildPq(
+            ProductQuantizationConfig config,
+            long workerThreads,
+            ProductQuantizationBuildLimits limits) {
+        if (workerThreads <= 0) throw new IllegalArgumentException("workerThreads must be positive");
+        var result = JavaPortableBridge.buildPq(
+                open(), config.toNative(), workerThreads, limits.toNative());
+        return new ProductQuantizationBuildResult(
+                new ProductQuantizer(result.getIndex()),
+                ProductQuantizationBuildStats.fromNative(result.getStats()));
+    }
+    public ProductQuantizer loadPq(byte[] manifest) {
+        return new ProductQuantizer(JavaPortableBridge.loadPq(open(), manifest.clone()));
+    }
     public ProximityReadSession read() { return new ProximityReadSession(this, open().read()); }
     public SearchResult search(SearchRequest request) {
         return fromNative(JavaPortableBridge.search(open(), request.toNative()));
