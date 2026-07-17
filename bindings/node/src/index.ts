@@ -97,11 +97,15 @@ export class Engine implements Disposable {
   buildProximity(
     dimensions: number,
     records: ProximityRecord[],
-    signal?: AbortSignal,
+    options: { threads?: number; signal?: AbortSignal } = {},
   ): Promise<ProximityMap> {
     const native = this.#open();
+    const threads = options.threads ?? 1;
+    if (!Number.isSafeInteger(threads) || threads <= 0) {
+      return Promise.reject(new RangeError("proximity build threads must be a positive safe integer"));
+    }
     const owned = ownProximityRecords(records);
-    return nativePromise(signal, () => new ProximityMap(native.buildProximity(dimensions, owned)));
+    return nativePromise(options.signal, () => new ProximityMap(native.buildProximity(dimensions, owned, threads)));
   }
 
   loadProximity(descriptor: Uint8Array, signal?: AbortSignal): Promise<ProximityMap> {

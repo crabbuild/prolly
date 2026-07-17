@@ -85,6 +85,11 @@ internal interface FastAbi : Library {
         key: Pointer?,
         keyLen: Long,
     ): ValueLeaseResult
+    fun prolly_fast_proximity_get_lease(
+        mapHandle: Long,
+        key: Pointer?,
+        keyLen: Long,
+    ): ValueLeaseResult
     fun prolly_fast_value_release(leaseHandle: Long)
 
     class ScanOpenResult : Structure(), Structure.ByValue {
@@ -156,6 +161,27 @@ data class NeighborView(
     val proof: ScopedBytes?,
 )
 
+class ProximityVectorView internal constructor(
+    private val pointer: Pointer,
+    private val offset: Long,
+    val dimensions: Int,
+    private val scope: PageScope,
+) {
+    fun component(index: Int): Float {
+        scope.check()
+        require(index in 0 until dimensions) { "proximity vector index is out of range" }
+        return java.lang.Float.intBitsToFloat(
+            pointer.getByte(offset + index * 4L).toInt().and(0xff) or
+                (pointer.getByte(offset + index * 4L + 1).toInt().and(0xff) shl 8) or
+                (pointer.getByte(offset + index * 4L + 2).toInt().and(0xff) shl 16) or
+                (pointer.getByte(offset + index * 4L + 3).toInt().and(0xff) shl 24),
+        )
+    }
+    fun floats(): FloatArray = FloatArray(dimensions, ::component)
+}
+
+data class ProximityRecordView(val vector: ProximityVectorView, val value: ScopedBytes)
+
 data class IndexMatchView(
     val term: ScopedBytes,
     val primaryKey: ScopedBytes,
@@ -226,6 +252,62 @@ internal object PackedPages {
             scope.close()
             FastAbi.INSTANCE.prolly_fast_value_release(result.leaseHandle)
         }
+    }
+
+    fun withProximityRecord(
+        mapHandle: ULong,
+        key: ByteArray,
+        block: (ProximityRecordView) -> Unit,
+    ): Boolean {
+        val keyMemory = Memory(key.size.toLong().coerceAtLeast(1))
+        if (key.isNotEmpty()) keyMemory.write(0, key, 0, key.size)
+        val result = FastAbi.INSTANCE.prolly_fast_proximity_get_lease(
+            mapHandle.toLong(), if (key.isEmpty()) null else keyMemory, key.size.toLong(),
+        )
+        check(result.status == 0) { "native retained proximity read failed with status ${result.status}" }
+        if (result.found.toInt() == 0) {
+            check(result.leaseHandle == 0L) { "missing proximity read returned a value lease" }
+            return false
+        }
+        check(result.leaseHandle != 0L && result.dataLen >= 8 && result.dataPtr != null) {
+            "native proximity read returned an invalid value lease"
+        }
+        val pointer = result.dataPtr!!
+        val header = pointer.getByteArray(0, 6)
+        val expected = byteArrayOf(0x50, 0x52, 0x56, 0x52, 2, 1)
+        val scope = PageScope()
+        try {
+            require(header.contentEquals(expected)) { "invalid retained proximity record header" }
+            val (dimensions, vectorStart) = readVarint(pointer, 6, result.dataLen)
+            require(dimensions <= Int.MAX_VALUE.toLong()) { "proximity dimensions exceed the JVM limit" }
+            val vectorBytes = dimensions * 4
+            require(vectorStart + vectorBytes <= result.dataLen) { "retained proximity vector is truncated" }
+            val (valueLength, valueStart) = readVarint(pointer, vectorStart + vectorBytes, result.dataLen)
+            require(valueStart + valueLength == result.dataLen) { "retained proximity value length is invalid" }
+            val bytes = pointer.getByteBuffer(0, result.dataLen)
+            block(ProximityRecordView(
+                ProximityVectorView(pointer, vectorStart, dimensions.toInt(), scope),
+                ScopedBytes(bytes, valueStart.toInt(), valueLength.toInt(), scope),
+            ))
+            return true
+        } finally {
+            scope.close()
+            FastAbi.INSTANCE.prolly_fast_value_release(result.leaseHandle)
+        }
+    }
+
+    private fun readVarint(pointer: Pointer, start: Long, length: Long): Pair<Long, Long> {
+        var offset = start
+        var shift = 0
+        var value = 0L
+        while (offset < length && shift < 64) {
+            val byte = pointer.getByte(offset).toInt().and(0xff)
+            offset += 1
+            value = value or ((byte and 0x7f).toLong() shl shift)
+            if (byte and 0x80 == 0) return value to offset
+            shift += 7
+        }
+        error("invalid proximity record varint")
     }
 
     fun withValueRef(

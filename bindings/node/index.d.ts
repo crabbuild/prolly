@@ -1442,6 +1442,7 @@ export declare class NativePortableProximityMap {
   count(): string
   config(): NodePortableProximityConfig
   get(key: Buffer): NodePortableExactProximityRecord | null
+  withRecordView(key: Buffer, visit: (arg: object) => void): boolean
   contains(key: Buffer): boolean
   scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
   search(request: NodePortableSearchRequest): NodePortableSearchResult
@@ -1465,6 +1466,7 @@ export declare class NativePortableProximityReadSession {
   cancellationToken(): NativePortableProximityCancellationToken
   searchCancellable(request: NodePortableSearchRequest, runtime: NativePortableProximitySearchRuntime | undefined | null, cancellation: NativePortableProximityCancellationToken): Promise<unknown>
   get(key: Buffer): NodePortableExactProximityRecord | null
+  withRecordView(key: Buffer, visit: (arg: object) => void): boolean
   contains(key: Buffer): boolean
   scanRecords(visitor: (record: NodePortableProximityRecord) => boolean): string
   withSearchPage(query: Float32Array, k: number, visitor: (page: { bytes: Buffer; recordCount: number; terminal: boolean }) => boolean): void
@@ -1542,7 +1544,7 @@ export declare class NativeProllyEngine {
   beginVersionedTransaction(): NativePortableVersionedTransaction
   versionedMap(id: Buffer): NativePortableVersionedMap
   indexedMap(id: Buffer, registry: NativePortableIndexRegistry): NativePortableIndexedMap
-  buildProximity(dimensions: number, records: Array<NodePortableProximityRecord>): NativePortableProximityMap
+  buildProximity(dimensions: number, records: Array<NodePortableProximityRecord>, threads: number): NativePortableProximityMap
   loadProximity(descriptor: Buffer): NativePortableProximityMap
   static memory(): NativeProllyEngine
   static memoryWithConfigJson(configJson: string): NativeProllyEngine

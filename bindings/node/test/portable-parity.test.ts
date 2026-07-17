@@ -929,3 +929,38 @@ test("pinned merges page conflicts and CAS publish", async () => {
     assert.equal(Buffer.from((await map.get(bytes("k")))!).toString(), "candidate");
   } finally { engine.close(); }
 });
+
+test("portable proximity builds accept explicit worker limits", async () => {
+  const engine = await Engine.memory();
+  try {
+    const records = [
+      { key: bytes("a"), vector: [0, 1], value: bytes("alpha") },
+      { key: bytes("b"), vector: [1, 0], value: bytes("beta") },
+    ];
+    const serial = await engine.buildProximity(2, records, { threads: 1 });
+    const parallel = await engine.buildProximity(2, records, { threads: 2 });
+    assert.deepEqual(parallel.descriptor(), serial.descriptor());
+    await assert.rejects(engine.buildProximity(2, records, { threads: 0 }), /threads/);
+    serial.close(); parallel.close();
+  } finally { engine.close(); }
+});
+
+test("proximity exact reads expose callback-scoped zero-copy record views", async () => {
+  const engine = await Engine.memory();
+  try {
+    const map = await engine.buildProximity(2, [
+      { key: bytes("a"), vector: [1.25, 2.5], value: bytes("alpha") },
+    ]);
+    let escaped: any;
+    assert.equal(map.withRecordView(bytes("a"), (record) => {
+      assert.equal(record.vector.dimensions, 2);
+      assert.equal(record.vector.component(0), 1.25);
+      assert.deepEqual(record.vector.toFloat32Array(), new Float32Array([1.25, 2.5]));
+      assert.equal(Buffer.from(record.value).toString(), "alpha");
+      escaped = record.value;
+    }), true);
+    assert.throws(() => escaped[0], /expired/);
+    assert.equal(map.withRecordView(bytes("missing"), () => assert.fail()), false);
+    map.close();
+  } finally { engine.close(); }
+});

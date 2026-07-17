@@ -1915,6 +1915,15 @@ pub struct BindingProximityReadSession {
 }
 
 impl BindingProximityReadSession {
+    pub(crate) fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, ProllyBindingError> {
+        with_proximity_session!(self, map, {
+            map.read()?.get_lease(key).map_err(Into::into)
+        })
+    }
+
     pub(crate) fn scan_records_range_until<B>(
         &self,
         start: &[u8],
@@ -2014,6 +2023,15 @@ pub struct BindingProximityMap {
 }
 
 impl BindingProximityMap {
+    pub(crate) fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, ProllyBindingError> {
+        with_proximity_map!(self, map, {
+            map.read()?.get_lease(key).map_err(Into::into)
+        })
+    }
+
     pub(crate) fn scan_records_range_until<B>(
         &self,
         start: &[u8],

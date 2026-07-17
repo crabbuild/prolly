@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Consumer;
 
 public final class ProximityMap implements AutoCloseable {
     private build.crab.prolly.api.ProximityMap nativeMap;
@@ -25,6 +26,12 @@ public final class ProximityMap implements AutoCloseable {
                 value.getInlineThresholdBytes(), value.getScalarQuantizationGroupSize());
     }
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) { return open().get(key.clone()); }
+    public boolean getView(byte[] key, Consumer<ProximityRecordView> visitor) {
+        return open().getView(key.clone(), value -> {
+            visitor.accept(ProximityRecordView.fromNative(value));
+            return kotlin.Unit.INSTANCE;
+        });
+    }
     public boolean contains(byte[] key) { return open().containsKey(key.clone()); }
     public long scanRecords(Predicate<ProximityRecord> visitor) {
         return JavaPortableBridge.scanRecords(open(), record -> visitor.test(new ProximityRecord(

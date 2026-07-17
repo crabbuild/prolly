@@ -847,6 +847,36 @@ export interface PortableProximityRecord {
   value?: Uint8Array;
 }
 
+export class WasmProximityVectorView implements Iterable<number> {
+  readonly dimensions: number;
+  readonly #data: DataView;
+  readonly #scope: { alive: boolean };
+
+  constructor(bytes: Uint8Array, dimensions: number, scope: { alive: boolean }) {
+    this.dimensions = dimensions;
+    this.#data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.#scope = scope;
+  }
+
+  component(index: number): number {
+    if (!this.#scope.alive) throw new WasmViewExpiredError();
+    if (!Number.isInteger(index) || index < 0 || index >= this.dimensions) {
+      throw new RangeError("proximity vector index is out of range");
+    }
+    return this.#data.getFloat32(index * 4, true);
+  }
+
+  toFloat32Array(): Float32Array { return Float32Array.from(this); }
+  *[Symbol.iterator](): Iterator<number> {
+    for (let index = 0; index < this.dimensions; index++) yield this.component(index);
+  }
+}
+
+export interface WasmProximityRecordView {
+  vector: WasmProximityVectorView;
+  value: Uint8Array;
+}
+
 export interface PortableSearchRequest {
   vector: Float32Array;
   topK: number;
@@ -1400,16 +1430,20 @@ export class Engine implements Disposable {
   buildProximity(
     dimensions: number,
     records: PortableProximityRecord[],
-    signal?: AbortSignal,
+    options: { threads?: number; signal?: AbortSignal } = {},
   ): Promise<WasmProximityMap> {
     const native = this.#open();
+    const threads = options.threads ?? 1;
+    if (!Number.isSafeInteger(threads) || threads <= 0) {
+      return Promise.reject(new RangeError("proximity build threads must be a positive safe integer"));
+    }
     const owned = records.map((record) => ({
       key: ownedPortableBytes(record.key),
       vector: new Float32Array(record.vector),
       value: ownedPortableBytes(record.value ?? new Uint8Array()),
     }));
-    return portablePromise(signal, () =>
-      new WasmProximityMap(native.buildProximity(dimensions, owned), this.#module?.wasmMemory()));
+    return portablePromise(options.signal, () =>
+      new WasmProximityMap(native.buildProximity(dimensions, owned, threads), this.#module?.wasmMemory()));
   }
 
   loadProximity(descriptor: Uint8Array, signal?: AbortSignal): Promise<WasmProximityMap> {
@@ -2406,6 +2440,36 @@ function decodeWasmValueRefView(value: Uint8Array): ValueRefView {
   throw new Error(`unknown value reference tag ${value[5]}`);
 }
 
+function readWasmRecordVarint(bytes: Uint8Array, start: number): [number, number] {
+  let value = 0;
+  let shift = 0;
+  for (let offset = start; offset < bytes.byteLength && shift <= 49; offset++, shift += 7) {
+    const byte = bytes[offset]!;
+    value += (byte & 0x7f) * 2 ** shift;
+    if ((byte & 0x80) === 0) return [value, offset + 1];
+  }
+  throw new Error("proximity record contains an invalid varint");
+}
+
+function decodeWasmProximityRecordView(
+  raw: Uint8Array,
+  scope: { alive: boolean },
+  memory?: WebAssembly.Memory,
+): WasmProximityRecordView {
+  if (raw.byteLength < 8 || raw[0] !== 0x50 || raw[1] !== 0x52 || raw[2] !== 0x56 || raw[3] !== 0x52 || raw[4] !== 2 || raw[5] !== 1) {
+    throw new Error("invalid retained proximity record header");
+  }
+  const [dimensions, vectorStart] = readWasmRecordVarint(raw, 6);
+  const vectorEnd = vectorStart + dimensions * 4;
+  if (!Number.isSafeInteger(vectorEnd) || vectorEnd > raw.byteLength) throw new Error("retained proximity vector is truncated");
+  const [valueLength, valueStart] = readWasmRecordVarint(raw, vectorEnd);
+  if (valueStart + valueLength !== raw.byteLength) throw new Error("retained proximity value length is invalid");
+  return {
+    vector: new WasmProximityVectorView(raw.subarray(vectorStart, vectorEnd), dimensions, scope),
+    value: scopedPortableBytes(raw.subarray(valueStart), scope, memory),
+  };
+}
+
 function readWasmScopedU64(value: Uint8Array, start: number): bigint {
   let result = 0n;
   for (let index = 0; index < 8; index += 1) result = (result << 8n) | BigInt(value[start + index]);
@@ -2899,6 +2963,15 @@ export class WasmProximityMap implements Disposable {
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     return this.nativeHandle().get(ownedPortableBytes(key)) ?? undefined;
   }
+  withRecordView(key: Uint8Array, visitor: (record: WasmProximityRecordView) => void): boolean {
+    if (typeof visitor !== "function") throw new TypeError("proximity record visitor must be a function");
+    const scope = { alive: true };
+    try {
+      return this.nativeHandle().withRecordView(ownedPortableBytes(key), (raw: Uint8Array) => {
+        visitor(decodeWasmProximityRecordView(raw, scope, this.#memory));
+      });
+    } finally { scope.alive = false; }
+  }
   contains(key: Uint8Array): boolean { return this.nativeHandle().contains(ownedPortableBytes(key)); }
   scanRecords(visitor: (record: PortableProximityRecord) => boolean): bigint {
     return BigInt(this.nativeHandle().scanRecords((record: PortableProximityRecord) => visitor({
@@ -3317,6 +3390,16 @@ export class WasmProximityReadSession implements Disposable {
   get(key: Uint8Array): { vector: Float32Array; value: Uint8Array } | undefined {
     if (this.#native == null) throw new Error("WASM proximity session is closed");
     return this.#native.get(ownedPortableBytes(key)) ?? undefined;
+  }
+  withRecordView(key: Uint8Array, visitor: (record: WasmProximityRecordView) => void): boolean {
+    if (this.#native == null) throw new Error("WASM proximity session is closed");
+    if (typeof visitor !== "function") throw new TypeError("proximity record visitor must be a function");
+    const scope = { alive: true };
+    try {
+      return this.#native.withRecordView(ownedPortableBytes(key), (raw: Uint8Array) => {
+        visitor(decodeWasmProximityRecordView(raw, scope, this.#memory));
+      });
+    } finally { scope.alive = false; }
   }
   contains(key: Uint8Array): boolean {
     if (this.#native == null) throw new Error("WASM proximity session is closed");

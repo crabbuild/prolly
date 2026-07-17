@@ -921,4 +921,17 @@ class PortableParityTest {
     private static byte[] bytes(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }
+
+    @Test
+    void proximityBuildAcceptsExplicitWorkerLimit() {
+        Prolly.useLocalDebugLibrary();
+        var records = List.of(
+                new ProximityRecord(bytes("a"), new float[]{0, 1}, bytes("alpha")),
+                new ProximityRecord(bytes("b"), new float[]{1, 0}, bytes("beta")));
+        try (Engine engine = Engine.memory();
+             var serial = engine.buildProximity(2, records, 1);
+             var parallel = engine.buildProximity(2, records, 2)) {
+            assertArrayEquals(serial.descriptor(), parallel.descriptor());
+        }
+    }
 }

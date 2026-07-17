@@ -3,6 +3,7 @@ package prolly
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"math"
 	"runtime"
@@ -13,6 +14,34 @@ import (
 type ProximityRecord struct {
 	Key    []byte
 	Vector []float32
+	Value  []byte
+}
+
+// ProximityVectorView is a callback-scoped, unaligned-safe view over the
+// canonical little-endian vector stored in an immutable native leaf.
+type ProximityVectorView struct {
+	raw []byte
+}
+
+func (v ProximityVectorView) Dimensions() int { return len(v.raw) / 4 }
+func (v ProximityVectorView) Component(index int) float32 {
+	if index < 0 || index >= v.Dimensions() {
+		panic("proximity vector index is out of range")
+	}
+	return math.Float32frombits(binary.LittleEndian.Uint32(v.raw[index*4 : index*4+4]))
+}
+func (v ProximityVectorView) Copy() []float32 {
+	result := make([]float32, v.Dimensions())
+	for index := range result {
+		result[index] = v.Component(index)
+	}
+	return result
+}
+
+// ProximityRecordView is valid only for the duration of a GetView callback.
+// Copy Value or Vector if the data must outlive the callback.
+type ProximityRecordView struct {
+	Vector ProximityVectorView
 	Value  []byte
 }
 
@@ -851,9 +880,24 @@ type ProximityMap struct {
 	mu     sync.RWMutex
 }
 
+// ProximityBuildOptions controls runtime-only construction work. Threads does
+// not affect canonical map contents and must be greater than zero.
+type ProximityBuildOptions struct {
+	Threads uint64
+}
+
 func (e *Engine) BuildProximity(dimensions uint32, records []ProximityRecord) (*ProximityMap, error) {
+	return e.BuildProximityWithOptions(dimensions, records, ProximityBuildOptions{Threads: 1})
+}
+
+// BuildProximityWithOptions builds the same canonical map with an explicit
+// native worker limit.
+func (e *Engine) BuildProximityWithOptions(dimensions uint32, records []ProximityRecord, options ProximityBuildOptions) (*ProximityMap, error) {
 	if dimensions == 0 {
 		return nil, errors.New("proximity dimensions must be positive")
+	}
+	if options.Threads == 0 {
+		return nil, errors.New("proximity build threads must be positive")
 	}
 	config, err := ffiDefaultProximityConfig(dimensions)
 	if err != nil {
@@ -863,7 +907,7 @@ func (e *Engine) BuildProximity(dimensions uint32, records []ProximityRecord) (*
 	if err != nil {
 		return nil, err
 	}
-	handle, err := ffiEngineBuildProximity(e, config, encoded)
+	handle, err := ffiEngineBuildProximity(e, config, encoded, &options.Threads)
 	if err != nil {
 		return nil, err
 	}
@@ -1662,6 +1706,20 @@ func (m *ProximityMap) Get(key []byte) (ExactProximityRecord, bool, error) {
 	return record, ok, nil
 }
 
+// GetView exposes a zero-copy exact record retained by an immutable native
+// leaf. The visitor must not retain the view after returning.
+func (m *ProximityMap) GetView(key []byte, visitor func(ProximityRecordView)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil proximity record view visitor")
+	}
+	_, fast, unlock, err := m.withHandle()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return proximityGetView(fast, key, visitor)
+}
+
 // ScanRecords visits exact records in bytewise key order and stops when the
 // visitor returns false. Records own their Go memory and may be retained.
 func (m *ProximityMap) ScanRecords(visitor func(ProximityRecord) bool) (uint64, error) {
@@ -2064,6 +2122,58 @@ func (s *ProximitySession) Get(key []byte) (ExactProximityRecord, bool, error) {
 		return ExactProximityRecord{}, false, err
 	}
 	return record, ok, nil
+}
+
+// GetView exposes a callback-scoped zero-copy exact record from this retained
+// read session.
+func (s *ProximitySession) GetView(key []byte, visitor func(ProximityRecordView)) (bool, error) {
+	if visitor == nil {
+		return false, errors.New("nil proximity record view visitor")
+	}
+	fast, unlock, err := s.withFast()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return proximityGetView(fast, key, visitor)
+}
+
+func readProximityVarint(raw []byte, offset int) (uint64, int, error) {
+	var value uint64
+	for shift := uint(0); shift < 64 && offset < len(raw); shift += 7 {
+		current := raw[offset]
+		offset++
+		if shift == 63 && current > 1 {
+			return 0, 0, errors.New("proximity record varint overflow")
+		}
+		value |= uint64(current&0x7f) << shift
+		if current&0x80 == 0 {
+			return value, offset, nil
+		}
+	}
+	return 0, 0, errors.New("invalid proximity record varint")
+}
+
+func proximityGetView(fast uint64, key []byte, visitor func(ProximityRecordView)) (bool, error) {
+	return withFastProximityValue(fast, key, func(raw []byte) error {
+		if len(raw) < 8 || !bytes.Equal(raw[:6], []byte{'P', 'R', 'V', 'R', 2, 1}) {
+			return errors.New("invalid retained proximity record header")
+		}
+		dimensions, vectorStart, err := readProximityVarint(raw, 6)
+		if err != nil {
+			return err
+		}
+		if dimensions > uint64((len(raw)-vectorStart)/4) {
+			return errors.New("retained proximity vector is truncated")
+		}
+		vectorEnd := vectorStart + int(dimensions)*4
+		valueLength, valueStart, err := readProximityVarint(raw, vectorEnd)
+		if err != nil || valueLength > uint64(len(raw)-valueStart) || valueStart+int(valueLength) != len(raw) {
+			return errors.New("retained proximity value length is invalid")
+		}
+		visitor(ProximityRecordView{Vector: ProximityVectorView{raw: raw[vectorStart:vectorEnd]}, Value: raw[valueStart:]})
+		return nil
+	})
 }
 
 // ScanRecords reuses the retained session and visits records in key order.

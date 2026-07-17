@@ -71,6 +71,70 @@ func TestTypedVersionedMapIsApplicationFacing(t *testing.T) {
 	}
 }
 
+func TestBuildProximityWithParallelism(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := []ProximityRecord{
+		{Key: []byte("a"), Vector: []float32{0, 1}, Value: []byte("alpha")},
+		{Key: []byte("b"), Vector: []float32{1, 0}, Value: []byte("beta")},
+	}
+	serial, err := engine.BuildProximityWithOptions(2, records, ProximityBuildOptions{Threads: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(serial.Close)
+	parallel, err := engine.BuildProximityWithOptions(2, records, ProximityBuildOptions{Threads: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(parallel.Close)
+	serialDescriptor, err := serial.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parallelDescriptor, err := parallel.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(serialDescriptor, parallelDescriptor) {
+		t.Fatal("parallel proximity build changed the canonical descriptor")
+	}
+}
+
+func TestProximityExactRecordView(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	proximity, err := engine.BuildProximity(2, []ProximityRecord{{
+		Key: []byte("a"), Vector: []float32{1.25, 2.5}, Value: []byte("alpha"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	found, err := proximity.GetView([]byte("a"), func(record ProximityRecordView) {
+		if record.Vector.Dimensions() != 2 || record.Vector.Component(1) != 2.5 || string(record.Value) != "alpha" {
+			t.Fatalf("unexpected proximity record view: %#v", record)
+		}
+	})
+	if err != nil || !found {
+		t.Fatalf("GetView found=%v err=%v", found, err)
+	}
+}
+
 func TestRetainedSearchRuntimeReusesValidatedContent(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {

@@ -1075,6 +1075,10 @@ impl WasmProximityMap {
     pub fn get(&self, key: Uint8Array) -> Result<JsValue, JsValue> {
         exact_record_value(self.load()?.get(&key.to_vec()).map_err(js_error)?)
     }
+    #[wasm_bindgen(js_name = withRecordView)]
+    pub fn with_record_view(&self, key: Uint8Array, visitor: &Function) -> Result<bool, JsValue> {
+        with_proximity_record_view(&self.load()?, key, visitor)
+    }
     pub fn contains(&self, key: Uint8Array) -> Result<bool, JsValue> {
         self.load()?.contains_key(&key.to_vec()).map_err(js_error)
     }
@@ -2133,6 +2137,11 @@ impl WasmProximityReadSession {
         Ok(object.into())
     }
 
+    #[wasm_bindgen(js_name = withRecordView)]
+    pub fn with_record_view(&self, key: Uint8Array, visitor: &Function) -> Result<bool, JsValue> {
+        with_proximity_record_view(&self.map, key, visitor)
+    }
+
     pub fn contains(&self, key: Uint8Array) -> Result<bool, JsValue> {
         self.map.contains_key(&key.to_vec()).map_err(js_error)
     }
@@ -2255,6 +2264,23 @@ fn scan_proximity_records(
     Ok(outcome.visited.to_string())
 }
 
+fn with_proximity_record_view(
+    map: &ProximityMap<Arc<prolly::MemStore>>,
+    key: Uint8Array,
+    visitor: &Function,
+) -> Result<bool, JsValue> {
+    let mut read = map.read().map_err(js_error)?;
+    let Some(lease) = read.get_lease(&key.to_vec()).map_err(js_error)? else {
+        return Ok(false);
+    };
+    let bytes = lease.as_bytes().map_err(js_error)?;
+    // SAFETY: the retained immutable leaf and its value lease live through
+    // the complete synchronous JavaScript callback.
+    let borrowed = unsafe { Uint8Array::view(bytes) };
+    visitor.call1(&JsValue::UNDEFINED, &borrowed.into())?;
+    Ok(true)
+}
+
 fn with_proximity_search_view(
     map: &ProximityMap<Arc<prolly::MemStore>>,
     query: Float32Array,
@@ -2309,7 +2335,13 @@ impl WasmProllyEngine {
         &self,
         dimensions: u32,
         records: Array,
+        threads: u32,
     ) -> Result<WasmProximityMap, JsValue> {
+        if threads != 1 {
+            return Err(JsValue::from_str(
+                "proximity build worker limits greater than one require native threads; this target is single-thread WebAssembly",
+            ));
+        }
         let records = records
             .iter()
             .map(proximity_record_from_js)

@@ -86,6 +86,34 @@ class NeighborView:
     proof: ScopedBytes | None
 
 
+class ProximityVectorView:
+    def __init__(self, view: memoryview, scope: _Scope):
+        if len(view) % 4:
+            raise ValueError("proximity vector byte length is invalid")
+        self._view = view
+        self._scope = scope
+
+    @property
+    def dimensions(self) -> int:
+        self._scope.check()
+        return len(self._view) // 4
+
+    def component(self, index: int) -> float:
+        self._scope.check()
+        if index < 0 or index >= self.dimensions:
+            raise IndexError("proximity vector index is out of range")
+        return struct.unpack_from("<f", self._view, index * 4)[0]
+
+    def to_list(self) -> list[float]:
+        return [self.component(index) for index in range(self.dimensions)]
+
+
+@dataclass(frozen=True)
+class ProximityRecordView:
+    vector: ProximityVectorView
+    value: ScopedBytes
+
+
 @dataclass(frozen=True)
 class EntryView:
     key: ScopedBytes
@@ -242,6 +270,69 @@ def point_read_view(
     finally:
         scope.close()
         release(result.lease_handle)
+
+
+def proximity_point_read_view(
+    map_handle: int,
+    key: bytes,
+    visit: Callable[[ProximityRecordView], _R],
+) -> tuple[bool, _R | None]:
+    """Expose one retained PRVR record only for the callback scope."""
+    if not callable(visit):
+        raise TypeError("proximity record visitor must be callable")
+    library = _native._UniffiLib
+    get_lease = library.prolly_fast_proximity_get_lease
+    get_lease.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t]
+    get_lease.restype = _FastValueLeaseResult
+    release = library.prolly_fast_value_release
+    release.argtypes = [ctypes.c_uint64]
+    release.restype = None
+    key_bytes = bytes(key)
+    key_buffer = (ctypes.c_uint8 * len(key_bytes)).from_buffer_copy(key_bytes)
+    result = get_lease(map_handle, key_buffer if key_bytes else None, len(key_bytes))
+    if result.status != 0:
+        raise RuntimeError(f"native retained proximity read failed with status {result.status}")
+    if not result.found:
+        if result.lease_handle:
+            release(result.lease_handle)
+            raise RuntimeError("missing proximity read returned a value lease")
+        return False, None
+    if not result.lease_handle or (result.data_len and not result.data_ptr):
+        if result.lease_handle:
+            release(result.lease_handle)
+        raise RuntimeError("native proximity read returned an invalid value lease")
+    scope = _Scope()
+    try:
+        raw = (ctypes.c_uint8 * result.data_len).from_address(ctypes.addressof(result.data_ptr.contents))
+        page = memoryview(raw).cast("B")
+        if len(page) < 8 or bytes(page[:6]) != b"PRVR\x02\x01":
+            raise ValueError("invalid retained proximity record header")
+        dimensions, vector_start = _read_varint(page, 6)
+        vector_end = vector_start + dimensions * 4
+        if vector_end > len(page):
+            raise ValueError("retained proximity vector is truncated")
+        value_length, value_start = _read_varint(page, vector_end)
+        if value_start + value_length != len(page):
+            raise ValueError("retained proximity value length is invalid")
+        return True, visit(ProximityRecordView(
+            ProximityVectorView(page[vector_start:vector_end], scope),
+            ScopedBytes(page[value_start:], scope),
+        ))
+    finally:
+        scope.close()
+        release(result.lease_handle)
+
+
+def _read_varint(value: memoryview, start: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    for offset in range(start, min(len(value), start + 10)):
+        byte = value[offset]
+        result |= (byte & 0x7f) << shift
+        if not byte & 0x80:
+            return result, offset + 1
+        shift += 7
+    raise ValueError("invalid proximity record varint")
 
 
 def decode_value_ref_view(value: ScopedBytes) -> ValueRefView:

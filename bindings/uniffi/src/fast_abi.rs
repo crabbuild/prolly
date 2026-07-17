@@ -29,6 +29,7 @@ pub const FAST_CAP_VALUE_LEASE: u64 = 1 << 4;
 pub const FAST_CAP_INDEX_CURSOR: u64 = 1 << 5;
 pub const FAST_CAP_PROXIMITY_SEARCH: u64 = 1 << 6;
 pub const FAST_CAP_PROXIMITY_RECORD_SCAN: u64 = 1 << 7;
+pub const FAST_CAP_PROXIMITY_VALUE_LEASE: u64 = 1 << 8;
 
 pub const FAST_STATUS_OK: i32 = 0;
 pub const FAST_STATUS_BUFFER_TOO_SMALL: i32 = 1;
@@ -130,6 +131,16 @@ enum LiveProximityTarget {
 }
 
 impl LiveProximityTarget {
+    fn get_lease(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<prolly::OwnedValueLease>, crate::ProllyBindingError> {
+        match self {
+            Self::Map(map) => map.get_lease(key),
+            Self::Session(session) => session.get_lease(key),
+        }
+    }
+
     fn search(
         &self,
         request: ProximitySearchRequestRecord,
@@ -533,6 +544,7 @@ pub extern "C" fn prolly_fast_abi_capabilities() -> u64 {
         | FAST_CAP_INDEX_CURSOR
         | FAST_CAP_PROXIMITY_SEARCH
         | FAST_CAP_PROXIMITY_RECORD_SCAN
+        | FAST_CAP_PROXIMITY_VALUE_LEASE
 }
 
 unsafe fn input_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
@@ -690,6 +702,64 @@ pub unsafe extern "C" fn prolly_fast_read_session_get_lease(
                 ..FastValueLeaseResult::default()
             }
         }
+    }
+}
+
+/// Retain the immutable packed leaf containing one encoded PRVR record. The
+/// pointer remains valid until `prolly_fast_value_release` is called.
+#[no_mangle]
+pub unsafe extern "C" fn prolly_fast_proximity_get_lease(
+    map_handle: u64,
+    key_ptr: *const u8,
+    key_len: usize,
+) -> FastValueLeaseResult {
+    let Some(map) = proximity_from_handle(map_handle) else {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    };
+    if key_len > MAX_BOUND_BYTES {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    }
+    let Some(key) = (unsafe { input_slice(key_ptr, key_len) }) else {
+        return FastValueLeaseResult {
+            status: FAST_STATUS_INVALID_ARGUMENT,
+            ..FastValueLeaseResult::default()
+        };
+    };
+    match catch_unwind(AssertUnwindSafe(|| match map.get_lease(key) {
+        Ok(None) => FastValueLeaseResult {
+            status: FAST_STATUS_OK,
+            ..FastValueLeaseResult::default()
+        },
+        Ok(Some(lease)) => match register_value(lease) {
+            Ok((lease_handle, data_ptr, data_len)) => FastValueLeaseResult {
+                status: FAST_STATUS_OK,
+                found: 1,
+                lease_handle,
+                data_ptr,
+                data_len,
+                ..FastValueLeaseResult::default()
+            },
+            Err(_) => FastValueLeaseResult {
+                status: FAST_STATUS_READ_ERROR,
+                ..FastValueLeaseResult::default()
+            },
+        },
+        Err(_) => FastValueLeaseResult {
+            status: FAST_STATUS_READ_ERROR,
+            ..FastValueLeaseResult::default()
+        },
+    })) {
+        Ok(result) => result,
+        Err(_) => FastValueLeaseResult {
+            status: FAST_STATUS_PANIC,
+            ..FastValueLeaseResult::default()
+        },
     }
 }
 
@@ -1920,6 +1990,30 @@ mod tests {
         assert_eq!(neighbor.value, Some(b"alpha".as_slice()));
         assert_eq!(neighbor.distance, 0.125);
         unsafe { prolly_fast_page_release(page.lease_handle) };
+    }
+
+    #[test]
+    fn proximity_exact_read_returns_the_retained_stored_record() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let map = engine
+            .build_proximity_map(
+                crate::ProximityConfigRecord::new(2),
+                vec![crate::ProximityRecordRecord {
+                    key: b"a".to_vec(),
+                    vector: vec![1.0, 2.0],
+                    value: b"alpha".to_vec(),
+                }],
+                None,
+            )
+            .unwrap();
+        let result =
+            unsafe { prolly_fast_proximity_get_lease(map.fast_handle(), b"a".as_ptr(), 1) };
+        assert_eq!(result.status, FAST_STATUS_OK);
+        assert_eq!(result.found, 1);
+        let raw = unsafe { slice::from_raw_parts(result.data_ptr, result.data_len as usize) };
+        assert_eq!(&raw[..4], b"PRVR");
+        assert!(raw.ends_with(b"alpha"));
+        unsafe { prolly_fast_value_release(result.lease_handle) };
     }
 
     #[test]

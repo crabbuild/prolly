@@ -883,3 +883,34 @@ test("WASM pinned merges page conflicts and CAS publish", { skip: !generatedPres
   assert.equal(Buffer.from((await map.get(bytes("k")))!).toString(), "candidate");
   merge.close(); engine.close();
 });
+
+test("WASM proximity build exposes the single-thread contract", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const records = [
+    { key: bytes("a"), vector: [0, 1], value: bytes("alpha") },
+    { key: bytes("b"), vector: [1, 0], value: bytes("beta") },
+  ];
+  const serial = await engine.buildProximity(2, records, { threads: 1 });
+  assert.equal(serial.count(), 2n);
+  await assert.rejects(
+    engine.buildProximity(2, records, { threads: 2 }),
+    /single-thread WebAssembly/,
+  );
+  serial.close(); engine.close();
+});
+
+test("WASM proximity exact reads expose scoped record views", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  const map = await engine.buildProximity(2, [
+    { key: bytes("a"), vector: [1.25, 2.5], value: bytes("alpha") },
+  ]);
+  let escaped: Uint8Array | undefined;
+  assert.equal(map.withRecordView(bytes("a"), (record: any) => {
+    assert.equal(record.vector.component(1), 2.5);
+    assert.deepEqual(record.vector.toFloat32Array(), new Float32Array([1.25, 2.5]));
+    assert.equal(Buffer.from(record.value).toString(), "alpha");
+    escaped = record.value;
+  }), true);
+  assert.throws(() => escaped![0], /expired/);
+  map.close(); engine.close();
+});

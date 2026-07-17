@@ -3,6 +3,7 @@ package build.crab.prolly.javaapi;
 import build.crab.prolly.api.JavaPortableBridge;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
+import java.util.function.Consumer;
 
 public final class ProximityReadSession implements AutoCloseable {
     private build.crab.prolly.api.ProximityReadSession nativeSession;
@@ -43,6 +44,13 @@ public final class ProximityReadSession implements AutoCloseable {
     public build.crab.prolly.ExactProximityRecordRecord get(byte[] key) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
         return nativeSession.get(key.clone());
+    }
+    public boolean getView(byte[] key, Consumer<ProximityRecordView> visitor) {
+        if (nativeSession == null) throw new IllegalStateException("proximity session is closed");
+        return nativeSession.getView(key.clone(), value -> {
+            visitor.accept(ProximityRecordView.fromNative(value));
+            return kotlin.Unit.INSTANCE;
+        });
     }
     public boolean contains(byte[] key) {
         if (nativeSession == null) throw new IllegalStateException("proximity session is closed");

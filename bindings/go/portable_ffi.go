@@ -568,7 +568,7 @@ func ffiDefaultProximityConfig(dimensions uint32) ([]byte, error) {
 	return portableTakeBuffer(buf), nil
 }
 
-func ffiEngineBuildProximity(engine *Engine, config, records []byte) (uint64, error) {
+func ffiEngineBuildProximity(engine *Engine, config, records []byte, threads *uint64) (uint64, error) {
 	handle, unlock, err := portableEngineHandle(engine)
 	if err != nil {
 		return 0, err
@@ -586,7 +586,7 @@ func ffiEngineBuildProximity(engine *Engine, config, records []byte) (uint64, er
 	if err != nil {
 		return 0, err
 	}
-	threadsBuf, err := portableInput([]byte{0})
+	threadsBuf, err := portableInput(encodeOptionalU64Bytes(threads))
 	if err != nil {
 		return 0, err
 	}

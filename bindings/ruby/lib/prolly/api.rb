@@ -931,6 +931,10 @@ module Prolly
     end
 
     def get(key) = open! { @native.get(key.b) }
+    def get_view(key, &block)
+      raise ArgumentError, 'get_view requires a block' unless block
+      open! { PackedPage.proximity_point_read_view(@native.fast_handle, key.b, &block) }
+    end
     def contains?(key) = open! { @native.contains_key(key.b) }
     def count = open! { @native.count }
     def config = open! { @native.config }
@@ -1412,6 +1416,10 @@ module Prolly
     end
 
     def get(key) = open! { @native.get(key.b) }
+    def get_view(key, &block)
+      raise ArgumentError, 'get_view requires a block' unless block
+      open! { PackedPage.proximity_point_read_view(@native.fast_handle, key.b, &block) }
+    end
     def contains?(key) = open! { @native.contains_key(key.b) }
     def search(request) = open! { @native.search(Prolly.owned_proximity_search_request(request)) }
     def search_with_runtime(request, runtime)
