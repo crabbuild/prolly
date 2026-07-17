@@ -331,6 +331,8 @@ module Prolly
     def prove_key(key) = open! { @native.prove_key(key.b) }
     def prove_keys(keys) = open! { @native.prove_keys(keys.map(&:b)) }
     def prove_range(start = ''.b, range_end = nil) = open! { @native.prove_range(start.b, range_end&.b) }
+    def prove_prefix(prefix) = open! { @native.prove_prefix(prefix.b) }
+    def prove_range_page(cursor = nil, range_end = nil, limit = 256) = open! { @native.prove_range_page(cursor, range_end&.b, limit) }
     def stats = open! { @native.stats }
     def export = open! { @native.export }
     def read = open! { ReadSession.new(@native.read_session) }

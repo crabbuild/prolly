@@ -25,15 +25,25 @@ import build.crab.prolly.MapUpdateRecord
 import build.crab.prolly.MapVersionRecord
 import build.crab.prolly.MutationKind
 import build.crab.prolly.MutationRecord
+import build.crab.prolly.MultiKeyProofRecord
+import build.crab.prolly.MultiKeyProofVerificationRecord
 import build.crab.prolly.ProximityVerificationRecord
 import build.crab.prolly.TreeStatsRecord
 import build.crab.prolly.ProximitySearchResultRecord
 import build.crab.prolly.ProximitySearchVerificationRecord
 import build.crab.prolly.RangeCursorRecord
 import build.crab.prolly.RangePageRecord
+import build.crab.prolly.RangePageProofRecord
+import build.crab.prolly.RangePageProofVerificationRecord
+import build.crab.prolly.RangeProofRecord
+import build.crab.prolly.RangeProofVerificationRecord
 import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ReversePageRecord
+import build.crab.prolly.ProvedRangePageRecord
 import build.crab.prolly.SecondaryIndexExtractorCallback
+import build.crab.prolly.verifyMultiKeyProof as verifyNativeMultiKeyProof
+import build.crab.prolly.verifyRangePageProof as verifyNativeRangePageProof
+import build.crab.prolly.verifyRangeProof as verifyNativeRangeProof
 
 data class JavaIndexedMutation(
     val kind: String,
@@ -284,6 +294,17 @@ private fun ProximityVerificationRecord.toJava() = JavaProximityVerification(
 )
 
 object JavaPortableBridge {
+    @JvmStatic
+    fun mapSnapshotProveRangePage(
+        snapshot: MapSnapshot,
+        cursor: RangeCursorRecord?,
+        end: ByteArray?,
+        limit: Long,
+    ): ProvedRangePageRecord {
+        require(limit >= 0) { "page limit must be non-negative" }
+        return snapshot.proveRangePage(cursor, end, limit.toULong())
+    }
+
     @JvmStatic
     fun mapSnapshotRangePage(
         snapshot: MapSnapshot,
@@ -584,6 +605,18 @@ object JavaPortableBridge {
 
     @JvmStatic
     fun verify(proof: KeyProofRecord): KeyProofVerificationRecord = verifyKeyProof(proof)
+
+    @JvmStatic
+    fun verifyMultiKey(proof: MultiKeyProofRecord): MultiKeyProofVerificationRecord =
+        verifyNativeMultiKeyProof(proof)
+
+    @JvmStatic
+    fun verifyRange(proof: RangeProofRecord): RangeProofVerificationRecord =
+        verifyNativeRangeProof(proof)
+
+    @JvmStatic
+    fun verifyRangePage(proof: RangePageProofRecord): RangePageProofVerificationRecord =
+        verifyNativeRangePageProof(proof)
 
     @JvmStatic
     fun verify(

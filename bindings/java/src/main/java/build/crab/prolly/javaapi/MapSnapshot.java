@@ -6,6 +6,8 @@ import java.util.Optional;
 import build.crab.prolly.EntryRecord;
 import build.crab.prolly.RangeCursorRecord;
 import build.crab.prolly.RangePageRecord;
+import build.crab.prolly.RangeProofRecord;
+import build.crab.prolly.ProvedRangePageRecord;
 import build.crab.prolly.ReverseCursorRecord;
 import build.crab.prolly.ReversePageRecord;
 import build.crab.prolly.api.JavaPortableBridge;
@@ -64,6 +66,17 @@ public final class MapSnapshot implements AutoCloseable {
     }
     public build.crab.prolly.MultiKeyProofRecord proveKeys(List<byte[]> keys) {
         return open().proveKeys(keys.stream().map(byte[]::clone).toList());
+    }
+    public RangeProofRecord proveRange(byte[] start, byte[] end) {
+        return open().proveRange(start.clone(), end == null ? null : end.clone());
+    }
+    public RangeProofRecord provePrefix(byte[] prefix) {
+        return open().provePrefix(prefix.clone());
+    }
+    public ProvedRangePageRecord proveRangePage(
+            RangeCursorRecord cursor, byte[] end, long limit) {
+        return JavaPortableBridge.mapSnapshotProveRangePage(
+                open(), cursor, end == null ? null : end.clone(), limit);
     }
     public build.crab.prolly.TreeStatsRecord stats() { return open().stats(); }
     public long entryCount() {

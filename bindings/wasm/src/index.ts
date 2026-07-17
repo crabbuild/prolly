@@ -399,6 +399,14 @@ export interface WasmRangeProofVerificationRecord {
   entries: WasmEntryRecord[];
 }
 
+export interface WasmRangePageProofVerificationRecord {
+  valid: boolean;
+  root?: Uint8Array | null;
+  after?: Uint8Array | null;
+  end?: Uint8Array | null;
+  entries: WasmEntryRecord[];
+}
+
 export interface WasmProofBundleSummaryRecord {
   version: string;
   kind: "key" | "multi_key" | "range" | "range_page" | "diff_page";
@@ -1140,6 +1148,26 @@ export class WasmMapSnapshot implements Disposable {
     return this.#open().prefixReversePage(ownedPortableBytes(prefix), cursor, limit);
   }
   proveKey(key: Uint8Array): WasmKeyProof { return new WasmKeyProof(this.#open().proveKey(ownedPortableBytes(key))); }
+  proveKeys(keys: readonly Uint8Array[]): WasmMultiKeyProof {
+    return new WasmMultiKeyProof(this.#open().proveKeys(keys.map(ownedPortableBytes)));
+  }
+  proveRange(start: Uint8Array = new Uint8Array(), end?: Uint8Array): WasmRangeProof {
+    return new WasmRangeProof(this.#open().proveRange(
+      ownedPortableBytes(start), end == null ? undefined : ownedPortableBytes(end),
+    ));
+  }
+  provePrefix(prefix: Uint8Array): WasmRangeProof {
+    return new WasmRangeProof(this.#open().provePrefix(ownedPortableBytes(prefix)));
+  }
+  proveRangePage(
+    cursor?: WasmRangeCursorRecord,
+    end?: Uint8Array,
+    limit = 256,
+  ): WasmProvedRangePage {
+    return new WasmProvedRangePage(this.#open().proveRangePage(
+      cursor, end == null ? undefined : ownedPortableBytes(end), limit,
+    ));
+  }
   stats(): { itemCount: bigint; byteCount: bigint } {
     const value = this.#open().stats(); return { itemCount: BigInt(value.itemCount), byteCount: BigInt(value.byteCount) };
   }
@@ -1167,6 +1195,43 @@ export class WasmKeyProof implements Disposable {
   constructor(native: any) { this.#native = native; }
   verify(): { valid: boolean; exists: boolean; value?: Uint8Array } {
     if (this.#native == null) throw new Error("WASM key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmMultiKeyProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(): WasmMultiKeyProofVerificationRecord {
+    if (this.#native == null) throw new Error("WASM multi-key proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmRangeProof implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  verify(): WasmRangeProofVerificationRecord {
+    if (this.#native == null) throw new Error("WASM range proof is closed");
+    return this.#native.verify();
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
+export class WasmProvedRangePage implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  page(): WasmRangePageRecord {
+    if (this.#native == null) throw new Error("WASM proved range page is closed");
+    return this.#native.page();
+  }
+  verify(): WasmRangePageProofVerificationRecord {
+    if (this.#native == null) throw new Error("WASM proved range page is closed");
     return this.#native.verify();
   }
   close(): void { this.#native?.free?.(); this.#native = undefined; }

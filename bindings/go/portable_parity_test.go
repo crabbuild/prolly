@@ -447,6 +447,9 @@ func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	if _, err = versioned.Put([]byte("k"), []byte("v")); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = versioned.Put([]byte("ka"), []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
 	snapshot, err := versioned.Snapshot()
 	if err != nil {
 		t.Fatal(err)
@@ -460,6 +463,24 @@ func TestPortableProofSessionAndMaintenance(t *testing.T) {
 	if err != nil || !verified.Valid || string(verified.Value) != "v" {
 		t.Fatalf("proof = %+v, %v", verified, err)
 	}
+	multiProof, err := snapshot.ProveKeys([][]byte{[]byte("k"), []byte("missing")})
+	if err != nil { t.Fatal(err) }
+	multi, err := VerifyMultiKeyProof(multiProof)
+	if err != nil || !multi.Valid || len(multi.Results) != 2 || !multi.Results[0].Exists || multi.Results[1].Exists {
+		t.Fatalf("multi proof = %+v, %v", multi, err)
+	}
+	rangeProof, err := snapshot.ProveRange([]byte("k"), []byte("l"))
+	if err != nil { t.Fatal(err) }
+	ranged, err := VerifyRangeProof(rangeProof)
+	if err != nil || !ranged.Valid || len(ranged.Entries) != 2 { t.Fatalf("range proof = %+v, %v", ranged, err) }
+	prefixProof, err := snapshot.ProvePrefix([]byte("k"))
+	if err != nil { t.Fatal(err) }
+	prefixed, err := VerifyRangeProof(prefixProof)
+	if err != nil || !prefixed.Valid || len(prefixed.Entries) != 2 { t.Fatalf("prefix proof = %+v, %v", prefixed, err) }
+	provedPage, err := snapshot.ProveRangePage(nil, []byte("l"), 1)
+	if err != nil { t.Fatal(err) }
+	page, err := VerifyRangePageProof(provedPage.Proof)
+	if err != nil || !page.Valid || len(provedPage.Page.Entries) != 1 { t.Fatalf("page proof = %+v, %v", page, err) }
 	session, err := snapshot.Read()
 	if err != nil {
 		t.Fatal(err)

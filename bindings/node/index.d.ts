@@ -1026,6 +1026,10 @@ export declare class NativePortableMapSnapshot {
   reversePage(cursor: NodeReverseCursorRecord | undefined | null, start: Buffer, limit: string): NodeReversePageRecord
   prefixReversePage(prefix: Buffer, cursor: NodeReverseCursorRecord | undefined | null, limit: string): NodeReversePageRecord
   proveKey(key: Buffer): NativePortableKeyProof
+  proveKeys(keys: Array<Buffer>): NativePortableMultiKeyProof
+  proveRange(start: Buffer, end?: Buffer | undefined | null): NativePortableRangeProof
+  provePrefix(prefix: Buffer): NativePortableRangeProof
+  proveRangePage(cursor: NodeRangeCursorRecord | undefined | null, end: Buffer | undefined | null, limit: string): NativePortableProvedRangePage
   stats(): NodePortableMaintenanceSummary
   export(): NodePortableMaintenanceSummary
   read(): NativePortableReadSession
@@ -1035,6 +1039,16 @@ export declare class NativePortableReadSession {
 }
 export declare class NativePortableKeyProof {
   verify(): NodePortableProofVerification
+}
+export declare class NativePortableMultiKeyProof {
+  verify(): NodeMultiKeyProofVerificationRecord
+}
+export declare class NativePortableRangeProof {
+  verify(): NodeRangeProofVerificationRecord
+}
+export declare class NativePortableProvedRangePage {
+  page(): NodeRangePageRecord
+  verify(): NodeRangePageProofVerificationRecord
 }
 export declare class NativePortableIndexRegistry {
   constructor()

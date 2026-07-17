@@ -120,11 +120,19 @@ class PortableParityTest {
         try (Engine engine = Engine.memory(); var versioned = engine.versionedMap(bytes("proofs"))) {
             versioned.initialize();
             versioned.put(bytes("k"), bytes("v"));
+            versioned.put(bytes("ka"), bytes("v2"));
             try (var snapshot = versioned.snapshot(); var session = snapshot.read()) {
                 var verified = Proofs.verify(snapshot.proveKey(bytes("k")));
                 assertTrue(verified.getValid());
                 assertArrayEquals(bytes("v"), verified.getValue());
-                assertEquals(1, snapshot.entryCount());
+                var multi = Proofs.verify(snapshot.proveKeys(List.of(bytes("k"), bytes("missing"))));
+                assertEquals(List.of(true, false), multi.getResults().stream().map(result -> result.getExists()).toList());
+                assertEquals(List.of("k", "ka"), Proofs.verify(snapshot.proveRange(bytes("k"), bytes("l"))).getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(List.of("k", "ka"), Proofs.verify(snapshot.provePrefix(bytes("k"))).getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                var provedPage = snapshot.proveRangePage(null, bytes("l"), 1);
+                assertTrue(Proofs.verify(provedPage.getProof()).getValid());
+                assertEquals(List.of("k"), provedPage.getPage().getEntries().stream().map(entry -> new String(entry.getKey())).toList());
+                assertEquals(2, snapshot.entryCount());
                 assertFalse(snapshot.export().getNodes().isEmpty());
                 assertArrayEquals(bytes("v"), session.get(bytes("k")).orElseThrow());
             }

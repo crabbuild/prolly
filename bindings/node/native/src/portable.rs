@@ -1,12 +1,15 @@
 use super::{
-    to_napi_error, NativeProllyEngine, NodeEntryRecord, NodeMutationRecord, NodeRangeCursorRecord,
-    NodeRangePageRecord, NodeReverseCursorRecord, NodeReversePageRecord, NodeTreeRecord,
+    to_napi_error, NativeProllyEngine, NodeEntryRecord, NodeMultiKeyProofVerificationRecord,
+    NodeMutationRecord, NodeRangeCursorRecord, NodeRangePageProofVerificationRecord,
+    NodeRangePageRecord, NodeRangeProofVerificationRecord, NodeReverseCursorRecord,
+    NodeReversePageRecord, NodeTreeRecord,
 };
 use napi::bindgen_prelude::{Buffer, Env, Error, Float32Array, FunctionRef, Result, Status};
 use napi_derive::napi;
 use prolly_bindings::{
     default_content_graph_limits, default_proximity_config, exact_proximity_search_request,
-    verify_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
+    verify_key_proof, verify_multi_key_proof, verify_proximity_membership_proof,
+    verify_proximity_structure_proof, verify_range_page_proof, verify_range_proof,
     ActiveIndexHealthRecord, BindingIndexRegistry, BindingIndexedMap, BindingIndexedSnapshot,
     BindingMapSnapshot, BindingProximityMap, BindingProximityReadSession,
     BindingProximitySearchProof, BindingSecondaryIndexSnapshot, BindingVersionedMap,
@@ -15,11 +18,12 @@ use prolly_bindings::{
     IndexedMapHealthRecord, IndexedMapMetricsRecord, IndexedRetentionRecord,
     IndexedSnapshotIdRecord, IndexedSourceRecord, IndexedUpdateKind, IndexedUpdateRecord,
     IndexedVersionRecord, KeyProofRecord, MapUpdateKind, MapUpdateRecord, MapVersionRecord,
-    ProllyBindingError, ProllyReadSession, ProximityConfigRecord, ProximityMembershipProofRecord,
-    ProximityMutationRecord, ProximityMutationStatsRecord, ProximityNeighborRecord,
-    ProximityRecordRecord, ProximitySearchClaimKindRecord, ProximitySearchResultRecord,
-    ProximityStructuralProofRecord, ProximityVerificationRecord, SearchBackendRecord,
-    SearchCompletionRecord, SecondaryIndexExtractorCallback, VersionPruneRecord,
+    MultiKeyProofRecord, ProllyBindingError, ProllyReadSession, ProvedRangePageRecord,
+    ProximityConfigRecord, ProximityMembershipProofRecord, ProximityMutationRecord,
+    ProximityMutationStatsRecord, ProximityNeighborRecord, ProximityRecordRecord,
+    ProximitySearchClaimKindRecord, ProximitySearchResultRecord, ProximityStructuralProofRecord,
+    ProximityVerificationRecord, RangeProofRecord, SearchBackendRecord, SearchCompletionRecord,
+    SecondaryIndexExtractorCallback, VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -1061,6 +1065,51 @@ impl NativePortableMapSnapshot {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "proveKeys")]
+    pub fn prove_keys(&self, keys: Vec<Buffer>) -> Result<NativePortableMultiKeyProof> {
+        self.inner
+            .prove_keys(keys.into_iter().map(|key| key.to_vec()).collect())
+            .map(|inner| NativePortableMultiKeyProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveRange")]
+    pub fn prove_range(
+        &self,
+        start: Buffer,
+        end: Option<Buffer>,
+    ) -> Result<NativePortableRangeProof> {
+        self.inner
+            .prove_range(start.to_vec(), end.map(|value| value.to_vec()))
+            .map(|inner| NativePortableRangeProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "provePrefix")]
+    pub fn prove_prefix(&self, prefix: Buffer) -> Result<NativePortableRangeProof> {
+        self.inner
+            .prove_prefix(prefix.to_vec())
+            .map(|inner| NativePortableRangeProof { inner })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "proveRangePage")]
+    pub fn prove_range_page(
+        &self,
+        cursor: Option<NodeRangeCursorRecord>,
+        end: Option<Buffer>,
+        limit: String,
+    ) -> Result<NativePortableProvedRangePage> {
+        self.inner
+            .prove_range_page(
+                cursor.map(Into::into),
+                end.map(|value| value.to_vec()),
+                parse_index_page_limit(&limit)?,
+            )
+            .map(|inner| NativePortableProvedRangePage { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi]
     pub fn stats(&self) -> Result<NodePortableMaintenanceSummary> {
         self.inner
@@ -1128,6 +1177,56 @@ impl NativePortableKeyProof {
                 exists: value.exists,
                 value: value.value.map(Buffer::from),
             })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableMultiKeyProof {
+    inner: MultiKeyProofRecord,
+}
+
+#[napi]
+impl NativePortableMultiKeyProof {
+    #[napi]
+    pub fn verify(&self) -> Result<NodeMultiKeyProofVerificationRecord> {
+        verify_multi_key_proof(self.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableRangeProof {
+    inner: RangeProofRecord,
+}
+
+#[napi]
+impl NativePortableRangeProof {
+    #[napi]
+    pub fn verify(&self) -> Result<NodeRangeProofVerificationRecord> {
+        verify_range_proof(self.inner.clone())
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
+pub struct NativePortableProvedRangePage {
+    inner: ProvedRangePageRecord,
+}
+
+#[napi]
+impl NativePortableProvedRangePage {
+    #[napi]
+    pub fn page(&self) -> NodeRangePageRecord {
+        self.inner.page.clone().into()
+    }
+
+    #[napi]
+    pub fn verify(&self) -> Result<NodeRangePageProofVerificationRecord> {
+        verify_range_page_proof(self.inner.proof.clone())
+            .map(Into::into)
             .map_err(to_napi_error)
     }
 }

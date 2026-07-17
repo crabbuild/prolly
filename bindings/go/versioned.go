@@ -714,6 +714,68 @@ func (s *MapSnapshot) ProveKey(key []byte) (KeyProof, error) {
 	}
 	return decodeKeyProof(raw)
 }
+
+// ProveKeys creates a compact proof for the requested keys. Input keys are
+// copied before crossing the FFI boundary so callers may safely reuse them.
+func (s *MapSnapshot) ProveKeys(keys [][]byte) (MultiKeyProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return MultiKeyProof{}, err
+	}
+	defer unlock()
+	owned := make([][]byte, len(keys))
+	for index, key := range keys {
+		owned[index] = append([]byte(nil), key...)
+	}
+	raw, err := ffiMapSnapshotProveKeys(handle, owned)
+	if err != nil {
+		return MultiKeyProof{}, err
+	}
+	return decodeMultiKeyProof(raw)
+}
+
+// ProveRange creates a proof for the half-open interval [start, end).
+func (s *MapSnapshot) ProveRange(start, end []byte) (RangeProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return RangeProof{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProveRange(handle, append([]byte(nil), start...), cloneOptionalBytes(end))
+	if err != nil {
+		return RangeProof{}, err
+	}
+	return decodeRangeProof(raw)
+}
+
+// ProvePrefix creates a proof covering every key with prefix.
+func (s *MapSnapshot) ProvePrefix(prefix []byte) (RangeProof, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return RangeProof{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProvePrefix(handle, append([]byte(nil), prefix...))
+	if err != nil {
+		return RangeProof{}, err
+	}
+	return decodeRangeProof(raw)
+}
+
+// ProveRangePage returns a bounded page together with its independently
+// verifiable proof.
+func (s *MapSnapshot) ProveRangePage(cursor *RangeCursor, end []byte, limit uint64) (ProvedRangePage, error) {
+	handle, unlock, err := s.withHandle()
+	if err != nil {
+		return ProvedRangePage{}, err
+	}
+	defer unlock()
+	raw, err := ffiMapSnapshotProveRangePage(handle, cloneRangeCursor(cursor), cloneOptionalBytes(end), limit)
+	if err != nil {
+		return ProvedRangePage{}, err
+	}
+	return decodeProvedRangePage(raw)
+}
 func (s *MapSnapshot) Read() (*ReadSession, error) {
 	handle, unlock, err := s.withHandle()
 	if err != nil {
