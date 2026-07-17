@@ -419,6 +419,7 @@ class PortableParityTest {
         Prolly.useLocalDebugLibrary();
         try (Engine engine = Engine.memory(); var map = engine.versionedMap(bytes("async"))) {
             map.initialize();
+            var subscription = map.subscribeAsync().get();
             byte[] key = bytes("original-key");
             byte[] value = bytes("original-value");
             var future = map.putAsync(key, value);
@@ -426,6 +427,12 @@ class PortableParityTest {
             value[0] = 'x';
             future.get();
             assertArrayEquals(bytes("original-value"), map.get(bytes("original-key")).orElseThrow());
+            var head = map.headAsync().get().orElseThrow();
+            try (var snapshot = map.snapshotAtAsync(head.id()).get()) {
+                assertArrayEquals(bytes("original-value"), snapshot.getAsync(bytes("original-key")).get().orElseThrow());
+            }
+            assertTrue(subscription.pollAsync().get().isPresent());
+            subscription.close();
         }
     }
 

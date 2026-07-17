@@ -441,6 +441,40 @@ public final class VersionedMap: @unchecked Sendable {
         }
     }
 
+    public func initializeAsync() -> Task<MapVersionRecord, Error> {
+        Task { try Task.checkCancellation(); return try self.initialize() }
+    }
+    public func headAsync() -> Task<MapVersionRecord?, Error> {
+        Task { try Task.checkCancellation(); return try self.head() }
+    }
+    public func versionAsync(_ id: Data) -> Task<MapVersionRecord?, Error> {
+        let owned = Data(id)
+        return Task { try Task.checkCancellation(); return try self.version(owned) }
+    }
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func applyAsync(_ mutations: [MutationRecord]) -> Task<MapVersionRecord, Error> {
+        let owned = mutations.map(ownedMutation)
+        return Task { try Task.checkCancellation(); return try self.apply(owned) }
+    }
+    public func deleteAsync(_ key: Data) -> Task<MapVersionRecord, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.delete(owned) }
+    }
+    public func snapshotAsync() -> Task<MapSnapshot?, Error> {
+        Task { try Task.checkCancellation(); return try self.snapshot() }
+    }
+    public func snapshotAtAsync(_ id: Data) -> Task<MapSnapshot?, Error> {
+        let owned = Data(id)
+        return Task { try Task.checkCancellation(); return try self.snapshot(at: owned) }
+    }
+    public func subscribeAsync(from lastSeen: Data? = nil) -> Task<MapSubscription, Error> {
+        let owned = lastSeen.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.subscribe(from: owned) }
+    }
+
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("VersionedMap") }
         return try body()
@@ -507,6 +541,9 @@ public final class MapSubscription: @unchecked Sendable {
     public func close() { closed = true }
     public var lastSeen: Data? { get throws { try open { try native.lastSeen() } } }
     public func poll() throws -> MapChangeEventRecord? { try open { try native.poll() } }
+    public func pollAsync() -> Task<MapChangeEventRecord?, Error> {
+        Task { try Task.checkCancellation(); return try self.poll() }
+    }
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("MapSubscription") }
         return try body()
@@ -635,6 +672,42 @@ public final class MapSnapshot: @unchecked Sendable {
     public func export() throws -> SnapshotBundleRecord { try open { try native.export() } }
     public func read() throws -> ReadSession { try open { ReadSession(native: try native.readSession()) } }
 
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func getManyAsync(_ keys: [Data]) -> Task<[Data?], Error> {
+        let owned = keys.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.getMany(owned) }
+    }
+    public func rangeAsync(from start: Data = Data(), to end: Data? = nil) -> Task<[EntryRecord], Error> {
+        let ownedStart = Data(start), ownedEnd = end.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.range(from: ownedStart, to: ownedEnd) }
+    }
+    public func prefixAsync(_ prefix: Data) -> Task<[EntryRecord], Error> {
+        let owned = Data(prefix)
+        return Task { try Task.checkCancellation(); return try self.prefix(owned) }
+    }
+    public func proveKeyAsync(_ key: Data) -> Task<KeyProofRecord, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.proveKey(owned) }
+    }
+    public func proveKeysAsync(_ keys: [Data]) -> Task<MultiKeyProofRecord, Error> {
+        let owned = keys.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.proveKeys(owned) }
+    }
+    public func proveRangeAsync(from start: Data = Data(), to end: Data? = nil) -> Task<RangeProofRecord, Error> {
+        let ownedStart = Data(start), ownedEnd = end.map { Data($0) }
+        return Task { try Task.checkCancellation(); return try self.proveRange(from: ownedStart, to: ownedEnd) }
+    }
+    public func provePrefixAsync(_ prefix: Data) -> Task<RangeProofRecord, Error> {
+        let owned = Data(prefix)
+        return Task { try Task.checkCancellation(); return try self.provePrefix(owned) }
+    }
+    public func statsAsync() -> Task<TreeStatsRecord, Error> {
+        Task { try Task.checkCancellation(); return try self.stats() }
+    }
+
     private func open<R>(_ body: () throws -> R) throws -> R {
         if closed { throw PortableAPIError.closed("MapSnapshot") }
         return try body()
@@ -740,6 +813,29 @@ public final class IndexedMap: @unchecked Sendable {
     }
     public func keepLast(_ count: UInt64) throws -> IndexedRetentionRecord {
         try native.keepLast(count: count)
+    }
+    public func getAsync(_ key: Data) -> Task<Data?, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.get(owned) }
+    }
+    public func putAsync(_ key: Data, value: Data) -> Task<IndexedVersionRecord, Error> {
+        let ownedKey = Data(key), ownedValue = Data(value)
+        return Task { try Task.checkCancellation(); return try self.put(ownedKey, value: ownedValue) }
+    }
+    public func applyAsync(_ mutations: [MutationRecord]) -> Task<IndexedVersionRecord, Error> {
+        let owned = mutations.map(ownedMutation)
+        return Task { try Task.checkCancellation(); return try self.apply(owned) }
+    }
+    public func deleteAsync(_ key: Data) -> Task<IndexedVersionRecord, Error> {
+        let owned = Data(key)
+        return Task { try Task.checkCancellation(); return try self.delete(owned) }
+    }
+    public func ensureIndexAsync(_ name: Data) -> Task<IndexBuildResultRecord, Error> {
+        let owned = Data(name)
+        return Task { try Task.checkCancellation(); return try self.ensureIndex(owned) }
+    }
+    public func snapshotAsync() -> Task<IndexedSnapshot, Error> {
+        Task { try Task.checkCancellation(); return try self.snapshot() }
     }
 }
 

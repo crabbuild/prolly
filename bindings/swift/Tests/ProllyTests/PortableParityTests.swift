@@ -302,11 +302,18 @@ final class PortableParityTests: XCTestCase {
         try await Engine.withMemory { engine in
             let versioned = try engine.versionedMap(Data("async".utf8))
             _ = try versioned.initialize()
+            let subscription = try await versioned.subscribeAsync().value
             var key = Data("k".utf8)
             let task = versioned.putAsync(key, value: Data("v".utf8))
             key[0] = Character("x").asciiValue!
-            _ = try await task.value
+            let updated = try await task.value
             XCTAssertEqual(try versioned.get(Data("k".utf8)), Data("v".utf8))
+            XCTAssertEqual(try await versioned.headAsync().value?.id, updated.id)
+            let snapshot = try XCTUnwrap(try await versioned.snapshotAtAsync(updated.id).value)
+            XCTAssertEqual(try await snapshot.getAsync(Data("k".utf8)).value, Data("v".utf8))
+            XCTAssertNotNil(try await subscription.pollAsync().value)
+            snapshot.close()
+            subscription.close()
         }
     }
 

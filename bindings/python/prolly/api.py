@@ -17,6 +17,15 @@ from .packed import (
 from .uniffi import prolly as _native
 
 
+def _background(call):
+    """Run an owned blocking binding call without blocking the event loop."""
+
+    async def run():
+        return await asyncio.to_thread(call)
+
+    return run()
+
+
 class _Scoped:
     def __init__(self) -> None:
         self._closed = False
@@ -477,12 +486,43 @@ class VersionedMap(_Scoped):
 
     def put_async(self, key: bytes, value: bytes):
         copied_key, copied_value = bytes(key), bytes(value)
+        return _background(lambda: self.put(copied_key, copied_value))
 
-        async def run():
-            self._open()
-            return await asyncio.to_thread(self._inner.put, copied_key, copied_value)
+    def initialize_async(self):
+        return _background(self.initialize)
 
-        return run()
+    def head_async(self):
+        return _background(self.head)
+
+    def version_async(self, version_id: bytes):
+        owned_id = bytes(version_id)
+        return _background(lambda: self.version(owned_id))
+
+    def get_async(self, key: bytes):
+        owned_key = bytes(key)
+        return _background(lambda: self.get(owned_key))
+
+    def apply_async(self, mutations):
+        owned = tuple(mutations)
+        return _background(lambda: self.apply(owned))
+
+    def delete_async(self, key: bytes):
+        owned_key = bytes(key)
+        return _background(lambda: self.delete(owned_key))
+
+    def snapshot_async(self):
+        return _background(self.snapshot)
+
+    def snapshot_at_async(self, version_id: bytes):
+        owned_id = bytes(version_id)
+        return _background(lambda: self.snapshot_at(owned_id))
+
+    def subscribe_async(self):
+        return _background(self.subscribe)
+
+    def subscribe_from_async(self, last_seen: bytes | None = None):
+        owned = None if last_seen is None else bytes(last_seen)
+        return _background(lambda: self.subscribe_from(owned))
 
 
 class VersionedTransaction(_Scoped):
@@ -566,6 +606,9 @@ class MapSubscription(_Scoped):
     def poll(self):
         self._open()
         return self._inner.poll()
+
+    def poll_async(self):
+        return _background(self.poll)
 
 
 class MapMerge(_Scoped):
@@ -701,6 +744,51 @@ class MapSnapshot(_Scoped):
     def read(self) -> "ReadSession":
         self._open()
         return ReadSession(self._inner.read_session())
+
+    def get_async(self, key: bytes):
+        owned_key = bytes(key)
+        return _background(lambda: self.get(owned_key))
+
+    def get_many_async(self, keys: Iterable[bytes]):
+        owned_keys = tuple(bytes(key) for key in keys)
+        return _background(lambda: self.get_many(owned_keys))
+
+    def range_async(self, start: bytes = b"", end: bytes | None = None):
+        owned_start = bytes(start)
+        owned_end = None if end is None else bytes(end)
+        return _background(lambda: self.range(owned_start, owned_end))
+
+    def prefix_async(self, prefix: bytes):
+        owned_prefix = bytes(prefix)
+        return _background(lambda: self.prefix(owned_prefix))
+
+    def range_page_async(self, cursor=None, end: bytes | None = None, limit: int = 256):
+        owned_end = None if end is None else bytes(end)
+        return _background(lambda: self.range_page(cursor, owned_end, limit))
+
+    def prefix_page_async(self, prefix: bytes, cursor=None, limit: int = 256):
+        owned_prefix = bytes(prefix)
+        return _background(lambda: self.prefix_page(owned_prefix, cursor, limit))
+
+    def prove_key_async(self, key: bytes):
+        owned_key = bytes(key)
+        return _background(lambda: self.prove_key(owned_key))
+
+    def prove_keys_async(self, keys: Iterable[bytes]):
+        owned_keys = tuple(bytes(key) for key in keys)
+        return _background(lambda: self.prove_keys(owned_keys))
+
+    def prove_range_async(self, start: bytes = b"", end: bytes | None = None):
+        owned_start = bytes(start)
+        owned_end = None if end is None else bytes(end)
+        return _background(lambda: self.prove_range(owned_start, owned_end))
+
+    def prove_prefix_async(self, prefix: bytes):
+        owned_prefix = bytes(prefix)
+        return _background(lambda: self.prove_prefix(owned_prefix))
+
+    def stats_async(self):
+        return _background(self.stats)
 
 
 class ReadSession(_Scoped):
@@ -840,6 +928,33 @@ class IndexedMap(_Scoped):
     def keep_last(self, count: int):
         self._open()
         return self._inner.keep_last(count)
+
+    def get_async(self, key: bytes):
+        owned_key = bytes(key)
+        return _background(lambda: self.get(owned_key))
+
+    def put_async(self, key: bytes, value: bytes):
+        owned_key, owned_value = bytes(key), bytes(value)
+        return _background(lambda: self.put(owned_key, owned_value))
+
+    def apply_async(self, mutations):
+        owned = tuple(mutations)
+        return _background(lambda: self.apply(owned))
+
+    def delete_async(self, key: bytes):
+        owned_key = bytes(key)
+        return _background(lambda: self.delete(owned_key))
+
+    def ensure_index_async(self, name: bytes):
+        owned_name = bytes(name)
+        return _background(lambda: self.ensure_index(owned_name))
+
+    def snapshot_async(self):
+        return _background(self.snapshot)
+
+    def snapshot_at_async(self, source_version: bytes):
+        owned_version = bytes(source_version)
+        return _background(lambda: self.snapshot_at(owned_version))
 
 
 class IndexedSnapshot(_Scoped):

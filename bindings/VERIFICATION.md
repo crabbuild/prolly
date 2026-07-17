@@ -7,7 +7,7 @@ rustdoc JSON and includes every public Rust root export and reachable public
 associated item.
 
 ~~~sh
-cargo +nightly rustdoc --lib -- -Z unstable-options --output-format json
+cargo +nightly rustdoc --lib --features async-store -- -Z unstable-options --output-format json
 python3 scripts/binding_api_inventory.py generate
 python3 scripts/binding_api_inventory.py check
 ~~~

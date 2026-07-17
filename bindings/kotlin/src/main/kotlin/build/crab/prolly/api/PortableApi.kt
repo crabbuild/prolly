@@ -286,6 +286,28 @@ class VersionedMap(internal val native: BindingVersionedMap) : AutoCloseable {
                 withContext(Dispatchers.IO) { native.put(copiedKey, copiedValue) }
             }
         }
+    suspend fun initializeAsync() = withContext(Dispatchers.IO) { initialize() }
+    suspend fun headAsync() = withContext(Dispatchers.IO) { head() }
+    suspend fun versionAsync(id: ByteArray) = id.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { version(owned) }
+    }
+    suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { get(owned) }
+    }
+    suspend fun applyAsync(mutations: List<MutationRecord>) = mutations.map(::ownedMutation).let { owned ->
+        withContext(Dispatchers.IO) { apply(owned) }
+    }
+    suspend fun deleteAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { delete(owned) }
+    }
+    suspend fun snapshotAsync() = withContext(Dispatchers.IO) { snapshot() }
+    suspend fun snapshotAtAsync(id: ByteArray) = id.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { snapshotAt(owned) }
+    }
+    suspend fun subscribeAsync() = withContext(Dispatchers.IO) { subscribe() }
+    suspend fun subscribeFromAsync(lastSeen: ByteArray? = null) = lastSeen?.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { subscribeFrom(owned) }
+    }
     override fun close() = native.close()
 }
 
@@ -317,6 +339,7 @@ class MapComparison(internal val native: BindingMapComparison) : AutoCloseable {
 class MapSubscription(internal val native: BindingMapSubscription) : AutoCloseable {
     fun lastSeen() = native.lastSeen()?.copyOf()
     fun poll() = native.poll()
+    suspend fun pollAsync() = withContext(Dispatchers.IO) { poll() }
     override fun close() = native.close()
 }
 
@@ -389,6 +412,43 @@ class MapSnapshot(internal val native: BindingMapSnapshot) : AutoCloseable {
     fun stats() = native.stats()
     fun export() = native.export()
     fun read() = ReadSession(native.readSession())
+    suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { get(owned) }
+    }
+    suspend fun getManyAsync(keys: List<ByteArray>) = keys.map(ByteArray::copyOf).let { owned ->
+        withContext(Dispatchers.IO) { getMany(owned) }
+    }
+    suspend fun rangeAsync(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
+        start.copyOf().let { ownedStart ->
+            val ownedEnd = end?.copyOf()
+            withContext(Dispatchers.IO) { range(ownedStart, ownedEnd) }
+        }
+    suspend fun prefixAsync(prefix: ByteArray) = prefix.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { prefix(owned) }
+    }
+    suspend fun rangePageAsync(
+        cursor: RangeCursorRecord? = null, end: ByteArray? = null, limit: ULong = 256uL,
+    ) = withContext(Dispatchers.IO) { rangePage(ownedRangeCursor(cursor), end?.copyOf(), limit) }
+    suspend fun prefixPageAsync(
+        prefix: ByteArray, cursor: RangeCursorRecord? = null, limit: ULong = 256uL,
+    ) = prefix.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { prefixPage(owned, ownedRangeCursor(cursor), limit) }
+    }
+    suspend fun proveKeyAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { proveKey(owned) }
+    }
+    suspend fun proveKeysAsync(keys: List<ByteArray>) = keys.map(ByteArray::copyOf).let { owned ->
+        withContext(Dispatchers.IO) { proveKeys(owned) }
+    }
+    suspend fun proveRangeAsync(start: ByteArray = ByteArray(0), end: ByteArray? = null) =
+        start.copyOf().let { ownedStart ->
+            val ownedEnd = end?.copyOf()
+            withContext(Dispatchers.IO) { proveRange(ownedStart, ownedEnd) }
+        }
+    suspend fun provePrefixAsync(prefix: ByteArray) = prefix.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { provePrefix(owned) }
+    }
+    suspend fun statsAsync() = withContext(Dispatchers.IO) { stats() }
     override fun close() = native.close()
 }
 
@@ -438,6 +498,28 @@ class IndexedMap(internal val native: BindingIndexedMap) : AutoCloseable {
     fun importCurrent(bundle: ByteArray, expectedSource: ByteArray? = null) =
         native.importCurrent(bundle.copyOf(), expectedSource?.copyOf())
     fun keepLast(count: ULong) = native.keepLast(count)
+    suspend fun getAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { get(owned) }
+    }
+    suspend fun putAsync(key: ByteArray, value: ByteArray) =
+        key.copyOf().let { ownedKey ->
+            value.copyOf().let { ownedValue ->
+                withContext(Dispatchers.IO) { put(ownedKey, ownedValue) }
+            }
+        }
+    suspend fun applyAsync(mutations: List<MutationRecord>) = mutations.map(::ownedMutation).let { owned ->
+        withContext(Dispatchers.IO) { apply(owned) }
+    }
+    suspend fun deleteAsync(key: ByteArray) = key.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { delete(owned) }
+    }
+    suspend fun ensureIndexAsync(name: ByteArray) = name.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { ensureIndex(owned) }
+    }
+    suspend fun snapshotAsync() = withContext(Dispatchers.IO) { snapshot() }
+    suspend fun snapshotAtAsync(sourceVersion: ByteArray) = sourceVersion.copyOf().let { owned ->
+        withContext(Dispatchers.IO) { snapshotAt(owned) }
+    }
     override fun close() = native.close()
 }
 

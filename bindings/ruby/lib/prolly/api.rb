@@ -332,6 +332,16 @@ module Prolly
     def snapshot = open! { IndexedSnapshot.new(@native.snapshot) }
     def snapshot_at(source_version) = open! { IndexedSnapshot.new(@native.snapshot_at(source_version.b)) }
     def snapshot_by_id(id) = open! { IndexedSnapshot.new(@native.snapshot_by_id(id)) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def put_async(key, value) = Future.new { put(key.b.dup, value.b.dup) }
+    def apply_async(mutations)
+      owned = owned_mutations(mutations)
+      Future.new { apply(owned) }
+    end
+    def delete_async(key) = Future.new { delete(key.b.dup) }
+    def ensure_index_async(name) = Future.new { ensure_index(name.b.dup) }
+    def snapshot_async = Future.new { snapshot }
+    def snapshot_at_async(source_version) = Future.new { snapshot_at(source_version.b.dup) }
     def close = @closed = true
 
     private
@@ -450,6 +460,23 @@ module Prolly
       Future.new { put(copied_key, copied_value) }
     end
 
+    def initialize_async = Future.new { initialize_map }
+    def head_async = Future.new { head }
+    def version_async(id) = Future.new { version(id.b.dup) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def apply_async(mutations)
+      owned = owned_mutations(mutations)
+      Future.new { apply(owned) }
+    end
+    def delete_async(key) = Future.new { delete(key.b.dup) }
+    def snapshot_async = Future.new { snapshot }
+    def snapshot_at_async(id) = Future.new { snapshot_at(id.b.dup) }
+    def subscribe_async = Future.new { subscribe }
+    def subscribe_from_async(last_seen = nil)
+      owned = last_seen&.b&.dup
+      Future.new { subscribe_from(owned) }
+    end
+
     def close = @closed = true
 
     private
@@ -520,6 +547,7 @@ module Prolly
 
     def last_seen = open! { @native.last_seen }
     def poll = open! { @native.poll }
+    def poll_async = Future.new { poll }
     def close = @closed = true
 
     private
@@ -578,6 +606,37 @@ module Prolly
     def stats = open! { @native.stats }
     def export = open! { @native.export }
     def read = open! { ReadSession.new(@native.read_session) }
+    def get_async(key) = Future.new { get(key.b.dup) }
+    def get_many_async(keys)
+      owned = keys.map { |key| key.b.dup }
+      Future.new { get_many(owned) }
+    end
+    def range_async(start = ''.b, range_end = nil)
+      owned_start = start.b.dup
+      owned_end = range_end&.b&.dup
+      Future.new { range(owned_start, owned_end) }
+    end
+    def prefix_async(prefix) = Future.new { self.prefix(prefix.b.dup) }
+    def range_page_async(cursor = nil, range_end = nil, limit = 256)
+      owned_end = range_end&.b&.dup
+      Future.new { range_page(cursor, owned_end, limit) }
+    end
+    def prefix_page_async(prefix, cursor = nil, limit = 256)
+      owned_prefix = prefix.b.dup
+      Future.new { prefix_page(owned_prefix, cursor, limit) }
+    end
+    def prove_key_async(key) = Future.new { prove_key(key.b.dup) }
+    def prove_keys_async(keys)
+      owned = keys.map { |key| key.b.dup }
+      Future.new { prove_keys(owned) }
+    end
+    def prove_range_async(start = ''.b, range_end = nil)
+      owned_start = start.b.dup
+      owned_end = range_end&.b&.dup
+      Future.new { prove_range(owned_start, owned_end) }
+    end
+    def prove_prefix_async(prefix) = Future.new { prove_prefix(prefix.b.dup) }
+    def stats_async = Future.new { stats }
     def close = @closed = true
 
     private

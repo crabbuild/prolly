@@ -275,6 +275,22 @@ public final class VersionedMap implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<Optional<MapVersion>> headAsync() {
+        var nativeHandle = open();
+        return CompletableFuture.supplyAsync(() -> {
+            var value = nativeHandle.head();
+            return Optional.ofNullable(value == null ? null : MapVersion.fromNative(value));
+        });
+    }
+
+    public CompletableFuture<Optional<MapVersion>> versionAsync(byte[] id) {
+        var nativeHandle = open(); byte[] ownedId = id.clone();
+        return CompletableFuture.supplyAsync(() -> {
+            var value = nativeHandle.version(ownedId);
+            return Optional.ofNullable(value == null ? null : MapVersion.fromNative(value));
+        });
+    }
+
     public CompletableFuture<MapVersion> putAsync(byte[] key, byte[] value) {
         var nativeHandle = open();
         byte[] ownedKey = key.clone();
@@ -283,10 +299,47 @@ public final class VersionedMap implements AutoCloseable {
                 () -> MapVersion.fromNative(nativeHandle.put(ownedKey, ownedValue)));
     }
 
+    public CompletableFuture<MapVersion> applyAsync(List<MapMutation> mutations) {
+        var nativeHandle = open();
+        var owned = mutations.stream()
+                .map(value -> new MapMutation(value.kind(), value.key(), value.value())).toList();
+        return CompletableFuture.supplyAsync(() -> MapVersion.fromNative(
+                build.crab.prolly.api.JavaPortableBridge.applyVersioned(
+                        nativeHandle, owned.stream().map(MapMutation::toBridge).toList())));
+    }
+
     public CompletableFuture<MapVersion> deleteAsync(byte[] key) {
         var nativeHandle = open();
         byte[] ownedKey = key.clone();
         return CompletableFuture.supplyAsync(() -> MapVersion.fromNative(nativeHandle.delete(ownedKey)));
+    }
+
+    public CompletableFuture<MapSnapshot> snapshotAsync() {
+        var nativeHandle = open();
+        return CompletableFuture.supplyAsync(() -> {
+            var value = nativeHandle.snapshot();
+            return value == null ? null : new MapSnapshot(value);
+        });
+    }
+
+    public CompletableFuture<MapSnapshot> snapshotAtAsync(byte[] id) {
+        var nativeHandle = open(); byte[] ownedId = id.clone();
+        return CompletableFuture.supplyAsync(() -> {
+            var value = nativeHandle.snapshotAt(ownedId);
+            return value == null ? null : new MapSnapshot(value);
+        });
+    }
+
+    public CompletableFuture<MapSubscription> subscribeAsync() {
+        var nativeHandle = open();
+        return CompletableFuture.supplyAsync(() -> new MapSubscription(nativeHandle.subscribe()));
+    }
+
+    public CompletableFuture<MapSubscription> subscribeFromAsync(byte[] lastSeen) {
+        var nativeHandle = open();
+        byte[] owned = lastSeen == null ? null : lastSeen.clone();
+        return CompletableFuture.supplyAsync(
+                () -> new MapSubscription(nativeHandle.subscribeFrom(owned)));
     }
 
     @Override

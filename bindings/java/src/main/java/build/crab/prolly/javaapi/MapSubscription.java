@@ -2,6 +2,7 @@ package build.crab.prolly.javaapi;
 
 import build.crab.prolly.MapChangeEventRecord;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /** Resumable, explicitly-polled versioned-map change subscription. */
 public final class MapSubscription implements AutoCloseable {
@@ -22,6 +23,11 @@ public final class MapSubscription implements AutoCloseable {
     }
 
     public Optional<MapChangeEventRecord> poll() { return Optional.ofNullable(open().poll()); }
+
+    public CompletableFuture<Optional<MapChangeEventRecord>> pollAsync() {
+        var nativeHandle = open();
+        return CompletableFuture.supplyAsync(() -> Optional.ofNullable(nativeHandle.poll()));
+    }
 
     @Override
     public void close() {

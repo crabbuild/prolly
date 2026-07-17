@@ -59,6 +59,15 @@ func (m *VersionedMap) InitializeAsync(ctx context.Context) *Future[MapVersion] 
 	return startFuture(ctx, m.Initialize)
 }
 
+func (m *VersionedMap) HeadAsync(ctx context.Context) *Future[*MapVersion] {
+	return startFuture(ctx, m.Head)
+}
+
+func (m *VersionedMap) VersionAsync(ctx context.Context, id []byte) *Future[*MapVersion] {
+	id = append([]byte(nil), id...)
+	return startFuture(ctx, func() (*MapVersion, error) { return m.Version(id) })
+}
+
 func (m *VersionedMap) GetAsync(ctx context.Context, key []byte) *Future[VersionedGetResult] {
 	key = append([]byte(nil), key...)
 	return startFuture(ctx, func() (VersionedGetResult, error) {
@@ -73,9 +82,89 @@ func (m *VersionedMap) PutAsync(ctx context.Context, key, value []byte) *Future[
 	return startFuture(ctx, func() (MapVersion, error) { return m.Put(key, value) })
 }
 
+func (m *VersionedMap) ApplyAsync(ctx context.Context, mutations []Mutation) *Future[MapVersion] {
+	mutations = cloneMutations(mutations)
+	return startFuture(ctx, func() (MapVersion, error) { return m.Apply(mutations) })
+}
+
 func (m *VersionedMap) DeleteAsync(ctx context.Context, key []byte) *Future[MapVersion] {
 	key = append([]byte(nil), key...)
 	return startFuture(ctx, func() (MapVersion, error) { return m.Delete(key) })
+}
+
+func (m *VersionedMap) SnapshotAsync(ctx context.Context) *Future[*MapSnapshot] {
+	return startFuture(ctx, m.Snapshot)
+}
+
+func (m *VersionedMap) SnapshotAtAsync(ctx context.Context, id []byte) *Future[*MapSnapshot] {
+	id = append([]byte(nil), id...)
+	return startFuture(ctx, func() (*MapSnapshot, error) { return m.SnapshotAt(id) })
+}
+
+func (m *VersionedMap) SubscribeAsync(ctx context.Context) *Future[*MapSubscription] {
+	return startFuture(ctx, m.Subscribe)
+}
+
+func (m *VersionedMap) SubscribeFromAsync(ctx context.Context, lastSeen []byte) *Future[*MapSubscription] {
+	lastSeen = append([]byte(nil), lastSeen...)
+	return startFuture(ctx, func() (*MapSubscription, error) { return m.SubscribeFrom(lastSeen) })
+}
+
+func (s *MapSubscription) PollAsync(ctx context.Context) *Future[*MapChangeEvent] {
+	return startFuture(ctx, s.Poll)
+}
+
+func (s *MapSnapshot) GetAsync(ctx context.Context, key []byte) *Future[VersionedGetResult] {
+	key = append([]byte(nil), key...)
+	return startFuture(ctx, func() (VersionedGetResult, error) {
+		value, found, err := s.Get(key)
+		return VersionedGetResult{Value: value, Found: found}, err
+	})
+}
+
+func (s *MapSnapshot) GetManyAsync(ctx context.Context, keys [][]byte) *Future[[][]byte] {
+	keys = cloneByteSlices(keys)
+	return startFuture(ctx, func() ([][]byte, error) { return s.GetMany(keys) })
+}
+
+func (s *MapSnapshot) RangeAsync(ctx context.Context, start, end []byte) *Future[[]Entry] {
+	start, end = append([]byte(nil), start...), append([]byte(nil), end...)
+	return startFuture(ctx, func() ([]Entry, error) { return s.Range(start, end) })
+}
+
+func (s *MapSnapshot) PrefixAsync(ctx context.Context, prefix []byte) *Future[[]Entry] {
+	prefix = append([]byte(nil), prefix...)
+	return startFuture(ctx, func() ([]Entry, error) { return s.Prefix(prefix) })
+}
+
+func (s *MapSnapshot) RangePageAsync(ctx context.Context, cursor *RangeCursor, end []byte, limit uint64) *Future[RangePage] {
+	cursor, end = cloneRangeCursor(cursor), append([]byte(nil), end...)
+	return startFuture(ctx, func() (RangePage, error) { return s.RangePage(cursor, end, limit) })
+}
+
+func (s *MapSnapshot) PrefixPageAsync(ctx context.Context, prefix []byte, cursor *RangeCursor, limit uint64) *Future[RangePage] {
+	prefix, cursor = append([]byte(nil), prefix...), cloneRangeCursor(cursor)
+	return startFuture(ctx, func() (RangePage, error) { return s.PrefixPage(prefix, cursor, limit) })
+}
+
+func (s *MapSnapshot) ProveKeyAsync(ctx context.Context, key []byte) *Future[KeyProof] {
+	key = append([]byte(nil), key...)
+	return startFuture(ctx, func() (KeyProof, error) { return s.ProveKey(key) })
+}
+
+func (s *MapSnapshot) ProveKeysAsync(ctx context.Context, keys [][]byte) *Future[MultiKeyProof] {
+	keys = cloneByteSlices(keys)
+	return startFuture(ctx, func() (MultiKeyProof, error) { return s.ProveKeys(keys) })
+}
+
+func (s *MapSnapshot) ProveRangeAsync(ctx context.Context, start, end []byte) *Future[RangeProof] {
+	start, end = append([]byte(nil), start...), append([]byte(nil), end...)
+	return startFuture(ctx, func() (RangeProof, error) { return s.ProveRange(start, end) })
+}
+
+func (s *MapSnapshot) ProvePrefixAsync(ctx context.Context, prefix []byte) *Future[RangeProof] {
+	prefix = append([]byte(nil), prefix...)
+	return startFuture(ctx, func() (RangeProof, error) { return s.ProvePrefix(prefix) })
 }
 
 type IndexedGetResult struct {
@@ -109,6 +198,11 @@ func (m *IndexedMap) EnsureIndexAsync(ctx context.Context, name []byte) *Future[
 
 func (m *IndexedMap) SnapshotAsync(ctx context.Context) *Future[*IndexedSnapshot] {
 	return startFuture(ctx, m.Snapshot)
+}
+
+func (m *IndexedMap) SnapshotAtAsync(ctx context.Context, sourceVersion []byte) *Future[*IndexedSnapshot] {
+	sourceVersion = append([]byte(nil), sourceVersion...)
+	return startFuture(ctx, func() (*IndexedSnapshot, error) { return m.SnapshotAt(sourceVersion) })
 }
 
 func startProximitySearchFuture(

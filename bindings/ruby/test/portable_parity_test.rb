@@ -374,11 +374,18 @@ class PortableParityTest < Minitest::Test
     Prolly::Engine.memory.use do |engine|
       versioned = engine.versioned_map('async'.b)
       versioned.initialize_map
+      subscription = versioned.subscribe_async.value
       key = 'k'.b
       future = versioned.put_async(key, 'v'.b)
       key.replace('x'.b)
-      future.value
+      updated = future.value
       assert_equal 'v'.b, versioned.get('k'.b)
+      assert_equal updated.id, versioned.head_async.value.id
+      snapshot = versioned.snapshot_at_async(updated.id).value
+      assert_equal 'v'.b, snapshot.get_async('k'.b).value
+      refute_nil subscription.poll_async.value
+      snapshot.close
+      subscription.close
     end
   end
 

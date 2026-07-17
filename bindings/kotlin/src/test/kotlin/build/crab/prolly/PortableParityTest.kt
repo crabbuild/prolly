@@ -443,10 +443,17 @@ class PortableParityTest {
         Engine.memory().use { engine ->
             engine.versionedMap("async".bytes()).use { versioned ->
                 versioned.initialize()
+                val subscription = versioned.subscribeAsync()
                 val key = "k".bytes()
-                versioned.putAsync(key, "v".bytes())
+                val updated = versioned.putAsync(key, "v".bytes())
                 key[0] = 'x'.code.toByte()
                 assertArrayEquals("v".bytes(), versioned.get("k".bytes()))
+                assertArrayEquals(updated.id, versioned.headAsync()!!.id)
+                versioned.snapshotAtAsync(updated.id)!!.use { snapshot ->
+                    assertArrayEquals("v".bytes(), snapshot.getAsync("k".bytes()))
+                }
+                assertEquals(false, subscription.pollAsync() == null)
+                subscription.close()
             }
         }
     }
