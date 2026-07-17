@@ -913,6 +913,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index() != 41978:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index() != 60542:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot() != 23616:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_at() != 6975:
@@ -3814,6 +3816,17 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index.argty
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -7239,6 +7252,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_put.restype 
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot.restype = ctypes.c_uint16
@@ -25684,6 +25700,8 @@ class BindingIndexedMapProtocol(typing.Protocol):
         raise NotImplementedError
     def repair_index(self, name: bytes,source_version: bytes) -> IndexVerificationRecord:
         raise NotImplementedError
+    def replace_index(self, name: bytes,generation: int,extractor_id: str,projection: IndexProjectionRecord,limits: typing.Optional[SecondaryIndexLimitsRecord],extractor: SecondaryIndexExtractorCallback) -> IndexBuildResultRecord:
+        raise NotImplementedError
     def snapshot(self, ) -> BindingIndexedSnapshot:
         raise NotImplementedError
     def snapshot_at(self, source_version: bytes) -> BindingIndexedSnapshot:
@@ -25955,6 +25973,36 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def replace_index(self, name: bytes,generation: int,extractor_id: str,projection: IndexProjectionRecord,limits: typing.Optional[SecondaryIndexLimitsRecord],extractor: SecondaryIndexExtractorCallback) -> IndexBuildResultRecord:
+
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterUInt64.check_lower(generation)
+
+        _UniffiFfiConverterString.check_lower(extractor_id)
+
+        _UniffiFfiConverterTypeIndexProjectionRecord.check_lower(projection)
+
+        _UniffiFfiConverterOptionalTypeSecondaryIndexLimitsRecord.check_lower(limits)
+
+        _UniffiFfiConverterTypeSecondaryIndexExtractorCallback.check_lower(extractor)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterUInt64.lower(generation),
+            _UniffiFfiConverterString.lower(extractor_id),
+            _UniffiFfiConverterTypeIndexProjectionRecord.lower(projection),
+            _UniffiFfiConverterOptionalTypeSecondaryIndexLimitsRecord.lower(limits),
+            _UniffiFfiConverterTypeSecondaryIndexExtractorCallback.lower(extractor),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeIndexBuildResultRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)

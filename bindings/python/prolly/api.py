@@ -915,6 +915,27 @@ class IndexedMap(_Scoped):
         self._open()
         return self._inner.repair_index(bytes(name), bytes(source_version))
 
+    def replace_index(
+        self,
+        name: bytes,
+        generation: int,
+        extractor_id: str,
+        projection: _native.IndexProjectionRecord,
+        extractor: Callable[[bytes, bytes], Iterable[tuple[bytes, bytes | None]]],
+        limits=None,
+    ):
+        class Adapter(_native.SecondaryIndexExtractorCallback):
+            def extract(self, primary_key: bytes, source_value: bytes):
+                return [
+                    _native.IndexEntryRecord(term=bytes(term), projection=value)
+                    for term, value in extractor(primary_key, source_value)
+                ]
+
+        self._open()
+        return self._inner.replace_index(
+            bytes(name), generation, extractor_id, projection, limits, Adapter()
+        )
+
     def deactivate_index(self, name: bytes):
         self._open()
         return self._inner.deactivate_index(bytes(name))

@@ -2813,6 +2813,7 @@ impl NativePortableIndexRegistry {
 #[napi]
 pub struct NativePortableIndexedMap {
     inner: Arc<BindingIndexedMap>,
+    env: Env,
 }
 
 #[napi]
@@ -2993,6 +2994,43 @@ impl NativePortableIndexedMap {
     #[napi(js_name = "planGc")]
     pub fn plan_gc(&self) -> Result<NodeGcPlanRecord> {
         self.inner.plan_gc().map(Into::into).map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "replaceIndex")]
+    pub fn replace_index(
+        &self,
+        name: Buffer,
+        generation: String,
+        extractor_id: String,
+        projection: String,
+        extractor: NodePortableIndexExtractor,
+    ) -> Result<NodePortableIndexBuildResult> {
+        let generation = generation.parse::<u64>().map_err(|error| {
+            Error::new(
+                Status::InvalidArg,
+                format!("invalid index generation: {error}"),
+            )
+        })?;
+        let projection = match projection.as_str() {
+            "keys_only" => IndexProjectionRecord::KeysOnly,
+            "include" => IndexProjectionRecord::Include,
+            "all" => IndexProjectionRecord::All,
+            _ => return Err(Error::new(Status::InvalidArg, "invalid index projection")),
+        };
+        self.inner
+            .replace_index(
+                name.to_vec(),
+                generation,
+                extractor_id,
+                projection,
+                None,
+                Arc::new(NodeIndexExtractor {
+                    env: self.env,
+                    callback: extractor,
+                }),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
     }
 }
 
@@ -4508,7 +4546,10 @@ impl NativeProllyEngine {
     ) -> Result<NativePortableIndexedMap> {
         self.inner
             .indexed_map(id.to_vec(), Arc::clone(&registry.inner))
-            .map(|inner| NativePortableIndexedMap { inner })
+            .map(|inner| NativePortableIndexedMap {
+                inner,
+                env: registry.env,
+            })
             .map_err(to_napi_error)
     }
 

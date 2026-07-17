@@ -197,6 +197,7 @@ extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_put(uint64_
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_delete(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_get(uint64_t ptr, RustBuffer key, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
+extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(uint64_t ptr, RustBuffer name, uint64_t generation, RustBuffer extractor_id, RustBuffer projection, RustBuffer limits, uint64_t extractor, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_health(uint64_t ptr, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(uint64_t ptr, RustBuffer name, RustBuffer source_version, RustCallStatus *out_err);
 extern RustBuffer uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index(uint64_t ptr, RustBuffer name, RustCallStatus *out_err);
@@ -2136,6 +2137,38 @@ func ffiIndexedMapEnsureIndex(handle uint64, name []byte) ([]byte, error) {
 	}
 	var status C.RustCallStatus
 	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(clone, nameBuf, &status)
+	if err := portableStatusError(&status); err != nil {
+		return nil, err
+	}
+	return portableTakeBuffer(buf), nil
+}
+
+func ffiIndexedMapReplaceIndex(handle uint64, name []byte, generation uint64, extractorID string, projection int32, limits []byte, extractor uint64) ([]byte, error) {
+	clone, err := portableCloneIndexedMap(handle)
+	if err != nil {
+		return nil, err
+	}
+	nameBuf, err := portableInput(encodeByteArray(name))
+	if err != nil {
+		return nil, err
+	}
+	idBuf, err := portableInput([]byte(extractorID))
+	if err != nil {
+		return nil, err
+	}
+	projectionBuf, err := portableInput(encodeEnum(projection))
+	if err != nil {
+		return nil, err
+	}
+	limitsBuf, err := portableInput(limits)
+	if err != nil {
+		return nil, err
+	}
+	var status C.RustCallStatus
+	buf := C.uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(
+		clone, nameBuf, C.uint64_t(generation), idBuf, projectionBuf, limitsBuf,
+		C.uint64_t(extractor), &status,
+	)
 	if err := portableStatusError(&status); err != nil {
 		return nil, err
 	}

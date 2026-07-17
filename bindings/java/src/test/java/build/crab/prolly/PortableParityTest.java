@@ -14,6 +14,7 @@ import build.crab.prolly.javaapi.HnswConfig;
 import build.crab.prolly.javaapi.IndexEntry;
 import build.crab.prolly.javaapi.IndexProjection;
 import build.crab.prolly.javaapi.IndexedMutation;
+import build.crab.prolly.javaapi.IndexedSnapshotId;
 import build.crab.prolly.javaapi.IndexedUpdateKind;
 import build.crab.prolly.javaapi.MapMutation;
 import build.crab.prolly.javaapi.MapEntry;
@@ -485,6 +486,19 @@ class PortableParityTest {
                 try (var indexed = engine.indexedMap(bytes("indexed-maintenance"), registry)) {
                     var version = indexed.put(bytes("k"), bytes("term"));
                     indexed.ensureIndex(bytes("by_value"));
+                    IndexedSnapshotId oldSnapshotId;
+                    try (var oldSnapshot = indexed.snapshot()) {
+                        oldSnapshotId = oldSnapshot.id();
+                    }
+                    var replacement = indexed.replaceIndex(
+                            bytes("by_value"), 2, "value-v2", IndexProjection.ALL,
+                            (key, value) -> List.of(new IndexEntry(value, null)));
+                    assertEquals(2, replacement.generation());
+                    assertEquals(2, indexed.health().activeIndexes().get(0).generation());
+                    try (var historical = indexed.snapshotById(oldSnapshotId);
+                         var historicalIndex = historical.index(bytes("by_value"))) {
+                        assertEquals(1, historicalIndex.exact(bytes("term")).size());
+                    }
                     assertTrue(indexed.verifyIndex(bytes("by_value"), version.sourceVersion()).valid());
                     assertTrue(indexed.buildAttempts() >= 1);
                     assertFalse(indexed.exportCurrent().length == 0);

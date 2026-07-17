@@ -1777,6 +1777,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_put(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot_at(
@@ -2899,6 +2901,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(`ptr`: L
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_put(`ptr`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(`ptr`: Long,`name`: RustBuffer.ByValue,`sourceVersion`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(`ptr`: Long,`name`: RustBuffer.ByValue,`generation`: Long,`extractorId`: RustBuffer.ByValue,`projection`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,`extractor`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
@@ -5000,6 +5004,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_repair_index() != 41978.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_replace_index() != 60542.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexedmap_snapshot() != 23616.toShort()) {
@@ -9071,6 +9078,8 @@ public interface BindingIndexedMapInterface {
 
     fun `repairIndex`(`name`: kotlin.ByteArray, `sourceVersion`: kotlin.ByteArray): IndexVerificationRecord
 
+    fun `replaceIndex`(`name`: kotlin.ByteArray, `generation`: kotlin.ULong, `extractorId`: kotlin.String, `projection`: IndexProjectionRecord, `limits`: SecondaryIndexLimitsRecord?, `extractor`: SecondaryIndexExtractorCallback): IndexBuildResultRecord
+
     fun `snapshot`(): BindingIndexedSnapshot
 
     fun `snapshotAt`(`sourceVersion`: kotlin.ByteArray): BindingIndexedSnapshot
@@ -9391,6 +9400,20 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(
         it,
         FfiConverterByteArray.lower(`name`),FfiConverterByteArray.lower(`sourceVersion`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `replaceIndex`(`name`: kotlin.ByteArray, `generation`: kotlin.ULong, `extractorId`: kotlin.String, `projection`: IndexProjectionRecord, `limits`: SecondaryIndexLimitsRecord?, `extractor`: SecondaryIndexExtractorCallback): IndexBuildResultRecord {
+            return FfiConverterTypeIndexBuildResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(
+        it,
+        FfiConverterByteArray.lower(`name`),FfiConverterULong.lower(`generation`),FfiConverterString.lower(`extractorId`),FfiConverterTypeIndexProjectionRecord.lower(`projection`),FfiConverterOptionalTypeSecondaryIndexLimitsRecord.lower(`limits`),FfiConverterTypeSecondaryIndexExtractorCallback.lower(`extractor`),_status)
 }
     }
     )

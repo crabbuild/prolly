@@ -325,6 +325,10 @@ module Prolly
     def verify_index(name, source_version) = open! { @native.verify_index(name.b, source_version.b) }
     def verify_all(source_version) = open! { @native.verify_all(source_version.b) }
     def repair_index(name, source_version) = open! { @native.repair_index(name.b, source_version.b) }
+    def replace_index(name, generation, extractor_id, projection, extractor, limits: nil)
+      adapter = extractor.is_a?(SecondaryIndexExtractorCallback) ? extractor : ProcIndexExtractor.new(extractor)
+      open! { @native.replace_index(name.b, generation, extractor_id, projection, limits, adapter) }
+    end
     def deactivate_index(name) = open! { @native.deactivate_index(name.b) }
     def export_current = open! { @native.export_current }
     def import_current(bundle, expected_source = nil) = open! { @native.import_current(bundle.b, expected_source&.b) }

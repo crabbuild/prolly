@@ -1302,6 +1302,7 @@ export declare class NativePortableIndexedMap {
   importCurrent(bundle: Buffer, expectedSource?: Buffer | undefined | null): NodePortableIndexedVersion
   keepLast(count: string): NodePortableIndexedRetention
   planGc(): NodeGcPlanRecord
+  replaceIndex(name: Buffer, generation: string, extractorId: string, projection: string, extractor: NodePortableIndexExtractor): NodePortableIndexBuildResult
 }
 export declare class NativePortableIndexedSnapshot {
   id(): NodePortableIndexedSnapshotId
