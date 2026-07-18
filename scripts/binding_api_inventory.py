@@ -399,6 +399,23 @@ _NON_APPLICATION_RUNTIME_OWNERS = {
     "prolly::StructuralDiffCursor",
     "prolly::SyncBlobStoreAsAsync",
 }
+_RUNTIME_EQUIVALENCE_BY_OWNER = {
+    "prolly::AsyncRangeIter": "iterator-sequence",
+    "prolly::Cursor": "iterator-sequence",
+    "prolly::CursorIterator": "iterator-sequence",
+    "prolly::DiffCursor": "iterator-sequence",
+    "prolly::RangeCursor": "iterator-sequence",
+    "prolly::RangeIter": "iterator-sequence",
+    "prolly::ReverseCursor": "iterator-sequence",
+    "prolly::StructuralDiffCursor": "iterator-sequence",
+    "prolly::IndexedSourceRecordRef": "borrowed-view",
+    "prolly::ProximityRecordRef": "borrowed-view",
+    "prolly::ProximityVectorRef": "borrowed-view",
+    "prolly::SecondaryIndexMatchRef": "borrowed-view",
+    "prolly::SearchIo": "builder-typestate",
+    "prolly::SyncBlobStoreAsAsync": "store-trait",
+    "prolly::VersionedMapEditor": "builder-typestate",
+}
 
 
 def _abstraction_equivalence(item: ApiItem) -> str | None:
@@ -484,6 +501,108 @@ def review_abstraction_entries(
     return reviewed
 
 
+def complete_reviewed_equivalence_entries(
+    manifest: dict[str, Any], equivalences: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply explicit host symbols and shared tests to reviewed abstractions."""
+
+    completed = dict(manifest)
+    operations: list[Any] = []
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        equivalence_id = entry.get("equivalence")
+        equivalence = equivalences.get(equivalence_id)
+        language_symbols = (
+            equivalence.get("language_symbols")
+            if isinstance(equivalence, dict)
+            else None
+        )
+        can_complete = (
+            entry.get("status") == "planned"
+            and entry.get("classification") in {"idiomatic", "rust-language-only"}
+            and _valid_review_metadata(entry)
+            and isinstance(equivalence_id, str)
+            and _valid_equivalence_record(equivalence)
+            and _nonempty_strings(language_symbols)
+            and set(language_symbols) == set(LANGUAGES)
+            and entry.get("languages") == {}
+            and entry.get("exclusions") == {}
+        )
+        if not can_complete:
+            operations.append(entry)
+            continue
+
+        rust = entry["rust"]
+        member = rust.rsplit("::", 1)[-1]
+        entry.update(
+            status="implemented",
+            languages={
+                language: template.replace("{rust}", rust).replace(
+                    "{member}", member
+                )
+                for language, template in language_symbols.items()
+            },
+            tests=list(equivalence["tests"]),
+            reconciliation="bound-idiomatic",
+            reconciliation_evidence=[
+                f"bindings/api/idiomatic-equivalents.json#{equivalence_id}"
+            ],
+            reconciliation_rationale=(
+                f"The reviewed {equivalence_id} contract defines concrete host "
+                "symbols, portable semantics, performance behavior, and shared "
+                "conformance evidence for this Rust abstraction."
+            ),
+        )
+        operations.append(entry)
+    completed["operations"] = operations
+    return completed
+
+
+def review_runtime_equivalence_entries(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Classify reviewed Rust cursor, view, and adapter methods idiomatically."""
+
+    reviewed = dict(manifest)
+    operations: list[Any] = []
+    for original in manifest.get("operations", []):
+        if not isinstance(original, dict):
+            operations.append(original)
+            continue
+        entry = dict(original)
+        rust = entry.get("rust")
+        owner = rust.rsplit("::", 1)[0] if isinstance(rust, str) else None
+        equivalence = _RUNTIME_EQUIVALENCE_BY_OWNER.get(owner)
+        if (
+            equivalence is None
+            or entry.get("status") != "planned"
+            or entry.get("audience") not in {"rust-extension", "application"}
+            or entry.get("reviewed") is not True
+            or entry.get("classification") not in {"portable", "idiomatic"}
+        ):
+            operations.append(entry)
+            continue
+        performance = {
+            "borrowed-view": "scoped-view",
+            "iterator-sequence": "paged",
+        }.get(equivalence, "owned")
+        entry.update(
+            classification="idiomatic",
+            equivalence=equivalence,
+            performance=performance,
+            rationale=(
+                f"{rust} is Rust runtime machinery represented by the reviewed "
+                f"{equivalence} host-language contract."
+            ),
+            docs=[f"bindings/api/idiomatic-equivalents.json#{equivalence}"],
+            reviewed=True,
+        )
+        operations.append(entry)
+    reviewed["operations"] = operations
+    return reviewed
+
+
 def review_runtime_audience_entries(
     items: dict[str, ApiItem], manifest: dict[str, Any]
 ) -> dict[str, Any]:
@@ -533,7 +652,7 @@ def apply_reconciliations(
 ) -> dict[str, Any]:
     """Expand reviewed reconciliation groups onto exact manifest rows."""
 
-    decisions: dict[str, tuple[str, list[str], str]] = {}
+    decisions: dict[str, tuple[str, list[str], str, dict[str, Any]]] = {}
     groups = document.get("groups")
     if not isinstance(groups, list):
         raise ValueError("reconciliation document must contain groups")
@@ -554,10 +673,39 @@ def apply_reconciliations(
             or not rationale.strip()
         ):
             raise ValueError("reconciliation group is incomplete")
+        templates = group.get("language_templates")
+        if templates is not None:
+            if (
+                group["state"] not in {"bound-direct", "bound-idiomatic"}
+                or not _nonempty_strings(templates)
+                or set(templates) != set(LANGUAGES)
+                or not isinstance(group.get("tests"), list)
+                or not group["tests"]
+                or not all(
+                    isinstance(test, str) and test.strip()
+                    for test in group["tests"]
+                )
+                or not isinstance(group.get("docs"), list)
+                or not group["docs"]
+                or not all(
+                    isinstance(doc, str) and doc.strip() for doc in group["docs"]
+                )
+            ):
+                raise ValueError("reconciliation release mapping is incomplete")
+        overrides = group.get("language_overrides", {})
+        if not isinstance(overrides, dict) or any(
+            rust not in rust_paths
+            or not _nonempty_strings(values)
+            or not set(values).issubset(LANGUAGES)
+            for rust, values in overrides.items()
+        ):
+            raise ValueError("reconciliation language overrides are invalid")
         for rust in rust_paths:
             if rust in decisions:
                 raise ValueError(f"duplicate reconciliation for {rust}")
-            decisions[rust] = (group["state"], list(evidence), rationale)
+            decisions[rust] = (
+                group["state"], list(evidence), rationale, group
+            )
 
     reconciled = dict(manifest)
     operations: list[Any] = []
@@ -569,12 +717,36 @@ def apply_reconciliations(
         entry = dict(original)
         rust = entry.get("rust")
         if rust in decisions:
-            state, evidence, rationale = decisions[rust]
+            state, evidence, rationale, group = decisions[rust]
             entry.update(
                 reconciliation=state,
                 reconciliation_evidence=evidence,
                 reconciliation_rationale=rationale,
             )
+            templates = group.get("language_templates")
+            if isinstance(templates, dict):
+                member = rust.rsplit("::", 1)[-1]
+                words = member.split("_")
+                camel = words[0] + "".join(word.capitalize() for word in words[1:])
+                pascal = "".join(word.capitalize() for word in words)
+                symbols = {
+                    language: template.replace("{rust}", rust)
+                    .replace("{member}", member)
+                    .replace("{snake}", member)
+                    .replace("{camel}", camel)
+                    .replace("{pascal}", pascal)
+                    for language, template in templates.items()
+                }
+                symbols.update(group.get("language_overrides", {}).get(rust, {}))
+                entry.update(
+                    status="implemented",
+                    languages=symbols,
+                    exclusions={},
+                    tests=list(group["tests"]),
+                    docs=list(group["docs"]),
+                    reviewed=True,
+                    rationale=rationale,
+                )
             seen.add(rust)
         operations.append(entry)
     missing = sorted(set(decisions) - seen)
@@ -696,6 +868,7 @@ def build_application_gap_report(
     }
     report: dict[str, Any] = {
         "release_complete_application_operations": [],
+        "release_complete_non_application_runtime": [],
         "bound_pending_manifest_evidence": [],
         "confirmed_missing_implementation": [],
         "confirmed_performance_gap": [],
@@ -718,16 +891,21 @@ def build_application_gap_report(
                     _gap_row(item, entry)
                 )
             continue
-        if complete:
-            report["release_complete_application_operations"].append(
-                _gap_row(item, entry)
-            )
-            continue
         if audience not in AUDIENCES:
             report["application_review_required"].append(_gap_row(item, entry))
             continue
         if audience != "application":
-            report["non_application_runtime"].append(_gap_row(item, entry))
+            bucket = (
+                "release_complete_non_application_runtime"
+                if complete
+                else "non_application_runtime"
+            )
+            report[bucket].append(_gap_row(item, entry))
+            continue
+        if complete:
+            report["release_complete_application_operations"].append(
+                _gap_row(item, entry)
+            )
             continue
         row = _gap_row(item, entry)
         reconciliation = entry.get("reconciliation")
@@ -948,6 +1126,8 @@ def _parser() -> argparse.ArgumentParser:
             "audit",
             "gaps",
             "review-abstractions",
+            "complete-equivalences",
+            "review-runtime-equivalences",
             "review-audiences",
             "apply-reconciliations",
         ),
@@ -1042,6 +1222,36 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             f"wrote {reviewed_count} reviewed abstraction classifications "
+            f"to {manifest_path}"
+        )
+        return 0
+    if args.command == "complete-equivalences":
+        completed = complete_reviewed_equivalence_entries(manifest, equivalences)
+        _write_json(manifest_path, completed)
+        completed_count = sum(
+            1
+            for entry in completed["operations"]
+            if isinstance(entry, dict)
+            and entry.get("status") == "implemented"
+            and entry.get("equivalence") in equivalences
+        )
+        print(
+            f"wrote {completed_count} completed equivalence mappings "
+            f"to {manifest_path}"
+        )
+        return 0
+    if args.command == "review-runtime-equivalences":
+        reviewed = review_runtime_equivalence_entries(manifest)
+        _write_json(manifest_path, reviewed)
+        reviewed_count = sum(
+            1
+            for entry in reviewed["operations"]
+            if isinstance(entry, dict)
+            and entry.get("equivalence") in _RUNTIME_EQUIVALENCE_BY_OWNER.values()
+            and entry.get("audience") == "rust-extension"
+        )
+        print(
+            f"wrote {reviewed_count} reviewed runtime equivalence mappings "
             f"to {manifest_path}"
         )
         return 0

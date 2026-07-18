@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "owner": "prolly::SecondaryIndexSnapshot",
+  "groups": [
+    {
+      "state": "bound-direct",
+      "rust": [
+        "prolly::SecondaryIndexSnapshot::exact",
+        "prolly::SecondaryIndexSnapshot::exact_page",
+        "prolly::SecondaryIndexSnapshot::exact_reverse_page",
+        "prolly::SecondaryIndexSnapshot::name",
+        "prolly::SecondaryIndexSnapshot::prefix",
+        "prolly::SecondaryIndexSnapshot::prefix_page",
+        "prolly::SecondaryIndexSnapshot::prefix_reverse_page",
+        "prolly::SecondaryIndexSnapshot::range",
+        "prolly::SecondaryIndexSnapshot::range_page",
+        "prolly::SecondaryIndexSnapshot::range_reverse_page",
+        "prolly::SecondaryIndexSnapshot::records"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py#SecondaryIndex",
+        "bindings/go/indexed.go#SecondaryIndex",
+        "bindings/node/src/indexed.ts#SecondaryIndex",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#SecondaryIndex",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/SecondaryIndex.java",
+        "bindings/ruby/lib/prolly/api.rb#SecondaryIndex",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#SecondaryIndex",
+        "bindings/wasm/src/index.ts#WasmSecondaryIndex"
+      ],
+      "rationale": "All eight wrappers expose index identity, exact/prefix/range lookups, source records, and bounded forward and reverse pages while retaining traversal and projection work in Rust.",
+      "language_templates": {
+        "python": "SecondaryIndex.{snake}",
+        "go": "prolly.(*SecondaryIndex).{pascal}",
+        "node": "SecondaryIndex.{camel}",
+        "kotlin": "SecondaryIndex.{camel}",
+        "java": "SecondaryIndex.{camel}",
+        "ruby": "SecondaryIndex#{snake}",
+        "swift": "SecondaryIndex.{camel}",
+        "wasm": "WasmSecondaryIndex.{camel}"
+      },
+      "tests": [
+        "portable-parity::secondary-index-bounded-pages"
+      ],
+      "docs": [
+        "bindings/VERIFICATION.md#major-api-groups"
+      ]
+    }
+  ]
+}

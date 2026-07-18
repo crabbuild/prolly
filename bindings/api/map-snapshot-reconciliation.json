@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "owner": "prolly::MapSnapshot",
+  "groups": [
+    {
+      "state": "bound-direct",
+      "rust": [
+        "prolly::MapSnapshot::contains_key",
+        "prolly::MapSnapshot::first_entry",
+        "prolly::MapSnapshot::get",
+        "prolly::MapSnapshot::get_many",
+        "prolly::MapSnapshot::id",
+        "prolly::MapSnapshot::last_entry",
+        "prolly::MapSnapshot::lower_bound",
+        "prolly::MapSnapshot::prefix",
+        "prolly::MapSnapshot::prefix_page",
+        "prolly::MapSnapshot::prefix_reverse_page",
+        "prolly::MapSnapshot::prove_key",
+        "prolly::MapSnapshot::prove_keys",
+        "prolly::MapSnapshot::prove_prefix",
+        "prolly::MapSnapshot::prove_range",
+        "prolly::MapSnapshot::prove_range_page",
+        "prolly::MapSnapshot::range",
+        "prolly::MapSnapshot::range_page",
+        "prolly::MapSnapshot::read",
+        "prolly::MapSnapshot::reverse_page",
+        "prolly::MapSnapshot::stats",
+        "prolly::MapSnapshot::upper_bound",
+        "prolly::MapSnapshot::version"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py#MapSnapshot",
+        "bindings/go/versioned.go#MapSnapshot",
+        "bindings/node/src/versioned.ts#MapSnapshot",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#MapSnapshot",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/MapSnapshot.java",
+        "bindings/ruby/lib/prolly/api.rb#MapSnapshot",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#MapSnapshot",
+        "bindings/wasm/src/index.ts#WasmMapSnapshot"
+      ],
+      "rationale": "All eight wrappers expose snapshot identity, point and ordered reads, bounded forward and reverse pages, proofs, statistics, and retained read sessions with owned inputs and native execution.",
+      "language_templates": {
+        "python": "MapSnapshot.{snake}",
+        "go": "prolly.(*MapSnapshot).{pascal}",
+        "node": "MapSnapshot.{camel}",
+        "kotlin": "MapSnapshot.{camel}",
+        "java": "MapSnapshot.{camel}",
+        "ruby": "MapSnapshot#{snake}",
+        "swift": "MapSnapshot.{camel}",
+        "wasm": "WasmMapSnapshot.{camel}"
+      },
+      "language_overrides": {
+        "prolly::MapSnapshot::contains_key": {
+          "python": "MapSnapshot.contains",
+          "go": "prolly.(*MapSnapshot).ContainsKey",
+          "node": "MapSnapshot.containsKey",
+          "kotlin": "MapSnapshot.containsKey",
+          "java": "MapSnapshot.containsKey",
+          "ruby": "MapSnapshot#contains?",
+          "swift": "MapSnapshot.contains",
+          "wasm": "WasmMapSnapshot.containsKey"
+        },
+        "prolly::MapSnapshot::id": {
+          "go": "prolly.(*MapSnapshot).ID"
+        }
+      },
+      "tests": [
+        "portable-parity::versioned-snapshot-navigation-and-proofs"
+      ],
+      "docs": [
+        "bindings/VERIFICATION.md#major-api-groups"
+      ]
+    }
+  ]
+}
