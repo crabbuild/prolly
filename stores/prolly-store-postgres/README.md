@@ -6,7 +6,16 @@ This crate implements `RemoteStoreBackend` using `sqlx::PgPool`. Use it through
 `RemoteProllyStore` and `AsyncProlly` when you want Prolly tree nodes, traversal
 hints, and named root manifests in PostgreSQL.
 
-## When To Use It
+## Installation
+
+```toml
+[dependencies]
+prolly-map = "0.4"
+prolly-store-postgres = "0.2.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## When to use it
 
 Use this adapter when your application already depends on PostgreSQL and you
 want durable, transactional storage for versioned maps. It is a good fit for
@@ -17,7 +26,7 @@ Prefer this adapter over Redis when named roots are durable business state. Use
 object-store or NoSQL adapters when the node volume is very large or when your
 deployment is already centered on those services.
 
-## Data Model
+## Data model
 
 `initialize_schema` creates three tables:
 
@@ -66,7 +75,7 @@ backend.initialize_schema().await?;
 # }
 ```
 
-## Basic Usage
+## Basic usage
 
 ```rust
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -106,7 +115,7 @@ assert_eq!(
 # }
 ```
 
-## Diff, Merge, And Conflict Resolution
+## Diff, merge, and conflict resolution
 
 Each update returns a new immutable `Tree`. Old and new trees share unchanged
 subtrees, so diffs and merges only need to inspect changed branches:
@@ -153,17 +162,18 @@ assert_eq!(
 # }
 ```
 
-## Operational Notes
+## Operational notes
 
 - `initialize_schema` is idempotent and safe to run during startup.
-- Named-root compare-and-swap uses SQL transactions and table locking.
+- Strict commits lock the roots table, validate named-root preconditions, and
+  apply node and root writes in one PostgreSQL transaction.
 - Node rows are content-addressed and can be shared by many named roots.
 - Removing a named root does not immediately delete unreachable nodes. Use a
   higher-level retention/GC flow before pruning nodes.
 - Keep PostgreSQL connection pooling aligned with your app concurrency. The
   adapter uses the `PgPool` you provide.
 
-## Running The Example
+## Running the example
 
 From the standalone repository root:
 
@@ -174,3 +184,19 @@ cargo run --manifest-path stores/prolly-store-postgres/Cargo.toml --example basi
 
 The example initializes schema, writes a base tree, computes diffs, merges
 branches, resolves a conflict, publishes a named root, and loads it back.
+
+## Testing
+
+The integration test runs when `PROLLY_STORE_POSTGRES_URL` is set and returns
+without connecting otherwise:
+
+```bash
+export PROLLY_STORE_POSTGRES_URL=postgres://prolly:prolly@127.0.0.1:55432/prolly
+cargo test --manifest-path stores/prolly-store-postgres/Cargo.toml
+```
+
+Run it against a disposable database or schema. The adapter tables are shared by
+every client using that database.
+
+See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
+async map, transaction, diff, and merge APIs used with this backend.

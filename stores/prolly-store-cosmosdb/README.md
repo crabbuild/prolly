@@ -7,7 +7,16 @@ surface with key authentication. Use it through `RemoteProllyStore` and
 `AsyncProlly` when your deployment is Azure-native and needs globally available
 Prolly tree storage.
 
-## When To Use It
+## Installation
+
+```toml
+[dependencies]
+prolly-map = "0.4"
+prolly-store-cosmosdb = "0.2.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## When to use it
 
 Use this adapter when Cosmos DB is already part of your platform, when you want
 managed global distribution, or when tenant/session metadata should live near
@@ -18,7 +27,7 @@ Use PostgreSQL/MySQL when SQL transactions and relational operations are the
 primary requirement. Use Redis when the store is intentionally cache-like. Use
 DynamoDB when you need the AWS-managed equivalent.
 
-## Container Model
+## Container model
 
 The adapter expects a Cosmos DB SQL API container with partition key:
 
@@ -71,7 +80,7 @@ az cosmosdb sql container create \
   --partition-key-path /kind
 ```
 
-## Basic Usage
+## Basic usage
 
 ```rust
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -113,7 +122,7 @@ batch back.
 Cosmos DB limits one transactional batch to a single partition key and up to 100
 operations. Large transactions should be split by the caller.
 
-## Diff And Merge
+## Diff and merge
 
 ```rust
 # use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -155,7 +164,7 @@ assert_eq!(
 # }
 ```
 
-## Operational Notes
+## Operational notes
 
 - The account key passed to `with_key` must be base64 encoded.
 - Use `with_key_prefix` for tenant, environment, and test isolation.
@@ -165,7 +174,7 @@ assert_eq!(
   policy around your production workload.
 - Root compare-and-swap uses document ETags.
 
-## Running The Example
+## Running the example
 
 From the standalone repository root:
 
@@ -179,3 +188,18 @@ cargo run --manifest-path stores/prolly-store-cosmosdb/Cargo.toml --example basi
 
 The example writes into a unique key prefix, publishes a named root, reloads it,
 runs diff/merge, and resolves a conflict.
+
+## Testing
+
+Unit tests are credential-free. The integration test runs when all four Cosmos
+DB variables from the setup section are present:
+
+```bash
+cargo test --manifest-path stores/prolly-store-cosmosdb/Cargo.toml
+```
+
+Use a dedicated container or key prefix for integration tests. The test suite
+creates isolated records but still consumes provisioned request units.
+
+See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
+async map, transaction, diff, and merge APIs used with this backend.
