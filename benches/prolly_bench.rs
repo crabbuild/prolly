@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prolly::{
-    append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryRule, Config,
-    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver,
-    SortedBatchBuilder, Store, Tree,
+    append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryDetector,
+    BoundaryRule, ChunkingSpec, Config, MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly,
+    Resolution, Resolver, SortedBatchBuilder, Store, Tree,
 };
 
 const DEFAULT_SCALE: usize = 10_000;
@@ -58,6 +58,10 @@ fn main() {
             bench_chunking_cutover(scale);
             return;
         }
+        Ok("boundary-hot-path") => {
+            bench_boundary_hot_path();
+            return;
+        }
         Ok(_) | Err(_) => {}
     }
 
@@ -87,6 +91,47 @@ fn main() {
     bench_range_diff_window(scale);
     bench_merge_sparse(scale);
     bench_merge_conflict_resolved(scale);
+}
+
+fn bench_boundary_hot_path() {
+    let entries = std::env::var("PROLLY_BOUNDARY_ENTRIES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(2_000_000)
+        .max(10_000);
+    measure_boundary_detector(
+        "boundary_entry_count_key_hash",
+        chunking::entry_count_key_hash(),
+        entries,
+    );
+    measure_boundary_detector(
+        "boundary_logical_bytes_key_weibull",
+        chunking::logical_bytes_key_weibull(),
+        entries,
+    );
+    measure_boundary_detector(
+        "boundary_logical_bytes_rolling_hash",
+        chunking::logical_bytes_rolling_hash(),
+        entries,
+    );
+}
+
+fn measure_boundary_detector(name: &str, spec: ChunkingSpec, entries: usize) {
+    measure(name, 5, entries, || {
+        let mut detector =
+            BoundaryDetector::new(spec.clone(), 0).expect("built-in policy is valid");
+        let value = [11_u8; 16];
+        let mut boundaries = 0usize;
+        for index in 0..entries {
+            let key = (index as u64).to_be_bytes();
+            boundaries += usize::from(
+                detector
+                    .observe(black_box(&key), black_box(&value), 24)
+                    .expect("fixed entry is valid"),
+            );
+        }
+        black_box(boundaries);
+    });
 }
 
 fn bench_chunking_cutover(items: usize) {
