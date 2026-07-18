@@ -2263,15 +2263,22 @@ pub(crate) fn apply_with_stats<S: Store>(
 const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;
 const BATCHED_VALUE_UPDATE_PARALLELISM: usize = 16;
 
+pub(crate) fn should_try_batched_value_updates<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutation_count: usize,
+) -> bool {
+    mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+        && tree.root.is_some()
+        && prolly.store().prefers_batch_reads()
+}
+
 pub(crate) fn try_apply_batched_value_updates<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<KeyStableBatchAttempt, Error> {
-    if mutations.len() < BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        || !prolly.store().prefers_batch_reads()
-        || tree.root.is_none()
-    {
+    if !should_try_batched_value_updates(prolly, tree, mutations.len()) {
         return Ok(KeyStableBatchAttempt::Fallback(mutations));
     }
 
@@ -4530,6 +4537,49 @@ mod tests {
             hints.insert((namespace.to_vec(), key.to_vec()), value.to_vec());
             Ok(())
         }
+    }
+
+    #[test]
+    fn batched_value_update_route_requires_every_eligibility_condition() {
+        let config = Config::default();
+        let preferred = Prolly::new(
+            CountingStore {
+                prefer_batch_reads: true,
+                ..CountingStore::default()
+            },
+            config.clone(),
+        );
+        let populated = Tree {
+            root: Some(Cid::from_bytes(b"route-classifier-root")),
+            config: config.clone(),
+        };
+        let empty = Tree {
+            root: None,
+            config: config.clone(),
+        };
+
+        assert!(!should_try_batched_value_updates(
+            &preferred,
+            &populated,
+            BATCHED_VALUE_UPDATE_MIN_MUTATIONS - 1
+        ));
+        assert!(should_try_batched_value_updates(
+            &preferred,
+            &populated,
+            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+        ));
+        assert!(!should_try_batched_value_updates(
+            &preferred,
+            &empty,
+            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+        ));
+
+        let nonpreferred = Prolly::new(CountingStore::default(), config);
+        assert!(!should_try_batched_value_updates(
+            &nonpreferred,
+            &populated,
+            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+        ));
     }
 
     /// Helper function to create a tree with the given key-value pairs

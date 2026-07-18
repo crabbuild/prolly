@@ -836,42 +836,46 @@ fn try_direct_value_updates<S: Store>(
         return Ok(DirectValueUpdateAttempt::Fallback(mutations));
     };
 
-    let batched_mutations = mutations
-        .into_iter()
-        .map(|(key, value)| Mutation::Upsert {
-            key,
-            val: value.expect("direct value path rejects deletes before routing"),
-        })
-        .collect::<Vec<_>>();
-    let metrics_before = manager.metrics();
     let mutations =
-        match super::batch::try_apply_batched_value_updates(manager, tree, batched_mutations)? {
-            super::batch::KeyStableBatchAttempt::Applied(result) => {
-                let metrics_after = manager.metrics();
-                stats.nodes_read += metrics_after
-                    .nodes_read
-                    .saturating_sub(metrics_before.nodes_read);
-                if measure_read_bytes {
-                    stats.bytes_read += metrics_after
-                        .bytes_read
-                        .saturating_sub(metrics_before.bytes_read);
-                }
-                stats.nodes_written += result.written_nodes as u64;
-                stats.bytes_written += result.written_bytes as u64;
-                stats.entries_streamed += result.entries_streamed as u64;
-                stats.resync_distance_entries = result.entries_streamed as u64;
-                stats.resync_distance_nodes = result.affected_leaves as u64;
-                stats.used_key_stable_fast_path = true;
-                stats.used_batched_value_update_path = true;
-                return Ok(DirectValueUpdateAttempt::Applied(Box::new((
-                    result.tree,
-                    *stats,
-                ))));
-            }
-            super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len()) {
+            let batched_mutations = mutations
                 .into_iter()
-                .map(mutation_parts)
-                .collect::<Vec<_>>(),
+                .map(|(key, value)| Mutation::Upsert {
+                    key,
+                    val: value.expect("direct value path rejects deletes before routing"),
+                })
+                .collect::<Vec<_>>();
+            let metrics_before = manager.metrics();
+            match super::batch::try_apply_batched_value_updates(manager, tree, batched_mutations)? {
+                super::batch::KeyStableBatchAttempt::Applied(result) => {
+                    let metrics_after = manager.metrics();
+                    stats.nodes_read += metrics_after
+                        .nodes_read
+                        .saturating_sub(metrics_before.nodes_read);
+                    if measure_read_bytes {
+                        stats.bytes_read += metrics_after
+                            .bytes_read
+                            .saturating_sub(metrics_before.bytes_read);
+                    }
+                    stats.nodes_written += result.written_nodes as u64;
+                    stats.bytes_written += result.written_bytes as u64;
+                    stats.entries_streamed += result.entries_streamed as u64;
+                    stats.resync_distance_entries = result.entries_streamed as u64;
+                    stats.resync_distance_nodes = result.affected_leaves as u64;
+                    stats.used_key_stable_fast_path = true;
+                    stats.used_batched_value_update_path = true;
+                    return Ok(DirectValueUpdateAttempt::Applied(Box::new((
+                        result.tree,
+                        *stats,
+                    ))));
+                }
+                super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+                    .into_iter()
+                    .map(mutation_parts)
+                    .collect::<Vec<_>>(),
+            }
+        } else {
+            mutations
         };
 
     let mut leaves = Vec::new();
