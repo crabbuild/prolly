@@ -1569,7 +1569,7 @@ func TestParityBatchPagesMergeAndNamedRoots(t *testing.T) {
 	if appendedStats.Stats.InputMutations != 3 ||
 		appendedStats.Stats.EffectiveMutations != 2 ||
 		appendedStats.Stats.PreprocessInputSorted ||
-		!appendedStats.Stats.UsedCoalescedRebuild ||
+		appendedStats.Stats.EntriesStreamed < appendedStats.Stats.EffectiveMutations ||
 		appendedStats.Stats.WrittenNodes == 0 {
 		t.Fatalf("unexpected append stats: %#v", appendedStats.Stats)
 	}

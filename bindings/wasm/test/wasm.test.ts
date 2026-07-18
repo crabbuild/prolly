@@ -615,7 +615,7 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
   assert.equal(appendedStats.stats.inputMutations, 3);
   assert.equal(appendedStats.stats.effectiveMutations, 2);
   assert.equal(appendedStats.stats.preprocessInputSorted, false);
-  assert.equal(appendedStats.stats.usedCoalescedRebuild, true);
+  assert.ok(appendedStats.stats.entriesStreamed >= appendedStats.stats.effectiveMutations);
   assert.ok(appendedStats.stats.writtenNodes > 0);
 
   const base = engine.put(engine.create(), utf8("k"), utf8("base"));

@@ -290,7 +290,7 @@ class ProllyParityTest {
             assertEquals(3, appendedStats.stats().inputMutations());
             assertEquals(2, appendedStats.stats().effectiveMutations());
             assertFalse(appendedStats.stats().preprocessInputSorted());
-            assertTrue(appendedStats.stats().usedCoalescedRebuild());
+            assertTrue(appendedStats.stats().entriesStreamed() >= appendedStats.stats().effectiveMutations());
             assertTrue(appendedStats.stats().writtenNodes() > 0);
 
             RangePageRecord firstPage = prolly.rangePage(tree, null, Optional.empty(), 1);

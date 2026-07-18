@@ -7,6 +7,8 @@ use std::cell::Cell;
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use rayon::prelude::*;
+
 use super::batch::{self, BatchApplyResult};
 use super::error::{Error, Mutation};
 use super::store::Store;
@@ -178,20 +180,38 @@ impl ExecutionPolicy {
     }
 
     pub(crate) fn ranges(self, len: usize) -> Vec<Range<usize>> {
-        if len == 0 {
-            return Vec::new();
-        }
-        let partitions = self.width.min(len).max(1);
-        let base = len / partitions;
-        let remainder = len % partitions;
-        (0..partitions)
-            .map(|partition| {
-                let start = partition * base + partition.min(remainder);
-                let width = base + usize::from(partition < remainder);
-                start..start + width
-            })
-            .collect()
+        indexed_ranges(len, self.width)
     }
+}
+
+/// Split indexed work into exactly `min(width, len)` balanced, non-empty
+/// ranges. The helper is also used by configured route decoding so an
+/// explicit CPU width cannot escape through a nested Rayon iterator.
+pub(crate) fn indexed_ranges(len: usize, width: usize) -> Vec<Range<usize>> {
+    if len == 0 {
+        return Vec::new();
+    }
+    let partitions = width.min(len).max(1);
+    let base = len / partitions;
+    let remainder = len % partitions;
+    (0..partitions)
+        .map(|partition| {
+            let start = partition * base + partition.min(remainder);
+            let width = base + usize::from(partition < remainder);
+            start..start + width
+        })
+        .collect()
+}
+
+pub(crate) fn map_indexed_ranges<T, F>(len: usize, width: usize, map: F) -> Vec<T>
+where
+    T: Send,
+    F: Fn(Range<usize>) -> T + Send + Sync,
+{
+    indexed_ranges(len, width)
+        .into_par_iter()
+        .map(map)
+        .collect()
 }
 
 pub(crate) fn parallel_batch_with_stats<S: Store>(
@@ -205,7 +225,12 @@ pub(crate) fn parallel_batch_with_stats<S: Store>(
 
 #[cfg(test)]
 mod tests {
-    use super::{CanonicalWriteConcurrencyGuard, ExecutionPolicy, ParallelConfig};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
+
+    use super::{
+        map_indexed_ranges, CanonicalWriteConcurrencyGuard, ExecutionPolicy, ParallelConfig,
+    };
 
     #[test]
     fn execution_policy_honors_threshold_and_width() {
@@ -253,5 +278,33 @@ mod tests {
         assert_eq!(policy.width(), 1);
         assert!(!policy.enabled());
         drop(guards);
+    }
+
+    #[test]
+    fn indexed_range_executor_never_exceeds_explicit_cpu_width() {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .unwrap()
+            .install(|| {
+                let barrier = Arc::new(Barrier::new(4));
+                let active = Arc::new(AtomicUsize::new(0));
+                let maximum = Arc::new(AtomicUsize::new(0));
+                let ranges = map_indexed_ranges(100, 4, {
+                    let barrier = barrier.clone();
+                    let active = active.clone();
+                    let maximum = maximum.clone();
+                    move |range| {
+                        let now = active.fetch_add(1, Ordering::AcqRel) + 1;
+                        maximum.fetch_max(now, Ordering::AcqRel);
+                        barrier.wait();
+                        active.fetch_sub(1, Ordering::AcqRel);
+                        range
+                    }
+                });
+
+                assert_eq!(ranges.len(), 4);
+                assert_eq!(maximum.load(Ordering::Acquire), 4);
+            });
     }
 }

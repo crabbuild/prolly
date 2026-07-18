@@ -35,7 +35,7 @@
 - Consumes: public `ParallelConfig { max_threads, parallelism_threshold }`.
 - Produces: `ExecutionPolicy::from_config`, `ExecutionPolicy::automatic`, `ExecutionPolicy::sequential`, `ExecutionPolicy::enabled`, `ExecutionPolicy::width`, `ExecutionPolicy::read_width`, `ExecutionPolicy::wave_size`, `ExecutionPolicy::limit_to`, `ExecutionPolicy::ranges`, and the active-write concurrency guard.
 
-- [ ] **Step 1: Implement the internal policy and indexed range partitioning**
+- [x] **Step 1: Implement the internal policy and indexed range partitioning**
 
 Add the following scheduling-only type below `ParallelConfig`:
 
@@ -132,7 +132,7 @@ impl ExecutionPolicy {
 
 Measured hardening extends this skeleton with a separate ordered-read width and an RAII active-write counter. Explicit `max_threads` caps both widths; automatic scheduling retains up to 16 ordered-read partitions, and inner execution drops to width one when active callers would leave fewer than three shared-pool threads per write. Balanced range construction creates exactly the admitted partition count, including near one-item-per-worker inputs.
 
-- [ ] **Step 2: Add policy tests after the implementation**
+- [x] **Step 2: Add policy tests after the implementation**
 
 Add tests that assert threshold fallback, sequential behavior, width capping, and exact non-overlapping range coverage:
 
@@ -157,7 +157,7 @@ fn execution_policy_ranges_cover_input_once_in_order() {
 }
 ```
 
-- [ ] **Step 3: Verify and commit the policy slice**
+- [x] **Step 3: Verify and commit the policy slice**
 
 Run:
 
@@ -189,7 +189,7 @@ git commit -m "feat: add canonical write execution policy"
 - Consumes: `ParallelConfig` and `ExecutionPolicy` from Task 1.
 - Produces: `write::apply_configured`, `write::apply_tree_configured`, and `batch::apply_with_stats_configured`; existing unconfigured entry points delegate with automatic policy.
 
-- [ ] **Step 1: Add configured canonical-writer entry points**
+- [x] **Step 1: Add configured canonical-writer entry points**
 
 Refactor `write::apply_impl` to receive `Option<&ParallelConfig>` without changing mutation semantics:
 
@@ -222,7 +222,7 @@ let policy = parallel_config.map_or_else(
 );
 ```
 
-- [ ] **Step 2: Add configured stats routing**
+- [x] **Step 2: Add configured stats routing**
 
 Add:
 
@@ -241,7 +241,7 @@ pub(crate) fn apply_with_stats_configured<S: Store>(
 
 Extract the duplicated `BatchApplyResult` conversion into `from_write_stats` so configured and automatic paths report identical counters.
 
-- [ ] **Step 3: Route public parallel APIs through the configured writer**
+- [x] **Step 3: Route public parallel APIs through the configured writer**
 
 Replace both ignored `_config` parameters:
 
@@ -269,7 +269,7 @@ pub(crate) fn parallel_batch_with_stats<S: Store>(
 }
 ```
 
-- [ ] **Step 4: Extend write telemetry with execution-policy evidence**
+- [x] **Step 4: Extend write telemetry with execution-policy evidence**
 
 Add `u64` counters to `WriteStats`:
 
@@ -291,7 +291,7 @@ pub coalesced_islands: usize,
 
 Initialize `parallel_width` to one and raise it only when an admitted executor actually launches independent work. Leave task/island counts zero until later tasks. Tests must be able to distinguish `sequential()` from an enabled configuration even when roots match, and a rejected route must not claim an unused width.
 
-- [ ] **Step 5: Add routing and root-equivalence tests**
+- [x] **Step 5: Add routing and root-equivalence tests**
 
 Update the current delegation test to assert:
 
@@ -303,7 +303,7 @@ assert_eq!(sequential.tree.root, parallel.tree.root);
 
 Extend `parallel_batch_matches_the_canonical_batch_root` to run widths `[1, 2, 4, 8, 0]` and compare every result with `batch` and fresh bulk build.
 
-- [ ] **Step 6: Verify and commit configured routing**
+- [x] **Step 6: Verify and commit configured routing**
 
 Run:
 
@@ -335,7 +335,7 @@ git commit -m "fix: honor canonical parallel batch configuration"
 - Consumes: `ExecutionPolicy` calculated in `write::apply_impl`.
 - Produces: configured `try_apply_batched_value_updates`, bounded ordered routing, and bounded indexed leaf preparation.
 
-- [ ] **Step 1: Remove the fixed routing width**
+- [x] **Step 1: Remove the fixed routing width**
 
 Delete `BATCHED_VALUE_UPDATE_PARALLELISM`. Change the helper signature to:
 
@@ -352,17 +352,17 @@ Pass `policy.read_width()` into `group_mutations_by_leaf_with_paths_batched`. Ex
 
 Before the full route, hydrate one representative mutation through the same owned-node cache. A missing or growing value rejects pure insert/growth batches cheaply. The full route still validates every mutation. Admit direct leaf replacement only for key-only entry-count hashing; route-path ancestry must classify rightmost leaves correctly, and rightmost status must never bypass the value-stability requirement for key+value, byte-measured, rolling, or Weibull policies.
 
-- [ ] **Step 2: Process independent leaf groups with bounded partitions**
+- [x] **Step 2: Process independent leaf groups with bounded partitions**
 
 Change `prepare_leaf_groups_for_coalesced_rebuild` to accept `ExecutionPolicy`. Preserve the sequential loop when disabled. At full shared-pool width, use one indexed Rayon iterator so work stealing balances uneven leaves without allocating hundreds of waves. For an explicit width below the pool, split the ordered groups into exactly `policy.width()` partitions and process each partition sequentially inside one Rayon task.
 
 Rayon indexed collection preserves group and partition order. Do not invoke a nested parallel iterator while a partition is executing.
 
-- [ ] **Step 3: Record actual task counts**
+- [x] **Step 3: Record actual task counts**
 
 Return the number of scheduled partitions from the batched update result and add it to `WriteStats.parallel_tasks`. Set `parallel_width` to one when fewer than two affected leaves are found even if the requested configuration was wider.
 
-- [ ] **Step 4: Add bounded-read and deterministic-leaf tests**
+- [x] **Step 4: Add bounded-read and deterministic-leaf tests**
 
 Use the existing counting store to execute the same large value-update batch with widths one, two, and four. Assert:
 
@@ -377,7 +377,7 @@ assert!(store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= expected_boun
 
 Also compare reachable serialized node bytes for width one and the widest available configuration.
 
-- [ ] **Step 5: Verify and commit key-stable parallel execution**
+- [x] **Step 5: Verify and commit key-stable parallel execution**
 
 Run:
 
@@ -407,7 +407,7 @@ git commit -m "perf: configure parallel key-stable batch execution"
 - Consumes: normalized mutations and ordered old `NodeSummary` leaves.
 - Produces: `MutationIsland`, `IslandReplay`, `plan_mutation_islands`, and `replay_mutation_island` with no store writes.
 
-- [ ] **Step 1: Add explicit island data structures**
+- [x] **Step 1: Add explicit island data structures**
 
 Add private types:
 
@@ -438,7 +438,7 @@ impl IslandReplay {
 }
 ```
 
-- [ ] **Step 2: Implement deterministic island planning**
+- [x] **Step 2: Implement deterministic island planning**
 
 `plan_mutation_islands` maps each mutation to its predecessor leaf with `partition_point`, groups mutations whose target leaves are adjacent, gives each group two predecessor leaves for exact-cap context, and requires at least one untouched leaf between candidates. Candidates without an untouched separator are coalesced before execution.
 
@@ -453,7 +453,7 @@ fn plan_mutation_islands(
 
 The returned ranges must be ordered, non-empty, mutation-complete, and non-overlapping at their protected boundaries.
 
-- [ ] **Step 3: Extract side-effect-free island replay from the canonical loop**
+- [x] **Step 3: Extract side-effect-free island replay from the canonical loop**
 
 Move the existing leaf replay/emitter logic into:
 
@@ -470,7 +470,7 @@ fn replay_mutation_island<S: Store>(
 
 It must clone mutation key/value data into its local emitter, stop only after matching an old leaf CID or exhausting its guard, and perform no `batch_put`, cache insertion, or root publication.
 
-- [ ] **Step 4: Add planner and replay tests after extraction**
+- [x] **Step 4: Add planner and replay tests after extraction**
 
 Cover:
 
@@ -481,7 +481,7 @@ Cover:
 - a cascading boundary change reaches the guard and returns false;
 - rolling and Weibull policies either prove CID resynchronization or fall back without publishing partial nodes.
 
-- [ ] **Step 5: Verify and commit the island planner**
+- [x] **Step 5: Verify and commit the island planner**
 
 Run:
 
@@ -512,7 +512,7 @@ git commit -m "refactor: extract canonical mutation island replay"
 - Consumes: `ExecutionPolicy`, `MutationIsland`, and `IslandReplay`.
 - Produces: `execute_mutation_islands`, bounded admission, and immediate canonical fallback before the existing frontier assembly.
 
-- [ ] **Step 1: Add ordered bounded execution helper**
+- [x] **Step 1: Add ordered bounded execution helper**
 
 Implement:
 
@@ -529,13 +529,13 @@ fn execute_mutation_islands<S: Store>(
 
 When disabled or only one island exists, execute in order. Otherwise, process `policy.wave_size()` islands per wave with indexed partitions, collecting ordered `Result<IslandReplay, Error>` values.
 
-- [ ] **Step 2: Bound admission and fall back immediately on a failed proof**
+- [x] **Step 2: Bound admission and fall back immediately on a failed proof**
 
 Before replay, reject dense spans, plans whose guarded leaf coverage exceeds 25%, and plans whose candidates collapse by more than 4:1. After the single bounded wave, scan ordered `Result<IslandReplay, Error>` values left to right and return the first real error. If any replay cannot prove independence, discard every speculative result and execute the existing sequential canonical loop immediately. Do not retry progressively larger regions; empirical testing showed O(n log n) work and pathological tail latency.
 
 Never add emitted bytes from an unproved replay to the publication collector.
 
-- [ ] **Step 3: Merge successful island output in canonical order**
+- [x] **Step 3: Merge successful island output in canonical order**
 
 Splice successful `summaries` into the unchanged old-leaf sequence by ordered `leaf_range`. Deduplicate changed leaves by CID, accumulate stats in island order, then invoke the existing fixed-separator or canonical `BatchBuilder::build_from_chunks_serial_deferred` frontier path.
 
@@ -547,11 +547,11 @@ stats.structural_islands += initial_island_count as u64;
 stats.coalesced_islands += coalesced_count as u64;
 ```
 
-- [ ] **Step 4: Add worker-count and fallback matrices**
+- [x] **Step 4: Add worker-count and fallback matrices**
 
 For widths `[1, 2, 4, 8, 0]`, compare batch, parallel batch, and fresh-build roots for distant clusters, adjacent clusters, inserts, deletes, and mixed mutations under every built-in chunking policy. Assert at least one distant-cluster fixture uses more than one island on a machine with more than one Rayon worker. Assert the adjacent fixture is rejected by admission and remains canonical.
 
-- [ ] **Step 5: Verify and commit structural parallelism**
+- [x] **Step 5: Verify and commit structural parallelism**
 
 Run:
 
@@ -585,7 +585,7 @@ git commit -m "perf: execute canonical mutation islands in parallel"
 - Consumes: the configured canonical writer completed in Tasks 1–5.
 - Produces: one truthful execution configuration and no public algorithm switch that silently does nothing.
 
-- [ ] **Step 1: Replace `BatchWriterConfig` with `ParallelConfig`**
+- [x] **Step 1: Replace `BatchWriterConfig` with `ParallelConfig`**
 
 Delete `BatchWriterConfig` and its setters. Change `BatchWriter` to:
 
@@ -629,15 +629,15 @@ impl BatchWriter {
 }
 ```
 
-- [ ] **Step 2: Remove stale exports and algorithm claims**
+- [x] **Step 2: Remove stale exports and algorithm claims**
 
 Remove `BatchWriterConfig` from `src/lib.rs`. Rewrite docs to state that `ParallelConfig` affects scheduling only, the canonical boundary engine is invariant, and width one is the deterministic sequential baseline. Remove claims about selectable optimized merge, bottom-up rebuild, deferred rebalancing, or cache warming.
 
-- [ ] **Step 3: Add a public-surface regression test**
+- [x] **Step 3: Add a public-surface regression test**
 
 Add a compile/runtime test that constructs `BatchWriter::with_config(ParallelConfig::new(2, 1))`, applies a large batch, and compares its root and stats with `Prolly::parallel_batch_with_stats` using the same config.
 
-- [ ] **Step 4: Verify and commit the hard API cutover**
+- [x] **Step 4: Verify and commit the hard API cutover**
 
 Run:
 
@@ -669,7 +669,7 @@ git commit -m "refactor: remove inert batch execution controls"
 - Consumes: public `ParallelConfig`, `parallel_batch_with_stats`, and canonical root validation.
 - Produces: repeatable worker-scaling and concurrent-caller benchmark modes plus raw evidence.
 
-- [ ] **Step 1: Add explicit scaling modes to the existing benchmark**
+- [x] **Step 1: Add explicit scaling modes to the existing benchmark**
 
 Add `parallel-scaling` and `parallel-callers` benchmark modes. Parse `PROLLY_WORKERS` as a comma-separated list and default to `1,2,4,8,12,16,0`. For each width, report CSV fields:
 
@@ -679,15 +679,15 @@ workload,base_entries,mutations,workers,effective_workers,callers,run,elapsed_ns
 
 Before timing, build each fixture once. Outside the timed interval, compare the produced root with width one and a fresh canonical build.
 
-- [ ] **Step 2: Add workload generators**
+- [x] **Step 2: Add workload generators**
 
 Generate deterministic append, random, clustered, value-only, insert-only, delete-only, and 60/20/20 mixed batches for base sizes 100 thousand, 1 million, and 10 million and mutation sizes 1 thousand, 10 thousand, 100 thousand, and 1 million. Seed every random generator with a constant recorded in output.
 
-- [ ] **Step 3: Add concurrent-caller saturation**
+- [x] **Step 3: Add concurrent-caller saturation**
 
 Use `std::thread::scope` and a barrier to launch 2, 4, and 8 callers against the same immutable base and shared store. Each caller uses disjoint deterministic mutation data and validates its root independently. Report total throughput and per-call latency samples; do not add caller thread count to Rayon worker count when labeling results.
 
-- [ ] **Step 4: Capture baseline and candidate measurements**
+- [x] **Step 4: Capture baseline and candidate measurements**
 
 Run at least five samples per cell in release mode. Round samples up to a complete rotation of configured widths so every width occupies every measurement position equally. Use at least 20 samples for p95/p99 decisions. Record exact commands and host metadata in `README.md`. Minimum commands:
 
@@ -696,11 +696,11 @@ cargo bench --bench prolly_bench -- parallel-scaling 1000000
 cargo bench --bench prolly_bench -- parallel-callers 1000000
 ```
 
-- [ ] **Step 5: Enforce the regression gates and write the report**
+- [x] **Step 5: Enforce the regression gates and write the report**
 
 Compare with width one and the pre-change commit. Report medians and p95/p99. Reject or disable an automatic parallel route if protected small-workload median regresses beyond 2% or p95 beyond 5%. Report inconclusive cells as noise. Include CPU count, worker-width saturation, RSS, store-call counts, and island fallback rate.
 
-- [ ] **Step 6: Verify and commit the benchmark evidence**
+- [x] **Step 6: Verify and commit the benchmark evidence**
 
 Run:
 
@@ -729,7 +729,7 @@ git commit -m "bench: validate canonical parallel executor scaling"
 - Consumes: every preceding implementation slice and its commits.
 - Produces: verified merge candidate with documented correctness and performance evidence.
 
-- [ ] **Step 1: Run the complete verification suite from a clean status**
+- [x] **Step 1: Run the complete verification suite from a clean status**
 
 Run:
 
@@ -743,7 +743,7 @@ git diff --check
 
 Expected: every command exits zero.
 
-- [ ] **Step 2: Audit requirements against evidence**
+- [x] **Step 2: Audit requirements against evidence**
 
 Confirm from tests and raw benchmark data:
 
@@ -755,15 +755,15 @@ Confirm from tests and raw benchmark data:
 - large independent workloads scale enough to justify automatic scheduling;
 - all remaining public execution knobs affect real behavior.
 
-- [ ] **Step 3: Request focused code review**
+- [x] **Step 3: Request focused code review**
 
 Provide the reviewer with the design, this plan, base SHA, head SHA, correctness commands, benchmark report, and explicit questions about canonical island independence, deterministic error selection, oversubscription, and hidden sequential bottlenecks.
 
-- [ ] **Step 4: Resolve every critical or important review finding**
+- [x] **Step 4: Resolve every critical or important review finding**
 
 Apply fixes, rerun the complete verification suite, and append any performance-impacting reruns to the report rather than overwriting raw evidence.
 
-- [ ] **Step 5: Commit final review fixes**
+- [x] **Step 5: Commit final review fixes**
 
 If review required changes:
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-18T07:46:49+00:00",
+  "generated_at": "2026-07-18T10:23:04+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -5145,29 +5145,7 @@
       "docs": []
     },
     {
-      "rust": "prolly::BatchApplyStats::affected_leaves",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchApplyStats::cache_written_nodes",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchApplyStats::changed_leaves",
+      "rust": "prolly::BatchApplyStats::bytes_read",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -5200,7 +5178,40 @@
       "docs": []
     },
     {
+      "rust": "prolly::BatchApplyStats::entries_streamed",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::BatchApplyStats::input_mutations",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BatchApplyStats::nodes_read",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BatchApplyStats::nodes_reused",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -5244,7 +5255,18 @@
       "docs": []
     },
     {
-      "rust": "prolly::BatchApplyStats::sparse_leaf_applies",
+      "rust": "prolly::BatchApplyStats::resync_distance_entries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BatchApplyStats::resync_distance_nodes",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -5266,7 +5288,7 @@
       "docs": []
     },
     {
-      "rust": "prolly::BatchApplyStats::used_append_fast_path",
+      "rust": "prolly::BatchApplyStats::used_batched_value_update_path",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -5277,40 +5299,7 @@
       "docs": []
     },
     {
-      "rust": "prolly::BatchApplyStats::used_batched_route",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_bottom_up_rebuild",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_coalesced_rebuild",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_deferred_rebalancing",
+      "rust": "prolly::BatchApplyStats::used_key_stable_fast_path",
       "classification": "portable",
       "status": "planned",
       "family": "core",

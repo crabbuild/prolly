@@ -548,24 +548,23 @@ func DeleteMutation(key []byte) Mutation {
 }
 
 type BatchApplyStats struct {
-	InputMutations          uint64
-	EffectiveMutations      uint64
-	PreprocessInputSorted   bool
-	AffectedLeaves          uint64
-	ChangedLeaves           uint64
-	SparseLeafApplies       uint64
-	WrittenNodes            uint64
-	WrittenBytes            uint64
-	UsedAppendFastPath      bool
-	UsedBatchedRoute        bool
-	UsedCoalescedRebuild    bool
-	UsedDeferredRebalancing bool
-	UsedBottomUpRebuild     bool
-	CacheWrittenNodes       bool
-	ParallelWidth           uint64
-	ParallelTasks           uint64
-	StructuralIslands       uint64
-	CoalescedIslands        uint64
+	InputMutations             uint64
+	EffectiveMutations         uint64
+	PreprocessInputSorted      bool
+	EntriesStreamed            uint64
+	NodesRead                  uint64
+	WrittenNodes               uint64
+	NodesReused                uint64
+	BytesRead                  uint64
+	WrittenBytes               uint64
+	ResyncDistanceEntries      uint64
+	ResyncDistanceNodes        uint64
+	UsedKeyStableFastPath      bool
+	UsedBatchedValueUpdatePath bool
+	ParallelWidth              uint64
+	ParallelTasks              uint64
+	StructuralIslands          uint64
+	CoalescedIslands           uint64
 }
 
 type BatchApplyResult struct {
@@ -9707,15 +9706,11 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
-	affectedLeaves, err := d.readUint64()
+	entriesStreamed, err := d.readUint64()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
-	changedLeaves, err := d.readUint64()
-	if err != nil {
-		return BatchApplyStats{}, err
-	}
-	sparseLeafApplies, err := d.readUint64()
+	nodesRead, err := d.readUint64()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
@@ -9723,31 +9718,31 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
+	nodesReused, err := d.readUint64()
+	if err != nil {
+		return BatchApplyStats{}, err
+	}
+	bytesRead, err := d.readUint64()
+	if err != nil {
+		return BatchApplyStats{}, err
+	}
 	writtenBytes, err := d.readUint64()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
-	usedAppendFastPath, err := d.readBool()
+	resyncDistanceEntries, err := d.readUint64()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
-	usedBatchedRoute, err := d.readBool()
+	resyncDistanceNodes, err := d.readUint64()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
-	usedCoalescedRebuild, err := d.readBool()
+	usedKeyStableFastPath, err := d.readBool()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
-	usedDeferredRebalancing, err := d.readBool()
-	if err != nil {
-		return BatchApplyStats{}, err
-	}
-	usedBottomUpRebuild, err := d.readBool()
-	if err != nil {
-		return BatchApplyStats{}, err
-	}
-	cacheWrittenNodes, err := d.readBool()
+	usedBatchedValueUpdatePath, err := d.readBool()
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
@@ -9768,24 +9763,23 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 		return BatchApplyStats{}, err
 	}
 	return BatchApplyStats{
-		InputMutations:          inputMutations,
-		EffectiveMutations:      effectiveMutations,
-		PreprocessInputSorted:   preprocessInputSorted,
-		AffectedLeaves:          affectedLeaves,
-		ChangedLeaves:           changedLeaves,
-		SparseLeafApplies:       sparseLeafApplies,
-		WrittenNodes:            writtenNodes,
-		WrittenBytes:            writtenBytes,
-		UsedAppendFastPath:      usedAppendFastPath,
-		UsedBatchedRoute:        usedBatchedRoute,
-		UsedCoalescedRebuild:    usedCoalescedRebuild,
-		UsedDeferredRebalancing: usedDeferredRebalancing,
-		UsedBottomUpRebuild:     usedBottomUpRebuild,
-		CacheWrittenNodes:       cacheWrittenNodes,
-		ParallelWidth:           parallelWidth,
-		ParallelTasks:           parallelTasks,
-		StructuralIslands:       structuralIslands,
-		CoalescedIslands:        coalescedIslands,
+		InputMutations:             inputMutations,
+		EffectiveMutations:         effectiveMutations,
+		PreprocessInputSorted:      preprocessInputSorted,
+		EntriesStreamed:            entriesStreamed,
+		NodesRead:                  nodesRead,
+		WrittenNodes:               writtenNodes,
+		NodesReused:                nodesReused,
+		BytesRead:                  bytesRead,
+		WrittenBytes:               writtenBytes,
+		ResyncDistanceEntries:      resyncDistanceEntries,
+		ResyncDistanceNodes:        resyncDistanceNodes,
+		UsedKeyStableFastPath:      usedKeyStableFastPath,
+		UsedBatchedValueUpdatePath: usedBatchedValueUpdatePath,
+		ParallelWidth:              parallelWidth,
+		ParallelTasks:              parallelTasks,
+		StructuralIslands:          structuralIslands,
+		CoalescedIslands:           coalescedIslands,
 	}, nil
 }
 

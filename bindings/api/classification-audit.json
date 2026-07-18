@@ -8,11 +8,11 @@
     "release_complete": 354,
     "reviewed_incomplete": 405,
     "unreviewed_runtime_candidate": 652,
-    "unreviewed_data_model": 1474,
+    "unreviewed_data_model": 1473,
     "unreviewed_rust_abstraction": 0
   },
   "family_counts": {
-    "core": 1525,
+    "core": 1524,
     "indexed-map": 249,
     "maintenance": 294,
     "proof": 171,
@@ -36,9 +36,9 @@
     "prolly::RemoteStoreBackend": 22,
     "prolly::ProximityMap": 21,
     "prolly::AsyncStore": 19,
-    "prolly::BatchApplyStats": 19,
     "prolly::IndexedSnapshotBundle": 19,
     "prolly::MergePolicyRegistry": 19,
+    "prolly::BatchApplyStats": 18,
     "prolly::Store": 18,
     "prolly::WriteStats": 17,
     "prolly::SecondaryIndexLimits": 16,
@@ -3759,27 +3759,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::affected_leaves",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::cache_written_nodes",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::changed_leaves",
+      "rust": "prolly::BatchApplyStats::bytes_read",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3809,7 +3789,37 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::BatchApplyStats::entries_streamed",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::BatchApplyStats::input_mutations",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::nodes_read",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::nodes_reused",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3849,7 +3859,17 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::sparse_leaf_applies",
+      "rust": "prolly::BatchApplyStats::resync_distance_entries",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::resync_distance_nodes",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3869,7 +3889,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::used_append_fast_path",
+      "rust": "prolly::BatchApplyStats::used_batched_value_update_path",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3879,37 +3899,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::used_batched_route",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_bottom_up_rebuild",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_coalesced_rebuild",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_deferred_rebalancing",
+      "rust": "prolly::BatchApplyStats::used_key_stable_fast_path",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",

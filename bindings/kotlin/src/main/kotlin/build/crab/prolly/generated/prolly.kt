@@ -24548,27 +24548,25 @@ data class BatchApplyStatsRecord (
     ,
     var `preprocessInputSorted`: kotlin.Boolean
     ,
-    var `affectedLeaves`: kotlin.ULong
+    var `entriesStreamed`: kotlin.ULong
     ,
-    var `changedLeaves`: kotlin.ULong
-    ,
-    var `sparseLeafApplies`: kotlin.ULong
+    var `nodesRead`: kotlin.ULong
     ,
     var `writtenNodes`: kotlin.ULong
     ,
+    var `nodesReused`: kotlin.ULong
+    ,
+    var `bytesRead`: kotlin.ULong
+    ,
     var `writtenBytes`: kotlin.ULong
     ,
-    var `usedAppendFastPath`: kotlin.Boolean
+    var `resyncDistanceEntries`: kotlin.ULong
     ,
-    var `usedBatchedRoute`: kotlin.Boolean
+    var `resyncDistanceNodes`: kotlin.ULong
     ,
-    var `usedCoalescedRebuild`: kotlin.Boolean
+    var `usedKeyStableFastPath`: kotlin.Boolean
     ,
-    var `usedDeferredRebalancing`: kotlin.Boolean
-    ,
-    var `usedBottomUpRebuild`: kotlin.Boolean
-    ,
-    var `cacheWrittenNodes`: kotlin.Boolean
+    var `usedBatchedValueUpdatePath`: kotlin.Boolean
     ,
     var `parallelWidth`: kotlin.ULong
     ,
@@ -24601,10 +24599,9 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterULong.read(buf),
@@ -24618,17 +24615,16 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterULong.allocationSize(value.`inputMutations`) +
             FfiConverterULong.allocationSize(value.`effectiveMutations`) +
             FfiConverterBoolean.allocationSize(value.`preprocessInputSorted`) +
-            FfiConverterULong.allocationSize(value.`affectedLeaves`) +
-            FfiConverterULong.allocationSize(value.`changedLeaves`) +
-            FfiConverterULong.allocationSize(value.`sparseLeafApplies`) +
+            FfiConverterULong.allocationSize(value.`entriesStreamed`) +
+            FfiConverterULong.allocationSize(value.`nodesRead`) +
             FfiConverterULong.allocationSize(value.`writtenNodes`) +
+            FfiConverterULong.allocationSize(value.`nodesReused`) +
+            FfiConverterULong.allocationSize(value.`bytesRead`) +
             FfiConverterULong.allocationSize(value.`writtenBytes`) +
-            FfiConverterBoolean.allocationSize(value.`usedAppendFastPath`) +
-            FfiConverterBoolean.allocationSize(value.`usedBatchedRoute`) +
-            FfiConverterBoolean.allocationSize(value.`usedCoalescedRebuild`) +
-            FfiConverterBoolean.allocationSize(value.`usedDeferredRebalancing`) +
-            FfiConverterBoolean.allocationSize(value.`usedBottomUpRebuild`) +
-            FfiConverterBoolean.allocationSize(value.`cacheWrittenNodes`) +
+            FfiConverterULong.allocationSize(value.`resyncDistanceEntries`) +
+            FfiConverterULong.allocationSize(value.`resyncDistanceNodes`) +
+            FfiConverterBoolean.allocationSize(value.`usedKeyStableFastPath`) +
+            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`) +
             FfiConverterULong.allocationSize(value.`parallelWidth`) +
             FfiConverterULong.allocationSize(value.`parallelTasks`) +
             FfiConverterULong.allocationSize(value.`structuralIslands`) +
@@ -24639,17 +24635,16 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterULong.write(value.`inputMutations`, buf)
             FfiConverterULong.write(value.`effectiveMutations`, buf)
             FfiConverterBoolean.write(value.`preprocessInputSorted`, buf)
-            FfiConverterULong.write(value.`affectedLeaves`, buf)
-            FfiConverterULong.write(value.`changedLeaves`, buf)
-            FfiConverterULong.write(value.`sparseLeafApplies`, buf)
+            FfiConverterULong.write(value.`entriesStreamed`, buf)
+            FfiConverterULong.write(value.`nodesRead`, buf)
             FfiConverterULong.write(value.`writtenNodes`, buf)
+            FfiConverterULong.write(value.`nodesReused`, buf)
+            FfiConverterULong.write(value.`bytesRead`, buf)
             FfiConverterULong.write(value.`writtenBytes`, buf)
-            FfiConverterBoolean.write(value.`usedAppendFastPath`, buf)
-            FfiConverterBoolean.write(value.`usedBatchedRoute`, buf)
-            FfiConverterBoolean.write(value.`usedCoalescedRebuild`, buf)
-            FfiConverterBoolean.write(value.`usedDeferredRebalancing`, buf)
-            FfiConverterBoolean.write(value.`usedBottomUpRebuild`, buf)
-            FfiConverterBoolean.write(value.`cacheWrittenNodes`, buf)
+            FfiConverterULong.write(value.`resyncDistanceEntries`, buf)
+            FfiConverterULong.write(value.`resyncDistanceNodes`, buf)
+            FfiConverterBoolean.write(value.`usedKeyStableFastPath`, buf)
+            FfiConverterBoolean.write(value.`usedBatchedValueUpdatePath`, buf)
             FfiConverterULong.write(value.`parallelWidth`, buf)
             FfiConverterULong.write(value.`parallelTasks`, buf)
             FfiConverterULong.write(value.`structuralIslands`, buf)
