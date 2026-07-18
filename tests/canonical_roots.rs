@@ -541,7 +541,7 @@ fn parallel_structural_islands_match_canonical_roots_for_every_policy_and_width(
                 })
                 .collect::<Vec<_>>();
             let mut saw_parallel_distant_islands = false;
-            let mut saw_adjacent_coalescing = false;
+            let mut saw_adjacent_admission_bypass = false;
 
             for (policy_index, mut policy) in [
                 chunking::entry_count_key_hash(),
@@ -676,9 +676,10 @@ fn parallel_structural_islands_match_canonical_roots_for_every_policy_and_width(
                         if policy_index == 0
                             && fixture_name == "adjacent-inserts"
                             && width == 4
-                            && result.stats.coalesced_islands > 0
+                            && result.stats.structural_islands == 0
+                            && result.stats.parallel_tasks == 0
                         {
-                            saw_adjacent_coalescing = true;
+                            saw_adjacent_admission_bypass = true;
                         }
                         if width == 0 {
                             widest = Some(result.tree);
@@ -711,6 +712,6 @@ fn parallel_structural_islands_match_canonical_roots_for_every_policy_and_width(
             }
 
             assert!(saw_parallel_distant_islands);
-            assert!(saw_adjacent_coalescing);
+            assert!(saw_adjacent_admission_bypass);
         });
 }

@@ -95,10 +95,17 @@ Batch paths also support:
 - bounded ordered route hydration when stores prefer batch reads
 - append-heavy right-edge optimization
 - proof-gated parallel mutation islands for independent structural changes
-- deterministic coalescing into the canonical sequential fallback
+- bounded structural admission and immediate canonical fallback on a failed proof
 
 `ParallelConfig` controls only scheduling width and threshold. All worker
-counts use the same boundary detector and canonical frontier assembly.
+counts use the same boundary detector and canonical frontier assembly. When
+concurrent large writers already saturate the shared Rayon pool, inner width
+drops to one and caller-level parallelism carries the workload.
+
+The direct parallel leaf route is intentionally narrow: only non-growing value
+updates under key-only entry-count hashing can bypass canonical streaming.
+Key+value, byte-measured, rolling, and Weibull policies remain on the streaming
+writer because a value change may move their persisted boundaries.
 
 ### Bulk builders
 

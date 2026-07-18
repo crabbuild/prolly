@@ -686,6 +686,17 @@ Use `BatchWriter` when a writer object is convenient. Its `ParallelConfig`
 controls only scheduling width and threshold; persisted policy and canonical
 output remain invariant.
 
+The reported effective width may be lower than the requested width when many
+large writers run concurrently. Once caller threads saturate the shared Rayon
+pool, inner parallel work is disabled to avoid oversubscription and
+tail-latency regressions. It may also remain one when the selected policy finds
+no proved-independent work; telemetry reports width actually used, not merely
+the requested or initially admitted width.
+
+Direct parallel leaf replacement is limited to non-growing value updates under
+key-only entry-count hashing. Value-sensitive and byte-measured policies use
+the canonical streaming writer even for rightmost leaves.
+
 ## Bulk Building
 
 Use `BatchBuilder` when you have many unsorted entries and want to build a fresh

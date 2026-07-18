@@ -9020,11 +9020,11 @@ mod tests {
                 assert_eq!(sequential_max_read, 0);
                 assert!(width_two.stats.parallel_width <= 2);
                 assert!(width_four.stats.parallel_width <= 4);
-                assert!(width_two.stats.parallel_tasks > 1);
+                assert_eq!(width_two.stats.parallel_tasks, 0);
                 assert!(width_four.stats.parallel_tasks > 1);
-                assert!(width_two.stats.used_batched_route);
+                assert!(!width_two.stats.used_batched_route);
                 assert!(width_four.stats.used_batched_route);
-                assert!(width_two_max_read <= update_mutations.len().div_ceil(2));
+                assert_eq!(width_two_max_read, 0);
                 assert!(width_four_max_read <= update_mutations.len().div_ceil(4));
                 assert_eq!(sequential.tree.root, width_two.tree.root);
                 assert_eq!(sequential.tree.root, width_four.tree.root);

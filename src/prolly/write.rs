@@ -182,6 +182,12 @@ fn apply_impl<S: Store>(
     measure_read_bytes: bool,
     parallel_config: Option<&ParallelConfig>,
 ) -> Result<(Tree, WriteStats), Error> {
+    let parallel_threshold = parallel_config
+        .map(|config| config.parallelism_threshold)
+        .unwrap_or_else(|| ParallelConfig::default().parallelism_threshold);
+    let _concurrency_guard = (mutations.len() >= parallel_threshold
+        && rayon::current_num_threads() > 1)
+        .then(super::parallel::CanonicalWriteConcurrencyGuard::enter);
     let mut stats = WriteStats {
         input_mutations: mutations.len() as u64,
         ..WriteStats::default()
@@ -205,7 +211,10 @@ fn apply_impl<S: Store>(
         || ExecutionPolicy::automatic(mutations.len(), mutations.len()),
         |config| ExecutionPolicy::from_config(config, mutations.len(), mutations.len()),
     );
-    stats.parallel_width = policy.width() as u64;
+    // Report the maximum width actually used, not merely the width admitted
+    // by policy. Canonical fallbacks that execute no independent work remain
+    // honest width-one operations in public telemetry.
+    stats.parallel_width = 1;
     if tree.root.is_none() {
         return build_empty_base(manager, tree, mutations, stats);
     }
@@ -701,47 +710,6 @@ fn execute_mutation_islands<S: Store>(
     Ok(replayed)
 }
 
-fn merge_mutation_islands(left: MutationIsland, right: MutationIsland) -> MutationIsland {
-    MutationIsland {
-        leaf_range: left.leaf_range.start..left.leaf_range.end.max(right.leaf_range.end),
-        mutation_range: left.mutation_range.start..right.mutation_range.end,
-        protected_end: left.protected_end.max(right.protected_end),
-    }
-}
-
-fn coalesce_unproved_islands(
-    islands: &[MutationIsland],
-    replays: &[IslandReplay],
-) -> Result<(Vec<MutationIsland>, usize), Error> {
-    if islands.len() != replays.len() {
-        return Err(Error::InvalidNode);
-    }
-
-    let mut coalesced = Vec::with_capacity(islands.len());
-    let mut index = 0usize;
-    while index < islands.len() {
-        if replays[index].proved_independent() {
-            coalesced.push(islands[index].clone());
-            index += 1;
-            continue;
-        }
-
-        if index + 1 < islands.len() {
-            coalesced.push(merge_mutation_islands(
-                islands[index].clone(),
-                islands[index + 1].clone(),
-            ));
-            index += 2;
-        } else {
-            let left = coalesced.pop().ok_or(Error::InvalidNode)?;
-            coalesced.push(merge_mutation_islands(left, islands[index].clone()));
-            index += 1;
-        }
-    }
-    let merged = islands.len().saturating_sub(coalesced.len());
-    Ok((coalesced, merged))
-}
-
 fn merge_proved_island_replays(
     old_leaves: &[NodeSummary],
     replays: Vec<IslandReplay>,
@@ -782,52 +750,113 @@ fn try_parallel_structural_islands<S: Store>(
     if !policy.enabled() {
         return Ok(None);
     }
-
-    let initial_count = mutation_island_candidates(old_leaves, mutations).len();
-    let mut islands = plan_mutation_islands(old_leaves, mutations);
-    stats.structural_islands += initial_count as u64;
-    stats.coalesced_islands += initial_count.saturating_sub(islands.len()) as u64;
-    let island_policy = policy.limit_to(islands.len());
-    stats.parallel_width = island_policy.width() as u64;
-    if !island_policy.enabled() {
+    if !structural_mutations_can_form_distant_islands(old_leaves, mutations) {
         return Ok(None);
     }
 
-    loop {
-        let execution_policy = policy.limit_to(islands.len());
-        let replays = execute_mutation_islands(
-            manager,
-            old_leaves,
-            mutations,
-            &tree.config,
-            islands.clone(),
-            execution_policy,
-            measure_read_bytes,
-        )?;
-        if execution_policy.enabled() {
-            stats.parallel_tasks += replays.len() as u64;
-        }
-        for replay in &replays {
-            stats.entries_streamed += replay.entries_streamed;
-            stats.nodes_read += replay.nodes_read;
-            stats.bytes_read += replay.bytes_read;
-            stats.resync_distance_nodes += replay.nodes_read;
-        }
-
-        if replays.iter().all(IslandReplay::proved_independent) {
-            return Ok(Some(merge_proved_island_replays(
-                old_leaves, replays, stats,
-            )?));
-        }
-
-        let previous_len = islands.len();
-        let (next, merged) = coalesce_unproved_islands(&islands, &replays)?;
-        stats.coalesced_islands += merged as u64;
-        if next.len() >= previous_len || next.len() < 2 {
-            return Ok(None);
-        }
-        islands = next;
+    let initial_count = mutation_island_candidates(old_leaves, mutations).len();
+    let islands = plan_mutation_islands(old_leaves, mutations);
+    stats.structural_islands += initial_count as u64;
+    stats.coalesced_islands += initial_count.saturating_sub(islands.len()) as u64;
+    let island_policy = policy.limit_to(islands.len());
+    if !island_policy.enabled()
+        || !structural_islands_worth_speculating(
+            initial_count,
+            &islands,
+            old_leaves.len(),
+            island_policy,
+        )
+    {
+        return Ok(None);
     }
+    stats.parallel_width = island_policy.width() as u64;
+
+    let execution_policy = policy.limit_to(islands.len());
+    let parallel_partitions = if execution_policy.enabled() {
+        islands
+            .chunks(execution_policy.wave_size())
+            .map(|wave| execution_policy.ranges(wave.len()).len())
+            .sum::<usize>()
+    } else {
+        0
+    };
+    let replays = execute_mutation_islands(
+        manager,
+        old_leaves,
+        mutations,
+        &tree.config,
+        islands,
+        execution_policy,
+        measure_read_bytes,
+    )?;
+    stats.parallel_tasks += parallel_partitions as u64;
+    for replay in &replays {
+        stats.entries_streamed += replay.entries_streamed;
+        stats.nodes_read += replay.nodes_read;
+        stats.bytes_read += replay.bytes_read;
+        stats.resync_distance_nodes += replay.nodes_read;
+    }
+
+    if replays.iter().all(IslandReplay::proved_independent) {
+        return Ok(Some(merge_proved_island_replays(
+            old_leaves, replays, stats,
+        )?));
+    }
+
+    // One failed CID proof is enough to invalidate independence. Retrying
+    // progressively larger speculative regions can turn a bounded miss into
+    // O(n log n) replay work, so fall back immediately.
+    Ok(None)
+}
+
+/// Fast rejection for a dense mutation span. At least two guarded islands
+/// require gaps wider than the predecessor context plus the proof guard. If
+/// the average leaf spacing cannot provide that gap, candidate planning can
+/// only coalesce the work into one local region.
+fn structural_mutations_can_form_distant_islands(
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+) -> bool {
+    let Some((first, last)) = mutations.first().zip(mutations.last()) else {
+        return false;
+    };
+    let target_leaf = |key: &[u8]| {
+        old_leaves
+            .partition_point(|leaf| leaf.first_key.as_slice() <= key)
+            .saturating_sub(1)
+    };
+    let first_leaf = target_leaf(&first.0);
+    let last_leaf = target_leaf(&last.0);
+    let leaf_span = last_leaf.saturating_sub(first_leaf).saturating_add(1);
+    let minimum_separation = MUTATION_ISLAND_GUARD_LEAVES.saturating_add(3);
+    leaf_span > 1 && mutations.len().saturating_mul(minimum_separation) < leaf_span
+}
+
+/// Reject island layouts whose up-front guard coalescing already proves that
+/// speculative replay would duplicate most of the canonical sequential scan.
+/// This is a scheduling decision only; rejected layouts immediately use the
+/// same canonical fallback that would run after a failed proof.
+fn structural_islands_worth_speculating(
+    candidate_count: usize,
+    islands: &[MutationIsland],
+    leaf_count: usize,
+    policy: ExecutionPolicy,
+) -> bool {
+    if islands.len() < 2 || leaf_count == 0 || !policy.enabled() {
+        return false;
+    }
+
+    // Many small candidates collapsing into very few guarded regions is the
+    // dense/random case. Replaying those regions and then falling back can
+    // read the tree twice without exposing enough independent CPU work.
+    if candidate_count > islands.len().saturating_mul(4) {
+        return false;
+    }
+
+    let guarded_leaves = islands.iter().fold(0usize, |total, island| {
+        total.saturating_add(island.protected_end.saturating_sub(island.leaf_range.start))
+    });
+    guarded_leaves.saturating_mul(4) <= leaf_count
 }
 
 fn try_localized_height_two_deletes<S: Store>(
@@ -1283,6 +1312,60 @@ enum DirectValueUpdateAttempt {
     Fallback(Vec<(Vec<u8>, Option<Vec<u8>>)>),
 }
 
+fn sampled_value_updates_are_likely_key_stable<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    policy: ExecutionPolicy,
+) -> Result<bool, Error> {
+    // A single representative route catches pure insert batches without
+    // duplicating meaningful work for the dominant key-stable update case.
+    // The full route still proves every mutation before applying anything.
+    const PREFLIGHT_SAMPLES: usize = 1;
+
+    let sample_count = mutations.len().min(PREFLIGHT_SAMPLES);
+    if sample_count == 0 {
+        return Ok(false);
+    }
+    let indexes = (0..sample_count)
+        .map(|sample| {
+            if sample_count == 1 {
+                0
+            } else {
+                sample * (mutations.len() - 1) / (sample_count - 1)
+            }
+        })
+        .collect::<Vec<_>>();
+    let samples = indexes
+        .into_iter()
+        .map(|index| Mutation::Upsert {
+            key: mutations[index].0.clone(),
+            val: mutations[index]
+                .1
+                .clone()
+                .expect("direct value path rejects deletes before routing"),
+        })
+        .collect::<Vec<_>>();
+    super::batch::sampled_value_updates_are_likely_key_stable(
+        manager,
+        tree,
+        samples,
+        policy.read_width(),
+    )
+}
+
+fn add_write_read_metric_delta(
+    stats: &mut WriteStats,
+    before: super::ProllyMetricsSnapshot,
+    after: super::ProllyMetricsSnapshot,
+    measure_read_bytes: bool,
+) {
+    stats.nodes_read += after.nodes_read.saturating_sub(before.nodes_read);
+    if measure_read_bytes {
+        stats.bytes_read += after.bytes_read.saturating_sub(before.bytes_read);
+    }
+}
+
 fn try_direct_value_updates<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
@@ -1308,48 +1391,56 @@ fn try_direct_value_updates<S: Store>(
 
     let mutations =
         if super::batch::should_try_batched_value_updates(manager, tree, mutations.len(), policy) {
-            let batched_mutations = mutations
-                .into_iter()
-                .map(|(key, value)| Mutation::Upsert {
-                    key,
-                    val: value.expect("direct value path rejects deletes before routing"),
-                })
-                .collect::<Vec<_>>();
             let metrics_before = manager.metrics();
-            match super::batch::try_apply_batched_value_updates(
-                manager,
-                tree,
-                batched_mutations,
-                policy,
-            )? {
-                super::batch::KeyStableBatchAttempt::Applied(result) => {
-                    let metrics_after = manager.metrics();
-                    stats.nodes_read += metrics_after
-                        .nodes_read
-                        .saturating_sub(metrics_before.nodes_read);
-                    if measure_read_bytes {
-                        stats.bytes_read += metrics_after
-                            .bytes_read
-                            .saturating_sub(metrics_before.bytes_read);
-                    }
-                    stats.nodes_written += result.written_nodes as u64;
-                    stats.bytes_written += result.written_bytes as u64;
-                    stats.entries_streamed += result.entries_streamed as u64;
-                    stats.resync_distance_entries = result.entries_streamed as u64;
-                    stats.resync_distance_nodes = result.affected_leaves as u64;
-                    stats.used_key_stable_fast_path = true;
-                    stats.used_batched_value_update_path = true;
-                    stats.parallel_width = result.parallel_width as u64;
-                    stats.parallel_tasks += result.parallel_tasks as u64;
-                    return Ok(DirectValueUpdateAttempt::Applied(Box::new((
-                        result.tree,
-                        *stats,
-                    ))));
-                }
-                super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+            if sampled_value_updates_are_likely_key_stable(manager, tree, &mutations, policy)? {
+                let batched_mutations = mutations
                     .into_iter()
-                    .map(mutation_parts)
-                    .collect::<Vec<_>>(),
+                    .map(|(key, value)| Mutation::Upsert {
+                        key,
+                        val: value.expect("direct value path rejects deletes before routing"),
+                    })
+                    .collect::<Vec<_>>();
+                let attempt = super::batch::try_apply_batched_value_updates(
+                    manager,
+                    tree,
+                    batched_mutations,
+                    policy,
+                )?;
+                add_write_read_metric_delta(
+                    stats,
+                    metrics_before,
+                    manager.metrics(),
+                    measure_read_bytes,
+                );
+                match attempt {
+                    super::batch::KeyStableBatchAttempt::Applied(result) => {
+                        stats.nodes_written += result.written_nodes as u64;
+                        stats.bytes_written += result.written_bytes as u64;
+                        stats.entries_streamed += result.entries_streamed as u64;
+                        stats.resync_distance_entries = result.entries_streamed as u64;
+                        stats.resync_distance_nodes = result.affected_leaves as u64;
+                        stats.used_key_stable_fast_path = true;
+                        stats.used_batched_value_update_path = true;
+                        stats.parallel_width = result.parallel_width as u64;
+                        stats.parallel_tasks += result.parallel_tasks as u64;
+                        return Ok(DirectValueUpdateAttempt::Applied(Box::new((
+                            result.tree,
+                            *stats,
+                        ))));
+                    }
+                    super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+                        .into_iter()
+                        .map(mutation_parts)
+                        .collect::<Vec<_>>(),
+                }
+            } else {
+                add_write_read_metric_delta(
+                    stats,
+                    metrics_before,
+                    manager.metrics(),
+                    measure_read_bytes,
+                );
+                mutations
             }
         } else {
             mutations
@@ -2079,6 +2170,55 @@ mod tests {
             pair[0].protected_end <= pair[1].leaf_range.start
                 && pair[0].mutation_range.end == pair[1].mutation_range.start
         }));
+    }
+
+    #[test]
+    fn structural_island_admission_rejects_dense_guards_but_keeps_sparse_work() {
+        let leaves = synthetic_leaf_summaries(128);
+        let dense_mutations = (0..32)
+            .map(|index| (format!("k{:04}", index * 4).into_bytes(), None))
+            .collect::<Vec<_>>();
+        let dense_candidates = mutation_island_candidates(&leaves, &dense_mutations).len();
+        let dense_islands = plan_mutation_islands(&leaves, &dense_mutations);
+        let policy = ExecutionPolicy::from_config(
+            &ParallelConfig::new(4, 1),
+            dense_mutations.len(),
+            dense_islands.len(),
+        );
+
+        assert!(!structural_islands_worth_speculating(
+            dense_candidates,
+            &dense_islands,
+            leaves.len(),
+            policy,
+        ));
+        assert!(!structural_mutations_can_form_distant_islands(
+            &leaves,
+            &dense_mutations,
+        ));
+
+        let sparse_mutations = vec![
+            (b"k0010".to_vec(), None),
+            (b"k0100".to_vec(), Some(b"changed".to_vec())),
+        ];
+        let sparse_candidates = mutation_island_candidates(&leaves, &sparse_mutations).len();
+        let sparse_islands = plan_mutation_islands(&leaves, &sparse_mutations);
+        let policy = ExecutionPolicy::from_config(
+            &ParallelConfig::new(2, 1),
+            sparse_mutations.len(),
+            sparse_islands.len(),
+        );
+
+        assert!(structural_islands_worth_speculating(
+            sparse_candidates,
+            &sparse_islands,
+            leaves.len(),
+            policy,
+        ));
+        assert!(structural_mutations_can_form_distant_islands(
+            &leaves,
+            &sparse_mutations,
+        ));
     }
 
     #[test]

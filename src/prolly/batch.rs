@@ -481,9 +481,10 @@ pub struct BatchApplyStats {
     pub used_bottom_up_rebuild: bool,
     /// Whether newly written nodes were retained in the in-process node cache.
     pub cache_written_nodes: bool,
-    /// Effective scheduling width selected for this canonical write.
+    /// Maximum CPU partition width actually used by an admitted leaf/island
+    /// executor. Ordered store-read fan-out is reported by store metrics.
     pub parallel_width: usize,
-    /// Number of independent parallel tasks executed by this write.
+    /// Number of logical independent CPU partitions scheduled by this write.
     pub parallel_tasks: usize,
     /// Number of structural mutation islands planned by this write.
     pub structural_islands: usize,
@@ -2275,6 +2276,7 @@ pub(crate) fn should_try_batched_value_updates<S: Store>(
     policy: ExecutionPolicy,
 ) -> bool {
     policy.enabled()
+        && policy.width() >= 4
         && mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
         && tree.root.is_some()
         && prolly.store().prefers_batch_reads()
@@ -2291,7 +2293,7 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     }
 
     let groups =
-        group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, policy.width())?;
+        group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, policy.read_width())?;
     if groups.is_empty() || !groups.iter().all(key_stable_group_is_safe) {
         let mut mutations = groups
             .into_iter()
@@ -2320,12 +2322,22 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
             written_bytes: collector.bytes_len(),
             parallel_width: leaf_policy.width(),
             parallel_tasks: if leaf_policy.enabled() {
-                affected_leaves
+                leaf_policy.ranges(affected_leaves).len()
             } else {
                 0
             },
         },
     )))
+}
+
+pub(crate) fn sampled_value_updates_are_likely_key_stable<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    read_width: usize,
+) -> Result<bool, Error> {
+    let groups = group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, read_width)?;
+    Ok(!groups.is_empty() && groups.iter().all(key_stable_group_is_safe))
 }
 
 fn key_stable_group_is_safe(group: &LeafMutationGroupWithPath) -> bool {
@@ -2334,24 +2346,36 @@ fn key_stable_group_is_safe(group: &LeafMutationGroupWithPath) -> bool {
     if group.leaf.encoded_len() >= hard_max {
         return false;
     }
-    let rightmost = group
-        .ancestors
-        .iter()
-        .all(|(ancestor, index)| index.saturating_add(1) == ancestor.len());
-    if !rightmost {
-        let Some(last_key) = group.leaf.keys.last() else {
-            return false;
-        };
-        if !super::boundary::entry_count_boundary(
-            &group.leaf.format.chunking,
-            u16::from(group.leaf.level),
-            group.leaf.len(),
-            last_key,
-        )
-        .unwrap_or(false)
-        {
-            return false;
+    let rightmost = if let Some(path) = &group.route_path {
+        let mut current = Some(path.clone());
+        let mut rightmost = true;
+        while let Some(path) = current {
+            rightmost &= path.child_index.saturating_add(1) == path.node.len();
+            current = path.parent.clone();
         }
+        rightmost
+    } else {
+        group
+            .ancestors
+            .iter()
+            .all(|(ancestor, index)| index.saturating_add(1) == ancestor.len())
+    };
+    let Some(last_key) = group.leaf.keys.last() else {
+        return false;
+    };
+    let Ok(ends_on_value_stable_boundary) = super::boundary::entry_count_boundary(
+        &group.leaf.format.chunking,
+        u16::from(group.leaf.level),
+        group.leaf.len(),
+        last_key,
+    ) else {
+        // Rightmost leaves do not require a terminal boundary, but their
+        // internal boundaries must still be invariant under value changes.
+        // Only key-only entry-count hashing has that property here.
+        return false;
+    };
+    if !rightmost && !ends_on_value_stable_boundary {
+        return false;
     }
     let mutations = group.mutations.as_slice();
     if mutations.len().saturating_mul(8) < group.leaf.len() {
@@ -3509,38 +3533,30 @@ fn prepare_leaf_groups_for_coalesced_rebuild(
             .collect();
     }
 
-    let mut prepared = Vec::with_capacity(groups.len());
-    let mut groups = groups.into_iter();
-    loop {
-        let wave = groups.by_ref().take(policy.wave_size()).collect::<Vec<_>>();
-        if wave.is_empty() {
-            break;
-        }
-
-        // Partition each bounded wave into no more than the configured width.
-        // Each Rayon task processes its partition sequentially, so max_threads
-        // is a real per-call concurrency bound rather than only a read hint.
-        let ranges = policy.ranges(wave.len());
-        let mut wave = wave.into_iter();
-        let partitions = ranges
-            .into_iter()
-            .map(|range| wave.by_ref().take(range.len()).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-
-        let output = partitions
+    if policy.width() == rayon::current_num_threads().max(1) {
+        return groups
             .into_par_iter()
-            .map(|partition| {
-                partition
-                    .into_iter()
-                    .map(|group| {
-                        prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        prepared.extend(output.into_iter().flatten());
+            .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
+            .collect();
     }
-    prepared
+
+    let ranges = policy.ranges(groups.len());
+    let mut groups = groups.into_iter();
+    let partitions = ranges
+        .into_iter()
+        .map(|range| groups.by_ref().take(range.len()).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+
+    let output = partitions
+        .into_par_iter()
+        .map(|partition| {
+            partition
+                .into_iter()
+                .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    output.into_iter().flatten().collect()
 }
 
 fn prepare_leaf_group_for_coalesced_rebuild(
@@ -4215,7 +4231,7 @@ mod tests {
     #[test]
     fn batched_value_update_route_requires_every_eligibility_condition() {
         rayon::ThreadPoolBuilder::new()
-            .num_threads(2)
+            .num_threads(4)
             .build()
             .unwrap()
             .install(|| {
@@ -4236,6 +4252,11 @@ mod tests {
                     config: config.clone(),
                 };
                 let parallel = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(4, 1),
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                );
+                let width_two = ExecutionPolicy::from_config(
                     &ParallelConfig::new(2, 1),
                     BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
                     BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
@@ -4252,6 +4273,12 @@ mod tests {
                     &populated,
                     BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
                     parallel,
+                ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    width_two,
                 ));
                 assert!(!should_try_batched_value_updates(
                     &preferred,
@@ -4687,6 +4714,51 @@ mod tests {
 
         assert_eq!(ancestors, vec![(root, 1), (child, 0)]);
         assert_eq!(ancestor_cids, vec![root_cid, child_cid]);
+    }
+
+    #[test]
+    fn key_stable_admission_uses_route_position_and_rejects_value_sensitive_policies() {
+        let group = |policy, child_index| {
+            let config = Config::builder().chunking(policy).build();
+            let mut leaf = create_test_leaf(vec![b"a".to_vec()], vec![b"old".to_vec()]);
+            leaf.format = config.format;
+            let parent = create_test_internal(vec![b"a".to_vec(), b"m".to_vec()]);
+            let route_path = Arc::new(MutationRoutePath {
+                parent: None,
+                node: Arc::new(parent),
+                cid: Cid::from_bytes(b"route-parent"),
+                child_index,
+                depth: 1,
+            });
+            LeafMutationGroupWithPath {
+                leaf,
+                ancestors: Vec::new(),
+                ancestor_cids: Vec::new(),
+                route_path: Some(route_path),
+                mutations: vec![Mutation::Upsert {
+                    key: b"a".to_vec(),
+                    val: b"new".to_vec(),
+                }]
+                .into(),
+            }
+        };
+
+        assert!(!key_stable_group_is_safe(&group(
+            crate::chunking::entry_count_key_hash(),
+            0,
+        )));
+        assert!(key_stable_group_is_safe(&group(
+            crate::chunking::entry_count_key_hash(),
+            1,
+        )));
+        assert!(!key_stable_group_is_safe(&group(
+            crate::chunking::entry_count_key_value_hash(),
+            1,
+        )));
+        assert!(!key_stable_group_is_safe(&group(
+            crate::chunking::logical_bytes_rolling_hash(),
+            1,
+        )));
     }
 
     #[test]
