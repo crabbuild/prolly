@@ -91,6 +91,20 @@ Executable targets are intentionally repetitive because they are cookbook
 material: the point is that a user can copy one scenario into an application and
 understand all required setup. The run-all executable is only an orchestrator.
 
+`ProllyStoreSQLite` implements the version-1 asynchronous foreign-store
+protocol with a caller-owned SQLite handle. It never closes the handle. Verify
+the adapter and Rust engine round trip from the repository root:
+
+```sh
+PROLLY_BINDINGS_LIBRARY_DIR="$PWD/target/debug" \
+  DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-store-sqlite-check
+```
+
+`ProllyStorePostgres` uses a caller-owned running PostgresNIO client. The
+package pins PostgresNIO 1.27 because it is the newest release compatible with
+the binding's Swift 5.10 toolchain.
+
 When adding a scenario, add a new `Examples/<Name>/main.swift`, add an executable
 product and target in `Package.swift`, and update `COOKBOOK.md` with the command
 and application pattern.

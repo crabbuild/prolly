@@ -101,9 +101,12 @@ The reviewed families cover generic codecs, iterators and sequences, borrowed
 views, store traits, typestate builders, and compile-time marker or associated
 types.
 
-The catalog does not synthesize manifest mappings or mark operations complete.
-An `idiomatic` or `rust-language-only` manifest row passes release validation
-only when it:
+The catalog records both the semantic pattern and the concrete host protocol,
+type, or namespace that carries it. `complete-equivalences` copies those
+symbols and shared tests only onto entries that were individually reviewed and
+already reference that equivalence; it does not classify new rows. An
+`idiomatic` or `rust-language-only` manifest row passes release validation only
+when it:
 
 - references a valid catalog equivalence with the same classification;
 - maps a concrete host symbol or pattern in all eight languages;
@@ -118,10 +121,18 @@ constraints described above.
 
 Run `python3 scripts/binding_api_inventory.py review-abstractions` after a
 rustdoc refresh to apply the exact, checked-in owner/kind review rules. This
-command adds classification, equivalence, rationale, and documentation metadata
-only. It deliberately preserves `planned`, empty language mappings, and empty
-test evidence until the corresponding host API and conformance coverage have
-been verified.
+command adds classification, equivalence, rationale, and documentation
+metadata. Then run:
+
+~~~sh
+python3 scripts/binding_api_inventory.py review-runtime-equivalences
+python3 scripts/binding_api_inventory.py complete-equivalences
+~~~
+
+The first command classifies reviewed cursor, borrowed-view, adapter, and
+validated-editor methods. The second requires explicit eight-language symbols
+and shared conformance tests in the catalog before changing a row from
+`planned` to `implemented`.
 
 ## Application gap report
 
@@ -139,6 +150,8 @@ explicitly reviewed as `application`. The report sections mean:
 
 - `release_complete_application_operations`: strict mapping and test evidence
   exists;
+- `release_complete_non_application_runtime`: strict idiomatic evidence exists
+  for reviewed Rust extension or implementation machinery;
 - `bound_pending_manifest_evidence`: source reconciliation found the behavior
   in all eight wrappers, directly or idiomatically, but concrete manifest
   symbols/tests are not complete yet;
@@ -164,6 +177,11 @@ explicitly reviewed as `application`. The report sections mean:
 source-surface reconciliation must next determine whether the operation is
 already bound under an idiomatic name, grouped into another host operation, or
 actually absent.
+
+Reviewed reconciliation documents may include `language_templates`, exact
+per-operation overrides, tests, and docs. `apply-reconciliations` promotes only
+the explicitly listed bound rows; it leaves unlisted operations planned so an
+owner-level audit cannot conceal a genuine API gap.
 
 `versioned-map-reconciliation.json` is the first exact source reconciliation.
 Its four groups partition all 66 incomplete `VersionedMap` methods into direct

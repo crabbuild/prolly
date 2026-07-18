@@ -646,6 +646,197 @@ where
     }
 }
 
+/// Owned async store overlay used by [`OwnedAsyncProllyTransaction`].
+#[cfg(feature = "async-store")]
+#[derive(Clone)]
+pub struct OwnedAsyncTransactionOverlayStore<S> {
+    base: S,
+    state: Arc<Mutex<TransactionState>>,
+}
+
+#[cfg(feature = "async-store")]
+impl<S> OwnedAsyncTransactionOverlayStore<S> {
+    fn new(base: S, state: Arc<Mutex<TransactionState>>) -> Self {
+        Self { base, state }
+    }
+
+    fn lock(&self) -> Result<MutexGuard<'_, TransactionState>, TransactionOverlayError> {
+        self.state.lock().map_err(TransactionOverlayError::poisoned)
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl<S> AsyncStore for OwnedAsyncTransactionOverlayStore<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    type Error = TransactionOverlayError;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        let staged = self.lock()?.node_writes.get(key).cloned();
+        match staged {
+            Some(value) => Ok(value),
+            None => self
+                .base
+                .get(key)
+                .await
+                .map_err(TransactionOverlayError::store),
+        }
+    }
+
+    async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.lock()?
+            .node_writes
+            .insert(key.to_vec(), Some(value.to_vec()));
+        Ok(())
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.lock()?.node_writes.insert(key.to_vec(), None);
+        Ok(())
+    }
+
+    async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        let mut state = self.lock()?;
+        for op in ops {
+            match op {
+                BatchOp::Upsert { key, value } => {
+                    state
+                        .node_writes
+                        .insert((*key).to_vec(), Some((*value).to_vec()));
+                }
+                BatchOp::Delete { key } => {
+                    state.node_writes.insert((*key).to_vec(), None);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        async_overlay_batch_get_ordered(&self.base, &self.state, keys).await
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.base.prefers_batch_reads()
+    }
+
+    fn read_parallelism(&self) -> usize {
+        self.base.read_parallelism()
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl<S> AsyncManifestStore for OwnedAsyncTransactionOverlayStore<S>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    type Error = TransactionOverlayError;
+
+    async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        if let Some(write) = self.lock()?.root_writes.get(name).cloned() {
+            return Ok(write.replacement().cloned());
+        }
+
+        let current = self
+            .base
+            .get_root(name)
+            .await
+            .map_err(TransactionOverlayError::store)?;
+        let mut state = self.lock()?;
+        state
+            .root_reads
+            .entry(name.to_vec())
+            .or_insert_with(|| current.clone());
+        Ok(current)
+    }
+
+    async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        self.lock()?.root_writes.insert(
+            name.to_vec(),
+            RootWrite::Put {
+                name: name.to_vec(),
+                manifest: manifest.clone(),
+            },
+        );
+        Ok(())
+    }
+
+    async fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        self.lock()?.root_writes.insert(
+            name.to_vec(),
+            RootWrite::Delete {
+                name: name.to_vec(),
+            },
+        );
+        Ok(())
+    }
+
+    async fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        let current = self.get_root(name).await?;
+        if current.as_ref() != expected {
+            return Ok(ManifestUpdate::Conflict { current });
+        }
+
+        match new {
+            Some(manifest) => self.put_root(name, manifest).await?,
+            None => self.delete_root(name).await?,
+        }
+        Ok(ManifestUpdate::Applied)
+    }
+}
+
+#[cfg(feature = "async-store")]
+async fn async_overlay_batch_get_ordered<S: AsyncStore>(
+    base: &S,
+    state: &Arc<Mutex<TransactionState>>,
+    keys: &[&[u8]],
+) -> Result<Vec<Option<Vec<u8>>>, TransactionOverlayError>
+where
+    S::Error: Send + Sync,
+{
+    let staged = {
+        let state = state.lock().map_err(TransactionOverlayError::poisoned)?;
+        keys.iter()
+            .map(|key| state.node_writes.get(*key).cloned())
+            .collect::<Vec<_>>()
+    };
+
+    let mut results = vec![None; keys.len()];
+    let mut missing_keys = Vec::new();
+    let mut missing_positions = Vec::new();
+    for (position, staged_value) in staged.into_iter().enumerate() {
+        match staged_value {
+            Some(value) => results[position] = value,
+            None => {
+                missing_keys.push(keys[position]);
+                missing_positions.push(position);
+            }
+        }
+    }
+    if missing_keys.is_empty() {
+        return Ok(results);
+    }
+
+    let plan = OrderedBatchReadPlan::new(&missing_keys);
+    let unique_values = base
+        .batch_get_ordered_unique(plan.unique_keys())
+        .await
+        .map_err(TransactionOverlayError::store)?;
+    let missing_values = plan.expand_owned(unique_values);
+    for (position, value) in missing_positions.into_iter().zip(missing_values) {
+        results[position] = value;
+    }
+    Ok(results)
+}
+
 /// Async store overlay used internally by [`AsyncProllyTransaction`].
 #[cfg(feature = "async-store")]
 #[derive(Clone)]
@@ -715,40 +906,7 @@ where
     }
 
     async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
-        let staged = {
-            let state = self.lock()?;
-            keys.iter()
-                .map(|key| state.node_writes.get(*key).cloned())
-                .collect::<Vec<_>>()
-        };
-
-        let mut results = vec![None; keys.len()];
-        let mut missing_keys = Vec::new();
-        let mut missing_positions = Vec::new();
-        for (position, staged_value) in staged.into_iter().enumerate() {
-            match staged_value {
-                Some(value) => results[position] = value,
-                None => {
-                    missing_keys.push(keys[position]);
-                    missing_positions.push(position);
-                }
-            }
-        }
-        if missing_keys.is_empty() {
-            return Ok(results);
-        }
-
-        let plan = OrderedBatchReadPlan::new(&missing_keys);
-        let unique_values = self
-            .base
-            .batch_get_ordered_unique(plan.unique_keys())
-            .await
-            .map_err(TransactionOverlayError::store)?;
-        let missing_values = plan.expand_owned(unique_values);
-        for (position, value) in missing_positions.into_iter().zip(missing_values) {
-            results[position] = value;
-        }
-        Ok(results)
+        async_overlay_batch_get_ordered(self.base, &self.state, keys).await
     }
 
     fn prefers_batch_reads(&self) -> bool {
@@ -1075,6 +1233,141 @@ where
     }
 }
 
+/// A strict optimistic async transaction that owns a cloned store handle.
+///
+/// This variant is intended for FFI bindings and other APIs that cannot keep a
+/// borrow of an [`AsyncProlly`] manager alive across asynchronous calls.
+#[cfg(feature = "async-store")]
+pub struct OwnedAsyncProllyTransaction<S>
+where
+    S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    base_store: S,
+    state: Arc<Mutex<TransactionState>>,
+    manager: AsyncProlly<OwnedAsyncTransactionOverlayStore<S>>,
+    completed: bool,
+}
+
+#[cfg(feature = "async-store")]
+impl<S> OwnedAsyncProllyTransaction<S>
+where
+    S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore + Clone,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    fn new(base: &AsyncProlly<S>) -> Result<Self, Error> {
+        if !base.store.supports_transactions() {
+            return Err(Error::UnsupportedTransactions {
+                store: type_name::<S>(),
+            });
+        }
+
+        let base_store = base.store.clone();
+        let state = Arc::new(Mutex::new(TransactionState::default()));
+        let overlay = OwnedAsyncTransactionOverlayStore::new(base_store.clone(), state.clone());
+        let manager = AsyncProlly::new(overlay, base.config.clone());
+        Ok(Self {
+            base_store,
+            state,
+            manager,
+            completed: false,
+        })
+    }
+
+    /// Create an empty tree using the base manager's config.
+    pub fn create(&self) -> Tree {
+        self.manager.create()
+    }
+
+    /// Get a value from a tree, including nodes staged in this transaction.
+    pub async fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+        self.manager.get(tree, key).await
+    }
+
+    /// Insert or update a key/value pair, staging rewritten nodes.
+    pub async fn put(&self, tree: &Tree, key: Vec<u8>, value: Vec<u8>) -> Result<Tree, Error> {
+        self.manager.put(tree, key, value).await
+    }
+
+    /// Delete a key, staging rewritten nodes.
+    pub async fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
+        self.manager.delete(tree, key).await
+    }
+
+    /// Apply a batch of logical map mutations inside the transaction.
+    pub async fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
+        self.manager.batch(tree, mutations).await
+    }
+
+    /// Load a named root and add it to the transaction read set.
+    pub async fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
+        self.manager.load_named_root(name).await
+    }
+
+    /// Stage an unconditional named-root publish.
+    pub async fn publish_named_root(&self, name: &[u8], tree: &Tree) -> Result<(), Error> {
+        self.manager.publish_named_root(name, tree).await
+    }
+
+    /// Stage an unconditional named-root publish with an explicit timestamp.
+    pub async fn publish_named_root_at_millis(
+        &self,
+        name: &[u8],
+        tree: &Tree,
+        timestamp_millis: u64,
+    ) -> Result<(), Error> {
+        self.manager
+            .publish_named_root_at_millis(name, tree, timestamp_millis)
+            .await
+    }
+
+    /// Stage an unconditional named-root delete.
+    pub async fn delete_named_root(&self, name: &[u8]) -> Result<(), Error> {
+        self.manager.delete_named_root(name).await
+    }
+
+    /// Stage a named-root CAS update.
+    pub async fn compare_and_swap_named_root(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+    ) -> Result<NamedRootUpdate, Error> {
+        self.manager
+            .compare_and_swap_named_root(name, expected, new)
+            .await
+    }
+
+    /// Discard all staged writes.
+    pub fn rollback(mut self) {
+        self.completed = true;
+    }
+
+    /// Commit staged node and named-root writes atomically.
+    pub async fn commit(mut self) -> Result<TransactionUpdate, Error> {
+        let (node_writes, root_conditions, root_writes) = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|err| Error::Store(Box::new(TransactionOverlayError::poisoned(err))))?;
+            (
+                state.node_writes(),
+                state.root_conditions(),
+                state.root_writes(),
+            )
+        };
+
+        let update = self
+            .base_store
+            .commit_transaction(&node_writes, &root_conditions, &root_writes)
+            .await?;
+        self.completed = true;
+        Ok(update)
+    }
+}
+
 /// A strict optimistic transaction over an [`AsyncProlly`] manager.
 #[cfg(feature = "async-store")]
 pub struct AsyncProllyTransaction<'a, S>
@@ -1247,6 +1540,21 @@ where
     }
 }
 
+#[cfg(feature = "async-store")]
+impl<S> Drop for OwnedAsyncProllyTransaction<S>
+where
+    S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    fn drop(&mut self) {
+        if !self.completed {
+            // Staged writes live only in the overlay, so rollback is just drop.
+            self.completed = true;
+        }
+    }
+}
+
 impl<S> Prolly<S>
 where
     S: Store + ManifestStore + TransactionalStore,
@@ -1293,6 +1601,15 @@ where
     /// Start a strict optimistic async transaction.
     pub fn begin_transaction(&self) -> Result<AsyncProllyTransaction<'_, S>, Error> {
         AsyncProllyTransaction::new(self)
+    }
+
+    /// Start a strict optimistic async transaction that owns a cloned store
+    /// handle and can therefore outlive a borrow of this manager.
+    pub fn begin_owned_transaction(&self) -> Result<OwnedAsyncProllyTransaction<S>, Error>
+    where
+        S: Clone,
+    {
+        OwnedAsyncProllyTransaction::new(self)
     }
 
     /// Run a boxed future in a transaction, committing on success and rolling

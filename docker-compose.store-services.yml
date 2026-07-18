@@ -1,6 +1,12 @@
 name: prolly-store-services
 
 services:
+  spanner:
+    image: gcr.io/cloud-spanner-emulator/emulator:latest
+    ports:
+      - "${PROLLY_STORE_SPANNER_GRPC_PORT:-9010}:9010"
+      - "${PROLLY_STORE_SPANNER_REST_PORT:-9020}:9020"
+
   dynamodb:
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]

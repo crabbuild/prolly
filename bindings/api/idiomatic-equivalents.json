@@ -15,6 +15,16 @@
         "swift": "Codec protocols passed to typed map initializers",
         "wasm": "Codec<T> JavaScript objects passed to typed map factories"
       },
+      "language_symbols": {
+        "python": "prolly.api.KeyCodec/ValueCodec contract ({rust})",
+        "go": "prolly.KeyCodec/ValueCodec contract ({rust})",
+        "node": "@trail/prolly-node Codec<T> contract ({rust})",
+        "kotlin": "build.crab.prolly.api KeyCodec/ValueCodec contract ({rust})",
+        "java": "build.crab.prolly.javaapi KeyCodec/ValueCodec contract ({rust})",
+        "ruby": "Prolly codec contract ({rust})",
+        "swift": "ProllyAPI KeyCodec/ValueCodec contract ({rust})",
+        "wasm": "@trail/prolly-wasm Codec<T> contract ({rust})"
+      },
       "tests": [
         "portable-parity::typed-codec-round-trip"
       ]
@@ -32,6 +42,16 @@
         "ruby": "Enumerable or block-scoped paged cursor",
         "swift": "Sequence or scoped paged cursor",
         "wasm": "Iterable or AsyncIterable over bounded browser-safe pages"
+      },
+      "language_symbols": {
+        "python": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "go": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "node": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "kotlin": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "java": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "ruby": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "swift": "MapSnapshot/ReadSession bounded-page iteration ({rust})",
+        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration ({rust})"
       },
       "tests": [
         "portable-parity::bounded-ordered-iteration"
@@ -51,6 +71,16 @@
         "swift": "withUnsafeBytes-style closure or scoped page lease",
         "wasm": "callback-scoped Uint8Array view invalidated on scope exit"
       },
+      "language_symbols": {
+        "python": "ScopedBytes/context-managed memoryview ({rust})",
+        "go": "ScopedBytes/page lease ({rust})",
+        "node": "ScopedBytes/callback Buffer view ({rust})",
+        "kotlin": "ScopedBytes/callback ByteBuffer view ({rust})",
+        "java": "ScopedBytes/callback ByteBuffer view ({rust})",
+        "ruby": "ScopedBytes/block-scoped view ({rust})",
+        "swift": "ScopedBytes/withUnsafeBytes view ({rust})",
+        "wasm": "ScopedBytes/callback Uint8Array view ({rust})"
+      },
       "tests": [
         "portable-parity::scoped-view-lifetime"
       ]
@@ -68,6 +98,16 @@
         "ruby": "store object responding to the documented callback methods",
         "swift": "Store protocol with async wrapper ownership",
         "wasm": "browser Store callback object with Promise-based adapter"
+      },
+      "language_symbols": {
+        "python": "HostStoreCallback/ForeignRemoteStore contract ({rust})",
+        "go": "prolly.RemoteStore contract with Rust-owned defaults ({rust})",
+        "node": "NativeHostStore/RemoteStore contract ({rust})",
+        "kotlin": "HostStoreCallback/RemoteStore contract ({rust})",
+        "java": "HostStoreAdapter/RemoteStore contract ({rust})",
+        "ruby": "Prolly::HostStoreCallback/ForeignRemoteStore contract ({rust})",
+        "swift": "HostStoreCallback/ForeignRemoteStore contract ({rust})",
+        "wasm": "RemoteStore contract with Rust-owned defaults ({rust})"
       },
       "tests": [
         "portable-parity::custom-store-callbacks"
@@ -87,6 +127,16 @@
         "swift": "value-type options and throwing initializers",
         "wasm": "typed JavaScript option objects validated at the WASM boundary"
       },
+      "language_symbols": {
+        "python": "validated option record/factory ({rust})",
+        "go": "validated option struct/constructor ({rust})",
+        "node": "validated typed option/factory ({rust})",
+        "kotlin": "validated option data class/builder ({rust})",
+        "java": "validated immutable option/builder ({rust})",
+        "ruby": "validated keyword option/factory ({rust})",
+        "swift": "validated option value/throwing initializer ({rust})",
+        "wasm": "validated TypeScript option/WASM factory ({rust})"
+      },
       "tests": [
         "portable-parity::configuration-validation"
       ]
@@ -104,6 +154,16 @@
         "ruby": "documented duck-type constraints with registration-time validation",
         "swift": "protocol constraints with throwing construction-time validation",
         "wasm": "TypeScript type constraints with WASM boundary validation"
+      },
+      "language_symbols": {
+        "python": "documented protocol constraint ({rust})",
+        "go": "documented interface constraint ({rust})",
+        "node": "TypeScript constraint with boundary validation ({rust})",
+        "kotlin": "generic constraint with boundary validation ({rust})",
+        "java": "generic constraint with boundary validation ({rust})",
+        "ruby": "documented duck-type constraint ({rust})",
+        "swift": "protocol constraint with boundary validation ({rust})",
+        "wasm": "TypeScript constraint with WASM validation ({rust})"
       },
       "tests": [
         "portable-parity::type-constraint-validation"
@@ -123,6 +183,16 @@
         "swift": "escaping closure or callback protocol receiving value records",
         "wasm": "JavaScript function receiving copied or callback-scoped records"
       },
+      "language_symbols": {
+        "python": "callable/Host callback protocol ({rust})",
+        "go": "function type/callback interface ({rust})",
+        "node": "typed callback interface ({rust})",
+        "kotlin": "function type/callback interface ({rust})",
+        "java": "functional callback interface ({rust})",
+        "ruby": "Proc/callback protocol ({rust})",
+        "swift": "closure/callback protocol ({rust})",
+        "wasm": "JavaScript callback contract ({rust})"
+      },
       "tests": [
         "portable-parity::callback-protocol-lifetime"
       ]
@@ -141,6 +211,16 @@
         "swift": "value struct or canonical record type",
         "wasm": "TypeScript interface or canonical browser-safe record type"
       },
+      "language_symbols": {
+        "python": "canonical dataclass record ({rust})",
+        "go": "canonical named record ({rust})",
+        "node": "canonical TypeScript record ({rust})",
+        "kotlin": "canonical data-class record ({rust})",
+        "java": "canonical record class ({rust})",
+        "ruby": "canonical immutable value object ({rust})",
+        "swift": "canonical value struct ({rust})",
+        "wasm": "canonical browser-safe TypeScript record ({rust})"
+      },
       "tests": [
         "portable-parity::record-shape-round-trip"
       ]
@@ -158,6 +238,16 @@
         "ruby": "module namespace",
         "swift": "module namespace",
         "wasm": "ES module export namespace"
+      },
+      "language_symbols": {
+        "python": "prolly package namespace ({rust})",
+        "go": "prolly package namespace ({rust})",
+        "node": "@trail/prolly-node export namespace ({rust})",
+        "kotlin": "build.crab.prolly package namespace ({rust})",
+        "java": "build.crab.prolly package namespace ({rust})",
+        "ruby": "Prolly module namespace ({rust})",
+        "swift": "Prolly/ProllyAPI module namespace ({rust})",
+        "wasm": "@trail/prolly-wasm export namespace ({rust})"
       },
       "tests": [
         "portable-parity::public-export-surface"

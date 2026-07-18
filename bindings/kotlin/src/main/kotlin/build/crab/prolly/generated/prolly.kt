@@ -31,6 +31,13 @@ import java.nio.charset.CodingErrorAction
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -673,6 +680,54 @@ internal interface UniffiCallbackInterfaceHostStoreCallbackMethod14 : com.sun.jn
 internal interface UniffiCallbackInterfaceMergeResolverCallbackMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`conflict`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`cid`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod2 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`cid`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod3 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`cid`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod4 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`ops`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod5 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`cids`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod6 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod7 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod8 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod9 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod10 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod11 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod12 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod13 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`new`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod14 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod15 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`conditions`: RustBuffer.ByValue,`roots`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
 internal interface UniffiCallbackInterfaceSecondaryIndexExtractorCallbackMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`primaryKey`: RustBuffer.ByValue,`sourceValue`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -835,6 +890,70 @@ internal open class UniffiVTableCallbackInterfaceMergeResolverCallback(
     }
 
 }
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "descriptor", "getNode", "putNode", "deleteNode", "batchNodes", "batchGetNodesOrdered", "listNodeCids", "getHint", "putHint", "batchPutNodesWithHint", "getRootManifest", "putRootManifest", "deleteRootManifest", "compareAndSwapRootManifest", "listRootManifests", "commitTransaction")
+internal open class UniffiVTableCallbackInterfaceForeignRemoteStore(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `descriptor`: UniffiCallbackInterfaceForeignRemoteStoreMethod0? = null,
+    @JvmField internal var `getNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod1? = null,
+    @JvmField internal var `putNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod2? = null,
+    @JvmField internal var `deleteNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod3? = null,
+    @JvmField internal var `batchNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod4? = null,
+    @JvmField internal var `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod5? = null,
+    @JvmField internal var `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod6? = null,
+    @JvmField internal var `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod7? = null,
+    @JvmField internal var `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8? = null,
+    @JvmField internal var `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9? = null,
+    @JvmField internal var `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod10? = null,
+    @JvmField internal var `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11? = null,
+    @JvmField internal var `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12? = null,
+    @JvmField internal var `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13? = null,
+    @JvmField internal var `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod14? = null,
+    @JvmField internal var `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod15? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `descriptor`: UniffiCallbackInterfaceForeignRemoteStoreMethod0? = null,
+        `getNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod1? = null,
+        `putNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod2? = null,
+        `deleteNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod3? = null,
+        `batchNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod4? = null,
+        `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod5? = null,
+        `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod6? = null,
+        `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod7? = null,
+        `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8? = null,
+        `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9? = null,
+        `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod10? = null,
+        `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11? = null,
+        `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12? = null,
+        `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13? = null,
+        `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod14? = null,
+        `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod15? = null,
+    ): UniffiVTableCallbackInterfaceForeignRemoteStore(`uniffiFree`,`uniffiClone`,`descriptor`,`getNode`,`putNode`,`deleteNode`,`batchNodes`,`batchGetNodesOrdered`,`listNodeCids`,`getHint`,`putHint`,`batchPutNodesWithHint`,`getRootManifest`,`putRootManifest`,`deleteRootManifest`,`compareAndSwapRootManifest`,`listRootManifests`,`commitTransaction`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceForeignRemoteStore) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `descriptor` = other.`descriptor`
+        `getNode` = other.`getNode`
+        `putNode` = other.`putNode`
+        `deleteNode` = other.`deleteNode`
+        `batchNodes` = other.`batchNodes`
+        `batchGetNodesOrdered` = other.`batchGetNodesOrdered`
+        `listNodeCids` = other.`listNodeCids`
+        `getHint` = other.`getHint`
+        `putHint` = other.`putHint`
+        `batchPutNodesWithHint` = other.`batchPutNodesWithHint`
+        `getRootManifest` = other.`getRootManifest`
+        `putRootManifest` = other.`putRootManifest`
+        `deleteRootManifest` = other.`deleteRootManifest`
+        `compareAndSwapRootManifest` = other.`compareAndSwapRootManifest`
+        `listRootManifests` = other.`listRootManifests`
+        `commitTransaction` = other.`commitTransaction`
+    }
+
+}
 @Structure.FieldOrder("uniffiFree", "uniffiClone", "extract")
 internal open class UniffiVTableCallbackInterfaceSecondaryIndexExtractorCallback(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -949,6 +1068,8 @@ external fun uniffi_prolly_bindings_checksum_func_i128_key(
 external fun uniffi_prolly_bindings_checksum_func_i64_key(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_inspect_proof_bundle(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_is_boundary_config(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_is_tombstone_value(
 ): Short
@@ -1139,6 +1260,8 @@ external fun uniffi_prolly_bindings_checksum_func_versioned_value_matches_schema
 external fun uniffi_prolly_bindings_checksum_func_versioned_value_require_schema(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_default_secondary_index_limits(
 ): Short
@@ -1527,6 +1650,100 @@ external fun uniffi_prolly_bindings_checksum_method_prollytransaction_publish_na
 external fun uniffi_prolly_bindings_checksum_method_prollytransaction_put(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_prollytransaction_rollback(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_create(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_get(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_put(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_range(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingindexregistry_len(
 ): Short
@@ -2064,6 +2281,8 @@ external fun uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite(
 ): Short
 external fun uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory(
 ): Short
+external fun uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new(
+): Short
 external fun uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new(
 ): Short
 external fun uniffi_prolly_bindings_checksum_constructor_bindingindexedmap_new(
@@ -2092,6 +2311,7 @@ internal object UniffiLib {
         uniffiCallbackInterfaceCrdtResolverCallback.register(this)
         uniffiCallbackInterfaceDiffVisitorCallback.register(this)
         uniffiCallbackInterfaceEntryVisitorCallback.register(this)
+        uniffiCallbackInterfaceForeignRemoteStore.register(this)
         uniffiCallbackInterfaceHostStoreCallback.register(this)
         uniffiCallbackInterfaceMergeResolverCallback.register(this)
         uniffiCallbackInterfaceProximityRecordVisitorCallback.register(this)
@@ -2530,6 +2750,116 @@ external fun uniffi_prolly_bindings_fn_method_prollytransaction_put(`ptr`: Long,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_prollytransaction_rollback(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+external fun uniffi_prolly_bindings_fn_clone_asyncprollyengine(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_asyncprollyengine(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new(`store`: Long,`config`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_batch(`ptr`: Long,`tree`: RustBuffer.ByValue,`mutations`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats(`ptr`: Long,`tree`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`replacement`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_create(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_delete(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_diff(`ptr`: Long,`base`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_get(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many(`ptr`: Long,`tree`: RustBuffer.ByValue,`keys`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_merge(`ptr`: Long,`base`: RustBuffer.ByValue,`left`: RustBuffer.ByValue,`right`: RustBuffer.ByValue,`resolver`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix(`ptr`: Long,`tree`: RustBuffer.ByValue,`prefix`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`tree`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis(`ptr`: Long,`name`: RustBuffer.ByValue,`tree`: RustBuffer.ByValue,`timestampMillis`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_put(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_range(`ptr`: Long,`tree`: RustBuffer.ByValue,`start`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page(`ptr`: Long,`tree`: RustBuffer.ByValue,`cursor`: RustBuffer.ByValue,`end`: RustBuffer.ByValue,`limit`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_clone_asyncprollytransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_asyncprollytransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch(`ptr`: Long,`tree`: RustBuffer.ByValue,`mutations`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`replacement`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_create(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_get(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root(`ptr`: Long,`name`: RustBuffer.ByValue,`tree`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis(`ptr`: Long,`name`: RustBuffer.ByValue,`tree`: RustBuffer.ByValue,`timestampMillis`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_put(`ptr`: Long,`tree`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_clone_foreignremotestore(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_foreignremotestore(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore(`vtable`: UniffiVTableCallbackInterfaceForeignRemoteStore,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_get_node(`ptr`: Long,`cid`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(`ptr`: Long,`cid`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(`ptr`: Long,`cid`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(`ptr`: Long,`ops`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(`ptr`: Long,`cids`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint(`ptr`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint(`ptr`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint(`ptr`: Long,`nodes`: RustBuffer.ByValue,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest(`ptr`: Long,`name`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest(`ptr`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest(`ptr`: Long,`name`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest(`ptr`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`new`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests(`ptr`: Long,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction(`ptr`: Long,`nodes`: RustBuffer.ByValue,`conditions`: RustBuffer.ByValue,`roots`: RustBuffer.ByValue,
+): Long
 external fun uniffi_prolly_bindings_fn_clone_bindingindexregistry(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_free_bindingindexregistry(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3200,6 +3530,8 @@ external fun uniffi_prolly_bindings_fn_func_i64_key(`value`: Long,uniffi_out_err
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_inspect_proof_bundle(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_is_boundary_config(`config`: RustBuffer.ByValue,`count`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Byte
 external fun uniffi_prolly_bindings_fn_func_is_tombstone_value(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
 external fun uniffi_prolly_bindings_fn_func_key_from_prefixed_segments(`prefix`: RustBuffer.ByValue,`segments`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3390,6 +3722,8 @@ external fun uniffi_prolly_bindings_fn_func_versioned_value_require_schema(`reco
 ): Unit
 external fun uniffi_prolly_bindings_fn_func_versioned_value_to_bytes(`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(`store`: Long,`config`: RustBuffer.ByValue,
+): Long
 external fun uniffi_prolly_bindings_fn_func_default_secondary_index_limits(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_composite_accelerator_config(uniffi_out_err: UniffiRustCallStatus,
@@ -3616,6 +3950,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316.toShort()) {
@@ -3901,6 +4238,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_default_secondary_index_limits() != 62049.toShort()) {
@@ -4483,6 +4823,147 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_prollytransaction_rollback() != 34302.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch() != 40064.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction() != 28949.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats() != 45715.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root() != 38856.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create() != 56360.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete() != 20300.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root() != 52828.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff() != 55207.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get() != 12607.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many() != 63418.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots() != 50340.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root() != 318.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge() != 37178.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix() != 9481.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root() != 18445.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis() != 41009.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put() != 37914.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range() != 35865.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page() != 22037.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch() != 13957.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit() != 47349.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root() != 59033.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create() != 32187.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete() != 36135.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root() != 47190.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get() != 58160.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root() != 28693.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root() != 19910.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis() != 21635.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put() != 10789.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback() != 11506.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor() != 37360.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node() != 60045.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node() != 45131.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node() != 20183.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337.toShort()) {
@@ -5289,6 +5770,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory() != 5409.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new() != 15218.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new() != 46129.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5314,6 +5798,135 @@ public fun uniffiEnsureInitialized() {
 }
 
 // Async support
+// Async return type handlers
+
+internal const val UNIFFI_RUST_FUTURE_POLL_READY = 0.toByte()
+internal const val UNIFFI_RUST_FUTURE_POLL_WAKE = 1.toByte()
+
+internal val uniffiContinuationHandleMap = UniffiHandleMap<CancellableContinuation<Byte>>()
+
+// FFI type for Rust future continuations
+internal object uniffiRustFutureContinuationCallbackImpl: UniffiRustFutureContinuationCallback {
+    override fun callback(data: Long, pollResult: Byte) {
+        uniffiContinuationHandleMap.remove(data).resume(pollResult)
+    }
+}
+
+internal suspend fun<T, F, E: kotlin.Exception> uniffiRustCallAsync(
+    rustFuture: Long,
+    pollFunc: (Long, UniffiRustFutureContinuationCallback, Long) -> Unit,
+    completeFunc: (Long, UniffiRustCallStatus) -> F,
+    freeFunc: (Long) -> Unit,
+    liftFunc: (F) -> T,
+    errorHandler: UniffiRustCallStatusErrorHandler<E>
+): T {
+    try {
+        do {
+            val pollResult = suspendCancellableCoroutine<Byte> { continuation ->
+                pollFunc(
+                    rustFuture,
+                    uniffiRustFutureContinuationCallbackImpl,
+                    uniffiContinuationHandleMap.insert(continuation)
+                )
+            }
+        } while (pollResult != UNIFFI_RUST_FUTURE_POLL_READY);
+
+        return liftFunc(
+            uniffiRustCallWithError(errorHandler, { status -> completeFunc(rustFuture, status) })
+        )
+    } finally {
+        freeFunc(rustFuture)
+    }
+}
+internal inline fun<T> uniffiTraitInterfaceCallAsync(
+    crossinline makeCall: suspend () -> T,
+    crossinline handleSuccess: (T) -> Unit,
+    crossinline handleError: (UniffiRustCallStatus.ByValue) -> Unit,
+    uniffiOutDroppedCallback: UniffiForeignFutureDroppedCallbackStruct,
+) {
+    // Using `GlobalScope` is labeled as a "delicate API" and generally discouraged in Kotlin programs, since it breaks structured concurrency.
+    // However, our parent task is a Rust future, so we're going to need to break structure concurrency in any case.
+    //
+    // Uniffi does its best to support structured concurrency across the FFI.
+    // If the Rust future is dropped, `uniffiForeignFutureDroppedCallbackImpl` is called, which will cancel the Kotlin coroutine if it's still running.
+    @OptIn(DelicateCoroutinesApi::class)
+    val job = GlobalScope.launch coroutineBlock@ {
+        // Note: it's important we call either `handleSuccess` or `handleError` exactly once.  Each
+        // call consumes an Arc reference, which means there should be no possibility of a double
+        // call.  The following code is structured so that will will never call both `handleSuccess`
+        // and `handleError`, even in the face of weird exceptions.
+        //
+        // In extreme circumstances we may not call either, for example if we fail to make the JNA
+        // call to `handleSuccess`.  This means we will leak the Arc reference, which is better than
+        // double-freeing it.
+        val callResult = try {
+            makeCall()
+        } catch(e: kotlin.Exception) {
+            handleError(
+                UniffiRustCallStatus.create(
+                    UNIFFI_CALL_UNEXPECTED_ERROR,
+                    FfiConverterString.lower(e.toString()),
+                )
+            )
+            return@coroutineBlock
+        }
+        handleSuccess(callResult)
+    }
+    val handle = uniffiForeignFutureHandleMap.insert(job)
+    uniffiOutDroppedCallback.uniffiSetValue(UniffiForeignFutureDroppedCallbackStruct(handle, uniffiForeignFutureDroppedCallbackImpl))
+}
+
+internal inline fun<T, reified E: Throwable> uniffiTraitInterfaceCallAsyncWithError(
+    crossinline makeCall: suspend () -> T,
+    crossinline handleSuccess: (T) -> Unit,
+    crossinline handleError: (UniffiRustCallStatus.ByValue) -> Unit,
+    crossinline lowerError: (E) -> RustBuffer.ByValue,
+    uniffiOutDroppedCallback: UniffiForeignFutureDroppedCallbackStruct,
+) {
+    // See uniffiTraitInterfaceCallAsync for details on `DelicateCoroutinesApi`
+    @OptIn(DelicateCoroutinesApi::class)
+    val job = GlobalScope.launch coroutineBlock@ {
+        // See the note in uniffiTraitInterfaceCallAsync for details on `handleSuccess` and
+        // `handleError`.
+        val callResult = try {
+            makeCall()
+        } catch(e: kotlin.Exception) {
+            if (e is E) {
+                handleError(
+                    UniffiRustCallStatus.create(
+                        UNIFFI_CALL_ERROR,
+                        lowerError(e),
+                    )
+                )
+            } else {
+                handleError(
+                    UniffiRustCallStatus.create(
+                        UNIFFI_CALL_UNEXPECTED_ERROR,
+                        FfiConverterString.lower(e.toString()),
+                    )
+                )
+            }
+            return@coroutineBlock
+        }
+        handleSuccess(callResult)
+    }
+    val handle = uniffiForeignFutureHandleMap.insert(job)
+    uniffiOutDroppedCallback.uniffiSetValue(UniffiForeignFutureDroppedCallbackStruct(handle, uniffiForeignFutureDroppedCallbackImpl))
+}
+
+internal val uniffiForeignFutureHandleMap = UniffiHandleMap<Job>()
+
+internal object uniffiForeignFutureDroppedCallbackImpl: UniffiForeignFutureDroppedCallback {
+    override fun callback(handle: Long) {
+        val job = uniffiForeignFutureHandleMap.remove(handle)
+        if (!job.isCompleted) {
+            job.cancel()
+        }
+    }
+}
+
+// For testing
+public fun uniffiForeignFutureHandleCount() = uniffiForeignFutureHandleMap.size
 
 // Public interface members begin here.
 
@@ -5769,6 +6382,1189 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
     override fun write(value: ByteArray, buf: ByteBuffer) {
         buf.putInt(value.size)
         buf.put(value)
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface RemoteNativeProllyEngineInterface {
+
+    suspend fun `batch`(`tree`: TreeRecord, `mutations`: List<MutationRecord>): TreeRecord
+
+    suspend fun `beginTransaction`(): RemoteNativeProllyTransaction
+
+    suspend fun `collectStats`(`tree`: TreeRecord): TreeStatsRecord
+
+    suspend fun `compareAndSwapNamedRoot`(`name`: kotlin.ByteArray, `expected`: TreeRecord?, `replacement`: TreeRecord?): NamedRootUpdateRecord
+
+    fun `create`(): TreeRecord
+
+    suspend fun `delete`(`tree`: TreeRecord, `key`: kotlin.ByteArray): TreeRecord
+
+    suspend fun `deleteNamedRoot`(`name`: kotlin.ByteArray)
+
+    suspend fun `diff`(`base`: TreeRecord, `other`: TreeRecord): List<DiffRecord>
+
+    suspend fun `get`(`tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ByteArray?
+
+    suspend fun `getMany`(`tree`: TreeRecord, `keys`: List<kotlin.ByteArray>): List<kotlin.ByteArray?>
+
+    suspend fun `listNamedRoots`(): List<NamedRootRecord>
+
+    suspend fun `loadNamedRoot`(`name`: kotlin.ByteArray): TreeRecord?
+
+    suspend fun `merge`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `resolver`: kotlin.String?): TreeRecord
+
+    suspend fun `prefix`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray): List<EntryRecord>
+
+    suspend fun `publishNamedRoot`(`name`: kotlin.ByteArray, `tree`: TreeRecord)
+
+    suspend fun `publishNamedRootAtMillis`(`name`: kotlin.ByteArray, `tree`: TreeRecord, `timestampMillis`: kotlin.ULong)
+
+    suspend fun `put`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): TreeRecord
+
+    suspend fun `range`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?): List<EntryRecord>
+
+    suspend fun `rangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong): RangePageRecord
+
+    companion object
+}
+
+open class RemoteNativeProllyEngine: Disposable, AutoCloseable, RemoteNativeProllyEngineInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    // Note no constructor generated for this object as it is async.
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine(handle, status)
+        }
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `batch`(`tree`: TreeRecord, `mutations`: List<MutationRecord>) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterSequenceTypeMutationRecord.lower(`mutations`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `beginTransaction`() : RemoteNativeProllyTransaction {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeRemoteNativeProllyTransaction.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `collectStats`(`tree`: TreeRecord) : TreeStatsRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeStatsRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `compareAndSwapNamedRoot`(`name`: kotlin.ByteArray, `expected`: TreeRecord?, `replacement`: TreeRecord?) : NamedRootUpdateRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterOptionalTypeTreeRecord.lower(`expected`),FfiConverterOptionalTypeTreeRecord.lower(`replacement`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNamedRootUpdateRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+    override fun `create`(): TreeRecord {
+            return FfiConverterTypeTreeRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `delete`(`tree`: TreeRecord, `key`: kotlin.ByteArray) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `deleteNamedRoot`(`name`: kotlin.ByteArray) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `diff`(`base`: TreeRecord, `other`: TreeRecord) : List<DiffRecord> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`other`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeDiffRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `get`(`tree`: TreeRecord, `key`: kotlin.ByteArray) : kotlin.ByteArray? {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalByteArray.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `getMany`(`tree`: TreeRecord, `keys`: List<kotlin.ByteArray>) : List<kotlin.ByteArray?> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterSequenceByteArray.lower(`keys`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceOptionalByteArray.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `listNamedRoots`() : List<NamedRootRecord> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeNamedRootRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `loadNamedRoot`(`name`: kotlin.ByteArray) : TreeRecord? {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `merge`(`base`: TreeRecord, `left`: TreeRecord, `right`: TreeRecord, `resolver`: kotlin.String?) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`base`),FfiConverterTypeTreeRecord.lower(`left`),FfiConverterTypeTreeRecord.lower(`right`),FfiConverterOptionalString.lower(`resolver`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `prefix`(`tree`: TreeRecord, `prefix`: kotlin.ByteArray) : List<EntryRecord> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`prefix`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeEntryRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `publishNamedRoot`(`name`: kotlin.ByteArray, `tree`: TreeRecord) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterTypeTreeRecord.lower(`tree`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `publishNamedRootAtMillis`(`name`: kotlin.ByteArray, `tree`: TreeRecord, `timestampMillis`: kotlin.ULong) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterULong.lower(`timestampMillis`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `put`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `range`(`tree`: TreeRecord, `start`: kotlin.ByteArray, `end`: kotlin.ByteArray?) : List<EntryRecord> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`start`),FfiConverterOptionalByteArray.lower(`end`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeEntryRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `rangePage`(`tree`: TreeRecord, `cursor`: RangeCursorRecord?, `end`: kotlin.ByteArray?, `limit`: kotlin.ULong) : RangePageRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterOptionalTypeRangeCursorRecord.lower(`cursor`),FfiConverterOptionalByteArray.lower(`end`),FfiConverterULong.lower(`limit`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeRangePageRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRemoteNativeProllyEngine: FfiConverter<RemoteNativeProllyEngine, Long> {
+    override fun lower(value: RemoteNativeProllyEngine): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RemoteNativeProllyEngine {
+        return RemoteNativeProllyEngine(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RemoteNativeProllyEngine {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RemoteNativeProllyEngine) = 8UL
+
+    override fun write(value: RemoteNativeProllyEngine, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface RemoteNativeProllyTransactionInterface {
+
+    suspend fun `batch`(`tree`: TreeRecord, `mutations`: List<MutationRecord>): TreeRecord
+
+    suspend fun `commit`(): TransactionUpdateRecord
+
+    suspend fun `compareAndSwapNamedRoot`(`name`: kotlin.ByteArray, `expected`: TreeRecord?, `replacement`: TreeRecord?): NamedRootUpdateRecord
+
+    suspend fun `create`(): TreeRecord
+
+    suspend fun `delete`(`tree`: TreeRecord, `key`: kotlin.ByteArray): TreeRecord
+
+    suspend fun `deleteNamedRoot`(`name`: kotlin.ByteArray)
+
+    suspend fun `get`(`tree`: TreeRecord, `key`: kotlin.ByteArray): kotlin.ByteArray?
+
+    suspend fun `loadNamedRoot`(`name`: kotlin.ByteArray): TreeRecord?
+
+    suspend fun `publishNamedRoot`(`name`: kotlin.ByteArray, `tree`: TreeRecord)
+
+    suspend fun `publishNamedRootAtMillis`(`name`: kotlin.ByteArray, `tree`: TreeRecord, `timestampMillis`: kotlin.ULong)
+
+    suspend fun `put`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): TreeRecord
+
+    suspend fun `rollback`()
+
+    companion object
+}
+
+open class RemoteNativeProllyTransaction: Disposable, AutoCloseable, RemoteNativeProllyTransactionInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction(handle, status)
+        }
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `batch`(`tree`: TreeRecord, `mutations`: List<MutationRecord>) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterSequenceTypeMutationRecord.lower(`mutations`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `commit`() : TransactionUpdateRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionUpdateRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `compareAndSwapNamedRoot`(`name`: kotlin.ByteArray, `expected`: TreeRecord?, `replacement`: TreeRecord?) : NamedRootUpdateRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterOptionalTypeTreeRecord.lower(`expected`),FfiConverterOptionalTypeTreeRecord.lower(`replacement`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNamedRootUpdateRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `create`() : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `delete`(`tree`: TreeRecord, `key`: kotlin.ByteArray) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `deleteNamedRoot`(`name`: kotlin.ByteArray) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `get`(`tree`: TreeRecord, `key`: kotlin.ByteArray) : kotlin.ByteArray? {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalByteArray.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `loadNamedRoot`(`name`: kotlin.ByteArray) : TreeRecord? {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `publishNamedRoot`(`name`: kotlin.ByteArray, `tree`: TreeRecord) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterTypeTreeRecord.lower(`tree`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `publishNamedRootAtMillis`(`name`: kotlin.ByteArray, `tree`: TreeRecord, `timestampMillis`: kotlin.ULong) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterULong.lower(`timestampMillis`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `put`(`tree`: TreeRecord, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray) : TreeRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put(
+                uniffiHandle,
+                FfiConverterTypeTreeRecord.lower(`tree`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTreeRecord.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `rollback`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRemoteNativeProllyTransaction: FfiConverter<RemoteNativeProllyTransaction, Long> {
+    override fun lower(value: RemoteNativeProllyTransaction): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RemoteNativeProllyTransaction {
+        return RemoteNativeProllyTransaction(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RemoteNativeProllyTransaction {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RemoteNativeProllyTransaction) = 8UL
+
+    override fun write(value: RemoteNativeProllyTransaction, buf: ByteBuffer) {
+        buf.putLong(lower(value))
     }
 }
 
@@ -15740,6 +17536,1189 @@ public object FfiConverterTypeEntryVisitorCallback: FfiConverter<EntryVisitorCal
 //
 
 
+public interface ForeignRemoteStore {
+
+    suspend fun `descriptor`(): StoreDescriptorResultRecord
+
+    suspend fun `getNode`(`cid`: kotlin.ByteArray): OptionalBytesResultRecord
+
+    suspend fun `putNode`(`cid`: kotlin.ByteArray, `value`: kotlin.ByteArray): UnitResultRecord
+
+    suspend fun `deleteNode`(`cid`: kotlin.ByteArray): UnitResultRecord
+
+    suspend fun `batchNodes`(`ops`: List<NodeMutationRecord>): UnitResultRecord
+
+    suspend fun `batchGetNodesOrdered`(`cids`: List<kotlin.ByteArray>): OptionalBytesListResultRecord
+
+    suspend fun `listNodeCids`(): BytesListResultRecord
+
+    suspend fun `getHint`(`namespace`: kotlin.ByteArray, `key`: kotlin.ByteArray): OptionalBytesResultRecord
+
+    suspend fun `putHint`(`namespace`: kotlin.ByteArray, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): UnitResultRecord
+
+    suspend fun `batchPutNodesWithHint`(`nodes`: List<NodeEntryRecord>, `namespace`: kotlin.ByteArray, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): UnitResultRecord
+
+    suspend fun `getRootManifest`(`name`: kotlin.ByteArray): OptionalBytesResultRecord
+
+    suspend fun `putRootManifest`(`name`: kotlin.ByteArray, `manifest`: kotlin.ByteArray): UnitResultRecord
+
+    suspend fun `deleteRootManifest`(`name`: kotlin.ByteArray): UnitResultRecord
+
+    suspend fun `compareAndSwapRootManifest`(`name`: kotlin.ByteArray, `expected`: OptionalBytesRecord, `new`: OptionalBytesRecord): RootCasResultRecord
+
+    suspend fun `listRootManifests`(): NamedBytesListResultRecord
+
+    suspend fun `commitTransaction`(`nodes`: List<NodeMutationRecord>, `conditions`: List<RootConditionRecord>, `roots`: List<RootWriteRecord>): TransactionResultRecord
+
+    companion object
+}
+
+open class ForeignRemoteStoreImpl: Disposable, AutoCloseable, ForeignRemoteStore
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore(handle, status)
+        }
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `descriptor`() : StoreDescriptorResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeStoreDescriptorResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `getNode`(`cid`: kotlin.ByteArray) : OptionalBytesResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`cid`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeOptionalBytesResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `putNode`(`cid`: kotlin.ByteArray, `value`: kotlin.ByteArray) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`cid`),FfiConverterByteArray.lower(`value`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `deleteNode`(`cid`: kotlin.ByteArray) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`cid`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `batchNodes`(`ops`: List<NodeMutationRecord>) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(
+                uniffiHandle,
+                FfiConverterSequenceTypeNodeMutationRecord.lower(`ops`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `batchGetNodesOrdered`(`cids`: List<kotlin.ByteArray>) : OptionalBytesListResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(
+                uniffiHandle,
+                FfiConverterSequenceByteArray.lower(`cids`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeOptionalBytesListResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `listNodeCids`() : BytesListResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeBytesListResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `getHint`(`namespace`: kotlin.ByteArray, `key`: kotlin.ByteArray) : OptionalBytesResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`namespace`),FfiConverterByteArray.lower(`key`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeOptionalBytesResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `putHint`(`namespace`: kotlin.ByteArray, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`namespace`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `batchPutNodesWithHint`(`nodes`: List<NodeEntryRecord>, `namespace`: kotlin.ByteArray, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint(
+                uniffiHandle,
+                FfiConverterSequenceTypeNodeEntryRecord.lower(`nodes`),FfiConverterByteArray.lower(`namespace`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `getRootManifest`(`name`: kotlin.ByteArray) : OptionalBytesResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeOptionalBytesResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `putRootManifest`(`name`: kotlin.ByteArray, `manifest`: kotlin.ByteArray) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterByteArray.lower(`manifest`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `deleteRootManifest`(`name`: kotlin.ByteArray) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `compareAndSwapRootManifest`(`name`: kotlin.ByteArray, `expected`: OptionalBytesRecord, `new`: OptionalBytesRecord) : RootCasResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest(
+                uniffiHandle,
+                FfiConverterByteArray.lower(`name`),FfiConverterTypeOptionalBytesRecord.lower(`expected`),FfiConverterTypeOptionalBytesRecord.lower(`new`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeRootCasResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `listRootManifests`() : NamedBytesListResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNamedBytesListResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `commitTransaction`(`nodes`: List<NodeMutationRecord>, `conditions`: List<RootConditionRecord>, `roots`: List<RootWriteRecord>) : TransactionResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction(
+                uniffiHandle,
+                FfiConverterSequenceTypeNodeMutationRecord.lower(`nodes`),FfiConverterSequenceTypeRootConditionRecord.lower(`conditions`),FfiConverterSequenceTypeRootWriteRecord.lower(`roots`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceForeignRemoteStore {
+    internal object `descriptor`: UniffiCallbackInterfaceForeignRemoteStoreMethod0 {
+        override fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`descriptor`(
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: StoreDescriptorResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeStoreDescriptorResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `getNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod1 {
+        override fun callback(`uniffiHandle`: Long,`cid`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`getNode`(
+                    FfiConverterByteArray.lift(`cid`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: OptionalBytesResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeOptionalBytesResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `putNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod2 {
+        override fun callback(`uniffiHandle`: Long,`cid`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`putNode`(
+                    FfiConverterByteArray.lift(`cid`),
+                    FfiConverterByteArray.lift(`value`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `deleteNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod3 {
+        override fun callback(`uniffiHandle`: Long,`cid`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`deleteNode`(
+                    FfiConverterByteArray.lift(`cid`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `batchNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod4 {
+        override fun callback(`uniffiHandle`: Long,`ops`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`batchNodes`(
+                    FfiConverterSequenceTypeNodeMutationRecord.lift(`ops`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod5 {
+        override fun callback(`uniffiHandle`: Long,`cids`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`batchGetNodesOrdered`(
+                    FfiConverterSequenceByteArray.lift(`cids`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: OptionalBytesListResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeOptionalBytesListResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod6 {
+        override fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`listNodeCids`(
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: BytesListResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeBytesListResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod7 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`getHint`(
+                    FfiConverterByteArray.lift(`namespace`),
+                    FfiConverterByteArray.lift(`key`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: OptionalBytesResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeOptionalBytesResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`putHint`(
+                    FfiConverterByteArray.lift(`namespace`),
+                    FfiConverterByteArray.lift(`key`),
+                    FfiConverterByteArray.lift(`value`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9 {
+        override fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`batchPutNodesWithHint`(
+                    FfiConverterSequenceTypeNodeEntryRecord.lift(`nodes`),
+                    FfiConverterByteArray.lift(`namespace`),
+                    FfiConverterByteArray.lift(`key`),
+                    FfiConverterByteArray.lift(`value`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod10 {
+        override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`getRootManifest`(
+                    FfiConverterByteArray.lift(`name`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: OptionalBytesResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeOptionalBytesResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11 {
+        override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`putRootManifest`(
+                    FfiConverterByteArray.lift(`name`),
+                    FfiConverterByteArray.lift(`manifest`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12 {
+        override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`deleteRootManifest`(
+                    FfiConverterByteArray.lift(`name`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13 {
+        override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`new`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`compareAndSwapRootManifest`(
+                    FfiConverterByteArray.lift(`name`),
+                    FfiConverterTypeOptionalBytesRecord.lift(`expected`),
+                    FfiConverterTypeOptionalBytesRecord.lift(`new`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: RootCasResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeRootCasResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod14 {
+        override fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`listRootManifests`(
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: NamedBytesListResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeNamedBytesListResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod15 {
+        override fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`conditions`: RustBuffer.ByValue,`roots`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`commitTransaction`(
+                    FfiConverterSequenceTypeNodeMutationRecord.lift(`nodes`),
+                    FfiConverterSequenceTypeRootConditionRecord.lift(`conditions`),
+                    FfiConverterSequenceTypeRootWriteRecord.lift(`roots`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: TransactionResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeTransactionResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeForeignRemoteStore.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeForeignRemoteStore.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceForeignRemoteStore.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `descriptor`,
+        `getNode`,
+        `putNode`,
+        `deleteNode`,
+        `batchNodes`,
+        `batchGetNodesOrdered`,
+        `listNodeCids`,
+        `getHint`,
+        `putHint`,
+        `batchPutNodesWithHint`,
+        `getRootManifest`,
+        `putRootManifest`,
+        `deleteRootManifest`,
+        `compareAndSwapRootManifest`,
+        `listRootManifests`,
+        `commitTransaction`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore(vtable)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeForeignRemoteStore: FfiConverter<ForeignRemoteStore, Long> {
+    internal val handleMap = UniffiHandleMap<ForeignRemoteStore>()
+
+    override fun lower(value: ForeignRemoteStore): Long {
+        if (value is ForeignRemoteStoreImpl) {
+             // Rust-implemented object.  Clone the handle and return it
+            return value.uniffiCloneHandle()
+         } else {
+            // Kotlin object, generate a new vtable handle and return that.
+            return handleMap.insert(value)
+         }
+    }
+
+    override fun lift(value: Long): ForeignRemoteStore {
+        if ((value and 1.toLong()) == 0.toLong()) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ForeignRemoteStoreImpl(UniffiWithHandle, value)
+        } else {
+            // Kotlin-generated handle, get the object from the handle map
+            return handleMap.remove(value)
+        }
+    }
+
+    override fun read(buf: ByteBuffer): ForeignRemoteStore {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: ForeignRemoteStore) = 8UL
+
+    override fun write(value: ForeignRemoteStore, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface HostStoreCallback {
 
     fun `get`(`key`: kotlin.ByteArray): HostStoreBytesResultRecord
@@ -21860,6 +24839,44 @@ public object FfiConverterTypeBlobRefRecord: FfiConverterRustBuffer<BlobRefRecor
 
 
 
+data class BytesListResultRecord (
+    var `values`: List<kotlin.ByteArray>
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBytesListResultRecord: FfiConverterRustBuffer<BytesListResultRecord> {
+    override fun read(buf: ByteBuffer): BytesListResultRecord {
+        return BytesListResultRecord(
+            FfiConverterSequenceByteArray.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BytesListResultRecord) = (
+            FfiConverterSequenceByteArray.allocationSize(value.`values`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: BytesListResultRecord, buf: ByteBuffer) {
+            FfiConverterSequenceByteArray.write(value.`values`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
+    }
+}
+
+
+
 data class CacheStatsRecord (
     var `cachedNodes`: kotlin.ULong
     ,
@@ -25364,6 +28381,82 @@ public object FfiConverterTypeMutationRecord: FfiConverterRustBuffer<MutationRec
 
 
 
+data class NamedBytesListResultRecord (
+    var `values`: List<NamedBytesRecord>
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNamedBytesListResultRecord: FfiConverterRustBuffer<NamedBytesListResultRecord> {
+    override fun read(buf: ByteBuffer): NamedBytesListResultRecord {
+        return NamedBytesListResultRecord(
+            FfiConverterSequenceTypeNamedBytesRecord.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NamedBytesListResultRecord) = (
+            FfiConverterSequenceTypeNamedBytesRecord.allocationSize(value.`values`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: NamedBytesListResultRecord, buf: ByteBuffer) {
+            FfiConverterSequenceTypeNamedBytesRecord.write(value.`values`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
+    }
+}
+
+
+
+data class NamedBytesRecord (
+    var `name`: kotlin.ByteArray
+    ,
+    var `value`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNamedBytesRecord: FfiConverterRustBuffer<NamedBytesRecord> {
+    override fun read(buf: ByteBuffer): NamedBytesRecord {
+        return NamedBytesRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NamedBytesRecord) = (
+            FfiConverterByteArray.allocationSize(value.`name`) +
+            FfiConverterByteArray.allocationSize(value.`value`)
+    )
+
+    override fun write(value: NamedBytesRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`name`, buf)
+            FfiConverterByteArray.write(value.`value`, buf)
+    }
+}
+
+
+
 data class NamedRootManifestRecord (
     var `name`: kotlin.ByteArray
     ,
@@ -25574,6 +28667,82 @@ public object FfiConverterTypeNamedRootUpdateRecord: FfiConverterRustBuffer<Name
 
 
 
+data class NodeEntryRecord (
+    var `key`: kotlin.ByteArray
+    ,
+    var `value`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeEntryRecord: FfiConverterRustBuffer<NodeEntryRecord> {
+    override fun read(buf: ByteBuffer): NodeEntryRecord {
+        return NodeEntryRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NodeEntryRecord) = (
+            FfiConverterByteArray.allocationSize(value.`key`) +
+            FfiConverterByteArray.allocationSize(value.`value`)
+    )
+
+    override fun write(value: NodeEntryRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`key`, buf)
+            FfiConverterByteArray.write(value.`value`, buf)
+    }
+}
+
+
+
+data class NodeMutationRecord (
+    var `key`: kotlin.ByteArray
+    ,
+    var `value`: OptionalBytesRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeMutationRecord: FfiConverterRustBuffer<NodeMutationRecord> {
+    override fun read(buf: ByteBuffer): NodeMutationRecord {
+        return NodeMutationRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NodeMutationRecord) = (
+            FfiConverterByteArray.allocationSize(value.`key`) +
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`value`)
+    )
+
+    override fun write(value: NodeMutationRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`key`, buf)
+            FfiConverterTypeOptionalBytesRecord.write(value.`value`, buf)
+    }
+}
+
+
+
 data class NodeRecord (
     var `keys`: List<kotlin.ByteArray>
     ,
@@ -25652,6 +28821,120 @@ public object FfiConverterTypeNodeRecord: FfiConverterRustBuffer<NodeRecord> {
             FfiConverterULong.write(value.`hashSeed`, buf)
             FfiConverterTypeEncodingRecord.write(value.`encoding`, buf)
             FfiConverterOptionalByteArray.write(value.`formatBytes`, buf)
+    }
+}
+
+
+
+data class OptionalBytesListResultRecord (
+    var `values`: List<OptionalBytesRecord>
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOptionalBytesListResultRecord: FfiConverterRustBuffer<OptionalBytesListResultRecord> {
+    override fun read(buf: ByteBuffer): OptionalBytesListResultRecord {
+        return OptionalBytesListResultRecord(
+            FfiConverterSequenceTypeOptionalBytesRecord.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OptionalBytesListResultRecord) = (
+            FfiConverterSequenceTypeOptionalBytesRecord.allocationSize(value.`values`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: OptionalBytesListResultRecord, buf: ByteBuffer) {
+            FfiConverterSequenceTypeOptionalBytesRecord.write(value.`values`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
+    }
+}
+
+
+
+data class OptionalBytesRecord (
+    var `present`: kotlin.Boolean
+    ,
+    var `value`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOptionalBytesRecord: FfiConverterRustBuffer<OptionalBytesRecord> {
+    override fun read(buf: ByteBuffer): OptionalBytesRecord {
+        return OptionalBytesRecord(
+            FfiConverterBoolean.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OptionalBytesRecord) = (
+            FfiConverterBoolean.allocationSize(value.`present`) +
+            FfiConverterByteArray.allocationSize(value.`value`)
+    )
+
+    override fun write(value: OptionalBytesRecord, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`present`, buf)
+            FfiConverterByteArray.write(value.`value`, buf)
+    }
+}
+
+
+
+data class OptionalBytesResultRecord (
+    var `value`: OptionalBytesRecord
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOptionalBytesResultRecord: FfiConverterRustBuffer<OptionalBytesResultRecord> {
+    override fun read(buf: ByteBuffer): OptionalBytesResultRecord {
+        return OptionalBytesResultRecord(
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OptionalBytesResultRecord) = (
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`value`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: OptionalBytesResultRecord, buf: ByteBuffer) {
+            FfiConverterTypeOptionalBytesRecord.write(value.`value`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
     }
 }
 
@@ -27637,6 +30920,87 @@ public object FfiConverterTypeReversePageRecord: FfiConverterRustBuffer<ReverseP
 
 
 
+data class RootCasResultRecord (
+    var `applied`: kotlin.Boolean
+    ,
+    var `current`: OptionalBytesRecord
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRootCasResultRecord: FfiConverterRustBuffer<RootCasResultRecord> {
+    override fun read(buf: ByteBuffer): RootCasResultRecord {
+        return RootCasResultRecord(
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RootCasResultRecord) = (
+            FfiConverterBoolean.allocationSize(value.`applied`) +
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`current`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: RootCasResultRecord, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`applied`, buf)
+            FfiConverterTypeOptionalBytesRecord.write(value.`current`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
+    }
+}
+
+
+
+data class RootConditionRecord (
+    var `name`: kotlin.ByteArray
+    ,
+    var `expected`: OptionalBytesRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRootConditionRecord: FfiConverterRustBuffer<RootConditionRecord> {
+    override fun read(buf: ByteBuffer): RootConditionRecord {
+        return RootConditionRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RootConditionRecord) = (
+            FfiConverterByteArray.allocationSize(value.`name`) +
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`expected`)
+    )
+
+    override fun write(value: RootConditionRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`name`, buf)
+            FfiConverterTypeOptionalBytesRecord.write(value.`expected`, buf)
+    }
+}
+
+
+
 data class RootManifestRecord (
     var `tree`: TreeRecord
     ,
@@ -27675,6 +31039,44 @@ public object FfiConverterTypeRootManifestRecord: FfiConverterRustBuffer<RootMan
             FfiConverterTypeTreeRecord.write(value.`tree`, buf)
             FfiConverterOptionalULong.write(value.`createdAtMillis`, buf)
             FfiConverterOptionalULong.write(value.`updatedAtMillis`, buf)
+    }
+}
+
+
+
+data class RootWriteRecord (
+    var `name`: kotlin.ByteArray
+    ,
+    var `replacement`: OptionalBytesRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRootWriteRecord: FfiConverterRustBuffer<RootWriteRecord> {
+    override fun read(buf: ByteBuffer): RootWriteRecord {
+        return RootWriteRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RootWriteRecord) = (
+            FfiConverterByteArray.allocationSize(value.`name`) +
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`replacement`)
+    )
+
+    override fun write(value: RootWriteRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`name`, buf)
+            FfiConverterTypeOptionalBytesRecord.write(value.`replacement`, buf)
     }
 }
 
@@ -28546,6 +31948,314 @@ public object FfiConverterTypeStatsPercentageChangeRecord: FfiConverterRustBuffe
 
 
 
+data class StoreCapabilitiesRecord (
+    var `nativeBatchReads`: kotlin.Boolean
+    ,
+    var `atomicBatchWrites`: kotlin.Boolean
+    ,
+    var `nodeScan`: kotlin.Boolean
+    ,
+    var `hints`: kotlin.Boolean
+    ,
+    var `atomicNodesAndHint`: kotlin.Boolean
+    ,
+    var `rootScan`: kotlin.Boolean
+    ,
+    var `rootCompareAndSwap`: kotlin.Boolean
+    ,
+    var `transactions`: kotlin.Boolean
+    ,
+    var `readParallelism`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoreCapabilitiesRecord: FfiConverterRustBuffer<StoreCapabilitiesRecord> {
+    override fun read(buf: ByteBuffer): StoreCapabilitiesRecord {
+        return StoreCapabilitiesRecord(
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoreCapabilitiesRecord) = (
+            FfiConverterBoolean.allocationSize(value.`nativeBatchReads`) +
+            FfiConverterBoolean.allocationSize(value.`atomicBatchWrites`) +
+            FfiConverterBoolean.allocationSize(value.`nodeScan`) +
+            FfiConverterBoolean.allocationSize(value.`hints`) +
+            FfiConverterBoolean.allocationSize(value.`atomicNodesAndHint`) +
+            FfiConverterBoolean.allocationSize(value.`rootScan`) +
+            FfiConverterBoolean.allocationSize(value.`rootCompareAndSwap`) +
+            FfiConverterBoolean.allocationSize(value.`transactions`) +
+            FfiConverterUInt.allocationSize(value.`readParallelism`)
+    )
+
+    override fun write(value: StoreCapabilitiesRecord, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`nativeBatchReads`, buf)
+            FfiConverterBoolean.write(value.`atomicBatchWrites`, buf)
+            FfiConverterBoolean.write(value.`nodeScan`, buf)
+            FfiConverterBoolean.write(value.`hints`, buf)
+            FfiConverterBoolean.write(value.`atomicNodesAndHint`, buf)
+            FfiConverterBoolean.write(value.`rootScan`, buf)
+            FfiConverterBoolean.write(value.`rootCompareAndSwap`, buf)
+            FfiConverterBoolean.write(value.`transactions`, buf)
+            FfiConverterUInt.write(value.`readParallelism`, buf)
+    }
+}
+
+
+
+data class StoreDescriptorRecord (
+    var `protocolMajor`: kotlin.UInt
+    ,
+    var `adapterName`: kotlin.String
+    ,
+    var `provider`: kotlin.String
+    ,
+    var `schemaVersion`: kotlin.UInt
+    ,
+    var `capabilities`: StoreCapabilitiesRecord
+    ,
+    var `limits`: StoreLimitsRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoreDescriptorRecord: FfiConverterRustBuffer<StoreDescriptorRecord> {
+    override fun read(buf: ByteBuffer): StoreDescriptorRecord {
+        return StoreDescriptorRecord(
+            FfiConverterUInt.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterTypeStoreCapabilitiesRecord.read(buf),
+            FfiConverterTypeStoreLimitsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoreDescriptorRecord) = (
+            FfiConverterUInt.allocationSize(value.`protocolMajor`) +
+            FfiConverterString.allocationSize(value.`adapterName`) +
+            FfiConverterString.allocationSize(value.`provider`) +
+            FfiConverterUInt.allocationSize(value.`schemaVersion`) +
+            FfiConverterTypeStoreCapabilitiesRecord.allocationSize(value.`capabilities`) +
+            FfiConverterTypeStoreLimitsRecord.allocationSize(value.`limits`)
+    )
+
+    override fun write(value: StoreDescriptorRecord, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`protocolMajor`, buf)
+            FfiConverterString.write(value.`adapterName`, buf)
+            FfiConverterString.write(value.`provider`, buf)
+            FfiConverterUInt.write(value.`schemaVersion`, buf)
+            FfiConverterTypeStoreCapabilitiesRecord.write(value.`capabilities`, buf)
+            FfiConverterTypeStoreLimitsRecord.write(value.`limits`, buf)
+    }
+}
+
+
+
+data class StoreDescriptorResultRecord (
+    var `value`: StoreDescriptorRecord?
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoreDescriptorResultRecord: FfiConverterRustBuffer<StoreDescriptorResultRecord> {
+    override fun read(buf: ByteBuffer): StoreDescriptorResultRecord {
+        return StoreDescriptorResultRecord(
+            FfiConverterOptionalTypeStoreDescriptorRecord.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoreDescriptorResultRecord) = (
+            FfiConverterOptionalTypeStoreDescriptorRecord.allocationSize(value.`value`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: StoreDescriptorResultRecord, buf: ByteBuffer) {
+            FfiConverterOptionalTypeStoreDescriptorRecord.write(value.`value`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
+    }
+}
+
+
+
+data class StoreErrorRecord (
+    var `code`: kotlin.String
+    ,
+    var `message`: kotlin.String
+    ,
+    var `retryable`: kotlin.Boolean
+    ,
+    var `providerCode`: kotlin.String?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoreErrorRecord: FfiConverterRustBuffer<StoreErrorRecord> {
+    override fun read(buf: ByteBuffer): StoreErrorRecord {
+        return StoreErrorRecord(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoreErrorRecord) = (
+            FfiConverterString.allocationSize(value.`code`) +
+            FfiConverterString.allocationSize(value.`message`) +
+            FfiConverterBoolean.allocationSize(value.`retryable`) +
+            FfiConverterOptionalString.allocationSize(value.`providerCode`)
+    )
+
+    override fun write(value: StoreErrorRecord, buf: ByteBuffer) {
+            FfiConverterString.write(value.`code`, buf)
+            FfiConverterString.write(value.`message`, buf)
+            FfiConverterBoolean.write(value.`retryable`, buf)
+            FfiConverterOptionalString.write(value.`providerCode`, buf)
+    }
+}
+
+
+
+data class StoreLimitsRecord (
+    var `maxBatchReadItems`: kotlin.UInt?
+    ,
+    var `maxBatchWriteItems`: kotlin.UInt?
+    ,
+    var `maxTransactionOperations`: kotlin.UInt?
+    ,
+    var `maxNodeBytes`: kotlin.ULong?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoreLimitsRecord: FfiConverterRustBuffer<StoreLimitsRecord> {
+    override fun read(buf: ByteBuffer): StoreLimitsRecord {
+        return StoreLimitsRecord(
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoreLimitsRecord) = (
+            FfiConverterOptionalUInt.allocationSize(value.`maxBatchReadItems`) +
+            FfiConverterOptionalUInt.allocationSize(value.`maxBatchWriteItems`) +
+            FfiConverterOptionalUInt.allocationSize(value.`maxTransactionOperations`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxNodeBytes`)
+    )
+
+    override fun write(value: StoreLimitsRecord, buf: ByteBuffer) {
+            FfiConverterOptionalUInt.write(value.`maxBatchReadItems`, buf)
+            FfiConverterOptionalUInt.write(value.`maxBatchWriteItems`, buf)
+            FfiConverterOptionalUInt.write(value.`maxTransactionOperations`, buf)
+            FfiConverterOptionalULong.write(value.`maxNodeBytes`, buf)
+    }
+}
+
+
+
+data class StoreTransactionConflictRecord (
+    var `name`: kotlin.ByteArray
+    ,
+    var `expected`: OptionalBytesRecord
+    ,
+    var `current`: OptionalBytesRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStoreTransactionConflictRecord: FfiConverterRustBuffer<StoreTransactionConflictRecord> {
+    override fun read(buf: ByteBuffer): StoreTransactionConflictRecord {
+        return StoreTransactionConflictRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+            FfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StoreTransactionConflictRecord) = (
+            FfiConverterByteArray.allocationSize(value.`name`) +
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`expected`) +
+            FfiConverterTypeOptionalBytesRecord.allocationSize(value.`current`)
+    )
+
+    override fun write(value: StoreTransactionConflictRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`name`, buf)
+            FfiConverterTypeOptionalBytesRecord.write(value.`expected`, buf)
+            FfiConverterTypeOptionalBytesRecord.write(value.`current`, buf)
+    }
+}
+
+
+
 data class StructuralDiffCursorRecord (
     var `baseRoot`: kotlin.ByteArray?
     ,
@@ -28852,6 +32562,49 @@ public object FfiConverterTypeTransactionConflictRecord: FfiConverterRustBuffer<
             FfiConverterByteArray.write(value.`name`, buf)
             FfiConverterOptionalTypeRootManifestRecord.write(value.`expected`, buf)
             FfiConverterOptionalTypeRootManifestRecord.write(value.`current`, buf)
+    }
+}
+
+
+
+data class TransactionResultRecord (
+    var `applied`: kotlin.Boolean
+    ,
+    var `conflict`: StoreTransactionConflictRecord?
+    ,
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransactionResultRecord: FfiConverterRustBuffer<TransactionResultRecord> {
+    override fun read(buf: ByteBuffer): TransactionResultRecord {
+        return TransactionResultRecord(
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalTypeStoreTransactionConflictRecord.read(buf),
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TransactionResultRecord) = (
+            FfiConverterBoolean.allocationSize(value.`applied`) +
+            FfiConverterOptionalTypeStoreTransactionConflictRecord.allocationSize(value.`conflict`) +
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: TransactionResultRecord, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`applied`, buf)
+            FfiConverterOptionalTypeStoreTransactionConflictRecord.write(value.`conflict`, buf)
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
     }
 }
 
@@ -29558,6 +33311,39 @@ public object FfiConverterTypeTypedContentObjectRecord: FfiConverterRustBuffer<T
             FfiConverterOptionalUInt.write(value.`dimensions`, buf)
             FfiConverterByteArray.write(value.`bytes`, buf)
             FfiConverterULong.write(value.`depth`, buf)
+    }
+}
+
+
+
+data class UnitResultRecord (
+    var `error`: StoreErrorRecord?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUnitResultRecord: FfiConverterRustBuffer<UnitResultRecord> {
+    override fun read(buf: ByteBuffer): UnitResultRecord {
+        return UnitResultRecord(
+            FfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UnitResultRecord) = (
+            FfiConverterOptionalTypeStoreErrorRecord.allocationSize(value.`error`)
+    )
+
+    override fun write(value: UnitResultRecord, buf: ByteBuffer) {
+            FfiConverterOptionalTypeStoreErrorRecord.write(value.`error`, buf)
     }
 }
 
@@ -32323,6 +36109,102 @@ public object FfiConverterOptionalTypeSecondaryIndexLimitsRecord: FfiConverterRu
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeStoreDescriptorRecord: FfiConverterRustBuffer<StoreDescriptorRecord?> {
+    override fun read(buf: ByteBuffer): StoreDescriptorRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeStoreDescriptorRecord.read(buf)
+    }
+
+    override fun allocationSize(value: StoreDescriptorRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeStoreDescriptorRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: StoreDescriptorRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeStoreDescriptorRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeStoreErrorRecord: FfiConverterRustBuffer<StoreErrorRecord?> {
+    override fun read(buf: ByteBuffer): StoreErrorRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeStoreErrorRecord.read(buf)
+    }
+
+    override fun allocationSize(value: StoreErrorRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeStoreErrorRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: StoreErrorRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeStoreErrorRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeStoreTransactionConflictRecord: FfiConverterRustBuffer<StoreTransactionConflictRecord?> {
+    override fun read(buf: ByteBuffer): StoreTransactionConflictRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeStoreTransactionConflictRecord.read(buf)
+    }
+
+    override fun allocationSize(value: StoreTransactionConflictRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeStoreTransactionConflictRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: StoreTransactionConflictRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeStoreTransactionConflictRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeStructuralDiffCursorRecord: FfiConverterRustBuffer<StructuralDiffCursorRecord?> {
     override fun read(buf: ByteBuffer): StructuralDiffCursorRecord? {
         if (buf.get().toInt() == 0) {
@@ -33267,6 +37149,34 @@ public object FfiConverterSequenceTypeMutationRecord: FfiConverterRustBuffer<Lis
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeNamedBytesRecord: FfiConverterRustBuffer<List<NamedBytesRecord>> {
+    override fun read(buf: ByteBuffer): List<NamedBytesRecord> {
+        val len = buf.getInt()
+        return List<NamedBytesRecord>(len) {
+            FfiConverterTypeNamedBytesRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NamedBytesRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNamedBytesRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NamedBytesRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNamedBytesRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeNamedRootManifestRecord: FfiConverterRustBuffer<List<NamedRootManifestRecord>> {
     override fun read(buf: ByteBuffer): List<NamedRootManifestRecord> {
         val len = buf.getInt()
@@ -33323,6 +37233,62 @@ public object FfiConverterSequenceTypeNamedRootRecord: FfiConverterRustBuffer<Li
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeNodeEntryRecord: FfiConverterRustBuffer<List<NodeEntryRecord>> {
+    override fun read(buf: ByteBuffer): List<NodeEntryRecord> {
+        val len = buf.getInt()
+        return List<NodeEntryRecord>(len) {
+            FfiConverterTypeNodeEntryRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NodeEntryRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNodeEntryRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NodeEntryRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNodeEntryRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeNodeMutationRecord: FfiConverterRustBuffer<List<NodeMutationRecord>> {
+    override fun read(buf: ByteBuffer): List<NodeMutationRecord> {
+        val len = buf.getInt()
+        return List<NodeMutationRecord>(len) {
+            FfiConverterTypeNodeMutationRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NodeMutationRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNodeMutationRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NodeMutationRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNodeMutationRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer<List<NodeRecord>> {
     override fun read(buf: ByteBuffer): List<NodeRecord> {
         val len = buf.getInt()
@@ -33341,6 +37307,34 @@ public object FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer<List<No
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeNodeRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeOptionalBytesRecord: FfiConverterRustBuffer<List<OptionalBytesRecord>> {
+    override fun read(buf: ByteBuffer): List<OptionalBytesRecord> {
+        val len = buf.getInt()
+        return List<OptionalBytesRecord>(len) {
+            FfiConverterTypeOptionalBytesRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<OptionalBytesRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeOptionalBytesRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<OptionalBytesRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeOptionalBytesRecord.write(it, buf)
         }
     }
 }
@@ -33425,6 +37419,62 @@ public object FfiConverterSequenceTypeProximityRecordRecord: FfiConverterRustBuf
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeProximityRecordRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRootConditionRecord: FfiConverterRustBuffer<List<RootConditionRecord>> {
+    override fun read(buf: ByteBuffer): List<RootConditionRecord> {
+        val len = buf.getInt()
+        return List<RootConditionRecord>(len) {
+            FfiConverterTypeRootConditionRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RootConditionRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRootConditionRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RootConditionRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRootConditionRecord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRootWriteRecord: FfiConverterRustBuffer<List<RootWriteRecord>> {
+    override fun read(buf: ByteBuffer): List<RootWriteRecord> {
+        val len = buf.getInt()
+        return List<RootWriteRecord>(len) {
+            FfiConverterTypeRootWriteRecord.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RootWriteRecord>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRootWriteRecord.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RootWriteRecord>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRootWriteRecord.write(it, buf)
         }
     }
 }
@@ -33792,6 +37842,14 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
         }
     }
 }
+
+
+
+
+
+
+
+
     @Throws(ProllyBindingException::class) fun `authenticatedProofEnvelopeFromBytes`(`bytes`: kotlin.ByteArray): AuthenticatedProofEnvelopeRecord {
             return FfiConverterTypeAuthenticatedProofEnvelopeRecord.lift(
     uniffiRustCallWithError(ProllyBindingException) { _status ->
@@ -34068,6 +38126,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
+
+    @Throws(ProllyBindingException::class) fun `isBoundaryConfig`(`config`: ConfigRecord, `count`: kotlin.ULong, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config(
+
+        FfiConverterTypeConfigRecord.lower(`config`),FfiConverterULong.lower(`count`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),_status)
+}
+    )
+    }
 
  fun `isTombstoneValue`(`bytes`: kotlin.ByteArray): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -35077,6 +39145,21 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     )
     }
 
+
+    @Throws(ProllyBindingException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `openRemoteProllyEngine`(`store`: ForeignRemoteStore, `config`: ConfigRecord) : RemoteNativeProllyEngine {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(FfiConverterTypeForeignRemoteStore.lower(`store`),FfiConverterTypeConfigRecord.lower(`config`),),
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeRemoteNativeProllyEngine.lift(it) },
+        // Error FFI converter
+        ProllyBindingException.ErrorHandler,
+    )
+    }
  fun `defaultSecondaryIndexLimits`(): SecondaryIndexLimitsRecord {
             return FfiConverterTypeSecondaryIndexLimitsRecord.lift(
     uniffiRustCall() { _status ->

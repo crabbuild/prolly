@@ -1410,7 +1410,7 @@ where
     }
     Ok(VersionedTransactionCommitRecord {
         applied: true,
-        versions: result?.into_iter().map(Into::into).collect(),
+        versions: result?,
         conflict_map_id: None,
         conflict_current: None,
     })
@@ -2007,7 +2007,7 @@ mod tests {
         );
         assert!(snapshot.pin_root().unwrap() >= 1);
         snapshot.pin_path(b"alice".to_vec()).unwrap();
-        assert!(snapshot.export().unwrap().nodes.len() >= 1);
+        assert!(!snapshot.export().unwrap().nodes.is_empty());
     }
 
     #[test]

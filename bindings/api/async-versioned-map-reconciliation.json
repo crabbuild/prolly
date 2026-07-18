@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "owner": "prolly::AsyncVersionedMap",
+  "groups": [
+    {
+      "state": "bound-idiomatic",
+      "rust": [
+        "prolly::AsyncVersionedMap::apply",
+        "prolly::AsyncVersionedMap::delete",
+        "prolly::AsyncVersionedMap::get",
+        "prolly::AsyncVersionedMap::head",
+        "prolly::AsyncVersionedMap::put",
+        "prolly::AsyncVersionedMap::snapshot",
+        "prolly::AsyncVersionedMap::snapshot_at",
+        "prolly::AsyncVersionedMap::subscribe",
+        "prolly::AsyncVersionedMap::subscribe_from",
+        "prolly::AsyncVersionedMap::version"
+      ],
+      "evidence": [
+        "bindings/python/tests/test_portable_parity.py#test_application_versioned_async_surface",
+        "bindings/go/portable_parity_test.go",
+        "bindings/node/test/portable-parity.test.ts",
+        "bindings/kotlin/src/test/kotlin/build/crab/prolly/PortableParityTest.kt",
+        "bindings/java/src/test/java/build/crab/prolly/PortableParityTest.java",
+        "bindings/ruby/test/portable_parity_test.rb",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/test/portable-parity.test.ts"
+      ],
+      "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
+      "language_templates": {
+        "python": "VersionedMap.{snake}_async",
+        "go": "prolly.(*VersionedMap).{pascal}",
+        "node": "VersionedMap.{camel}",
+        "kotlin": "VersionedMap.{camel}Async",
+        "java": "VersionedMap.{camel}Async",
+        "ruby": "VersionedMap#{snake}_async",
+        "swift": "VersionedMap.{camel}Async",
+        "wasm": "WasmVersionedMap.{camel}"
+      },
+      "language_overrides": {
+        "prolly::AsyncVersionedMap::subscribe_from": {
+          "swift": "VersionedMap.subscribeAsync(from:)"
+        }
+      },
+      "tests": [
+        "portable-parity::application-versioned-async-surface"
+      ],
+      "docs": [
+        "bindings/VERIFICATION.md#major-api-groups"
+      ]
+    },
+    {
+      "state": "bound-idiomatic",
+      "rust": [
+        "prolly::AsyncVersionedMap::edit"
+      ],
+      "evidence": [
+        "bindings/api/idiomatic-equivalents.json#builder-typestate",
+        "bindings/api/versioned-map-reconciliation.json"
+      ],
+      "rationale": "The Rust closure-based editor is exposed as the owned mutation-batch apply operation. This avoids carrying a Rust borrow across an await while retaining a single native batch publication.",
+      "language_templates": {
+        "python": "VersionedMap.apply_async",
+        "go": "prolly.(*VersionedMap).Apply",
+        "node": "VersionedMap.apply",
+        "kotlin": "VersionedMap.applyAsync",
+        "java": "VersionedMap.applyAsync",
+        "ruby": "VersionedMap#apply_async",
+        "swift": "VersionedMap.applyAsync",
+        "wasm": "WasmVersionedMap.apply"
+      },
+      "tests": [
+        "portable-parity::application-versioned-async-surface"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#builder-typestate"
+      ]
+    },
+    {
+      "state": "bound-idiomatic",
+      "rust": [
+        "prolly::AsyncVersionedMap::id",
+        "prolly::AsyncVersionedMap::new"
+      ],
+      "evidence": [
+        "bindings/python/prolly/api.py#Engine.versioned_map",
+        "bindings/go/versioned.go#Engine.VersionedMap",
+        "bindings/node/src/versioned.ts#VersionedMap",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedMap",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedMap.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedMap",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedMap",
+        "bindings/wasm/src/index.ts#WasmVersionedMap"
+      ],
+      "rationale": "Map construction and immutable map identity do not perform asynchronous store I/O, so the portable wrappers expose them as immediate Engine factories and owned byte properties even when subsequent operations use host-native async constructs.",
+      "language_templates": {
+        "python": "VersionedMap.{snake}",
+        "go": "prolly.(*VersionedMap).{pascal}",
+        "node": "VersionedMap.{camel}",
+        "kotlin": "VersionedMap.{camel}",
+        "java": "VersionedMap.{camel}",
+        "ruby": "VersionedMap#{snake}",
+        "swift": "VersionedMap.{camel}",
+        "wasm": "WasmVersionedMap.{camel}"
+      },
+      "language_overrides": {
+        "prolly::AsyncVersionedMap::id": {
+          "go": "prolly.(*VersionedMap).ID",
+          "kotlin": "VersionedMap.id",
+          "swift": "VersionedMap.id"
+        },
+        "prolly::AsyncVersionedMap::new": {
+          "python": "Engine.versioned_map",
+          "go": "prolly.(*Engine).VersionedMap",
+          "node": "Engine.versionedMap",
+          "kotlin": "Engine.versionedMap",
+          "java": "Engine.versionedMap",
+          "ruby": "Engine#versioned_map",
+          "swift": "Engine.versionedMap",
+          "wasm": "Engine.versionedMap"
+        }
+      },
+      "tests": [
+        "portable-parity::application-versioned-async-surface"
+      ],
+      "docs": [
+        "bindings/VERIFICATION.md#major-api-groups"
+      ]
+    }
+  ]
+}

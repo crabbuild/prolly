@@ -1,0 +1,12 @@
+go 1.25.0
+
+use (
+	..
+	./cosmosdb
+	./dynamodb
+	./mysql
+	./postgres
+	./redis
+	./spanner
+	./sqlite
+)

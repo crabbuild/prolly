@@ -105,6 +105,52 @@ Rust-backed surface. Use the async wrapper when orchestration is already
 Promise-based. The async wrapper does not change data consistency semantics; it
 only gives JavaScript code a familiar scheduling model.
 
+## Async Store Providers
+
+Database adapters are separate packages, so installing `@trail/prolly-node`
+does not install a database SDK. Each adapter accepts a caller-owned SDK client,
+pool, database, or container and never closes it. Initialize or validate the
+physical schema explicitly before opening a remote engine.
+
+| Provider package | Minimal construction | Required preparation |
+| --- | --- | --- |
+| `@trail/prolly-store-sqlite` | `new SqliteStore(database)` | `await store.initializeSchema()` |
+| `@trail/prolly-store-postgres` | `new PostgresStore(pool)` | `await store.initializeSchema()` |
+| `@trail/prolly-store-mysql` | `new MysqlStore(pool)` | `await store.initializeSchema()` |
+| `@trail/prolly-store-redis` | `new RedisStore(client)` | connect the binary Redis client |
+| `@trail/prolly-store-dynamodb` | `new DynamoDbStore(client, { tableName: "prolly" })` | `await store.initializeTable()` |
+| `@trail/prolly-store-cosmosdb` | `new CosmosDbStore(container)` | create with `/kind`, then `await store.validateContainer()` |
+| `@trail/prolly-store-spanner` | `new SpannerStore(database)` | apply the exported `SPANNER_DDL` statements |
+| `@trail/prolly-store-pglite` | `new PGliteStore(database)` | `await store.initializeSchema()` |
+
+Import the constructor from the provider package and create the injected value
+with its official SDK. For example:
+
+```ts
+import { Pool } from "pg";
+import { PostgresStore } from "@trail/prolly-store-postgres";
+
+const pool = new Pool(); // standard PG* environment variables or explicit options
+const store = new PostgresStore(pool);
+await store.initializeSchema();
+```
+
+PostgreSQL, MySQL, SQLite, Spanner, and PGlite use the exact physical layouts
+specified by the corresponding Rust store. Redis requires durable server
+configuration (normally AOF, a deliberate `appendfsync` policy, recovery tests,
+and backups) when used as primary storage. DynamoDB enforces 100-item reads,
+25-item batch writes, and 100-operation strict transactions. Cosmos DB requires
+one logical `/kind` partition and limits strict transactions to 100 operations.
+
+Abort signals are checked at provider boundaries and passed to SDKs that expose
+cancellation. A cancellation request may not undo a provider operation already
+accepted by the service, so retry CAS and strict commits only after resolving
+ambiguous outcomes. Credentials, TLS, pooling, retries, and client lifecycle
+remain application responsibilities.
+
+Run all eight adapters and the local emulators from the repository root with
+`./scripts/test-node-jvm-stores.sh`.
+
 ## Native Loading
 
 The source tree expects a locally built addon. The release package should ship

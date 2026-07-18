@@ -10,7 +10,22 @@
 
   <modules>
     <module>kotlin</module>
+    <module>kotlin/storetest</module>
+    <module>kotlin/stores/sqlite</module>
+    <module>kotlin/stores/postgres</module>
+    <module>kotlin/stores/mysql</module>
+    <module>kotlin/stores/redis</module>
+    <module>kotlin/stores/dynamodb</module>
+    <module>kotlin/stores/cosmosdb</module>
+    <module>kotlin/stores/spanner</module>
     <module>java</module>
+    <module>java/stores/sqlite</module>
+    <module>java/stores/postgres</module>
+    <module>java/stores/mysql</module>
+    <module>java/stores/redis</module>
+    <module>java/stores/dynamodb</module>
+    <module>java/stores/cosmosdb</module>
+    <module>java/stores/spanner</module>
   </modules>
 
   <properties>

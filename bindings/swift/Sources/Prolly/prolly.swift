@@ -352,7 +352,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles.
+// Initial value and increment amount for handles. 
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -636,22 +636,830 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
+public protocol AsyncProllyEngineProtocol: AnyObject, Sendable {
+    
+    func batch(tree: TreeRecord, mutations: [MutationRecord]) async throws  -> TreeRecord
+    
+    func beginTransaction() async throws  -> AsyncProllyTransaction
+    
+    func collectStats(tree: TreeRecord) async throws  -> TreeStatsRecord
+    
+    func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) async throws  -> NamedRootUpdateRecord
+    
+    func create()  -> TreeRecord
+    
+    func delete(tree: TreeRecord, key: Data) async throws  -> TreeRecord
+    
+    func deleteNamedRoot(name: Data) async throws 
+    
+    func diff(base: TreeRecord, other: TreeRecord) async throws  -> [DiffRecord]
+    
+    func get(tree: TreeRecord, key: Data) async throws  -> Data?
+    
+    func getMany(tree: TreeRecord, keys: [Data]) async throws  -> [Data?]
+    
+    func listNamedRoots() async throws  -> [NamedRootRecord]
+    
+    func loadNamedRoot(name: Data) async throws  -> TreeRecord?
+    
+    func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?) async throws  -> TreeRecord
+    
+    func prefix(tree: TreeRecord, prefix: Data) async throws  -> [EntryRecord]
+    
+    func publishNamedRoot(name: Data, tree: TreeRecord) async throws 
+    
+    func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64) async throws 
+    
+    func put(tree: TreeRecord, key: Data, value: Data) async throws  -> TreeRecord
+    
+    func range(tree: TreeRecord, start: Data, end: Data?) async throws  -> [EntryRecord]
+    
+    func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64) async throws  -> RangePageRecord
+    
+}
+open class AsyncProllyEngine: AsyncProllyEngineProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_asyncprollyengine(self.handle, $0) }
+    }
+public convenience init(store: ForeignRemoteStore, config: ConfigRecord)async throws  {
+    let handle =
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new(FfiConverterTypeForeignRemoteStore_lower(store),FfiConverterTypeConfigRecord_lower(config)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_u64,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_u64,
+            freeFunc: ffi_prolly_bindings_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAsyncProllyEngine_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+        
+        .uniffiCloneHandle()
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_asyncprollyengine(handle, $0) }
+    }
+
+    
+
+    
+open func batch(tree: TreeRecord, mutations: [MutationRecord])async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_batch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterSequenceTypeMutationRecord.lower(mutations)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func beginTransaction()async throws  -> AsyncProllyTransaction  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_u64,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_u64,
+            freeFunc: ffi_prolly_bindings_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAsyncProllyTransaction_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func collectStats(tree: TreeRecord)async throws  -> TreeStatsRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeStatsRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)async throws  -> NamedRootUpdateRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterOptionTypeTreeRecord.lower(expected),FfiConverterOptionTypeTreeRecord.lower(replacement)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNamedRootUpdateRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func create() -> TreeRecord  {
+    return try!  FfiConverterTypeTreeRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_asyncprollyengine_create(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+open func delete(tree: TreeRecord, key: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_delete(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func deleteNamedRoot(name: Data)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func diff(base: TreeRecord, other: TreeRecord)async throws  -> [DiffRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_diff(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(base),FfiConverterTypeTreeRecord_lower(other)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeDiffRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func get(tree: TreeRecord, key: Data)async throws  -> Data?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_get(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionData.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func getMany(tree: TreeRecord, keys: [Data])async throws  -> [Data?]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterSequenceData.lower(keys)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceOptionData.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func listNamedRoots()async throws  -> [NamedRootRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeNamedRootRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func loadNamedRoot(name: Data)async throws  -> TreeRecord?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeTreeRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_merge(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(base),FfiConverterTypeTreeRecord_lower(left),FfiConverterTypeTreeRecord_lower(right),FfiConverterOptionString.lower(resolver)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func prefix(tree: TreeRecord, prefix: Data)async throws  -> [EntryRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(prefix)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeEntryRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func publishNamedRoot(name: Data, tree: TreeRecord)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree),FfiConverterUInt64.lower(timestampMillis)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func put(tree: TreeRecord, key: Data, value: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_put(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func range(tree: TreeRecord, start: Data, end: Data?)async throws  -> [EntryRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_range(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(start),FfiConverterOptionData.lower(end)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeEntryRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, end: Data?, limit: UInt64)async throws  -> RangePageRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterOptionTypeRangeCursorRecord.lower(cursor),FfiConverterOptionData.lower(end),FfiConverterUInt64.lower(limit)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRangePageRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncProllyEngine: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = AsyncProllyEngine
+
+    public static func lift(_ handle: UInt64) throws -> AsyncProllyEngine {
+        return AsyncProllyEngine(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: AsyncProllyEngine) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncProllyEngine {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AsyncProllyEngine, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyEngine_lift(_ handle: UInt64) throws -> AsyncProllyEngine {
+    return try FfiConverterTypeAsyncProllyEngine.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyEngine_lower(_ value: AsyncProllyEngine) -> UInt64 {
+    return FfiConverterTypeAsyncProllyEngine.lower(value)
+}
+
+
+
+
+
+
+public protocol AsyncProllyTransactionProtocol: AnyObject, Sendable {
+    
+    func batch(tree: TreeRecord, mutations: [MutationRecord]) async throws  -> TreeRecord
+    
+    func commit() async throws  -> TransactionUpdateRecord
+    
+    func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) async throws  -> NamedRootUpdateRecord
+    
+    func create() async throws  -> TreeRecord
+    
+    func delete(tree: TreeRecord, key: Data) async throws  -> TreeRecord
+    
+    func deleteNamedRoot(name: Data) async throws 
+    
+    func get(tree: TreeRecord, key: Data) async throws  -> Data?
+    
+    func loadNamedRoot(name: Data) async throws  -> TreeRecord?
+    
+    func publishNamedRoot(name: Data, tree: TreeRecord) async throws 
+    
+    func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64) async throws 
+    
+    func put(tree: TreeRecord, key: Data, value: Data) async throws  -> TreeRecord
+    
+    func rollback() async throws 
+    
+}
+open class AsyncProllyTransaction: AsyncProllyTransactionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_asyncprollytransaction(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_asyncprollytransaction(handle, $0) }
+    }
+
+    
+
+    
+open func batch(tree: TreeRecord, mutations: [MutationRecord])async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterSequenceTypeMutationRecord.lower(mutations)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func commit()async throws  -> TransactionUpdateRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionUpdateRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)async throws  -> NamedRootUpdateRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterOptionTypeTreeRecord.lower(expected),FfiConverterOptionTypeTreeRecord.lower(replacement)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNamedRootUpdateRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func create()async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_create(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func delete(tree: TreeRecord, key: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func deleteNamedRoot(name: Data)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func get(tree: TreeRecord, key: Data)async throws  -> Data?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_get(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionData.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func loadNamedRoot(name: Data)async throws  -> TreeRecord?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeTreeRecord.lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func publishNamedRoot(name: Data, tree: TreeRecord)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeTreeRecord_lower(tree),FfiConverterUInt64.lower(timestampMillis)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func put(tree: TreeRecord, key: Data, value: Data)async throws  -> TreeRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_put(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTreeRecord_lower(tree),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTreeRecord_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+open func rollback()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_void,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_void,
+            freeFunc: ffi_prolly_bindings_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncProllyTransaction: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = AsyncProllyTransaction
+
+    public static func lift(_ handle: UInt64) throws -> AsyncProllyTransaction {
+        return AsyncProllyTransaction(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: AsyncProllyTransaction) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncProllyTransaction {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AsyncProllyTransaction, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyTransaction_lift(_ handle: UInt64) throws -> AsyncProllyTransaction {
+    return try FfiConverterTypeAsyncProllyTransaction.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncProllyTransaction_lower(_ value: AsyncProllyTransaction) -> UInt64 {
+    return FfiConverterTypeAsyncProllyTransaction.lower(value)
+}
+
+
+
+
+
+
 public protocol BindingAcceleratorCatalogProtocol: AnyObject, Sendable {
-
+    
     func entries()  -> [AcceleratorCatalogEntryRecord]
-
+    
     func manifest()  -> Data
-
+    
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
-
+    
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
-
+    
     func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
-
+    
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
-
+    
     func sourceDescriptor()  -> Data
-
+    
 }
 open class BindingAcceleratorCatalog: BindingAcceleratorCatalogProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -703,9 +1511,9 @@ open class BindingAcceleratorCatalog: BindingAcceleratorCatalogProtocol, @unchec
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingacceleratorcatalog(handle, $0) }
     }
 
+    
 
-
-
+    
 open func entries() -> [AcceleratorCatalogEntryRecord]  {
     return try!  FfiConverterSequenceTypeAcceleratorCatalogEntryRecord.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries(
@@ -713,7 +1521,7 @@ open func entries() -> [AcceleratorCatalogEntryRecord]  {
     )
 })
 }
-
+    
 open func manifest() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_manifest(
@@ -721,7 +1529,7 @@ open func manifest() -> Data  {
     )
 })
 }
-
+    
 open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
     return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_prove_search(
@@ -732,7 +1540,7 @@ open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestR
     )
 })
 }
-
+    
 open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search(
@@ -742,7 +1550,7 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
     )
 })
 }
-
+    
 open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_cancellable(
@@ -754,7 +1562,7 @@ open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_search_with_runtime(
@@ -765,7 +1573,7 @@ open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func sourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_source_descriptor(
@@ -773,9 +1581,9 @@ open func sourceDescriptor() -> Data  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -825,31 +1633,31 @@ public func FfiConverterTypeBindingAcceleratorCatalog_lower(_ value: BindingAcce
 
 
 public protocol BindingCompositeAcceleratorProtocol: AnyObject, Sendable {
-
+    
     func baseKind()  -> CompositeBaseKindRecord
-
+    
     func baseSourceDescriptor()  -> Data
-
+    
     func buildStats()  -> CompositeBuildStatsRecord
-
+    
     func config()  -> CompositeAcceleratorConfigRecord
-
+    
     func currentSourceDescriptor()  -> Data
-
+    
     func deltaCount()  -> UInt64
-
+    
     func manifest()  -> Data
-
+    
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
-
+    
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
-
+    
     func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
-
+    
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
-
+    
     func shadowCount()  -> UInt64
-
+    
 }
 open class BindingCompositeAccelerator: BindingCompositeAcceleratorProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -901,9 +1709,9 @@ open class BindingCompositeAccelerator: BindingCompositeAcceleratorProtocol, @un
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingcompositeaccelerator(handle, $0) }
     }
 
+    
 
-
-
+    
 open func baseKind() -> CompositeBaseKindRecord  {
     return try!  FfiConverterTypeCompositeBaseKindRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_kind(
@@ -911,7 +1719,7 @@ open func baseKind() -> CompositeBaseKindRecord  {
     )
 })
 }
-
+    
 open func baseSourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_base_source_descriptor(
@@ -919,7 +1727,7 @@ open func baseSourceDescriptor() -> Data  {
     )
 })
 }
-
+    
 open func buildStats() -> CompositeBuildStatsRecord  {
     return try!  FfiConverterTypeCompositeBuildStatsRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_build_stats(
@@ -927,7 +1735,7 @@ open func buildStats() -> CompositeBuildStatsRecord  {
     )
 })
 }
-
+    
 open func config() -> CompositeAcceleratorConfigRecord  {
     return try!  FfiConverterTypeCompositeAcceleratorConfigRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_config(
@@ -935,7 +1743,7 @@ open func config() -> CompositeAcceleratorConfigRecord  {
     )
 })
 }
-
+    
 open func currentSourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_current_source_descriptor(
@@ -943,7 +1751,7 @@ open func currentSourceDescriptor() -> Data  {
     )
 })
 }
-
+    
 open func deltaCount() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_delta_count(
@@ -951,7 +1759,7 @@ open func deltaCount() -> UInt64  {
     )
 })
 }
-
+    
 open func manifest() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_manifest(
@@ -959,7 +1767,7 @@ open func manifest() -> Data  {
     )
 })
 }
-
+    
 open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
     return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_prove_search(
@@ -970,7 +1778,7 @@ open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestR
     )
 })
 }
-
+    
 open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search(
@@ -980,7 +1788,7 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
     )
 })
 }
-
+    
 open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_cancellable(
@@ -992,7 +1800,7 @@ open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_search_with_runtime(
@@ -1003,7 +1811,7 @@ open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func shadowCount() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingcompositeaccelerator_shadow_count(
@@ -1011,9 +1819,9 @@ open func shadowCount() -> UInt64  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -1063,23 +1871,23 @@ public func FfiConverterTypeBindingCompositeAccelerator_lower(_ value: BindingCo
 
 
 public protocol BindingHnswIndexProtocol: AnyObject, Sendable {
-
+    
     func config()  -> HnswConfigRecord
-
+    
     func isCanonical()  -> Bool
-
+    
     func manifest()  -> Data
-
+    
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
-
+    
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
-
+    
     func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
-
+    
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
-
+    
     func sourceDescriptor()  -> Data
-
+    
 }
 open class BindingHnswIndex: BindingHnswIndexProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1131,9 +1939,9 @@ open class BindingHnswIndex: BindingHnswIndexProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_bindinghnswindex(handle, $0) }
     }
 
+    
 
-
-
+    
 open func config() -> HnswConfigRecord  {
     return try!  FfiConverterTypeHnswConfigRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_config(
@@ -1141,7 +1949,7 @@ open func config() -> HnswConfigRecord  {
     )
 })
 }
-
+    
 open func isCanonical() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_is_canonical(
@@ -1149,7 +1957,7 @@ open func isCanonical() -> Bool  {
     )
 })
 }
-
+    
 open func manifest() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_manifest(
@@ -1157,7 +1965,7 @@ open func manifest() -> Data  {
     )
 })
 }
-
+    
 open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
     return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_prove_search(
@@ -1168,7 +1976,7 @@ open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestR
     )
 })
 }
-
+    
 open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_search(
@@ -1178,7 +1986,7 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
     )
 })
 }
-
+    
 open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_search_cancellable(
@@ -1190,7 +1998,7 @@ open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_search_with_runtime(
@@ -1201,7 +2009,7 @@ open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func sourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindinghnswindex_source_descriptor(
@@ -1209,9 +2017,9 @@ open func sourceDescriptor() -> Data  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -1261,11 +2069,11 @@ public func FfiConverterTypeBindingHnswIndex_lower(_ value: BindingHnswIndex) ->
 
 
 public protocol BindingIndexRegistryProtocol: AnyObject, Sendable {
-
+    
     func len() throws  -> UInt64
-
-    func register(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback) throws
-
+    
+    func register(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback) throws 
+    
 }
 open class BindingIndexRegistry: BindingIndexRegistryProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1324,9 +2132,9 @@ public convenience init() {
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingindexregistry(handle, $0) }
     }
 
+    
 
-
-
+    
 open func len()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexregistry_len(
@@ -1334,7 +2142,7 @@ open func len()throws  -> UInt64  {
     )
 })
 }
-
+    
 open func register(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexregistry_register(
             self.uniffiCloneHandle(),
@@ -1347,9 +2155,9 @@ open func register(name: Data, generation: UInt64, extractorId: String, projecti
     )
 }
 }
+    
 
-
-
+    
 }
 
 
@@ -1399,51 +2207,51 @@ public func FfiConverterTypeBindingIndexRegistry_lower(_ value: BindingIndexRegi
 
 
 public protocol BindingIndexedMapProtocol: AnyObject, Sendable {
-
+    
     func apply(mutations: [MutationRecord]) throws  -> IndexedVersionRecord
-
+    
     func applyIf(expectedSource: Data?, mutations: [MutationRecord]) throws  -> IndexedUpdateRecord
-
+    
     func deactivateIndex(name: Data) throws  -> IndexedVersionRecord
-
+    
     func delete(key: Data) throws  -> IndexedVersionRecord
-
+    
     func ensureIndex(name: Data) throws  -> IndexBuildResultRecord
-
+    
     func exportCurrent() throws  -> Data
-
+    
     func fastHandle()  -> UInt64
-
+    
     func get(key: Data) throws  -> Data?
-
+    
     func health() throws  -> IndexedMapHealthRecord
-
+    
     func id()  -> Data
-
+    
     func importCurrent(bundle: Data, expectedSource: Data?) throws  -> IndexedVersionRecord
-
+    
     func keepLast(count: UInt64) throws  -> IndexedRetentionRecord
-
+    
     func metrics() throws  -> IndexedMapMetricsRecord
-
+    
     func planGc() throws  -> GcPlanRecord
-
+    
     func put(key: Data, value: Data) throws  -> IndexedVersionRecord
-
+    
     func repairIndex(name: Data, sourceVersion: Data) throws  -> IndexVerificationRecord
-
+    
     func replaceIndex(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback) throws  -> IndexBuildResultRecord
-
+    
     func snapshot() throws  -> BindingIndexedSnapshot
-
+    
     func snapshotAt(sourceVersion: Data) throws  -> BindingIndexedSnapshot
-
+    
     func snapshotById(snapshotId: IndexedSnapshotIdRecord) throws  -> BindingIndexedSnapshot
-
+    
     func verifyAll(sourceVersion: Data) throws  -> [IndexVerificationRecord]
-
+    
     func verifyIndex(name: Data, sourceVersion: Data) throws  -> IndexVerificationRecord
-
+    
 }
 open class BindingIndexedMap: BindingIndexedMapProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1505,9 +2313,9 @@ public convenience init(engine: ProllyEngine, id: Data, registry: BindingIndexRe
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingindexedmap(handle, $0) }
     }
 
+    
 
-
-
+    
 open func apply(mutations: [MutationRecord])throws  -> IndexedVersionRecord  {
     return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_apply(
@@ -1516,7 +2324,7 @@ open func apply(mutations: [MutationRecord])throws  -> IndexedVersionRecord  {
     )
 })
 }
-
+    
 open func applyIf(expectedSource: Data?, mutations: [MutationRecord])throws  -> IndexedUpdateRecord  {
     return try  FfiConverterTypeIndexedUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_apply_if(
@@ -1526,7 +2334,7 @@ open func applyIf(expectedSource: Data?, mutations: [MutationRecord])throws  -> 
     )
 })
 }
-
+    
 open func deactivateIndex(name: Data)throws  -> IndexedVersionRecord  {
     return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_deactivate_index(
@@ -1535,7 +2343,7 @@ open func deactivateIndex(name: Data)throws  -> IndexedVersionRecord  {
     )
 })
 }
-
+    
 open func delete(key: Data)throws  -> IndexedVersionRecord  {
     return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_delete(
@@ -1544,7 +2352,7 @@ open func delete(key: Data)throws  -> IndexedVersionRecord  {
     )
 })
 }
-
+    
 open func ensureIndex(name: Data)throws  -> IndexBuildResultRecord  {
     return try  FfiConverterTypeIndexBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_ensure_index(
@@ -1553,7 +2361,7 @@ open func ensureIndex(name: Data)throws  -> IndexBuildResultRecord  {
     )
 })
 }
-
+    
 open func exportCurrent()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_export_current(
@@ -1561,7 +2369,7 @@ open func exportCurrent()throws  -> Data  {
     )
 })
 }
-
+    
 open func fastHandle() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle(
@@ -1569,7 +2377,7 @@ open func fastHandle() -> UInt64  {
     )
 })
 }
-
+    
 open func get(key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_get(
@@ -1578,7 +2386,7 @@ open func get(key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func health()throws  -> IndexedMapHealthRecord  {
     return try  FfiConverterTypeIndexedMapHealthRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_health(
@@ -1586,7 +2394,7 @@ open func health()throws  -> IndexedMapHealthRecord  {
     )
 })
 }
-
+    
 open func id() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_id(
@@ -1594,7 +2402,7 @@ open func id() -> Data  {
     )
 })
 }
-
+    
 open func importCurrent(bundle: Data, expectedSource: Data?)throws  -> IndexedVersionRecord  {
     return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_import_current(
@@ -1604,7 +2412,7 @@ open func importCurrent(bundle: Data, expectedSource: Data?)throws  -> IndexedVe
     )
 })
 }
-
+    
 open func keepLast(count: UInt64)throws  -> IndexedRetentionRecord  {
     return try  FfiConverterTypeIndexedRetentionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_keep_last(
@@ -1613,7 +2421,7 @@ open func keepLast(count: UInt64)throws  -> IndexedRetentionRecord  {
     )
 })
 }
-
+    
 open func metrics()throws  -> IndexedMapMetricsRecord  {
     return try  FfiConverterTypeIndexedMapMetricsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_metrics(
@@ -1621,7 +2429,7 @@ open func metrics()throws  -> IndexedMapMetricsRecord  {
     )
 })
 }
-
+    
 open func planGc()throws  -> GcPlanRecord  {
     return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_plan_gc(
@@ -1629,7 +2437,7 @@ open func planGc()throws  -> GcPlanRecord  {
     )
 })
 }
-
+    
 open func put(key: Data, value: Data)throws  -> IndexedVersionRecord  {
     return try  FfiConverterTypeIndexedVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_put(
@@ -1639,7 +2447,7 @@ open func put(key: Data, value: Data)throws  -> IndexedVersionRecord  {
     )
 })
 }
-
+    
 open func repairIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificationRecord  {
     return try  FfiConverterTypeIndexVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_repair_index(
@@ -1649,7 +2457,7 @@ open func repairIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificati
     )
 })
 }
-
+    
 open func replaceIndex(name: Data, generation: UInt64, extractorId: String, projection: IndexProjectionRecord, limits: SecondaryIndexLimitsRecord?, extractor: SecondaryIndexExtractorCallback)throws  -> IndexBuildResultRecord  {
     return try  FfiConverterTypeIndexBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_replace_index(
@@ -1663,7 +2471,7 @@ open func replaceIndex(name: Data, generation: UInt64, extractorId: String, proj
     )
 })
 }
-
+    
 open func snapshot()throws  -> BindingIndexedSnapshot  {
     return try  FfiConverterTypeBindingIndexedSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot(
@@ -1671,7 +2479,7 @@ open func snapshot()throws  -> BindingIndexedSnapshot  {
     )
 })
 }
-
+    
 open func snapshotAt(sourceVersion: Data)throws  -> BindingIndexedSnapshot  {
     return try  FfiConverterTypeBindingIndexedSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_at(
@@ -1680,7 +2488,7 @@ open func snapshotAt(sourceVersion: Data)throws  -> BindingIndexedSnapshot  {
     )
 })
 }
-
+    
 open func snapshotById(snapshotId: IndexedSnapshotIdRecord)throws  -> BindingIndexedSnapshot  {
     return try  FfiConverterTypeBindingIndexedSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_snapshot_by_id(
@@ -1689,7 +2497,7 @@ open func snapshotById(snapshotId: IndexedSnapshotIdRecord)throws  -> BindingInd
     )
 })
 }
-
+    
 open func verifyAll(sourceVersion: Data)throws  -> [IndexVerificationRecord]  {
     return try  FfiConverterSequenceTypeIndexVerificationRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_all(
@@ -1698,7 +2506,7 @@ open func verifyAll(sourceVersion: Data)throws  -> [IndexVerificationRecord]  {
     )
 })
 }
-
+    
 open func verifyIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificationRecord  {
     return try  FfiConverterTypeIndexVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedmap_verify_index(
@@ -1708,9 +2516,9 @@ open func verifyIndex(name: Data, sourceVersion: Data)throws  -> IndexVerificati
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -1760,11 +2568,11 @@ public func FfiConverterTypeBindingIndexedMap_lower(_ value: BindingIndexedMap) 
 
 
 public protocol BindingIndexedSnapshotProtocol: AnyObject, Sendable {
-
+    
     func id()  -> IndexedSnapshotIdRecord
-
+    
     func index(name: Data) throws  -> BindingSecondaryIndexSnapshot
-
+    
 }
 open class BindingIndexedSnapshot: BindingIndexedSnapshotProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1816,9 +2624,9 @@ open class BindingIndexedSnapshot: BindingIndexedSnapshotProtocol, @unchecked Se
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingindexedsnapshot(handle, $0) }
     }
 
+    
 
-
-
+    
 open func id() -> IndexedSnapshotIdRecord  {
     return try!  FfiConverterTypeIndexedSnapshotIdRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_id(
@@ -1826,7 +2634,7 @@ open func id() -> IndexedSnapshotIdRecord  {
     )
 })
 }
-
+    
 open func index(name: Data)throws  -> BindingSecondaryIndexSnapshot  {
     return try  FfiConverterTypeBindingSecondaryIndexSnapshot_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingindexedsnapshot_index(
@@ -1835,9 +2643,9 @@ open func index(name: Data)throws  -> BindingSecondaryIndexSnapshot  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -1890,29 +2698,29 @@ public func FfiConverterTypeBindingIndexedSnapshot_lower(_ value: BindingIndexed
  * Owned version-pinned comparison. It never re-resolves head.
  */
 public protocol BindingMapComparisonProtocol: AnyObject, Sendable {
-
+    
     func base()  -> MapVersionRecord
-
+    
     func changedSpans() throws  -> ChangedSpanHintRecord?
-
+    
     func debugView() throws  -> TreeDebugComparisonRecord
-
+    
     func diff() throws  -> [DiffRecord]
-
+    
     func diffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> DiffPageRecord
-
+    
     func proveDiffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedDiffPageRecord
-
+    
     func publishChangedSpans(spans: [ChangedSpanRecord]) throws  -> Bool
-
+    
     func scanDiff(visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func stats() throws  -> StatsComparisonRecord
-
+    
     func structuralDiffPage(cursor: StructuralDiffCursorRecord?, limit: UInt64) throws  -> StructuralDiffPageRecord
-
+    
     func target()  -> MapVersionRecord
-
+    
 }
 /**
  * Owned version-pinned comparison. It never re-resolves head.
@@ -1967,9 +2775,9 @@ open class BindingMapComparison: BindingMapComparisonProtocol, @unchecked Sendab
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapcomparison(handle, $0) }
     }
 
+    
 
-
-
+    
 open func base() -> MapVersionRecord  {
     return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_base(
@@ -1977,7 +2785,7 @@ open func base() -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func changedSpans()throws  -> ChangedSpanHintRecord?  {
     return try  FfiConverterOptionTypeChangedSpanHintRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_changed_spans(
@@ -1985,7 +2793,7 @@ open func changedSpans()throws  -> ChangedSpanHintRecord?  {
     )
 })
 }
-
+    
 open func debugView()throws  -> TreeDebugComparisonRecord  {
     return try  FfiConverterTypeTreeDebugComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_debug_view(
@@ -1993,7 +2801,7 @@ open func debugView()throws  -> TreeDebugComparisonRecord  {
     )
 })
 }
-
+    
 open func diff()throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff(
@@ -2001,7 +2809,7 @@ open func diff()throws  -> [DiffRecord]  {
     )
 })
 }
-
+    
 open func diffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> DiffPageRecord  {
     return try  FfiConverterTypeDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_diff_page(
@@ -2012,7 +2820,7 @@ open func diffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)th
     )
 })
 }
-
+    
 open func proveDiffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedDiffPageRecord  {
     return try  FfiConverterTypeProvedDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_prove_diff_page(
@@ -2023,7 +2831,7 @@ open func proveDiffPage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt
     )
 })
 }
-
+    
 open func publishChangedSpans(spans: [ChangedSpanRecord])throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_publish_changed_spans(
@@ -2032,7 +2840,7 @@ open func publishChangedSpans(spans: [ChangedSpanRecord])throws  -> Bool  {
     )
 })
 }
-
+    
 open func scanDiff(visitor: DiffVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_scan_diff(
@@ -2041,7 +2849,7 @@ open func scanDiff(visitor: DiffVisitorCallback)throws  -> ScanOutcomeRecord  {
     )
 })
 }
-
+    
 open func stats()throws  -> StatsComparisonRecord  {
     return try  FfiConverterTypeStatsComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_stats(
@@ -2049,7 +2857,7 @@ open func stats()throws  -> StatsComparisonRecord  {
     )
 })
 }
-
+    
 open func structuralDiffPage(cursor: StructuralDiffCursorRecord?, limit: UInt64)throws  -> StructuralDiffPageRecord  {
     return try  FfiConverterTypeStructuralDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_structural_diff_page(
@@ -2059,7 +2867,7 @@ open func structuralDiffPage(cursor: StructuralDiffCursorRecord?, limit: UInt64)
     )
 })
 }
-
+    
 open func target() -> MapVersionRecord  {
     return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapcomparison_target(
@@ -2067,9 +2875,9 @@ open func target() -> MapVersionRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -2122,34 +2930,34 @@ public func FfiConverterTypeBindingMapComparison_lower(_ value: BindingMapCompar
  * Three-way merge pinned to a concrete base, head, and candidate.
  */
 public protocol BindingMapMergeProtocol: AnyObject, Sendable {
-
+    
     func base()  -> MapVersionRecord
-
+    
     func candidate()  -> MapVersionRecord
-
+    
     func conflictPage(cursor: RangeCursorRecord?, limit: UInt64) throws  -> ConflictPageRecord
-
+    
     func crdtMerge(config: CrdtConfigRecord) throws  -> TreeRecord
-
+    
     func crdtMergeExplain(config: CrdtConfigRecord) throws  -> MergeExplanationRecord
-
+    
     func head()  -> MapVersionRecord
-
+    
     func merge(resolver: String?) throws  -> TreeRecord
-
+    
     func mergeWithPolicy(policy: MergePolicyRegistry) throws  -> TreeRecord
-
+    
     /**
      * Publish only if the head pinned when this object was created is still current.
      */
     func publish(resolver: String?) throws  -> MapUpdateRecord
-
+    
     func publishCrdt(config: CrdtConfigRecord) throws  -> MapUpdateRecord
-
+    
     func publishWithPolicy(policy: MergePolicyRegistry) throws  -> MapUpdateRecord
-
+    
     func scanConflicts(visitor: ConflictVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
 }
 /**
  * Three-way merge pinned to a concrete base, head, and candidate.
@@ -2204,9 +3012,9 @@ open class BindingMapMerge: BindingMapMergeProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapmerge(handle, $0) }
     }
 
+    
 
-
-
+    
 open func base() -> MapVersionRecord  {
     return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_base(
@@ -2214,7 +3022,7 @@ open func base() -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func candidate() -> MapVersionRecord  {
     return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_candidate(
@@ -2222,7 +3030,7 @@ open func candidate() -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func conflictPage(cursor: RangeCursorRecord?, limit: UInt64)throws  -> ConflictPageRecord  {
     return try  FfiConverterTypeConflictPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_conflict_page(
@@ -2232,7 +3040,7 @@ open func conflictPage(cursor: RangeCursorRecord?, limit: UInt64)throws  -> Conf
     )
 })
 }
-
+    
 open func crdtMerge(config: CrdtConfigRecord)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge(
@@ -2241,7 +3049,7 @@ open func crdtMerge(config: CrdtConfigRecord)throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func crdtMergeExplain(config: CrdtConfigRecord)throws  -> MergeExplanationRecord  {
     return try  FfiConverterTypeMergeExplanationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_crdt_merge_explain(
@@ -2250,7 +3058,7 @@ open func crdtMergeExplain(config: CrdtConfigRecord)throws  -> MergeExplanationR
     )
 })
 }
-
+    
 open func head() -> MapVersionRecord  {
     return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_head(
@@ -2258,7 +3066,7 @@ open func head() -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func merge(resolver: String?)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_merge(
@@ -2267,7 +3075,7 @@ open func merge(resolver: String?)throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func mergeWithPolicy(policy: MergePolicyRegistry)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_merge_with_policy(
@@ -2276,7 +3084,7 @@ open func mergeWithPolicy(policy: MergePolicyRegistry)throws  -> TreeRecord  {
     )
 })
 }
-
+    
     /**
      * Publish only if the head pinned when this object was created is still current.
      */
@@ -2288,7 +3096,7 @@ open func publish(resolver: String?)throws  -> MapUpdateRecord  {
     )
 })
 }
-
+    
 open func publishCrdt(config: CrdtConfigRecord)throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_crdt(
@@ -2297,7 +3105,7 @@ open func publishCrdt(config: CrdtConfigRecord)throws  -> MapUpdateRecord  {
     )
 })
 }
-
+    
 open func publishWithPolicy(policy: MergePolicyRegistry)throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_publish_with_policy(
@@ -2306,7 +3114,7 @@ open func publishWithPolicy(policy: MergePolicyRegistry)throws  -> MapUpdateReco
     )
 })
 }
-
+    
 open func scanConflicts(visitor: ConflictVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapmerge_scan_conflicts(
@@ -2315,9 +3123,9 @@ open func scanConflicts(visitor: ConflictVisitorCallback)throws  -> ScanOutcomeR
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -2370,83 +3178,83 @@ public func FfiConverterTypeBindingMapMerge_lower(_ value: BindingMapMerge) -> U
  * Owned immutable snapshot that remains valid while the managed head advances.
  */
 public protocol BindingMapSnapshotProtocol: AnyObject, Sendable {
-
+    
     func containsKey(key: Data) throws  -> Bool
-
+    
     func copyMissingNodes(destination: ProllyEngine) throws  -> MissingNodeCopyRecord
-
+    
     func cursorWindow(key: Data, rangeEnd: Data?, limit: UInt64) throws  -> CursorWindowRecord
-
+    
     func debugView() throws  -> TreeDebugViewRecord
-
+    
     func export() throws  -> SnapshotBundleRecord
-
+    
     func firstEntry() throws  -> EntryRecord?
-
+    
     func get(key: Data) throws  -> Data?
-
+    
     func getMany(keys: [Data]) throws  -> [Data?]
-
+    
     func getValueRef(key: Data) throws  -> ValueRefRecord?
-
+    
     func hydratePrefixHint(prefix: Data) throws  -> Bool
-
+    
     func id()  -> Data
-
+    
     func lastEntry() throws  -> EntryRecord?
-
+    
     func lowerBound(key: Data) throws  -> EntryRecord?
-
+    
     func pinPath(key: Data) throws  -> UInt64
-
+    
     func pinRoot() throws  -> UInt64
-
+    
     func planMissingNodes(destination: ProllyEngine) throws  -> MissingNodePlanRecord
-
+    
     func prefix(prefix: Data) throws  -> [EntryRecord]
-
+    
     func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
-
+    
     func prefixReversePage(prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64) throws  -> ReversePageRecord
-
+    
     func proveKey(key: Data) throws  -> KeyProofRecord
-
+    
     func proveKeys(keys: [Data]) throws  -> MultiKeyProofRecord
-
+    
     func provePrefix(prefix: Data) throws  -> RangeProofRecord
-
+    
     func proveRange(start: Data, rangeEnd: Data?) throws  -> RangeProofRecord
-
+    
     func proveRangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedRangePageRecord
-
+    
     func publishPrefixHint(prefix: Data) throws  -> Bool
-
+    
     func pushTo(destination: BindingVersionedMap) throws  -> MapVersionRecord
-
+    
     func range(start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
-
+    
     func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
-
+    
     /**
      * Bind this snapshot to a reusable session. Native adapters use the
      * packed borrowed-read ABI from this session on performance-sensitive paths.
      */
     func readSession() throws  -> ProllyReadSession
-
+    
     func reversePage(cursor: ReverseCursorRecord?, start: Data, limit: UInt64) throws  -> ReversePageRecord
-
+    
     func scanPrefix(prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func stats() throws  -> TreeStatsRecord
-
+    
     func tree()  -> TreeRecord
-
+    
     func upperBound(key: Data) throws  -> EntryRecord?
-
+    
     func version()  -> MapVersionRecord
-
+    
 }
 /**
  * Owned immutable snapshot that remains valid while the managed head advances.
@@ -2501,9 +3309,9 @@ open class BindingMapSnapshot: BindingMapSnapshotProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapsnapshot(handle, $0) }
     }
 
+    
 
-
-
+    
 open func containsKey(key: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_contains_key(
@@ -2512,7 +3320,7 @@ open func containsKey(key: Data)throws  -> Bool  {
     )
 })
 }
-
+    
 open func copyMissingNodes(destination: ProllyEngine)throws  -> MissingNodeCopyRecord  {
     return try  FfiConverterTypeMissingNodeCopyRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_copy_missing_nodes(
@@ -2521,7 +3329,7 @@ open func copyMissingNodes(destination: ProllyEngine)throws  -> MissingNodeCopyR
     )
 })
 }
-
+    
 open func cursorWindow(key: Data, rangeEnd: Data?, limit: UInt64)throws  -> CursorWindowRecord  {
     return try  FfiConverterTypeCursorWindowRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_cursor_window(
@@ -2532,7 +3340,7 @@ open func cursorWindow(key: Data, rangeEnd: Data?, limit: UInt64)throws  -> Curs
     )
 })
 }
-
+    
 open func debugView()throws  -> TreeDebugViewRecord  {
     return try  FfiConverterTypeTreeDebugViewRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_debug_view(
@@ -2540,7 +3348,7 @@ open func debugView()throws  -> TreeDebugViewRecord  {
     )
 })
 }
-
+    
 open func export()throws  -> SnapshotBundleRecord  {
     return try  FfiConverterTypeSnapshotBundleRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_export(
@@ -2548,7 +3356,7 @@ open func export()throws  -> SnapshotBundleRecord  {
     )
 })
 }
-
+    
 open func firstEntry()throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_first_entry(
@@ -2556,7 +3364,7 @@ open func firstEntry()throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func get(key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get(
@@ -2565,7 +3373,7 @@ open func get(key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func getMany(keys: [Data])throws  -> [Data?]  {
     return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_many(
@@ -2574,7 +3382,7 @@ open func getMany(keys: [Data])throws  -> [Data?]  {
     )
 })
 }
-
+    
 open func getValueRef(key: Data)throws  -> ValueRefRecord?  {
     return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_get_value_ref(
@@ -2583,7 +3391,7 @@ open func getValueRef(key: Data)throws  -> ValueRefRecord?  {
     )
 })
 }
-
+    
 open func hydratePrefixHint(prefix: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_hydrate_prefix_hint(
@@ -2592,7 +3400,7 @@ open func hydratePrefixHint(prefix: Data)throws  -> Bool  {
     )
 })
 }
-
+    
 open func id() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_id(
@@ -2600,7 +3408,7 @@ open func id() -> Data  {
     )
 })
 }
-
+    
 open func lastEntry()throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_last_entry(
@@ -2608,7 +3416,7 @@ open func lastEntry()throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func lowerBound(key: Data)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_lower_bound(
@@ -2617,7 +3425,7 @@ open func lowerBound(key: Data)throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func pinPath(key: Data)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_path(
@@ -2626,7 +3434,7 @@ open func pinPath(key: Data)throws  -> UInt64  {
     )
 })
 }
-
+    
 open func pinRoot()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_pin_root(
@@ -2634,7 +3442,7 @@ open func pinRoot()throws  -> UInt64  {
     )
 })
 }
-
+    
 open func planMissingNodes(destination: ProllyEngine)throws  -> MissingNodePlanRecord  {
     return try  FfiConverterTypeMissingNodePlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_plan_missing_nodes(
@@ -2643,7 +3451,7 @@ open func planMissingNodes(destination: ProllyEngine)throws  -> MissingNodePlanR
     )
 })
 }
-
+    
 open func prefix(prefix: Data)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix(
@@ -2652,7 +3460,7 @@ open func prefix(prefix: Data)throws  -> [EntryRecord]  {
     )
 })
 }
-
+    
 open func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_page(
@@ -2663,7 +3471,7 @@ open func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)thr
     )
 })
 }
-
+    
 open func prefixReversePage(prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64)throws  -> ReversePageRecord  {
     return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prefix_reverse_page(
@@ -2674,7 +3482,7 @@ open func prefixReversePage(prefix: Data, cursor: ReverseCursorRecord?, limit: U
     )
 })
 }
-
+    
 open func proveKey(key: Data)throws  -> KeyProofRecord  {
     return try  FfiConverterTypeKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_key(
@@ -2683,7 +3491,7 @@ open func proveKey(key: Data)throws  -> KeyProofRecord  {
     )
 })
 }
-
+    
 open func proveKeys(keys: [Data])throws  -> MultiKeyProofRecord  {
     return try  FfiConverterTypeMultiKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_keys(
@@ -2692,7 +3500,7 @@ open func proveKeys(keys: [Data])throws  -> MultiKeyProofRecord  {
     )
 })
 }
-
+    
 open func provePrefix(prefix: Data)throws  -> RangeProofRecord  {
     return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_prefix(
@@ -2701,7 +3509,7 @@ open func provePrefix(prefix: Data)throws  -> RangeProofRecord  {
     )
 })
 }
-
+    
 open func proveRange(start: Data, rangeEnd: Data?)throws  -> RangeProofRecord  {
     return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range(
@@ -2711,7 +3519,7 @@ open func proveRange(start: Data, rangeEnd: Data?)throws  -> RangeProofRecord  {
     )
 })
 }
-
+    
 open func proveRangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedRangePageRecord  {
     return try  FfiConverterTypeProvedRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_prove_range_page(
@@ -2722,7 +3530,7 @@ open func proveRangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UIn
     )
 })
 }
-
+    
 open func publishPrefixHint(prefix: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_publish_prefix_hint(
@@ -2731,7 +3539,7 @@ open func publishPrefixHint(prefix: Data)throws  -> Bool  {
     )
 })
 }
-
+    
 open func pushTo(destination: BindingVersionedMap)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_push_to(
@@ -2740,7 +3548,7 @@ open func pushTo(destination: BindingVersionedMap)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func range(start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range(
@@ -2750,7 +3558,7 @@ open func range(start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     )
 })
 }
-
+    
 open func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_range_page(
@@ -2761,7 +3569,7 @@ open func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)t
     )
 })
 }
-
+    
     /**
      * Bind this snapshot to a reusable session. Native adapters use the
      * packed borrowed-read ABI from this session on performance-sensitive paths.
@@ -2773,7 +3581,7 @@ open func readSession()throws  -> ProllyReadSession  {
     )
 })
 }
-
+    
 open func reversePage(cursor: ReverseCursorRecord?, start: Data, limit: UInt64)throws  -> ReversePageRecord  {
     return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_reverse_page(
@@ -2784,7 +3592,7 @@ open func reversePage(cursor: ReverseCursorRecord?, start: Data, limit: UInt64)t
     )
 })
 }
-
+    
 open func scanPrefix(prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_prefix(
@@ -2794,7 +3602,7 @@ open func scanPrefix(prefix: Data, visitor: EntryVisitorCallback)throws  -> Scan
     )
 })
 }
-
+    
 open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_scan_range(
@@ -2805,7 +3613,7 @@ open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)
     )
 })
 }
-
+    
 open func stats()throws  -> TreeStatsRecord  {
     return try  FfiConverterTypeTreeStatsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_stats(
@@ -2813,7 +3621,7 @@ open func stats()throws  -> TreeStatsRecord  {
     )
 })
 }
-
+    
 open func tree() -> TreeRecord  {
     return try!  FfiConverterTypeTreeRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_tree(
@@ -2821,7 +3629,7 @@ open func tree() -> TreeRecord  {
     )
 })
 }
-
+    
 open func upperBound(key: Data)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_upper_bound(
@@ -2830,7 +3638,7 @@ open func upperBound(key: Data)throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func version() -> MapVersionRecord  {
     return try!  FfiConverterTypeMapVersionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingmapsnapshot_version(
@@ -2838,9 +3646,9 @@ open func version() -> MapVersionRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -2893,11 +3701,11 @@ public func FfiConverterTypeBindingMapSnapshot_lower(_ value: BindingMapSnapshot
  * Resumable polling subscription with portable owned state.
  */
 public protocol BindingMapSubscriptionProtocol: AnyObject, Sendable {
-
+    
     func lastSeen() throws  -> Data?
-
+    
     func poll() throws  -> MapChangeEventRecord?
-
+    
 }
 /**
  * Resumable polling subscription with portable owned state.
@@ -2952,9 +3760,9 @@ open class BindingMapSubscription: BindingMapSubscriptionProtocol, @unchecked Se
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingmapsubscription(handle, $0) }
     }
 
+    
 
-
-
+    
 open func lastSeen()throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsubscription_last_seen(
@@ -2962,7 +3770,7 @@ open func lastSeen()throws  -> Data?  {
     )
 })
 }
-
+    
 open func poll()throws  -> MapChangeEventRecord?  {
     return try  FfiConverterOptionTypeMapChangeEventRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingmapsubscription_poll(
@@ -2970,9 +3778,9 @@ open func poll()throws  -> MapChangeEventRecord?  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -3022,23 +3830,23 @@ public func FfiConverterTypeBindingMapSubscription_lower(_ value: BindingMapSubs
 
 
 public protocol BindingProductQuantizerProtocol: AnyObject, Sendable {
-
+    
     func config()  -> ProductQuantizationConfigRecord
-
+    
     func manifest()  -> Data
-
+    
     func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
-
+    
     func quality()  -> ProductQuantizationQualityRecord
-
+    
     func search(map: BindingProximityMap, request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
-
+    
     func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
-
+    
     func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
-
+    
     func sourceDescriptor()  -> Data
-
+    
 }
 open class BindingProductQuantizer: BindingProductQuantizerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3090,9 +3898,9 @@ open class BindingProductQuantizer: BindingProductQuantizerProtocol, @unchecked 
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingproductquantizer(handle, $0) }
     }
 
+    
 
-
-
+    
 open func config() -> ProductQuantizationConfigRecord  {
     return try!  FfiConverterTypeProductQuantizationConfigRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_config(
@@ -3100,7 +3908,7 @@ open func config() -> ProductQuantizationConfigRecord  {
     )
 })
 }
-
+    
 open func manifest() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_manifest(
@@ -3108,7 +3916,7 @@ open func manifest() -> Data  {
     )
 })
 }
-
+    
 open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
     return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_prove_search(
@@ -3119,7 +3927,7 @@ open func proveSearch(map: BindingProximityMap, request: ProximitySearchRequestR
     )
 })
 }
-
+    
 open func quality() -> ProductQuantizationQualityRecord  {
     return try!  FfiConverterTypeProductQuantizationQualityRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_quality(
@@ -3127,7 +3935,7 @@ open func quality() -> ProductQuantizationQualityRecord  {
     )
 })
 }
-
+    
 open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_search(
@@ -3137,7 +3945,7 @@ open func search(map: BindingProximityMap, request: ProximitySearchRequestRecord
     )
 })
 }
-
+    
 open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_cancellable(
@@ -3149,7 +3957,7 @@ open func searchCancellable(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_search_with_runtime(
@@ -3160,7 +3968,7 @@ open func searchWithRuntime(map: BindingProximityMap, request: ProximitySearchRe
     )
 })
 }
-
+    
 open func sourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproductquantizer_source_descriptor(
@@ -3168,9 +3976,9 @@ open func sourceDescriptor() -> Data  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -3220,11 +4028,11 @@ public func FfiConverterTypeBindingProductQuantizer_lower(_ value: BindingProduc
 
 
 public protocol BindingProximityCancellationTokenProtocol: AnyObject, Sendable {
-
-    func cancel()
-
+    
+    func cancel() 
+    
     func isCancelled()  -> Bool
-
+    
 }
 open class BindingProximityCancellationToken: BindingProximityCancellationTokenProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3283,16 +4091,16 @@ public convenience init() {
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitycancellationtoken(handle, $0) }
     }
 
+    
 
-
-
+    
 open func cancel()  {try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_cancel(
             self.uniffiCloneHandle(),$0
     )
 }
 }
-
+    
 open func isCancelled() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitycancellationtoken_is_cancelled(
@@ -3300,9 +4108,9 @@ open func isCancelled() -> Bool  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -3352,65 +4160,65 @@ public func FfiConverterTypeBindingProximityCancellationToken_lower(_ value: Bin
 
 
 public protocol BindingProximityMapProtocol: AnyObject, Sendable {
-
+    
     func buildAcceleratorCatalog(hnsw: BindingHnswIndex?, pq: BindingProductQuantizer?, composite: BindingCompositeAccelerator?) throws  -> BindingAcceleratorCatalog
-
+    
     func buildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord) throws  -> CompositeBuildOutcomeRecord
-
+    
     func buildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord) throws  -> CompositeBuildOutcomeRecord
-
+    
     func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord) throws  -> HnswBuildResultRecord
-
+    
     func buildOrRebuildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord) throws  -> CompositeBuildOrRebuildOutcomeRecord
-
+    
     func buildOrRebuildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord) throws  -> CompositeBuildOrRebuildOutcomeRecord
-
+    
     func buildPq(config: ProductQuantizationConfigRecord, workerThreads: UInt64, limits: ProductQuantizationBuildLimitsRecord) throws  -> ProductQuantizationBuildResultRecord
-
-    func clearContentCache() throws
-
+    
+    func clearContentCache() throws 
+    
     func config() throws  -> ProximityConfigRecord
-
+    
     func containsKey(key: Data) throws  -> Bool
-
+    
     func count() throws  -> UInt64
-
+    
     func descriptor()  -> Data
-
+    
     func fastHandle()  -> UInt64
-
+    
     func get(key: Data) throws  -> ExactProximityRecordRecord?
-
+    
     func loadAcceleratorCatalog(manifest: Data) throws  -> BindingAcceleratorCatalog
-
+    
     func loadComposite(manifest: Data) throws  -> BindingCompositeAccelerator
-
+    
     func loadHnsw(manifest: Data) throws  -> BindingHnswIndex
-
+    
     func loadPq(manifest: Data) throws  -> BindingProductQuantizer
-
+    
     func mutate(mutations: [ProximityMutationRecord]) throws  -> ProximityMutationResultRecord
-
+    
     func proveMembership(key: Data) throws  -> ProximityMembershipProofRecord
-
+    
     func proveSearch(request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord) throws  -> BindingProximitySearchProof
-
+    
     func proveStructure(limits: ContentGraphLimitsRecord) throws  -> ProximityStructuralProofRecord
-
+    
     func readSession() throws  -> BindingProximityReadSession
-
+    
     func rebuild(mutations: [ProximityMutationRecord]) throws  -> BindingProximityMap
-
+    
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
-
+    
     func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
-
+    
     func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
-
+    
     func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
-
+    
     func verify() throws  -> ProximityVerificationRecord
-
+    
 }
 open class BindingProximityMap: BindingProximityMapProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3462,9 +4270,9 @@ open class BindingProximityMap: BindingProximityMapProtocol, @unchecked Sendable
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitymap(handle, $0) }
     }
 
+    
 
-
-
+    
 open func buildAcceleratorCatalog(hnsw: BindingHnswIndex?, pq: BindingProductQuantizer?, composite: BindingCompositeAccelerator?)throws  -> BindingAcceleratorCatalog  {
     return try  FfiConverterTypeBindingAcceleratorCatalog_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(
@@ -3475,7 +4283,7 @@ open func buildAcceleratorCatalog(hnsw: BindingHnswIndex?, pq: BindingProductQua
     )
 })
 }
-
+    
 open func buildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord)throws  -> CompositeBuildOutcomeRecord  {
     return try  FfiConverterTypeCompositeBuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(
@@ -3487,7 +4295,7 @@ open func buildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswInde
     )
 })
 }
-
+    
 open func buildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord)throws  -> CompositeBuildOutcomeRecord  {
     return try  FfiConverterTypeCompositeBuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(
@@ -3499,7 +4307,7 @@ open func buildCompositePq(baseMap: BindingProximityMap, base: BindingProductQua
     )
 })
 }
-
+    
 open func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord)throws  -> HnswBuildResultRecord  {
     return try  FfiConverterTypeHnswBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(
@@ -3509,7 +4317,7 @@ open func buildHnsw(config: HnswConfigRecord, limits: HnswBuildLimitsRecord)thro
     )
 })
 }
-
+    
 open func buildOrRebuildCompositeHnsw(baseMap: BindingProximityMap, base: BindingHnswIndex, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord)throws  -> CompositeBuildOrRebuildOutcomeRecord  {
     return try  FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_hnsw(
@@ -3522,7 +4330,7 @@ open func buildOrRebuildCompositeHnsw(baseMap: BindingProximityMap, base: Bindin
     )
 })
 }
-
+    
 open func buildOrRebuildCompositePq(baseMap: BindingProximityMap, base: BindingProductQuantizer, config: CompositeAcceleratorConfigRecord, limits: CompositeBuildLimitsRecord, rebuild: CompositeRebuildOptionsRecord)throws  -> CompositeBuildOrRebuildOutcomeRecord  {
     return try  FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(
@@ -3535,7 +4343,7 @@ open func buildOrRebuildCompositePq(baseMap: BindingProximityMap, base: BindingP
     )
 })
 }
-
+    
 open func buildPq(config: ProductQuantizationConfigRecord, workerThreads: UInt64, limits: ProductQuantizationBuildLimitsRecord)throws  -> ProductQuantizationBuildResultRecord  {
     return try  FfiConverterTypeProductQuantizationBuildResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq(
@@ -3546,14 +4354,14 @@ open func buildPq(config: ProductQuantizationConfigRecord, workerThreads: UInt64
     )
 })
 }
-
+    
 open func clearContentCache()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(
             self.uniffiCloneHandle(),$0
     )
 }
 }
-
+    
 open func config()throws  -> ProximityConfigRecord  {
     return try  FfiConverterTypeProximityConfigRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_config(
@@ -3561,7 +4369,7 @@ open func config()throws  -> ProximityConfigRecord  {
     )
 })
 }
-
+    
 open func containsKey(key: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_contains_key(
@@ -3570,7 +4378,7 @@ open func containsKey(key: Data)throws  -> Bool  {
     )
 })
 }
-
+    
 open func count()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_count(
@@ -3578,7 +4386,7 @@ open func count()throws  -> UInt64  {
     )
 })
 }
-
+    
 open func descriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_descriptor(
@@ -3586,7 +4394,7 @@ open func descriptor() -> Data  {
     )
 })
 }
-
+    
 open func fastHandle() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_fast_handle(
@@ -3594,7 +4402,7 @@ open func fastHandle() -> UInt64  {
     )
 })
 }
-
+    
 open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
     return try  FfiConverterOptionTypeExactProximityRecordRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_get(
@@ -3603,7 +4411,7 @@ open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
     )
 })
 }
-
+    
 open func loadAcceleratorCatalog(manifest: Data)throws  -> BindingAcceleratorCatalog  {
     return try  FfiConverterTypeBindingAcceleratorCatalog_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_load_accelerator_catalog(
@@ -3612,7 +4420,7 @@ open func loadAcceleratorCatalog(manifest: Data)throws  -> BindingAcceleratorCat
     )
 })
 }
-
+    
 open func loadComposite(manifest: Data)throws  -> BindingCompositeAccelerator  {
     return try  FfiConverterTypeBindingCompositeAccelerator_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite(
@@ -3621,7 +4429,7 @@ open func loadComposite(manifest: Data)throws  -> BindingCompositeAccelerator  {
     )
 })
 }
-
+    
 open func loadHnsw(manifest: Data)throws  -> BindingHnswIndex  {
     return try  FfiConverterTypeBindingHnswIndex_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(
@@ -3630,7 +4438,7 @@ open func loadHnsw(manifest: Data)throws  -> BindingHnswIndex  {
     )
 })
 }
-
+    
 open func loadPq(manifest: Data)throws  -> BindingProductQuantizer  {
     return try  FfiConverterTypeBindingProductQuantizer_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq(
@@ -3639,7 +4447,7 @@ open func loadPq(manifest: Data)throws  -> BindingProductQuantizer  {
     )
 })
 }
-
+    
 open func mutate(mutations: [ProximityMutationRecord])throws  -> ProximityMutationResultRecord  {
     return try  FfiConverterTypeProximityMutationResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(
@@ -3648,7 +4456,7 @@ open func mutate(mutations: [ProximityMutationRecord])throws  -> ProximityMutati
     )
 })
 }
-
+    
 open func proveMembership(key: Data)throws  -> ProximityMembershipProofRecord  {
     return try  FfiConverterTypeProximityMembershipProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_membership(
@@ -3657,7 +4465,7 @@ open func proveMembership(key: Data)throws  -> ProximityMembershipProofRecord  {
     )
 })
 }
-
+    
 open func proveSearch(request: ProximitySearchRequestRecord, limits: ContentGraphLimitsRecord)throws  -> BindingProximitySearchProof  {
     return try  FfiConverterTypeBindingProximitySearchProof_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_search(
@@ -3667,7 +4475,7 @@ open func proveSearch(request: ProximitySearchRequestRecord, limits: ContentGrap
     )
 })
 }
-
+    
 open func proveStructure(limits: ContentGraphLimitsRecord)throws  -> ProximityStructuralProofRecord  {
     return try  FfiConverterTypeProximityStructuralProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_prove_structure(
@@ -3676,7 +4484,7 @@ open func proveStructure(limits: ContentGraphLimitsRecord)throws  -> ProximitySt
     )
 })
 }
-
+    
 open func readSession()throws  -> BindingProximityReadSession  {
     return try  FfiConverterTypeBindingProximityReadSession_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_read_session(
@@ -3684,7 +4492,7 @@ open func readSession()throws  -> BindingProximityReadSession  {
     )
 })
 }
-
+    
 open func rebuild(mutations: [ProximityMutationRecord])throws  -> BindingProximityMap  {
     return try  FfiConverterTypeBindingProximityMap_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_rebuild(
@@ -3693,7 +4501,7 @@ open func rebuild(mutations: [ProximityMutationRecord])throws  -> BindingProximi
     )
 })
 }
-
+    
 open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_scan_records(
@@ -3702,7 +4510,7 @@ open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64 
     )
 })
 }
-
+    
 open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_search(
@@ -3711,7 +4519,7 @@ open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearc
     )
 })
 }
-
+    
 open func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_search_cancellable(
@@ -3722,7 +4530,7 @@ open func searchCancellable(request: ProximitySearchRequestRecord, runtime: Bind
     )
 })
 }
-
+    
 open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_search_with_runtime(
@@ -3732,7 +4540,7 @@ open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: Bind
     )
 })
 }
-
+    
 open func verify()throws  -> ProximityVerificationRecord  {
     return try  FfiConverterTypeProximityVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitymap_verify(
@@ -3740,9 +4548,9 @@ open func verify()throws  -> ProximityVerificationRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -3792,21 +4600,21 @@ public func FfiConverterTypeBindingProximityMap_lower(_ value: BindingProximityM
 
 
 public protocol BindingProximityReadSessionProtocol: AnyObject, Sendable {
-
+    
     func containsKey(key: Data) throws  -> Bool
-
+    
     func fastHandle()  -> UInt64
-
+    
     func get(key: Data) throws  -> ExactProximityRecordRecord?
-
+    
     func scanRecords(visitor: ProximityRecordVisitorCallback) throws  -> UInt64
-
+    
     func search(request: ProximitySearchRequestRecord) throws  -> ProximitySearchResultRecord
-
+    
     func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken) throws  -> ProximitySearchResultRecord
-
+    
     func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime) throws  -> ProximitySearchResultRecord
-
+    
 }
 open class BindingProximityReadSession: BindingProximityReadSessionProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3858,9 +4666,9 @@ open class BindingProximityReadSession: BindingProximityReadSessionProtocol, @un
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximityreadsession(handle, $0) }
     }
 
+    
 
-
-
+    
 open func containsKey(key: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_contains_key(
@@ -3869,7 +4677,7 @@ open func containsKey(key: Data)throws  -> Bool  {
     )
 })
 }
-
+    
 open func fastHandle() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_fast_handle(
@@ -3877,7 +4685,7 @@ open func fastHandle() -> UInt64  {
     )
 })
 }
-
+    
 open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
     return try  FfiConverterOptionTypeExactProximityRecordRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_get(
@@ -3886,7 +4694,7 @@ open func get(key: Data)throws  -> ExactProximityRecordRecord?  {
     )
 })
 }
-
+    
 open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_scan_records(
@@ -3895,7 +4703,7 @@ open func scanRecords(visitor: ProximityRecordVisitorCallback)throws  -> UInt64 
     )
 })
 }
-
+    
 open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search(
@@ -3904,7 +4712,7 @@ open func search(request: ProximitySearchRequestRecord)throws  -> ProximitySearc
     )
 })
 }
-
+    
 open func searchCancellable(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime?, cancellation: BindingProximityCancellationToken)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_cancellable(
@@ -3915,7 +4723,7 @@ open func searchCancellable(request: ProximitySearchRequestRecord, runtime: Bind
     )
 })
 }
-
+    
 open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: BindingProximitySearchRuntime)throws  -> ProximitySearchResultRecord  {
     return try  FfiConverterTypeProximitySearchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximityreadsession_search_with_runtime(
@@ -3925,9 +4733,9 @@ open func searchWithRuntime(request: ProximitySearchRequestRecord, runtime: Bind
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -3977,11 +4785,11 @@ public func FfiConverterTypeBindingProximityReadSession_lower(_ value: BindingPr
 
 
 public protocol BindingProximitySearchProofProtocol: AnyObject, Sendable {
-
+    
     func sourceDescriptor()  -> Data
-
+    
     func verify(expectedDescriptor: Data?, limits: ContentGraphLimitsRecord) throws  -> ProximitySearchVerificationRecord
-
+    
 }
 open class BindingProximitySearchProof: BindingProximitySearchProofProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -4033,9 +4841,9 @@ open class BindingProximitySearchProof: BindingProximitySearchProofProtocol, @un
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitysearchproof(handle, $0) }
     }
 
+    
 
-
-
+    
 open func sourceDescriptor() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_source_descriptor(
@@ -4043,7 +4851,7 @@ open func sourceDescriptor() -> Data  {
     )
 })
 }
-
+    
 open func verify(expectedDescriptor: Data?, limits: ContentGraphLimitsRecord)throws  -> ProximitySearchVerificationRecord  {
     return try  FfiConverterTypeProximitySearchVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingproximitysearchproof_verify(
@@ -4053,9 +4861,9 @@ open func verify(expectedDescriptor: Data?, limits: ContentGraphLimitsRecord)thr
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -4105,13 +4913,13 @@ public func FfiConverterTypeBindingProximitySearchProof_lower(_ value: BindingPr
 
 
 public protocol BindingProximitySearchRuntimeProtocol: AnyObject, Sendable {
-
-    func clear()
-
+    
+    func clear() 
+    
     func policy()  -> ProximitySearchRuntimePolicyRecord
-
+    
     func stats()  -> ProximitySearchRuntimeStatsRecord
-
+    
 }
 open class BindingProximitySearchRuntime: BindingProximitySearchRuntimeProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -4163,16 +4971,16 @@ open class BindingProximitySearchRuntime: BindingProximitySearchRuntimeProtocol,
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingproximitysearchruntime(handle, $0) }
     }
 
+    
 
-
-
+    
 open func clear()  {try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clear(
             self.uniffiCloneHandle(),$0
     )
 }
 }
-
+    
 open func policy() -> ProximitySearchRuntimePolicyRecord  {
     return try!  FfiConverterTypeProximitySearchRuntimePolicyRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(
@@ -4180,7 +4988,7 @@ open func policy() -> ProximitySearchRuntimePolicyRecord  {
     )
 })
 }
-
+    
 open func stats() -> ProximitySearchRuntimeStatsRecord  {
     return try!  FfiConverterTypeProximitySearchRuntimeStatsRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(
@@ -4188,9 +4996,9 @@ open func stats() -> ProximitySearchRuntimeStatsRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -4240,31 +5048,31 @@ public func FfiConverterTypeBindingProximitySearchRuntime_lower(_ value: Binding
 
 
 public protocol BindingSecondaryIndexSnapshotProtocol: AnyObject, Sendable {
-
+    
     func exact(term: Data) throws  -> [IndexMatchRecord]
-
+    
     func exactPage(term: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
-
+    
     func exactReversePage(term: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
-
+    
     func fastHandle()  -> UInt64
-
+    
     func name()  -> Data
-
+    
     func prefix(prefix: Data) throws  -> [IndexMatchRecord]
-
+    
     func prefixPage(prefix: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
-
+    
     func prefixReversePage(prefix: Data, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
-
+    
     func range(start: Data, rangeEnd: Data?) throws  -> [IndexMatchRecord]
-
+    
     func rangePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
-
+    
     func rangeReversePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64) throws  -> IndexPageRecord
-
+    
     func records(term: Data) throws  -> [IndexedSourceRecord]
-
+    
 }
 open class BindingSecondaryIndexSnapshot: BindingSecondaryIndexSnapshotProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -4316,9 +5124,9 @@ open class BindingSecondaryIndexSnapshot: BindingSecondaryIndexSnapshotProtocol,
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingsecondaryindexsnapshot(handle, $0) }
     }
 
+    
 
-
-
+    
 open func exact(term: Data)throws  -> [IndexMatchRecord]  {
     return try  FfiConverterSequenceTypeIndexMatchRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact(
@@ -4327,7 +5135,7 @@ open func exact(term: Data)throws  -> [IndexMatchRecord]  {
     )
 })
 }
-
+    
 open func exactPage(term: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
     return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_page(
@@ -4338,7 +5146,7 @@ open func exactPage(term: Data, cursor: Data?, limit: UInt64)throws  -> IndexPag
     )
 })
 }
-
+    
 open func exactReversePage(term: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
     return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_exact_reverse_page(
@@ -4349,7 +5157,7 @@ open func exactReversePage(term: Data, cursor: Data?, limit: UInt64)throws  -> I
     )
 })
 }
-
+    
 open func fastHandle() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_fast_handle(
@@ -4357,7 +5165,7 @@ open func fastHandle() -> UInt64  {
     )
 })
 }
-
+    
 open func name() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_name(
@@ -4365,7 +5173,7 @@ open func name() -> Data  {
     )
 })
 }
-
+    
 open func prefix(prefix: Data)throws  -> [IndexMatchRecord]  {
     return try  FfiConverterSequenceTypeIndexMatchRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix(
@@ -4374,7 +5182,7 @@ open func prefix(prefix: Data)throws  -> [IndexMatchRecord]  {
     )
 })
 }
-
+    
 open func prefixPage(prefix: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
     return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_page(
@@ -4385,7 +5193,7 @@ open func prefixPage(prefix: Data, cursor: Data?, limit: UInt64)throws  -> Index
     )
 })
 }
-
+    
 open func prefixReversePage(prefix: Data, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
     return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_prefix_reverse_page(
@@ -4396,7 +5204,7 @@ open func prefixReversePage(prefix: Data, cursor: Data?, limit: UInt64)throws  -
     )
 })
 }
-
+    
 open func range(start: Data, rangeEnd: Data?)throws  -> [IndexMatchRecord]  {
     return try  FfiConverterSequenceTypeIndexMatchRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range(
@@ -4406,7 +5214,7 @@ open func range(start: Data, rangeEnd: Data?)throws  -> [IndexMatchRecord]  {
     )
 })
 }
-
+    
 open func rangePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
     return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_page(
@@ -4418,7 +5226,7 @@ open func rangePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64)t
     )
 })
 }
-
+    
 open func rangeReversePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: UInt64)throws  -> IndexPageRecord  {
     return try  FfiConverterTypeIndexPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_range_reverse_page(
@@ -4430,7 +5238,7 @@ open func rangeReversePage(start: Data, rangeEnd: Data?, cursor: Data?, limit: U
     )
 })
 }
-
+    
 open func records(term: Data)throws  -> [IndexedSourceRecord]  {
     return try  FfiConverterSequenceTypeIndexedSourceRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingsecondaryindexsnapshot_records(
@@ -4439,9 +5247,9 @@ open func records(term: Data)throws  -> [IndexedSourceRecord]  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -4494,153 +5302,153 @@ public func FfiConverterTypeBindingSecondaryIndexSnapshot_lower(_ value: Binding
  * Application-facing managed map with version history and optimistic updates.
  */
 public protocol BindingVersionedMapProtocol: AnyObject, Sendable {
-
+    
     func append(mutations: [MutationRecord]) throws  -> MapVersionRecord
-
+    
     func apply(mutations: [MutationRecord]) throws  -> MapVersionRecord
-
+    
     func applyAtMillis(mutations: [MutationRecord], timestampMillis: UInt64) throws  -> MapVersionRecord
-
+    
     func applyIf(expected: Data?, mutations: [MutationRecord]) throws  -> MapUpdateRecord
-
+    
     func applyIfAtMillis(expected: Data?, mutations: [MutationRecord], timestampMillis: UInt64) throws  -> MapUpdateRecord
-
+    
     func backup() throws  -> Data
-
+    
     func changesSince(base: Data) throws  -> [DiffRecord]
-
+    
     func compare(base: Data, target: Data) throws  -> BindingMapComparison
-
+    
     func compareToHead(base: Data) throws  -> BindingMapComparison
-
+    
     func containsKey(key: Data) throws  -> Bool
-
+    
     func delete(key: Data) throws  -> MapVersionRecord
-
+    
     func deleteIf(expected: Data?, key: Data) throws  -> MapUpdateRecord
-
+    
     func diff(base: Data, target: Data) throws  -> [DiffRecord]
-
+    
     func edit(mutations: [MutationRecord]) throws  -> MapVersionRecord
-
+    
     func editIf(expected: Data?, mutations: [MutationRecord]) throws  -> MapUpdateRecord
-
+    
     func get(key: Data) throws  -> Data?
-
+    
     func getAt(id: Data, key: Data) throws  -> Data?
-
+    
     func getLargeValue(blobStore: ProllyBlobStore, key: Data) throws  -> Data?
-
+    
     func getMany(keys: [Data]) throws  -> [Data?]
-
+    
     func getManyAt(id: Data, keys: [Data]) throws  -> [Data?]
-
+    
     func getValueRef(key: Data) throws  -> ValueRefRecord?
-
+    
     func getValueRefAt(id: Data, key: Data) throws  -> ValueRefRecord?
-
+    
     func head() throws  -> MapVersionRecord?
-
+    
     func headId() throws  -> Data?
-
+    
     func headName()  -> Data
-
+    
     func id()  -> Data
-
+    
     func importAsHead(bundle: SnapshotBundleRecord) throws  -> MapVersionRecord
-
+    
     func importAsHeadAtMillis(bundle: SnapshotBundleRecord, timestampMillis: UInt64) throws  -> MapVersionRecord
-
+    
     func initialize() throws  -> MapVersionRecord
-
+    
     func initializeSorted(entries: [EntryRecord]) throws  -> MapUpdateRecord
-
+    
     func isInitialized() throws  -> Bool
-
+    
     func keepFor(maxAgeMillis: UInt64) throws  -> VersionPruneRecord
-
+    
     func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64) throws  -> VersionPruneRecord
-
+    
     func keepLast(count: UInt64) throws  -> VersionPruneRecord
-
+    
     func keepVersions(ids: [Data]) throws  -> VersionPruneRecord
-
+    
     func parallelApply(mutations: [MutationRecord], config: ParallelConfigRecord) throws  -> VersionedMapBatchResultRecord
-
+    
     func planBlobGc(blobStore: ProllyBlobStore) throws  -> BlobGcPlanRecord
-
+    
     func planGc() throws  -> GcPlanRecord
-
+    
     func prefix(prefix: Data) throws  -> [EntryRecord]
-
+    
     func prefixAt(id: Data, prefix: Data) throws  -> [EntryRecord]
-
+    
     func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
-
+    
     func prefixPageAt(id: Data, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
-
+    
     func prepareMerge(base: Data, candidate: Data) throws  -> BindingMapMerge
-
+    
     func pruneVersions(keepLatest: UInt64) throws  -> VersionPruneRecord
-
+    
     func put(key: Data, value: Data) throws  -> MapVersionRecord
-
+    
     func putIf(expected: Data?, key: Data, value: Data) throws  -> MapUpdateRecord
-
+    
     func putLargeValue(blobStore: ProllyBlobStore, key: Data, value: Data, config: LargeValueConfigRecord) throws  -> MapVersionRecord
-
+    
     func putLargeValueIf(blobStore: ProllyBlobStore, expected: Data?, key: Data, value: Data, config: LargeValueConfigRecord) throws  -> MapUpdateRecord
-
+    
     func range(start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
-
+    
     func rangeAt(id: Data, start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
-
+    
     func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
-
+    
     func rangePageAt(id: Data, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
-
+    
     func readSession() throws  -> ProllyReadSession?
-
+    
     func rebuildFromEntriesIf(expected: Data?, entries: [EntryRecord]) throws  -> MapUpdateRecord
-
+    
     func rebuildFromIterIf(expected: Data?, entries: [EntryRecord]) throws  -> MapUpdateRecord
-
+    
     func rebuildSortedIf(expected: Data?, entries: [EntryRecord]) throws  -> MapUpdateRecord
-
+    
     func restoreBackup(bytes: Data) throws  -> MapVersionRecord
-
+    
     func retentionPolicy()  -> NamedRootRetentionRecord
-
+    
     func rollbackTo(id: Data) throws  -> MapVersionRecord
-
+    
     func scanPrefix(prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func scanPrefixAt(id: Data, prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func scanRangeAt(id: Data, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func snapshot() throws  -> BindingMapSnapshot?
-
+    
     func snapshotAt(id: Data) throws  -> BindingMapSnapshot?
-
+    
     func subscribe() throws  -> BindingMapSubscription
-
+    
     func subscribeFrom(lastSeen: Data?) throws  -> BindingMapSubscription
-
+    
     func sweepBlobGc(blobStore: ProllyBlobStore) throws  -> BlobGcSweepRecord
-
+    
     func sweepGc() throws  -> GcSweepRecord
-
+    
     func verifyCatalog() throws  -> MapCatalogVerificationRecord
-
+    
     func version(id: Data) throws  -> MapVersionRecord?
-
+    
     func versions() throws  -> [MapVersionRecord]
-
+    
     func versionsPrefix()  -> Data
-
+    
 }
 /**
  * Application-facing managed map with version history and optimistic updates.
@@ -4704,9 +5512,9 @@ public convenience init(engine: ProllyEngine, id: Data)throws  {
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingversionedmap(handle, $0) }
     }
 
+    
 
-
-
+    
 open func append(mutations: [MutationRecord])throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_append(
@@ -4715,7 +5523,7 @@ open func append(mutations: [MutationRecord])throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func apply(mutations: [MutationRecord])throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_apply(
@@ -4724,7 +5532,7 @@ open func apply(mutations: [MutationRecord])throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func applyAtMillis(mutations: [MutationRecord], timestampMillis: UInt64)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_at_millis(
@@ -4734,7 +5542,7 @@ open func applyAtMillis(mutations: [MutationRecord], timestampMillis: UInt64)thr
     )
 })
 }
-
+    
 open func applyIf(expected: Data?, mutations: [MutationRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if(
@@ -4744,7 +5552,7 @@ open func applyIf(expected: Data?, mutations: [MutationRecord])throws  -> MapUpd
     )
 })
 }
-
+    
 open func applyIfAtMillis(expected: Data?, mutations: [MutationRecord], timestampMillis: UInt64)throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_apply_if_at_millis(
@@ -4755,7 +5563,7 @@ open func applyIfAtMillis(expected: Data?, mutations: [MutationRecord], timestam
     )
 })
 }
-
+    
 open func backup()throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_backup(
@@ -4763,7 +5571,7 @@ open func backup()throws  -> Data  {
     )
 })
 }
-
+    
 open func changesSince(base: Data)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_changes_since(
@@ -4772,7 +5580,7 @@ open func changesSince(base: Data)throws  -> [DiffRecord]  {
     )
 })
 }
-
+    
 open func compare(base: Data, target: Data)throws  -> BindingMapComparison  {
     return try  FfiConverterTypeBindingMapComparison_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_compare(
@@ -4782,7 +5590,7 @@ open func compare(base: Data, target: Data)throws  -> BindingMapComparison  {
     )
 })
 }
-
+    
 open func compareToHead(base: Data)throws  -> BindingMapComparison  {
     return try  FfiConverterTypeBindingMapComparison_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_compare_to_head(
@@ -4791,7 +5599,7 @@ open func compareToHead(base: Data)throws  -> BindingMapComparison  {
     )
 })
 }
-
+    
 open func containsKey(key: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_contains_key(
@@ -4800,7 +5608,7 @@ open func containsKey(key: Data)throws  -> Bool  {
     )
 })
 }
-
+    
 open func delete(key: Data)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_delete(
@@ -4809,7 +5617,7 @@ open func delete(key: Data)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func deleteIf(expected: Data?, key: Data)throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_delete_if(
@@ -4819,7 +5627,7 @@ open func deleteIf(expected: Data?, key: Data)throws  -> MapUpdateRecord  {
     )
 })
 }
-
+    
 open func diff(base: Data, target: Data)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_diff(
@@ -4829,7 +5637,7 @@ open func diff(base: Data, target: Data)throws  -> [DiffRecord]  {
     )
 })
 }
-
+    
 open func edit(mutations: [MutationRecord])throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_edit(
@@ -4838,7 +5646,7 @@ open func edit(mutations: [MutationRecord])throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func editIf(expected: Data?, mutations: [MutationRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_edit_if(
@@ -4848,7 +5656,7 @@ open func editIf(expected: Data?, mutations: [MutationRecord])throws  -> MapUpda
     )
 })
 }
-
+    
 open func get(key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get(
@@ -4857,7 +5665,7 @@ open func get(key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func getAt(id: Data, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get_at(
@@ -4867,7 +5675,7 @@ open func getAt(id: Data, key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func getLargeValue(blobStore: ProllyBlobStore, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get_large_value(
@@ -4877,7 +5685,7 @@ open func getLargeValue(blobStore: ProllyBlobStore, key: Data)throws  -> Data?  
     )
 })
 }
-
+    
 open func getMany(keys: [Data])throws  -> [Data?]  {
     return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many(
@@ -4886,7 +5694,7 @@ open func getMany(keys: [Data])throws  -> [Data?]  {
     )
 })
 }
-
+    
 open func getManyAt(id: Data, keys: [Data])throws  -> [Data?]  {
     return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get_many_at(
@@ -4896,7 +5704,7 @@ open func getManyAt(id: Data, keys: [Data])throws  -> [Data?]  {
     )
 })
 }
-
+    
 open func getValueRef(key: Data)throws  -> ValueRefRecord?  {
     return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref(
@@ -4905,7 +5713,7 @@ open func getValueRef(key: Data)throws  -> ValueRefRecord?  {
     )
 })
 }
-
+    
 open func getValueRefAt(id: Data, key: Data)throws  -> ValueRefRecord?  {
     return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_get_value_ref_at(
@@ -4915,7 +5723,7 @@ open func getValueRefAt(id: Data, key: Data)throws  -> ValueRefRecord?  {
     )
 })
 }
-
+    
 open func head()throws  -> MapVersionRecord?  {
     return try  FfiConverterOptionTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_head(
@@ -4923,7 +5731,7 @@ open func head()throws  -> MapVersionRecord?  {
     )
 })
 }
-
+    
 open func headId()throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_head_id(
@@ -4931,7 +5739,7 @@ open func headId()throws  -> Data?  {
     )
 })
 }
-
+    
 open func headName() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_head_name(
@@ -4939,7 +5747,7 @@ open func headName() -> Data  {
     )
 })
 }
-
+    
 open func id() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_id(
@@ -4947,7 +5755,7 @@ open func id() -> Data  {
     )
 })
 }
-
+    
 open func importAsHead(bundle: SnapshotBundleRecord)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head(
@@ -4956,7 +5764,7 @@ open func importAsHead(bundle: SnapshotBundleRecord)throws  -> MapVersionRecord 
     )
 })
 }
-
+    
 open func importAsHeadAtMillis(bundle: SnapshotBundleRecord, timestampMillis: UInt64)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_import_as_head_at_millis(
@@ -4966,7 +5774,7 @@ open func importAsHeadAtMillis(bundle: SnapshotBundleRecord, timestampMillis: UI
     )
 })
 }
-
+    
 open func initialize()throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize(
@@ -4974,7 +5782,7 @@ open func initialize()throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func initializeSorted(entries: [EntryRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_initialize_sorted(
@@ -4983,7 +5791,7 @@ open func initializeSorted(entries: [EntryRecord])throws  -> MapUpdateRecord  {
     )
 })
 }
-
+    
 open func isInitialized()throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_is_initialized(
@@ -4991,7 +5799,7 @@ open func isInitialized()throws  -> Bool  {
     )
 })
 }
-
+    
 open func keepFor(maxAgeMillis: UInt64)throws  -> VersionPruneRecord  {
     return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for(
@@ -5000,7 +5808,7 @@ open func keepFor(maxAgeMillis: UInt64)throws  -> VersionPruneRecord  {
     )
 })
 }
-
+    
 open func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64)throws  -> VersionPruneRecord  {
     return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_for_at(
@@ -5010,7 +5818,7 @@ open func keepForAt(nowMillis: UInt64, maxAgeMillis: UInt64)throws  -> VersionPr
     )
 })
 }
-
+    
 open func keepLast(count: UInt64)throws  -> VersionPruneRecord  {
     return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_last(
@@ -5019,7 +5827,7 @@ open func keepLast(count: UInt64)throws  -> VersionPruneRecord  {
     )
 })
 }
-
+    
 open func keepVersions(ids: [Data])throws  -> VersionPruneRecord  {
     return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_keep_versions(
@@ -5028,7 +5836,7 @@ open func keepVersions(ids: [Data])throws  -> VersionPruneRecord  {
     )
 })
 }
-
+    
 open func parallelApply(mutations: [MutationRecord], config: ParallelConfigRecord)throws  -> VersionedMapBatchResultRecord  {
     return try  FfiConverterTypeVersionedMapBatchResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_parallel_apply(
@@ -5038,7 +5846,7 @@ open func parallelApply(mutations: [MutationRecord], config: ParallelConfigRecor
     )
 })
 }
-
+    
 open func planBlobGc(blobStore: ProllyBlobStore)throws  -> BlobGcPlanRecord  {
     return try  FfiConverterTypeBlobGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_blob_gc(
@@ -5047,7 +5855,7 @@ open func planBlobGc(blobStore: ProllyBlobStore)throws  -> BlobGcPlanRecord  {
     )
 })
 }
-
+    
 open func planGc()throws  -> GcPlanRecord  {
     return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_plan_gc(
@@ -5055,7 +5863,7 @@ open func planGc()throws  -> GcPlanRecord  {
     )
 })
 }
-
+    
 open func prefix(prefix: Data)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix(
@@ -5064,7 +5872,7 @@ open func prefix(prefix: Data)throws  -> [EntryRecord]  {
     )
 })
 }
-
+    
 open func prefixAt(id: Data, prefix: Data)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_at(
@@ -5074,7 +5882,7 @@ open func prefixAt(id: Data, prefix: Data)throws  -> [EntryRecord]  {
     )
 })
 }
-
+    
 open func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page(
@@ -5085,7 +5893,7 @@ open func prefixPage(prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)thr
     )
 })
 }
-
+    
 open func prefixPageAt(id: Data, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_prefix_page_at(
@@ -5097,7 +5905,7 @@ open func prefixPageAt(id: Data, prefix: Data, cursor: RangeCursorRecord?, limit
     )
 })
 }
-
+    
 open func prepareMerge(base: Data, candidate: Data)throws  -> BindingMapMerge  {
     return try  FfiConverterTypeBindingMapMerge_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_prepare_merge(
@@ -5107,7 +5915,7 @@ open func prepareMerge(base: Data, candidate: Data)throws  -> BindingMapMerge  {
     )
 })
 }
-
+    
 open func pruneVersions(keepLatest: UInt64)throws  -> VersionPruneRecord  {
     return try  FfiConverterTypeVersionPruneRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_prune_versions(
@@ -5116,7 +5924,7 @@ open func pruneVersions(keepLatest: UInt64)throws  -> VersionPruneRecord  {
     )
 })
 }
-
+    
 open func put(key: Data, value: Data)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_put(
@@ -5126,7 +5934,7 @@ open func put(key: Data, value: Data)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func putIf(expected: Data?, key: Data, value: Data)throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_put_if(
@@ -5137,7 +5945,7 @@ open func putIf(expected: Data?, key: Data, value: Data)throws  -> MapUpdateReco
     )
 })
 }
-
+    
 open func putLargeValue(blobStore: ProllyBlobStore, key: Data, value: Data, config: LargeValueConfigRecord)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value(
@@ -5149,7 +5957,7 @@ open func putLargeValue(blobStore: ProllyBlobStore, key: Data, value: Data, conf
     )
 })
 }
-
+    
 open func putLargeValueIf(blobStore: ProllyBlobStore, expected: Data?, key: Data, value: Data, config: LargeValueConfigRecord)throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_put_large_value_if(
@@ -5162,7 +5970,7 @@ open func putLargeValueIf(blobStore: ProllyBlobStore, expected: Data?, key: Data
     )
 })
 }
-
+    
 open func range(start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_range(
@@ -5172,7 +5980,7 @@ open func range(start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     )
 })
 }
-
+    
 open func rangeAt(id: Data, start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_range_at(
@@ -5183,7 +5991,7 @@ open func rangeAt(id: Data, start: Data, rangeEnd: Data?)throws  -> [EntryRecord
     )
 })
 }
-
+    
 open func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page(
@@ -5194,7 +6002,7 @@ open func rangePage(cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)t
     )
 })
 }
-
+    
 open func rangePageAt(id: Data, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_range_page_at(
@@ -5206,7 +6014,7 @@ open func rangePageAt(id: Data, cursor: RangeCursorRecord?, rangeEnd: Data?, lim
     )
 })
 }
-
+    
 open func readSession()throws  -> ProllyReadSession?  {
     return try  FfiConverterOptionTypeProllyReadSession.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_read_session(
@@ -5214,7 +6022,7 @@ open func readSession()throws  -> ProllyReadSession?  {
     )
 })
 }
-
+    
 open func rebuildFromEntriesIf(expected: Data?, entries: [EntryRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_entries_if(
@@ -5224,7 +6032,7 @@ open func rebuildFromEntriesIf(expected: Data?, entries: [EntryRecord])throws  -
     )
 })
 }
-
+    
 open func rebuildFromIterIf(expected: Data?, entries: [EntryRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_from_iter_if(
@@ -5234,7 +6042,7 @@ open func rebuildFromIterIf(expected: Data?, entries: [EntryRecord])throws  -> M
     )
 })
 }
-
+    
 open func rebuildSortedIf(expected: Data?, entries: [EntryRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_rebuild_sorted_if(
@@ -5244,7 +6052,7 @@ open func rebuildSortedIf(expected: Data?, entries: [EntryRecord])throws  -> Map
     )
 })
 }
-
+    
 open func restoreBackup(bytes: Data)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_restore_backup(
@@ -5253,7 +6061,7 @@ open func restoreBackup(bytes: Data)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func retentionPolicy() -> NamedRootRetentionRecord  {
     return try!  FfiConverterTypeNamedRootRetentionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_retention_policy(
@@ -5261,7 +6069,7 @@ open func retentionPolicy() -> NamedRootRetentionRecord  {
     )
 })
 }
-
+    
 open func rollbackTo(id: Data)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_rollback_to(
@@ -5270,7 +6078,7 @@ open func rollbackTo(id: Data)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func scanPrefix(prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix(
@@ -5280,7 +6088,7 @@ open func scanPrefix(prefix: Data, visitor: EntryVisitorCallback)throws  -> Scan
     )
 })
 }
-
+    
 open func scanPrefixAt(id: Data, prefix: Data, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_prefix_at(
@@ -5291,7 +6099,7 @@ open func scanPrefixAt(id: Data, prefix: Data, visitor: EntryVisitorCallback)thr
     )
 })
 }
-
+    
 open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range(
@@ -5302,7 +6110,7 @@ open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)
     )
 })
 }
-
+    
 open func scanRangeAt(id: Data, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)throws  -> ScanOutcomeRecord  {
     return try  FfiConverterTypeScanOutcomeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_scan_range_at(
@@ -5314,7 +6122,7 @@ open func scanRangeAt(id: Data, start: Data, rangeEnd: Data?, visitor: EntryVisi
     )
 })
 }
-
+    
 open func snapshot()throws  -> BindingMapSnapshot?  {
     return try  FfiConverterOptionTypeBindingMapSnapshot.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot(
@@ -5322,7 +6130,7 @@ open func snapshot()throws  -> BindingMapSnapshot?  {
     )
 })
 }
-
+    
 open func snapshotAt(id: Data)throws  -> BindingMapSnapshot?  {
     return try  FfiConverterOptionTypeBindingMapSnapshot.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_snapshot_at(
@@ -5331,7 +6139,7 @@ open func snapshotAt(id: Data)throws  -> BindingMapSnapshot?  {
     )
 })
 }
-
+    
 open func subscribe()throws  -> BindingMapSubscription  {
     return try  FfiConverterTypeBindingMapSubscription_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe(
@@ -5339,7 +6147,7 @@ open func subscribe()throws  -> BindingMapSubscription  {
     )
 })
 }
-
+    
 open func subscribeFrom(lastSeen: Data?)throws  -> BindingMapSubscription  {
     return try  FfiConverterTypeBindingMapSubscription_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_subscribe_from(
@@ -5348,7 +6156,7 @@ open func subscribeFrom(lastSeen: Data?)throws  -> BindingMapSubscription  {
     )
 })
 }
-
+    
 open func sweepBlobGc(blobStore: ProllyBlobStore)throws  -> BlobGcSweepRecord  {
     return try  FfiConverterTypeBlobGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_blob_gc(
@@ -5357,7 +6165,7 @@ open func sweepBlobGc(blobStore: ProllyBlobStore)throws  -> BlobGcSweepRecord  {
     )
 })
 }
-
+    
 open func sweepGc()throws  -> GcSweepRecord  {
     return try  FfiConverterTypeGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_sweep_gc(
@@ -5365,7 +6173,7 @@ open func sweepGc()throws  -> GcSweepRecord  {
     )
 })
 }
-
+    
 open func verifyCatalog()throws  -> MapCatalogVerificationRecord  {
     return try  FfiConverterTypeMapCatalogVerificationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_verify_catalog(
@@ -5373,7 +6181,7 @@ open func verifyCatalog()throws  -> MapCatalogVerificationRecord  {
     )
 })
 }
-
+    
 open func version(id: Data)throws  -> MapVersionRecord?  {
     return try  FfiConverterOptionTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_version(
@@ -5382,7 +6190,7 @@ open func version(id: Data)throws  -> MapVersionRecord?  {
     )
 })
 }
-
+    
 open func versions()throws  -> [MapVersionRecord]  {
     return try  FfiConverterSequenceTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_versions(
@@ -5390,7 +6198,7 @@ open func versions()throws  -> [MapVersionRecord]  {
     )
 })
 }
-
+    
 open func versionsPrefix() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_bindingversionedmap_versions_prefix(
@@ -5398,9 +6206,9 @@ open func versionsPrefix() -> Data  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -5455,23 +6263,23 @@ public func FfiConverterTypeBindingVersionedMap_lower(_ value: BindingVersionedM
  * `VersionedMapsTransaction` at commit.
  */
 public protocol BindingVersionedTransactionProtocol: AnyObject, Sendable {
-
+    
     func apply(mapId: Data, mutations: [MutationRecord]) throws  -> MapVersionRecord
-
+    
     func applyIf(mapId: Data, expected: Data?, mutations: [MutationRecord]) throws  -> MapUpdateRecord
-
+    
     func commit() throws  -> VersionedTransactionCommitRecord
-
+    
     func delete(mapId: Data, key: Data) throws  -> MapVersionRecord
-
+    
     func get(mapId: Data, key: Data) throws  -> Data?
-
+    
     func head(mapId: Data) throws  -> MapVersionRecord?
-
+    
     func put(mapId: Data, key: Data, value: Data) throws  -> MapVersionRecord
-
-    func rollback() throws
-
+    
+    func rollback() throws 
+    
 }
 /**
  * Host-friendly atomic multi-map transaction. Mutations are accumulated in
@@ -5528,9 +6336,9 @@ open class BindingVersionedTransaction: BindingVersionedTransactionProtocol, @un
         try! rustCall { uniffi_prolly_bindings_fn_free_bindingversionedtransaction(handle, $0) }
     }
 
+    
 
-
-
+    
 open func apply(mapId: Data, mutations: [MutationRecord])throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply(
@@ -5540,7 +6348,7 @@ open func apply(mapId: Data, mutations: [MutationRecord])throws  -> MapVersionRe
     )
 })
 }
-
+    
 open func applyIf(mapId: Data, expected: Data?, mutations: [MutationRecord])throws  -> MapUpdateRecord  {
     return try  FfiConverterTypeMapUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_apply_if(
@@ -5551,7 +6359,7 @@ open func applyIf(mapId: Data, expected: Data?, mutations: [MutationRecord])thro
     )
 })
 }
-
+    
 open func commit()throws  -> VersionedTransactionCommitRecord  {
     return try  FfiConverterTypeVersionedTransactionCommitRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_commit(
@@ -5559,7 +6367,7 @@ open func commit()throws  -> VersionedTransactionCommitRecord  {
     )
 })
 }
-
+    
 open func delete(mapId: Data, key: Data)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_delete(
@@ -5569,7 +6377,7 @@ open func delete(mapId: Data, key: Data)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func get(mapId: Data, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_get(
@@ -5579,7 +6387,7 @@ open func get(mapId: Data, key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func head(mapId: Data)throws  -> MapVersionRecord?  {
     return try  FfiConverterOptionTypeMapVersionRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_head(
@@ -5588,7 +6396,7 @@ open func head(mapId: Data)throws  -> MapVersionRecord?  {
     )
 })
 }
-
+    
 open func put(mapId: Data, key: Data, value: Data)throws  -> MapVersionRecord  {
     return try  FfiConverterTypeMapVersionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_put(
@@ -5599,16 +6407,16 @@ open func put(mapId: Data, key: Data, value: Data)throws  -> MapVersionRecord  {
     )
 })
 }
-
+    
 open func rollback()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_bindingversionedtransaction_rollback(
             self.uniffiCloneHandle(),$0
     )
 }
 }
+    
 
-
-
+    
 }
 
 
@@ -5658,12 +6466,12 @@ public func FfiConverterTypeBindingVersionedTransaction_lower(_ value: BindingVe
 
 
 public protocol ConflictVisitorCallback: AnyObject, Sendable {
-
+    
     /**
      * Return `true` to continue or `false` to stop after this conflict.
      */
     func visit(conflict: ConflictRecord)  -> Bool
-
+    
 }
 open class ConflictVisitorCallbackImpl: ConflictVisitorCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -5715,9 +6523,9 @@ open class ConflictVisitorCallbackImpl: ConflictVisitorCallback, @unchecked Send
         try! rustCall { uniffi_prolly_bindings_fn_free_conflictvisitorcallback(handle, $0) }
     }
 
+    
 
-
-
+    
     /**
      * Return `true` to continue or `false` to stop after this conflict.
      */
@@ -5729,9 +6537,9 @@ open func visit(conflict: ConflictRecord) -> Bool  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -5775,7 +6583,7 @@ fileprivate struct UniffiCallbackInterfaceConflictVisitorCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -5851,9 +6659,9 @@ public func FfiConverterTypeConflictVisitorCallback_lower(_ value: ConflictVisit
 
 
 public protocol CrdtResolverCallback: AnyObject, Sendable {
-
+    
     func resolve(conflict: ConflictRecord)  -> CrdtResolutionRecord
-
+    
 }
 open class CrdtResolverCallbackImpl: CrdtResolverCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -5905,9 +6713,9 @@ open class CrdtResolverCallbackImpl: CrdtResolverCallback, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_crdtresolvercallback(handle, $0) }
     }
 
+    
 
-
-
+    
 open func resolve(conflict: ConflictRecord) -> CrdtResolutionRecord  {
     return try!  FfiConverterTypeCrdtResolutionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_crdtresolvercallback_resolve(
@@ -5916,9 +6724,9 @@ open func resolve(conflict: ConflictRecord) -> CrdtResolutionRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -5962,7 +6770,7 @@ fileprivate struct UniffiCallbackInterfaceCrdtResolverCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeCrdtResolutionRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6038,12 +6846,12 @@ public func FfiConverterTypeCrdtResolverCallback_lower(_ value: CrdtResolverCall
 
 
 public protocol DiffVisitorCallback: AnyObject, Sendable {
-
+    
     /**
      * Return `true` to continue or `false` to stop after this diff.
      */
     func visit(diff: DiffRecord)  -> Bool
-
+    
 }
 open class DiffVisitorCallbackImpl: DiffVisitorCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -6095,9 +6903,9 @@ open class DiffVisitorCallbackImpl: DiffVisitorCallback, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_diffvisitorcallback(handle, $0) }
     }
 
+    
 
-
-
+    
     /**
      * Return `true` to continue or `false` to stop after this diff.
      */
@@ -6109,9 +6917,9 @@ open func visit(diff: DiffRecord) -> Bool  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -6155,7 +6963,7 @@ fileprivate struct UniffiCallbackInterfaceDiffVisitorCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6231,12 +7039,12 @@ public func FfiConverterTypeDiffVisitorCallback_lower(_ value: DiffVisitorCallba
 
 
 public protocol EntryVisitorCallback: AnyObject, Sendable {
-
+    
     /**
      * Return `true` to continue or `false` to stop after this entry.
      */
     func visit(entry: EntryRecord)  -> Bool
-
+    
 }
 open class EntryVisitorCallbackImpl: EntryVisitorCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -6288,9 +7096,9 @@ open class EntryVisitorCallbackImpl: EntryVisitorCallback, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_entryvisitorcallback(handle, $0) }
     }
 
+    
 
-
-
+    
     /**
      * Return `true` to continue or `false` to stop after this entry.
      */
@@ -6302,9 +7110,9 @@ open func visit(entry: EntryRecord) -> Bool  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -6348,7 +7156,7 @@ fileprivate struct UniffiCallbackInterfaceEntryVisitorCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6423,38 +7231,1200 @@ public func FfiConverterTypeEntryVisitorCallback_lower(_ value: EntryVisitorCall
 
 
 
+public protocol ForeignRemoteStore: AnyObject, Sendable {
+    
+    func descriptor() async  -> StoreDescriptorResultRecord
+    
+    func getNode(cid: Data) async  -> OptionalBytesResultRecord
+    
+    func putNode(cid: Data, value: Data) async  -> UnitResultRecord
+    
+    func deleteNode(cid: Data) async  -> UnitResultRecord
+    
+    func batchNodes(ops: [NodeMutationRecord]) async  -> UnitResultRecord
+    
+    func batchGetNodesOrdered(cids: [Data]) async  -> OptionalBytesListResultRecord
+    
+    func listNodeCids() async  -> BytesListResultRecord
+    
+    func getHint(namespace: Data, key: Data) async  -> OptionalBytesResultRecord
+    
+    func putHint(namespace: Data, key: Data, value: Data) async  -> UnitResultRecord
+    
+    func batchPutNodesWithHint(nodes: [NodeEntryRecord], namespace: Data, key: Data, value: Data) async  -> UnitResultRecord
+    
+    func getRootManifest(name: Data) async  -> OptionalBytesResultRecord
+    
+    func putRootManifest(name: Data, manifest: Data) async  -> UnitResultRecord
+    
+    func deleteRootManifest(name: Data) async  -> UnitResultRecord
+    
+    func compareAndSwapRootManifest(name: Data, expected: OptionalBytesRecord, new: OptionalBytesRecord) async  -> RootCasResultRecord
+    
+    func listRootManifests() async  -> NamedBytesListResultRecord
+    
+    func commitTransaction(nodes: [NodeMutationRecord], conditions: [RootConditionRecord], roots: [RootWriteRecord]) async  -> TransactionResultRecord
+    
+}
+open class ForeignRemoteStoreImpl: ForeignRemoteStore, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_prolly_bindings_fn_clone_foreignremotestore(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_prolly_bindings_fn_free_foreignremotestore(handle, $0) }
+    }
+
+    
+
+    
+open func descriptor()async  -> StoreDescriptorResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeStoreDescriptorResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func getNode(cid: Data)async  -> OptionalBytesResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_get_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(cid)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func putNode(cid: Data, value: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(cid),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func deleteNode(cid: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(cid)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func batchNodes(ops: [NodeMutationRecord])async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeNodeMutationRecord.lower(ops)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func batchGetNodesOrdered(cids: [Data])async  -> OptionalBytesListResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceData.lower(cids)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesListResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func listNodeCids()async  -> BytesListResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBytesListResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func getHint(namespace: Data, key: Data)async  -> OptionalBytesResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(namespace),FfiConverterData.lower(key)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func putHint(namespace: Data, key: Data, value: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(namespace),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func batchPutNodesWithHint(nodes: [NodeEntryRecord], namespace: Data, key: Data, value: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeNodeEntryRecord.lower(nodes),FfiConverterData.lower(namespace),FfiConverterData.lower(key),FfiConverterData.lower(value)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func getRootManifest(name: Data)async  -> OptionalBytesResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalBytesResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func putRootManifest(name: Data, manifest: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterData.lower(manifest)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func deleteRootManifest(name: Data)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func compareAndSwapRootManifest(name: Data, expected: OptionalBytesRecord, new: OptionalBytesRecord)async  -> RootCasResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest(
+                    self.uniffiCloneHandle(),
+                    FfiConverterData.lower(name),FfiConverterTypeOptionalBytesRecord_lower(expected),FfiConverterTypeOptionalBytesRecord_lower(new)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRootCasResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func listRootManifests()async  -> NamedBytesListResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNamedBytesListResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+open func commitTransaction(nodes: [NodeMutationRecord], conditions: [RootConditionRecord], roots: [RootWriteRecord])async  -> TransactionResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction(
+                    self.uniffiCloneHandle(),
+                    FfiConverterSequenceTypeNodeMutationRecord.lower(nodes),FfiConverterSequenceTypeRootConditionRecord.lower(conditions),FfiConverterSequenceTypeRootWriteRecord.lower(roots)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionResultRecord_lift,
+            errorHandler: nil
+            
+        )
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceForeignRemoteStore {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceForeignRemoteStore] = [UniffiVTableCallbackInterfaceForeignRemoteStore(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeForeignRemoteStore.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ForeignRemoteStore: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeForeignRemoteStore.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ForeignRemoteStore: handle missing in uniffiClone")
+            }
+        },
+        descriptor: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> StoreDescriptorResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.descriptor(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: StoreDescriptorResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeStoreDescriptorResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        getNode: { (
+            uniffiHandle: UInt64,
+            cid: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.getNode(
+                     cid: try FfiConverterData.lift(cid)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        putNode: { (
+            uniffiHandle: UInt64,
+            cid: RustBuffer,
+            value: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.putNode(
+                     cid: try FfiConverterData.lift(cid),
+                     value: try FfiConverterData.lift(value)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        deleteNode: { (
+            uniffiHandle: UInt64,
+            cid: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.deleteNode(
+                     cid: try FfiConverterData.lift(cid)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        batchNodes: { (
+            uniffiHandle: UInt64,
+            ops: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.batchNodes(
+                     ops: try FfiConverterSequenceTypeNodeMutationRecord.lift(ops)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        batchGetNodesOrdered: { (
+            uniffiHandle: UInt64,
+            cids: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesListResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.batchGetNodesOrdered(
+                     cids: try FfiConverterSequenceData.lift(cids)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesListResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesListResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        listNodeCids: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> BytesListResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.listNodeCids(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: BytesListResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeBytesListResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        getHint: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            key: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.getHint(
+                     namespace: try FfiConverterData.lift(namespace),
+                     key: try FfiConverterData.lift(key)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        putHint: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            key: RustBuffer,
+            value: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.putHint(
+                     namespace: try FfiConverterData.lift(namespace),
+                     key: try FfiConverterData.lift(key),
+                     value: try FfiConverterData.lift(value)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        batchPutNodesWithHint: { (
+            uniffiHandle: UInt64,
+            nodes: RustBuffer,
+            namespace: RustBuffer,
+            key: RustBuffer,
+            value: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.batchPutNodesWithHint(
+                     nodes: try FfiConverterSequenceTypeNodeEntryRecord.lift(nodes),
+                     namespace: try FfiConverterData.lift(namespace),
+                     key: try FfiConverterData.lift(key),
+                     value: try FfiConverterData.lift(value)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        getRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> OptionalBytesResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.getRootManifest(
+                     name: try FfiConverterData.lift(name)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: OptionalBytesResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeOptionalBytesResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        putRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            manifest: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.putRootManifest(
+                     name: try FfiConverterData.lift(name),
+                     manifest: try FfiConverterData.lift(manifest)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        deleteRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.deleteRootManifest(
+                     name: try FfiConverterData.lift(name)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        compareAndSwapRootManifest: { (
+            uniffiHandle: UInt64,
+            name: RustBuffer,
+            expected: RustBuffer,
+            new: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> RootCasResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.compareAndSwapRootManifest(
+                     name: try FfiConverterData.lift(name),
+                     expected: try FfiConverterTypeOptionalBytesRecord_lift(expected),
+                     new: try FfiConverterTypeOptionalBytesRecord_lift(new)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: RootCasResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeRootCasResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        listRootManifests: { (
+            uniffiHandle: UInt64,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> NamedBytesListResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.listRootManifests(
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: NamedBytesListResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeNamedBytesListResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        commitTransaction: { (
+            uniffiHandle: UInt64,
+            nodes: RustBuffer,
+            conditions: RustBuffer,
+            roots: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> TransactionResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.commitTransaction(
+                     nodes: try FfiConverterSequenceTypeNodeMutationRecord.lift(nodes),
+                     conditions: try FfiConverterSequenceTypeRootConditionRecord.lift(conditions),
+                     roots: try FfiConverterSequenceTypeRootWriteRecord.lift(roots)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: TransactionResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeTransactionResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        }
+    )]
+}
+
+private func uniffiCallbackInitForeignRemoteStore() {
+    uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore(UniffiCallbackInterfaceForeignRemoteStore.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeForeignRemoteStore: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<ForeignRemoteStore>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = ForeignRemoteStore
+
+    public static func lift(_ handle: UInt64) throws -> ForeignRemoteStore {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return ForeignRemoteStoreImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: ForeignRemoteStore) -> UInt64 {
+         if let rustImpl = value as? ForeignRemoteStoreImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ForeignRemoteStore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ForeignRemoteStore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeForeignRemoteStore_lift(_ handle: UInt64) throws -> ForeignRemoteStore {
+    return try FfiConverterTypeForeignRemoteStore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeForeignRemoteStore_lower(_ value: ForeignRemoteStore) -> UInt64 {
+    return FfiConverterTypeForeignRemoteStore.lower(value)
+}
+
+
+
+
+
+
 public protocol HostStoreCallback: AnyObject, Sendable {
-
+    
     func get(key: Data)  -> HostStoreBytesResultRecord
-
+    
     func put(key: Data, value: Data)  -> HostStoreUnitResultRecord
-
+    
     func delete(key: Data)  -> HostStoreUnitResultRecord
-
+    
     func batch(ops: [MutationRecord])  -> HostStoreUnitResultRecord
-
+    
     func batchGetOrdered(keys: [Data])  -> HostStoreBatchGetResultRecord
-
+    
     func prefersBatchReads()  -> HostStoreBoolResultRecord
-
+    
     func supportsHints()  -> HostStoreBoolResultRecord
-
+    
     func getHint(namespace: Data, key: Data)  -> HostStoreBytesResultRecord
-
+    
     func putHint(namespace: Data, key: Data, value: Data)  -> HostStoreUnitResultRecord
-
+    
     func listNodeCids()  -> HostStoreListBytesResultRecord
-
+    
     func getRoot(name: Data)  -> HostStoreRootResultRecord
-
+    
     func putRoot(name: Data, manifest: RootManifestRecord)  -> HostStoreUnitResultRecord
-
+    
     func deleteRoot(name: Data)  -> HostStoreUnitResultRecord
-
+    
     func compareAndSwapRoot(name: Data, expected: RootManifestRecord?, replacement: RootManifestRecord?)  -> HostStoreRootCasResultRecord
-
+    
     func listRoots()  -> HostStoreListRootsResultRecord
-
+    
 }
 open class HostStoreCallbackImpl: HostStoreCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -6506,9 +8476,9 @@ open class HostStoreCallbackImpl: HostStoreCallback, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_hoststorecallback(handle, $0) }
     }
 
+    
 
-
-
+    
 open func get(key: Data) -> HostStoreBytesResultRecord  {
     return try!  FfiConverterTypeHostStoreBytesResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_get(
@@ -6517,7 +8487,7 @@ open func get(key: Data) -> HostStoreBytesResultRecord  {
     )
 })
 }
-
+    
 open func put(key: Data, value: Data) -> HostStoreUnitResultRecord  {
     return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_put(
@@ -6527,7 +8497,7 @@ open func put(key: Data, value: Data) -> HostStoreUnitResultRecord  {
     )
 })
 }
-
+    
 open func delete(key: Data) -> HostStoreUnitResultRecord  {
     return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_delete(
@@ -6536,7 +8506,7 @@ open func delete(key: Data) -> HostStoreUnitResultRecord  {
     )
 })
 }
-
+    
 open func batch(ops: [MutationRecord]) -> HostStoreUnitResultRecord  {
     return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_batch(
@@ -6545,7 +8515,7 @@ open func batch(ops: [MutationRecord]) -> HostStoreUnitResultRecord  {
     )
 })
 }
-
+    
 open func batchGetOrdered(keys: [Data]) -> HostStoreBatchGetResultRecord  {
     return try!  FfiConverterTypeHostStoreBatchGetResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_batch_get_ordered(
@@ -6554,7 +8524,7 @@ open func batchGetOrdered(keys: [Data]) -> HostStoreBatchGetResultRecord  {
     )
 })
 }
-
+    
 open func prefersBatchReads() -> HostStoreBoolResultRecord  {
     return try!  FfiConverterTypeHostStoreBoolResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_prefers_batch_reads(
@@ -6562,7 +8532,7 @@ open func prefersBatchReads() -> HostStoreBoolResultRecord  {
     )
 })
 }
-
+    
 open func supportsHints() -> HostStoreBoolResultRecord  {
     return try!  FfiConverterTypeHostStoreBoolResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_supports_hints(
@@ -6570,7 +8540,7 @@ open func supportsHints() -> HostStoreBoolResultRecord  {
     )
 })
 }
-
+    
 open func getHint(namespace: Data, key: Data) -> HostStoreBytesResultRecord  {
     return try!  FfiConverterTypeHostStoreBytesResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_get_hint(
@@ -6580,7 +8550,7 @@ open func getHint(namespace: Data, key: Data) -> HostStoreBytesResultRecord  {
     )
 })
 }
-
+    
 open func putHint(namespace: Data, key: Data, value: Data) -> HostStoreUnitResultRecord  {
     return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_put_hint(
@@ -6591,7 +8561,7 @@ open func putHint(namespace: Data, key: Data, value: Data) -> HostStoreUnitResul
     )
 })
 }
-
+    
 open func listNodeCids() -> HostStoreListBytesResultRecord  {
     return try!  FfiConverterTypeHostStoreListBytesResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_list_node_cids(
@@ -6599,7 +8569,7 @@ open func listNodeCids() -> HostStoreListBytesResultRecord  {
     )
 })
 }
-
+    
 open func getRoot(name: Data) -> HostStoreRootResultRecord  {
     return try!  FfiConverterTypeHostStoreRootResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_get_root(
@@ -6608,7 +8578,7 @@ open func getRoot(name: Data) -> HostStoreRootResultRecord  {
     )
 })
 }
-
+    
 open func putRoot(name: Data, manifest: RootManifestRecord) -> HostStoreUnitResultRecord  {
     return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_put_root(
@@ -6618,7 +8588,7 @@ open func putRoot(name: Data, manifest: RootManifestRecord) -> HostStoreUnitResu
     )
 })
 }
-
+    
 open func deleteRoot(name: Data) -> HostStoreUnitResultRecord  {
     return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_delete_root(
@@ -6627,7 +8597,7 @@ open func deleteRoot(name: Data) -> HostStoreUnitResultRecord  {
     )
 })
 }
-
+    
 open func compareAndSwapRoot(name: Data, expected: RootManifestRecord?, replacement: RootManifestRecord?) -> HostStoreRootCasResultRecord  {
     return try!  FfiConverterTypeHostStoreRootCasResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_compare_and_swap_root(
@@ -6638,7 +8608,7 @@ open func compareAndSwapRoot(name: Data, expected: RootManifestRecord?, replacem
     )
 })
 }
-
+    
 open func listRoots() -> HostStoreListRootsResultRecord  {
     return try!  FfiConverterTypeHostStoreListRootsResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_list_roots(
@@ -6646,9 +8616,9 @@ open func listRoots() -> HostStoreListRootsResultRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -6692,7 +8662,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreBytesResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6718,7 +8688,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6742,7 +8712,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6766,7 +8736,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6790,7 +8760,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreBatchGetResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6812,7 +8782,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreBoolResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6834,7 +8804,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreBoolResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6860,7 +8830,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreBytesResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6888,7 +8858,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6910,7 +8880,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreListBytesResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6934,7 +8904,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreRootResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6960,7 +8930,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -6984,7 +8954,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -7012,7 +8982,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreRootCasResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -7034,7 +9004,7 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreListRootsResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -7110,25 +9080,25 @@ public func FfiConverterTypeHostStoreCallback_lower(_ value: HostStoreCallback) 
 
 
 public protocol MergePolicyRegistryProtocol: AnyObject, Sendable {
-
+    
     func hasDefault() throws  -> Bool
-
+    
     func isEmpty() throws  -> Bool
-
+    
     func len() throws  -> UInt64
-
-    func pushExactResolver(key: Data, resolver: MergeResolverCallback) throws
-
-    func pushExactResolverName(key: Data, name: String) throws
-
-    func pushPrefixResolver(prefix: Data, resolver: MergeResolverCallback) throws
-
-    func pushPrefixResolverName(prefix: Data, name: String) throws
-
-    func setDefaultResolver(resolver: MergeResolverCallback) throws
-
-    func setDefaultResolverName(name: String) throws
-
+    
+    func pushExactResolver(key: Data, resolver: MergeResolverCallback) throws 
+    
+    func pushExactResolverName(key: Data, name: String) throws 
+    
+    func pushPrefixResolver(prefix: Data, resolver: MergeResolverCallback) throws 
+    
+    func pushPrefixResolverName(prefix: Data, name: String) throws 
+    
+    func setDefaultResolver(resolver: MergeResolverCallback) throws 
+    
+    func setDefaultResolverName(name: String) throws 
+    
 }
 open class MergePolicyRegistry: MergePolicyRegistryProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -7187,9 +9157,9 @@ public convenience init() {
         try! rustCall { uniffi_prolly_bindings_fn_free_mergepolicyregistry(handle, $0) }
     }
 
+    
 
-
-
+    
 open func hasDefault()throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_has_default(
@@ -7197,7 +9167,7 @@ open func hasDefault()throws  -> Bool  {
     )
 })
 }
-
+    
 open func isEmpty()throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_is_empty(
@@ -7205,7 +9175,7 @@ open func isEmpty()throws  -> Bool  {
     )
 })
 }
-
+    
 open func len()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_len(
@@ -7213,7 +9183,7 @@ open func len()throws  -> UInt64  {
     )
 })
 }
-
+    
 open func pushExactResolver(key: Data, resolver: MergeResolverCallback)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_push_exact_resolver(
             self.uniffiCloneHandle(),
@@ -7222,7 +9192,7 @@ open func pushExactResolver(key: Data, resolver: MergeResolverCallback)throws   
     )
 }
 }
-
+    
 open func pushExactResolverName(key: Data, name: String)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_push_exact_resolver_name(
             self.uniffiCloneHandle(),
@@ -7231,7 +9201,7 @@ open func pushExactResolverName(key: Data, name: String)throws   {try rustCallWi
     )
 }
 }
-
+    
 open func pushPrefixResolver(prefix: Data, resolver: MergeResolverCallback)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_push_prefix_resolver(
             self.uniffiCloneHandle(),
@@ -7240,7 +9210,7 @@ open func pushPrefixResolver(prefix: Data, resolver: MergeResolverCallback)throw
     )
 }
 }
-
+    
 open func pushPrefixResolverName(prefix: Data, name: String)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_push_prefix_resolver_name(
             self.uniffiCloneHandle(),
@@ -7249,7 +9219,7 @@ open func pushPrefixResolverName(prefix: Data, name: String)throws   {try rustCa
     )
 }
 }
-
+    
 open func setDefaultResolver(resolver: MergeResolverCallback)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_set_default_resolver(
             self.uniffiCloneHandle(),
@@ -7257,7 +9227,7 @@ open func setDefaultResolver(resolver: MergeResolverCallback)throws   {try rustC
     )
 }
 }
-
+    
 open func setDefaultResolverName(name: String)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_mergepolicyregistry_set_default_resolver_name(
             self.uniffiCloneHandle(),
@@ -7265,9 +9235,9 @@ open func setDefaultResolverName(name: String)throws   {try rustCallWithError(Ff
     )
 }
 }
+    
 
-
-
+    
 }
 
 
@@ -7317,9 +9287,9 @@ public func FfiConverterTypeMergePolicyRegistry_lower(_ value: MergePolicyRegist
 
 
 public protocol MergeResolverCallback: AnyObject, Sendable {
-
+    
     func resolve(conflict: ConflictRecord)  -> ResolutionRecord
-
+    
 }
 open class MergeResolverCallbackImpl: MergeResolverCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -7371,9 +9341,9 @@ open class MergeResolverCallbackImpl: MergeResolverCallback, @unchecked Sendable
         try! rustCall { uniffi_prolly_bindings_fn_free_mergeresolvercallback(handle, $0) }
     }
 
+    
 
-
-
+    
 open func resolve(conflict: ConflictRecord) -> ResolutionRecord  {
     return try!  FfiConverterTypeResolutionRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_mergeresolvercallback_resolve(
@@ -7382,9 +9352,9 @@ open func resolve(conflict: ConflictRecord) -> ResolutionRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -7428,7 +9398,7 @@ fileprivate struct UniffiCallbackInterfaceMergeResolverCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeResolutionRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -7504,17 +9474,17 @@ public func FfiConverterTypeMergeResolverCallback_lower(_ value: MergeResolverCa
 
 
 public protocol ProllyBlobStoreProtocol: AnyObject, Sendable {
-
+    
     func blobCount() throws  -> UInt64
-
-    func deleteBlob(reference: BlobRefRecord) throws
-
+    
+    func deleteBlob(reference: BlobRefRecord) throws 
+    
     func getBlob(reference: BlobRefRecord) throws  -> Data?
-
+    
     func listBlobRefs() throws  -> [BlobRefRecord]
-
+    
     func putBlob(bytes: Data) throws  -> BlobRefRecord
-
+    
 }
 open class ProllyBlobStore: ProllyBlobStoreProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -7566,7 +9536,7 @@ open class ProllyBlobStore: ProllyBlobStoreProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_prollyblobstore(handle, $0) }
     }
 
-
+    
 public static func file(path: String)throws  -> ProllyBlobStore  {
     return try  FfiConverterTypeProllyBlobStore_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_constructor_prollyblobstore_file(
@@ -7574,16 +9544,16 @@ public static func file(path: String)throws  -> ProllyBlobStore  {
     )
 })
 }
-
+    
 public static func memory() -> ProllyBlobStore  {
     return try!  FfiConverterTypeProllyBlobStore_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_constructor_prollyblobstore_memory($0
     )
 })
 }
+    
 
-
-
+    
 open func blobCount()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyblobstore_blob_count(
@@ -7591,7 +9561,7 @@ open func blobCount()throws  -> UInt64  {
     )
 })
 }
-
+    
 open func deleteBlob(reference: BlobRefRecord)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyblobstore_delete_blob(
             self.uniffiCloneHandle(),
@@ -7599,7 +9569,7 @@ open func deleteBlob(reference: BlobRefRecord)throws   {try rustCallWithError(Ff
     )
 }
 }
-
+    
 open func getBlob(reference: BlobRefRecord)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyblobstore_get_blob(
@@ -7608,7 +9578,7 @@ open func getBlob(reference: BlobRefRecord)throws  -> Data?  {
     )
 })
 }
-
+    
 open func listBlobRefs()throws  -> [BlobRefRecord]  {
     return try  FfiConverterSequenceTypeBlobRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyblobstore_list_blob_refs(
@@ -7616,7 +9586,7 @@ open func listBlobRefs()throws  -> [BlobRefRecord]  {
     )
 })
 }
-
+    
 open func putBlob(bytes: Data)throws  -> BlobRefRecord  {
     return try  FfiConverterTypeBlobRefRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyblobstore_put_blob(
@@ -7625,9 +9595,9 @@ open func putBlob(bytes: Data)throws  -> BlobRefRecord  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -7677,318 +9647,318 @@ public func FfiConverterTypeProllyBlobStore_lower(_ value: ProllyBlobStore) -> U
 
 
 public protocol ProllyEngineProtocol: AnyObject, Sendable {
-
+    
     func appendBatch(tree: TreeRecord, mutations: [MutationRecord]) throws  -> TreeRecord
-
+    
     func appendBatchWithStats(tree: TreeRecord, mutations: [MutationRecord]) throws  -> BatchApplyResultRecord
-
+    
     func batch(tree: TreeRecord, mutations: [MutationRecord]) throws  -> TreeRecord
-
+    
     func batchWithStats(tree: TreeRecord, mutations: [MutationRecord]) throws  -> BatchApplyResultRecord
-
+    
     func beginTransaction() throws  -> ProllyTransaction
-
+    
     func beginVersionedTransaction() throws  -> BindingVersionedTransaction
-
+    
     func buildFromEntries(entries: [EntryRecord]) throws  -> TreeRecord
-
+    
     func buildFromSortedEntries(entries: [EntryRecord]) throws  -> TreeRecord
-
+    
     /**
      * Canonically build one immutable proximity map and return its
      * descriptor-bound application handle.
      */
     func buildProximityMap(config: ProximityConfigRecord, records: [ProximityRecordRecord], threads: UInt64?) throws  -> BindingProximityMap
-
+    
     func cacheStats() throws  -> CacheStatsRecord
-
-    func clearCache()
-
+    
+    func clearCache() 
+    
     func collectStats(tree: TreeRecord) throws  -> TreeStatsRecord
-
+    
     func collectStatsJson(tree: TreeRecord) throws  -> JsonDocumentRecord
-
+    
     func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) throws  -> NamedRootUpdateRecord
-
+    
     func compareAndSwapNamedRootAtMillis(name: Data, expected: TreeRecord?, replacement: TreeRecord?, timestampMillis: UInt64) throws  -> NamedRootUpdateRecord
-
+    
     func compareAndSwapSnapshot(namespace: SnapshotNamespaceRecord, id: Data, expected: TreeRecord?, replacement: TreeRecord?) throws  -> NamedRootUpdateRecord
-
+    
     func compareAndSwapSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id: Data, expected: TreeRecord?, replacement: TreeRecord?, timestampMillis: UInt64) throws  -> NamedRootUpdateRecord
-
+    
     func conflictPage(base: TreeRecord, left: TreeRecord, right: TreeRecord, cursor: RangeCursorRecord?, limit: UInt64) throws  -> ConflictPageRecord
-
+    
     func copyMissingNodes(tree: TreeRecord, destination: ProllyEngine) throws  -> MissingNodeCopyRecord
-
+    
     func crdtMerge(base: TreeRecord, left: TreeRecord, right: TreeRecord, config: CrdtConfigRecord) throws  -> TreeRecord
-
+    
     func crdtMergeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, deletePolicy: CrdtDeletePolicyKind, resolver: CrdtResolverCallback) throws  -> TreeRecord
-
+    
     func create()  -> TreeRecord
-
+    
     func cursorWindow(tree: TreeRecord, key: Data, rangeEnd: Data?, limit: UInt64) throws  -> CursorWindowRecord
-
+    
     func debugCompareTrees(left: TreeRecord, right: TreeRecord) throws  -> TreeDebugComparisonRecord
-
+    
     func debugCompareTreesJson(left: TreeRecord, right: TreeRecord) throws  -> JsonDocumentRecord
-
+    
     func debugCompareTreesText(left: TreeRecord, right: TreeRecord) throws  -> String
-
+    
     func debugTree(tree: TreeRecord) throws  -> TreeDebugViewRecord
-
+    
     func debugTreeJson(tree: TreeRecord) throws  -> JsonDocumentRecord
-
+    
     func debugTreeText(tree: TreeRecord) throws  -> String
-
+    
     func delete(tree: TreeRecord, key: Data) throws  -> TreeRecord
-
-    func deleteNamedRoot(name: Data) throws
-
+    
+    func deleteNamedRoot(name: Data) throws 
+    
     /**
      * Delete every raw-byte key in the half-open range `[start, end)`.
      */
     func deleteRange(tree: TreeRecord, start: Data, rangeEnd: Data) throws  -> TreeRecord
-
+    
     /**
      * Delete every raw-byte key in `[start, end)` and return write statistics.
      */
     func deleteRangeWithStats(tree: TreeRecord, start: Data, rangeEnd: Data) throws  -> WriteResultRecord
-
-    func deleteSnapshot(namespace: SnapshotNamespaceRecord, id: Data) throws
-
+    
+    func deleteSnapshot(namespace: SnapshotNamespaceRecord, id: Data) throws 
+    
     func diff(base: TreeRecord, other: TreeRecord) throws  -> [DiffRecord]
-
+    
     func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?) throws  -> [DiffRecord]
-
+    
     func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> DiffPageRecord
-
+    
     func exportSnapshot(tree: TreeRecord) throws  -> SnapshotBundleRecord
-
+    
     func firstEntry(tree: TreeRecord) throws  -> EntryRecord?
-
+    
     func get(tree: TreeRecord, key: Data) throws  -> Data?
-
+    
     func getLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data) throws  -> Data?
-
+    
     func getMany(tree: TreeRecord, keys: [Data]) throws  -> [Data?]
-
+    
     func getValueRef(tree: TreeRecord, key: Data) throws  -> ValueRefRecord?
-
+    
     func hydratePrefixPathHint(tree: TreeRecord, prefix: Data) throws  -> Bool
-
+    
     func importSnapshot(bundle: SnapshotBundleRecord) throws  -> TreeRecord
-
+    
     /**
      * Open an application-facing indexed map using a frozen snapshot of the
      * supplied extractor registry.
      */
     func indexedMap(id: Data, registry: BindingIndexRegistry) throws  -> BindingIndexedMap
-
+    
     func lastEntry(tree: TreeRecord) throws  -> EntryRecord?
-
+    
     func listNamedRootManifests() throws  -> [NamedRootManifestRecord]
-
+    
     func listNamedRoots() throws  -> [NamedRootRecord]
-
+    
     func listNodeCids() throws  -> [Data]
-
+    
     func listSnapshots(namespace: SnapshotNamespaceRecord) throws  -> [SnapshotRecord]
-
+    
     func loadChangedSpansHint(base: TreeRecord, changed: TreeRecord) throws  -> ChangedSpanHintRecord?
-
+    
     func loadNamedRoot(name: Data) throws  -> TreeRecord?
-
+    
     func loadNamedRoots(names: [Data]) throws  -> NamedRootSelectionRecord
-
+    
     /**
      * Reopen and validate an immutable proximity descriptor from this
      * engine's content store.
      */
     func loadProximityMap(descriptor: Data) throws  -> BindingProximityMap
-
+    
     func loadRetainedNamedRoots(retention: NamedRootRetentionRecord) throws  -> NamedRootSelectionRecord
-
+    
     func loadSnapshot(namespace: SnapshotNamespaceRecord, id: Data) throws  -> TreeRecord?
-
+    
     func loadSnapshots(namespace: SnapshotNamespaceRecord, ids: [Data]) throws  -> SnapshotSelectionRecord
-
+    
     func lowerBound(tree: TreeRecord, key: Data) throws  -> EntryRecord?
-
+    
     func markReachable(roots: [TreeRecord]) throws  -> GcReachabilityRecord
-
+    
     func markReachableBlobs(roots: [TreeRecord]) throws  -> BlobGcReachabilityRecord
-
+    
     func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?) throws  -> TreeRecord
-
+    
     func mergeExplain(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?) throws  -> MergeExplanationRecord
-
+    
     func mergeExplainWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, policy: MergePolicyRegistry) throws  -> MergeExplanationRecord
-
+    
     func mergeExplainWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: MergeResolverCallback) throws  -> MergeExplanationRecord
-
+    
     func mergePrefix(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, resolver: String?) throws  -> TreeRecord
-
+    
     func mergePrefixWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, policy: MergePolicyRegistry) throws  -> TreeRecord
-
+    
     func mergePrefixWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, resolver: MergeResolverCallback) throws  -> TreeRecord
-
+    
     func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: String?) throws  -> TreeRecord
-
+    
     func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, policy: MergePolicyRegistry) throws  -> TreeRecord
-
+    
     func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: MergeResolverCallback) throws  -> TreeRecord
-
+    
     func mergeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, policy: MergePolicyRegistry) throws  -> TreeRecord
-
+    
     func mergeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: MergeResolverCallback) throws  -> TreeRecord
-
+    
     func metrics()  -> MetricsRecord
-
+    
     func parallelBatch(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord) throws  -> TreeRecord
-
+    
     func parallelBatchWithStats(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord) throws  -> BatchApplyResultRecord
-
+    
     func pinTreePath(tree: TreeRecord, key: Data) throws  -> UInt64
-
+    
     func pinTreeRoot(tree: TreeRecord) throws  -> UInt64
-
+    
     func planBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidateBlobs: [BlobRefRecord]) throws  -> BlobGcPlanRecord
-
+    
     func planBlobStoreGc(blobStore: ProllyBlobStore, roots: [TreeRecord]) throws  -> BlobGcPlanRecord
-
+    
     func planGc(roots: [TreeRecord], candidateCids: [Data]) throws  -> GcPlanRecord
-
+    
     func planMissingNodes(tree: TreeRecord, destination: ProllyEngine) throws  -> MissingNodePlanRecord
-
+    
     func planStoreGc(roots: [TreeRecord]) throws  -> GcPlanRecord
-
+    
     func planStoreGcForRetention(retention: NamedRootRetentionRecord) throws  -> GcPlanRecord
-
+    
     func prefix(tree: TreeRecord, prefix: Data) throws  -> [EntryRecord]
-
+    
     func prefixPage(tree: TreeRecord, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64) throws  -> RangePageRecord
-
+    
     func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64) throws  -> ReversePageRecord
-
+    
     func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedDiffPageRecord
-
+    
     func proveKey(tree: TreeRecord, key: Data) throws  -> KeyProofRecord
-
+    
     func proveKeys(tree: TreeRecord, keys: [Data]) throws  -> MultiKeyProofRecord
-
+    
     func provePrefix(tree: TreeRecord, prefix: Data) throws  -> RangeProofRecord
-
+    
     func proveRange(tree: TreeRecord, start: Data, rangeEnd: Data?) throws  -> RangeProofRecord
-
+    
     func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> ProvedRangePageRecord
-
+    
     /**
      * Create an engine-bound, reusable proximity search runtime. Reusing this
      * object across searches preserves validated content-cache entries and
      * exposes cumulative physical I/O counters.
      */
     func proximitySearchRuntime(policy: ProximitySearchRuntimePolicyRecord) throws  -> BindingProximitySearchRuntime
-
+    
     func publishChangedSpansHint(base: TreeRecord, changed: TreeRecord, spans: [ChangedSpanRecord]) throws  -> Bool
-
-    func publishNamedRoot(name: Data, tree: TreeRecord) throws
-
-    func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64) throws
-
+    
+    func publishNamedRoot(name: Data, tree: TreeRecord) throws 
+    
+    func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64) throws 
+    
     func publishPrefixPathHint(tree: TreeRecord, prefix: Data) throws  -> Bool
-
-    func publishSnapshot(namespace: SnapshotNamespaceRecord, id: Data, tree: TreeRecord) throws
-
-    func publishSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id: Data, tree: TreeRecord, timestampMillis: UInt64) throws
-
+    
+    func publishSnapshot(namespace: SnapshotNamespaceRecord, id: Data, tree: TreeRecord) throws 
+    
+    func publishSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id: Data, tree: TreeRecord, timestampMillis: UInt64) throws 
+    
     func put(tree: TreeRecord, key: Data, value: Data) throws  -> TreeRecord
-
+    
     func putLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data, value: Data, config: LargeValueConfigRecord) throws  -> TreeRecord
-
+    
     func range(tree: TreeRecord, start: Data, rangeEnd: Data?) throws  -> [EntryRecord]
-
+    
     func rangeAfter(tree: TreeRecord, afterKey: Data, rangeEnd: Data?) throws  -> [EntryRecord]
-
+    
     func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?) throws  -> [DiffRecord]
-
+    
     func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?) throws  -> [EntryRecord]
-
+    
     func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64) throws  -> RangePageRecord
-
+    
     /**
      * Bind one immutable tree to a reusable read object. Foreign callers that
      * issue repeated reads should prefer this over retransmitting `TreeRecord`
      * on every operation.
      */
     func readSession(tree: TreeRecord) throws  -> ProllyReadSession
-
-    func resetMetrics()
-
+    
+    func resetMetrics() 
+    
     func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Data, limit: UInt64) throws  -> ReversePageRecord
-
+    
     /**
      * Stream genuine three-way conflicts without allocating a complete list.
      */
     func scanConflicts(base: TreeRecord, left: TreeRecord, right: TreeRecord, visitor: ConflictVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream structural differences without first allocating a complete list.
      */
     func scanDiff(base: TreeRecord, other: TreeRecord, visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream all entries with `prefix` through the borrowed Rust traversal.
      */
     func scanPrefix(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream a prefix in descending key order.
      */
     func scanPrefixReverse(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream a half-open range through the borrowed Rust traversal.
      */
     func scanRange(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream structural differences whose keys fall in `[start, end)`.
      */
     func scanRangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?, visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream a half-open range in descending key order.
      */
     func scanRangeReverse(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     func statsDiff(before: TreeRecord, after: TreeRecord) throws  -> StatsComparisonRecord
-
+    
     func statsDiffJson(before: TreeRecord, after: TreeRecord) throws  -> JsonDocumentRecord
-
+    
     func structuralDiffPage(base: TreeRecord, other: TreeRecord, cursorJson: String?, limit: UInt64) throws  -> StructuralDiffPageRecord
-
+    
     func structuralDiffPageWithCursor(base: TreeRecord, other: TreeRecord, cursor: StructuralDiffCursorRecord?, limit: UInt64) throws  -> StructuralDiffPageRecord
-
+    
     func sweepBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidateBlobs: [BlobRefRecord]) throws  -> BlobGcSweepRecord
-
+    
     func sweepBlobStoreGc(blobStore: ProllyBlobStore, roots: [TreeRecord]) throws  -> BlobGcSweepRecord
-
+    
     func sweepGc(roots: [TreeRecord], candidateCids: [Data]) throws  -> GcSweepRecord
-
+    
     func sweepStoreGc(roots: [TreeRecord]) throws  -> GcSweepRecord
-
+    
     func sweepStoreGcForRetention(retention: NamedRootRetentionRecord) throws  -> GcSweepRecord
-
+    
     func unpinAllCacheNodes() throws  -> UInt64
-
+    
     func upperBound(tree: TreeRecord, key: Data) throws  -> EntryRecord?
-
+    
     /**
      * Open an application-facing managed map. The returned object shares the
      * underlying engine and may outlive this particular foreign handle.
      */
     func versionedMap(id: Data) throws  -> BindingVersionedMap
-
+    
 }
 open class ProllyEngine: ProllyEngineProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -8040,7 +10010,7 @@ open class ProllyEngine: ProllyEngineProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_prollyengine(handle, $0) }
     }
 
-
+    
 public static func customStore(callback: HostStoreCallback, config: ConfigRecord)throws  -> ProllyEngine  {
     return try  FfiConverterTypeProllyEngine_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_constructor_prollyengine_custom_store(
@@ -8049,7 +10019,7 @@ public static func customStore(callback: HostStoreCallback, config: ConfigRecord
     )
 })
 }
-
+    
 public static func file(path: String, config: ConfigRecord)throws  -> ProllyEngine  {
     return try  FfiConverterTypeProllyEngine_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_constructor_prollyengine_file(
@@ -8058,7 +10028,7 @@ public static func file(path: String, config: ConfigRecord)throws  -> ProllyEngi
     )
 })
 }
-
+    
 public static func memory(config: ConfigRecord)throws  -> ProllyEngine  {
     return try  FfiConverterTypeProllyEngine_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_constructor_prollyengine_memory(
@@ -8066,7 +10036,7 @@ public static func memory(config: ConfigRecord)throws  -> ProllyEngine  {
     )
 })
 }
-
+    
 public static func sqlite(path: String, config: ConfigRecord)throws  -> ProllyEngine  {
     return try  FfiConverterTypeProllyEngine_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_constructor_prollyengine_sqlite(
@@ -8075,7 +10045,7 @@ public static func sqlite(path: String, config: ConfigRecord)throws  -> ProllyEn
     )
 })
 }
-
+    
 public static func sqliteInMemory(config: ConfigRecord)throws  -> ProllyEngine  {
     return try  FfiConverterTypeProllyEngine_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_constructor_prollyengine_sqlite_in_memory(
@@ -8083,9 +10053,9 @@ public static func sqliteInMemory(config: ConfigRecord)throws  -> ProllyEngine  
     )
 })
 }
+    
 
-
-
+    
 open func appendBatch(tree: TreeRecord, mutations: [MutationRecord])throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_append_batch(
@@ -8095,7 +10065,7 @@ open func appendBatch(tree: TreeRecord, mutations: [MutationRecord])throws  -> T
     )
 })
 }
-
+    
 open func appendBatchWithStats(tree: TreeRecord, mutations: [MutationRecord])throws  -> BatchApplyResultRecord  {
     return try  FfiConverterTypeBatchApplyResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_append_batch_with_stats(
@@ -8105,7 +10075,7 @@ open func appendBatchWithStats(tree: TreeRecord, mutations: [MutationRecord])thr
     )
 })
 }
-
+    
 open func batch(tree: TreeRecord, mutations: [MutationRecord])throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_batch(
@@ -8115,7 +10085,7 @@ open func batch(tree: TreeRecord, mutations: [MutationRecord])throws  -> TreeRec
     )
 })
 }
-
+    
 open func batchWithStats(tree: TreeRecord, mutations: [MutationRecord])throws  -> BatchApplyResultRecord  {
     return try  FfiConverterTypeBatchApplyResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_batch_with_stats(
@@ -8125,7 +10095,7 @@ open func batchWithStats(tree: TreeRecord, mutations: [MutationRecord])throws  -
     )
 })
 }
-
+    
 open func beginTransaction()throws  -> ProllyTransaction  {
     return try  FfiConverterTypeProllyTransaction_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_begin_transaction(
@@ -8133,7 +10103,7 @@ open func beginTransaction()throws  -> ProllyTransaction  {
     )
 })
 }
-
+    
 open func beginVersionedTransaction()throws  -> BindingVersionedTransaction  {
     return try  FfiConverterTypeBindingVersionedTransaction_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_begin_versioned_transaction(
@@ -8141,7 +10111,7 @@ open func beginVersionedTransaction()throws  -> BindingVersionedTransaction  {
     )
 })
 }
-
+    
 open func buildFromEntries(entries: [EntryRecord])throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_build_from_entries(
@@ -8150,7 +10120,7 @@ open func buildFromEntries(entries: [EntryRecord])throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func buildFromSortedEntries(entries: [EntryRecord])throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_build_from_sorted_entries(
@@ -8159,7 +10129,7 @@ open func buildFromSortedEntries(entries: [EntryRecord])throws  -> TreeRecord  {
     )
 })
 }
-
+    
     /**
      * Canonically build one immutable proximity map and return its
      * descriptor-bound application handle.
@@ -8174,7 +10144,7 @@ open func buildProximityMap(config: ProximityConfigRecord, records: [ProximityRe
     )
 })
 }
-
+    
 open func cacheStats()throws  -> CacheStatsRecord  {
     return try  FfiConverterTypeCacheStatsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_cache_stats(
@@ -8182,14 +10152,14 @@ open func cacheStats()throws  -> CacheStatsRecord  {
     )
 })
 }
-
+    
 open func clearCache()  {try! rustCall() {
     uniffi_prolly_bindings_fn_method_prollyengine_clear_cache(
             self.uniffiCloneHandle(),$0
     )
 }
 }
-
+    
 open func collectStats(tree: TreeRecord)throws  -> TreeStatsRecord  {
     return try  FfiConverterTypeTreeStatsRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_collect_stats(
@@ -8198,7 +10168,7 @@ open func collectStats(tree: TreeRecord)throws  -> TreeStatsRecord  {
     )
 })
 }
-
+    
 open func collectStatsJson(tree: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_collect_stats_json(
@@ -8207,7 +10177,7 @@ open func collectStatsJson(tree: TreeRecord)throws  -> JsonDocumentRecord  {
     )
 })
 }
-
+    
 open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)throws  -> NamedRootUpdateRecord  {
     return try  FfiConverterTypeNamedRootUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_named_root(
@@ -8218,7 +10188,7 @@ open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement
     )
 })
 }
-
+    
 open func compareAndSwapNamedRootAtMillis(name: Data, expected: TreeRecord?, replacement: TreeRecord?, timestampMillis: UInt64)throws  -> NamedRootUpdateRecord  {
     return try  FfiConverterTypeNamedRootUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_named_root_at_millis(
@@ -8230,7 +10200,7 @@ open func compareAndSwapNamedRootAtMillis(name: Data, expected: TreeRecord?, rep
     )
 })
 }
-
+    
 open func compareAndSwapSnapshot(namespace: SnapshotNamespaceRecord, id: Data, expected: TreeRecord?, replacement: TreeRecord?)throws  -> NamedRootUpdateRecord  {
     return try  FfiConverterTypeNamedRootUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_snapshot(
@@ -8242,7 +10212,7 @@ open func compareAndSwapSnapshot(namespace: SnapshotNamespaceRecord, id: Data, e
     )
 })
 }
-
+    
 open func compareAndSwapSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id: Data, expected: TreeRecord?, replacement: TreeRecord?, timestampMillis: UInt64)throws  -> NamedRootUpdateRecord  {
     return try  FfiConverterTypeNamedRootUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_compare_and_swap_snapshot_at_millis(
@@ -8255,7 +10225,7 @@ open func compareAndSwapSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id:
     )
 })
 }
-
+    
 open func conflictPage(base: TreeRecord, left: TreeRecord, right: TreeRecord, cursor: RangeCursorRecord?, limit: UInt64)throws  -> ConflictPageRecord  {
     return try  FfiConverterTypeConflictPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_conflict_page(
@@ -8268,7 +10238,7 @@ open func conflictPage(base: TreeRecord, left: TreeRecord, right: TreeRecord, cu
     )
 })
 }
-
+    
 open func copyMissingNodes(tree: TreeRecord, destination: ProllyEngine)throws  -> MissingNodeCopyRecord  {
     return try  FfiConverterTypeMissingNodeCopyRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_copy_missing_nodes(
@@ -8278,7 +10248,7 @@ open func copyMissingNodes(tree: TreeRecord, destination: ProllyEngine)throws  -
     )
 })
 }
-
+    
 open func crdtMerge(base: TreeRecord, left: TreeRecord, right: TreeRecord, config: CrdtConfigRecord)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge(
@@ -8290,7 +10260,7 @@ open func crdtMerge(base: TreeRecord, left: TreeRecord, right: TreeRecord, confi
     )
 })
 }
-
+    
 open func crdtMergeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, deletePolicy: CrdtDeletePolicyKind, resolver: CrdtResolverCallback)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_crdt_merge_with_resolver(
@@ -8303,7 +10273,7 @@ open func crdtMergeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeR
     )
 })
 }
-
+    
 open func create() -> TreeRecord  {
     return try!  FfiConverterTypeTreeRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_prollyengine_create(
@@ -8311,7 +10281,7 @@ open func create() -> TreeRecord  {
     )
 })
 }
-
+    
 open func cursorWindow(tree: TreeRecord, key: Data, rangeEnd: Data?, limit: UInt64)throws  -> CursorWindowRecord  {
     return try  FfiConverterTypeCursorWindowRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_cursor_window(
@@ -8323,7 +10293,7 @@ open func cursorWindow(tree: TreeRecord, key: Data, rangeEnd: Data?, limit: UInt
     )
 })
 }
-
+    
 open func debugCompareTrees(left: TreeRecord, right: TreeRecord)throws  -> TreeDebugComparisonRecord  {
     return try  FfiConverterTypeTreeDebugComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees(
@@ -8333,7 +10303,7 @@ open func debugCompareTrees(left: TreeRecord, right: TreeRecord)throws  -> TreeD
     )
 })
 }
-
+    
 open func debugCompareTreesJson(left: TreeRecord, right: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_json(
@@ -8343,7 +10313,7 @@ open func debugCompareTreesJson(left: TreeRecord, right: TreeRecord)throws  -> J
     )
 })
 }
-
+    
 open func debugCompareTreesText(left: TreeRecord, right: TreeRecord)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_compare_trees_text(
@@ -8353,7 +10323,7 @@ open func debugCompareTreesText(left: TreeRecord, right: TreeRecord)throws  -> S
     )
 })
 }
-
+    
 open func debugTree(tree: TreeRecord)throws  -> TreeDebugViewRecord  {
     return try  FfiConverterTypeTreeDebugViewRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_tree(
@@ -8362,7 +10332,7 @@ open func debugTree(tree: TreeRecord)throws  -> TreeDebugViewRecord  {
     )
 })
 }
-
+    
 open func debugTreeJson(tree: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_tree_json(
@@ -8371,7 +10341,7 @@ open func debugTreeJson(tree: TreeRecord)throws  -> JsonDocumentRecord  {
     )
 })
 }
-
+    
 open func debugTreeText(tree: TreeRecord)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_debug_tree_text(
@@ -8380,7 +10350,7 @@ open func debugTreeText(tree: TreeRecord)throws  -> String  {
     )
 })
 }
-
+    
 open func delete(tree: TreeRecord, key: Data)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_delete(
@@ -8390,7 +10360,7 @@ open func delete(tree: TreeRecord, key: Data)throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func deleteNamedRoot(name: Data)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_delete_named_root(
             self.uniffiCloneHandle(),
@@ -8398,7 +10368,7 @@ open func deleteNamedRoot(name: Data)throws   {try rustCallWithError(FfiConverte
     )
 }
 }
-
+    
     /**
      * Delete every raw-byte key in the half-open range `[start, end)`.
      */
@@ -8412,7 +10382,7 @@ open func deleteRange(tree: TreeRecord, start: Data, rangeEnd: Data)throws  -> T
     )
 })
 }
-
+    
     /**
      * Delete every raw-byte key in `[start, end)` and return write statistics.
      */
@@ -8426,7 +10396,7 @@ open func deleteRangeWithStats(tree: TreeRecord, start: Data, rangeEnd: Data)thr
     )
 })
 }
-
+    
 open func deleteSnapshot(namespace: SnapshotNamespaceRecord, id: Data)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_delete_snapshot(
             self.uniffiCloneHandle(),
@@ -8435,7 +10405,7 @@ open func deleteSnapshot(namespace: SnapshotNamespaceRecord, id: Data)throws   {
     )
 }
 }
-
+    
 open func diff(base: TreeRecord, other: TreeRecord)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_diff(
@@ -8445,7 +10415,7 @@ open func diff(base: TreeRecord, other: TreeRecord)throws  -> [DiffRecord]  {
     )
 })
 }
-
+    
 open func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_diff_from_cursor(
@@ -8457,7 +10427,7 @@ open func diffFromCursor(base: TreeRecord, other: TreeRecord, cursor: RangeCurso
     )
 })
 }
-
+    
 open func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> DiffPageRecord  {
     return try  FfiConverterTypeDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_diff_page(
@@ -8470,7 +10440,7 @@ open func diffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecor
     )
 })
 }
-
+    
 open func exportSnapshot(tree: TreeRecord)throws  -> SnapshotBundleRecord  {
     return try  FfiConverterTypeSnapshotBundleRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_export_snapshot(
@@ -8479,7 +10449,7 @@ open func exportSnapshot(tree: TreeRecord)throws  -> SnapshotBundleRecord  {
     )
 })
 }
-
+    
 open func firstEntry(tree: TreeRecord)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_first_entry(
@@ -8488,7 +10458,7 @@ open func firstEntry(tree: TreeRecord)throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func get(tree: TreeRecord, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_get(
@@ -8498,7 +10468,7 @@ open func get(tree: TreeRecord, key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func getLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_get_large_value(
@@ -8509,7 +10479,7 @@ open func getLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data)
     )
 })
 }
-
+    
 open func getMany(tree: TreeRecord, keys: [Data])throws  -> [Data?]  {
     return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_get_many(
@@ -8519,7 +10489,7 @@ open func getMany(tree: TreeRecord, keys: [Data])throws  -> [Data?]  {
     )
 })
 }
-
+    
 open func getValueRef(tree: TreeRecord, key: Data)throws  -> ValueRefRecord?  {
     return try  FfiConverterOptionTypeValueRefRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_get_value_ref(
@@ -8529,7 +10499,7 @@ open func getValueRef(tree: TreeRecord, key: Data)throws  -> ValueRefRecord?  {
     )
 })
 }
-
+    
 open func hydratePrefixPathHint(tree: TreeRecord, prefix: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_hydrate_prefix_path_hint(
@@ -8539,7 +10509,7 @@ open func hydratePrefixPathHint(tree: TreeRecord, prefix: Data)throws  -> Bool  
     )
 })
 }
-
+    
 open func importSnapshot(bundle: SnapshotBundleRecord)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_import_snapshot(
@@ -8548,7 +10518,7 @@ open func importSnapshot(bundle: SnapshotBundleRecord)throws  -> TreeRecord  {
     )
 })
 }
-
+    
     /**
      * Open an application-facing indexed map using a frozen snapshot of the
      * supplied extractor registry.
@@ -8562,7 +10532,7 @@ open func indexedMap(id: Data, registry: BindingIndexRegistry)throws  -> Binding
     )
 })
 }
-
+    
 open func lastEntry(tree: TreeRecord)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_last_entry(
@@ -8571,7 +10541,7 @@ open func lastEntry(tree: TreeRecord)throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func listNamedRootManifests()throws  -> [NamedRootManifestRecord]  {
     return try  FfiConverterSequenceTypeNamedRootManifestRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_list_named_root_manifests(
@@ -8579,7 +10549,7 @@ open func listNamedRootManifests()throws  -> [NamedRootManifestRecord]  {
     )
 })
 }
-
+    
 open func listNamedRoots()throws  -> [NamedRootRecord]  {
     return try  FfiConverterSequenceTypeNamedRootRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_list_named_roots(
@@ -8587,7 +10557,7 @@ open func listNamedRoots()throws  -> [NamedRootRecord]  {
     )
 })
 }
-
+    
 open func listNodeCids()throws  -> [Data]  {
     return try  FfiConverterSequenceData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_list_node_cids(
@@ -8595,7 +10565,7 @@ open func listNodeCids()throws  -> [Data]  {
     )
 })
 }
-
+    
 open func listSnapshots(namespace: SnapshotNamespaceRecord)throws  -> [SnapshotRecord]  {
     return try  FfiConverterSequenceTypeSnapshotRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_list_snapshots(
@@ -8604,7 +10574,7 @@ open func listSnapshots(namespace: SnapshotNamespaceRecord)throws  -> [SnapshotR
     )
 })
 }
-
+    
 open func loadChangedSpansHint(base: TreeRecord, changed: TreeRecord)throws  -> ChangedSpanHintRecord?  {
     return try  FfiConverterOptionTypeChangedSpanHintRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_load_changed_spans_hint(
@@ -8614,7 +10584,7 @@ open func loadChangedSpansHint(base: TreeRecord, changed: TreeRecord)throws  -> 
     )
 })
 }
-
+    
 open func loadNamedRoot(name: Data)throws  -> TreeRecord?  {
     return try  FfiConverterOptionTypeTreeRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_load_named_root(
@@ -8623,7 +10593,7 @@ open func loadNamedRoot(name: Data)throws  -> TreeRecord?  {
     )
 })
 }
-
+    
 open func loadNamedRoots(names: [Data])throws  -> NamedRootSelectionRecord  {
     return try  FfiConverterTypeNamedRootSelectionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_load_named_roots(
@@ -8632,7 +10602,7 @@ open func loadNamedRoots(names: [Data])throws  -> NamedRootSelectionRecord  {
     )
 })
 }
-
+    
     /**
      * Reopen and validate an immutable proximity descriptor from this
      * engine's content store.
@@ -8645,7 +10615,7 @@ open func loadProximityMap(descriptor: Data)throws  -> BindingProximityMap  {
     )
 })
 }
-
+    
 open func loadRetainedNamedRoots(retention: NamedRootRetentionRecord)throws  -> NamedRootSelectionRecord  {
     return try  FfiConverterTypeNamedRootSelectionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_load_retained_named_roots(
@@ -8654,7 +10624,7 @@ open func loadRetainedNamedRoots(retention: NamedRootRetentionRecord)throws  -> 
     )
 })
 }
-
+    
 open func loadSnapshot(namespace: SnapshotNamespaceRecord, id: Data)throws  -> TreeRecord?  {
     return try  FfiConverterOptionTypeTreeRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_load_snapshot(
@@ -8664,7 +10634,7 @@ open func loadSnapshot(namespace: SnapshotNamespaceRecord, id: Data)throws  -> T
     )
 })
 }
-
+    
 open func loadSnapshots(namespace: SnapshotNamespaceRecord, ids: [Data])throws  -> SnapshotSelectionRecord  {
     return try  FfiConverterTypeSnapshotSelectionRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_load_snapshots(
@@ -8674,7 +10644,7 @@ open func loadSnapshots(namespace: SnapshotNamespaceRecord, ids: [Data])throws  
     )
 })
 }
-
+    
 open func lowerBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_lower_bound(
@@ -8684,7 +10654,7 @@ open func lowerBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
     )
 })
 }
-
+    
 open func markReachable(roots: [TreeRecord])throws  -> GcReachabilityRecord  {
     return try  FfiConverterTypeGcReachabilityRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_mark_reachable(
@@ -8693,7 +10663,7 @@ open func markReachable(roots: [TreeRecord])throws  -> GcReachabilityRecord  {
     )
 })
 }
-
+    
 open func markReachableBlobs(roots: [TreeRecord])throws  -> BlobGcReachabilityRecord  {
     return try  FfiConverterTypeBlobGcReachabilityRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_mark_reachable_blobs(
@@ -8702,7 +10672,7 @@ open func markReachableBlobs(roots: [TreeRecord])throws  -> BlobGcReachabilityRe
     )
 })
 }
-
+    
 open func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge(
@@ -8714,7 +10684,7 @@ open func merge(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver:
     )
 })
 }
-
+    
 open func mergeExplain(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: String?)throws  -> MergeExplanationRecord  {
     return try  FfiConverterTypeMergeExplanationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_explain(
@@ -8726,7 +10696,7 @@ open func mergeExplain(base: TreeRecord, left: TreeRecord, right: TreeRecord, re
     )
 })
 }
-
+    
 open func mergeExplainWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, policy: MergePolicyRegistry)throws  -> MergeExplanationRecord  {
     return try  FfiConverterTypeMergeExplanationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_explain_with_policy(
@@ -8738,7 +10708,7 @@ open func mergeExplainWithPolicy(base: TreeRecord, left: TreeRecord, right: Tree
     )
 })
 }
-
+    
 open func mergeExplainWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: MergeResolverCallback)throws  -> MergeExplanationRecord  {
     return try  FfiConverterTypeMergeExplanationRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_explain_with_resolver(
@@ -8750,7 +10720,7 @@ open func mergeExplainWithResolver(base: TreeRecord, left: TreeRecord, right: Tr
     )
 })
 }
-
+    
 open func mergePrefix(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, resolver: String?)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix(
@@ -8763,7 +10733,7 @@ open func mergePrefix(base: TreeRecord, left: TreeRecord, right: TreeRecord, pre
     )
 })
 }
-
+    
 open func mergePrefixWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, policy: MergePolicyRegistry)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix_with_policy(
@@ -8776,7 +10746,7 @@ open func mergePrefixWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeR
     )
 })
 }
-
+    
 open func mergePrefixWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, prefix: Data, resolver: MergeResolverCallback)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_prefix_with_resolver(
@@ -8789,7 +10759,7 @@ open func mergePrefixWithResolver(base: TreeRecord, left: TreeRecord, right: Tre
     )
 })
 }
-
+    
 open func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: String?)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_range(
@@ -8803,7 +10773,7 @@ open func mergeRange(base: TreeRecord, left: TreeRecord, right: TreeRecord, star
     )
 })
 }
-
+    
 open func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, policy: MergePolicyRegistry)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_policy(
@@ -8817,7 +10787,7 @@ open func mergeRangeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRe
     )
 })
 }
-
+    
 open func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, start: Data, rangeEnd: Data?, resolver: MergeResolverCallback)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_range_with_resolver(
@@ -8831,7 +10801,7 @@ open func mergeRangeWithResolver(base: TreeRecord, left: TreeRecord, right: Tree
     )
 })
 }
-
+    
 open func mergeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord, policy: MergePolicyRegistry)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_with_policy(
@@ -8843,7 +10813,7 @@ open func mergeWithPolicy(base: TreeRecord, left: TreeRecord, right: TreeRecord,
     )
 })
 }
-
+    
 open func mergeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecord, resolver: MergeResolverCallback)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_merge_with_resolver(
@@ -8855,7 +10825,7 @@ open func mergeWithResolver(base: TreeRecord, left: TreeRecord, right: TreeRecor
     )
 })
 }
-
+    
 open func metrics() -> MetricsRecord  {
     return try!  FfiConverterTypeMetricsRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_prollyengine_metrics(
@@ -8863,7 +10833,7 @@ open func metrics() -> MetricsRecord  {
     )
 })
 }
-
+    
 open func parallelBatch(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch(
@@ -8874,7 +10844,7 @@ open func parallelBatch(tree: TreeRecord, mutations: [MutationRecord], config: P
     )
 })
 }
-
+    
 open func parallelBatchWithStats(tree: TreeRecord, mutations: [MutationRecord], config: ParallelConfigRecord)throws  -> BatchApplyResultRecord  {
     return try  FfiConverterTypeBatchApplyResultRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_parallel_batch_with_stats(
@@ -8885,7 +10855,7 @@ open func parallelBatchWithStats(tree: TreeRecord, mutations: [MutationRecord], 
     )
 })
 }
-
+    
 open func pinTreePath(tree: TreeRecord, key: Data)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_path(
@@ -8895,7 +10865,7 @@ open func pinTreePath(tree: TreeRecord, key: Data)throws  -> UInt64  {
     )
 })
 }
-
+    
 open func pinTreeRoot(tree: TreeRecord)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_pin_tree_root(
@@ -8904,7 +10874,7 @@ open func pinTreeRoot(tree: TreeRecord)throws  -> UInt64  {
     )
 })
 }
-
+    
 open func planBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidateBlobs: [BlobRefRecord])throws  -> BlobGcPlanRecord  {
     return try  FfiConverterTypeBlobGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_plan_blob_gc(
@@ -8915,7 +10885,7 @@ open func planBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidateB
     )
 })
 }
-
+    
 open func planBlobStoreGc(blobStore: ProllyBlobStore, roots: [TreeRecord])throws  -> BlobGcPlanRecord  {
     return try  FfiConverterTypeBlobGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_plan_blob_store_gc(
@@ -8925,7 +10895,7 @@ open func planBlobStoreGc(blobStore: ProllyBlobStore, roots: [TreeRecord])throws
     )
 })
 }
-
+    
 open func planGc(roots: [TreeRecord], candidateCids: [Data])throws  -> GcPlanRecord  {
     return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_plan_gc(
@@ -8935,7 +10905,7 @@ open func planGc(roots: [TreeRecord], candidateCids: [Data])throws  -> GcPlanRec
     )
 })
 }
-
+    
 open func planMissingNodes(tree: TreeRecord, destination: ProllyEngine)throws  -> MissingNodePlanRecord  {
     return try  FfiConverterTypeMissingNodePlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_plan_missing_nodes(
@@ -8945,7 +10915,7 @@ open func planMissingNodes(tree: TreeRecord, destination: ProllyEngine)throws  -
     )
 })
 }
-
+    
 open func planStoreGc(roots: [TreeRecord])throws  -> GcPlanRecord  {
     return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc(
@@ -8954,7 +10924,7 @@ open func planStoreGc(roots: [TreeRecord])throws  -> GcPlanRecord  {
     )
 })
 }
-
+    
 open func planStoreGcForRetention(retention: NamedRootRetentionRecord)throws  -> GcPlanRecord  {
     return try  FfiConverterTypeGcPlanRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_plan_store_gc_for_retention(
@@ -8963,7 +10933,7 @@ open func planStoreGcForRetention(retention: NamedRootRetentionRecord)throws  ->
     )
 })
 }
-
+    
 open func prefix(tree: TreeRecord, prefix: Data)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prefix(
@@ -8973,7 +10943,7 @@ open func prefix(tree: TreeRecord, prefix: Data)throws  -> [EntryRecord]  {
     )
 })
 }
-
+    
 open func prefixPage(tree: TreeRecord, prefix: Data, cursor: RangeCursorRecord?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prefix_page(
@@ -8985,7 +10955,7 @@ open func prefixPage(tree: TreeRecord, prefix: Data, cursor: RangeCursorRecord?,
     )
 })
 }
-
+    
 open func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCursorRecord?, limit: UInt64)throws  -> ReversePageRecord  {
     return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prefix_reverse_page(
@@ -8997,7 +10967,7 @@ open func prefixReversePage(tree: TreeRecord, prefix: Data, cursor: ReverseCurso
     )
 })
 }
-
+    
 open func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedDiffPageRecord  {
     return try  FfiConverterTypeProvedDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_diff_page(
@@ -9010,7 +10980,7 @@ open func proveDiffPage(base: TreeRecord, other: TreeRecord, cursor: RangeCursor
     )
 })
 }
-
+    
 open func proveKey(tree: TreeRecord, key: Data)throws  -> KeyProofRecord  {
     return try  FfiConverterTypeKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_key(
@@ -9020,7 +10990,7 @@ open func proveKey(tree: TreeRecord, key: Data)throws  -> KeyProofRecord  {
     )
 })
 }
-
+    
 open func proveKeys(tree: TreeRecord, keys: [Data])throws  -> MultiKeyProofRecord  {
     return try  FfiConverterTypeMultiKeyProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_keys(
@@ -9030,7 +11000,7 @@ open func proveKeys(tree: TreeRecord, keys: [Data])throws  -> MultiKeyProofRecor
     )
 })
 }
-
+    
 open func provePrefix(tree: TreeRecord, prefix: Data)throws  -> RangeProofRecord  {
     return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_prefix(
@@ -9040,7 +11010,7 @@ open func provePrefix(tree: TreeRecord, prefix: Data)throws  -> RangeProofRecord
     )
 })
 }
-
+    
 open func proveRange(tree: TreeRecord, start: Data, rangeEnd: Data?)throws  -> RangeProofRecord  {
     return try  FfiConverterTypeRangeProofRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_range(
@@ -9051,7 +11021,7 @@ open func proveRange(tree: TreeRecord, start: Data, rangeEnd: Data?)throws  -> R
     )
 })
 }
-
+    
 open func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> ProvedRangePageRecord  {
     return try  FfiConverterTypeProvedRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_prove_range_page(
@@ -9063,7 +11033,7 @@ open func proveRangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd:
     )
 })
 }
-
+    
     /**
      * Create an engine-bound, reusable proximity search runtime. Reusing this
      * object across searches preserves validated content-cache entries and
@@ -9077,7 +11047,7 @@ open func proximitySearchRuntime(policy: ProximitySearchRuntimePolicyRecord)thro
     )
 })
 }
-
+    
 open func publishChangedSpansHint(base: TreeRecord, changed: TreeRecord, spans: [ChangedSpanRecord])throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_publish_changed_spans_hint(
@@ -9088,7 +11058,7 @@ open func publishChangedSpansHint(base: TreeRecord, changed: TreeRecord, spans: 
     )
 })
 }
-
+    
 open func publishNamedRoot(name: Data, tree: TreeRecord)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_publish_named_root(
             self.uniffiCloneHandle(),
@@ -9097,7 +11067,7 @@ open func publishNamedRoot(name: Data, tree: TreeRecord)throws   {try rustCallWi
     )
 }
 }
-
+    
 open func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis: UInt64)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_publish_named_root_at_millis(
             self.uniffiCloneHandle(),
@@ -9107,7 +11077,7 @@ open func publishNamedRootAtMillis(name: Data, tree: TreeRecord, timestampMillis
     )
 }
 }
-
+    
 open func publishPrefixPathHint(tree: TreeRecord, prefix: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_publish_prefix_path_hint(
@@ -9117,7 +11087,7 @@ open func publishPrefixPathHint(tree: TreeRecord, prefix: Data)throws  -> Bool  
     )
 })
 }
-
+    
 open func publishSnapshot(namespace: SnapshotNamespaceRecord, id: Data, tree: TreeRecord)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_publish_snapshot(
             self.uniffiCloneHandle(),
@@ -9127,7 +11097,7 @@ open func publishSnapshot(namespace: SnapshotNamespaceRecord, id: Data, tree: Tr
     )
 }
 }
-
+    
 open func publishSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id: Data, tree: TreeRecord, timestampMillis: UInt64)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_publish_snapshot_at_millis(
             self.uniffiCloneHandle(),
@@ -9138,7 +11108,7 @@ open func publishSnapshotAtMillis(namespace: SnapshotNamespaceRecord, id: Data, 
     )
 }
 }
-
+    
 open func put(tree: TreeRecord, key: Data, value: Data)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_put(
@@ -9149,7 +11119,7 @@ open func put(tree: TreeRecord, key: Data, value: Data)throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func putLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data, value: Data, config: LargeValueConfigRecord)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_put_large_value(
@@ -9162,7 +11132,7 @@ open func putLargeValue(blobStore: ProllyBlobStore, tree: TreeRecord, key: Data,
     )
 })
 }
-
+    
 open func range(tree: TreeRecord, start: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range(
@@ -9173,7 +11143,7 @@ open func range(tree: TreeRecord, start: Data, rangeEnd: Data?)throws  -> [Entry
     )
 })
 }
-
+    
 open func rangeAfter(tree: TreeRecord, afterKey: Data, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_after(
@@ -9184,7 +11154,7 @@ open func rangeAfter(tree: TreeRecord, afterKey: Data, rangeEnd: Data?)throws  -
     )
 })
 }
-
+    
 open func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: Data?)throws  -> [DiffRecord]  {
     return try  FfiConverterSequenceTypeDiffRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_diff(
@@ -9196,7 +11166,7 @@ open func rangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeEnd: 
     )
 })
 }
-
+    
 open func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?)throws  -> [EntryRecord]  {
     return try  FfiConverterSequenceTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_from_cursor(
@@ -9207,7 +11177,7 @@ open func rangeFromCursor(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd
     )
 })
 }
-
+    
 open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data?, limit: UInt64)throws  -> RangePageRecord  {
     return try  FfiConverterTypeRangePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_range_page(
@@ -9219,7 +11189,7 @@ open func rangePage(tree: TreeRecord, cursor: RangeCursorRecord?, rangeEnd: Data
     )
 })
 }
-
+    
     /**
      * Bind one immutable tree to a reusable read object. Foreign callers that
      * issue repeated reads should prefer this over retransmitting `TreeRecord`
@@ -9233,14 +11203,14 @@ open func readSession(tree: TreeRecord)throws  -> ProllyReadSession  {
     )
 })
 }
-
+    
 open func resetMetrics()  {try! rustCall() {
     uniffi_prolly_bindings_fn_method_prollyengine_reset_metrics(
             self.uniffiCloneHandle(),$0
     )
 }
 }
-
+    
 open func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Data, limit: UInt64)throws  -> ReversePageRecord  {
     return try  FfiConverterTypeReversePageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_reverse_page(
@@ -9252,7 +11222,7 @@ open func reversePage(tree: TreeRecord, cursor: ReverseCursorRecord?, start: Dat
     )
 })
 }
-
+    
     /**
      * Stream genuine three-way conflicts without allocating a complete list.
      */
@@ -9267,7 +11237,7 @@ open func scanConflicts(base: TreeRecord, left: TreeRecord, right: TreeRecord, v
     )
 })
 }
-
+    
     /**
      * Stream structural differences without first allocating a complete list.
      */
@@ -9281,7 +11251,7 @@ open func scanDiff(base: TreeRecord, other: TreeRecord, visitor: DiffVisitorCall
     )
 })
 }
-
+    
     /**
      * Stream all entries with `prefix` through the borrowed Rust traversal.
      */
@@ -9295,7 +11265,7 @@ open func scanPrefix(tree: TreeRecord, prefix: Data, visitor: EntryVisitorCallba
     )
 })
 }
-
+    
     /**
      * Stream a prefix in descending key order.
      */
@@ -9309,7 +11279,7 @@ open func scanPrefixReverse(tree: TreeRecord, prefix: Data, visitor: EntryVisito
     )
 })
 }
-
+    
     /**
      * Stream a half-open range through the borrowed Rust traversal.
      */
@@ -9324,7 +11294,7 @@ open func scanRange(tree: TreeRecord, start: Data, rangeEnd: Data?, visitor: Ent
     )
 })
 }
-
+    
     /**
      * Stream structural differences whose keys fall in `[start, end)`.
      */
@@ -9340,7 +11310,7 @@ open func scanRangeDiff(base: TreeRecord, other: TreeRecord, start: Data, rangeE
     )
 })
 }
-
+    
     /**
      * Stream a half-open range in descending key order.
      */
@@ -9355,7 +11325,7 @@ open func scanRangeReverse(tree: TreeRecord, start: Data, rangeEnd: Data?, visit
     )
 })
 }
-
+    
 open func statsDiff(before: TreeRecord, after: TreeRecord)throws  -> StatsComparisonRecord  {
     return try  FfiConverterTypeStatsComparisonRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_stats_diff(
@@ -9365,7 +11335,7 @@ open func statsDiff(before: TreeRecord, after: TreeRecord)throws  -> StatsCompar
     )
 })
 }
-
+    
 open func statsDiffJson(before: TreeRecord, after: TreeRecord)throws  -> JsonDocumentRecord  {
     return try  FfiConverterTypeJsonDocumentRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_stats_diff_json(
@@ -9375,7 +11345,7 @@ open func statsDiffJson(before: TreeRecord, after: TreeRecord)throws  -> JsonDoc
     )
 })
 }
-
+    
 open func structuralDiffPage(base: TreeRecord, other: TreeRecord, cursorJson: String?, limit: UInt64)throws  -> StructuralDiffPageRecord  {
     return try  FfiConverterTypeStructuralDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page(
@@ -9387,7 +11357,7 @@ open func structuralDiffPage(base: TreeRecord, other: TreeRecord, cursorJson: St
     )
 })
 }
-
+    
 open func structuralDiffPageWithCursor(base: TreeRecord, other: TreeRecord, cursor: StructuralDiffCursorRecord?, limit: UInt64)throws  -> StructuralDiffPageRecord  {
     return try  FfiConverterTypeStructuralDiffPageRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_structural_diff_page_with_cursor(
@@ -9399,7 +11369,7 @@ open func structuralDiffPageWithCursor(base: TreeRecord, other: TreeRecord, curs
     )
 })
 }
-
+    
 open func sweepBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidateBlobs: [BlobRefRecord])throws  -> BlobGcSweepRecord  {
     return try  FfiConverterTypeBlobGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_sweep_blob_gc(
@@ -9410,7 +11380,7 @@ open func sweepBlobGc(blobStore: ProllyBlobStore, roots: [TreeRecord], candidate
     )
 })
 }
-
+    
 open func sweepBlobStoreGc(blobStore: ProllyBlobStore, roots: [TreeRecord])throws  -> BlobGcSweepRecord  {
     return try  FfiConverterTypeBlobGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_sweep_blob_store_gc(
@@ -9420,7 +11390,7 @@ open func sweepBlobStoreGc(blobStore: ProllyBlobStore, roots: [TreeRecord])throw
     )
 })
 }
-
+    
 open func sweepGc(roots: [TreeRecord], candidateCids: [Data])throws  -> GcSweepRecord  {
     return try  FfiConverterTypeGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_sweep_gc(
@@ -9430,7 +11400,7 @@ open func sweepGc(roots: [TreeRecord], candidateCids: [Data])throws  -> GcSweepR
     )
 })
 }
-
+    
 open func sweepStoreGc(roots: [TreeRecord])throws  -> GcSweepRecord  {
     return try  FfiConverterTypeGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_sweep_store_gc(
@@ -9439,7 +11409,7 @@ open func sweepStoreGc(roots: [TreeRecord])throws  -> GcSweepRecord  {
     )
 })
 }
-
+    
 open func sweepStoreGcForRetention(retention: NamedRootRetentionRecord)throws  -> GcSweepRecord  {
     return try  FfiConverterTypeGcSweepRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_sweep_store_gc_for_retention(
@@ -9448,7 +11418,7 @@ open func sweepStoreGcForRetention(retention: NamedRootRetentionRecord)throws  -
     )
 })
 }
-
+    
 open func unpinAllCacheNodes()throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_unpin_all_cache_nodes(
@@ -9456,7 +11426,7 @@ open func unpinAllCacheNodes()throws  -> UInt64  {
     )
 })
 }
-
+    
 open func upperBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
     return try  FfiConverterOptionTypeEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollyengine_upper_bound(
@@ -9466,7 +11436,7 @@ open func upperBound(tree: TreeRecord, key: Data)throws  -> EntryRecord?  {
     )
 })
 }
-
+    
     /**
      * Open an application-facing managed map. The returned object shares the
      * underlying engine and may outlive this particular foreign handle.
@@ -9479,9 +11449,9 @@ open func versionedMap(id: Data)throws  -> BindingVersionedMap  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -9535,40 +11505,40 @@ public func FfiConverterTypeProllyEngine_lower(_ value: ProllyEngine) -> UInt64 
  * repeated foreign-language reads.
  */
 public protocol ProllyReadSessionProtocol: AnyObject, Sendable {
-
+    
     /**
      * Internal opaque transport handle used by handwritten native adapters.
      * The handle resolves only while this UniFFI object is alive.
      */
     func fastHandle()  -> UInt64
-
+    
     /**
      * Return an owned value while reusing the decoded tree bound to this
      * session. This is the portable UniFFI session API.
      */
     func get(key: Data) throws  -> Data?
-
+    
     /**
      * Batch point reads while serializing the key set and result only once.
      */
     func getMany(keys: [Data]) throws  -> [Data?]
-
+    
     /**
      * Stream genuine three-way conflicts. The receiver is the merge base.
      */
     func scanConflicts(left: ProllyReadSession, right: ProllyReadSession, visitor: ConflictVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream a half-open range without retransmitting the tree on every
      * operation. Callback records remain owned for compatibility.
      */
     func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
     /**
      * Stream structural differences against another root-bound session.
      */
     func scanRangeDiff(other: ProllyReadSession, start: Data, rangeEnd: Data?, visitor: DiffVisitorCallback) throws  -> ScanOutcomeRecord
-
+    
 }
 /**
  * A root-bound read object that amortizes tree decoding and ownership across
@@ -9624,9 +11594,9 @@ open class ProllyReadSession: ProllyReadSessionProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_prollyreadsession(handle, $0) }
     }
 
+    
 
-
-
+    
     /**
      * Internal opaque transport handle used by handwritten native adapters.
      * The handle resolves only while this UniFFI object is alive.
@@ -9638,7 +11608,7 @@ open func fastHandle() -> UInt64  {
     )
 })
 }
-
+    
     /**
      * Return an owned value while reusing the decoded tree bound to this
      * session. This is the portable UniFFI session API.
@@ -9651,7 +11621,7 @@ open func get(key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
     /**
      * Batch point reads while serializing the key set and result only once.
      */
@@ -9663,7 +11633,7 @@ open func getMany(keys: [Data])throws  -> [Data?]  {
     )
 })
 }
-
+    
     /**
      * Stream genuine three-way conflicts. The receiver is the merge base.
      */
@@ -9677,7 +11647,7 @@ open func scanConflicts(left: ProllyReadSession, right: ProllyReadSession, visit
     )
 })
 }
-
+    
     /**
      * Stream a half-open range without retransmitting the tree on every
      * operation. Callback records remain owned for compatibility.
@@ -9692,7 +11662,7 @@ open func scanRange(start: Data, rangeEnd: Data?, visitor: EntryVisitorCallback)
     )
 })
 }
-
+    
     /**
      * Stream structural differences against another root-bound session.
      */
@@ -9707,9 +11677,9 @@ open func scanRangeDiff(other: ProllyReadSession, start: Data, rangeEnd: Data?, 
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -9759,29 +11729,29 @@ public func FfiConverterTypeProllyReadSession_lower(_ value: ProllyReadSession) 
 
 
 public protocol ProllyTransactionProtocol: AnyObject, Sendable {
-
+    
     func batch(tree: TreeRecord, mutations: [MutationRecord]) throws  -> TreeRecord
-
+    
     func commit() throws  -> TransactionUpdateRecord
-
+    
     func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?) throws  -> NamedRootUpdateRecord
-
+    
     func create() throws  -> TreeRecord
-
+    
     func delete(tree: TreeRecord, key: Data) throws  -> TreeRecord
-
-    func deleteNamedRoot(name: Data) throws
-
+    
+    func deleteNamedRoot(name: Data) throws 
+    
     func get(tree: TreeRecord, key: Data) throws  -> Data?
-
+    
     func loadNamedRoot(name: Data) throws  -> TreeRecord?
-
-    func publishNamedRoot(name: Data, tree: TreeRecord) throws
-
+    
+    func publishNamedRoot(name: Data, tree: TreeRecord) throws 
+    
     func put(tree: TreeRecord, key: Data, value: Data) throws  -> TreeRecord
-
-    func rollback() throws
-
+    
+    func rollback() throws 
+    
 }
 open class ProllyTransaction: ProllyTransactionProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -9833,9 +11803,9 @@ open class ProllyTransaction: ProllyTransactionProtocol, @unchecked Sendable {
         try! rustCall { uniffi_prolly_bindings_fn_free_prollytransaction(handle, $0) }
     }
 
+    
 
-
-
+    
 open func batch(tree: TreeRecord, mutations: [MutationRecord])throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_batch(
@@ -9845,7 +11815,7 @@ open func batch(tree: TreeRecord, mutations: [MutationRecord])throws  -> TreeRec
     )
 })
 }
-
+    
 open func commit()throws  -> TransactionUpdateRecord  {
     return try  FfiConverterTypeTransactionUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_commit(
@@ -9853,7 +11823,7 @@ open func commit()throws  -> TransactionUpdateRecord  {
     )
 })
 }
-
+    
 open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement: TreeRecord?)throws  -> NamedRootUpdateRecord  {
     return try  FfiConverterTypeNamedRootUpdateRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_compare_and_swap_named_root(
@@ -9864,7 +11834,7 @@ open func compareAndSwapNamedRoot(name: Data, expected: TreeRecord?, replacement
     )
 })
 }
-
+    
 open func create()throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_create(
@@ -9872,7 +11842,7 @@ open func create()throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func delete(tree: TreeRecord, key: Data)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_delete(
@@ -9882,7 +11852,7 @@ open func delete(tree: TreeRecord, key: Data)throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func deleteNamedRoot(name: Data)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_delete_named_root(
             self.uniffiCloneHandle(),
@@ -9890,7 +11860,7 @@ open func deleteNamedRoot(name: Data)throws   {try rustCallWithError(FfiConverte
     )
 }
 }
-
+    
 open func get(tree: TreeRecord, key: Data)throws  -> Data?  {
     return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_get(
@@ -9900,7 +11870,7 @@ open func get(tree: TreeRecord, key: Data)throws  -> Data?  {
     )
 })
 }
-
+    
 open func loadNamedRoot(name: Data)throws  -> TreeRecord?  {
     return try  FfiConverterOptionTypeTreeRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_load_named_root(
@@ -9909,7 +11879,7 @@ open func loadNamedRoot(name: Data)throws  -> TreeRecord?  {
     )
 })
 }
-
+    
 open func publishNamedRoot(name: Data, tree: TreeRecord)throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_publish_named_root(
             self.uniffiCloneHandle(),
@@ -9918,7 +11888,7 @@ open func publishNamedRoot(name: Data, tree: TreeRecord)throws   {try rustCallWi
     )
 }
 }
-
+    
 open func put(tree: TreeRecord, key: Data, value: Data)throws  -> TreeRecord  {
     return try  FfiConverterTypeTreeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_put(
@@ -9929,16 +11899,16 @@ open func put(tree: TreeRecord, key: Data, value: Data)throws  -> TreeRecord  {
     )
 })
 }
-
+    
 open func rollback()throws   {try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_prollytransaction_rollback(
             self.uniffiCloneHandle(),$0
     )
 }
 }
+    
 
-
-
+    
 }
 
 
@@ -9988,9 +11958,9 @@ public func FfiConverterTypeProllyTransaction_lower(_ value: ProllyTransaction) 
 
 
 public protocol ProximityRecordVisitorCallback: AnyObject, Sendable {
-
+    
     func visit(record: ProximityRecordRecord)  -> Bool
-
+    
 }
 open class ProximityRecordVisitorCallbackImpl: ProximityRecordVisitorCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -10042,9 +12012,9 @@ open class ProximityRecordVisitorCallbackImpl: ProximityRecordVisitorCallback, @
         try! rustCall { uniffi_prolly_bindings_fn_free_proximityrecordvisitorcallback(handle, $0) }
     }
 
+    
 
-
-
+    
 open func visit(record: ProximityRecordRecord) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_proximityrecordvisitorcallback_visit(
@@ -10053,9 +12023,9 @@ open func visit(record: ProximityRecordRecord) -> Bool  {
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -10099,7 +12069,7 @@ fileprivate struct UniffiCallbackInterfaceProximityRecordVisitorCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -10175,9 +12145,9 @@ public func FfiConverterTypeProximityRecordVisitorCallback_lower(_ value: Proxim
 
 
 public protocol SecondaryIndexExtractorCallback: AnyObject, Sendable {
-
+    
     func extract(primaryKey: Data, sourceValue: Data) throws  -> [IndexEntryRecord]
-
+    
 }
 open class SecondaryIndexExtractorCallbackImpl: SecondaryIndexExtractorCallback, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -10229,9 +12199,9 @@ open class SecondaryIndexExtractorCallbackImpl: SecondaryIndexExtractorCallback,
         try! rustCall { uniffi_prolly_bindings_fn_free_secondaryindexextractorcallback(handle, $0) }
     }
 
+    
 
-
-
+    
 open func extract(primaryKey: Data, sourceValue: Data)throws  -> [IndexEntryRecord]  {
     return try  FfiConverterSequenceTypeIndexEntryRecord.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_method_secondaryindexextractorcallback_extract(
@@ -10241,9 +12211,9 @@ open func extract(primaryKey: Data, sourceValue: Data)throws  -> [IndexEntryReco
     )
 })
 }
+    
 
-
-
+    
 }
 
 
@@ -10289,7 +12259,7 @@ fileprivate struct UniffiCallbackInterfaceSecondaryIndexExtractorCallback {
                 )
             }
 
-
+            
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceTypeIndexEntryRecord.lower($0) }
             uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
@@ -10376,9 +12346,9 @@ public struct AcceleratorCatalogEntryRecord: Equatable, Hashable {
         self.manifest = manifest
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10392,8 +12362,8 @@ public struct FfiConverterTypeAcceleratorCatalogEntryRecord: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AcceleratorCatalogEntryRecord {
         return
             try AcceleratorCatalogEntryRecord(
-                kind: FfiConverterTypeCatalogAcceleratorKindRecord.read(from: &buf),
-                configurationFingerprint: FfiConverterData.read(from: &buf),
+                kind: FfiConverterTypeCatalogAcceleratorKindRecord.read(from: &buf), 
+                configurationFingerprint: FfiConverterData.read(from: &buf), 
                 manifest: FfiConverterData.read(from: &buf)
         )
     }
@@ -10440,9 +12410,9 @@ public struct ActiveIndexHealthRecord: Equatable, Hashable {
         self.indexVersion = indexVersion
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10456,11 +12426,11 @@ public struct FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActiveIndexHealthRecord {
         return
             try ActiveIndexHealthRecord(
-                name: FfiConverterData.read(from: &buf),
-                generation: FfiConverterUInt64.read(from: &buf),
-                fingerprint: FfiConverterData.read(from: &buf),
-                projection: FfiConverterTypeIndexProjectionRecord.read(from: &buf),
-                indexMapId: FfiConverterData.read(from: &buf),
+                name: FfiConverterData.read(from: &buf), 
+                generation: FfiConverterUInt64.read(from: &buf), 
+                fingerprint: FfiConverterData.read(from: &buf), 
+                projection: FfiConverterTypeIndexProjectionRecord.read(from: &buf), 
+                indexMapId: FfiConverterData.read(from: &buf), 
                 indexVersion: FfiConverterData.read(from: &buf)
         )
     }
@@ -10506,9 +12476,9 @@ public struct AuthenticatedProofBundleVerificationRecord: Equatable, Hashable {
         self.proofError = proofError
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10522,9 +12492,9 @@ public struct FfiConverterTypeAuthenticatedProofBundleVerificationRecord: FfiCon
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthenticatedProofBundleVerificationRecord {
         return
             try AuthenticatedProofBundleVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                envelope: FfiConverterTypeAuthenticatedProofEnvelopeVerificationRecord.read(from: &buf),
-                proof: FfiConverterOptionTypeProofBundleVerificationRecord.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                envelope: FfiConverterTypeAuthenticatedProofEnvelopeVerificationRecord.read(from: &buf), 
+                proof: FfiConverterOptionTypeProofBundleVerificationRecord.read(from: &buf), 
                 proofError: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -10576,9 +12546,9 @@ public struct AuthenticatedProofEnvelopeRecord: Equatable, Hashable {
         self.signature = signature
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10592,13 +12562,13 @@ public struct FfiConverterTypeAuthenticatedProofEnvelopeRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthenticatedProofEnvelopeRecord {
         return
             try AuthenticatedProofEnvelopeRecord(
-                algorithm: FfiConverterString.read(from: &buf),
-                keyId: FfiConverterData.read(from: &buf),
-                proofBundle: FfiConverterData.read(from: &buf),
-                context: FfiConverterData.read(from: &buf),
-                issuedAtMillis: FfiConverterOptionUInt64.read(from: &buf),
-                expiresAtMillis: FfiConverterOptionUInt64.read(from: &buf),
-                nonce: FfiConverterData.read(from: &buf),
+                algorithm: FfiConverterString.read(from: &buf), 
+                keyId: FfiConverterData.read(from: &buf), 
+                proofBundle: FfiConverterData.read(from: &buf), 
+                context: FfiConverterData.read(from: &buf), 
+                issuedAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
+                expiresAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
+                nonce: FfiConverterData.read(from: &buf), 
                 signature: FfiConverterData.read(from: &buf)
         )
     }
@@ -10662,9 +12632,9 @@ public struct AuthenticatedProofEnvelopeVerificationRecord: Equatable, Hashable 
         self.nonce = nonce
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10678,17 +12648,17 @@ public struct FfiConverterTypeAuthenticatedProofEnvelopeVerificationRecord: FfiC
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthenticatedProofEnvelopeVerificationRecord {
         return
             try AuthenticatedProofEnvelopeVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                signatureValid: FfiConverterBool.read(from: &buf),
-                timeValid: FfiConverterBool.read(from: &buf),
-                notYetValid: FfiConverterBool.read(from: &buf),
-                expired: FfiConverterBool.read(from: &buf),
-                algorithm: FfiConverterString.read(from: &buf),
-                keyId: FfiConverterData.read(from: &buf),
-                proofBundle: FfiConverterData.read(from: &buf),
-                context: FfiConverterData.read(from: &buf),
-                issuedAtMillis: FfiConverterOptionUInt64.read(from: &buf),
-                expiresAtMillis: FfiConverterOptionUInt64.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                signatureValid: FfiConverterBool.read(from: &buf), 
+                timeValid: FfiConverterBool.read(from: &buf), 
+                notYetValid: FfiConverterBool.read(from: &buf), 
+                expired: FfiConverterBool.read(from: &buf), 
+                algorithm: FfiConverterString.read(from: &buf), 
+                keyId: FfiConverterData.read(from: &buf), 
+                proofBundle: FfiConverterData.read(from: &buf), 
+                context: FfiConverterData.read(from: &buf), 
+                issuedAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
+                expiresAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
                 nonce: FfiConverterData.read(from: &buf)
         )
     }
@@ -10736,9 +12706,9 @@ public struct BatchApplyResultRecord: Equatable, Hashable {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10752,7 +12722,7 @@ public struct FfiConverterTypeBatchApplyResultRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchApplyResultRecord {
         return
             try BatchApplyResultRecord(
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                tree: FfiConverterTypeTreeRecord.read(from: &buf), 
                 stats: FfiConverterTypeBatchApplyStatsRecord.read(from: &buf)
         )
     }
@@ -10814,9 +12784,9 @@ public struct BatchApplyStatsRecord: Equatable, Hashable {
         self.cacheWrittenNodes = cacheWrittenNodes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10830,19 +12800,19 @@ public struct FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchApplyStatsRecord {
         return
             try BatchApplyStatsRecord(
-                inputMutations: FfiConverterUInt64.read(from: &buf),
-                effectiveMutations: FfiConverterUInt64.read(from: &buf),
-                preprocessInputSorted: FfiConverterBool.read(from: &buf),
-                affectedLeaves: FfiConverterUInt64.read(from: &buf),
-                changedLeaves: FfiConverterUInt64.read(from: &buf),
-                sparseLeafApplies: FfiConverterUInt64.read(from: &buf),
-                writtenNodes: FfiConverterUInt64.read(from: &buf),
-                writtenBytes: FfiConverterUInt64.read(from: &buf),
-                usedAppendFastPath: FfiConverterBool.read(from: &buf),
-                usedBatchedRoute: FfiConverterBool.read(from: &buf),
-                usedCoalescedRebuild: FfiConverterBool.read(from: &buf),
-                usedDeferredRebalancing: FfiConverterBool.read(from: &buf),
-                usedBottomUpRebuild: FfiConverterBool.read(from: &buf),
+                inputMutations: FfiConverterUInt64.read(from: &buf), 
+                effectiveMutations: FfiConverterUInt64.read(from: &buf), 
+                preprocessInputSorted: FfiConverterBool.read(from: &buf), 
+                affectedLeaves: FfiConverterUInt64.read(from: &buf), 
+                changedLeaves: FfiConverterUInt64.read(from: &buf), 
+                sparseLeafApplies: FfiConverterUInt64.read(from: &buf), 
+                writtenNodes: FfiConverterUInt64.read(from: &buf), 
+                writtenBytes: FfiConverterUInt64.read(from: &buf), 
+                usedAppendFastPath: FfiConverterBool.read(from: &buf), 
+                usedBatchedRoute: FfiConverterBool.read(from: &buf), 
+                usedCoalescedRebuild: FfiConverterBool.read(from: &buf), 
+                usedDeferredRebalancing: FfiConverterBool.read(from: &buf), 
+                usedBottomUpRebuild: FfiConverterBool.read(from: &buf), 
                 cacheWrittenNodes: FfiConverterBool.read(from: &buf)
         )
     }
@@ -10900,9 +12870,9 @@ public struct BlobGcPlanRecord: Equatable, Hashable {
         self.missingCandidates = missingCandidates
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10916,11 +12886,11 @@ public struct FfiConverterTypeBlobGcPlanRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlobGcPlanRecord {
         return
             try BlobGcPlanRecord(
-                reachability: FfiConverterTypeBlobGcReachabilityRecord.read(from: &buf),
-                candidateBlobs: FfiConverterUInt64.read(from: &buf),
-                reclaimableBlobs: FfiConverterSequenceTypeBlobRefRecord.read(from: &buf),
-                reclaimableBlobCount: FfiConverterUInt64.read(from: &buf),
-                reclaimableBlobBytes: FfiConverterUInt64.read(from: &buf),
+                reachability: FfiConverterTypeBlobGcReachabilityRecord.read(from: &buf), 
+                candidateBlobs: FfiConverterUInt64.read(from: &buf), 
+                reclaimableBlobs: FfiConverterSequenceTypeBlobRefRecord.read(from: &buf), 
+                reclaimableBlobCount: FfiConverterUInt64.read(from: &buf), 
+                reclaimableBlobBytes: FfiConverterUInt64.read(from: &buf), 
                 missingCandidates: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -10968,9 +12938,9 @@ public struct BlobGcReachabilityRecord: Equatable, Hashable {
         self.scannedValues = scannedValues
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -10984,10 +12954,10 @@ public struct FfiConverterTypeBlobGcReachabilityRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlobGcReachabilityRecord {
         return
             try BlobGcReachabilityRecord(
-                liveBlobs: FfiConverterSequenceTypeBlobRefRecord.read(from: &buf),
-                liveBlobCount: FfiConverterUInt64.read(from: &buf),
-                liveBlobBytes: FfiConverterUInt64.read(from: &buf),
-                scannedNodes: FfiConverterUInt64.read(from: &buf),
+                liveBlobs: FfiConverterSequenceTypeBlobRefRecord.read(from: &buf), 
+                liveBlobCount: FfiConverterUInt64.read(from: &buf), 
+                liveBlobBytes: FfiConverterUInt64.read(from: &buf), 
+                scannedNodes: FfiConverterUInt64.read(from: &buf), 
                 scannedValues: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11030,9 +13000,9 @@ public struct BlobGcSweepRecord: Equatable, Hashable {
         self.deletedBlobBytes = deletedBlobBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11046,8 +13016,8 @@ public struct FfiConverterTypeBlobGcSweepRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlobGcSweepRecord {
         return
             try BlobGcSweepRecord(
-                plan: FfiConverterTypeBlobGcPlanRecord.read(from: &buf),
-                deletedBlobs: FfiConverterUInt64.read(from: &buf),
+                plan: FfiConverterTypeBlobGcPlanRecord.read(from: &buf), 
+                deletedBlobs: FfiConverterUInt64.read(from: &buf), 
                 deletedBlobBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11086,9 +13056,9 @@ public struct BlobRefRecord: Equatable, Hashable {
         self.len = len
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11102,7 +13072,7 @@ public struct FfiConverterTypeBlobRefRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlobRefRecord {
         return
             try BlobRefRecord(
-                cid: FfiConverterData.read(from: &buf),
+                cid: FfiConverterData.read(from: &buf), 
                 len: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11129,6 +13099,60 @@ public func FfiConverterTypeBlobRefRecord_lower(_ value: BlobRefRecord) -> RustB
 }
 
 
+public struct BytesListResultRecord: Equatable, Hashable {
+    public var values: [Data]
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [Data], error: StoreErrorRecord?) {
+        self.values = values
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BytesListResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBytesListResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BytesListResultRecord {
+        return
+            try BytesListResultRecord(
+                values: FfiConverterSequenceData.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BytesListResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceData.write(value.values, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBytesListResultRecord_lift(_ buf: RustBuffer) throws -> BytesListResultRecord {
+    return try FfiConverterTypeBytesListResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBytesListResultRecord_lower(_ value: BytesListResultRecord) -> RustBuffer {
+    return FfiConverterTypeBytesListResultRecord.lower(value)
+}
+
+
 public struct CacheStatsRecord: Equatable, Hashable {
     public var cachedNodes: UInt64
     public var cachedBytes: UInt64
@@ -11144,9 +13168,9 @@ public struct CacheStatsRecord: Equatable, Hashable {
         self.pinnedBytes = pinnedBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11160,9 +13184,9 @@ public struct FfiConverterTypeCacheStatsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CacheStatsRecord {
         return
             try CacheStatsRecord(
-                cachedNodes: FfiConverterUInt64.read(from: &buf),
-                cachedBytes: FfiConverterUInt64.read(from: &buf),
-                pinnedNodes: FfiConverterUInt64.read(from: &buf),
+                cachedNodes: FfiConverterUInt64.read(from: &buf), 
+                cachedBytes: FfiConverterUInt64.read(from: &buf), 
+                pinnedNodes: FfiConverterUInt64.read(from: &buf), 
                 pinnedBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11204,9 +13228,9 @@ public struct ChangedSpanHintRecord: Equatable, Hashable {
         self.spans = spans
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11220,8 +13244,8 @@ public struct FfiConverterTypeChangedSpanHintRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChangedSpanHintRecord {
         return
             try ChangedSpanHintRecord(
-                baseRoot: FfiConverterOptionData.read(from: &buf),
-                changedRoot: FfiConverterOptionData.read(from: &buf),
+                baseRoot: FfiConverterOptionData.read(from: &buf), 
+                changedRoot: FfiConverterOptionData.read(from: &buf), 
                 spans: FfiConverterSequenceTypeChangedSpanRecord.read(from: &buf)
         )
     }
@@ -11260,9 +13284,9 @@ public struct ChangedSpanRecord: Equatable, Hashable {
         self.end = end
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11276,7 +13300,7 @@ public struct FfiConverterTypeChangedSpanRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChangedSpanRecord {
         return
             try ChangedSpanRecord(
-                start: FfiConverterData.read(from: &buf),
+                start: FfiConverterData.read(from: &buf), 
                 end: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -11320,9 +13344,9 @@ public struct CompositeAcceleratorConfigRecord: Equatable, Hashable {
         self.baseOverfetchMultiplier = baseOverfetchMultiplier
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11336,10 +13360,10 @@ public struct FfiConverterTypeCompositeAcceleratorConfigRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeAcceleratorConfigRecord {
         return
             try CompositeAcceleratorConfigRecord(
-                maxDeltaRecords: FfiConverterUInt64.read(from: &buf),
-                maxShadowRecords: FfiConverterUInt64.read(from: &buf),
-                maxDeltaRatioPpm: FfiConverterUInt32.read(from: &buf),
-                maxShadowRatioPpm: FfiConverterUInt32.read(from: &buf),
+                maxDeltaRecords: FfiConverterUInt64.read(from: &buf), 
+                maxShadowRecords: FfiConverterUInt64.read(from: &buf), 
+                maxDeltaRatioPpm: FfiConverterUInt32.read(from: &buf), 
+                maxShadowRatioPpm: FfiConverterUInt32.read(from: &buf), 
                 baseOverfetchMultiplier: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -11384,9 +13408,9 @@ public struct CompositeBuildLimitsRecord: Equatable, Hashable {
         self.maxDistanceEvaluations = maxDistanceEvaluations
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11400,9 +13424,9 @@ public struct FfiConverterTypeCompositeBuildLimitsRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildLimitsRecord {
         return
             try CompositeBuildLimitsRecord(
-                maxDiffEntries: FfiConverterOptionUInt64.read(from: &buf),
-                maxOwnedBytes: FfiConverterOptionUInt64.read(from: &buf),
-                maxEncodedOutputBytes: FfiConverterOptionUInt64.read(from: &buf),
+                maxDiffEntries: FfiConverterOptionUInt64.read(from: &buf), 
+                maxOwnedBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxEncodedOutputBytes: FfiConverterOptionUInt64.read(from: &buf), 
                 maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -11454,9 +13478,9 @@ public struct CompositeBuildOrRebuildOutcomeRecord {
         self.pqStats = pqStats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11470,13 +13494,13 @@ public struct FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildOrRebuildOutcomeRecord {
         return
             try CompositeBuildOrRebuildOutcomeRecord(
-                kind: FfiConverterTypeCompositeBuildOrRebuildKindRecord.read(from: &buf),
-                composite: FfiConverterOptionTypeBindingCompositeAccelerator.read(from: &buf),
-                hnsw: FfiConverterOptionTypeBindingHnswIndex.read(from: &buf),
-                pq: FfiConverterOptionTypeBindingProductQuantizer.read(from: &buf),
-                reasons: FfiConverterSequenceTypeFullRebuildReasonRecord.read(from: &buf),
-                compositeStats: FfiConverterTypeCompositeBuildStatsRecord.read(from: &buf),
-                hnswStats: FfiConverterOptionTypeHnswBuildStatsRecord.read(from: &buf),
+                kind: FfiConverterTypeCompositeBuildOrRebuildKindRecord.read(from: &buf), 
+                composite: FfiConverterOptionTypeBindingCompositeAccelerator.read(from: &buf), 
+                hnsw: FfiConverterOptionTypeBindingHnswIndex.read(from: &buf), 
+                pq: FfiConverterOptionTypeBindingProductQuantizer.read(from: &buf), 
+                reasons: FfiConverterSequenceTypeFullRebuildReasonRecord.read(from: &buf), 
+                compositeStats: FfiConverterTypeCompositeBuildStatsRecord.read(from: &buf), 
+                hnswStats: FfiConverterOptionTypeHnswBuildStatsRecord.read(from: &buf), 
                 pqStats: FfiConverterOptionTypeProductQuantizationBuildStatsRecord.read(from: &buf)
         )
     }
@@ -11522,9 +13546,9 @@ public struct CompositeBuildOutcomeRecord {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11538,8 +13562,8 @@ public struct FfiConverterTypeCompositeBuildOutcomeRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildOutcomeRecord {
         return
             try CompositeBuildOutcomeRecord(
-                accelerator: FfiConverterOptionTypeBindingCompositeAccelerator.read(from: &buf),
-                reasons: FfiConverterSequenceTypeFullRebuildReasonRecord.read(from: &buf),
+                accelerator: FfiConverterOptionTypeBindingCompositeAccelerator.read(from: &buf), 
+                reasons: FfiConverterSequenceTypeFullRebuildReasonRecord.read(from: &buf), 
                 stats: FfiConverterTypeCompositeBuildStatsRecord.read(from: &buf)
         )
     }
@@ -11594,9 +13618,9 @@ public struct CompositeBuildStatsRecord: Equatable, Hashable {
         self.distanceEvaluations = distanceEvaluations
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11610,15 +13634,15 @@ public struct FfiConverterTypeCompositeBuildStatsRecord: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildStatsRecord {
         return
             try CompositeBuildStatsRecord(
-                diffEntries: FfiConverterUInt64.read(from: &buf),
-                insertedRecords: FfiConverterUInt64.read(from: &buf),
-                vectorUpdatedRecords: FfiConverterUInt64.read(from: &buf),
-                valueOnlyRecords: FfiConverterUInt64.read(from: &buf),
-                deletedRecords: FfiConverterUInt64.read(from: &buf),
-                deltaRecords: FfiConverterUInt64.read(from: &buf),
-                shadowRecords: FfiConverterUInt64.read(from: &buf),
-                ownedBytesPeak: FfiConverterUInt64.read(from: &buf),
-                encodedOutputBytes: FfiConverterUInt64.read(from: &buf),
+                diffEntries: FfiConverterUInt64.read(from: &buf), 
+                insertedRecords: FfiConverterUInt64.read(from: &buf), 
+                vectorUpdatedRecords: FfiConverterUInt64.read(from: &buf), 
+                valueOnlyRecords: FfiConverterUInt64.read(from: &buf), 
+                deletedRecords: FfiConverterUInt64.read(from: &buf), 
+                deltaRecords: FfiConverterUInt64.read(from: &buf), 
+                shadowRecords: FfiConverterUInt64.read(from: &buf), 
+                ownedBytesPeak: FfiConverterUInt64.read(from: &buf), 
+                encodedOutputBytes: FfiConverterUInt64.read(from: &buf), 
                 distanceEvaluations: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11666,9 +13690,9 @@ public struct CompositeRebuildOptionsRecord: Equatable, Hashable {
         self.pqLimits = pqLimits
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11682,8 +13706,8 @@ public struct FfiConverterTypeCompositeRebuildOptionsRecord: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeRebuildOptionsRecord {
         return
             try CompositeRebuildOptionsRecord(
-                hnswLimits: FfiConverterTypeHnswBuildLimitsRecord.read(from: &buf),
-                pqWorkerThreads: FfiConverterUInt64.read(from: &buf),
+                hnswLimits: FfiConverterTypeHnswBuildLimitsRecord.read(from: &buf), 
+                pqWorkerThreads: FfiConverterUInt64.read(from: &buf), 
                 pqLimits: FfiConverterTypeProductQuantizationBuildLimitsRecord.read(from: &buf)
         )
     }
@@ -11734,9 +13758,9 @@ public struct ConfigRecord: Equatable, Hashable {
         self.formatBytes = formatBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11750,13 +13774,13 @@ public struct FfiConverterTypeConfigRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfigRecord {
         return
             try ConfigRecord(
-                minChunkSize: FfiConverterUInt64.read(from: &buf),
-                maxChunkSize: FfiConverterUInt64.read(from: &buf),
-                chunkingFactor: FfiConverterUInt32.read(from: &buf),
-                hashSeed: FfiConverterUInt64.read(from: &buf),
-                encoding: FfiConverterTypeEncodingRecord.read(from: &buf),
-                nodeCacheMaxNodes: FfiConverterOptionUInt64.read(from: &buf),
-                nodeCacheMaxBytes: FfiConverterOptionUInt64.read(from: &buf),
+                minChunkSize: FfiConverterUInt64.read(from: &buf), 
+                maxChunkSize: FfiConverterUInt64.read(from: &buf), 
+                chunkingFactor: FfiConverterUInt32.read(from: &buf), 
+                hashSeed: FfiConverterUInt64.read(from: &buf), 
+                encoding: FfiConverterTypeEncodingRecord.read(from: &buf), 
+                nodeCacheMaxNodes: FfiConverterOptionUInt64.read(from: &buf), 
+                nodeCacheMaxBytes: FfiConverterOptionUInt64.read(from: &buf), 
                 formatBytes: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -11800,9 +13824,9 @@ public struct ConflictPageRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11816,7 +13840,7 @@ public struct FfiConverterTypeConflictPageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConflictPageRecord {
         return
             try ConflictPageRecord(
-                conflicts: FfiConverterSequenceTypeConflictRecord.read(from: &buf),
+                conflicts: FfiConverterSequenceTypeConflictRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
         )
     }
@@ -11858,9 +13882,9 @@ public struct ConflictRecord: Equatable, Hashable {
         self.right = right
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11874,9 +13898,9 @@ public struct FfiConverterTypeConflictRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConflictRecord {
         return
             try ConflictRecord(
-                key: FfiConverterData.read(from: &buf),
-                base: FfiConverterOptionData.read(from: &buf),
-                left: FfiConverterOptionData.read(from: &buf),
+                key: FfiConverterData.read(from: &buf), 
+                base: FfiConverterOptionData.read(from: &buf), 
+                left: FfiConverterOptionData.read(from: &buf), 
                 right: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -11920,9 +13944,9 @@ public struct ContentGraphLimitsRecord: Equatable, Hashable {
         self.maxReferencesPerObject = maxReferencesPerObject
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11936,9 +13960,9 @@ public struct FfiConverterTypeContentGraphLimitsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContentGraphLimitsRecord {
         return
             try ContentGraphLimitsRecord(
-                maxObjects: FfiConverterUInt64.read(from: &buf),
-                maxDepth: FfiConverterUInt64.read(from: &buf),
-                maxBytes: FfiConverterUInt64.read(from: &buf),
+                maxObjects: FfiConverterUInt64.read(from: &buf), 
+                maxDepth: FfiConverterUInt64.read(from: &buf), 
+                maxBytes: FfiConverterUInt64.read(from: &buf), 
                 maxReferencesPerObject: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11978,9 +14002,9 @@ public struct CrdtConfigRecord: Equatable, Hashable {
         self.deletePolicy = deletePolicy
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -11994,7 +14018,7 @@ public struct FfiConverterTypeCrdtConfigRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrdtConfigRecord {
         return
             try CrdtConfigRecord(
-                strategy: FfiConverterTypeCrdtMergeStrategyKind.read(from: &buf),
+                strategy: FfiConverterTypeCrdtMergeStrategyKind.read(from: &buf), 
                 deletePolicy: FfiConverterTypeCrdtDeletePolicyKind.read(from: &buf)
         )
     }
@@ -12032,9 +14056,9 @@ public struct CrdtResolutionRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12048,7 +14072,7 @@ public struct FfiConverterTypeCrdtResolutionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrdtResolutionRecord {
         return
             try CrdtResolutionRecord(
-                kind: FfiConverterTypeCrdtResolutionKind.read(from: &buf),
+                kind: FfiConverterTypeCrdtResolutionKind.read(from: &buf), 
                 value: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -12092,9 +14116,9 @@ public struct CursorWindowRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12108,10 +14132,10 @@ public struct FfiConverterTypeCursorWindowRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CursorWindowRecord {
         return
             try CursorWindowRecord(
-                positionKey: FfiConverterOptionData.read(from: &buf),
-                positionValue: FfiConverterOptionData.read(from: &buf),
-                found: FfiConverterBool.read(from: &buf),
-                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf),
+                positionKey: FfiConverterOptionData.read(from: &buf), 
+                positionValue: FfiConverterOptionData.read(from: &buf), 
+                found: FfiConverterBool.read(from: &buf), 
+                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
         )
     }
@@ -12160,9 +14184,9 @@ public struct DiffPageProofRecord: Equatable, Hashable {
         self.limit = limit
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12176,11 +14200,11 @@ public struct FfiConverterTypeDiffPageProofRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffPageProofRecord {
         return
             try DiffPageProofRecord(
-                base: FfiConverterTypeRangePageProofRecord.read(from: &buf),
-                other: FfiConverterTypeRangePageProofRecord.read(from: &buf),
-                lookaheadBase: FfiConverterOptionTypeKeyProofRecord.read(from: &buf),
-                lookaheadOther: FfiConverterOptionTypeKeyProofRecord.read(from: &buf),
-                requestedEnd: FfiConverterOptionData.read(from: &buf),
+                base: FfiConverterTypeRangePageProofRecord.read(from: &buf), 
+                other: FfiConverterTypeRangePageProofRecord.read(from: &buf), 
+                lookaheadBase: FfiConverterOptionTypeKeyProofRecord.read(from: &buf), 
+                lookaheadOther: FfiConverterOptionTypeKeyProofRecord.read(from: &buf), 
+                requestedEnd: FfiConverterOptionData.read(from: &buf), 
                 limit: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12242,9 +14266,9 @@ public struct DiffPageProofVerificationRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12258,17 +14282,17 @@ public struct FfiConverterTypeDiffPageProofVerificationRecord: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffPageProofVerificationRecord {
         return
             try DiffPageProofVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                baseValid: FfiConverterBool.read(from: &buf),
-                otherValid: FfiConverterBool.read(from: &buf),
-                lookaheadValid: FfiConverterBool.read(from: &buf),
-                baseRoot: FfiConverterOptionData.read(from: &buf),
-                otherRoot: FfiConverterOptionData.read(from: &buf),
-                after: FfiConverterOptionData.read(from: &buf),
-                requestedEnd: FfiConverterOptionData.read(from: &buf),
-                proofEnd: FfiConverterOptionData.read(from: &buf),
-                limit: FfiConverterUInt64.read(from: &buf),
-                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                baseValid: FfiConverterBool.read(from: &buf), 
+                otherValid: FfiConverterBool.read(from: &buf), 
+                lookaheadValid: FfiConverterBool.read(from: &buf), 
+                baseRoot: FfiConverterOptionData.read(from: &buf), 
+                otherRoot: FfiConverterOptionData.read(from: &buf), 
+                after: FfiConverterOptionData.read(from: &buf), 
+                requestedEnd: FfiConverterOptionData.read(from: &buf), 
+                proofEnd: FfiConverterOptionData.read(from: &buf), 
+                limit: FfiConverterUInt64.read(from: &buf), 
+                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
         )
     }
@@ -12316,9 +14340,9 @@ public struct DiffPageRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12332,7 +14356,7 @@ public struct FfiConverterTypeDiffPageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffPageRecord {
         return
             try DiffPageRecord(
-                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf),
+                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
         )
     }
@@ -12376,9 +14400,9 @@ public struct DiffRecord: Equatable, Hashable {
         self.newValue = newValue
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12392,10 +14416,10 @@ public struct FfiConverterTypeDiffRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffRecord {
         return
             try DiffRecord(
-                kind: FfiConverterTypeDiffKind.read(from: &buf),
-                key: FfiConverterData.read(from: &buf),
-                value: FfiConverterOptionData.read(from: &buf),
-                oldValue: FfiConverterOptionData.read(from: &buf),
+                kind: FfiConverterTypeDiffKind.read(from: &buf), 
+                key: FfiConverterData.read(from: &buf), 
+                value: FfiConverterOptionData.read(from: &buf), 
+                oldValue: FfiConverterOptionData.read(from: &buf), 
                 newValue: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -12444,9 +14468,9 @@ public struct DiffTraversalStatsRecord: Equatable, Hashable {
         self.emittedDiffs = emittedDiffs
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12460,11 +14484,11 @@ public struct FfiConverterTypeDiffTraversalStatsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffTraversalStatsRecord {
         return
             try DiffTraversalStatsRecord(
-                comparedNodes: FfiConverterUInt64.read(from: &buf),
-                reusedSubtrees: FfiConverterUInt64.read(from: &buf),
-                addedSubtrees: FfiConverterUInt64.read(from: &buf),
-                removedSubtrees: FfiConverterUInt64.read(from: &buf),
-                collectedFallbacks: FfiConverterUInt64.read(from: &buf),
+                comparedNodes: FfiConverterUInt64.read(from: &buf), 
+                reusedSubtrees: FfiConverterUInt64.read(from: &buf), 
+                addedSubtrees: FfiConverterUInt64.read(from: &buf), 
+                removedSubtrees: FfiConverterUInt64.read(from: &buf), 
+                collectedFallbacks: FfiConverterUInt64.read(from: &buf), 
                 emittedDiffs: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12506,9 +14530,9 @@ public struct EncodingRecord: Equatable, Hashable {
         self.customName = customName
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12522,7 +14546,7 @@ public struct FfiConverterTypeEncodingRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EncodingRecord {
         return
             try EncodingRecord(
-                kind: FfiConverterTypeEncodingKind.read(from: &buf),
+                kind: FfiConverterTypeEncodingKind.read(from: &buf), 
                 customName: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -12560,9 +14584,9 @@ public struct EntryRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12576,7 +14600,7 @@ public struct FfiConverterTypeEntryRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EntryRecord {
         return
             try EntryRecord(
-                key: FfiConverterData.read(from: &buf),
+                key: FfiConverterData.read(from: &buf), 
                 value: FfiConverterData.read(from: &buf)
         )
     }
@@ -12614,9 +14638,9 @@ public struct ExactProximityRecordRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12630,7 +14654,7 @@ public struct FfiConverterTypeExactProximityRecordRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExactProximityRecordRecord {
         return
             try ExactProximityRecordRecord(
-                vector: FfiConverterSequenceFloat.read(from: &buf),
+                vector: FfiConverterSequenceFloat.read(from: &buf), 
                 value: FfiConverterData.read(from: &buf)
         )
     }
@@ -12670,9 +14694,9 @@ public struct FullRebuildReasonRecord: Equatable, Hashable {
         self.maximum = maximum
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12686,8 +14710,8 @@ public struct FfiConverterTypeFullRebuildReasonRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FullRebuildReasonRecord {
         return
             try FullRebuildReasonRecord(
-                kind: FfiConverterTypeFullRebuildReasonKindRecord.read(from: &buf),
-                actual: FfiConverterUInt64.read(from: &buf),
+                kind: FfiConverterTypeFullRebuildReasonKindRecord.read(from: &buf), 
+                actual: FfiConverterUInt64.read(from: &buf), 
                 maximum: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12734,9 +14758,9 @@ public struct GcPlanRecord: Equatable, Hashable {
         self.missingCandidates = missingCandidates
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12750,11 +14774,11 @@ public struct FfiConverterTypeGcPlanRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GcPlanRecord {
         return
             try GcPlanRecord(
-                reachability: FfiConverterTypeGcReachabilityRecord.read(from: &buf),
-                candidateNodes: FfiConverterUInt64.read(from: &buf),
-                reclaimableCids: FfiConverterSequenceData.read(from: &buf),
-                reclaimableNodes: FfiConverterUInt64.read(from: &buf),
-                reclaimableBytes: FfiConverterUInt64.read(from: &buf),
+                reachability: FfiConverterTypeGcReachabilityRecord.read(from: &buf), 
+                candidateNodes: FfiConverterUInt64.read(from: &buf), 
+                reclaimableCids: FfiConverterSequenceData.read(from: &buf), 
+                reclaimableNodes: FfiConverterUInt64.read(from: &buf), 
+                reclaimableBytes: FfiConverterUInt64.read(from: &buf), 
                 missingCandidates: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12802,9 +14826,9 @@ public struct GcReachabilityRecord: Equatable, Hashable {
         self.internalNodes = internalNodes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12818,10 +14842,10 @@ public struct FfiConverterTypeGcReachabilityRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GcReachabilityRecord {
         return
             try GcReachabilityRecord(
-                liveCids: FfiConverterSequenceData.read(from: &buf),
-                liveNodes: FfiConverterUInt64.read(from: &buf),
-                liveBytes: FfiConverterUInt64.read(from: &buf),
-                leafNodes: FfiConverterUInt64.read(from: &buf),
+                liveCids: FfiConverterSequenceData.read(from: &buf), 
+                liveNodes: FfiConverterUInt64.read(from: &buf), 
+                liveBytes: FfiConverterUInt64.read(from: &buf), 
+                leafNodes: FfiConverterUInt64.read(from: &buf), 
                 internalNodes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12864,9 +14888,9 @@ public struct GcSweepRecord: Equatable, Hashable {
         self.deletedBytes = deletedBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12880,8 +14904,8 @@ public struct FfiConverterTypeGcSweepRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GcSweepRecord {
         return
             try GcSweepRecord(
-                plan: FfiConverterTypeGcPlanRecord.read(from: &buf),
-                deletedNodes: FfiConverterUInt64.read(from: &buf),
+                plan: FfiConverterTypeGcPlanRecord.read(from: &buf), 
+                deletedNodes: FfiConverterUInt64.read(from: &buf), 
                 deletedBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12926,9 +14950,9 @@ public struct HnswBuildLimitsRecord: Equatable, Hashable {
         self.maxEncodedGraphBytes = maxEncodedGraphBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -12942,10 +14966,10 @@ public struct FfiConverterTypeHnswBuildLimitsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HnswBuildLimitsRecord {
         return
             try HnswBuildLimitsRecord(
-                maxRecords: FfiConverterOptionUInt64.read(from: &buf),
-                maxOwnedBytes: FfiConverterOptionUInt64.read(from: &buf),
-                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf),
-                workerThreads: FfiConverterUInt64.read(from: &buf),
+                maxRecords: FfiConverterOptionUInt64.read(from: &buf), 
+                maxOwnedBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf), 
+                workerThreads: FfiConverterUInt64.read(from: &buf), 
                 maxEncodedGraphBytes: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -12986,9 +15010,9 @@ public struct HnswBuildResultRecord {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13002,7 +15026,7 @@ public struct FfiConverterTypeHnswBuildResultRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HnswBuildResultRecord {
         return
             try HnswBuildResultRecord(
-                index: FfiConverterTypeBindingHnswIndex.read(from: &buf),
+                index: FfiConverterTypeBindingHnswIndex.read(from: &buf), 
                 stats: FfiConverterTypeHnswBuildStatsRecord.read(from: &buf)
         )
     }
@@ -13048,9 +15072,9 @@ public struct HnswBuildStatsRecord: Equatable, Hashable {
         self.encodedGraphBytes = encodedGraphBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13064,11 +15088,11 @@ public struct FfiConverterTypeHnswBuildStatsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HnswBuildStatsRecord {
         return
             try HnswBuildStatsRecord(
-                records: FfiConverterUInt64.read(from: &buf),
-                distanceEvaluations: FfiConverterUInt64.read(from: &buf),
-                directedEdges: FfiConverterUInt64.read(from: &buf),
-                maximumLevel: FfiConverterUInt8.read(from: &buf),
-                ownedBytes: FfiConverterUInt64.read(from: &buf),
+                records: FfiConverterUInt64.read(from: &buf), 
+                distanceEvaluations: FfiConverterUInt64.read(from: &buf), 
+                directedEdges: FfiConverterUInt64.read(from: &buf), 
+                maximumLevel: FfiConverterUInt8.read(from: &buf), 
+                ownedBytes: FfiConverterUInt64.read(from: &buf), 
                 encodedGraphBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -13120,9 +15144,9 @@ public struct HnswConfigRecord: Equatable, Hashable {
         self.routingVectorEncoding = routingVectorEncoding
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13136,12 +15160,12 @@ public struct FfiConverterTypeHnswConfigRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HnswConfigRecord {
         return
             try HnswConfigRecord(
-                maxConnections: FfiConverterUInt16.read(from: &buf),
-                efConstruction: FfiConverterUInt32.read(from: &buf),
-                efSearch: FfiConverterUInt32.read(from: &buf),
-                levelBits: FfiConverterUInt8.read(from: &buf),
-                overfetchMultiplier: FfiConverterUInt32.read(from: &buf),
-                seed: FfiConverterUInt64.read(from: &buf),
+                maxConnections: FfiConverterUInt16.read(from: &buf), 
+                efConstruction: FfiConverterUInt32.read(from: &buf), 
+                efSearch: FfiConverterUInt32.read(from: &buf), 
+                levelBits: FfiConverterUInt8.read(from: &buf), 
+                overfetchMultiplier: FfiConverterUInt32.read(from: &buf), 
+                seed: FfiConverterUInt64.read(from: &buf), 
                 routingVectorEncoding: FfiConverterTypeHnswRoutingVectorEncodingRecord.read(from: &buf)
         )
     }
@@ -13184,9 +15208,9 @@ public struct HostStoreBatchGetResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13200,7 +15224,7 @@ public struct FfiConverterTypeHostStoreBatchGetResultRecord: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreBatchGetResultRecord {
         return
             try HostStoreBatchGetResultRecord(
-                values: FfiConverterSequenceOptionData.read(from: &buf),
+                values: FfiConverterSequenceOptionData.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13238,9 +15262,9 @@ public struct HostStoreBoolResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13254,7 +15278,7 @@ public struct FfiConverterTypeHostStoreBoolResultRecord: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreBoolResultRecord {
         return
             try HostStoreBoolResultRecord(
-                value: FfiConverterBool.read(from: &buf),
+                value: FfiConverterBool.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13292,9 +15316,9 @@ public struct HostStoreBytesResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13308,7 +15332,7 @@ public struct FfiConverterTypeHostStoreBytesResultRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreBytesResultRecord {
         return
             try HostStoreBytesResultRecord(
-                value: FfiConverterOptionData.read(from: &buf),
+                value: FfiConverterOptionData.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13346,9 +15370,9 @@ public struct HostStoreListBytesResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13362,7 +15386,7 @@ public struct FfiConverterTypeHostStoreListBytesResultRecord: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreListBytesResultRecord {
         return
             try HostStoreListBytesResultRecord(
-                values: FfiConverterSequenceData.read(from: &buf),
+                values: FfiConverterSequenceData.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13400,9 +15424,9 @@ public struct HostStoreListRootsResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13416,7 +15440,7 @@ public struct FfiConverterTypeHostStoreListRootsResultRecord: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreListRootsResultRecord {
         return
             try HostStoreListRootsResultRecord(
-                values: FfiConverterSequenceTypeHostStoreNamedRootManifestRecord.read(from: &buf),
+                values: FfiConverterSequenceTypeHostStoreNamedRootManifestRecord.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13454,9 +15478,9 @@ public struct HostStoreNamedRootManifestRecord: Equatable, Hashable {
         self.manifest = manifest
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13470,7 +15494,7 @@ public struct FfiConverterTypeHostStoreNamedRootManifestRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreNamedRootManifestRecord {
         return
             try HostStoreNamedRootManifestRecord(
-                name: FfiConverterData.read(from: &buf),
+                name: FfiConverterData.read(from: &buf), 
                 manifest: FfiConverterTypeRootManifestRecord.read(from: &buf)
         )
     }
@@ -13510,9 +15534,9 @@ public struct HostStoreRootCasResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13526,8 +15550,8 @@ public struct FfiConverterTypeHostStoreRootCasResultRecord: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreRootCasResultRecord {
         return
             try HostStoreRootCasResultRecord(
-                applied: FfiConverterBool.read(from: &buf),
-                current: FfiConverterOptionTypeRootManifestRecord.read(from: &buf),
+                applied: FfiConverterBool.read(from: &buf), 
+                current: FfiConverterOptionTypeRootManifestRecord.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13566,9 +15590,9 @@ public struct HostStoreRootResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13582,7 +15606,7 @@ public struct FfiConverterTypeHostStoreRootResultRecord: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostStoreRootResultRecord {
         return
             try HostStoreRootResultRecord(
-                value: FfiConverterOptionTypeRootManifestRecord.read(from: &buf),
+                value: FfiConverterOptionTypeRootManifestRecord.read(from: &buf), 
                 error: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13618,9 +15642,9 @@ public struct HostStoreUnitResultRecord: Equatable, Hashable {
         self.error = error
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13680,9 +15704,9 @@ public struct IndexBuildResultRecord: Equatable, Hashable {
         self.activated = activated
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13696,12 +15720,12 @@ public struct FfiConverterTypeIndexBuildResultRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexBuildResultRecord {
         return
             try IndexBuildResultRecord(
-                sourceVersion: FfiConverterData.read(from: &buf),
-                indexVersion: FfiConverterData.read(from: &buf),
-                catalogVersion: FfiConverterData.read(from: &buf),
-                generation: FfiConverterUInt64.read(from: &buf),
-                entries: FfiConverterUInt64.read(from: &buf),
-                attempts: FfiConverterUInt64.read(from: &buf),
+                sourceVersion: FfiConverterData.read(from: &buf), 
+                indexVersion: FfiConverterData.read(from: &buf), 
+                catalogVersion: FfiConverterData.read(from: &buf), 
+                generation: FfiConverterUInt64.read(from: &buf), 
+                entries: FfiConverterUInt64.read(from: &buf), 
+                attempts: FfiConverterUInt64.read(from: &buf), 
                 activated: FfiConverterBool.read(from: &buf)
         )
     }
@@ -13744,9 +15768,9 @@ public struct IndexEntryRecord: Equatable, Hashable {
         self.projection = projection
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13760,7 +15784,7 @@ public struct FfiConverterTypeIndexEntryRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexEntryRecord {
         return
             try IndexEntryRecord(
-                term: FfiConverterData.read(from: &buf),
+                term: FfiConverterData.read(from: &buf), 
                 projection: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -13800,9 +15824,9 @@ public struct IndexMatchRecord: Equatable, Hashable {
         self.projection = projection
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13816,8 +15840,8 @@ public struct FfiConverterTypeIndexMatchRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexMatchRecord {
         return
             try IndexMatchRecord(
-                term: FfiConverterData.read(from: &buf),
-                primaryKey: FfiConverterData.read(from: &buf),
+                term: FfiConverterData.read(from: &buf), 
+                primaryKey: FfiConverterData.read(from: &buf), 
                 projection: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -13856,9 +15880,9 @@ public struct IndexPageRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13872,7 +15896,7 @@ public struct FfiConverterTypeIndexPageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexPageRecord {
         return
             try IndexPageRecord(
-                matches: FfiConverterSequenceTypeIndexMatchRecord.read(from: &buf),
+                matches: FfiConverterSequenceTypeIndexMatchRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -13924,9 +15948,9 @@ public struct IndexVerificationRecord: Equatable, Hashable {
         self.canonical = canonical
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -13940,14 +15964,14 @@ public struct FfiConverterTypeIndexVerificationRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexVerificationRecord {
         return
             try IndexVerificationRecord(
-                name: FfiConverterData.read(from: &buf),
-                sourceVersion: FfiConverterData.read(from: &buf),
-                expectedIndexVersion: FfiConverterData.read(from: &buf),
-                actualIndexVersion: FfiConverterData.read(from: &buf),
-                expectedEntries: FfiConverterUInt64.read(from: &buf),
-                actualEntries: FfiConverterUInt64.read(from: &buf),
-                semanticDifferences: FfiConverterUInt64.read(from: &buf),
-                valid: FfiConverterBool.read(from: &buf),
+                name: FfiConverterData.read(from: &buf), 
+                sourceVersion: FfiConverterData.read(from: &buf), 
+                expectedIndexVersion: FfiConverterData.read(from: &buf), 
+                actualIndexVersion: FfiConverterData.read(from: &buf), 
+                expectedEntries: FfiConverterUInt64.read(from: &buf), 
+                actualEntries: FfiConverterUInt64.read(from: &buf), 
+                semanticDifferences: FfiConverterUInt64.read(from: &buf), 
+                valid: FfiConverterBool.read(from: &buf), 
                 canonical: FfiConverterBool.read(from: &buf)
         )
     }
@@ -13998,9 +16022,9 @@ public struct IndexedMapHealthRecord: Equatable, Hashable {
         self.supportsTransactions = supportsTransactions
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14014,10 +16038,10 @@ public struct FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedMapHealthRecord {
         return
             try IndexedMapHealthRecord(
-                sourceMapId: FfiConverterData.read(from: &buf),
-                sourceVersion: FfiConverterOptionData.read(from: &buf),
-                catalogVersion: FfiConverterOptionData.read(from: &buf),
-                activeIndexes: FfiConverterSequenceTypeActiveIndexHealthRecord.read(from: &buf),
+                sourceMapId: FfiConverterData.read(from: &buf), 
+                sourceVersion: FfiConverterOptionData.read(from: &buf), 
+                catalogVersion: FfiConverterOptionData.read(from: &buf), 
+                activeIndexes: FfiConverterSequenceTypeActiveIndexHealthRecord.read(from: &buf), 
                 supportsTransactions: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14082,9 +16106,9 @@ public struct IndexedMapMetricsRecord: Equatable, Hashable {
         self.retainedRoots = retainedRoots
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14098,19 +16122,19 @@ public struct FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedMapMetricsRecord {
         return
             try IndexedMapMetricsRecord(
-                normalizedSourceMutations: FfiConverterUInt64.read(from: &buf),
-                recordsExtracted: FfiConverterUInt64.read(from: &buf),
-                termsEmitted: FfiConverterUInt64.read(from: &buf),
-                projectedBytes: FfiConverterUInt64.read(from: &buf),
-                physicalUpserts: FfiConverterUInt64.read(from: &buf),
-                physicalDeletes: FfiConverterUInt64.read(from: &buf),
-                unchangedEmissionsSkipped: FfiConverterUInt64.read(from: &buf),
-                sourceNodesWritten: FfiConverterUInt64.read(from: &buf),
-                indexNodesWritten: FfiConverterUInt64.read(from: &buf),
-                catalogNodesWritten: FfiConverterUInt64.read(from: &buf),
-                retries: FfiConverterUInt64.read(from: &buf),
-                buildAttempts: FfiConverterUInt64.read(from: &buf),
-                verificationOutcomes: FfiConverterUInt64.read(from: &buf),
+                normalizedSourceMutations: FfiConverterUInt64.read(from: &buf), 
+                recordsExtracted: FfiConverterUInt64.read(from: &buf), 
+                termsEmitted: FfiConverterUInt64.read(from: &buf), 
+                projectedBytes: FfiConverterUInt64.read(from: &buf), 
+                physicalUpserts: FfiConverterUInt64.read(from: &buf), 
+                physicalDeletes: FfiConverterUInt64.read(from: &buf), 
+                unchangedEmissionsSkipped: FfiConverterUInt64.read(from: &buf), 
+                sourceNodesWritten: FfiConverterUInt64.read(from: &buf), 
+                indexNodesWritten: FfiConverterUInt64.read(from: &buf), 
+                catalogNodesWritten: FfiConverterUInt64.read(from: &buf), 
+                retries: FfiConverterUInt64.read(from: &buf), 
+                buildAttempts: FfiConverterUInt64.read(from: &buf), 
+                verificationOutcomes: FfiConverterUInt64.read(from: &buf), 
                 retainedRoots: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -14170,9 +16194,9 @@ public struct IndexedRetentionRecord: Equatable, Hashable {
         self.removedNamedRoots = removedNamedRoots
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14186,12 +16210,12 @@ public struct FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedRetentionRecord {
         return
             try IndexedRetentionRecord(
-                retainedSourceVersions: FfiConverterSequenceData.read(from: &buf),
-                removedSourceVersions: FfiConverterSequenceData.read(from: &buf),
-                retainedIndexVersions: FfiConverterSequenceData.read(from: &buf),
-                removedIndexVersions: FfiConverterSequenceData.read(from: &buf),
-                removedCatalogVersions: FfiConverterSequenceData.read(from: &buf),
-                removedCheckpointRecords: FfiConverterUInt64.read(from: &buf),
+                retainedSourceVersions: FfiConverterSequenceData.read(from: &buf), 
+                removedSourceVersions: FfiConverterSequenceData.read(from: &buf), 
+                retainedIndexVersions: FfiConverterSequenceData.read(from: &buf), 
+                removedIndexVersions: FfiConverterSequenceData.read(from: &buf), 
+                removedCatalogVersions: FfiConverterSequenceData.read(from: &buf), 
+                removedCheckpointRecords: FfiConverterUInt64.read(from: &buf), 
                 removedNamedRoots: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -14234,9 +16258,9 @@ public struct IndexedSnapshotIdRecord: Equatable, Hashable {
         self.catalogVersion = catalogVersion
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14250,7 +16274,7 @@ public struct FfiConverterTypeIndexedSnapshotIdRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedSnapshotIdRecord {
         return
             try IndexedSnapshotIdRecord(
-                sourceVersion: FfiConverterData.read(from: &buf),
+                sourceVersion: FfiConverterData.read(from: &buf), 
                 catalogVersion: FfiConverterData.read(from: &buf)
         )
     }
@@ -14292,9 +16316,9 @@ public struct IndexedSourceRecord: Equatable, Hashable {
         self.sourceValue = sourceValue
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14308,9 +16332,9 @@ public struct FfiConverterTypeIndexedSourceRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedSourceRecord {
         return
             try IndexedSourceRecord(
-                term: FfiConverterData.read(from: &buf),
-                primaryKey: FfiConverterData.read(from: &buf),
-                projection: FfiConverterOptionData.read(from: &buf),
+                term: FfiConverterData.read(from: &buf), 
+                primaryKey: FfiConverterData.read(from: &buf), 
+                projection: FfiConverterOptionData.read(from: &buf), 
                 sourceValue: FfiConverterData.read(from: &buf)
         )
     }
@@ -14352,9 +16376,9 @@ public struct IndexedUpdateRecord: Equatable, Hashable {
         self.current = current
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14368,8 +16392,8 @@ public struct FfiConverterTypeIndexedUpdateRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedUpdateRecord {
         return
             try IndexedUpdateRecord(
-                kind: FfiConverterTypeIndexedUpdateKind.read(from: &buf),
-                previousSourceVersion: FfiConverterOptionData.read(from: &buf),
+                kind: FfiConverterTypeIndexedUpdateKind.read(from: &buf), 
+                previousSourceVersion: FfiConverterOptionData.read(from: &buf), 
                 current: FfiConverterOptionTypeIndexedVersionRecord.read(from: &buf)
         )
     }
@@ -14410,9 +16434,9 @@ public struct IndexedVersionRecord: Equatable, Hashable {
         self.indexCount = indexCount
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14426,8 +16450,8 @@ public struct FfiConverterTypeIndexedVersionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedVersionRecord {
         return
             try IndexedVersionRecord(
-                sourceVersion: FfiConverterData.read(from: &buf),
-                catalogVersion: FfiConverterOptionData.read(from: &buf),
+                sourceVersion: FfiConverterData.read(from: &buf), 
+                catalogVersion: FfiConverterOptionData.read(from: &buf), 
                 indexCount: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -14464,9 +16488,9 @@ public struct JsonDocumentRecord: Equatable, Hashable {
         self.json = json
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14518,9 +16542,9 @@ public struct KeyProofRecord: Equatable, Hashable {
         self.path = path
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14534,8 +16558,8 @@ public struct FfiConverterTypeKeyProofRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyProofRecord {
         return
             try KeyProofRecord(
-                root: FfiConverterOptionData.read(from: &buf),
-                key: FfiConverterData.read(from: &buf),
+                root: FfiConverterOptionData.read(from: &buf), 
+                key: FfiConverterData.read(from: &buf), 
                 path: FfiConverterSequenceTypeNodeRecord.read(from: &buf)
         )
     }
@@ -14582,9 +16606,9 @@ public struct KeyProofVerificationRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14598,11 +16622,11 @@ public struct FfiConverterTypeKeyProofVerificationRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyProofVerificationRecord {
         return
             try KeyProofVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                exists: FfiConverterBool.read(from: &buf),
-                absence: FfiConverterBool.read(from: &buf),
-                root: FfiConverterOptionData.read(from: &buf),
-                key: FfiConverterData.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                exists: FfiConverterBool.read(from: &buf), 
+                absence: FfiConverterBool.read(from: &buf), 
+                root: FfiConverterOptionData.read(from: &buf), 
+                key: FfiConverterData.read(from: &buf), 
                 value: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -14642,9 +16666,9 @@ public struct LargeValueConfigRecord: Equatable, Hashable {
         self.inlineThreshold = inlineThreshold
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14698,9 +16722,9 @@ public struct MapCatalogVerificationRecord: Equatable, Hashable {
         self.reachableBytes = reachableBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14714,9 +16738,9 @@ public struct FfiConverterTypeMapCatalogVerificationRecord: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapCatalogVerificationRecord {
         return
             try MapCatalogVerificationRecord(
-                head: FfiConverterData.read(from: &buf),
-                versionCount: FfiConverterUInt64.read(from: &buf),
-                reachableNodes: FfiConverterUInt64.read(from: &buf),
+                head: FfiConverterData.read(from: &buf), 
+                versionCount: FfiConverterUInt64.read(from: &buf), 
+                reachableNodes: FfiConverterUInt64.read(from: &buf), 
                 reachableBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -14758,9 +16782,9 @@ public struct MapChangeEventRecord: Equatable, Hashable {
         self.diffs = diffs
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14774,8 +16798,8 @@ public struct FfiConverterTypeMapChangeEventRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapChangeEventRecord {
         return
             try MapChangeEventRecord(
-                previous: FfiConverterOptionData.read(from: &buf),
-                current: FfiConverterTypeMapVersionRecord.read(from: &buf),
+                previous: FfiConverterOptionData.read(from: &buf), 
+                current: FfiConverterTypeMapVersionRecord.read(from: &buf), 
                 diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf)
         )
     }
@@ -14816,9 +16840,9 @@ public struct MapUpdateRecord: Equatable, Hashable {
         self.current = current
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14832,8 +16856,8 @@ public struct FfiConverterTypeMapUpdateRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapUpdateRecord {
         return
             try MapUpdateRecord(
-                kind: FfiConverterTypeMapUpdateKind.read(from: &buf),
-                previous: FfiConverterOptionData.read(from: &buf),
+                kind: FfiConverterTypeMapUpdateKind.read(from: &buf), 
+                previous: FfiConverterOptionData.read(from: &buf), 
                 current: FfiConverterOptionTypeMapVersionRecord.read(from: &buf)
         )
     }
@@ -14887,13 +16911,13 @@ public struct MapVersionRecord: Equatable, Hashable {
     public init(
         /**
          * Raw 32-byte content-derived version identifier.
-         */id: Data,
+         */id: Data, 
         /**
          * Immutable tree handle for this version.
-         */tree: TreeRecord,
+         */tree: TreeRecord, 
         /**
          * Creation timestamp recorded by the version root, when available.
-         */createdAtMillis: UInt64?,
+         */createdAtMillis: UInt64?, 
         /**
          * Whether this version was the head when resolved.
          */isHead: Bool) {
@@ -14903,9 +16927,9 @@ public struct MapVersionRecord: Equatable, Hashable {
         self.isHead = isHead
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14919,9 +16943,9 @@ public struct FfiConverterTypeMapVersionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapVersionRecord {
         return
             try MapVersionRecord(
-                id: FfiConverterData.read(from: &buf),
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
-                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf),
+                id: FfiConverterData.read(from: &buf), 
+                tree: FfiConverterTypeTreeRecord.read(from: &buf), 
+                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
                 isHead: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14965,9 +16989,9 @@ public struct MergeExplanationRecord: Equatable, Hashable {
         self.trace = trace
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -14981,9 +17005,9 @@ public struct FfiConverterTypeMergeExplanationRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeExplanationRecord {
         return
             try MergeExplanationRecord(
-                result: FfiConverterOptionTypeTreeRecord.read(from: &buf),
-                error: FfiConverterOptionString.read(from: &buf),
-                traceJson: FfiConverterString.read(from: &buf),
+                result: FfiConverterOptionTypeTreeRecord.read(from: &buf), 
+                error: FfiConverterOptionString.read(from: &buf), 
+                traceJson: FfiConverterString.read(from: &buf), 
                 trace: FfiConverterTypeMergeTraceRecord.read(from: &buf)
         )
     }
@@ -15051,9 +17075,9 @@ public struct MergeTraceEventRecord: Equatable, Hashable {
         self.appendOnly = appendOnly
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15067,21 +17091,21 @@ public struct FfiConverterTypeMergeTraceEventRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceEventRecord {
         return
             try MergeTraceEventRecord(
-                kind: FfiConverterTypeMergeTraceEventKind.read(from: &buf),
-                fastPath: FfiConverterOptionTypeMergeFastPathKind.read(from: &buf),
-                cid: FfiConverterOptionData.read(from: &buf),
-                reuseReason: FfiConverterOptionTypeMergeReuseReasonKind.read(from: &buf),
-                level: FfiConverterOptionUInt64.read(from: &buf),
-                entries: FfiConverterOptionUInt64.read(from: &buf),
-                firstKey: FfiConverterOptionData.read(from: &buf),
-                lastKey: FfiConverterOptionData.read(from: &buf),
-                stage: FfiConverterOptionTypeMergeTraceStageKind.read(from: &buf),
-                key: FfiConverterOptionData.read(from: &buf),
-                resolution: FfiConverterOptionTypeMergeTraceResolutionKind.read(from: &buf),
-                fallbackReason: FfiConverterOptionTypeMergeFallbackReasonKind.read(from: &buf),
-                diffStats: FfiConverterOptionTypeDiffTraversalStatsRecord.read(from: &buf),
-                rightChanges: FfiConverterOptionUInt64.read(from: &buf),
-                mutations: FfiConverterOptionUInt64.read(from: &buf),
+                kind: FfiConverterTypeMergeTraceEventKind.read(from: &buf), 
+                fastPath: FfiConverterOptionTypeMergeFastPathKind.read(from: &buf), 
+                cid: FfiConverterOptionData.read(from: &buf), 
+                reuseReason: FfiConverterOptionTypeMergeReuseReasonKind.read(from: &buf), 
+                level: FfiConverterOptionUInt64.read(from: &buf), 
+                entries: FfiConverterOptionUInt64.read(from: &buf), 
+                firstKey: FfiConverterOptionData.read(from: &buf), 
+                lastKey: FfiConverterOptionData.read(from: &buf), 
+                stage: FfiConverterOptionTypeMergeTraceStageKind.read(from: &buf), 
+                key: FfiConverterOptionData.read(from: &buf), 
+                resolution: FfiConverterOptionTypeMergeTraceResolutionKind.read(from: &buf), 
+                fallbackReason: FfiConverterOptionTypeMergeFallbackReasonKind.read(from: &buf), 
+                diffStats: FfiConverterOptionTypeDiffTraversalStatsRecord.read(from: &buf), 
+                rightChanges: FfiConverterOptionUInt64.read(from: &buf), 
+                mutations: FfiConverterOptionUInt64.read(from: &buf), 
                 appendOnly: FfiConverterOptionBool.read(from: &buf)
         )
     }
@@ -15131,9 +17155,9 @@ public struct MergeTraceRecord: Equatable, Hashable {
         self.events = events
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15205,9 +17229,9 @@ public struct MetricsRecord: Equatable, Hashable {
         self.storeBatchPutNodes = storeBatchPutNodes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15221,18 +17245,18 @@ public struct FfiConverterTypeMetricsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MetricsRecord {
         return
             try MetricsRecord(
-                nodeCacheHits: FfiConverterUInt64.read(from: &buf),
-                nodeCacheMisses: FfiConverterUInt64.read(from: &buf),
-                nodeCacheEvictions: FfiConverterUInt64.read(from: &buf),
-                nodesRead: FfiConverterUInt64.read(from: &buf),
-                bytesRead: FfiConverterUInt64.read(from: &buf),
-                nodesWritten: FfiConverterUInt64.read(from: &buf),
-                bytesWritten: FfiConverterUInt64.read(from: &buf),
-                storeGetCalls: FfiConverterUInt64.read(from: &buf),
-                storeBatchGetCalls: FfiConverterUInt64.read(from: &buf),
-                storeBatchGetKeys: FfiConverterUInt64.read(from: &buf),
-                storePutCalls: FfiConverterUInt64.read(from: &buf),
-                storeBatchPutCalls: FfiConverterUInt64.read(from: &buf),
+                nodeCacheHits: FfiConverterUInt64.read(from: &buf), 
+                nodeCacheMisses: FfiConverterUInt64.read(from: &buf), 
+                nodeCacheEvictions: FfiConverterUInt64.read(from: &buf), 
+                nodesRead: FfiConverterUInt64.read(from: &buf), 
+                bytesRead: FfiConverterUInt64.read(from: &buf), 
+                nodesWritten: FfiConverterUInt64.read(from: &buf), 
+                bytesWritten: FfiConverterUInt64.read(from: &buf), 
+                storeGetCalls: FfiConverterUInt64.read(from: &buf), 
+                storeBatchGetCalls: FfiConverterUInt64.read(from: &buf), 
+                storeBatchGetKeys: FfiConverterUInt64.read(from: &buf), 
+                storePutCalls: FfiConverterUInt64.read(from: &buf), 
+                storeBatchPutCalls: FfiConverterUInt64.read(from: &buf), 
                 storeBatchPutNodes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -15283,9 +17307,9 @@ public struct MissingNodeCopyRecord: Equatable, Hashable {
         self.copiedBytes = copiedBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15299,8 +17323,8 @@ public struct FfiConverterTypeMissingNodeCopyRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MissingNodeCopyRecord {
         return
             try MissingNodeCopyRecord(
-                plan: FfiConverterTypeMissingNodePlanRecord.read(from: &buf),
-                copiedNodes: FfiConverterUInt64.read(from: &buf),
+                plan: FfiConverterTypeMissingNodePlanRecord.read(from: &buf), 
+                copiedNodes: FfiConverterUInt64.read(from: &buf), 
                 copiedBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -15347,9 +17371,9 @@ public struct MissingNodePlanRecord: Equatable, Hashable {
         self.missingBytes = missingBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15363,11 +17387,11 @@ public struct FfiConverterTypeMissingNodePlanRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MissingNodePlanRecord {
         return
             try MissingNodePlanRecord(
-                requiredCids: FfiConverterSequenceData.read(from: &buf),
-                requiredNodes: FfiConverterUInt64.read(from: &buf),
-                requiredBytes: FfiConverterUInt64.read(from: &buf),
-                missingCids: FfiConverterSequenceData.read(from: &buf),
-                missingNodes: FfiConverterUInt64.read(from: &buf),
+                requiredCids: FfiConverterSequenceData.read(from: &buf), 
+                requiredNodes: FfiConverterUInt64.read(from: &buf), 
+                requiredBytes: FfiConverterUInt64.read(from: &buf), 
+                missingCids: FfiConverterSequenceData.read(from: &buf), 
+                missingNodes: FfiConverterUInt64.read(from: &buf), 
                 missingBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -15411,9 +17435,9 @@ public struct MultiKeyProofRecord: Equatable, Hashable {
         self.path = path
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15427,8 +17451,8 @@ public struct FfiConverterTypeMultiKeyProofRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiKeyProofRecord {
         return
             try MultiKeyProofRecord(
-                root: FfiConverterOptionData.read(from: &buf),
-                keys: FfiConverterSequenceData.read(from: &buf),
+                root: FfiConverterOptionData.read(from: &buf), 
+                keys: FfiConverterSequenceData.read(from: &buf), 
                 path: FfiConverterSequenceTypeNodeRecord.read(from: &buf)
         )
     }
@@ -15469,9 +17493,9 @@ public struct MultiKeyProofVerificationRecord: Equatable, Hashable {
         self.results = results
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15485,8 +17509,8 @@ public struct FfiConverterTypeMultiKeyProofVerificationRecord: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiKeyProofVerificationRecord {
         return
             try MultiKeyProofVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                root: FfiConverterOptionData.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                root: FfiConverterOptionData.read(from: &buf), 
                 results: FfiConverterSequenceTypeKeyProofVerificationRecord.read(from: &buf)
         )
     }
@@ -15527,9 +17551,9 @@ public struct MutationRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15543,8 +17567,8 @@ public struct FfiConverterTypeMutationRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MutationRecord {
         return
             try MutationRecord(
-                kind: FfiConverterTypeMutationKind.read(from: &buf),
-                key: FfiConverterData.read(from: &buf),
+                kind: FfiConverterTypeMutationKind.read(from: &buf), 
+                key: FfiConverterData.read(from: &buf), 
                 value: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -15572,6 +17596,114 @@ public func FfiConverterTypeMutationRecord_lower(_ value: MutationRecord) -> Rus
 }
 
 
+public struct NamedBytesListResultRecord: Equatable, Hashable {
+    public var values: [NamedBytesRecord]
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [NamedBytesRecord], error: StoreErrorRecord?) {
+        self.values = values
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NamedBytesListResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNamedBytesListResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedBytesListResultRecord {
+        return
+            try NamedBytesListResultRecord(
+                values: FfiConverterSequenceTypeNamedBytesRecord.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NamedBytesListResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeNamedBytesRecord.write(value.values, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesListResultRecord_lift(_ buf: RustBuffer) throws -> NamedBytesListResultRecord {
+    return try FfiConverterTypeNamedBytesListResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesListResultRecord_lower(_ value: NamedBytesListResultRecord) -> RustBuffer {
+    return FfiConverterTypeNamedBytesListResultRecord.lower(value)
+}
+
+
+public struct NamedBytesRecord: Equatable, Hashable {
+    public var name: Data
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, value: Data) {
+        self.name = name
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NamedBytesRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNamedBytesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedBytesRecord {
+        return
+            try NamedBytesRecord(
+                name: FfiConverterData.read(from: &buf), 
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NamedBytesRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesRecord_lift(_ buf: RustBuffer) throws -> NamedBytesRecord {
+    return try FfiConverterTypeNamedBytesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedBytesRecord_lower(_ value: NamedBytesRecord) -> RustBuffer {
+    return FfiConverterTypeNamedBytesRecord.lower(value)
+}
+
+
 public struct NamedRootManifestRecord: Equatable, Hashable {
     public var name: Data
     public var manifest: RootManifestRecord
@@ -15583,9 +17715,9 @@ public struct NamedRootManifestRecord: Equatable, Hashable {
         self.manifest = manifest
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15599,7 +17731,7 @@ public struct FfiConverterTypeNamedRootManifestRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedRootManifestRecord {
         return
             try NamedRootManifestRecord(
-                name: FfiConverterData.read(from: &buf),
+                name: FfiConverterData.read(from: &buf), 
                 manifest: FfiConverterTypeRootManifestRecord.read(from: &buf)
         )
     }
@@ -15637,9 +17769,9 @@ public struct NamedRootRecord: Equatable, Hashable {
         self.tree = tree
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15653,7 +17785,7 @@ public struct FfiConverterTypeNamedRootRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedRootRecord {
         return
             try NamedRootRecord(
-                name: FfiConverterData.read(from: &buf),
+                name: FfiConverterData.read(from: &buf), 
                 tree: FfiConverterTypeTreeRecord.read(from: &buf)
         )
     }
@@ -15697,9 +17829,9 @@ public struct NamedRootRetentionRecord: Equatable, Hashable {
         self.minUpdatedAtMillis = minUpdatedAtMillis
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15713,10 +17845,10 @@ public struct FfiConverterTypeNamedRootRetentionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedRootRetentionRecord {
         return
             try NamedRootRetentionRecord(
-                kind: FfiConverterTypeNamedRootRetentionKind.read(from: &buf),
-                names: FfiConverterSequenceData.read(from: &buf),
-                prefix: FfiConverterData.read(from: &buf),
-                count: FfiConverterOptionUInt64.read(from: &buf),
+                kind: FfiConverterTypeNamedRootRetentionKind.read(from: &buf), 
+                names: FfiConverterSequenceData.read(from: &buf), 
+                prefix: FfiConverterData.read(from: &buf), 
+                count: FfiConverterOptionUInt64.read(from: &buf), 
                 minUpdatedAtMillis: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -15757,9 +17889,9 @@ public struct NamedRootSelectionRecord: Equatable, Hashable {
         self.missingNames = missingNames
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15773,7 +17905,7 @@ public struct FfiConverterTypeNamedRootSelectionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedRootSelectionRecord {
         return
             try NamedRootSelectionRecord(
-                roots: FfiConverterSequenceTypeNamedRootRecord.read(from: &buf),
+                roots: FfiConverterSequenceTypeNamedRootRecord.read(from: &buf), 
                 missingNames: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -15813,9 +17945,9 @@ public struct NamedRootUpdateRecord: Equatable, Hashable {
         self.current = current
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15829,8 +17961,8 @@ public struct FfiConverterTypeNamedRootUpdateRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedRootUpdateRecord {
         return
             try NamedRootUpdateRecord(
-                applied: FfiConverterBool.read(from: &buf),
-                conflict: FfiConverterBool.read(from: &buf),
+                applied: FfiConverterBool.read(from: &buf), 
+                conflict: FfiConverterBool.read(from: &buf), 
                 current: FfiConverterOptionTypeTreeRecord.read(from: &buf)
         )
     }
@@ -15855,6 +17987,114 @@ public func FfiConverterTypeNamedRootUpdateRecord_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeNamedRootUpdateRecord_lower(_ value: NamedRootUpdateRecord) -> RustBuffer {
     return FfiConverterTypeNamedRootUpdateRecord.lower(value)
+}
+
+
+public struct NodeEntryRecord: Equatable, Hashable {
+    public var key: Data
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, value: Data) {
+        self.key = key
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NodeEntryRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeEntryRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeEntryRecord {
+        return
+            try NodeEntryRecord(
+                key: FfiConverterData.read(from: &buf), 
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodeEntryRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeEntryRecord_lift(_ buf: RustBuffer) throws -> NodeEntryRecord {
+    return try FfiConverterTypeNodeEntryRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeEntryRecord_lower(_ value: NodeEntryRecord) -> RustBuffer {
+    return FfiConverterTypeNodeEntryRecord.lower(value)
+}
+
+
+public struct NodeMutationRecord: Equatable, Hashable {
+    public var key: Data
+    public var value: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: Data, value: OptionalBytesRecord) {
+        self.key = key
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NodeMutationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeMutationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeMutationRecord {
+        return
+            try NodeMutationRecord(
+                key: FfiConverterData.read(from: &buf), 
+                value: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodeMutationRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeMutationRecord_lift(_ buf: RustBuffer) throws -> NodeMutationRecord {
+    return try FfiConverterTypeNodeMutationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeMutationRecord_lower(_ value: NodeMutationRecord) -> RustBuffer {
+    return FfiConverterTypeNodeMutationRecord.lower(value)
 }
 
 
@@ -15887,9 +18127,9 @@ public struct NodeRecord: Equatable, Hashable {
         self.formatBytes = formatBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15903,16 +18143,16 @@ public struct FfiConverterTypeNodeRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeRecord {
         return
             try NodeRecord(
-                keys: FfiConverterSequenceData.read(from: &buf),
-                vals: FfiConverterSequenceData.read(from: &buf),
-                childCounts: FfiConverterSequenceUInt64.read(from: &buf),
-                leaf: FfiConverterBool.read(from: &buf),
-                level: FfiConverterUInt8.read(from: &buf),
-                minChunkSize: FfiConverterUInt64.read(from: &buf),
-                maxChunkSize: FfiConverterUInt64.read(from: &buf),
-                chunkingFactor: FfiConverterUInt32.read(from: &buf),
-                hashSeed: FfiConverterUInt64.read(from: &buf),
-                encoding: FfiConverterTypeEncodingRecord.read(from: &buf),
+                keys: FfiConverterSequenceData.read(from: &buf), 
+                vals: FfiConverterSequenceData.read(from: &buf), 
+                childCounts: FfiConverterSequenceUInt64.read(from: &buf), 
+                leaf: FfiConverterBool.read(from: &buf), 
+                level: FfiConverterUInt8.read(from: &buf), 
+                minChunkSize: FfiConverterUInt64.read(from: &buf), 
+                maxChunkSize: FfiConverterUInt64.read(from: &buf), 
+                chunkingFactor: FfiConverterUInt32.read(from: &buf), 
+                hashSeed: FfiConverterUInt64.read(from: &buf), 
+                encoding: FfiConverterTypeEncodingRecord.read(from: &buf), 
                 formatBytes: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -15948,6 +18188,168 @@ public func FfiConverterTypeNodeRecord_lower(_ value: NodeRecord) -> RustBuffer 
 }
 
 
+public struct OptionalBytesListResultRecord: Equatable, Hashable {
+    public var values: [OptionalBytesRecord]
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [OptionalBytesRecord], error: StoreErrorRecord?) {
+        self.values = values
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension OptionalBytesListResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptionalBytesListResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalBytesListResultRecord {
+        return
+            try OptionalBytesListResultRecord(
+                values: FfiConverterSequenceTypeOptionalBytesRecord.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptionalBytesListResultRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeOptionalBytesRecord.write(value.values, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesListResultRecord_lift(_ buf: RustBuffer) throws -> OptionalBytesListResultRecord {
+    return try FfiConverterTypeOptionalBytesListResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesListResultRecord_lower(_ value: OptionalBytesListResultRecord) -> RustBuffer {
+    return FfiConverterTypeOptionalBytesListResultRecord.lower(value)
+}
+
+
+public struct OptionalBytesRecord: Equatable, Hashable {
+    public var present: Bool
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(present: Bool, value: Data) {
+        self.present = present
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension OptionalBytesRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptionalBytesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalBytesRecord {
+        return
+            try OptionalBytesRecord(
+                present: FfiConverterBool.read(from: &buf), 
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptionalBytesRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.present, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesRecord_lift(_ buf: RustBuffer) throws -> OptionalBytesRecord {
+    return try FfiConverterTypeOptionalBytesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesRecord_lower(_ value: OptionalBytesRecord) -> RustBuffer {
+    return FfiConverterTypeOptionalBytesRecord.lower(value)
+}
+
+
+public struct OptionalBytesResultRecord: Equatable, Hashable {
+    public var value: OptionalBytesRecord
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: OptionalBytesRecord, error: StoreErrorRecord?) {
+        self.value = value
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension OptionalBytesResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOptionalBytesResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalBytesResultRecord {
+        return
+            try OptionalBytesResultRecord(
+                value: FfiConverterTypeOptionalBytesRecord.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OptionalBytesResultRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeOptionalBytesRecord.write(value.value, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesResultRecord_lift(_ buf: RustBuffer) throws -> OptionalBytesResultRecord {
+    return try FfiConverterTypeOptionalBytesResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOptionalBytesResultRecord_lower(_ value: OptionalBytesResultRecord) -> RustBuffer {
+    return FfiConverterTypeOptionalBytesResultRecord.lower(value)
+}
+
+
 public struct ParallelConfigRecord: Equatable, Hashable {
     public var maxThreads: UInt64
     public var parallelismThreshold: UInt64
@@ -15959,9 +18361,9 @@ public struct ParallelConfigRecord: Equatable, Hashable {
         self.parallelismThreshold = parallelismThreshold
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -15975,7 +18377,7 @@ public struct FfiConverterTypeParallelConfigRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ParallelConfigRecord {
         return
             try ParallelConfigRecord(
-                maxThreads: FfiConverterUInt64.read(from: &buf),
+                maxThreads: FfiConverterUInt64.read(from: &buf), 
                 parallelismThreshold: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -16021,9 +18423,9 @@ public struct ProductQuantizationBuildLimitsRecord: Equatable, Hashable {
         self.maxWorkerThreads = maxWorkerThreads
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16037,11 +18439,11 @@ public struct FfiConverterTypeProductQuantizationBuildLimitsRecord: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationBuildLimitsRecord {
         return
             try ProductQuantizationBuildLimitsRecord(
-                maxTrainingVectors: FfiConverterOptionUInt64.read(from: &buf),
-                maxTrainingBytes: FfiConverterOptionUInt64.read(from: &buf),
-                maxTemporaryCodeBytes: FfiConverterOptionUInt64.read(from: &buf),
-                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf),
-                maxEncodedOutputBytes: FfiConverterOptionUInt64.read(from: &buf),
+                maxTrainingVectors: FfiConverterOptionUInt64.read(from: &buf), 
+                maxTrainingBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxTemporaryCodeBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf), 
+                maxEncodedOutputBytes: FfiConverterOptionUInt64.read(from: &buf), 
                 maxWorkerThreads: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -16083,9 +18485,9 @@ public struct ProductQuantizationBuildResultRecord {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16099,7 +18501,7 @@ public struct FfiConverterTypeProductQuantizationBuildResultRecord: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationBuildResultRecord {
         return
             try ProductQuantizationBuildResultRecord(
-                index: FfiConverterTypeBindingProductQuantizer.read(from: &buf),
+                index: FfiConverterTypeBindingProductQuantizer.read(from: &buf), 
                 stats: FfiConverterTypeProductQuantizationBuildStatsRecord.read(from: &buf)
         )
     }
@@ -16145,9 +18547,9 @@ public struct ProductQuantizationBuildStatsRecord: Equatable, Hashable {
         self.encodedOutputBytes = encodedOutputBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16161,11 +18563,11 @@ public struct FfiConverterTypeProductQuantizationBuildStatsRecord: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationBuildStatsRecord {
         return
             try ProductQuantizationBuildStatsRecord(
-                trainingDistanceEvaluations: FfiConverterUInt64.read(from: &buf),
-                encodingDistanceEvaluations: FfiConverterUInt64.read(from: &buf),
-                encodedVectors: FfiConverterUInt64.read(from: &buf),
-                trainingVectors: FfiConverterUInt64.read(from: &buf),
-                trainingBytes: FfiConverterUInt64.read(from: &buf),
+                trainingDistanceEvaluations: FfiConverterUInt64.read(from: &buf), 
+                encodingDistanceEvaluations: FfiConverterUInt64.read(from: &buf), 
+                encodedVectors: FfiConverterUInt64.read(from: &buf), 
+                trainingVectors: FfiConverterUInt64.read(from: &buf), 
+                trainingBytes: FfiConverterUInt64.read(from: &buf), 
                 encodedOutputBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -16215,9 +18617,9 @@ public struct ProductQuantizationConfigRecord: Equatable, Hashable {
         self.maxTrainingVectors = maxTrainingVectors
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16231,11 +18633,11 @@ public struct FfiConverterTypeProductQuantizationConfigRecord: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationConfigRecord {
         return
             try ProductQuantizationConfigRecord(
-                subquantizers: FfiConverterUInt32.read(from: &buf),
-                centroidsPerSubquantizer: FfiConverterUInt16.read(from: &buf),
-                trainingIterations: FfiConverterUInt16.read(from: &buf),
-                rerankMultiplier: FfiConverterUInt32.read(from: &buf),
-                seed: FfiConverterUInt64.read(from: &buf),
+                subquantizers: FfiConverterUInt32.read(from: &buf), 
+                centroidsPerSubquantizer: FfiConverterUInt16.read(from: &buf), 
+                trainingIterations: FfiConverterUInt16.read(from: &buf), 
+                rerankMultiplier: FfiConverterUInt32.read(from: &buf), 
+                seed: FfiConverterUInt64.read(from: &buf), 
                 maxTrainingVectors: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -16277,9 +18679,9 @@ public struct ProductQuantizationQualityRecord: Equatable, Hashable {
         self.maximumSquaredError = maximumSquaredError
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16293,7 +18695,7 @@ public struct FfiConverterTypeProductQuantizationQualityRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProductQuantizationQualityRecord {
         return
             try ProductQuantizationQualityRecord(
-                meanSquaredError: FfiConverterDouble.read(from: &buf),
+                meanSquaredError: FfiConverterDouble.read(from: &buf), 
                 maximumSquaredError: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -16351,9 +18753,9 @@ public struct ProofBundleSummaryRecord: Equatable, Hashable {
         self.hasLookahead = hasLookahead
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16367,17 +18769,17 @@ public struct FfiConverterTypeProofBundleSummaryRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProofBundleSummaryRecord {
         return
             try ProofBundleSummaryRecord(
-                version: FfiConverterUInt64.read(from: &buf),
-                kind: FfiConverterString.read(from: &buf),
-                root: FfiConverterOptionData.read(from: &buf),
-                otherRoot: FfiConverterOptionData.read(from: &buf),
-                keyCount: FfiConverterUInt64.read(from: &buf),
-                pathNodeCount: FfiConverterUInt64.read(from: &buf),
-                start: FfiConverterOptionData.read(from: &buf),
-                end: FfiConverterOptionData.read(from: &buf),
-                after: FfiConverterOptionData.read(from: &buf),
-                requestedEnd: FfiConverterOptionData.read(from: &buf),
-                limit: FfiConverterOptionUInt64.read(from: &buf),
+                version: FfiConverterUInt64.read(from: &buf), 
+                kind: FfiConverterString.read(from: &buf), 
+                root: FfiConverterOptionData.read(from: &buf), 
+                otherRoot: FfiConverterOptionData.read(from: &buf), 
+                keyCount: FfiConverterUInt64.read(from: &buf), 
+                pathNodeCount: FfiConverterUInt64.read(from: &buf), 
+                start: FfiConverterOptionData.read(from: &buf), 
+                end: FfiConverterOptionData.read(from: &buf), 
+                after: FfiConverterOptionData.read(from: &buf), 
+                requestedEnd: FfiConverterOptionData.read(from: &buf), 
+                limit: FfiConverterOptionUInt64.read(from: &buf), 
                 hasLookahead: FfiConverterBool.read(from: &buf)
         )
     }
@@ -16435,9 +18837,9 @@ public struct ProofBundleVerificationRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16451,12 +18853,12 @@ public struct FfiConverterTypeProofBundleVerificationRecord: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProofBundleVerificationRecord {
         return
             try ProofBundleVerificationRecord(
-                summary: FfiConverterTypeProofBundleSummaryRecord.read(from: &buf),
-                valid: FfiConverterBool.read(from: &buf),
-                existsCount: FfiConverterUInt64.read(from: &buf),
-                absenceCount: FfiConverterUInt64.read(from: &buf),
-                entryCount: FfiConverterUInt64.read(from: &buf),
-                diffCount: FfiConverterUInt64.read(from: &buf),
+                summary: FfiConverterTypeProofBundleSummaryRecord.read(from: &buf), 
+                valid: FfiConverterBool.read(from: &buf), 
+                existsCount: FfiConverterUInt64.read(from: &buf), 
+                absenceCount: FfiConverterUInt64.read(from: &buf), 
+                entryCount: FfiConverterUInt64.read(from: &buf), 
+                diffCount: FfiConverterUInt64.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
         )
     }
@@ -16499,9 +18901,9 @@ public struct ProvedDiffPageRecord: Equatable, Hashable {
         self.proof = proof
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16515,7 +18917,7 @@ public struct FfiConverterTypeProvedDiffPageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProvedDiffPageRecord {
         return
             try ProvedDiffPageRecord(
-                page: FfiConverterTypeDiffPageRecord.read(from: &buf),
+                page: FfiConverterTypeDiffPageRecord.read(from: &buf), 
                 proof: FfiConverterTypeDiffPageProofRecord.read(from: &buf)
         )
     }
@@ -16553,9 +18955,9 @@ public struct ProvedRangePageRecord: Equatable, Hashable {
         self.proof = proof
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16569,7 +18971,7 @@ public struct FfiConverterTypeProvedRangePageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProvedRangePageRecord {
         return
             try ProvedRangePageRecord(
-                page: FfiConverterTypeRangePageRecord.read(from: &buf),
+                page: FfiConverterTypeRangePageRecord.read(from: &buf), 
                 proof: FfiConverterTypeRangePageProofRecord.read(from: &buf)
         )
     }
@@ -16623,9 +19025,9 @@ public struct ProximityConfigRecord: Equatable, Hashable {
         self.scalarQuantizationGroupSize = scalarQuantizationGroupSize
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16639,15 +19041,15 @@ public struct FfiConverterTypeProximityConfigRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityConfigRecord {
         return
             try ProximityConfigRecord(
-                dimensions: FfiConverterUInt32.read(from: &buf),
-                metric: FfiConverterTypeDistanceMetricRecord.read(from: &buf),
-                logChunkSize: FfiConverterUInt8.read(from: &buf),
-                levelHashSeed: FfiConverterUInt64.read(from: &buf),
-                minPageBytes: FfiConverterUInt32.read(from: &buf),
-                targetPageBytes: FfiConverterUInt32.read(from: &buf),
-                maxPageBytes: FfiConverterUInt32.read(from: &buf),
-                overflowHashSeed: FfiConverterUInt64.read(from: &buf),
-                inlineThresholdBytes: FfiConverterUInt32.read(from: &buf),
+                dimensions: FfiConverterUInt32.read(from: &buf), 
+                metric: FfiConverterTypeDistanceMetricRecord.read(from: &buf), 
+                logChunkSize: FfiConverterUInt8.read(from: &buf), 
+                levelHashSeed: FfiConverterUInt64.read(from: &buf), 
+                minPageBytes: FfiConverterUInt32.read(from: &buf), 
+                targetPageBytes: FfiConverterUInt32.read(from: &buf), 
+                maxPageBytes: FfiConverterUInt32.read(from: &buf), 
+                overflowHashSeed: FfiConverterUInt64.read(from: &buf), 
+                inlineThresholdBytes: FfiConverterUInt32.read(from: &buf), 
                 scalarQuantizationGroupSize: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
@@ -16699,9 +19101,9 @@ public struct ProximityFilterRecord: Equatable, Hashable {
         self.eligibleKeys = eligibleKeys
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16715,10 +19117,10 @@ public struct FfiConverterTypeProximityFilterRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityFilterRecord {
         return
             try ProximityFilterRecord(
-                kind: FfiConverterTypeProximityFilterKind.read(from: &buf),
-                start: FfiConverterOptionData.read(from: &buf),
-                rangeEnd: FfiConverterOptionData.read(from: &buf),
-                prefix: FfiConverterOptionData.read(from: &buf),
+                kind: FfiConverterTypeProximityFilterKind.read(from: &buf), 
+                start: FfiConverterOptionData.read(from: &buf), 
+                rangeEnd: FfiConverterOptionData.read(from: &buf), 
+                prefix: FfiConverterOptionData.read(from: &buf), 
                 eligibleKeys: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -16763,9 +19165,9 @@ public struct ProximityMembershipProofRecord: Equatable, Hashable {
         self.recordBytes = recordBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16779,9 +19181,9 @@ public struct FfiConverterTypeProximityMembershipProofRecord: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMembershipProofRecord {
         return
             try ProximityMembershipProofRecord(
-                descriptor: FfiConverterData.read(from: &buf),
-                descriptorBytes: FfiConverterData.read(from: &buf),
-                directoryProof: FfiConverterTypeKeyProofRecord.read(from: &buf),
+                descriptor: FfiConverterData.read(from: &buf), 
+                descriptorBytes: FfiConverterData.read(from: &buf), 
+                directoryProof: FfiConverterTypeKeyProofRecord.read(from: &buf), 
                 recordBytes: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -16823,9 +19225,9 @@ public struct ProximityMembershipVerificationRecord: Equatable, Hashable {
         self.record = record
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16839,8 +19241,8 @@ public struct FfiConverterTypeProximityMembershipVerificationRecord: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMembershipVerificationRecord {
         return
             try ProximityMembershipVerificationRecord(
-                descriptor: FfiConverterData.read(from: &buf),
-                key: FfiConverterData.read(from: &buf),
+                descriptor: FfiConverterData.read(from: &buf), 
+                key: FfiConverterData.read(from: &buf), 
                 record: FfiConverterOptionTypeExactProximityRecordRecord.read(from: &buf)
         )
     }
@@ -16881,9 +19283,9 @@ public struct ProximityMutationRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16897,8 +19299,8 @@ public struct FfiConverterTypeProximityMutationRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMutationRecord {
         return
             try ProximityMutationRecord(
-                key: FfiConverterData.read(from: &buf),
-                vector: FfiConverterOptionSequenceFloat.read(from: &buf),
+                key: FfiConverterData.read(from: &buf), 
+                vector: FfiConverterOptionSequenceFloat.read(from: &buf), 
                 value: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -16937,9 +19339,9 @@ public struct ProximityMutationResultRecord {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -16953,7 +19355,7 @@ public struct FfiConverterTypeProximityMutationResultRecord: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMutationResultRecord {
         return
             try ProximityMutationResultRecord(
-                map: FfiConverterTypeBindingProximityMap.read(from: &buf),
+                map: FfiConverterTypeBindingProximityMap.read(from: &buf), 
                 stats: FfiConverterTypeProximityMutationStatsRecord.read(from: &buf)
         )
     }
@@ -17013,9 +19415,9 @@ public struct ProximityMutationStatsRecord: Equatable, Hashable {
         self.fullProximityRebuild = fullProximityRebuild
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17029,18 +19431,18 @@ public struct FfiConverterTypeProximityMutationStatsRecord: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityMutationStatsRecord {
         return
             try ProximityMutationStatsRecord(
-                directoryEntriesScanned: FfiConverterUInt64.read(from: &buf),
-                directoryNodesRead: FfiConverterUInt64.read(from: &buf),
-                directoryNodesRebuilt: FfiConverterUInt64.read(from: &buf),
-                directoryNodesWritten: FfiConverterUInt64.read(from: &buf),
-                directoryNodesReused: FfiConverterUInt64.read(from: &buf),
-                directoryLevelsRebuilt: FfiConverterUInt64.read(from: &buf),
-                directoryRightEdgeRebuilt: FfiConverterBool.read(from: &buf),
-                nodesRead: FfiConverterUInt64.read(from: &buf),
-                nodesWritten: FfiConverterUInt64.read(from: &buf),
-                nodesReused: FfiConverterUInt64.read(from: &buf),
-                recordsRebuilt: FfiConverterUInt64.read(from: &buf),
-                distanceEvaluations: FfiConverterUInt64.read(from: &buf),
+                directoryEntriesScanned: FfiConverterUInt64.read(from: &buf), 
+                directoryNodesRead: FfiConverterUInt64.read(from: &buf), 
+                directoryNodesRebuilt: FfiConverterUInt64.read(from: &buf), 
+                directoryNodesWritten: FfiConverterUInt64.read(from: &buf), 
+                directoryNodesReused: FfiConverterUInt64.read(from: &buf), 
+                directoryLevelsRebuilt: FfiConverterUInt64.read(from: &buf), 
+                directoryRightEdgeRebuilt: FfiConverterBool.read(from: &buf), 
+                nodesRead: FfiConverterUInt64.read(from: &buf), 
+                nodesWritten: FfiConverterUInt64.read(from: &buf), 
+                nodesReused: FfiConverterUInt64.read(from: &buf), 
+                recordsRebuilt: FfiConverterUInt64.read(from: &buf), 
+                distanceEvaluations: FfiConverterUInt64.read(from: &buf), 
                 fullProximityRebuild: FfiConverterBool.read(from: &buf)
         )
     }
@@ -17091,9 +19493,9 @@ public struct ProximityNeighborRecord: Equatable, Hashable {
         self.distance = distance
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17107,8 +19509,8 @@ public struct FfiConverterTypeProximityNeighborRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityNeighborRecord {
         return
             try ProximityNeighborRecord(
-                key: FfiConverterData.read(from: &buf),
-                value: FfiConverterData.read(from: &buf),
+                key: FfiConverterData.read(from: &buf), 
+                value: FfiConverterData.read(from: &buf), 
                 distance: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -17149,9 +19551,9 @@ public struct ProximityRecordRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17165,8 +19567,8 @@ public struct FfiConverterTypeProximityRecordRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityRecordRecord {
         return
             try ProximityRecordRecord(
-                key: FfiConverterData.read(from: &buf),
-                vector: FfiConverterSequenceFloat.read(from: &buf),
+                key: FfiConverterData.read(from: &buf), 
+                vector: FfiConverterSequenceFloat.read(from: &buf), 
                 value: FfiConverterData.read(from: &buf)
         )
     }
@@ -17205,9 +19607,9 @@ public struct ProximitySearchClaimRecord: Equatable, Hashable {
         self.terminalLowerBound = terminalLowerBound
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17221,7 +19623,7 @@ public struct FfiConverterTypeProximitySearchClaimRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchClaimRecord {
         return
             try ProximitySearchClaimRecord(
-                kind: FfiConverterTypeProximitySearchClaimKindRecord.read(from: &buf),
+                kind: FfiConverterTypeProximitySearchClaimKindRecord.read(from: &buf), 
                 terminalLowerBound: FfiConverterOptionDouble.read(from: &buf)
         )
     }
@@ -17275,9 +19677,9 @@ public struct ProximitySearchRequestRecord: Equatable, Hashable {
         self.pqRerankMultiplier = pqRerankMultiplier
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17291,15 +19693,15 @@ public struct FfiConverterTypeProximitySearchRequestRecord: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchRequestRecord {
         return
             try ProximitySearchRequestRecord(
-                query: FfiConverterSequenceFloat.read(from: &buf),
-                k: FfiConverterUInt64.read(from: &buf),
-                policy: FfiConverterTypeSearchPolicyKind.read(from: &buf),
-                adaptiveQuality: FfiConverterOptionTypeAdaptiveQualityRecord.read(from: &buf),
-                budget: FfiConverterTypeSearchBudgetRecord.read(from: &buf),
-                filter: FfiConverterTypeProximityFilterRecord.read(from: &buf),
-                kernel: FfiConverterTypeQueryKernelRecord.read(from: &buf),
-                backend: FfiConverterTypeSearchBackendRecord.read(from: &buf),
-                hnswEfSearch: FfiConverterOptionUInt32.read(from: &buf),
+                query: FfiConverterSequenceFloat.read(from: &buf), 
+                k: FfiConverterUInt64.read(from: &buf), 
+                policy: FfiConverterTypeSearchPolicyKind.read(from: &buf), 
+                adaptiveQuality: FfiConverterOptionTypeAdaptiveQualityRecord.read(from: &buf), 
+                budget: FfiConverterTypeSearchBudgetRecord.read(from: &buf), 
+                filter: FfiConverterTypeProximityFilterRecord.read(from: &buf), 
+                kernel: FfiConverterTypeQueryKernelRecord.read(from: &buf), 
+                backend: FfiConverterTypeSearchBackendRecord.read(from: &buf), 
+                hnswEfSearch: FfiConverterOptionUInt32.read(from: &buf), 
                 pqRerankMultiplier: FfiConverterOptionUInt16.read(from: &buf)
         )
     }
@@ -17351,9 +19753,9 @@ public struct ProximitySearchResultRecord: Equatable, Hashable {
         self.planFormatVersion = planFormatVersion
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17367,10 +19769,10 @@ public struct FfiConverterTypeProximitySearchResultRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchResultRecord {
         return
             try ProximitySearchResultRecord(
-                neighbors: FfiConverterSequenceTypeProximityNeighborRecord.read(from: &buf),
-                stats: FfiConverterTypeProximitySearchStatsRecord.read(from: &buf),
-                completion: FfiConverterTypeSearchCompletionRecord.read(from: &buf),
-                backend: FfiConverterTypeSearchBackendRecord.read(from: &buf),
+                neighbors: FfiConverterSequenceTypeProximityNeighborRecord.read(from: &buf), 
+                stats: FfiConverterTypeProximitySearchStatsRecord.read(from: &buf), 
+                completion: FfiConverterTypeSearchCompletionRecord.read(from: &buf), 
+                backend: FfiConverterTypeSearchBackendRecord.read(from: &buf), 
                 planFormatVersion: FfiConverterUInt8.read(from: &buf)
         )
     }
@@ -17417,9 +19819,9 @@ public struct ProximitySearchRuntimePolicyRecord: Equatable, Hashable {
         self.pqMaxBytes = pqMaxBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17433,10 +19835,10 @@ public struct FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchRuntimePolicyRecord {
         return
             try ProximitySearchRuntimePolicyRecord(
-                maxEntries: FfiConverterUInt64.read(from: &buf),
-                maxBytes: FfiConverterUInt64.read(from: &buf),
-                authoritativeMaxBytes: FfiConverterUInt64.read(from: &buf),
-                hnswMaxBytes: FfiConverterUInt64.read(from: &buf),
+                maxEntries: FfiConverterUInt64.read(from: &buf), 
+                maxBytes: FfiConverterUInt64.read(from: &buf), 
+                authoritativeMaxBytes: FfiConverterUInt64.read(from: &buf), 
+                hnswMaxBytes: FfiConverterUInt64.read(from: &buf), 
                 pqMaxBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -17477,9 +19879,9 @@ public struct ProximitySearchRuntimeStatsRecord: Equatable, Hashable {
         self.physicalBytesRead = physicalBytesRead
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17493,7 +19895,7 @@ public struct FfiConverterTypeProximitySearchRuntimeStatsRecord: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchRuntimeStatsRecord {
         return
             try ProximitySearchRuntimeStatsRecord(
-                physicalReads: FfiConverterUInt64.read(from: &buf),
+                physicalReads: FfiConverterUInt64.read(from: &buf), 
                 physicalBytesRead: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -17549,9 +19951,9 @@ public struct ProximitySearchStatsRecord: Equatable, Hashable {
         self.candidateRetainedBytesPeak = candidateRetainedBytesPeak
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17565,16 +19967,16 @@ public struct FfiConverterTypeProximitySearchStatsRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchStatsRecord {
         return
             try ProximitySearchStatsRecord(
-                levelsVisited: FfiConverterUInt64.read(from: &buf),
-                nodesRead: FfiConverterUInt64.read(from: &buf),
-                bytesRead: FfiConverterUInt64.read(from: &buf),
-                physicalBytesRead: FfiConverterUInt64.read(from: &buf),
-                committedBytes: FfiConverterUInt64.read(from: &buf),
-                distanceEvaluations: FfiConverterUInt64.read(from: &buf),
-                quantizedDistanceEvaluations: FfiConverterUInt64.read(from: &buf),
-                rerankedCandidates: FfiConverterUInt64.read(from: &buf),
-                frontierPeak: FfiConverterUInt64.read(from: &buf),
-                candidateHandlesPeak: FfiConverterUInt64.read(from: &buf),
+                levelsVisited: FfiConverterUInt64.read(from: &buf), 
+                nodesRead: FfiConverterUInt64.read(from: &buf), 
+                bytesRead: FfiConverterUInt64.read(from: &buf), 
+                physicalBytesRead: FfiConverterUInt64.read(from: &buf), 
+                committedBytes: FfiConverterUInt64.read(from: &buf), 
+                distanceEvaluations: FfiConverterUInt64.read(from: &buf), 
+                quantizedDistanceEvaluations: FfiConverterUInt64.read(from: &buf), 
+                rerankedCandidates: FfiConverterUInt64.read(from: &buf), 
+                frontierPeak: FfiConverterUInt64.read(from: &buf), 
+                candidateHandlesPeak: FfiConverterUInt64.read(from: &buf), 
                 candidateRetainedBytesPeak: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -17623,9 +20025,9 @@ public struct ProximitySearchVerificationRecord: Equatable, Hashable {
         self.replayedEvents = replayedEvents
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17639,8 +20041,8 @@ public struct FfiConverterTypeProximitySearchVerificationRecord: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchVerificationRecord {
         return
             try ProximitySearchVerificationRecord(
-                result: FfiConverterTypeProximitySearchResultRecord.read(from: &buf),
-                claim: FfiConverterTypeProximitySearchClaimRecord.read(from: &buf),
+                result: FfiConverterTypeProximitySearchResultRecord.read(from: &buf), 
+                claim: FfiConverterTypeProximitySearchClaimRecord.read(from: &buf), 
                 replayedEvents: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -17679,9 +20081,9 @@ public struct ProximityStructuralProofRecord: Equatable, Hashable {
         self.objects = objects
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17695,7 +20097,7 @@ public struct FfiConverterTypeProximityStructuralProofRecord: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityStructuralProofRecord {
         return
             try ProximityStructuralProofRecord(
-                descriptor: FfiConverterData.read(from: &buf),
+                descriptor: FfiConverterData.read(from: &buf), 
                 objects: FfiConverterSequenceTypeTypedContentObjectRecord.read(from: &buf)
         )
     }
@@ -17735,9 +20137,9 @@ public struct ProximityStructuralVerificationRecord: Equatable, Hashable {
         self.summary = summary
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17751,8 +20153,8 @@ public struct FfiConverterTypeProximityStructuralVerificationRecord: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityStructuralVerificationRecord {
         return
             try ProximityStructuralVerificationRecord(
-                descriptor: FfiConverterData.read(from: &buf),
-                objectCount: FfiConverterUInt64.read(from: &buf),
+                descriptor: FfiConverterData.read(from: &buf), 
+                objectCount: FfiConverterUInt64.read(from: &buf), 
                 summary: FfiConverterTypeProximityVerificationRecord.read(from: &buf)
         )
     }
@@ -17807,9 +20209,9 @@ public struct ProximityVerificationRecord: Equatable, Hashable {
         self.distanceChecks = distanceChecks
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17823,15 +20225,15 @@ public struct FfiConverterTypeProximityVerificationRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityVerificationRecord {
         return
             try ProximityVerificationRecord(
-                recordCount: FfiConverterUInt64.read(from: &buf),
-                proximityNodeCount: FfiConverterUInt64.read(from: &buf),
-                externalVectorCount: FfiConverterUInt64.read(from: &buf),
-                quantizedNodeCount: FfiConverterUInt64.read(from: &buf),
-                scalarQuantizerCount: FfiConverterUInt64.read(from: &buf),
-                overflowPageCount: FfiConverterUInt64.read(from: &buf),
-                overflowDirectoryCount: FfiConverterUInt64.read(from: &buf),
-                maximumLevel: FfiConverterUInt8.read(from: &buf),
-                maximumNodeBytes: FfiConverterUInt64.read(from: &buf),
+                recordCount: FfiConverterUInt64.read(from: &buf), 
+                proximityNodeCount: FfiConverterUInt64.read(from: &buf), 
+                externalVectorCount: FfiConverterUInt64.read(from: &buf), 
+                quantizedNodeCount: FfiConverterUInt64.read(from: &buf), 
+                scalarQuantizerCount: FfiConverterUInt64.read(from: &buf), 
+                overflowPageCount: FfiConverterUInt64.read(from: &buf), 
+                overflowDirectoryCount: FfiConverterUInt64.read(from: &buf), 
+                maximumLevel: FfiConverterUInt8.read(from: &buf), 
+                maximumNodeBytes: FfiConverterUInt64.read(from: &buf), 
                 distanceChecks: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -17877,9 +20279,9 @@ public struct RangeBoundsRecord: Equatable, Hashable {
         self.end = end
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17893,7 +20295,7 @@ public struct FfiConverterTypeRangeBoundsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RangeBoundsRecord {
         return
             try RangeBoundsRecord(
-                start: FfiConverterData.read(from: &buf),
+                start: FfiConverterData.read(from: &buf), 
                 end: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -17929,9 +20331,9 @@ public struct RangeCursorRecord: Equatable, Hashable {
         self.afterKey = afterKey
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -17985,9 +20387,9 @@ public struct RangePageProofRecord: Equatable, Hashable {
         self.path = path
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18001,9 +20403,9 @@ public struct FfiConverterTypeRangePageProofRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RangePageProofRecord {
         return
             try RangePageProofRecord(
-                root: FfiConverterOptionData.read(from: &buf),
-                after: FfiConverterOptionData.read(from: &buf),
-                end: FfiConverterOptionData.read(from: &buf),
+                root: FfiConverterOptionData.read(from: &buf), 
+                after: FfiConverterOptionData.read(from: &buf), 
+                end: FfiConverterOptionData.read(from: &buf), 
                 path: FfiConverterSequenceTypeNodeRecord.read(from: &buf)
         )
     }
@@ -18049,9 +20451,9 @@ public struct RangePageProofVerificationRecord: Equatable, Hashable {
         self.entries = entries
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18065,10 +20467,10 @@ public struct FfiConverterTypeRangePageProofVerificationRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RangePageProofVerificationRecord {
         return
             try RangePageProofVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                root: FfiConverterOptionData.read(from: &buf),
-                after: FfiConverterOptionData.read(from: &buf),
-                end: FfiConverterOptionData.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                root: FfiConverterOptionData.read(from: &buf), 
+                after: FfiConverterOptionData.read(from: &buf), 
+                end: FfiConverterOptionData.read(from: &buf), 
                 entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf)
         )
     }
@@ -18109,9 +20511,9 @@ public struct RangePageRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18125,7 +20527,7 @@ public struct FfiConverterTypeRangePageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RangePageRecord {
         return
             try RangePageRecord(
-                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf),
+                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeRangeCursorRecord.read(from: &buf)
         )
     }
@@ -18167,9 +20569,9 @@ public struct RangeProofRecord: Equatable, Hashable {
         self.path = path
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18183,9 +20585,9 @@ public struct FfiConverterTypeRangeProofRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RangeProofRecord {
         return
             try RangeProofRecord(
-                root: FfiConverterOptionData.read(from: &buf),
-                start: FfiConverterData.read(from: &buf),
-                end: FfiConverterOptionData.read(from: &buf),
+                root: FfiConverterOptionData.read(from: &buf), 
+                start: FfiConverterData.read(from: &buf), 
+                end: FfiConverterOptionData.read(from: &buf), 
                 path: FfiConverterSequenceTypeNodeRecord.read(from: &buf)
         )
     }
@@ -18231,9 +20633,9 @@ public struct RangeProofVerificationRecord: Equatable, Hashable {
         self.entries = entries
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18247,10 +20649,10 @@ public struct FfiConverterTypeRangeProofVerificationRecord: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RangeProofVerificationRecord {
         return
             try RangeProofVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                root: FfiConverterOptionData.read(from: &buf),
-                start: FfiConverterData.read(from: &buf),
-                end: FfiConverterOptionData.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                root: FfiConverterOptionData.read(from: &buf), 
+                start: FfiConverterData.read(from: &buf), 
+                end: FfiConverterOptionData.read(from: &buf), 
                 entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf)
         )
     }
@@ -18291,9 +20693,9 @@ public struct ResolutionRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18307,7 +20709,7 @@ public struct FfiConverterTypeResolutionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResolutionRecord {
         return
             try ResolutionRecord(
-                kind: FfiConverterTypeResolutionKind.read(from: &buf),
+                kind: FfiConverterTypeResolutionKind.read(from: &buf), 
                 value: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -18343,9 +20745,9 @@ public struct ReverseCursorRecord: Equatable, Hashable {
         self.beforeKey = beforeKey
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18395,9 +20797,9 @@ public struct ReversePageRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18411,7 +20813,7 @@ public struct FfiConverterTypeReversePageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReversePageRecord {
         return
             try ReversePageRecord(
-                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf),
+                entries: FfiConverterSequenceTypeEntryRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeReverseCursorRecord.read(from: &buf)
         )
     }
@@ -18438,6 +20840,118 @@ public func FfiConverterTypeReversePageRecord_lower(_ value: ReversePageRecord) 
 }
 
 
+public struct RootCasResultRecord: Equatable, Hashable {
+    public var applied: Bool
+    public var current: OptionalBytesRecord
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, current: OptionalBytesRecord, error: StoreErrorRecord?) {
+        self.applied = applied
+        self.current = current
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RootCasResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootCasResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootCasResultRecord {
+        return
+            try RootCasResultRecord(
+                applied: FfiConverterBool.read(from: &buf), 
+                current: FfiConverterTypeOptionalBytesRecord.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootCasResultRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.current, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootCasResultRecord_lift(_ buf: RustBuffer) throws -> RootCasResultRecord {
+    return try FfiConverterTypeRootCasResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootCasResultRecord_lower(_ value: RootCasResultRecord) -> RustBuffer {
+    return FfiConverterTypeRootCasResultRecord.lower(value)
+}
+
+
+public struct RootConditionRecord: Equatable, Hashable {
+    public var name: Data
+    public var expected: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, expected: OptionalBytesRecord) {
+        self.name = name
+        self.expected = expected
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RootConditionRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootConditionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootConditionRecord {
+        return
+            try RootConditionRecord(
+                name: FfiConverterData.read(from: &buf), 
+                expected: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootConditionRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.expected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootConditionRecord_lift(_ buf: RustBuffer) throws -> RootConditionRecord {
+    return try FfiConverterTypeRootConditionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootConditionRecord_lower(_ value: RootConditionRecord) -> RustBuffer {
+    return FfiConverterTypeRootConditionRecord.lower(value)
+}
+
+
 public struct RootManifestRecord: Equatable, Hashable {
     public var tree: TreeRecord
     public var createdAtMillis: UInt64?
@@ -18451,9 +20965,9 @@ public struct RootManifestRecord: Equatable, Hashable {
         self.updatedAtMillis = updatedAtMillis
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18467,8 +20981,8 @@ public struct FfiConverterTypeRootManifestRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootManifestRecord {
         return
             try RootManifestRecord(
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
-                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf),
+                tree: FfiConverterTypeTreeRecord.read(from: &buf), 
+                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
                 updatedAtMillis: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -18496,6 +21010,60 @@ public func FfiConverterTypeRootManifestRecord_lower(_ value: RootManifestRecord
 }
 
 
+public struct RootWriteRecord: Equatable, Hashable {
+    public var name: Data
+    public var replacement: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, replacement: OptionalBytesRecord) {
+        self.name = name
+        self.replacement = replacement
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RootWriteRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootWriteRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootWriteRecord {
+        return
+            try RootWriteRecord(
+                name: FfiConverterData.read(from: &buf), 
+                replacement: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootWriteRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.replacement, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootWriteRecord_lift(_ buf: RustBuffer) throws -> RootWriteRecord {
+    return try FfiConverterTypeRootWriteRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootWriteRecord_lower(_ value: RootWriteRecord) -> RustBuffer {
+    return FfiConverterTypeRootWriteRecord.lower(value)
+}
+
+
 /**
  * Result of a streaming read operation.
  *
@@ -18514,9 +21082,9 @@ public struct ScanOutcomeRecord: Equatable, Hashable {
         self.stopped = stopped
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18530,7 +21098,7 @@ public struct FfiConverterTypeScanOutcomeRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScanOutcomeRecord {
         return
             try ScanOutcomeRecord(
-                visited: FfiConverterUInt64.read(from: &buf),
+                visited: FfiConverterUInt64.read(from: &buf), 
                 stopped: FfiConverterBool.read(from: &buf)
         )
     }
@@ -18572,9 +21140,9 @@ public struct SearchBudgetRecord: Equatable, Hashable {
         self.maxFrontierEntries = maxFrontierEntries
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18588,9 +21156,9 @@ public struct FfiConverterTypeSearchBudgetRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchBudgetRecord {
         return
             try SearchBudgetRecord(
-                maxNodes: FfiConverterOptionUInt64.read(from: &buf),
-                maxCommittedBytes: FfiConverterOptionUInt64.read(from: &buf),
-                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf),
+                maxNodes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxCommittedBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                maxDistanceEvaluations: FfiConverterOptionUInt64.read(from: &buf), 
                 maxFrontierEntries: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -18656,9 +21224,9 @@ public struct SecondaryIndexLimitsRecord: Equatable, Hashable {
         self.maxBuildRetries = maxBuildRetries
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18672,20 +21240,20 @@ public struct FfiConverterTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecondaryIndexLimitsRecord {
         return
             try SecondaryIndexLimitsRecord(
-                maxTermBytes: FfiConverterUInt64.read(from: &buf),
-                maxProjectionBytes: FfiConverterUInt64.read(from: &buf),
-                maxAllValueBytes: FfiConverterUInt64.read(from: &buf),
-                maxTermsPerRecord: FfiConverterUInt64.read(from: &buf),
-                maxProjectedBytesPerRecord: FfiConverterUInt64.read(from: &buf),
-                maxDerivedMutationsPerTransaction: FfiConverterUInt64.read(from: &buf),
-                maxProjectedBytesPerTransaction: FfiConverterUInt64.read(from: &buf),
-                maxIndexes: FfiConverterUInt64.read(from: &buf),
-                buildPageSize: FfiConverterUInt64.read(from: &buf),
-                maxTemporarySortBytes: FfiConverterUInt64.read(from: &buf),
-                maxBundleNodes: FfiConverterUInt64.read(from: &buf),
-                maxBundleBytes: FfiConverterUInt64.read(from: &buf),
-                maxVerificationEntries: FfiConverterUInt64.read(from: &buf),
-                maxWriteRetries: FfiConverterUInt64.read(from: &buf),
+                maxTermBytes: FfiConverterUInt64.read(from: &buf), 
+                maxProjectionBytes: FfiConverterUInt64.read(from: &buf), 
+                maxAllValueBytes: FfiConverterUInt64.read(from: &buf), 
+                maxTermsPerRecord: FfiConverterUInt64.read(from: &buf), 
+                maxProjectedBytesPerRecord: FfiConverterUInt64.read(from: &buf), 
+                maxDerivedMutationsPerTransaction: FfiConverterUInt64.read(from: &buf), 
+                maxProjectedBytesPerTransaction: FfiConverterUInt64.read(from: &buf), 
+                maxIndexes: FfiConverterUInt64.read(from: &buf), 
+                buildPageSize: FfiConverterUInt64.read(from: &buf), 
+                maxTemporarySortBytes: FfiConverterUInt64.read(from: &buf), 
+                maxBundleNodes: FfiConverterUInt64.read(from: &buf), 
+                maxBundleBytes: FfiConverterUInt64.read(from: &buf), 
+                maxVerificationEntries: FfiConverterUInt64.read(from: &buf), 
+                maxWriteRetries: FfiConverterUInt64.read(from: &buf), 
                 maxBuildRetries: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -18736,9 +21304,9 @@ public struct SnapshotBundleNodeRecord: Equatable, Hashable {
         self.bytes = bytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18752,7 +21320,7 @@ public struct FfiConverterTypeSnapshotBundleNodeRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleNodeRecord {
         return
             try SnapshotBundleNodeRecord(
-                cid: FfiConverterData.read(from: &buf),
+                cid: FfiConverterData.read(from: &buf), 
                 bytes: FfiConverterData.read(from: &buf)
         )
     }
@@ -18792,9 +21360,9 @@ public struct SnapshotBundleRecord: Equatable, Hashable {
         self.nodes = nodes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18808,8 +21376,8 @@ public struct FfiConverterTypeSnapshotBundleRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleRecord {
         return
             try SnapshotBundleRecord(
-                formatVersion: FfiConverterUInt32.read(from: &buf),
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                formatVersion: FfiConverterUInt32.read(from: &buf), 
+                tree: FfiConverterTypeTreeRecord.read(from: &buf), 
                 nodes: FfiConverterSequenceTypeSnapshotBundleNodeRecord.read(from: &buf)
         )
     }
@@ -18856,9 +21424,9 @@ public struct SnapshotBundleSummaryRecord: Equatable, Hashable {
         self.maxNodeBytes = maxNodeBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18872,11 +21440,11 @@ public struct FfiConverterTypeSnapshotBundleSummaryRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleSummaryRecord {
         return
             try SnapshotBundleSummaryRecord(
-                formatVersion: FfiConverterUInt32.read(from: &buf),
-                root: FfiConverterOptionData.read(from: &buf),
-                nodeCount: FfiConverterUInt64.read(from: &buf),
-                byteCount: FfiConverterUInt64.read(from: &buf),
-                minNodeBytes: FfiConverterUInt64.read(from: &buf),
+                formatVersion: FfiConverterUInt32.read(from: &buf), 
+                root: FfiConverterOptionData.read(from: &buf), 
+                nodeCount: FfiConverterUInt64.read(from: &buf), 
+                byteCount: FfiConverterUInt64.read(from: &buf), 
+                minNodeBytes: FfiConverterUInt64.read(from: &buf), 
                 maxNodeBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -18926,9 +21494,9 @@ public struct SnapshotBundleVerificationRecord: Equatable, Hashable {
         self.extraCids = extraCids
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -18942,11 +21510,11 @@ public struct FfiConverterTypeSnapshotBundleVerificationRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotBundleVerificationRecord {
         return
             try SnapshotBundleVerificationRecord(
-                valid: FfiConverterBool.read(from: &buf),
-                summary: FfiConverterTypeSnapshotBundleSummaryRecord.read(from: &buf),
-                reachableNodes: FfiConverterUInt64.read(from: &buf),
-                reachableBytes: FfiConverterUInt64.read(from: &buf),
-                missingCids: FfiConverterSequenceData.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf), 
+                summary: FfiConverterTypeSnapshotBundleSummaryRecord.read(from: &buf), 
+                reachableNodes: FfiConverterUInt64.read(from: &buf), 
+                reachableBytes: FfiConverterUInt64.read(from: &buf), 
+                missingCids: FfiConverterSequenceData.read(from: &buf), 
                 extraCids: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -18988,9 +21556,9 @@ public struct SnapshotNamespaceRecord: Equatable, Hashable {
         self.customPrefix = customPrefix
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19004,7 +21572,7 @@ public struct FfiConverterTypeSnapshotNamespaceRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotNamespaceRecord {
         return
             try SnapshotNamespaceRecord(
-                kind: FfiConverterTypeSnapshotNamespaceKind.read(from: &buf),
+                kind: FfiConverterTypeSnapshotNamespaceKind.read(from: &buf), 
                 customPrefix: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -19048,9 +21616,9 @@ public struct SnapshotRecord: Equatable, Hashable {
         self.updatedAtMillis = updatedAtMillis
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19064,10 +21632,10 @@ public struct FfiConverterTypeSnapshotRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotRecord {
         return
             try SnapshotRecord(
-                id: FfiConverterData.read(from: &buf),
-                name: FfiConverterData.read(from: &buf),
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
-                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf),
+                id: FfiConverterData.read(from: &buf), 
+                name: FfiConverterData.read(from: &buf), 
+                tree: FfiConverterTypeTreeRecord.read(from: &buf), 
+                createdAtMillis: FfiConverterOptionUInt64.read(from: &buf), 
                 updatedAtMillis: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -19108,9 +21676,9 @@ public struct SnapshotSelectionRecord: Equatable, Hashable {
         self.missingIds = missingIds
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19124,7 +21692,7 @@ public struct FfiConverterTypeSnapshotSelectionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotSelectionRecord {
         return
             try SnapshotSelectionRecord(
-                snapshots: FfiConverterSequenceTypeSnapshotRecord.read(from: &buf),
+                snapshots: FfiConverterSequenceTypeSnapshotRecord.read(from: &buf), 
                 missingIds: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -19166,9 +21734,9 @@ public struct StatsComparisonRecord: Equatable, Hashable {
         self.percentage = percentage
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19182,9 +21750,9 @@ public struct FfiConverterTypeStatsComparisonRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatsComparisonRecord {
         return
             try StatsComparisonRecord(
-                before: FfiConverterTypeTreeStatsRecord.read(from: &buf),
-                after: FfiConverterTypeTreeStatsRecord.read(from: &buf),
-                absolute: FfiConverterTypeStatsDiffRecord.read(from: &buf),
+                before: FfiConverterTypeTreeStatsRecord.read(from: &buf), 
+                after: FfiConverterTypeTreeStatsRecord.read(from: &buf), 
+                absolute: FfiConverterTypeStatsDiffRecord.read(from: &buf), 
                 percentage: FfiConverterTypeStatsPercentageChangeRecord.read(from: &buf)
         )
     }
@@ -19268,9 +21836,9 @@ public struct StatsDiffRecord: Equatable, Hashable {
         self.totalValuesSizeBytesDiff = totalValuesSizeBytesDiff
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19284,29 +21852,29 @@ public struct FfiConverterTypeStatsDiffRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatsDiffRecord {
         return
             try StatsDiffRecord(
-                numNodesDiff: FfiConverterInt64.read(from: &buf),
-                numLeavesDiff: FfiConverterInt64.read(from: &buf),
-                numInternalNodesDiff: FfiConverterInt64.read(from: &buf),
-                treeHeightDiff: FfiConverterInt8.read(from: &buf),
-                totalKeyValuePairsDiff: FfiConverterInt64.read(from: &buf),
-                totalTreeSizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                avgNodeSizeBytesDiff: FfiConverterDouble.read(from: &buf),
-                minNodeSizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                maxNodeSizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                avgEntriesPerNodeDiff: FfiConverterDouble.read(from: &buf),
-                avgFanoutDiff: FfiConverterDouble.read(from: &buf),
-                minFanoutDiff: FfiConverterInt64.read(from: &buf),
-                maxFanoutDiff: FfiConverterInt64.read(from: &buf),
-                avgFillFactorDiff: FfiConverterDouble.read(from: &buf),
-                avgLeafFillFactorDiff: FfiConverterDouble.read(from: &buf),
-                avgInternalFillFactorDiff: FfiConverterDouble.read(from: &buf),
-                avgKeySizeBytesDiff: FfiConverterDouble.read(from: &buf),
-                avgValueSizeBytesDiff: FfiConverterDouble.read(from: &buf),
-                minKeySizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                maxKeySizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                minValueSizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                maxValueSizeBytesDiff: FfiConverterInt64.read(from: &buf),
-                totalKeysSizeBytesDiff: FfiConverterInt64.read(from: &buf),
+                numNodesDiff: FfiConverterInt64.read(from: &buf), 
+                numLeavesDiff: FfiConverterInt64.read(from: &buf), 
+                numInternalNodesDiff: FfiConverterInt64.read(from: &buf), 
+                treeHeightDiff: FfiConverterInt8.read(from: &buf), 
+                totalKeyValuePairsDiff: FfiConverterInt64.read(from: &buf), 
+                totalTreeSizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                avgNodeSizeBytesDiff: FfiConverterDouble.read(from: &buf), 
+                minNodeSizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                maxNodeSizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                avgEntriesPerNodeDiff: FfiConverterDouble.read(from: &buf), 
+                avgFanoutDiff: FfiConverterDouble.read(from: &buf), 
+                minFanoutDiff: FfiConverterInt64.read(from: &buf), 
+                maxFanoutDiff: FfiConverterInt64.read(from: &buf), 
+                avgFillFactorDiff: FfiConverterDouble.read(from: &buf), 
+                avgLeafFillFactorDiff: FfiConverterDouble.read(from: &buf), 
+                avgInternalFillFactorDiff: FfiConverterDouble.read(from: &buf), 
+                avgKeySizeBytesDiff: FfiConverterDouble.read(from: &buf), 
+                avgValueSizeBytesDiff: FfiConverterDouble.read(from: &buf), 
+                minKeySizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                maxKeySizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                minValueSizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                maxValueSizeBytesDiff: FfiConverterInt64.read(from: &buf), 
+                totalKeysSizeBytesDiff: FfiConverterInt64.read(from: &buf), 
                 totalValuesSizeBytesDiff: FfiConverterInt64.read(from: &buf)
         )
     }
@@ -19410,9 +21978,9 @@ public struct StatsPercentageChangeRecord: Equatable, Hashable {
         self.totalValuesSizeBytesPct = totalValuesSizeBytesPct
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19426,29 +21994,29 @@ public struct FfiConverterTypeStatsPercentageChangeRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatsPercentageChangeRecord {
         return
             try StatsPercentageChangeRecord(
-                numNodesPct: FfiConverterDouble.read(from: &buf),
-                numLeavesPct: FfiConverterDouble.read(from: &buf),
-                numInternalNodesPct: FfiConverterDouble.read(from: &buf),
-                treeHeightPct: FfiConverterDouble.read(from: &buf),
-                totalKeyValuePairsPct: FfiConverterDouble.read(from: &buf),
-                totalTreeSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                avgNodeSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                minNodeSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                maxNodeSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                avgEntriesPerNodePct: FfiConverterDouble.read(from: &buf),
-                avgFanoutPct: FfiConverterDouble.read(from: &buf),
-                minFanoutPct: FfiConverterDouble.read(from: &buf),
-                maxFanoutPct: FfiConverterDouble.read(from: &buf),
-                avgFillFactorPct: FfiConverterDouble.read(from: &buf),
-                avgLeafFillFactorPct: FfiConverterDouble.read(from: &buf),
-                avgInternalFillFactorPct: FfiConverterDouble.read(from: &buf),
-                avgKeySizeBytesPct: FfiConverterDouble.read(from: &buf),
-                avgValueSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                minKeySizeBytesPct: FfiConverterDouble.read(from: &buf),
-                maxKeySizeBytesPct: FfiConverterDouble.read(from: &buf),
-                minValueSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                maxValueSizeBytesPct: FfiConverterDouble.read(from: &buf),
-                totalKeysSizeBytesPct: FfiConverterDouble.read(from: &buf),
+                numNodesPct: FfiConverterDouble.read(from: &buf), 
+                numLeavesPct: FfiConverterDouble.read(from: &buf), 
+                numInternalNodesPct: FfiConverterDouble.read(from: &buf), 
+                treeHeightPct: FfiConverterDouble.read(from: &buf), 
+                totalKeyValuePairsPct: FfiConverterDouble.read(from: &buf), 
+                totalTreeSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                avgNodeSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                minNodeSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                maxNodeSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                avgEntriesPerNodePct: FfiConverterDouble.read(from: &buf), 
+                avgFanoutPct: FfiConverterDouble.read(from: &buf), 
+                minFanoutPct: FfiConverterDouble.read(from: &buf), 
+                maxFanoutPct: FfiConverterDouble.read(from: &buf), 
+                avgFillFactorPct: FfiConverterDouble.read(from: &buf), 
+                avgLeafFillFactorPct: FfiConverterDouble.read(from: &buf), 
+                avgInternalFillFactorPct: FfiConverterDouble.read(from: &buf), 
+                avgKeySizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                avgValueSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                minKeySizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                maxKeySizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                minValueSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                maxValueSizeBytesPct: FfiConverterDouble.read(from: &buf), 
+                totalKeysSizeBytesPct: FfiConverterDouble.read(from: &buf), 
                 totalValuesSizeBytesPct: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -19497,6 +22065,394 @@ public func FfiConverterTypeStatsPercentageChangeRecord_lower(_ value: StatsPerc
 }
 
 
+public struct StoreCapabilitiesRecord: Equatable, Hashable {
+    public var nativeBatchReads: Bool
+    public var atomicBatchWrites: Bool
+    public var nodeScan: Bool
+    public var hints: Bool
+    public var atomicNodesAndHint: Bool
+    public var rootScan: Bool
+    public var rootCompareAndSwap: Bool
+    public var transactions: Bool
+    public var readParallelism: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(nativeBatchReads: Bool, atomicBatchWrites: Bool, nodeScan: Bool, hints: Bool, atomicNodesAndHint: Bool, rootScan: Bool, rootCompareAndSwap: Bool, transactions: Bool, readParallelism: UInt32) {
+        self.nativeBatchReads = nativeBatchReads
+        self.atomicBatchWrites = atomicBatchWrites
+        self.nodeScan = nodeScan
+        self.hints = hints
+        self.atomicNodesAndHint = atomicNodesAndHint
+        self.rootScan = rootScan
+        self.rootCompareAndSwap = rootCompareAndSwap
+        self.transactions = transactions
+        self.readParallelism = readParallelism
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StoreCapabilitiesRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreCapabilitiesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreCapabilitiesRecord {
+        return
+            try StoreCapabilitiesRecord(
+                nativeBatchReads: FfiConverterBool.read(from: &buf), 
+                atomicBatchWrites: FfiConverterBool.read(from: &buf), 
+                nodeScan: FfiConverterBool.read(from: &buf), 
+                hints: FfiConverterBool.read(from: &buf), 
+                atomicNodesAndHint: FfiConverterBool.read(from: &buf), 
+                rootScan: FfiConverterBool.read(from: &buf), 
+                rootCompareAndSwap: FfiConverterBool.read(from: &buf), 
+                transactions: FfiConverterBool.read(from: &buf), 
+                readParallelism: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreCapabilitiesRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.nativeBatchReads, into: &buf)
+        FfiConverterBool.write(value.atomicBatchWrites, into: &buf)
+        FfiConverterBool.write(value.nodeScan, into: &buf)
+        FfiConverterBool.write(value.hints, into: &buf)
+        FfiConverterBool.write(value.atomicNodesAndHint, into: &buf)
+        FfiConverterBool.write(value.rootScan, into: &buf)
+        FfiConverterBool.write(value.rootCompareAndSwap, into: &buf)
+        FfiConverterBool.write(value.transactions, into: &buf)
+        FfiConverterUInt32.write(value.readParallelism, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreCapabilitiesRecord_lift(_ buf: RustBuffer) throws -> StoreCapabilitiesRecord {
+    return try FfiConverterTypeStoreCapabilitiesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreCapabilitiesRecord_lower(_ value: StoreCapabilitiesRecord) -> RustBuffer {
+    return FfiConverterTypeStoreCapabilitiesRecord.lower(value)
+}
+
+
+public struct StoreDescriptorRecord: Equatable, Hashable {
+    public var protocolMajor: UInt32
+    public var adapterName: String
+    public var provider: String
+    public var schemaVersion: UInt32
+    public var capabilities: StoreCapabilitiesRecord
+    public var limits: StoreLimitsRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(protocolMajor: UInt32, adapterName: String, provider: String, schemaVersion: UInt32, capabilities: StoreCapabilitiesRecord, limits: StoreLimitsRecord) {
+        self.protocolMajor = protocolMajor
+        self.adapterName = adapterName
+        self.provider = provider
+        self.schemaVersion = schemaVersion
+        self.capabilities = capabilities
+        self.limits = limits
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StoreDescriptorRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreDescriptorRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreDescriptorRecord {
+        return
+            try StoreDescriptorRecord(
+                protocolMajor: FfiConverterUInt32.read(from: &buf), 
+                adapterName: FfiConverterString.read(from: &buf), 
+                provider: FfiConverterString.read(from: &buf), 
+                schemaVersion: FfiConverterUInt32.read(from: &buf), 
+                capabilities: FfiConverterTypeStoreCapabilitiesRecord.read(from: &buf), 
+                limits: FfiConverterTypeStoreLimitsRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreDescriptorRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.protocolMajor, into: &buf)
+        FfiConverterString.write(value.adapterName, into: &buf)
+        FfiConverterString.write(value.provider, into: &buf)
+        FfiConverterUInt32.write(value.schemaVersion, into: &buf)
+        FfiConverterTypeStoreCapabilitiesRecord.write(value.capabilities, into: &buf)
+        FfiConverterTypeStoreLimitsRecord.write(value.limits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorRecord_lift(_ buf: RustBuffer) throws -> StoreDescriptorRecord {
+    return try FfiConverterTypeStoreDescriptorRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorRecord_lower(_ value: StoreDescriptorRecord) -> RustBuffer {
+    return FfiConverterTypeStoreDescriptorRecord.lower(value)
+}
+
+
+public struct StoreDescriptorResultRecord: Equatable, Hashable {
+    public var value: StoreDescriptorRecord?
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: StoreDescriptorRecord?, error: StoreErrorRecord?) {
+        self.value = value
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StoreDescriptorResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreDescriptorResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreDescriptorResultRecord {
+        return
+            try StoreDescriptorResultRecord(
+                value: FfiConverterOptionTypeStoreDescriptorRecord.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreDescriptorResultRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeStoreDescriptorRecord.write(value.value, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorResultRecord_lift(_ buf: RustBuffer) throws -> StoreDescriptorResultRecord {
+    return try FfiConverterTypeStoreDescriptorResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreDescriptorResultRecord_lower(_ value: StoreDescriptorResultRecord) -> RustBuffer {
+    return FfiConverterTypeStoreDescriptorResultRecord.lower(value)
+}
+
+
+public struct StoreErrorRecord: Equatable, Hashable {
+    public var code: String
+    public var message: String
+    public var retryable: Bool
+    public var providerCode: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(code: String, message: String, retryable: Bool, providerCode: String?) {
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.providerCode = providerCode
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StoreErrorRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreErrorRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreErrorRecord {
+        return
+            try StoreErrorRecord(
+                code: FfiConverterString.read(from: &buf), 
+                message: FfiConverterString.read(from: &buf), 
+                retryable: FfiConverterBool.read(from: &buf), 
+                providerCode: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreErrorRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.code, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterBool.write(value.retryable, into: &buf)
+        FfiConverterOptionString.write(value.providerCode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreErrorRecord_lift(_ buf: RustBuffer) throws -> StoreErrorRecord {
+    return try FfiConverterTypeStoreErrorRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreErrorRecord_lower(_ value: StoreErrorRecord) -> RustBuffer {
+    return FfiConverterTypeStoreErrorRecord.lower(value)
+}
+
+
+public struct StoreLimitsRecord: Equatable, Hashable {
+    public var maxBatchReadItems: UInt32?
+    public var maxBatchWriteItems: UInt32?
+    public var maxTransactionOperations: UInt32?
+    public var maxNodeBytes: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(maxBatchReadItems: UInt32?, maxBatchWriteItems: UInt32?, maxTransactionOperations: UInt32?, maxNodeBytes: UInt64?) {
+        self.maxBatchReadItems = maxBatchReadItems
+        self.maxBatchWriteItems = maxBatchWriteItems
+        self.maxTransactionOperations = maxTransactionOperations
+        self.maxNodeBytes = maxNodeBytes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StoreLimitsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreLimitsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreLimitsRecord {
+        return
+            try StoreLimitsRecord(
+                maxBatchReadItems: FfiConverterOptionUInt32.read(from: &buf), 
+                maxBatchWriteItems: FfiConverterOptionUInt32.read(from: &buf), 
+                maxTransactionOperations: FfiConverterOptionUInt32.read(from: &buf), 
+                maxNodeBytes: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreLimitsRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt32.write(value.maxBatchReadItems, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxBatchWriteItems, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxTransactionOperations, into: &buf)
+        FfiConverterOptionUInt64.write(value.maxNodeBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreLimitsRecord_lift(_ buf: RustBuffer) throws -> StoreLimitsRecord {
+    return try FfiConverterTypeStoreLimitsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreLimitsRecord_lower(_ value: StoreLimitsRecord) -> RustBuffer {
+    return FfiConverterTypeStoreLimitsRecord.lower(value)
+}
+
+
+public struct StoreTransactionConflictRecord: Equatable, Hashable {
+    public var name: Data
+    public var expected: OptionalBytesRecord
+    public var current: OptionalBytesRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: Data, expected: OptionalBytesRecord, current: OptionalBytesRecord) {
+        self.name = name
+        self.expected = expected
+        self.current = current
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StoreTransactionConflictRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreTransactionConflictRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreTransactionConflictRecord {
+        return
+            try StoreTransactionConflictRecord(
+                name: FfiConverterData.read(from: &buf), 
+                expected: FfiConverterTypeOptionalBytesRecord.read(from: &buf), 
+                current: FfiConverterTypeOptionalBytesRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StoreTransactionConflictRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.name, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.expected, into: &buf)
+        FfiConverterTypeOptionalBytesRecord.write(value.current, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreTransactionConflictRecord_lift(_ buf: RustBuffer) throws -> StoreTransactionConflictRecord {
+    return try FfiConverterTypeStoreTransactionConflictRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreTransactionConflictRecord_lower(_ value: StoreTransactionConflictRecord) -> RustBuffer {
+    return FfiConverterTypeStoreTransactionConflictRecord.lower(value)
+}
+
+
 public struct StructuralDiffCursorRecord: Equatable, Hashable {
     public var baseRoot: Data?
     public var otherRoot: Data?
@@ -19512,9 +22468,9 @@ public struct StructuralDiffCursorRecord: Equatable, Hashable {
         self.pending = pending
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19528,9 +22484,9 @@ public struct FfiConverterTypeStructuralDiffCursorRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffCursorRecord {
         return
             try StructuralDiffCursorRecord(
-                baseRoot: FfiConverterOptionData.read(from: &buf),
-                otherRoot: FfiConverterOptionData.read(from: &buf),
-                markers: FfiConverterSequenceTypeStructuralDiffMarkerRecord.read(from: &buf),
+                baseRoot: FfiConverterOptionData.read(from: &buf), 
+                otherRoot: FfiConverterOptionData.read(from: &buf), 
+                markers: FfiConverterSequenceTypeStructuralDiffMarkerRecord.read(from: &buf), 
                 pending: FfiConverterSequenceTypeDiffRecord.read(from: &buf)
         )
     }
@@ -19576,9 +22532,9 @@ public struct StructuralDiffMarkerRecord: Equatable, Hashable {
         self.cid = cid
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19592,10 +22548,10 @@ public struct FfiConverterTypeStructuralDiffMarkerRecord: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffMarkerRecord {
         return
             try StructuralDiffMarkerRecord(
-                kind: FfiConverterTypeStructuralDiffMarkerKind.read(from: &buf),
-                baseCid: FfiConverterOptionData.read(from: &buf),
-                otherCid: FfiConverterOptionData.read(from: &buf),
-                spanEnd: FfiConverterOptionData.read(from: &buf),
+                kind: FfiConverterTypeStructuralDiffMarkerKind.read(from: &buf), 
+                baseCid: FfiConverterOptionData.read(from: &buf), 
+                otherCid: FfiConverterOptionData.read(from: &buf), 
+                spanEnd: FfiConverterOptionData.read(from: &buf), 
                 cid: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -19640,9 +22596,9 @@ public struct StructuralDiffPageRecord: Equatable, Hashable {
         self.nextCursor = nextCursor
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19656,9 +22612,9 @@ public struct FfiConverterTypeStructuralDiffPageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffPageRecord {
         return
             try StructuralDiffPageRecord(
-                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf),
-                nextCursorJson: FfiConverterOptionString.read(from: &buf),
-                stats: FfiConverterTypeDiffTraversalStatsRecord.read(from: &buf),
+                diffs: FfiConverterSequenceTypeDiffRecord.read(from: &buf), 
+                nextCursorJson: FfiConverterOptionString.read(from: &buf), 
+                stats: FfiConverterTypeDiffTraversalStatsRecord.read(from: &buf), 
                 nextCursor: FfiConverterOptionTypeStructuralDiffCursorRecord.read(from: &buf)
         )
     }
@@ -19698,9 +22654,9 @@ public struct TimestampedValueRecord: Equatable, Hashable {
         self.timestamp = timestamp
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19714,7 +22670,7 @@ public struct FfiConverterTypeTimestampedValueRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TimestampedValueRecord {
         return
             try TimestampedValueRecord(
-                value: FfiConverterData.read(from: &buf),
+                value: FfiConverterData.read(from: &buf), 
                 timestamp: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -19752,9 +22708,9 @@ public struct TombstoneMetadataRecord: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19768,7 +22724,7 @@ public struct FfiConverterTypeTombstoneMetadataRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TombstoneMetadataRecord {
         return
             try TombstoneMetadataRecord(
-                key: FfiConverterString.read(from: &buf),
+                key: FfiConverterString.read(from: &buf), 
                 value: FfiConverterData.read(from: &buf)
         )
     }
@@ -19808,9 +22764,9 @@ public struct TombstoneRecord: Equatable, Hashable {
         self.causalMetadata = causalMetadata
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19824,8 +22780,8 @@ public struct FfiConverterTypeTombstoneRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TombstoneRecord {
         return
             try TombstoneRecord(
-                actor: FfiConverterData.read(from: &buf),
-                timestampMillis: FfiConverterUInt64.read(from: &buf),
+                actor: FfiConverterData.read(from: &buf), 
+                timestampMillis: FfiConverterUInt64.read(from: &buf), 
                 causalMetadata: FfiConverterSequenceTypeTombstoneMetadataRecord.read(from: &buf)
         )
     }
@@ -19866,9 +22822,9 @@ public struct TransactionConflictRecord: Equatable, Hashable {
         self.current = current
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19882,8 +22838,8 @@ public struct FfiConverterTypeTransactionConflictRecord: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionConflictRecord {
         return
             try TransactionConflictRecord(
-                name: FfiConverterData.read(from: &buf),
-                expected: FfiConverterOptionTypeRootManifestRecord.read(from: &buf),
+                name: FfiConverterData.read(from: &buf), 
+                expected: FfiConverterOptionTypeRootManifestRecord.read(from: &buf), 
                 current: FfiConverterOptionTypeRootManifestRecord.read(from: &buf)
         )
     }
@@ -19911,6 +22867,64 @@ public func FfiConverterTypeTransactionConflictRecord_lower(_ value: Transaction
 }
 
 
+public struct TransactionResultRecord: Equatable, Hashable {
+    public var applied: Bool
+    public var conflict: StoreTransactionConflictRecord?
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, conflict: StoreTransactionConflictRecord?, error: StoreErrorRecord?) {
+        self.applied = applied
+        self.conflict = conflict
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TransactionResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionResultRecord {
+        return
+            try TransactionResultRecord(
+                applied: FfiConverterBool.read(from: &buf), 
+                conflict: FfiConverterOptionTypeStoreTransactionConflictRecord.read(from: &buf), 
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionResultRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterOptionTypeStoreTransactionConflictRecord.write(value.conflict, into: &buf)
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionResultRecord_lift(_ buf: RustBuffer) throws -> TransactionResultRecord {
+    return try FfiConverterTypeTransactionResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionResultRecord_lower(_ value: TransactionResultRecord) -> RustBuffer {
+    return FfiConverterTypeTransactionResultRecord.lower(value)
+}
+
+
 public struct TransactionUpdateRecord: Equatable, Hashable {
     public var applied: Bool
     public var conflict: Bool
@@ -19928,9 +22942,9 @@ public struct TransactionUpdateRecord: Equatable, Hashable {
         self.conflictDetail = conflictDetail
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -19944,10 +22958,10 @@ public struct FfiConverterTypeTransactionUpdateRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionUpdateRecord {
         return
             try TransactionUpdateRecord(
-                applied: FfiConverterBool.read(from: &buf),
-                conflict: FfiConverterBool.read(from: &buf),
-                nodesWritten: FfiConverterUInt64.read(from: &buf),
-                rootsWritten: FfiConverterUInt64.read(from: &buf),
+                applied: FfiConverterBool.read(from: &buf), 
+                conflict: FfiConverterBool.read(from: &buf), 
+                nodesWritten: FfiConverterUInt64.read(from: &buf), 
+                rootsWritten: FfiConverterUInt64.read(from: &buf), 
                 conflictDetail: FfiConverterOptionTypeTransactionConflictRecord.read(from: &buf)
         )
     }
@@ -19988,9 +23002,9 @@ public struct TreeDebugComparedNodeRecord: Equatable, Hashable {
         self.node = node
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20004,7 +23018,7 @@ public struct FfiConverterTypeTreeDebugComparedNodeRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugComparedNodeRecord {
         return
             try TreeDebugComparedNodeRecord(
-                status: FfiConverterTypeTreeDebugNodeStatusKind.read(from: &buf),
+                status: FfiConverterTypeTreeDebugNodeStatusKind.read(from: &buf), 
                 node: FfiConverterTypeTreeDebugNodeRecord.read(from: &buf)
         )
     }
@@ -20054,9 +23068,9 @@ public struct TreeDebugComparisonLevelRecord: Equatable, Hashable {
         self.nodes = nodes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20070,13 +23084,13 @@ public struct FfiConverterTypeTreeDebugComparisonLevelRecord: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugComparisonLevelRecord {
         return
             try TreeDebugComparisonLevelRecord(
-                level: FfiConverterUInt8.read(from: &buf),
-                sharedNodes: FfiConverterUInt64.read(from: &buf),
-                leftOnlyNodes: FfiConverterUInt64.read(from: &buf),
-                rightOnlyNodes: FfiConverterUInt64.read(from: &buf),
-                sharedBytes: FfiConverterUInt64.read(from: &buf),
-                leftOnlyBytes: FfiConverterUInt64.read(from: &buf),
-                rightOnlyBytes: FfiConverterUInt64.read(from: &buf),
+                level: FfiConverterUInt8.read(from: &buf), 
+                sharedNodes: FfiConverterUInt64.read(from: &buf), 
+                leftOnlyNodes: FfiConverterUInt64.read(from: &buf), 
+                rightOnlyNodes: FfiConverterUInt64.read(from: &buf), 
+                sharedBytes: FfiConverterUInt64.read(from: &buf), 
+                leftOnlyBytes: FfiConverterUInt64.read(from: &buf), 
+                rightOnlyBytes: FfiConverterUInt64.read(from: &buf), 
                 nodes: FfiConverterSequenceTypeTreeDebugComparedNodeRecord.read(from: &buf)
         )
     }
@@ -20130,9 +23144,9 @@ public struct TreeDebugComparisonRecord: Equatable, Hashable {
         self.levels = levels
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20146,12 +23160,12 @@ public struct FfiConverterTypeTreeDebugComparisonRecord: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugComparisonRecord {
         return
             try TreeDebugComparisonRecord(
-                sharedNodes: FfiConverterUInt64.read(from: &buf),
-                leftOnlyNodes: FfiConverterUInt64.read(from: &buf),
-                rightOnlyNodes: FfiConverterUInt64.read(from: &buf),
-                sharedBytes: FfiConverterUInt64.read(from: &buf),
-                leftOnlyBytes: FfiConverterUInt64.read(from: &buf),
-                rightOnlyBytes: FfiConverterUInt64.read(from: &buf),
+                sharedNodes: FfiConverterUInt64.read(from: &buf), 
+                leftOnlyNodes: FfiConverterUInt64.read(from: &buf), 
+                rightOnlyNodes: FfiConverterUInt64.read(from: &buf), 
+                sharedBytes: FfiConverterUInt64.read(from: &buf), 
+                leftOnlyBytes: FfiConverterUInt64.read(from: &buf), 
+                rightOnlyBytes: FfiConverterUInt64.read(from: &buf), 
                 levels: FfiConverterSequenceTypeTreeDebugComparisonLevelRecord.read(from: &buf)
         )
     }
@@ -20194,9 +23208,9 @@ public struct TreeDebugLevelRecord: Equatable, Hashable {
         self.nodes = nodes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20210,7 +23224,7 @@ public struct FfiConverterTypeTreeDebugLevelRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugLevelRecord {
         return
             try TreeDebugLevelRecord(
-                level: FfiConverterUInt8.read(from: &buf),
+                level: FfiConverterUInt8.read(from: &buf), 
                 nodes: FfiConverterSequenceTypeTreeDebugNodeRecord.read(from: &buf)
         )
     }
@@ -20262,9 +23276,9 @@ public struct TreeDebugNodeRecord: Equatable, Hashable {
         self.lastKey = lastKey
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20278,14 +23292,14 @@ public struct FfiConverterTypeTreeDebugNodeRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugNodeRecord {
         return
             try TreeDebugNodeRecord(
-                cid: FfiConverterData.read(from: &buf),
-                leaf: FfiConverterBool.read(from: &buf),
-                level: FfiConverterUInt8.read(from: &buf),
-                entryCount: FfiConverterUInt64.read(from: &buf),
-                maxEntries: FfiConverterUInt64.read(from: &buf),
-                fillFactor: FfiConverterDouble.read(from: &buf),
-                encodedBytes: FfiConverterUInt64.read(from: &buf),
-                firstKey: FfiConverterOptionData.read(from: &buf),
+                cid: FfiConverterData.read(from: &buf), 
+                leaf: FfiConverterBool.read(from: &buf), 
+                level: FfiConverterUInt8.read(from: &buf), 
+                entryCount: FfiConverterUInt64.read(from: &buf), 
+                maxEntries: FfiConverterUInt64.read(from: &buf), 
+                fillFactor: FfiConverterDouble.read(from: &buf), 
+                encodedBytes: FfiConverterUInt64.read(from: &buf), 
+                firstKey: FfiConverterOptionData.read(from: &buf), 
                 lastKey: FfiConverterOptionData.read(from: &buf)
         )
     }
@@ -20328,9 +23342,9 @@ public struct TreeDebugViewRecord: Equatable, Hashable {
         self.levels = levels
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20380,9 +23394,9 @@ public struct TreeRecord: Equatable, Hashable {
         self.config = config
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20396,7 +23410,7 @@ public struct FfiConverterTypeTreeRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeRecord {
         return
             try TreeRecord(
-                root: FfiConverterOptionData.read(from: &buf),
+                root: FfiConverterOptionData.read(from: &buf), 
                 config: FfiConverterTypeConfigRecord.read(from: &buf)
         )
     }
@@ -20434,9 +23448,9 @@ public struct TreeStatsLevelF64Record: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20450,7 +23464,7 @@ public struct FfiConverterTypeTreeStatsLevelF64Record: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeStatsLevelF64Record {
         return
             try TreeStatsLevelF64Record(
-                level: FfiConverterUInt8.read(from: &buf),
+                level: FfiConverterUInt8.read(from: &buf), 
                 value: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -20488,9 +23502,9 @@ public struct TreeStatsLevelU64Record: Equatable, Hashable {
         self.value = value
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20504,7 +23518,7 @@ public struct FfiConverterTypeTreeStatsLevelU64Record: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeStatsLevelU64Record {
         return
             try TreeStatsLevelU64Record(
-                level: FfiConverterUInt8.read(from: &buf),
+                level: FfiConverterUInt8.read(from: &buf), 
                 value: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -20596,9 +23610,9 @@ public struct TreeStatsRecord: Equatable, Hashable {
         self.totalValuesSizeBytes = totalValuesSizeBytes
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20612,34 +23626,34 @@ public struct FfiConverterTypeTreeStatsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeStatsRecord {
         return
             try TreeStatsRecord(
-                numNodes: FfiConverterUInt64.read(from: &buf),
-                numLeaves: FfiConverterUInt64.read(from: &buf),
-                numInternalNodes: FfiConverterUInt64.read(from: &buf),
-                treeHeight: FfiConverterUInt8.read(from: &buf),
-                totalKeyValuePairs: FfiConverterUInt64.read(from: &buf),
-                totalTreeSizeBytes: FfiConverterUInt64.read(from: &buf),
-                avgNodeSizeBytes: FfiConverterDouble.read(from: &buf),
-                minNodeSizeBytes: FfiConverterUInt64.read(from: &buf),
-                maxNodeSizeBytes: FfiConverterUInt64.read(from: &buf),
-                avgEntriesPerNode: FfiConverterDouble.read(from: &buf),
-                nodesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf),
-                avgNodeSizePerLevel: FfiConverterSequenceTypeTreeStatsLevelF64Record.read(from: &buf),
-                avgEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelF64Record.read(from: &buf),
-                minEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf),
-                maxEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf),
-                avgFanout: FfiConverterDouble.read(from: &buf),
-                minFanout: FfiConverterUInt64.read(from: &buf),
-                maxFanout: FfiConverterUInt64.read(from: &buf),
-                avgFillFactor: FfiConverterDouble.read(from: &buf),
-                avgLeafFillFactor: FfiConverterDouble.read(from: &buf),
-                avgInternalFillFactor: FfiConverterDouble.read(from: &buf),
-                avgKeySizeBytes: FfiConverterDouble.read(from: &buf),
-                avgValueSizeBytes: FfiConverterDouble.read(from: &buf),
-                minKeySizeBytes: FfiConverterUInt64.read(from: &buf),
-                maxKeySizeBytes: FfiConverterUInt64.read(from: &buf),
-                minValueSizeBytes: FfiConverterUInt64.read(from: &buf),
-                maxValueSizeBytes: FfiConverterUInt64.read(from: &buf),
-                totalKeysSizeBytes: FfiConverterUInt64.read(from: &buf),
+                numNodes: FfiConverterUInt64.read(from: &buf), 
+                numLeaves: FfiConverterUInt64.read(from: &buf), 
+                numInternalNodes: FfiConverterUInt64.read(from: &buf), 
+                treeHeight: FfiConverterUInt8.read(from: &buf), 
+                totalKeyValuePairs: FfiConverterUInt64.read(from: &buf), 
+                totalTreeSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                avgNodeSizeBytes: FfiConverterDouble.read(from: &buf), 
+                minNodeSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                maxNodeSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                avgEntriesPerNode: FfiConverterDouble.read(from: &buf), 
+                nodesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf), 
+                avgNodeSizePerLevel: FfiConverterSequenceTypeTreeStatsLevelF64Record.read(from: &buf), 
+                avgEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelF64Record.read(from: &buf), 
+                minEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf), 
+                maxEntriesPerLevel: FfiConverterSequenceTypeTreeStatsLevelU64Record.read(from: &buf), 
+                avgFanout: FfiConverterDouble.read(from: &buf), 
+                minFanout: FfiConverterUInt64.read(from: &buf), 
+                maxFanout: FfiConverterUInt64.read(from: &buf), 
+                avgFillFactor: FfiConverterDouble.read(from: &buf), 
+                avgLeafFillFactor: FfiConverterDouble.read(from: &buf), 
+                avgInternalFillFactor: FfiConverterDouble.read(from: &buf), 
+                avgKeySizeBytes: FfiConverterDouble.read(from: &buf), 
+                avgValueSizeBytes: FfiConverterDouble.read(from: &buf), 
+                minKeySizeBytes: FfiConverterUInt64.read(from: &buf), 
+                maxKeySizeBytes: FfiConverterUInt64.read(from: &buf), 
+                minValueSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                maxValueSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                totalKeysSizeBytes: FfiConverterUInt64.read(from: &buf), 
                 totalValuesSizeBytes: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -20710,9 +23724,9 @@ public struct TypedContentObjectRecord: Equatable, Hashable {
         self.depth = depth
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20726,10 +23740,10 @@ public struct FfiConverterTypeTypedContentObjectRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TypedContentObjectRecord {
         return
             try TypedContentObjectRecord(
-                kind: FfiConverterTypeContentObjectKindRecord.read(from: &buf),
-                cid: FfiConverterData.read(from: &buf),
-                dimensions: FfiConverterOptionUInt32.read(from: &buf),
-                bytes: FfiConverterData.read(from: &buf),
+                kind: FfiConverterTypeContentObjectKindRecord.read(from: &buf), 
+                cid: FfiConverterData.read(from: &buf), 
+                dimensions: FfiConverterOptionUInt32.read(from: &buf), 
+                bytes: FfiConverterData.read(from: &buf), 
                 depth: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -20759,6 +23773,56 @@ public func FfiConverterTypeTypedContentObjectRecord_lower(_ value: TypedContent
 }
 
 
+public struct UnitResultRecord: Equatable, Hashable {
+    public var error: StoreErrorRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: StoreErrorRecord?) {
+        self.error = error
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UnitResultRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUnitResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnitResultRecord {
+        return
+            try UnitResultRecord(
+                error: FfiConverterOptionTypeStoreErrorRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UnitResultRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeStoreErrorRecord.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnitResultRecord_lift(_ buf: RustBuffer) throws -> UnitResultRecord {
+    return try FfiConverterTypeUnitResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUnitResultRecord_lower(_ value: UnitResultRecord) -> RustBuffer {
+    return FfiConverterTypeUnitResultRecord.lower(value)
+}
+
+
 public struct ValueRefRecord: Equatable, Hashable {
     public var kind: ValueRefKind
     public var value: Data?
@@ -20772,9 +23836,9 @@ public struct ValueRefRecord: Equatable, Hashable {
         self.blob = blob
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20788,8 +23852,8 @@ public struct FfiConverterTypeValueRefRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ValueRefRecord {
         return
             try ValueRefRecord(
-                kind: FfiConverterTypeValueRefKind.read(from: &buf),
-                value: FfiConverterOptionData.read(from: &buf),
+                kind: FfiConverterTypeValueRefKind.read(from: &buf), 
+                value: FfiConverterOptionData.read(from: &buf), 
                 blob: FfiConverterOptionTypeBlobRefRecord.read(from: &buf)
         )
     }
@@ -20828,9 +23892,9 @@ public struct VersionPruneRecord: Equatable, Hashable {
         self.removed = removed
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20844,7 +23908,7 @@ public struct FfiConverterTypeVersionPruneRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionPruneRecord {
         return
             try VersionPruneRecord(
-                retained: FfiConverterSequenceData.read(from: &buf),
+                retained: FfiConverterSequenceData.read(from: &buf), 
                 removed: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -20882,9 +23946,9 @@ public struct VersionedMapBatchResultRecord: Equatable, Hashable {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20898,7 +23962,7 @@ public struct FfiConverterTypeVersionedMapBatchResultRecord: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionedMapBatchResultRecord {
         return
             try VersionedMapBatchResultRecord(
-                version: FfiConverterTypeMapVersionRecord.read(from: &buf),
+                version: FfiConverterTypeMapVersionRecord.read(from: &buf), 
                 stats: FfiConverterTypeBatchApplyStatsRecord.read(from: &buf)
         )
     }
@@ -20940,9 +24004,9 @@ public struct VersionedTransactionCommitRecord: Equatable, Hashable {
         self.conflictCurrent = conflictCurrent
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -20956,9 +24020,9 @@ public struct FfiConverterTypeVersionedTransactionCommitRecord: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionedTransactionCommitRecord {
         return
             try VersionedTransactionCommitRecord(
-                applied: FfiConverterBool.read(from: &buf),
-                versions: FfiConverterSequenceTypeMapVersionRecord.read(from: &buf),
-                conflictMapId: FfiConverterOptionData.read(from: &buf),
+                applied: FfiConverterBool.read(from: &buf), 
+                versions: FfiConverterSequenceTypeMapVersionRecord.read(from: &buf), 
+                conflictMapId: FfiConverterOptionData.read(from: &buf), 
                 conflictCurrent: FfiConverterOptionTypeMapVersionRecord.read(from: &buf)
         )
     }
@@ -21002,9 +24066,9 @@ public struct VersionedValueRecord: Equatable, Hashable {
         self.payload = payload
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -21018,9 +24082,9 @@ public struct FfiConverterTypeVersionedValueRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionedValueRecord {
         return
             try VersionedValueRecord(
-                schema: FfiConverterString.read(from: &buf),
-                version: FfiConverterUInt64.read(from: &buf),
-                encoding: FfiConverterTypeEncodingRecord.read(from: &buf),
+                schema: FfiConverterString.read(from: &buf), 
+                version: FfiConverterUInt64.read(from: &buf), 
+                encoding: FfiConverterTypeEncodingRecord.read(from: &buf), 
                 payload: FfiConverterData.read(from: &buf)
         )
     }
@@ -21060,9 +24124,9 @@ public struct WriteResultRecord: Equatable, Hashable {
         self.stats = stats
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -21076,7 +24140,7 @@ public struct FfiConverterTypeWriteResultRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteResultRecord {
         return
             try WriteResultRecord(
-                tree: FfiConverterTypeTreeRecord.read(from: &buf),
+                tree: FfiConverterTypeTreeRecord.read(from: &buf), 
                 stats: FfiConverterTypeWriteStatsRecord.read(from: &buf)
         )
     }
@@ -21134,9 +24198,9 @@ public struct WriteStatsRecord: Equatable, Hashable {
         self.usedBatchedValueUpdatePath = usedBatchedValueUpdatePath
     }
 
+    
 
-
-
+    
 }
 
 #if compiler(>=6)
@@ -21150,17 +24214,17 @@ public struct FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WriteStatsRecord {
         return
             try WriteStatsRecord(
-                inputMutations: FfiConverterUInt64.read(from: &buf),
-                effectiveMutations: FfiConverterUInt64.read(from: &buf),
-                entriesStreamed: FfiConverterUInt64.read(from: &buf),
-                nodesRead: FfiConverterUInt64.read(from: &buf),
-                nodesWritten: FfiConverterUInt64.read(from: &buf),
-                nodesReused: FfiConverterUInt64.read(from: &buf),
-                bytesRead: FfiConverterUInt64.read(from: &buf),
-                bytesWritten: FfiConverterUInt64.read(from: &buf),
-                resyncDistanceEntries: FfiConverterUInt64.read(from: &buf),
-                resyncDistanceNodes: FfiConverterUInt64.read(from: &buf),
-                usedKeyStableFastPath: FfiConverterBool.read(from: &buf),
+                inputMutations: FfiConverterUInt64.read(from: &buf), 
+                effectiveMutations: FfiConverterUInt64.read(from: &buf), 
+                entriesStreamed: FfiConverterUInt64.read(from: &buf), 
+                nodesRead: FfiConverterUInt64.read(from: &buf), 
+                nodesWritten: FfiConverterUInt64.read(from: &buf), 
+                nodesReused: FfiConverterUInt64.read(from: &buf), 
+                bytesRead: FfiConverterUInt64.read(from: &buf), 
+                bytesWritten: FfiConverterUInt64.read(from: &buf), 
+                resyncDistanceEntries: FfiConverterUInt64.read(from: &buf), 
+                resyncDistanceNodes: FfiConverterUInt64.read(from: &buf), 
+                usedKeyStableFastPath: FfiConverterBool.read(from: &buf), 
                 usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf)
         )
     }
@@ -21200,7 +24264,7 @@ public func FfiConverterTypeWriteStatsRecord_lower(_ value: WriteStatsRecord) ->
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum AdaptiveQualityRecord: Equatable, Hashable {
-
+    
     case fast
     case balanced
     case highRecall
@@ -21224,32 +24288,32 @@ public struct FfiConverterTypeAdaptiveQualityRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AdaptiveQualityRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .fast
-
+        
         case 2: return .balanced
-
+        
         case 3: return .highRecall
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: AdaptiveQualityRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .fast:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .balanced:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .highRecall:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -21274,7 +24338,7 @@ public func FfiConverterTypeAdaptiveQualityRecord_lower(_ value: AdaptiveQuality
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CatalogAcceleratorKindRecord: Equatable, Hashable {
-
+    
     case hnsw
     case productQuantized
     case composite
@@ -21298,32 +24362,32 @@ public struct FfiConverterTypeCatalogAcceleratorKindRecord: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CatalogAcceleratorKindRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .hnsw
-
+        
         case 2: return .productQuantized
-
+        
         case 3: return .composite
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CatalogAcceleratorKindRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .hnsw:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .productQuantized:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .composite:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -21348,7 +24412,7 @@ public func FfiConverterTypeCatalogAcceleratorKindRecord_lower(_ value: CatalogA
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CompositeBaseKindRecord: Equatable, Hashable {
-
+    
     case hnsw
     case productQuantized
 
@@ -21371,26 +24435,26 @@ public struct FfiConverterTypeCompositeBaseKindRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBaseKindRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .hnsw
-
+        
         case 2: return .productQuantized
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CompositeBaseKindRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .hnsw:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .productQuantized:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -21415,7 +24479,7 @@ public func FfiConverterTypeCompositeBaseKindRecord_lower(_ value: CompositeBase
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CompositeBuildOrRebuildKindRecord: Equatable, Hashable {
-
+    
     case composite
     case noAcceleratorRequired
     case hnswRebuilt
@@ -21440,38 +24504,38 @@ public struct FfiConverterTypeCompositeBuildOrRebuildKindRecord: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompositeBuildOrRebuildKindRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .composite
-
+        
         case 2: return .noAcceleratorRequired
-
+        
         case 3: return .hnswRebuilt
-
+        
         case 4: return .productQuantizedRebuilt
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CompositeBuildOrRebuildKindRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .composite:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .noAcceleratorRequired:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .hnswRebuilt:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .productQuantizedRebuilt:
             writeInt(&buf, Int32(4))
-
+        
         }
     }
 }
@@ -21496,7 +24560,7 @@ public func FfiConverterTypeCompositeBuildOrRebuildKindRecord_lower(_ value: Com
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ContentObjectKindRecord: Equatable, Hashable {
-
+    
     case orderedNode
     case proximityDescriptor
     case proximityNode
@@ -21529,86 +24593,86 @@ public struct FfiConverterTypeContentObjectKindRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContentObjectKindRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .orderedNode
-
+        
         case 2: return .proximityDescriptor
-
+        
         case 3: return .proximityNode
-
+        
         case 4: return .overflowDirectory
-
+        
         case 5: return .overflowPage
-
+        
         case 6: return .externalVector
-
+        
         case 7: return .scalarQuantization
-
+        
         case 8: return .productQuantization
-
+        
         case 9: return .hnswManifest
-
+        
         case 10: return .hnswPage
-
+        
         case 11: return .compositeAccelerator
-
+        
         case 12: return .acceleratorCatalog
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ContentObjectKindRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .orderedNode:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .proximityDescriptor:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .proximityNode:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .overflowDirectory:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .overflowPage:
             writeInt(&buf, Int32(5))
-
-
+        
+        
         case .externalVector:
             writeInt(&buf, Int32(6))
-
-
+        
+        
         case .scalarQuantization:
             writeInt(&buf, Int32(7))
-
-
+        
+        
         case .productQuantization:
             writeInt(&buf, Int32(8))
-
-
+        
+        
         case .hnswManifest:
             writeInt(&buf, Int32(9))
-
-
+        
+        
         case .hnswPage:
             writeInt(&buf, Int32(10))
-
-
+        
+        
         case .compositeAccelerator:
             writeInt(&buf, Int32(11))
-
-
+        
+        
         case .acceleratorCatalog:
             writeInt(&buf, Int32(12))
-
+        
         }
     }
 }
@@ -21633,7 +24697,7 @@ public func FfiConverterTypeContentObjectKindRecord_lower(_ value: ContentObject
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CrdtDeletePolicyKind: Equatable, Hashable {
-
+    
     case deleteWins
     case updateWins
 
@@ -21656,26 +24720,26 @@ public struct FfiConverterTypeCrdtDeletePolicyKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrdtDeletePolicyKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .deleteWins
-
+        
         case 2: return .updateWins
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CrdtDeletePolicyKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .deleteWins:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .updateWins:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -21700,7 +24764,7 @@ public func FfiConverterTypeCrdtDeletePolicyKind_lower(_ value: CrdtDeletePolicy
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CrdtMergeStrategyKind: Equatable, Hashable {
-
+    
     case lastWriterWins
     case multiValue
 
@@ -21723,26 +24787,26 @@ public struct FfiConverterTypeCrdtMergeStrategyKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrdtMergeStrategyKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .lastWriterWins
-
+        
         case 2: return .multiValue
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CrdtMergeStrategyKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .lastWriterWins:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .multiValue:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -21767,7 +24831,7 @@ public func FfiConverterTypeCrdtMergeStrategyKind_lower(_ value: CrdtMergeStrate
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CrdtResolutionKind: Equatable, Hashable {
-
+    
     case value
     case delete
 
@@ -21790,26 +24854,26 @@ public struct FfiConverterTypeCrdtResolutionKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CrdtResolutionKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .value
-
+        
         case 2: return .delete
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CrdtResolutionKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .value:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .delete:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -21834,7 +24898,7 @@ public func FfiConverterTypeCrdtResolutionKind_lower(_ value: CrdtResolutionKind
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum DiffKind: Equatable, Hashable {
-
+    
     case added
     case removed
     case changed
@@ -21858,32 +24922,32 @@ public struct FfiConverterTypeDiffKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiffKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .added
-
+        
         case 2: return .removed
-
+        
         case 3: return .changed
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: DiffKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .added:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .removed:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .changed:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -21908,7 +24972,7 @@ public func FfiConverterTypeDiffKind_lower(_ value: DiffKind) -> RustBuffer {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum DistanceMetricRecord: Equatable, Hashable {
-
+    
     case l2Squared
     case cosine
     case innerProduct
@@ -21932,32 +24996,32 @@ public struct FfiConverterTypeDistanceMetricRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DistanceMetricRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .l2Squared
-
+        
         case 2: return .cosine
-
+        
         case 3: return .innerProduct
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: DistanceMetricRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .l2Squared:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .cosine:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .innerProduct:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -21982,7 +25046,7 @@ public func FfiConverterTypeDistanceMetricRecord_lower(_ value: DistanceMetricRe
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum EncodingKind: Equatable, Hashable {
-
+    
     case raw
     case cbor
     case json
@@ -22007,38 +25071,38 @@ public struct FfiConverterTypeEncodingKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EncodingKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .raw
-
+        
         case 2: return .cbor
-
+        
         case 3: return .json
-
+        
         case 4: return .custom
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: EncodingKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .raw:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .cbor:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .json:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .custom:
             writeInt(&buf, Int32(4))
-
+        
         }
     }
 }
@@ -22063,7 +25127,7 @@ public func FfiConverterTypeEncodingKind_lower(_ value: EncodingKind) -> RustBuf
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum FullRebuildReasonKindRecord: Equatable, Hashable {
-
+    
     case deltaRecords
     case shadowRecords
     case deltaRatio
@@ -22088,38 +25152,38 @@ public struct FfiConverterTypeFullRebuildReasonKindRecord: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FullRebuildReasonKindRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .deltaRecords
-
+        
         case 2: return .shadowRecords
-
+        
         case 3: return .deltaRatio
-
+        
         case 4: return .shadowRatio
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: FullRebuildReasonKindRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .deltaRecords:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .shadowRecords:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .deltaRatio:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .shadowRatio:
             writeInt(&buf, Int32(4))
-
+        
         }
     }
 }
@@ -22144,7 +25208,7 @@ public func FfiConverterTypeFullRebuildReasonKindRecord_lower(_ value: FullRebui
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum HnswRoutingVectorEncodingRecord: Equatable, Hashable {
-
+    
     case fullF32
 
 
@@ -22166,20 +25230,20 @@ public struct FfiConverterTypeHnswRoutingVectorEncodingRecord: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HnswRoutingVectorEncodingRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .fullF32
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: HnswRoutingVectorEncodingRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .fullF32:
             writeInt(&buf, Int32(1))
-
+        
         }
     }
 }
@@ -22204,7 +25268,7 @@ public func FfiConverterTypeHnswRoutingVectorEncodingRecord_lower(_ value: HnswR
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum IndexProjectionRecord: Equatable, Hashable {
-
+    
     case keysOnly
     case include
     case all
@@ -22228,32 +25292,32 @@ public struct FfiConverterTypeIndexProjectionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexProjectionRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .keysOnly
-
+        
         case 2: return .include
-
+        
         case 3: return .all
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: IndexProjectionRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .keysOnly:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .include:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .all:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -22278,7 +25342,7 @@ public func FfiConverterTypeIndexProjectionRecord_lower(_ value: IndexProjection
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum IndexedUpdateKind: Equatable, Hashable {
-
+    
     case applied
     case unchanged
     case conflict
@@ -22302,32 +25366,32 @@ public struct FfiConverterTypeIndexedUpdateKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedUpdateKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .applied
-
+        
         case 2: return .unchanged
-
+        
         case 3: return .conflict
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: IndexedUpdateKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .applied:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .unchanged:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .conflict:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -22352,7 +25416,7 @@ public func FfiConverterTypeIndexedUpdateKind_lower(_ value: IndexedUpdateKind) 
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MapUpdateKind: Equatable, Hashable {
-
+    
     case applied
     case unchanged
     case conflict
@@ -22376,32 +25440,32 @@ public struct FfiConverterTypeMapUpdateKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MapUpdateKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .applied
-
+        
         case 2: return .unchanged
-
+        
         case 3: return .conflict
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MapUpdateKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .applied:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .unchanged:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .conflict:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -22426,7 +25490,7 @@ public func FfiConverterTypeMapUpdateKind_lower(_ value: MapUpdateKind) -> RustB
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MergeFallbackReasonKind: Equatable, Hashable {
-
+    
     case missingRoot
     case shapeMismatch
     case nodeLengthMismatch
@@ -22453,50 +25517,50 @@ public struct FfiConverterTypeMergeFallbackReasonKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeFallbackReasonKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .missingRoot
-
+        
         case 2: return .shapeMismatch
-
+        
         case 3: return .nodeLengthMismatch
-
+        
         case 4: return .childFallback
-
+        
         case 5: return .deleteResolution
-
+        
         case 6: return .diffBatch
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MergeFallbackReasonKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .missingRoot:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .shapeMismatch:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .nodeLengthMismatch:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .childFallback:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .deleteResolution:
             writeInt(&buf, Int32(5))
-
-
+        
+        
         case .diffBatch:
             writeInt(&buf, Int32(6))
-
+        
         }
     }
 }
@@ -22521,7 +25585,7 @@ public func FfiConverterTypeMergeFallbackReasonKind_lower(_ value: MergeFallback
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MergeFastPathKind: Equatable, Hashable {
-
+    
     case branchesEqual
     case leftUnchanged
     case rightUnchanged
@@ -22545,32 +25609,32 @@ public struct FfiConverterTypeMergeFastPathKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeFastPathKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .branchesEqual
-
+        
         case 2: return .leftUnchanged
-
+        
         case 3: return .rightUnchanged
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MergeFastPathKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .branchesEqual:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .leftUnchanged:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .rightUnchanged:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -22595,7 +25659,7 @@ public func FfiConverterTypeMergeFastPathKind_lower(_ value: MergeFastPathKind) 
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MergeReuseReasonKind: Equatable, Hashable {
-
+    
     case branchesEqual
     case leftUnchanged
     case rightUnchanged
@@ -22622,50 +25686,50 @@ public struct FfiConverterTypeMergeReuseReasonKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeReuseReasonKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .branchesEqual
-
+        
         case 2: return .leftUnchanged
-
+        
         case 3: return .rightUnchanged
-
+        
         case 4: return .unchangedAfterMerge
-
+        
         case 5: return .matchesLeft
-
+        
         case 6: return .matchesRight
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MergeReuseReasonKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .branchesEqual:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .leftUnchanged:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .rightUnchanged:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .unchangedAfterMerge:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .matchesLeft:
             writeInt(&buf, Int32(5))
-
-
+        
+        
         case .matchesRight:
             writeInt(&buf, Int32(6))
-
+        
         }
     }
 }
@@ -22690,7 +25754,7 @@ public func FfiConverterTypeMergeReuseReasonKind_lower(_ value: MergeReuseReason
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MergeTraceEventKind: Equatable, Hashable {
-
+    
     case fastPath
     case structuralMergeStarted
     case reusedSubtree
@@ -22719,62 +25783,62 @@ public struct FfiConverterTypeMergeTraceEventKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceEventKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .fastPath
-
+        
         case 2: return .structuralMergeStarted
-
+        
         case 3: return .reusedSubtree
-
+        
         case 4: return .rewrittenNode
-
+        
         case 5: return .resolverCalled
-
+        
         case 6: return .fallback
-
+        
         case 7: return .diffTraversal
-
+        
         case 8: return .batchMerge
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MergeTraceEventKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .fastPath:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .structuralMergeStarted:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .reusedSubtree:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .rewrittenNode:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .resolverCalled:
             writeInt(&buf, Int32(5))
-
-
+        
+        
         case .fallback:
             writeInt(&buf, Int32(6))
-
-
+        
+        
         case .diffTraversal:
             writeInt(&buf, Int32(7))
-
-
+        
+        
         case .batchMerge:
             writeInt(&buf, Int32(8))
-
+        
         }
     }
 }
@@ -22799,7 +25863,7 @@ public func FfiConverterTypeMergeTraceEventKind_lower(_ value: MergeTraceEventKi
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MergeTraceResolutionKind: Equatable, Hashable {
-
+    
     case value
     case delete
     case unresolved
@@ -22823,32 +25887,32 @@ public struct FfiConverterTypeMergeTraceResolutionKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceResolutionKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .value
-
+        
         case 2: return .delete
-
+        
         case 3: return .unresolved
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MergeTraceResolutionKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .value:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .delete:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .unresolved:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -22873,7 +25937,7 @@ public func FfiConverterTypeMergeTraceResolutionKind_lower(_ value: MergeTraceRe
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MergeTraceStageKind: Equatable, Hashable {
-
+    
     case structural
     case batch
 
@@ -22896,26 +25960,26 @@ public struct FfiConverterTypeMergeTraceStageKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MergeTraceStageKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .structural
-
+        
         case 2: return .batch
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MergeTraceStageKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .structural:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .batch:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -22940,7 +26004,7 @@ public func FfiConverterTypeMergeTraceStageKind_lower(_ value: MergeTraceStageKi
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum MutationKind: Equatable, Hashable {
-
+    
     case upsert
     case delete
 
@@ -22963,26 +26027,26 @@ public struct FfiConverterTypeMutationKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MutationKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .upsert
-
+        
         case 2: return .delete
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: MutationKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .upsert:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .delete:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -23007,7 +26071,7 @@ public func FfiConverterTypeMutationKind_lower(_ value: MutationKind) -> RustBuf
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NamedRootRetentionKind: Equatable, Hashable {
-
+    
     case all
     case exact
     case prefix
@@ -23033,44 +26097,44 @@ public struct FfiConverterTypeNamedRootRetentionKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NamedRootRetentionKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .all
-
+        
         case 2: return .exact
-
+        
         case 3: return .prefix
-
+        
         case 4: return .newestByName
-
+        
         case 5: return .updatedSince
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NamedRootRetentionKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .all:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .exact:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .prefix:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .newestByName:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .updatedSince:
             writeInt(&buf, Int32(5))
-
+        
         }
     }
 }
@@ -23094,8 +26158,8 @@ public func FfiConverterTypeNamedRootRetentionKind_lower(_ value: NamedRootReten
 
 public enum ProllyBindingError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-
-
+    
+    
     case InvalidArgument(reason: String
     )
     case InvalidCid(reason: String
@@ -23113,15 +26177,15 @@ public enum ProllyBindingError: Swift.Error, Equatable, Hashable, Foundation.Loc
     case Internal(reason: String
     )
 
+    
 
+    
 
-
-
-
+    
     public var errorDescription: String? {
         String(reflecting: self)
     }
-
+    
 }
 
 #if compiler(>=6)
@@ -23138,9 +26202,9 @@ public struct FfiConverterTypeProllyBindingError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
+        
 
-
-
+        
         case 1: return .InvalidArgument(
             reason: try FfiConverterString.read(from: &buf)
             )
@@ -23173,49 +26237,49 @@ public struct FfiConverterTypeProllyBindingError: FfiConverterRustBuffer {
     public static func write(_ value: ProllyBindingError, into buf: inout [UInt8]) {
         switch value {
 
+        
 
-
-
-
+        
+        
         case let .InvalidArgument(reason):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .InvalidCid(reason):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .InvalidNode(reason):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .NotFound(reason):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .Conflict(reason):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .Store(reason):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .Serialization(reason):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(reason, into: &buf)
-
-
+            
+        
         case let .Internal(reason):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(reason, into: &buf)
-
+            
         }
     }
 }
@@ -23239,7 +26303,7 @@ public func FfiConverterTypeProllyBindingError_lower(_ value: ProllyBindingError
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ProximityFilterKind: Equatable, Hashable {
-
+    
     case all
     case keyRange
     case prefix
@@ -23264,38 +26328,38 @@ public struct FfiConverterTypeProximityFilterKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximityFilterKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .all
-
+        
         case 2: return .keyRange
-
+        
         case 3: return .prefix
-
+        
         case 4: return .eligibleKeys
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ProximityFilterKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .all:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .keyRange:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .prefix:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .eligibleKeys:
             writeInt(&buf, Int32(4))
-
+        
         }
     }
 }
@@ -23320,7 +26384,7 @@ public func FfiConverterTypeProximityFilterKind_lower(_ value: ProximityFilterKi
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ProximitySearchClaimKindRecord: Equatable, Hashable {
-
+    
     case exactL2Optimal
     case honestExecution
 
@@ -23343,26 +26407,26 @@ public struct FfiConverterTypeProximitySearchClaimKindRecord: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProximitySearchClaimKindRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .exactL2Optimal
-
+        
         case 2: return .honestExecution
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ProximitySearchClaimKindRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .exactL2Optimal:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .honestExecution:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -23387,7 +26451,7 @@ public func FfiConverterTypeProximitySearchClaimKindRecord_lower(_ value: Proxim
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum QueryKernelRecord: Equatable, Hashable {
-
+    
     case scalarDeterministic
     case simdDeterministic
     case autoDeterministic
@@ -23411,32 +26475,32 @@ public struct FfiConverterTypeQueryKernelRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QueryKernelRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .scalarDeterministic
-
+        
         case 2: return .simdDeterministic
-
+        
         case 3: return .autoDeterministic
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: QueryKernelRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .scalarDeterministic:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .simdDeterministic:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .autoDeterministic:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -23461,7 +26525,7 @@ public func FfiConverterTypeQueryKernelRecord_lower(_ value: QueryKernelRecord) 
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ResolutionKind: Equatable, Hashable {
-
+    
     case value
     case delete
     case unresolved
@@ -23485,32 +26549,32 @@ public struct FfiConverterTypeResolutionKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResolutionKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .value
-
+        
         case 2: return .delete
-
+        
         case 3: return .unresolved
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ResolutionKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .value:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .delete:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .unresolved:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -23535,7 +26599,7 @@ public func FfiConverterTypeResolutionKind_lower(_ value: ResolutionKind) -> Rus
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SearchBackendRecord: Equatable, Hashable {
-
+    
     case native
     case productQuantized
     case hnsw
@@ -23561,44 +26625,44 @@ public struct FfiConverterTypeSearchBackendRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchBackendRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .native
-
+        
         case 2: return .productQuantized
-
+        
         case 3: return .hnsw
-
+        
         case 4: return .composite
-
+        
         case 5: return .auto
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: SearchBackendRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .native:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .productQuantized:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .hnsw:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .composite:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .auto:
             writeInt(&buf, Int32(5))
-
+        
         }
     }
 }
@@ -23623,7 +26687,7 @@ public func FfiConverterTypeSearchBackendRecord_lower(_ value: SearchBackendReco
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SearchCompletionRecord: Equatable, Hashable {
-
+    
     case exact
     case approximatePolicySatisfied
     case budgetExhausted
@@ -23649,44 +26713,44 @@ public struct FfiConverterTypeSearchCompletionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchCompletionRecord {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .exact
-
+        
         case 2: return .approximatePolicySatisfied
-
+        
         case 3: return .budgetExhausted
-
+        
         case 4: return .cancelled
-
+        
         case 5: return .deadlineExceeded
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: SearchCompletionRecord, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .exact:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .approximatePolicySatisfied:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .budgetExhausted:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .cancelled:
             writeInt(&buf, Int32(4))
-
-
+        
+        
         case .deadlineExceeded:
             writeInt(&buf, Int32(5))
-
+        
         }
     }
 }
@@ -23711,7 +26775,7 @@ public func FfiConverterTypeSearchCompletionRecord_lower(_ value: SearchCompleti
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SearchPolicyKind: Equatable, Hashable {
-
+    
     case exact
     case fixedBudget
     case adaptive
@@ -23735,32 +26799,32 @@ public struct FfiConverterTypeSearchPolicyKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchPolicyKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .exact
-
+        
         case 2: return .fixedBudget
-
+        
         case 3: return .adaptive
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: SearchPolicyKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .exact:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .fixedBudget:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .adaptive:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -23785,7 +26849,7 @@ public func FfiConverterTypeSearchPolicyKind_lower(_ value: SearchPolicyKind) ->
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SnapshotNamespaceKind: Equatable, Hashable {
-
+    
     case branch
     case tag
     case checkpoint
@@ -23810,38 +26874,38 @@ public struct FfiConverterTypeSnapshotNamespaceKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SnapshotNamespaceKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .branch
-
+        
         case 2: return .tag
-
+        
         case 3: return .checkpoint
-
+        
         case 4: return .custom
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: SnapshotNamespaceKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .branch:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .tag:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .checkpoint:
             writeInt(&buf, Int32(3))
-
-
+        
+        
         case .custom:
             writeInt(&buf, Int32(4))
-
+        
         }
     }
 }
@@ -23866,7 +26930,7 @@ public func FfiConverterTypeSnapshotNamespaceKind_lower(_ value: SnapshotNamespa
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum StructuralDiffMarkerKind: Equatable, Hashable {
-
+    
     case compare
     case added
     case removed
@@ -23890,32 +26954,32 @@ public struct FfiConverterTypeStructuralDiffMarkerKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StructuralDiffMarkerKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .compare
-
+        
         case 2: return .added
-
+        
         case 3: return .removed
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: StructuralDiffMarkerKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .compare:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .added:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .removed:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -23940,7 +27004,7 @@ public func FfiConverterTypeStructuralDiffMarkerKind_lower(_ value: StructuralDi
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum TreeDebugNodeStatusKind: Equatable, Hashable {
-
+    
     case shared
     case leftOnly
     case rightOnly
@@ -23964,32 +27028,32 @@ public struct FfiConverterTypeTreeDebugNodeStatusKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TreeDebugNodeStatusKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .shared
-
+        
         case 2: return .leftOnly
-
+        
         case 3: return .rightOnly
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: TreeDebugNodeStatusKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .shared:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .leftOnly:
             writeInt(&buf, Int32(2))
-
-
+        
+        
         case .rightOnly:
             writeInt(&buf, Int32(3))
-
+        
         }
     }
 }
@@ -24014,7 +27078,7 @@ public func FfiConverterTypeTreeDebugNodeStatusKind_lower(_ value: TreeDebugNode
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ValueRefKind: Equatable, Hashable {
-
+    
     case inline
     case blob
 
@@ -24037,26 +27101,26 @@ public struct FfiConverterTypeValueRefKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ValueRefKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
+        
         case 1: return .inline
-
+        
         case 2: return .blob
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ValueRefKind, into buf: inout [UInt8]) {
         switch value {
-
-
+        
+        
         case .inline:
             writeInt(&buf, Int32(1))
-
-
+        
+        
         case .blob:
             writeInt(&buf, Int32(2))
-
+        
         }
     }
 }
@@ -24792,6 +27856,78 @@ fileprivate struct FfiConverterOptionTypeSecondaryIndexLimitsRecord: FfiConverte
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSecondaryIndexLimitsRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStoreDescriptorRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StoreDescriptorRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoreDescriptorRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoreDescriptorRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStoreErrorRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StoreErrorRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoreErrorRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoreErrorRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStoreTransactionConflictRecord: FfiConverterRustBuffer {
+    typealias SwiftType = StoreTransactionConflictRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStoreTransactionConflictRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStoreTransactionConflictRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -25588,6 +28724,31 @@ fileprivate struct FfiConverterSequenceTypeMutationRecord: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNamedBytesRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [NamedBytesRecord]
+
+    public static func write(_ value: [NamedBytesRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNamedBytesRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NamedBytesRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NamedBytesRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNamedBytesRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNamedRootManifestRecord: FfiConverterRustBuffer {
     typealias SwiftType = [NamedRootManifestRecord]
 
@@ -25638,6 +28799,56 @@ fileprivate struct FfiConverterSequenceTypeNamedRootRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNodeEntryRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeEntryRecord]
+
+    public static func write(_ value: [NodeEntryRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeEntryRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeEntryRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeEntryRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeEntryRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeNodeMutationRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeMutationRecord]
+
+    public static func write(_ value: [NodeMutationRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeMutationRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeMutationRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeMutationRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeMutationRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer {
     typealias SwiftType = [NodeRecord]
 
@@ -25655,6 +28866,31 @@ fileprivate struct FfiConverterSequenceTypeNodeRecord: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNodeRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeOptionalBytesRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [OptionalBytesRecord]
+
+    public static func write(_ value: [OptionalBytesRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOptionalBytesRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OptionalBytesRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OptionalBytesRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOptionalBytesRecord.read(from: &buf))
         }
         return seq
     }
@@ -25730,6 +28966,56 @@ fileprivate struct FfiConverterSequenceTypeProximityRecordRecord: FfiConverterRu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeProximityRecordRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRootConditionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [RootConditionRecord]
+
+    public static func write(_ value: [RootConditionRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRootConditionRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RootConditionRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RootConditionRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRootConditionRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRootWriteRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [RootWriteRecord]
+
+    public static func write(_ value: [RootWriteRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRootWriteRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RootWriteRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RootWriteRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRootWriteRecord.read(from: &buf))
         }
         return seq
     }
@@ -26059,6 +29345,144 @@ fileprivate struct FfiConverterSequenceOptionData: FfiConverterRustBuffer {
         return seq
     }
 }
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
+
+fileprivate let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+fileprivate func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> (),
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> (),
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call the ensure init function since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureProllyBindingsInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8;
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                { handle, pollResult in
+                    uniffiFutureContinuationCallback(handle: handle, pollResult: pollResult)
+                },
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
+private func uniffiTraitInterfaceCallAsync<T>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    droppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+) {
+    let task = Task {
+        // Note: it's important we call either `handleSuccess` or `handleError` exactly once.  Each
+        // call consumes an Arc reference, which means there should be no possibility of a double
+        // call.  The following code is structured so that will will never call both `handleSuccess`
+        // and `handleError`, even in the face of weird errors.
+        //
+        // On platforms that need extra machinery to make C-ABI calls, like JNA or ctypes, it's
+        // possible that we fail to make either call.  However, it doesn't seem like this is
+        // possible on Swift since swift can just make the C call directly.
+        var callResult: T
+        do {
+            callResult = try await makeCall()
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+            return
+        }
+        handleSuccess(callResult)
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    droppedCallback.pointee = UniffiForeignFutureDroppedCallbackStruct(
+        handle: handle,
+        free: uniffiForeignFutureDroppedCallback
+    )
+}
+
+private func uniffiTraitInterfaceCallAsyncWithError<T, E>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    lowerError: @escaping (E) -> RustBuffer,
+    droppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+) {
+    let task = Task {
+        // See the note in uniffiTraitInterfaceCallAsync for details on `handleSuccess` and
+        // `handleError`.
+        var callResult: T
+        do {
+            callResult = try await makeCall()
+        } catch let error as E {
+            handleError(CALL_ERROR, lowerError(error))
+            return
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+            return
+        }
+        handleSuccess(callResult)
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    droppedCallback.pointee = UniffiForeignFutureDroppedCallbackStruct(
+        handle: handle,
+        free: uniffiForeignFutureDroppedCallback
+    )
+}
+
+// Borrow the callback handle map implementation to store foreign future handles
+// TODO: consolidate the handle-map code (https://github.com/mozilla/uniffi-rs/pull/1823)
+fileprivate let UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeignFutureTask>()
+
+// Protocol for tasks that handle foreign futures.
+//
+// Defining a protocol allows all tasks to be stored in the same handle map.  This can't be done
+// with the task object itself, since has generic parameters.
+fileprivate protocol UniffiForeignFutureTask {
+    func cancel()
+}
+
+extension Task: UniffiForeignFutureTask {}
+
+private func uniffiForeignFutureDroppedCallback(handle: UInt64) {
+    do {
+        let task = try UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle: handle)
+        // Set the cancellation flag on the task.  If it's still running, the code can check the
+        // cancellation flag or call `Task.checkCancellation()`.  If the task has completed, this is
+        // a no-op.
+        task.cancel()
+    } catch {
+        print("uniffiForeignFutureDroppedCallback: handle missing from handlemap")
+    }
+}
+
+// For testing
+public func uniffiForeignFutureHandleCountProlly() -> Int {
+    UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
+}
 public func authenticatedProofEnvelopeFromBytes(bytes: Data)throws  -> AuthenticatedProofEnvelopeRecord  {
     return try  FfiConverterTypeAuthenticatedProofEnvelopeRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_authenticated_proof_envelope_from_bytes(
@@ -26239,6 +29663,16 @@ public func inspectProofBundle(bytes: Data)throws  -> ProofBundleSummaryRecord  
     return try  FfiConverterTypeProofBundleSummaryRecord_lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
     uniffi_prolly_bindings_fn_func_inspect_proof_bundle(
         FfiConverterData.lower(bytes),$0
+    )
+})
+}
+public func isBoundaryConfig(config: ConfigRecord, count: UInt64, key: Data, value: Data)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
+    uniffi_prolly_bindings_fn_func_is_boundary_config(
+        FfiConverterTypeConfigRecord_lower(config),
+        FfiConverterUInt64.lower(count),
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(value),$0
     )
 })
 }
@@ -26942,6 +30376,20 @@ public func versionedValueToBytes(record: VersionedValueRecord)throws  -> Data  
     )
 })
 }
+public func openRemoteProllyEngine(store: ForeignRemoteStore, config: ConfigRecord)async throws  -> AsyncProllyEngine  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(FfiConverterTypeForeignRemoteStore_lower(store),FfiConverterTypeConfigRecord_lower(config)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_u64,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_u64,
+            freeFunc: ffi_prolly_bindings_rust_future_free_u64,
+            liftFunc: FfiConverterTypeAsyncProllyEngine_lift,
+            errorHandler: FfiConverterTypeProllyBindingError_lift
+        )
+}
 public func defaultSecondaryIndexLimits() -> SecondaryIndexLimitsRecord  {
     return try!  FfiConverterTypeSecondaryIndexLimitsRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_default_secondary_index_limits($0
@@ -27129,6 +30577,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316) {
@@ -27414,6 +30865,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_default_secondary_index_limits() != 62049) {
@@ -27996,6 +31450,147 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_prollytransaction_rollback() != 34302) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch() != 40064) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction() != 28949) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats() != 45715) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root() != 38856) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_create() != 56360) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete() != 20300) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root() != 52828) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff() != 55207) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_get() != 12607) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many() != 63418) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots() != 50340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root() != 318) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge() != 37178) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix() != 9481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root() != 18445) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis() != 41009) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_put() != 37914) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_range() != 35865) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page() != 22037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch() != 13957) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit() != 47349) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root() != 59033) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create() != 32187) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete() != 36135) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root() != 47190) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get() != 58160) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root() != 28693) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root() != 19910) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis() != 21635) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put() != 10789) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback() != 11506) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor() != 37360) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node() != 60045) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node() != 45131) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node() != 20183) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337) {
@@ -28802,6 +32397,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_constructor_prollyengine_sqlite_in_memory() != 5409) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new() != 15218) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_constructor_bindingindexregistry_new() != 46129) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28819,6 +32417,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitCrdtResolverCallback()
     uniffiCallbackInitDiffVisitorCallback()
     uniffiCallbackInitEntryVisitorCallback()
+    uniffiCallbackInitForeignRemoteStore()
     uniffiCallbackInitHostStoreCallback()
     uniffiCallbackInitMergeResolverCallback()
     uniffiCallbackInitProximityRecordVisitorCallback()

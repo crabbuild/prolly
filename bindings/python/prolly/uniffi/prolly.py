@@ -26,6 +26,7 @@ import threading
 import itertools
 import traceback
 import typing
+import asyncio
 import platform
 
 
@@ -333,7 +334,7 @@ def _uniffi_trait_interface_call_with_error(call_status, make_call, write_return
     except Exception as e:
         call_status.code = _UniffiRustCallStatus.CALL_UNEXPECTED_ERROR
         call_status.error_buf = _UniffiFfiConverterString.lower(repr(e))
-# Initial value and increment amount for handles.
+# Initial value and increment amount for handles. 
 # These ensure that Python-generated handles always have the lowest bit set
 _UNIFFI_HANDLEMAP_INITIAL = 1
 _UNIFFI_HANDLEMAP_DELTA = 2
@@ -452,6 +453,7 @@ def _uniffi_load_indirect():
     override = os.environ.get("PROLLY_BINDINGS_LIBRARY")
     if override:
         return ctypes.cdll.LoadLibrary(override)
+
     if sys.platform == "darwin":
         libname = "lib{}.dylib"
     elif sys.platform.startswith("win"):
@@ -559,6 +561,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_key_from_prefixed_segments() != 62628:
@@ -594,6 +598,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_func_node_from_bytes() != 2212:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_node_to_bytes() != 56453:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_parallel_config() != 49373:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -752,6 +758,70 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_func_versioned_value_require_schema() != 58319:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes() != 30630:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new() != 15218:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch() != 40064:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction() != 28949:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats() != 45715:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root() != 38856:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create() != 56360:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete() != 20300:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root() != 52828:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff() != 55207:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get() != 12607:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many() != 63418:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots() != 50340:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root() != 318:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge() != 37178:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix() != 9481:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root() != 18445:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis() != 41009:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put() != 37914:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range() != 35865:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page() != 22037:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch() != 13957:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit() != 47349:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root() != 59033:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create() != 32187:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete() != 36135:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root() != 47190:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get() != 58160:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root() != 28693:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root() != 19910:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis() != 21635:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put() != 10789:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback() != 11506:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries() != 1963:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1284,6 +1354,38 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit() != 12838:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit() != 30875:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor() != 37360:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node() != 60045:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node() != 45131:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node() != 20183:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get() != 14064:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1920,6 +2022,26 @@ _UniffiLib.ffi_prolly_bindings_rust_future_free_void.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.ffi_prolly_bindings_rust_future_free_void.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_bindingacceleratorcatalog.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -2150,6 +2272,16 @@ _UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_free_entryvisitorcallback.restype = None
+_UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore.restype = None
 _UniffiLib.uniffi_prolly_bindings_fn_clone_hoststorecallback.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -2308,6 +2440,74 @@ _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback.a
     ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyEntryVisitorCallback),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_entryvisitorcallback.restype = None
+class _UniffiForeignFutureResultRustBuffer(ctypes.Structure):
+    _fields_ = [
+        ("return_value", _UniffiRustBuffer),
+        ("call_status", _UniffiRustCallStatus),
+    ]
+_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiForeignFutureResultRustBuffer,
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD1 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
+)
+_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_FOREIGN_REMOTE_STORE = ctypes.CFUNCTYPE(None,ctypes.c_uint64,
+)
+class _UniffiVTableCallbackInterfaceProllyForeignRemoteStore(ctypes.Structure):
+    _fields_ = [
+        ("uniffi_free", _UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_FOREIGN_REMOTE_STORE),
+        ("uniffi_clone", _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE),
+        ("descriptor", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD0),
+        ("get_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD1),
+        ("put_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2),
+        ("delete_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3),
+        ("batch_nodes", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4),
+        ("batch_get_nodes_ordered", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5),
+        ("list_node_cids", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6),
+        ("get_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7),
+        ("put_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8),
+        ("batch_put_nodes_with_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9),
+        ("get_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10),
+        ("put_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11),
+        ("delete_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12),
+        ("compare_and_swap_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13),
+        ("list_root_manifests", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14),
+        ("commit_transaction", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15),
+    ]
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore.argtypes = (
+    ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyForeignRemoteStore),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore.restype = None
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD0 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
@@ -2613,6 +2813,14 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_inspect_proof_bundle.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_inspect_proof_bundle.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config.argtypes = (
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config.restype = ctypes.c_int8
 _UniffiLib.uniffi_prolly_bindings_fn_func_is_tombstone_value.argtypes = (
     _UniffiRustBuffer,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -2709,6 +2917,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_func_parallel_config.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -3138,6 +3351,192 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_versioned_value_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_constructor_asyncprollyengine_new.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_bindingacceleratorcatalog_entries.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -4818,6 +5217,95 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit.argtypes 
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_entryvisitorcallback_visit.restype = ctypes.c_int8
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_get.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -6249,6 +6737,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_i64_key.restype = ctypes.c_uint1
 _UniffiLib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_is_boundary_config.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_is_boundary_config.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_is_tombstone_value.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_is_tombstone_value.restype = ctypes.c_uint16
@@ -6303,6 +6794,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_node_from_bytes.restype = ctypes
 _UniffiLib.uniffi_prolly_bindings_checksum_func_node_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_node_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_parallel_config.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_parallel_config.restype = ctypes.c_uint16
@@ -6540,6 +7034,102 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_require_schema.r
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_versioned_value_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_constructor_asyncprollyengine_new.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_batch.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_begin_transaction.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_collect_stats.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_compare_and_swap_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_create.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_delete_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_diff.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_get_many.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_list_named_roots.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_load_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_merge.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_prefix.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_publish_named_root_at_millis.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_put.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollyengine_range_page.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_batch.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_commit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_compare_and_swap_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_create.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_delete_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_get.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_load_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_publish_named_root_at_millis.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_put.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_asyncprollytransaction_rollback.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_bindingacceleratorcatalog_entries.restype = ctypes.c_uint16
@@ -7338,6 +7928,54 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_diffvisitorcallback_visit.rest
 _UniffiLib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_entryvisitorcallback_visit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_descriptor.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_node.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get.restype = ctypes.c_uint16
@@ -7900,7 +8538,131 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_secondaryindexextractorcallbac
 _uniffi_check_contract_api_version(_UniffiLib)
 # _uniffi_check_api_checksums(_UniffiLib)
 
+# RustFuturePoll values
+_UNIFFI_RUST_FUTURE_POLL_READY = 0
+_UNIFFI_RUST_FUTURE_POLL_WAKE = 1
 
+# Stores futures for _uniffi_continuation_callback
+_UniffiContinuationHandleMap = _UniffiHandleMap()
+
+_UNIFFI_GLOBAL_EVENT_LOOP = None
+
+"""
+Set the event loop to use for async functions
+
+This is needed if some async functions run outside of the eventloop, for example:
+    - A non-eventloop thread is spawned, maybe from `EventLoop.run_in_executor` or maybe from the
+      Rust code spawning its own thread.
+    - The Rust code calls an async callback method from a sync callback function, using something
+      like `pollster` to block on the async call.
+
+In this case, we need an event loop to run the Python async function, but there's no eventloop set
+for the thread.  Use `uniffi_set_event_loop` to force an eventloop to be used in this case.
+"""
+def uniffi_set_event_loop(eventloop: asyncio.BaseEventLoop):
+    global _UNIFFI_GLOBAL_EVENT_LOOP
+    _UNIFFI_GLOBAL_EVENT_LOOP = eventloop
+
+def _uniffi_get_event_loop():
+    if _UNIFFI_GLOBAL_EVENT_LOOP is not None:
+        return _UNIFFI_GLOBAL_EVENT_LOOP
+    else:
+        return asyncio.get_running_loop()
+
+# Continuation callback for async functions
+# lift the return value or error and resolve the future, causing the async function to resume.
+@_UNIFFI_RUST_FUTURE_CONTINUATION_CALLBACK
+def _uniffi_continuation_callback(future_ptr, poll_code):
+    (eventloop, future) = _UniffiContinuationHandleMap.remove(future_ptr)
+    eventloop.call_soon_threadsafe(_uniffi_set_future_result, future, poll_code)
+
+def _uniffi_set_future_result(future, poll_code):
+    if not future.cancelled():
+        future.set_result(poll_code)
+
+async def _uniffi_rust_call_async(rust_future, ffi_poll, ffi_complete, ffi_free, lift_func, error_ffi_converter):
+    try:
+        eventloop = _uniffi_get_event_loop()
+
+        # Loop and poll until we see a _UNIFFI_RUST_FUTURE_POLL_READY value
+        while True:
+            future = eventloop.create_future()
+            ffi_poll(
+                rust_future,
+                _uniffi_continuation_callback,
+                _UniffiContinuationHandleMap.insert((eventloop, future)),
+            )
+            poll_code = await future
+            if poll_code == _UNIFFI_RUST_FUTURE_POLL_READY:
+                break
+
+        return lift_func(
+            _uniffi_rust_call_with_error(error_ffi_converter, ffi_complete, rust_future)
+        )
+    finally:
+        ffi_free(rust_future)
+def _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error):
+    async def make_call_and_call_callback():
+        # Note: it's important we call either `handle_success` or `handle_error` exactly once.  Each
+        # call consumes an Arc reference, which means there should be no possibility of a double
+        # call.  The following code is structured so that will will never call both `handle_success`
+        # and `handle_error`, even in the face of weird exceptions.
+        #
+        # In extreme circumstances we may not call either, for example if we fail to make the ctypes
+        # call to `handle_success`.  This means we will leak the Arc reference, which is better than
+        # double-freeing it.
+        try:
+            call_result = await make_call()
+        except Exception as e:
+            print("UniFFI: Unhandled exception in trait interface call", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            handle_error(
+                _UniffiRustCallStatus.CALL_UNEXPECTED_ERROR,
+                _UniffiFfiConverterString.lower(repr(e)),
+            )
+        else:
+            handle_success(call_result)
+    eventloop = _uniffi_get_event_loop()
+    task = asyncio.run_coroutine_threadsafe(make_call_and_call_callback(), eventloop)
+    handle = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert((eventloop, task))
+    uniffi_out_dropped_callback[0] = _UniffiForeignFutureDroppedCallbackStruct(handle, _uniffi_future_dropped_callback)
+
+def _uniffi_trait_interface_call_async_with_error(make_call, uniffi_out_dropped_callback, handle_success, handle_error, error_type, lower_error):
+    async def make_call_and_call_callback():
+        # See the note in _uniffi_trait_interface_call_async for details on `handle_success` and
+        # `handle_error`.
+        try:
+            try:
+                call_result = await make_call()
+            except error_type as e:
+                handle_error(
+                    _UniffiRustCallStatus.CALL_ERROR,
+                    lower_error(e),
+                )
+            else:
+                handle_success(call_result)
+        except Exception as e:
+            print("UniFFI: Unhandled exception in trait interface call", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            handle_error(
+                _UniffiRustCallStatus.CALL_UNEXPECTED_ERROR,
+                _UniffiFfiConverterString.lower(repr(e)),
+            )
+    eventloop = _uniffi_get_event_loop()
+    task = asyncio.run_coroutine_threadsafe(make_call_and_call_callback(), eventloop)
+    handle = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert((eventloop, task))
+    uniffi_out_dropped_callback[0] = _UniffiForeignFutureDroppedCallbackStruct(handle, _uniffi_future_dropped_callback)
+
+_UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = _UniffiHandleMap()
+
+@_UNIFFI_FOREIGN_FUTURE_DROPPED_CALLBACK
+def _uniffi_future_dropped_callback(handle):
+    (eventloop, task) = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle)
+    eventloop.call_soon(_uniffi_cancel_task, task)
+
+def _uniffi_cancel_task(task):
+    if not task.done():
+        task.cancel()
 
 # Public interface members begin here.
 
@@ -7911,13 +8673,13 @@ _uniffi_check_contract_api_version(_UniffiLib)
 
 
 class CatalogAcceleratorKindRecord(enum.Enum):
-
+    
     HNSW = 0
-
+    
     PRODUCT_QUANTIZED = 1
-
+    
     COMPOSITE = 2
-
+    
 
 
 class _UniffiFfiConverterTypeCatalogAcceleratorKindRecord(_UniffiConverterRustBuffer):
@@ -7979,10 +8741,10 @@ class AcceleratorCatalogEntryRecord:
         self.kind = kind
         self.configuration_fingerprint = configuration_fingerprint
         self.manifest = manifest
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "AcceleratorCatalogEntryRecord(kind={}, configuration_fingerprint={}, manifest={})".format(self.kind, self.configuration_fingerprint, self.manifest)
     def __eq__(self, other):
@@ -8034,13 +8796,13 @@ class _UniffiFfiConverterUInt64(_UniffiConverterPrimitiveInt):
 
 
 class IndexProjectionRecord(enum.Enum):
-
+    
     KEYS_ONLY = 0
-
+    
     INCLUDE = 1
-
+    
     ALL = 2
-
+    
 
 
 class _UniffiFfiConverterTypeIndexProjectionRecord(_UniffiConverterRustBuffer):
@@ -8085,10 +8847,10 @@ class ActiveIndexHealthRecord:
         self.projection = projection
         self.index_map_id = index_map_id
         self.index_version = index_version
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ActiveIndexHealthRecord(name={}, generation={}, fingerprint={}, projection={}, index_map_id={}, index_version={})".format(self.name, self.generation, self.fingerprint, self.projection, self.index_map_id, self.index_version)
     def __eq__(self, other):
@@ -8229,10 +8991,10 @@ class AuthenticatedProofEnvelopeVerificationRecord:
         self.issued_at_millis = issued_at_millis
         self.expires_at_millis = expires_at_millis
         self.nonce = nonce
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "AuthenticatedProofEnvelopeVerificationRecord(valid={}, signature_valid={}, time_valid={}, not_yet_valid={}, expired={}, algorithm={}, key_id={}, proof_bundle={}, context={}, issued_at_millis={}, expires_at_millis={}, nonce={})".format(self.valid, self.signature_valid, self.time_valid, self.not_yet_valid, self.expired, self.algorithm, self.key_id, self.proof_bundle, self.context, self.issued_at_millis, self.expires_at_millis, self.nonce)
     def __eq__(self, other):
@@ -8350,10 +9112,10 @@ class ProofBundleSummaryRecord:
         self.requested_end = requested_end
         self.limit = limit
         self.has_lookahead = has_lookahead
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProofBundleSummaryRecord(version={}, kind={}, root={}, other_root={}, key_count={}, path_node_count={}, start={}, end={}, after={}, requested_end={}, limit={}, has_lookahead={})".format(self.version, self.kind, self.root, self.other_root, self.key_count, self.path_node_count, self.start, self.end, self.after, self.requested_end, self.limit, self.has_lookahead)
     def __eq__(self, other):
@@ -8435,10 +9197,10 @@ class _UniffiFfiConverterTypeProofBundleSummaryRecord(_UniffiConverterRustBuffer
 class RangeCursorRecord:
     def __init__(self, *, after_key:typing.Optional[bytes]):
         self.after_key = after_key
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangeCursorRecord(after_key={})".format(self.after_key)
     def __eq__(self, other):
@@ -8496,10 +9258,10 @@ class ProofBundleVerificationRecord:
         self.entry_count = entry_count
         self.diff_count = diff_count
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProofBundleVerificationRecord(summary={}, valid={}, exists_count={}, absence_count={}, entry_count={}, diff_count={}, next_cursor={})".format(self.summary, self.valid, self.exists_count, self.absence_count, self.entry_count, self.diff_count, self.next_cursor)
     def __eq__(self, other):
@@ -8609,10 +9371,10 @@ class AuthenticatedProofBundleVerificationRecord:
         self.envelope = envelope
         self.proof = proof
         self.proof_error = proof_error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "AuthenticatedProofBundleVerificationRecord(valid={}, envelope={}, proof={}, proof_error={})".format(self.valid, self.envelope, self.proof, self.proof_error)
     def __eq__(self, other):
@@ -8661,10 +9423,10 @@ class AuthenticatedProofEnvelopeRecord:
         self.expires_at_millis = expires_at_millis
         self.nonce = nonce
         self.signature = signature
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "AuthenticatedProofEnvelopeRecord(algorithm={}, key_id={}, proof_bundle={}, context={}, issued_at_millis={}, expires_at_millis={}, nonce={}, signature={})".format(self.algorithm, self.key_id, self.proof_bundle, self.context, self.issued_at_millis, self.expires_at_millis, self.nonce, self.signature)
     def __eq__(self, other):
@@ -8741,15 +9503,15 @@ class _UniffiFfiConverterUInt32(_UniffiConverterPrimitiveInt):
 
 
 class EncodingKind(enum.Enum):
-
+    
     RAW = 0
-
+    
     CBOR = 1
-
+    
     JSON = 2
-
+    
     CUSTOM = 3
-
+    
 
 
 class _UniffiFfiConverterTypeEncodingKind(_UniffiConverterRustBuffer):
@@ -8796,10 +9558,10 @@ class EncodingRecord:
     def __init__(self, *, kind:EncodingKind, custom_name:typing.Optional[str]):
         self.kind = kind
         self.custom_name = custom_name
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "EncodingRecord(kind={}, custom_name={})".format(self.kind, self.custom_name)
     def __eq__(self, other):
@@ -8838,10 +9600,10 @@ class ConfigRecord:
         self.node_cache_max_nodes = node_cache_max_nodes
         self.node_cache_max_bytes = node_cache_max_bytes
         self.format_bytes = format_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ConfigRecord(min_chunk_size={}, max_chunk_size={}, chunking_factor={}, hash_seed={}, encoding={}, node_cache_max_nodes={}, node_cache_max_bytes={}, format_bytes={})".format(self.min_chunk_size, self.max_chunk_size, self.chunking_factor, self.hash_seed, self.encoding, self.node_cache_max_nodes, self.node_cache_max_bytes, self.format_bytes)
     def __eq__(self, other):
@@ -8904,10 +9666,10 @@ class TreeRecord:
     def __init__(self, *, root:typing.Optional[bytes], config:ConfigRecord):
         self.root = root
         self.config = config
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeRecord(root={}, config={})".format(self.root, self.config)
     def __eq__(self, other):
@@ -8952,10 +9714,10 @@ class BatchApplyStatsRecord:
         self.used_deferred_rebalancing = used_deferred_rebalancing
         self.used_bottom_up_rebuild = used_bottom_up_rebuild
         self.cache_written_nodes = cache_written_nodes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "BatchApplyStatsRecord(input_mutations={}, effective_mutations={}, preprocess_input_sorted={}, affected_leaves={}, changed_leaves={}, sparse_leaf_applies={}, written_nodes={}, written_bytes={}, used_append_fast_path={}, used_batched_route={}, used_coalesced_rebuild={}, used_deferred_rebalancing={}, used_bottom_up_rebuild={}, cache_written_nodes={})".format(self.input_mutations, self.effective_mutations, self.preprocess_input_sorted, self.affected_leaves, self.changed_leaves, self.sparse_leaf_applies, self.written_nodes, self.written_bytes, self.used_append_fast_path, self.used_batched_route, self.used_coalesced_rebuild, self.used_deferred_rebalancing, self.used_bottom_up_rebuild, self.cache_written_nodes)
     def __eq__(self, other):
@@ -9048,10 +9810,10 @@ class BatchApplyResultRecord:
     def __init__(self, *, tree:TreeRecord, stats:BatchApplyStatsRecord):
         self.tree = tree
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "BatchApplyResultRecord(tree={}, stats={})".format(self.tree, self.stats)
     def __eq__(self, other):
@@ -9084,10 +9846,10 @@ class BlobRefRecord:
     def __init__(self, *, cid:bytes, len:int):
         self.cid = cid
         self.len = len
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "BlobRefRecord(cid={}, len={})".format(self.cid, self.len)
     def __eq__(self, other):
@@ -9146,10 +9908,10 @@ class BlobGcReachabilityRecord:
         self.live_blob_bytes = live_blob_bytes
         self.scanned_nodes = scanned_nodes
         self.scanned_values = scanned_values
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "BlobGcReachabilityRecord(live_blobs={}, live_blob_count={}, live_blob_bytes={}, scanned_nodes={}, scanned_values={})".format(self.live_blobs, self.live_blob_count, self.live_blob_bytes, self.scanned_nodes, self.scanned_values)
     def __eq__(self, other):
@@ -9201,10 +9963,10 @@ class BlobGcPlanRecord:
         self.reclaimable_blob_count = reclaimable_blob_count
         self.reclaimable_blob_bytes = reclaimable_blob_bytes
         self.missing_candidates = missing_candidates
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "BlobGcPlanRecord(reachability={}, candidate_blobs={}, reclaimable_blobs={}, reclaimable_blob_count={}, reclaimable_blob_bytes={}, missing_candidates={})".format(self.reachability, self.candidate_blobs, self.reclaimable_blobs, self.reclaimable_blob_count, self.reclaimable_blob_bytes, self.missing_candidates)
     def __eq__(self, other):
@@ -9258,10 +10020,10 @@ class BlobGcSweepRecord:
         self.plan = plan
         self.deleted_blobs = deleted_blobs
         self.deleted_blob_bytes = deleted_blob_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "BlobGcSweepRecord(plan={}, deleted_blobs={}, deleted_blob_bytes={})".format(self.plan, self.deleted_blobs, self.deleted_blob_bytes)
     def __eq__(self, other):
@@ -9294,6 +10056,138 @@ class _UniffiFfiConverterTypeBlobGcSweepRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.deleted_blobs, buf)
         _UniffiFfiConverterUInt64.write(value.deleted_blob_bytes, buf)
 
+class _UniffiFfiConverterSequenceBytes(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterBytes.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterBytes.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterBytes.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class StoreErrorRecord:
+    def __init__(self, *, code:str, message:str, retryable:bool, provider_code:typing.Optional[str]):
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.provider_code = provider_code
+        
+        
+
+    
+    def __str__(self):
+        return "StoreErrorRecord(code={}, message={}, retryable={}, provider_code={})".format(self.code, self.message, self.retryable, self.provider_code)
+    def __eq__(self, other):
+        if self.code != other.code:
+            return False
+        if self.message != other.message:
+            return False
+        if self.retryable != other.retryable:
+            return False
+        if self.provider_code != other.provider_code:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreErrorRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreErrorRecord(
+            code=_UniffiFfiConverterString.read(buf),
+            message=_UniffiFfiConverterString.read(buf),
+            retryable=_UniffiFfiConverterBoolean.read(buf),
+            provider_code=_UniffiFfiConverterOptionalString.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterString.check_lower(value.code)
+        _UniffiFfiConverterString.check_lower(value.message)
+        _UniffiFfiConverterBoolean.check_lower(value.retryable)
+        _UniffiFfiConverterOptionalString.check_lower(value.provider_code)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterString.write(value.code, buf)
+        _UniffiFfiConverterString.write(value.message, buf)
+        _UniffiFfiConverterBoolean.write(value.retryable, buf)
+        _UniffiFfiConverterOptionalString.write(value.provider_code, buf)
+
+class _UniffiFfiConverterOptionalTypeStoreErrorRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeStoreErrorRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeStoreErrorRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeStoreErrorRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class BytesListResultRecord:
+    def __init__(self, *, values:typing.List[bytes], error:typing.Optional[StoreErrorRecord]):
+        self.values = values
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "BytesListResultRecord(values={}, error={})".format(self.values, self.error)
+    def __eq__(self, other):
+        if self.values != other.values:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeBytesListResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return BytesListResultRecord(
+            values=_UniffiFfiConverterSequenceBytes.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceBytes.check_lower(value.values)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceBytes.write(value.values, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
 @dataclass
 class CacheStatsRecord:
     def __init__(self, *, cached_nodes:int, cached_bytes:int, pinned_nodes:int, pinned_bytes:int):
@@ -9301,10 +10195,10 @@ class CacheStatsRecord:
         self.cached_bytes = cached_bytes
         self.pinned_nodes = pinned_nodes
         self.pinned_bytes = pinned_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CacheStatsRecord(cached_nodes={}, cached_bytes={}, pinned_nodes={}, pinned_bytes={})".format(self.cached_nodes, self.cached_bytes, self.pinned_nodes, self.pinned_bytes)
     def __eq__(self, other):
@@ -9347,10 +10241,10 @@ class ChangedSpanRecord:
     def __init__(self, *, start:bytes, end:typing.Optional[bytes]):
         self.start = start
         self.end = end
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ChangedSpanRecord(start={}, end={})".format(self.start, self.end)
     def __eq__(self, other):
@@ -9407,10 +10301,10 @@ class ChangedSpanHintRecord:
         self.base_root = base_root
         self.changed_root = changed_root
         self.spans = spans
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ChangedSpanHintRecord(base_root={}, changed_root={}, spans={})".format(self.base_root, self.changed_root, self.spans)
     def __eq__(self, other):
@@ -9451,10 +10345,10 @@ class CompositeAcceleratorConfigRecord:
         self.max_delta_ratio_ppm = max_delta_ratio_ppm
         self.max_shadow_ratio_ppm = max_shadow_ratio_ppm
         self.base_overfetch_multiplier = base_overfetch_multiplier
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CompositeAcceleratorConfigRecord(max_delta_records={}, max_shadow_records={}, max_delta_ratio_ppm={}, max_shadow_ratio_ppm={}, base_overfetch_multiplier={})".format(self.max_delta_records, self.max_shadow_records, self.max_delta_ratio_ppm, self.max_shadow_ratio_ppm, self.base_overfetch_multiplier)
     def __eq__(self, other):
@@ -9504,10 +10398,10 @@ class CompositeBuildLimitsRecord:
         self.max_owned_bytes = max_owned_bytes
         self.max_encoded_output_bytes = max_encoded_output_bytes
         self.max_distance_evaluations = max_distance_evaluations
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CompositeBuildLimitsRecord(max_diff_entries={}, max_owned_bytes={}, max_encoded_output_bytes={}, max_distance_evaluations={})".format(self.max_diff_entries, self.max_owned_bytes, self.max_encoded_output_bytes, self.max_distance_evaluations)
     def __eq__(self, other):
@@ -9551,15 +10445,15 @@ class _UniffiFfiConverterTypeCompositeBuildLimitsRecord(_UniffiConverterRustBuff
 
 
 class CompositeBuildOrRebuildKindRecord(enum.Enum):
-
+    
     COMPOSITE = 0
-
+    
     NO_ACCELERATOR_REQUIRED = 1
-
+    
     HNSW_REBUILT = 2
-
+    
     PRODUCT_QUANTIZED_REBUILT = 3
-
+    
 
 
 class _UniffiFfiConverterTypeCompositeBuildOrRebuildKindRecord(_UniffiConverterRustBuffer):
@@ -9607,11 +10501,11 @@ class _UniffiFfiConverterTypeCompositeBuildOrRebuildKindRecord(_UniffiConverterR
 
 
 class CompositeBaseKindRecord(enum.Enum):
-
+    
     HNSW = 0
-
+    
     PRODUCT_QUANTIZED = 1
-
+    
 
 
 class _UniffiFfiConverterTypeCompositeBaseKindRecord(_UniffiConverterRustBuffer):
@@ -9654,10 +10548,10 @@ class CompositeBuildStatsRecord:
         self.owned_bytes_peak = owned_bytes_peak
         self.encoded_output_bytes = encoded_output_bytes
         self.distance_evaluations = distance_evaluations
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CompositeBuildStatsRecord(diff_entries={}, inserted_records={}, vector_updated_records={}, value_only_records={}, deleted_records={}, delta_records={}, shadow_records={}, owned_bytes_peak={}, encoded_output_bytes={}, distance_evaluations={})".format(self.diff_entries, self.inserted_records, self.vector_updated_records, self.value_only_records, self.deleted_records, self.delta_records, self.shadow_records, self.owned_bytes_peak, self.encoded_output_bytes, self.distance_evaluations)
     def __eq__(self, other):
@@ -9757,9 +10651,9 @@ class _UniffiFfiConverterUInt8(_UniffiConverterPrimitiveInt):
 
 
 class HnswRoutingVectorEncodingRecord(enum.Enum):
-
+    
     FULL_F32 = 0
-
+    
 
 
 class _UniffiFfiConverterTypeHnswRoutingVectorEncodingRecord(_UniffiConverterRustBuffer):
@@ -9793,10 +10687,10 @@ class HnswConfigRecord:
         self.overfetch_multiplier = overfetch_multiplier
         self.seed = seed
         self.routing_vector_encoding = routing_vector_encoding
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HnswConfigRecord(max_connections={}, ef_construction={}, ef_search={}, level_bits={}, overfetch_multiplier={}, seed={}, routing_vector_encoding={})".format(self.max_connections, self.ef_construction, self.ef_search, self.level_bits, self.overfetch_multiplier, self.seed, self.routing_vector_encoding)
     def __eq__(self, other):
@@ -9887,13 +10781,13 @@ class _UniffiFfiConverterSequenceFloat32(_UniffiConverterRustBuffer):
 
 
 class SearchPolicyKind(enum.Enum):
-
+    
     EXACT = 0
-
+    
     FIXED_BUDGET = 1
-
+    
     ADAPTIVE = 2
-
+    
 
 
 class _UniffiFfiConverterTypeSearchPolicyKind(_UniffiConverterRustBuffer):
@@ -9935,13 +10829,13 @@ class _UniffiFfiConverterTypeSearchPolicyKind(_UniffiConverterRustBuffer):
 
 
 class AdaptiveQualityRecord(enum.Enum):
-
+    
     FAST = 0
-
+    
     BALANCED = 1
-
+    
     HIGH_RECALL = 2
-
+    
 
 
 class _UniffiFfiConverterTypeAdaptiveQualityRecord(_UniffiConverterRustBuffer):
@@ -10009,10 +10903,10 @@ class SearchBudgetRecord:
         self.max_committed_bytes = max_committed_bytes
         self.max_distance_evaluations = max_distance_evaluations
         self.max_frontier_entries = max_frontier_entries
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SearchBudgetRecord(max_nodes={}, max_committed_bytes={}, max_distance_evaluations={}, max_frontier_entries={})".format(self.max_nodes, self.max_committed_bytes, self.max_distance_evaluations, self.max_frontier_entries)
     def __eq__(self, other):
@@ -10056,15 +10950,15 @@ class _UniffiFfiConverterTypeSearchBudgetRecord(_UniffiConverterRustBuffer):
 
 
 class ProximityFilterKind(enum.Enum):
-
+    
     ALL = 0
-
+    
     KEY_RANGE = 1
-
+    
     PREFIX = 2
-
+    
     ELIGIBLE_KEYS = 3
-
+    
 
 
 class _UniffiFfiConverterTypeProximityFilterKind(_UniffiConverterRustBuffer):
@@ -10106,29 +11000,6 @@ class _UniffiFfiConverterTypeProximityFilterKind(_UniffiConverterRustBuffer):
 
 
 
-class _UniffiFfiConverterSequenceBytes(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterBytes.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterBytes.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterBytes.read(buf) for i in range(count)
-        ]
-
 @dataclass
 class ProximityFilterRecord:
     def __init__(self, *, kind:ProximityFilterKind, start:typing.Optional[bytes], range_end:typing.Optional[bytes], prefix:typing.Optional[bytes], eligible_keys:typing.List[bytes]):
@@ -10137,10 +11008,10 @@ class ProximityFilterRecord:
         self.range_end = range_end
         self.prefix = prefix
         self.eligible_keys = eligible_keys
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityFilterRecord(kind={}, start={}, range_end={}, prefix={}, eligible_keys={})".format(self.kind, self.start, self.range_end, self.prefix, self.eligible_keys)
     def __eq__(self, other):
@@ -10189,13 +11060,13 @@ class _UniffiFfiConverterTypeProximityFilterRecord(_UniffiConverterRustBuffer):
 
 
 class QueryKernelRecord(enum.Enum):
-
+    
     SCALAR_DETERMINISTIC = 0
-
+    
     SIMD_DETERMINISTIC = 1
-
+    
     AUTO_DETERMINISTIC = 2
-
+    
 
 
 class _UniffiFfiConverterTypeQueryKernelRecord(_UniffiConverterRustBuffer):
@@ -10237,17 +11108,17 @@ class _UniffiFfiConverterTypeQueryKernelRecord(_UniffiConverterRustBuffer):
 
 
 class SearchBackendRecord(enum.Enum):
-
+    
     NATIVE = 0
-
+    
     PRODUCT_QUANTIZED = 1
-
+    
     HNSW = 2
-
+    
     COMPOSITE = 3
-
+    
     AUTO = 4
-
+    
 
 
 class _UniffiFfiConverterTypeSearchBackendRecord(_UniffiConverterRustBuffer):
@@ -10358,10 +11229,10 @@ class ProximitySearchRequestRecord:
         self.backend = backend
         self.hnsw_ef_search = hnsw_ef_search
         self.pq_rerank_multiplier = pq_rerank_multiplier
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchRequestRecord(query={}, k={}, policy={}, adaptive_quality={}, budget={}, filter={}, kernel={}, backend={}, hnsw_ef_search={}, pq_rerank_multiplier={})".format(self.query, self.k, self.policy, self.adaptive_quality, self.budget, self.filter, self.kernel, self.backend, self.hnsw_ef_search, self.pq_rerank_multiplier)
     def __eq__(self, other):
@@ -10436,10 +11307,10 @@ class ContentGraphLimitsRecord:
         self.max_depth = max_depth
         self.max_bytes = max_bytes
         self.max_references_per_object = max_references_per_object
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ContentGraphLimitsRecord(max_objects={}, max_depth={}, max_bytes={}, max_references_per_object={})".format(self.max_objects, self.max_depth, self.max_bytes, self.max_references_per_object)
     def __eq__(self, other):
@@ -10492,10 +11363,10 @@ class ProximityNeighborRecord:
         self.key = key
         self.value = value
         self.distance = distance
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityNeighborRecord(key={}, value={}, distance={})".format(self.key, self.value, self.distance)
     def __eq__(self, other):
@@ -10565,10 +11436,10 @@ class ProximitySearchStatsRecord:
         self.frontier_peak = frontier_peak
         self.candidate_handles_peak = candidate_handles_peak
         self.candidate_retained_bytes_peak = candidate_retained_bytes_peak
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchStatsRecord(levels_visited={}, nodes_read={}, bytes_read={}, physical_bytes_read={}, committed_bytes={}, distance_evaluations={}, quantized_distance_evaluations={}, reranked_candidates={}, frontier_peak={}, candidate_handles_peak={}, candidate_retained_bytes_peak={})".format(self.levels_visited, self.nodes_read, self.bytes_read, self.physical_bytes_read, self.committed_bytes, self.distance_evaluations, self.quantized_distance_evaluations, self.reranked_candidates, self.frontier_peak, self.candidate_handles_peak, self.candidate_retained_bytes_peak)
     def __eq__(self, other):
@@ -10647,17 +11518,17 @@ class _UniffiFfiConverterTypeProximitySearchStatsRecord(_UniffiConverterRustBuff
 
 
 class SearchCompletionRecord(enum.Enum):
-
+    
     EXACT = 0
-
+    
     APPROXIMATE_POLICY_SATISFIED = 1
-
+    
     BUDGET_EXHAUSTED = 2
-
+    
     CANCELLED = 3
-
+    
     DEADLINE_EXCEEDED = 4
-
+    
 
 
 class _UniffiFfiConverterTypeSearchCompletionRecord(_UniffiConverterRustBuffer):
@@ -10713,10 +11584,10 @@ class ProximitySearchResultRecord:
         self.completion = completion
         self.backend = backend
         self.plan_format_version = plan_format_version
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchResultRecord(neighbors={}, stats={}, completion={}, backend={}, plan_format_version={})".format(self.neighbors, self.stats, self.completion, self.backend, self.plan_format_version)
     def __eq__(self, other):
@@ -10765,11 +11636,11 @@ class _UniffiFfiConverterTypeProximitySearchResultRecord(_UniffiConverterRustBuf
 
 
 class ProximitySearchClaimKindRecord(enum.Enum):
-
+    
     EXACT_L2_OPTIMAL = 0
-
+    
     HONEST_EXECUTION = 1
-
+    
 
 
 class _UniffiFfiConverterTypeProximitySearchClaimKindRecord(_UniffiConverterRustBuffer):
@@ -10829,10 +11700,10 @@ class ProximitySearchClaimRecord:
     def __init__(self, *, kind:ProximitySearchClaimKindRecord, terminal_lower_bound:typing.Optional[float]):
         self.kind = kind
         self.terminal_lower_bound = terminal_lower_bound
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchClaimRecord(kind={}, terminal_lower_bound={})".format(self.kind, self.terminal_lower_bound)
     def __eq__(self, other):
@@ -10866,10 +11737,10 @@ class ProximitySearchVerificationRecord:
         self.result = result
         self.claim = claim
         self.replayed_events = replayed_events
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchVerificationRecord(result={}, claim={}, replayed_events={})".format(self.result, self.claim, self.replayed_events)
     def __eq__(self, other):
@@ -10916,9 +11787,9 @@ class ProllyBindingError(Exception):
 _UniffiTempProllyBindingError = ProllyBindingError
 
 class ProllyBindingError:  # type: ignore
-
+    
     class InvalidArgument(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10929,7 +11800,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.InvalidArgument({})".format(str(self))
     _UniffiTempProllyBindingError.InvalidArgument = InvalidArgument # type: ignore
     class InvalidCid(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10940,7 +11811,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.InvalidCid({})".format(str(self))
     _UniffiTempProllyBindingError.InvalidCid = InvalidCid # type: ignore
     class InvalidNode(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10951,7 +11822,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.InvalidNode({})".format(str(self))
     _UniffiTempProllyBindingError.InvalidNode = InvalidNode # type: ignore
     class NotFound(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10962,7 +11833,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.NotFound({})".format(str(self))
     _UniffiTempProllyBindingError.NotFound = NotFound # type: ignore
     class Conflict(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10973,7 +11844,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.Conflict({})".format(str(self))
     _UniffiTempProllyBindingError.Conflict = Conflict # type: ignore
     class Store(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10984,7 +11855,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.Store({})".format(str(self))
     _UniffiTempProllyBindingError.Store = Store # type: ignore
     class Serialization(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -10995,7 +11866,7 @@ class ProllyBindingError:  # type: ignore
             return "ProllyBindingError.Serialization({})".format(str(self))
     _UniffiTempProllyBindingError.Serialization = Serialization # type: ignore
     class Internal(_UniffiTempProllyBindingError):
-
+        
         def __init__(self, reason):
             super().__init__(", ".join([
                 "reason={!r}".format(reason),
@@ -11104,16 +11975,16 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
 
 
 class BindingProximitySearchProofProtocol(typing.Protocol):
-
+    
     def source_descriptor(self, ) -> bytes:
         raise NotImplementedError
     def verify(self, expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximitySearchVerificationRecord:
         raise NotImplementedError
 
 class BindingProximitySearchProof(BindingProximitySearchProofProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -11147,7 +12018,7 @@ class BindingProximitySearchProof(BindingProximitySearchProofProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def verify(self, expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximitySearchVerificationRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected_descriptor)
 
         _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
@@ -11202,10 +12073,10 @@ class ProximitySearchRuntimePolicyRecord:
         self.authoritative_max_bytes = authoritative_max_bytes
         self.hnsw_max_bytes = hnsw_max_bytes
         self.pq_max_bytes = pq_max_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchRuntimePolicyRecord(max_entries={}, max_bytes={}, authoritative_max_bytes={}, hnsw_max_bytes={}, pq_max_bytes={})".format(self.max_entries, self.max_bytes, self.authoritative_max_bytes, self.hnsw_max_bytes, self.pq_max_bytes)
     def __eq__(self, other):
@@ -11253,10 +12124,10 @@ class ProximitySearchRuntimeStatsRecord:
     def __init__(self, *, physical_reads:int, physical_bytes_read:int):
         self.physical_reads = physical_reads
         self.physical_bytes_read = physical_bytes_read
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximitySearchRuntimeStatsRecord(physical_reads={}, physical_bytes_read={})".format(self.physical_reads, self.physical_bytes_read)
     def __eq__(self, other):
@@ -11286,7 +12157,7 @@ class _UniffiFfiConverterTypeProximitySearchRuntimeStatsRecord(_UniffiConverterR
 
 
 class BindingProximitySearchRuntimeProtocol(typing.Protocol):
-
+    
     def clear(self, ) -> None:
         raise NotImplementedError
     def policy(self, ) -> ProximitySearchRuntimePolicyRecord:
@@ -11295,9 +12166,9 @@ class BindingProximitySearchRuntimeProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingProximitySearchRuntime(BindingProximitySearchRuntimeProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -11411,14 +12282,14 @@ class _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime(_UniffiConver
 
 
 class BindingProximityCancellationTokenProtocol(typing.Protocol):
-
+    
     def cancel(self, ) -> None:
         raise NotImplementedError
     def is_cancelled(self, ) -> bool:
         raise NotImplementedError
 
 class BindingProximityCancellationToken(BindingProximityCancellationTokenProtocol):
-
+    
     _handle: ctypes.c_uint64
     def __init__(self, ):
         _uniffi_lowered_args = (
@@ -11505,7 +12376,7 @@ class _UniffiFfiConverterTypeBindingProximityCancellationToken:
 
 
 class BindingHnswIndexProtocol(typing.Protocol):
-
+    
     def config(self, ) -> HnswConfigRecord:
         raise NotImplementedError
     def is_canonical(self, ) -> bool:
@@ -11524,9 +12395,9 @@ class BindingHnswIndexProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingHnswIndex(BindingHnswIndexProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -11584,7 +12455,7 @@ class BindingHnswIndex(BindingHnswIndexProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11605,7 +12476,7 @@ class BindingHnswIndex(BindingHnswIndexProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11623,7 +12494,7 @@ class BindingHnswIndex(BindingHnswIndexProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11647,7 +12518,7 @@ class BindingHnswIndex(BindingHnswIndexProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11743,10 +12614,10 @@ class ProductQuantizationConfigRecord:
         self.rerank_multiplier = rerank_multiplier
         self.seed = seed
         self.max_training_vectors = max_training_vectors
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProductQuantizationConfigRecord(subquantizers={}, centroids_per_subquantizer={}, training_iterations={}, rerank_multiplier={}, seed={}, max_training_vectors={})".format(self.subquantizers, self.centroids_per_subquantizer, self.training_iterations, self.rerank_multiplier, self.seed, self.max_training_vectors)
     def __eq__(self, other):
@@ -11799,10 +12670,10 @@ class ProductQuantizationQualityRecord:
     def __init__(self, *, mean_squared_error:float, maximum_squared_error:float):
         self.mean_squared_error = mean_squared_error
         self.maximum_squared_error = maximum_squared_error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProductQuantizationQualityRecord(mean_squared_error={}, maximum_squared_error={})".format(self.mean_squared_error, self.maximum_squared_error)
     def __eq__(self, other):
@@ -11832,7 +12703,7 @@ class _UniffiFfiConverterTypeProductQuantizationQualityRecord(_UniffiConverterRu
 
 
 class BindingProductQuantizerProtocol(typing.Protocol):
-
+    
     def config(self, ) -> ProductQuantizationConfigRecord:
         raise NotImplementedError
     def manifest(self, ) -> bytes:
@@ -11851,9 +12722,9 @@ class BindingProductQuantizerProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingProductQuantizer(BindingProductQuantizerProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -11899,7 +12770,7 @@ class BindingProductQuantizer(BindingProductQuantizerProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11932,7 +12803,7 @@ class BindingProductQuantizer(BindingProductQuantizerProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11950,7 +12821,7 @@ class BindingProductQuantizer(BindingProductQuantizerProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -11974,7 +12845,7 @@ class BindingProductQuantizer(BindingProductQuantizerProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -12086,7 +12957,7 @@ class _UniffiFfiConverterSequenceTypeAcceleratorCatalogEntryRecord(_UniffiConver
 
 
 class BindingAcceleratorCatalogProtocol(typing.Protocol):
-
+    
     def entries(self, ) -> typing.List[AcceleratorCatalogEntryRecord]:
         raise NotImplementedError
     def manifest(self, ) -> bytes:
@@ -12103,9 +12974,9 @@ class BindingAcceleratorCatalogProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingAcceleratorCatalog(BindingAcceleratorCatalogProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -12151,7 +13022,7 @@ class BindingAcceleratorCatalog(BindingAcceleratorCatalogProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -12172,7 +13043,7 @@ class BindingAcceleratorCatalog(BindingAcceleratorCatalogProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -12190,7 +13061,7 @@ class BindingAcceleratorCatalog(BindingAcceleratorCatalogProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -12214,7 +13085,7 @@ class BindingAcceleratorCatalog(BindingAcceleratorCatalogProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -12282,15 +13153,15 @@ class _UniffiFfiConverterTypeBindingAcceleratorCatalog:
 
 
 class FullRebuildReasonKindRecord(enum.Enum):
-
+    
     DELTA_RECORDS = 0
-
+    
     SHADOW_RECORDS = 1
-
+    
     DELTA_RATIO = 2
-
+    
     SHADOW_RATIO = 3
-
+    
 
 
 class _UniffiFfiConverterTypeFullRebuildReasonKindRecord(_UniffiConverterRustBuffer):
@@ -12338,10 +13209,10 @@ class FullRebuildReasonRecord:
         self.kind = kind
         self.actual = actual
         self.maximum = maximum
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "FullRebuildReasonRecord(kind={}, actual={}, maximum={})".format(self.kind, self.actual, self.maximum)
     def __eq__(self, other):
@@ -12403,10 +13274,10 @@ class CompositeBuildOutcomeRecord:
         self.accelerator = accelerator
         self.reasons = reasons
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CompositeBuildOutcomeRecord(accelerator={}, reasons={}, stats={})".format(self.accelerator, self.reasons, self.stats)
     def __eq__(self, other):
@@ -12447,10 +13318,10 @@ class HnswBuildLimitsRecord:
         self.max_distance_evaluations = max_distance_evaluations
         self.worker_threads = worker_threads
         self.max_encoded_graph_bytes = max_encoded_graph_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HnswBuildLimitsRecord(max_records={}, max_owned_bytes={}, max_distance_evaluations={}, worker_threads={}, max_encoded_graph_bytes={})".format(self.max_records, self.max_owned_bytes, self.max_distance_evaluations, self.worker_threads, self.max_encoded_graph_bytes)
     def __eq__(self, other):
@@ -12502,10 +13373,10 @@ class HnswBuildStatsRecord:
         self.maximum_level = maximum_level
         self.owned_bytes = owned_bytes
         self.encoded_graph_bytes = encoded_graph_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HnswBuildStatsRecord(records={}, distance_evaluations={}, directed_edges={}, maximum_level={}, owned_bytes={}, encoded_graph_bytes={})".format(self.records, self.distance_evaluations, self.directed_edges, self.maximum_level, self.owned_bytes, self.encoded_graph_bytes)
     def __eq__(self, other):
@@ -12558,10 +13429,10 @@ class HnswBuildResultRecord:
     def __init__(self, *, index:BindingHnswIndex, stats:HnswBuildStatsRecord):
         self.index = index
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HnswBuildResultRecord(index={}, stats={})".format(self.index, self.stats)
     def __eq__(self, other):
@@ -12598,10 +13469,10 @@ class ProductQuantizationBuildLimitsRecord:
         self.max_distance_evaluations = max_distance_evaluations
         self.max_encoded_output_bytes = max_encoded_output_bytes
         self.max_worker_threads = max_worker_threads
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProductQuantizationBuildLimitsRecord(max_training_vectors={}, max_training_bytes={}, max_temporary_code_bytes={}, max_distance_evaluations={}, max_encoded_output_bytes={}, max_worker_threads={})".format(self.max_training_vectors, self.max_training_bytes, self.max_temporary_code_bytes, self.max_distance_evaluations, self.max_encoded_output_bytes, self.max_worker_threads)
     def __eq__(self, other):
@@ -12655,10 +13526,10 @@ class CompositeRebuildOptionsRecord:
         self.hnsw_limits = hnsw_limits
         self.pq_worker_threads = pq_worker_threads
         self.pq_limits = pq_limits
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CompositeRebuildOptionsRecord(hnsw_limits={}, pq_worker_threads={}, pq_limits={})".format(self.hnsw_limits, self.pq_worker_threads, self.pq_limits)
     def __eq__(self, other):
@@ -12700,10 +13571,10 @@ class ProductQuantizationBuildStatsRecord:
         self.training_vectors = training_vectors
         self.training_bytes = training_bytes
         self.encoded_output_bytes = encoded_output_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProductQuantizationBuildStatsRecord(training_distance_evaluations={}, encoding_distance_evaluations={}, encoded_vectors={}, training_vectors={}, training_bytes={}, encoded_output_bytes={})".format(self.training_distance_evaluations, self.encoding_distance_evaluations, self.encoded_vectors, self.training_vectors, self.training_bytes, self.encoded_output_bytes)
     def __eq__(self, other):
@@ -12756,10 +13627,10 @@ class ProductQuantizationBuildResultRecord:
     def __init__(self, *, index:BindingProductQuantizer, stats:ProductQuantizationBuildStatsRecord):
         self.index = index
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProductQuantizationBuildResultRecord(index={}, stats={})".format(self.index, self.stats)
     def __eq__(self, other):
@@ -12793,13 +13664,13 @@ class _UniffiFfiConverterTypeProductQuantizationBuildResultRecord(_UniffiConvert
 
 
 class DistanceMetricRecord(enum.Enum):
-
+    
     L2_SQUARED = 0
-
+    
     COSINE = 1
-
+    
     INNER_PRODUCT = 2
-
+    
 
 
 class _UniffiFfiConverterTypeDistanceMetricRecord(_UniffiConverterRustBuffer):
@@ -12848,10 +13719,10 @@ class ProximityConfigRecord:
         self.overflow_hash_seed = overflow_hash_seed
         self.inline_threshold_bytes = inline_threshold_bytes
         self.scalar_quantization_group_size = scalar_quantization_group_size
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityConfigRecord(dimensions={}, metric={}, log_chunk_size={}, level_hash_seed={}, min_page_bytes={}, target_page_bytes={}, max_page_bytes={}, overflow_hash_seed={}, inline_threshold_bytes={}, scalar_quantization_group_size={})".format(self.dimensions, self.metric, self.log_chunk_size, self.level_hash_seed, self.min_page_bytes, self.target_page_bytes, self.max_page_bytes, self.overflow_hash_seed, self.inline_threshold_bytes, self.scalar_quantization_group_size)
     def __eq__(self, other):
@@ -12924,10 +13795,10 @@ class ExactProximityRecordRecord:
     def __init__(self, *, vector:typing.List[float], value:bytes):
         self.vector = vector
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ExactProximityRecordRecord(vector={}, value={})".format(self.vector, self.value)
     def __eq__(self, other):
@@ -13011,10 +13882,10 @@ class ProximityMutationRecord:
         self.key = key
         self.vector = vector
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityMutationRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
     def __eq__(self, other):
@@ -13086,10 +13957,10 @@ class ProximityMutationStatsRecord:
         self.records_rebuilt = records_rebuilt
         self.distance_evaluations = distance_evaluations
         self.full_proximity_rebuild = full_proximity_rebuild
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityMutationStatsRecord(directory_entries_scanned={}, directory_nodes_read={}, directory_nodes_rebuilt={}, directory_nodes_written={}, directory_nodes_reused={}, directory_levels_rebuilt={}, directory_right_edge_rebuilt={}, nodes_read={}, nodes_written={}, nodes_reused={}, records_rebuilt={}, distance_evaluations={}, full_proximity_rebuild={})".format(self.directory_entries_scanned, self.directory_nodes_read, self.directory_nodes_rebuilt, self.directory_nodes_written, self.directory_nodes_reused, self.directory_levels_rebuilt, self.directory_right_edge_rebuilt, self.nodes_read, self.nodes_written, self.nodes_reused, self.records_rebuilt, self.distance_evaluations, self.full_proximity_rebuild)
     def __eq__(self, other):
@@ -13177,10 +14048,10 @@ class ProximityMutationResultRecord:
     def __init__(self, *, map:BindingProximityMap, stats:ProximityMutationStatsRecord):
         self.map = map
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityMutationResultRecord(map={}, stats={})".format(self.map, self.stats)
     def __eq__(self, other):
@@ -13245,10 +14116,10 @@ class NodeRecord:
         self.hash_seed = hash_seed
         self.encoding = encoding
         self.format_bytes = format_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "NodeRecord(keys={}, vals={}, child_counts={}, leaf={}, level={}, min_chunk_size={}, max_chunk_size={}, chunking_factor={}, hash_seed={}, encoding={}, format_bytes={})".format(self.keys, self.vals, self.child_counts, self.leaf, self.level, self.min_chunk_size, self.max_chunk_size, self.chunking_factor, self.hash_seed, self.encoding, self.format_bytes)
     def __eq__(self, other):
@@ -13350,10 +14221,10 @@ class KeyProofRecord:
         self.root = root
         self.key = key
         self.path = path
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "KeyProofRecord(root={}, key={}, path={})".format(self.root, self.key, self.path)
     def __eq__(self, other):
@@ -13393,10 +14264,10 @@ class ProximityMembershipProofRecord:
         self.descriptor_bytes = descriptor_bytes
         self.directory_proof = directory_proof
         self.record_bytes = record_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityMembershipProofRecord(descriptor={}, descriptor_bytes={}, directory_proof={}, record_bytes={})".format(self.descriptor, self.descriptor_bytes, self.directory_proof, self.record_bytes)
     def __eq__(self, other):
@@ -13440,31 +14311,31 @@ class _UniffiFfiConverterTypeProximityMembershipProofRecord(_UniffiConverterRust
 
 
 class ContentObjectKindRecord(enum.Enum):
-
+    
     ORDERED_NODE = 0
-
+    
     PROXIMITY_DESCRIPTOR = 1
-
+    
     PROXIMITY_NODE = 2
-
+    
     OVERFLOW_DIRECTORY = 3
-
+    
     OVERFLOW_PAGE = 4
-
+    
     EXTERNAL_VECTOR = 5
-
+    
     SCALAR_QUANTIZATION = 6
-
+    
     PRODUCT_QUANTIZATION = 7
-
+    
     HNSW_MANIFEST = 8
-
+    
     HNSW_PAGE = 9
-
+    
     COMPOSITE_ACCELERATOR = 10
-
+    
     ACCELERATOR_CATALOG = 11
-
+    
 
 
 class _UniffiFfiConverterTypeContentObjectKindRecord(_UniffiConverterRustBuffer):
@@ -13562,10 +14433,10 @@ class TypedContentObjectRecord:
         self.dimensions = dimensions
         self.bytes = bytes
         self.depth = depth
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TypedContentObjectRecord(kind={}, cid={}, dimensions={}, bytes={}, depth={})".format(self.kind, self.cid, self.dimensions, self.bytes, self.depth)
     def __eq__(self, other):
@@ -13636,10 +14507,10 @@ class ProximityStructuralProofRecord:
     def __init__(self, *, descriptor:bytes, objects:typing.List[TypedContentObjectRecord]):
         self.descriptor = descriptor
         self.objects = objects
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityStructuralProofRecord(descriptor={}, objects={})".format(self.descriptor, self.objects)
     def __eq__(self, other):
@@ -13673,10 +14544,10 @@ class ProximityRecordRecord:
         self.key = key
         self.vector = vector
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityRecordRecord(key={}, vector={}, value={})".format(self.key, self.vector, self.value)
     def __eq__(self, other):
@@ -13711,14 +14582,14 @@ class _UniffiFfiConverterTypeProximityRecordRecord(_UniffiConverterRustBuffer):
 
 
 class ProximityRecordVisitorCallback():
-
+    
     def visit(self, record: ProximityRecordRecord) -> bool:
         raise NotImplementedError
 
 class ProximityRecordVisitorCallbackImpl(ProximityRecordVisitorCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -13740,7 +14611,7 @@ class ProximityRecordVisitorCallbackImpl(ProximityRecordVisitorCallback):
         inst._handle = handle
         return inst
     def visit(self, record: ProximityRecordRecord) -> bool:
-
+        
         _UniffiFfiConverterTypeProximityRecordRecord.check_lower(record)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -13840,7 +14711,7 @@ class _UniffiFfiConverterTypeProximityRecordVisitorCallback:
 
 
 class BindingProximityReadSessionProtocol(typing.Protocol):
-
+    
     def contains_key(self, key: bytes) -> bool:
         raise NotImplementedError
     def fast_handle(self, ) -> int:
@@ -13857,9 +14728,9 @@ class BindingProximityReadSessionProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingProximityReadSession(BindingProximityReadSessionProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -13881,7 +14752,7 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         inst._handle = handle
         return inst
     def contains_key(self, key: bytes) -> bool:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -13908,7 +14779,7 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -13923,7 +14794,7 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
-
+        
         _UniffiFfiConverterTypeProximityRecordVisitorCallback.check_lower(visitor)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -13938,7 +14809,7 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -13953,7 +14824,7 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_cancellable(self, request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
 
         _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
@@ -13974,7 +14845,7 @@ class BindingProximityReadSession(BindingProximityReadSessionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
 
         _UniffiFfiConverterTypeBindingProximitySearchRuntime.check_lower(runtime)
@@ -14034,10 +14905,10 @@ class ProximityVerificationRecord:
         self.maximum_level = maximum_level
         self.maximum_node_bytes = maximum_node_bytes
         self.distance_checks = distance_checks
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityVerificationRecord(record_count={}, proximity_node_count={}, external_vector_count={}, quantized_node_count={}, scalar_quantizer_count={}, overflow_page_count={}, overflow_directory_count={}, maximum_level={}, maximum_node_bytes={}, distance_checks={})".format(self.record_count, self.proximity_node_count, self.external_vector_count, self.quantized_node_count, self.scalar_quantizer_count, self.overflow_page_count, self.overflow_directory_count, self.maximum_level, self.maximum_node_bytes, self.distance_checks)
     def __eq__(self, other):
@@ -14107,7 +14978,7 @@ class _UniffiFfiConverterTypeProximityVerificationRecord(_UniffiConverterRustBuf
 
 
 class BindingProximityMapProtocol(typing.Protocol):
-
+    
     def build_accelerator_catalog(self, hnsw: typing.Optional[BindingHnswIndex],pq: typing.Optional[BindingProductQuantizer],composite: typing.Optional[BindingCompositeAccelerator]) -> BindingAcceleratorCatalog:
         raise NotImplementedError
     def build_composite_hnsw(self, base_map: BindingProximityMap,base: BindingHnswIndex,config: CompositeAcceleratorConfigRecord,limits: CompositeBuildLimitsRecord) -> CompositeBuildOutcomeRecord:
@@ -14168,9 +15039,9 @@ class BindingProximityMapProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingProximityMap(BindingProximityMapProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -14192,7 +15063,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         inst._handle = handle
         return inst
     def build_accelerator_catalog(self, hnsw: typing.Optional[BindingHnswIndex],pq: typing.Optional[BindingProductQuantizer],composite: typing.Optional[BindingCompositeAccelerator]) -> BindingAcceleratorCatalog:
-
+        
         _UniffiFfiConverterOptionalTypeBindingHnswIndex.check_lower(hnsw)
 
         _UniffiFfiConverterOptionalTypeBindingProductQuantizer.check_lower(pq)
@@ -14213,7 +15084,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_composite_hnsw(self, base_map: BindingProximityMap,base: BindingHnswIndex,config: CompositeAcceleratorConfigRecord,limits: CompositeBuildLimitsRecord) -> CompositeBuildOutcomeRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(base_map)
 
         _UniffiFfiConverterTypeBindingHnswIndex.check_lower(base)
@@ -14237,7 +15108,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_composite_pq(self, base_map: BindingProximityMap,base: BindingProductQuantizer,config: CompositeAcceleratorConfigRecord,limits: CompositeBuildLimitsRecord) -> CompositeBuildOutcomeRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(base_map)
 
         _UniffiFfiConverterTypeBindingProductQuantizer.check_lower(base)
@@ -14261,7 +15132,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_hnsw(self, config: HnswConfigRecord,limits: HnswBuildLimitsRecord) -> HnswBuildResultRecord:
-
+        
         _UniffiFfiConverterTypeHnswConfigRecord.check_lower(config)
 
         _UniffiFfiConverterTypeHnswBuildLimitsRecord.check_lower(limits)
@@ -14279,7 +15150,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_or_rebuild_composite_hnsw(self, base_map: BindingProximityMap,base: BindingHnswIndex,config: CompositeAcceleratorConfigRecord,limits: CompositeBuildLimitsRecord,rebuild: CompositeRebuildOptionsRecord) -> CompositeBuildOrRebuildOutcomeRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(base_map)
 
         _UniffiFfiConverterTypeBindingHnswIndex.check_lower(base)
@@ -14306,7 +15177,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_or_rebuild_composite_pq(self, base_map: BindingProximityMap,base: BindingProductQuantizer,config: CompositeAcceleratorConfigRecord,limits: CompositeBuildLimitsRecord,rebuild: CompositeRebuildOptionsRecord) -> CompositeBuildOrRebuildOutcomeRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(base_map)
 
         _UniffiFfiConverterTypeBindingProductQuantizer.check_lower(base)
@@ -14333,7 +15204,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_pq(self, config: ProductQuantizationConfigRecord,worker_threads: int,limits: ProductQuantizationBuildLimitsRecord) -> ProductQuantizationBuildResultRecord:
-
+        
         _UniffiFfiConverterTypeProductQuantizationConfigRecord.check_lower(config)
 
         _UniffiFfiConverterUInt64.check_lower(worker_threads)
@@ -14378,7 +15249,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def contains_key(self, key: bytes) -> bool:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14429,7 +15300,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, key: bytes) -> typing.Optional[ExactProximityRecordRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14444,7 +15315,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_accelerator_catalog(self, manifest: bytes) -> BindingAcceleratorCatalog:
-
+        
         _UniffiFfiConverterBytes.check_lower(manifest)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14459,7 +15330,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_composite(self, manifest: bytes) -> BindingCompositeAccelerator:
-
+        
         _UniffiFfiConverterBytes.check_lower(manifest)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14474,7 +15345,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_hnsw(self, manifest: bytes) -> BindingHnswIndex:
-
+        
         _UniffiFfiConverterBytes.check_lower(manifest)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14489,7 +15360,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_pq(self, manifest: bytes) -> BindingProductQuantizer:
-
+        
         _UniffiFfiConverterBytes.check_lower(manifest)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14504,7 +15375,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def mutate(self, mutations: typing.List[ProximityMutationRecord]) -> ProximityMutationResultRecord:
-
+        
         _UniffiFfiConverterSequenceTypeProximityMutationRecord.check_lower(mutations)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14519,7 +15390,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_membership(self, key: bytes) -> ProximityMembershipProofRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14534,7 +15405,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_search(self, request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
 
         _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
@@ -14552,7 +15423,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_structure(self, limits: ContentGraphLimitsRecord) -> ProximityStructuralProofRecord:
-
+        
         _UniffiFfiConverterTypeContentGraphLimitsRecord.check_lower(limits)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14579,7 +15450,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def rebuild(self, mutations: typing.List[ProximityMutationRecord]) -> BindingProximityMap:
-
+        
         _UniffiFfiConverterSequenceTypeProximityMutationRecord.check_lower(mutations)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14594,7 +15465,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_records(self, visitor: ProximityRecordVisitorCallback) -> int:
-
+        
         _UniffiFfiConverterTypeProximityRecordVisitorCallback.check_lower(visitor)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14609,7 +15480,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search(self, request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -14624,7 +15495,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_cancellable(self, request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
 
         _UniffiFfiConverterOptionalTypeBindingProximitySearchRuntime.check_lower(runtime)
@@ -14645,7 +15516,7 @@ class BindingProximityMap(BindingProximityMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
 
         _UniffiFfiConverterTypeBindingProximitySearchRuntime.check_lower(runtime)
@@ -14706,7 +15577,7 @@ class _UniffiFfiConverterTypeBindingProximityMap:
 
 
 class BindingCompositeAcceleratorProtocol(typing.Protocol):
-
+    
     def base_kind(self, ) -> CompositeBaseKindRecord:
         raise NotImplementedError
     def base_source_descriptor(self, ) -> bytes:
@@ -14733,9 +15604,9 @@ class BindingCompositeAcceleratorProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingCompositeAccelerator(BindingCompositeAcceleratorProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -14841,7 +15712,7 @@ class BindingCompositeAccelerator(BindingCompositeAcceleratorProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,limits: ContentGraphLimitsRecord) -> BindingProximitySearchProof:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -14862,7 +15733,7 @@ class BindingCompositeAccelerator(BindingCompositeAcceleratorProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search(self, map: BindingProximityMap,request: ProximitySearchRequestRecord) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -14880,7 +15751,7 @@ class BindingCompositeAccelerator(BindingCompositeAcceleratorProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_cancellable(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: typing.Optional[BindingProximitySearchRuntime],cancellation: BindingProximityCancellationToken) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -14904,7 +15775,7 @@ class BindingCompositeAccelerator(BindingCompositeAcceleratorProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def search_with_runtime(self, map: BindingProximityMap,request: ProximitySearchRequestRecord,runtime: BindingProximitySearchRuntime) -> ProximitySearchResultRecord:
-
+        
         _UniffiFfiConverterTypeBindingProximityMap.check_lower(map)
 
         _UniffiFfiConverterTypeProximitySearchRequestRecord.check_lower(request)
@@ -15052,10 +15923,10 @@ class CompositeBuildOrRebuildOutcomeRecord:
         self.composite_stats = composite_stats
         self.hnsw_stats = hnsw_stats
         self.pq_stats = pq_stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CompositeBuildOrRebuildOutcomeRecord(kind={}, composite={}, hnsw={}, pq={}, reasons={}, composite_stats={}, hnsw_stats={}, pq_stats={})".format(self.kind, self.composite, self.hnsw, self.pq, self.reasons, self.composite_stats, self.hnsw_stats, self.pq_stats)
     def __eq__(self, other):
@@ -15120,10 +15991,10 @@ class ConflictRecord:
         self.base = base
         self.left = left
         self.right = right
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ConflictRecord(key={}, base={}, left={}, right={})".format(self.key, self.base, self.left, self.right)
     def __eq__(self, other):
@@ -15189,10 +16060,10 @@ class ConflictPageRecord:
     def __init__(self, *, conflicts:typing.List[ConflictRecord], next_cursor:typing.Optional[RangeCursorRecord]):
         self.conflicts = conflicts
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ConflictPageRecord(conflicts={}, next_cursor={})".format(self.conflicts, self.next_cursor)
     def __eq__(self, other):
@@ -15226,11 +16097,11 @@ class _UniffiFfiConverterTypeConflictPageRecord(_UniffiConverterRustBuffer):
 
 
 class CrdtMergeStrategyKind(enum.Enum):
-
+    
     LAST_WRITER_WINS = 0
-
+    
     MULTI_VALUE = 1
-
+    
 
 
 class _UniffiFfiConverterTypeCrdtMergeStrategyKind(_UniffiConverterRustBuffer):
@@ -15266,11 +16137,11 @@ class _UniffiFfiConverterTypeCrdtMergeStrategyKind(_UniffiConverterRustBuffer):
 
 
 class CrdtDeletePolicyKind(enum.Enum):
-
+    
     DELETE_WINS = 0
-
+    
     UPDATE_WINS = 1
-
+    
 
 
 class _UniffiFfiConverterTypeCrdtDeletePolicyKind(_UniffiConverterRustBuffer):
@@ -15305,10 +16176,10 @@ class CrdtConfigRecord:
     def __init__(self, *, strategy:CrdtMergeStrategyKind, delete_policy:CrdtDeletePolicyKind):
         self.strategy = strategy
         self.delete_policy = delete_policy
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CrdtConfigRecord(strategy={}, delete_policy={})".format(self.strategy, self.delete_policy)
     def __eq__(self, other):
@@ -15342,11 +16213,11 @@ class _UniffiFfiConverterTypeCrdtConfigRecord(_UniffiConverterRustBuffer):
 
 
 class CrdtResolutionKind(enum.Enum):
-
+    
     VALUE = 0
-
+    
     DELETE = 1
-
+    
 
 
 class _UniffiFfiConverterTypeCrdtResolutionKind(_UniffiConverterRustBuffer):
@@ -15381,10 +16252,10 @@ class CrdtResolutionRecord:
     def __init__(self, *, kind:CrdtResolutionKind, value:typing.Optional[bytes]):
         self.kind = kind
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CrdtResolutionRecord(kind={}, value={})".format(self.kind, self.value)
     def __eq__(self, other):
@@ -15417,10 +16288,10 @@ class EntryRecord:
     def __init__(self, *, key:bytes, value:bytes):
         self.key = key
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "EntryRecord(key={}, value={})".format(self.key, self.value)
     def __eq__(self, other):
@@ -15479,10 +16350,10 @@ class CursorWindowRecord:
         self.found = found
         self.entries = entries
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "CursorWindowRecord(position_key={}, position_value={}, found={}, entries={}, next_cursor={})".format(self.position_key, self.position_value, self.found, self.entries, self.next_cursor)
     def __eq__(self, other):
@@ -15532,10 +16403,10 @@ class RangePageProofRecord:
         self.after = after
         self.end = end
         self.path = path
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangePageProofRecord(root={}, after={}, end={}, path={})".format(self.root, self.after, self.end, self.path)
     def __eq__(self, other):
@@ -15607,10 +16478,10 @@ class DiffPageProofRecord:
         self.lookahead_other = lookahead_other
         self.requested_end = requested_end
         self.limit = limit
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "DiffPageProofRecord(base={}, other={}, lookahead_base={}, lookahead_other={}, requested_end={}, limit={})".format(self.base, self.other, self.lookahead_base, self.lookahead_other, self.requested_end, self.limit)
     def __eq__(self, other):
@@ -15664,13 +16535,13 @@ class _UniffiFfiConverterTypeDiffPageProofRecord(_UniffiConverterRustBuffer):
 
 
 class DiffKind(enum.Enum):
-
+    
     ADDED = 0
-
+    
     REMOVED = 1
-
+    
     CHANGED = 2
-
+    
 
 
 class _UniffiFfiConverterTypeDiffKind(_UniffiConverterRustBuffer):
@@ -15714,10 +16585,10 @@ class DiffRecord:
         self.value = value
         self.old_value = old_value
         self.new_value = new_value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "DiffRecord(kind={}, key={}, value={}, old_value={}, new_value={})".format(self.kind, self.key, self.value, self.old_value, self.new_value)
     def __eq__(self, other):
@@ -15798,10 +16669,10 @@ class DiffPageProofVerificationRecord:
         self.limit = limit
         self.diffs = diffs
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "DiffPageProofVerificationRecord(valid={}, base_valid={}, other_valid={}, lookahead_valid={}, base_root={}, other_root={}, after={}, requested_end={}, proof_end={}, limit={}, diffs={}, next_cursor={})".format(self.valid, self.base_valid, self.other_valid, self.lookahead_valid, self.base_root, self.other_root, self.after, self.requested_end, self.proof_end, self.limit, self.diffs, self.next_cursor)
     def __eq__(self, other):
@@ -15884,10 +16755,10 @@ class DiffPageRecord:
     def __init__(self, *, diffs:typing.List[DiffRecord], next_cursor:typing.Optional[RangeCursorRecord]):
         self.diffs = diffs
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "DiffPageRecord(diffs={}, next_cursor={})".format(self.diffs, self.next_cursor)
     def __eq__(self, other):
@@ -15924,10 +16795,10 @@ class DiffTraversalStatsRecord:
         self.removed_subtrees = removed_subtrees
         self.collected_fallbacks = collected_fallbacks
         self.emitted_diffs = emitted_diffs
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "DiffTraversalStatsRecord(compared_nodes={}, reused_subtrees={}, added_subtrees={}, removed_subtrees={}, collected_fallbacks={}, emitted_diffs={})".format(self.compared_nodes, self.reused_subtrees, self.added_subtrees, self.removed_subtrees, self.collected_fallbacks, self.emitted_diffs)
     def __eq__(self, other):
@@ -15983,10 +16854,10 @@ class GcReachabilityRecord:
         self.live_bytes = live_bytes
         self.leaf_nodes = leaf_nodes
         self.internal_nodes = internal_nodes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "GcReachabilityRecord(live_cids={}, live_nodes={}, live_bytes={}, leaf_nodes={}, internal_nodes={})".format(self.live_cids, self.live_nodes, self.live_bytes, self.leaf_nodes, self.internal_nodes)
     def __eq__(self, other):
@@ -16038,10 +16909,10 @@ class GcPlanRecord:
         self.reclaimable_nodes = reclaimable_nodes
         self.reclaimable_bytes = reclaimable_bytes
         self.missing_candidates = missing_candidates
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "GcPlanRecord(reachability={}, candidate_nodes={}, reclaimable_cids={}, reclaimable_nodes={}, reclaimable_bytes={}, missing_candidates={})".format(self.reachability, self.candidate_nodes, self.reclaimable_cids, self.reclaimable_nodes, self.reclaimable_bytes, self.missing_candidates)
     def __eq__(self, other):
@@ -16095,10 +16966,10 @@ class GcSweepRecord:
         self.plan = plan
         self.deleted_nodes = deleted_nodes
         self.deleted_bytes = deleted_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "GcSweepRecord(plan={}, deleted_nodes={}, deleted_bytes={})".format(self.plan, self.deleted_nodes, self.deleted_bytes)
     def __eq__(self, other):
@@ -16159,10 +17030,10 @@ class HostStoreBatchGetResultRecord:
     def __init__(self, *, values:typing.List[typing.Optional[bytes]], error:typing.Optional[str]):
         self.values = values
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreBatchGetResultRecord(values={}, error={})".format(self.values, self.error)
     def __eq__(self, other):
@@ -16195,10 +17066,10 @@ class HostStoreBoolResultRecord:
     def __init__(self, *, value:bool, error:typing.Optional[str]):
         self.value = value
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreBoolResultRecord(value={}, error={})".format(self.value, self.error)
     def __eq__(self, other):
@@ -16231,10 +17102,10 @@ class HostStoreBytesResultRecord:
     def __init__(self, *, value:typing.Optional[bytes], error:typing.Optional[str]):
         self.value = value
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreBytesResultRecord(value={}, error={})".format(self.value, self.error)
     def __eq__(self, other):
@@ -16267,10 +17138,10 @@ class HostStoreListBytesResultRecord:
     def __init__(self, *, values:typing.List[bytes], error:typing.Optional[str]):
         self.values = values
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreListBytesResultRecord(values={}, error={})".format(self.values, self.error)
     def __eq__(self, other):
@@ -16304,10 +17175,10 @@ class RootManifestRecord:
         self.tree = tree
         self.created_at_millis = created_at_millis
         self.updated_at_millis = updated_at_millis
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RootManifestRecord(tree={}, created_at_millis={}, updated_at_millis={})".format(self.tree, self.created_at_millis, self.updated_at_millis)
     def __eq__(self, other):
@@ -16345,10 +17216,10 @@ class HostStoreNamedRootManifestRecord:
     def __init__(self, *, name:bytes, manifest:RootManifestRecord):
         self.name = name
         self.manifest = manifest
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreNamedRootManifestRecord(name={}, manifest={})".format(self.name, self.manifest)
     def __eq__(self, other):
@@ -16404,10 +17275,10 @@ class HostStoreListRootsResultRecord:
     def __init__(self, *, values:typing.List[HostStoreNamedRootManifestRecord], error:typing.Optional[str]):
         self.values = values
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreListRootsResultRecord(values={}, error={})".format(self.values, self.error)
     def __eq__(self, other):
@@ -16466,10 +17337,10 @@ class HostStoreRootCasResultRecord:
         self.applied = applied
         self.current = current
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreRootCasResultRecord(applied={}, current={}, error={})".format(self.applied, self.current, self.error)
     def __eq__(self, other):
@@ -16507,10 +17378,10 @@ class HostStoreRootResultRecord:
     def __init__(self, *, value:typing.Optional[RootManifestRecord], error:typing.Optional[str]):
         self.value = value
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreRootResultRecord(value={}, error={})".format(self.value, self.error)
     def __eq__(self, other):
@@ -16542,10 +17413,10 @@ class _UniffiFfiConverterTypeHostStoreRootResultRecord(_UniffiConverterRustBuffe
 class HostStoreUnitResultRecord:
     def __init__(self, *, error:typing.Optional[str]):
         self.error = error
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "HostStoreUnitResultRecord(error={})".format(self.error)
     def __eq__(self, other):
@@ -16578,10 +17449,10 @@ class IndexBuildResultRecord:
         self.entries = entries
         self.attempts = attempts
         self.activated = activated
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexBuildResultRecord(source_version={}, index_version={}, catalog_version={}, generation={}, entries={}, attempts={}, activated={})".format(self.source_version, self.index_version, self.catalog_version, self.generation, self.entries, self.attempts, self.activated)
     def __eq__(self, other):
@@ -16639,10 +17510,10 @@ class IndexEntryRecord:
     def __init__(self, *, term:bytes, projection:typing.Optional[bytes]):
         self.term = term
         self.projection = projection
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexEntryRecord(term={}, projection={})".format(self.term, self.projection)
     def __eq__(self, other):
@@ -16676,10 +17547,10 @@ class IndexMatchRecord:
         self.term = term
         self.primary_key = primary_key
         self.projection = projection
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexMatchRecord(term={}, primary_key={}, projection={})".format(self.term, self.primary_key, self.projection)
     def __eq__(self, other):
@@ -16740,10 +17611,10 @@ class IndexPageRecord:
     def __init__(self, *, matches:typing.List[IndexMatchRecord], next_cursor:typing.Optional[bytes]):
         self.matches = matches
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexPageRecord(matches={}, next_cursor={})".format(self.matches, self.next_cursor)
     def __eq__(self, other):
@@ -16783,10 +17654,10 @@ class IndexVerificationRecord:
         self.semantic_differences = semantic_differences
         self.valid = valid
         self.canonical = canonical
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexVerificationRecord(name={}, source_version={}, expected_index_version={}, actual_index_version={}, expected_entries={}, actual_entries={}, semantic_differences={}, valid={}, canonical={})".format(self.name, self.source_version, self.expected_index_version, self.actual_index_version, self.expected_entries, self.actual_entries, self.semantic_differences, self.valid, self.canonical)
     def __eq__(self, other):
@@ -16880,10 +17751,10 @@ class IndexedMapHealthRecord:
         self.catalog_version = catalog_version
         self.active_indexes = active_indexes
         self.supports_transactions = supports_transactions
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedMapHealthRecord(source_map_id={}, source_version={}, catalog_version={}, active_indexes={}, supports_transactions={})".format(self.source_map_id, self.source_version, self.catalog_version, self.active_indexes, self.supports_transactions)
     def __eq__(self, other):
@@ -16943,10 +17814,10 @@ class IndexedMapMetricsRecord:
         self.build_attempts = build_attempts
         self.verification_outcomes = verification_outcomes
         self.retained_roots = retained_roots
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedMapMetricsRecord(normalized_source_mutations={}, records_extracted={}, terms_emitted={}, projected_bytes={}, physical_upserts={}, physical_deletes={}, unchanged_emissions_skipped={}, source_nodes_written={}, index_nodes_written={}, catalog_nodes_written={}, retries={}, build_attempts={}, verification_outcomes={}, retained_roots={})".format(self.normalized_source_mutations, self.records_extracted, self.terms_emitted, self.projected_bytes, self.physical_upserts, self.physical_deletes, self.unchanged_emissions_skipped, self.source_nodes_written, self.index_nodes_written, self.catalog_nodes_written, self.retries, self.build_attempts, self.verification_outcomes, self.retained_roots)
     def __eq__(self, other):
@@ -17044,10 +17915,10 @@ class IndexedRetentionRecord:
         self.removed_catalog_versions = removed_catalog_versions
         self.removed_checkpoint_records = removed_checkpoint_records
         self.removed_named_roots = removed_named_roots
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedRetentionRecord(retained_source_versions={}, removed_source_versions={}, retained_index_versions={}, removed_index_versions={}, removed_catalog_versions={}, removed_checkpoint_records={}, removed_named_roots={})".format(self.retained_source_versions, self.removed_source_versions, self.retained_index_versions, self.removed_index_versions, self.removed_catalog_versions, self.removed_checkpoint_records, self.removed_named_roots)
     def __eq__(self, other):
@@ -17105,10 +17976,10 @@ class IndexedSnapshotIdRecord:
     def __init__(self, *, source_version:bytes, catalog_version:bytes):
         self.source_version = source_version
         self.catalog_version = catalog_version
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedSnapshotIdRecord(source_version={}, catalog_version={})".format(self.source_version, self.catalog_version)
     def __eq__(self, other):
@@ -17143,10 +18014,10 @@ class IndexedSourceRecord:
         self.primary_key = primary_key
         self.projection = projection
         self.source_value = source_value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedSourceRecord(term={}, primary_key={}, projection={}, source_value={})".format(self.term, self.primary_key, self.projection, self.source_value)
     def __eq__(self, other):
@@ -17190,13 +18061,13 @@ class _UniffiFfiConverterTypeIndexedSourceRecord(_UniffiConverterRustBuffer):
 
 
 class IndexedUpdateKind(enum.Enum):
-
+    
     APPLIED = 0
-
+    
     UNCHANGED = 1
-
+    
     CONFLICT = 2
-
+    
 
 
 class _UniffiFfiConverterTypeIndexedUpdateKind(_UniffiConverterRustBuffer):
@@ -17238,10 +18109,10 @@ class IndexedVersionRecord:
         self.source_version = source_version
         self.catalog_version = catalog_version
         self.index_count = index_count
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedVersionRecord(source_version={}, catalog_version={}, index_count={})".format(self.source_version, self.catalog_version, self.index_count)
     def __eq__(self, other):
@@ -17305,10 +18176,10 @@ class IndexedUpdateRecord:
         self.kind = kind
         self.previous_source_version = previous_source_version
         self.current = current
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "IndexedUpdateRecord(kind={}, previous_source_version={}, current={})".format(self.kind, self.previous_source_version, self.current)
     def __eq__(self, other):
@@ -17345,10 +18216,10 @@ class _UniffiFfiConverterTypeIndexedUpdateRecord(_UniffiConverterRustBuffer):
 class JsonDocumentRecord:
     def __init__(self, *, json:str):
         self.json = json
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "JsonDocumentRecord(json={})".format(self.json)
     def __eq__(self, other):
@@ -17380,10 +18251,10 @@ class KeyProofVerificationRecord:
         self.root = root
         self.key = key
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "KeyProofVerificationRecord(valid={}, exists={}, absence={}, root={}, key={}, value={})".format(self.valid, self.exists, self.absence, self.root, self.key, self.value)
     def __eq__(self, other):
@@ -17435,10 +18306,10 @@ class _UniffiFfiConverterTypeKeyProofVerificationRecord(_UniffiConverterRustBuff
 class LargeValueConfigRecord:
     def __init__(self, *, inline_threshold:int):
         self.inline_threshold = inline_threshold
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "LargeValueConfigRecord(inline_threshold={})".format(self.inline_threshold)
     def __eq__(self, other):
@@ -17468,10 +18339,10 @@ class MapCatalogVerificationRecord:
         self.version_count = version_count
         self.reachable_nodes = reachable_nodes
         self.reachable_bytes = reachable_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MapCatalogVerificationRecord(head={}, version_count={}, reachable_nodes={}, reachable_bytes={})".format(self.head, self.version_count, self.reachable_nodes, self.reachable_bytes)
     def __eq__(self, other):
@@ -17519,10 +18390,10 @@ class MapVersionRecord:
         self.tree = tree
         self.created_at_millis = created_at_millis
         self.is_head = is_head
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MapVersionRecord(id={}, tree={}, created_at_millis={}, is_head={})".format(self.id, self.tree, self.created_at_millis, self.is_head)
     def __eq__(self, other):
@@ -17566,10 +18437,10 @@ class MapChangeEventRecord:
         self.previous = previous
         self.current = current
         self.diffs = diffs
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MapChangeEventRecord(previous={}, current={}, diffs={})".format(self.previous, self.current, self.diffs)
     def __eq__(self, other):
@@ -17608,13 +18479,13 @@ class _UniffiFfiConverterTypeMapChangeEventRecord(_UniffiConverterRustBuffer):
 
 
 class MapUpdateKind(enum.Enum):
-
+    
     APPLIED = 0
-
+    
     UNCHANGED = 1
-
+    
     CONFLICT = 2
-
+    
 
 
 class _UniffiFfiConverterTypeMapUpdateKind(_UniffiConverterRustBuffer):
@@ -17681,10 +18552,10 @@ class MapUpdateRecord:
         self.kind = kind
         self.previous = previous
         self.current = current
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MapUpdateRecord(kind={}, previous={}, current={})".format(self.kind, self.previous, self.current)
     def __eq__(self, other):
@@ -17748,23 +18619,23 @@ class _UniffiFfiConverterOptionalTypeTreeRecord(_UniffiConverterRustBuffer):
 
 
 class MergeTraceEventKind(enum.Enum):
-
+    
     FAST_PATH = 0
-
+    
     STRUCTURAL_MERGE_STARTED = 1
-
+    
     REUSED_SUBTREE = 2
-
+    
     REWRITTEN_NODE = 3
-
+    
     RESOLVER_CALLED = 4
-
+    
     FALLBACK = 5
-
+    
     DIFF_TRAVERSAL = 6
-
+    
     BATCH_MERGE = 7
-
+    
 
 
 class _UniffiFfiConverterTypeMergeTraceEventKind(_UniffiConverterRustBuffer):
@@ -17836,13 +18707,13 @@ class _UniffiFfiConverterTypeMergeTraceEventKind(_UniffiConverterRustBuffer):
 
 
 class MergeFastPathKind(enum.Enum):
-
+    
     BRANCHES_EQUAL = 0
-
+    
     LEFT_UNCHANGED = 1
-
+    
     RIGHT_UNCHANGED = 2
-
+    
 
 
 class _UniffiFfiConverterTypeMergeFastPathKind(_UniffiConverterRustBuffer):
@@ -17909,19 +18780,19 @@ class _UniffiFfiConverterOptionalTypeMergeFastPathKind(_UniffiConverterRustBuffe
 
 
 class MergeReuseReasonKind(enum.Enum):
-
+    
     BRANCHES_EQUAL = 0
-
+    
     LEFT_UNCHANGED = 1
-
+    
     RIGHT_UNCHANGED = 2
-
+    
     UNCHANGED_AFTER_MERGE = 3
-
+    
     MATCHES_LEFT = 4
-
+    
     MATCHES_RIGHT = 5
-
+    
 
 
 class _UniffiFfiConverterTypeMergeReuseReasonKind(_UniffiConverterRustBuffer):
@@ -18006,11 +18877,11 @@ class _UniffiFfiConverterOptionalTypeMergeReuseReasonKind(_UniffiConverterRustBu
 
 
 class MergeTraceStageKind(enum.Enum):
-
+    
     STRUCTURAL = 0
-
+    
     BATCH = 1
-
+    
 
 
 class _UniffiFfiConverterTypeMergeTraceStageKind(_UniffiConverterRustBuffer):
@@ -18071,13 +18942,13 @@ class _UniffiFfiConverterOptionalTypeMergeTraceStageKind(_UniffiConverterRustBuf
 
 
 class MergeTraceResolutionKind(enum.Enum):
-
+    
     VALUE = 0
-
+    
     DELETE = 1
-
+    
     UNRESOLVED = 2
-
+    
 
 
 class _UniffiFfiConverterTypeMergeTraceResolutionKind(_UniffiConverterRustBuffer):
@@ -18144,19 +19015,19 @@ class _UniffiFfiConverterOptionalTypeMergeTraceResolutionKind(_UniffiConverterRu
 
 
 class MergeFallbackReasonKind(enum.Enum):
-
+    
     MISSING_ROOT = 0
-
+    
     SHAPE_MISMATCH = 1
-
+    
     NODE_LENGTH_MISMATCH = 2
-
+    
     CHILD_FALLBACK = 3
-
+    
     DELETE_RESOLUTION = 4
-
+    
     DIFF_BATCH = 5
-
+    
 
 
 class _UniffiFfiConverterTypeMergeFallbackReasonKind(_UniffiConverterRustBuffer):
@@ -18304,10 +19175,10 @@ class MergeTraceEventRecord:
         self.right_changes = right_changes
         self.mutations = mutations
         self.append_only = append_only
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MergeTraceEventRecord(kind={}, fast_path={}, cid={}, reuse_reason={}, level={}, entries={}, first_key={}, last_key={}, stage={}, key={}, resolution={}, fallback_reason={}, diff_stats={}, right_changes={}, mutations={}, append_only={})".format(self.kind, self.fast_path, self.cid, self.reuse_reason, self.level, self.entries, self.first_key, self.last_key, self.stage, self.key, self.resolution, self.fallback_reason, self.diff_stats, self.right_changes, self.mutations, self.append_only)
     def __eq__(self, other):
@@ -18432,10 +19303,10 @@ class _UniffiFfiConverterSequenceTypeMergeTraceEventRecord(_UniffiConverterRustB
 class MergeTraceRecord:
     def __init__(self, *, events:typing.List[MergeTraceEventRecord]):
         self.events = events
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MergeTraceRecord(events={})".format(self.events)
     def __eq__(self, other):
@@ -18465,10 +19336,10 @@ class MergeExplanationRecord:
         self.error = error
         self.trace_json = trace_json
         self.trace = trace
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MergeExplanationRecord(result={}, error={}, trace_json={}, trace={})".format(self.result, self.error, self.trace_json, self.trace)
     def __eq__(self, other):
@@ -18522,10 +19393,10 @@ class MetricsRecord:
         self.store_put_calls = store_put_calls
         self.store_batch_put_calls = store_batch_put_calls
         self.store_batch_put_nodes = store_batch_put_nodes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MetricsRecord(node_cache_hits={}, node_cache_misses={}, node_cache_evictions={}, nodes_read={}, bytes_read={}, nodes_written={}, bytes_written={}, store_get_calls={}, store_batch_get_calls={}, store_batch_get_keys={}, store_put_calls={}, store_batch_put_calls={}, store_batch_put_nodes={})".format(self.node_cache_hits, self.node_cache_misses, self.node_cache_evictions, self.nodes_read, self.bytes_read, self.nodes_written, self.bytes_written, self.store_get_calls, self.store_batch_get_calls, self.store_batch_get_keys, self.store_put_calls, self.store_batch_put_calls, self.store_batch_put_nodes)
     def __eq__(self, other):
@@ -18617,10 +19488,10 @@ class MissingNodePlanRecord:
         self.missing_cids = missing_cids
         self.missing_nodes = missing_nodes
         self.missing_bytes = missing_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MissingNodePlanRecord(required_cids={}, required_nodes={}, required_bytes={}, missing_cids={}, missing_nodes={}, missing_bytes={})".format(self.required_cids, self.required_nodes, self.required_bytes, self.missing_cids, self.missing_nodes, self.missing_bytes)
     def __eq__(self, other):
@@ -18674,10 +19545,10 @@ class MissingNodeCopyRecord:
         self.plan = plan
         self.copied_nodes = copied_nodes
         self.copied_bytes = copied_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MissingNodeCopyRecord(plan={}, copied_nodes={}, copied_bytes={})".format(self.plan, self.copied_nodes, self.copied_bytes)
     def __eq__(self, other):
@@ -18716,10 +19587,10 @@ class MultiKeyProofRecord:
         self.root = root
         self.keys = keys
         self.path = path
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MultiKeyProofRecord(root={}, keys={}, path={})".format(self.root, self.keys, self.path)
     def __eq__(self, other):
@@ -18781,10 +19652,10 @@ class MultiKeyProofVerificationRecord:
         self.valid = valid
         self.root = root
         self.results = results
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MultiKeyProofVerificationRecord(valid={}, root={}, results={})".format(self.valid, self.root, self.results)
     def __eq__(self, other):
@@ -18823,11 +19694,11 @@ class _UniffiFfiConverterTypeMultiKeyProofVerificationRecord(_UniffiConverterRus
 
 
 class MutationKind(enum.Enum):
-
+    
     UPSERT = 0
-
+    
     DELETE = 1
-
+    
 
 
 class _UniffiFfiConverterTypeMutationKind(_UniffiConverterRustBuffer):
@@ -18863,10 +19734,10 @@ class MutationRecord:
         self.kind = kind
         self.key = key
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "MutationRecord(kind={}, key={}, value={})".format(self.kind, self.key, self.value)
     def __eq__(self, other):
@@ -18900,14 +19771,109 @@ class _UniffiFfiConverterTypeMutationRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalBytes.write(value.value, buf)
 
 @dataclass
+class NamedBytesRecord:
+    def __init__(self, *, name:bytes, value:bytes):
+        self.name = name
+        self.value = value
+        
+        
+
+    
+    def __str__(self):
+        return "NamedBytesRecord(name={}, value={})".format(self.name, self.value)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNamedBytesRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NamedBytesRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeNamedBytesRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNamedBytesRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNamedBytesRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNamedBytesRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class NamedBytesListResultRecord:
+    def __init__(self, *, values:typing.List[NamedBytesRecord], error:typing.Optional[StoreErrorRecord]):
+        self.values = values
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "NamedBytesListResultRecord(values={}, error={})".format(self.values, self.error)
+    def __eq__(self, other):
+        if self.values != other.values:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNamedBytesListResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NamedBytesListResultRecord(
+            values=_UniffiFfiConverterSequenceTypeNamedBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceTypeNamedBytesRecord.check_lower(value.values)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceTypeNamedBytesRecord.write(value.values, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
 class NamedRootManifestRecord:
     def __init__(self, *, name:bytes, manifest:RootManifestRecord):
         self.name = name
         self.manifest = manifest
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "NamedRootManifestRecord(name={}, manifest={})".format(self.name, self.manifest)
     def __eq__(self, other):
@@ -18940,10 +19906,10 @@ class NamedRootRecord:
     def __init__(self, *, name:bytes, tree:TreeRecord):
         self.name = name
         self.tree = tree
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "NamedRootRecord(name={}, tree={})".format(self.name, self.tree)
     def __eq__(self, other):
@@ -18977,17 +19943,17 @@ class _UniffiFfiConverterTypeNamedRootRecord(_UniffiConverterRustBuffer):
 
 
 class NamedRootRetentionKind(enum.Enum):
-
+    
     ALL = 0
-
+    
     EXACT = 1
-
+    
     PREFIX = 2
-
+    
     NEWEST_BY_NAME = 3
-
+    
     UPDATED_SINCE = 4
-
+    
 
 
 class _UniffiFfiConverterTypeNamedRootRetentionKind(_UniffiConverterRustBuffer):
@@ -19043,10 +20009,10 @@ class NamedRootRetentionRecord:
         self.prefix = prefix
         self.count = count
         self.min_updated_at_millis = min_updated_at_millis
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "NamedRootRetentionRecord(kind={}, names={}, prefix={}, count={}, min_updated_at_millis={})".format(self.kind, self.names, self.prefix, self.count, self.min_updated_at_millis)
     def __eq__(self, other):
@@ -19117,10 +20083,10 @@ class NamedRootSelectionRecord:
     def __init__(self, *, roots:typing.List[NamedRootRecord], missing_names:typing.List[bytes]):
         self.roots = roots
         self.missing_names = missing_names
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "NamedRootSelectionRecord(roots={}, missing_names={})".format(self.roots, self.missing_names)
     def __eq__(self, other):
@@ -19154,10 +20120,10 @@ class NamedRootUpdateRecord:
         self.applied = applied
         self.conflict = conflict
         self.current = current
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "NamedRootUpdateRecord(applied={}, conflict={}, current={})".format(self.applied, self.conflict, self.current)
     def __eq__(self, other):
@@ -19191,14 +20157,217 @@ class _UniffiFfiConverterTypeNamedRootUpdateRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalTypeTreeRecord.write(value.current, buf)
 
 @dataclass
+class NodeEntryRecord:
+    def __init__(self, *, key:bytes, value:bytes):
+        self.key = key
+        self.value = value
+        
+        
+
+    
+    def __str__(self):
+        return "NodeEntryRecord(key={}, value={})".format(self.key, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNodeEntryRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NodeEntryRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+@dataclass
+class OptionalBytesRecord:
+    def __init__(self, *, present:bool, value:bytes):
+        self.present = present
+        self.value = value
+        
+        
+
+    
+    def __str__(self):
+        return "OptionalBytesRecord(present={}, value={})".format(self.present, self.value)
+    def __eq__(self, other):
+        if self.present != other.present:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeOptionalBytesRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return OptionalBytesRecord(
+            present=_UniffiFfiConverterBoolean.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.present)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.present, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+@dataclass
+class NodeMutationRecord:
+    def __init__(self, *, key:bytes, value:OptionalBytesRecord):
+        self.key = key
+        self.value = value
+        
+        
+
+    
+    def __str__(self):
+        return "NodeMutationRecord(key={}, value={})".format(self.key, self.value)
+    def __eq__(self, other):
+        if self.key != other.key:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNodeMutationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NodeMutationRecord(
+            key=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeOptionalBytesRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeOptionalBytesRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeOptionalBytesRecord.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class OptionalBytesListResultRecord:
+    def __init__(self, *, values:typing.List[OptionalBytesRecord], error:typing.Optional[StoreErrorRecord]):
+        self.values = values
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "OptionalBytesListResultRecord(values={}, error={})".format(self.values, self.error)
+    def __eq__(self, other):
+        if self.values != other.values:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeOptionalBytesListResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return OptionalBytesListResultRecord(
+            values=_UniffiFfiConverterSequenceTypeOptionalBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceTypeOptionalBytesRecord.check_lower(value.values)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceTypeOptionalBytesRecord.write(value.values, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
+class OptionalBytesResultRecord:
+    def __init__(self, *, value:OptionalBytesRecord, error:typing.Optional[StoreErrorRecord]):
+        self.value = value
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "OptionalBytesResultRecord(value={}, error={})".format(self.value, self.error)
+    def __eq__(self, other):
+        if self.value != other.value:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeOptionalBytesResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return OptionalBytesResultRecord(
+            value=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.value)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.value, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
 class ParallelConfigRecord:
     def __init__(self, *, max_threads:int, parallelism_threshold:int):
         self.max_threads = max_threads
         self.parallelism_threshold = parallelism_threshold
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ParallelConfigRecord(max_threads={}, parallelism_threshold={})".format(self.max_threads, self.parallelism_threshold)
     def __eq__(self, other):
@@ -19231,10 +20400,10 @@ class ProvedDiffPageRecord:
     def __init__(self, *, page:DiffPageRecord, proof:DiffPageProofRecord):
         self.page = page
         self.proof = proof
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProvedDiffPageRecord(page={}, proof={})".format(self.page, self.proof)
     def __eq__(self, other):
@@ -19267,10 +20436,10 @@ class RangePageRecord:
     def __init__(self, *, entries:typing.List[EntryRecord], next_cursor:typing.Optional[RangeCursorRecord]):
         self.entries = entries
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangePageRecord(entries={}, next_cursor={})".format(self.entries, self.next_cursor)
     def __eq__(self, other):
@@ -19303,10 +20472,10 @@ class ProvedRangePageRecord:
     def __init__(self, *, page:RangePageRecord, proof:RangePageProofRecord):
         self.page = page
         self.proof = proof
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProvedRangePageRecord(page={}, proof={})".format(self.page, self.proof)
     def __eq__(self, other):
@@ -19340,10 +20509,10 @@ class ProximityMembershipVerificationRecord:
         self.descriptor = descriptor
         self.key = key
         self.record = record
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityMembershipVerificationRecord(descriptor={}, key={}, record={})".format(self.descriptor, self.key, self.record)
     def __eq__(self, other):
@@ -19382,10 +20551,10 @@ class ProximityStructuralVerificationRecord:
         self.descriptor = descriptor
         self.object_count = object_count
         self.summary = summary
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ProximityStructuralVerificationRecord(descriptor={}, object_count={}, summary={})".format(self.descriptor, self.object_count, self.summary)
     def __eq__(self, other):
@@ -19423,10 +20592,10 @@ class RangeBoundsRecord:
     def __init__(self, *, start:bytes, end:typing.Optional[bytes]):
         self.start = start
         self.end = end
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangeBoundsRecord(start={}, end={})".format(self.start, self.end)
     def __eq__(self, other):
@@ -19462,10 +20631,10 @@ class RangePageProofVerificationRecord:
         self.after = after
         self.end = end
         self.entries = entries
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangePageProofVerificationRecord(valid={}, root={}, after={}, end={}, entries={})".format(self.valid, self.root, self.after, self.end, self.entries)
     def __eq__(self, other):
@@ -19515,10 +20684,10 @@ class RangeProofRecord:
         self.start = start
         self.end = end
         self.path = path
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangeProofRecord(root={}, start={}, end={}, path={})".format(self.root, self.start, self.end, self.path)
     def __eq__(self, other):
@@ -19564,10 +20733,10 @@ class RangeProofVerificationRecord:
         self.start = start
         self.end = end
         self.entries = entries
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "RangeProofVerificationRecord(valid={}, root={}, start={}, end={}, entries={})".format(self.valid, self.root, self.start, self.end, self.entries)
     def __eq__(self, other):
@@ -19616,13 +20785,13 @@ class _UniffiFfiConverterTypeRangeProofVerificationRecord(_UniffiConverterRustBu
 
 
 class ResolutionKind(enum.Enum):
-
+    
     VALUE = 0
-
+    
     DELETE = 1
-
+    
     UNRESOLVED = 2
-
+    
 
 
 class _UniffiFfiConverterTypeResolutionKind(_UniffiConverterRustBuffer):
@@ -19663,10 +20832,10 @@ class ResolutionRecord:
     def __init__(self, *, kind:ResolutionKind, value:typing.Optional[bytes]):
         self.kind = kind
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ResolutionRecord(kind={}, value={})".format(self.kind, self.value)
     def __eq__(self, other):
@@ -19698,10 +20867,10 @@ class _UniffiFfiConverterTypeResolutionRecord(_UniffiConverterRustBuffer):
 class ReverseCursorRecord:
     def __init__(self, *, before_key:typing.Optional[bytes]):
         self.before_key = before_key
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ReverseCursorRecord(before_key={})".format(self.before_key)
     def __eq__(self, other):
@@ -19754,10 +20923,10 @@ class ReversePageRecord:
     def __init__(self, *, entries:typing.List[EntryRecord], next_cursor:typing.Optional[ReverseCursorRecord]):
         self.entries = entries
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ReversePageRecord(entries={}, next_cursor={})".format(self.entries, self.next_cursor)
     def __eq__(self, other):
@@ -19786,6 +20955,120 @@ class _UniffiFfiConverterTypeReversePageRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalTypeReverseCursorRecord.write(value.next_cursor, buf)
 
 @dataclass
+class RootCasResultRecord:
+    def __init__(self, *, applied:bool, current:OptionalBytesRecord, error:typing.Optional[StoreErrorRecord]):
+        self.applied = applied
+        self.current = current
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "RootCasResultRecord(applied={}, current={}, error={})".format(self.applied, self.current, self.error)
+    def __eq__(self, other):
+        if self.applied != other.applied:
+            return False
+        if self.current != other.current:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRootCasResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RootCasResultRecord(
+            applied=_UniffiFfiConverterBoolean.read(buf),
+            current=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.applied)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.current)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.applied, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.current, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
+class RootConditionRecord:
+    def __init__(self, *, name:bytes, expected:OptionalBytesRecord):
+        self.name = name
+        self.expected = expected
+        
+        
+
+    
+    def __str__(self):
+        return "RootConditionRecord(name={}, expected={})".format(self.name, self.expected)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.expected != other.expected:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRootConditionRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RootConditionRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            expected=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.expected)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.expected, buf)
+
+@dataclass
+class RootWriteRecord:
+    def __init__(self, *, name:bytes, replacement:OptionalBytesRecord):
+        self.name = name
+        self.replacement = replacement
+        
+        
+
+    
+    def __str__(self):
+        return "RootWriteRecord(name={}, replacement={})".format(self.name, self.replacement)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.replacement != other.replacement:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRootWriteRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RootWriteRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            replacement=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.replacement)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.replacement, buf)
+
+@dataclass
 class ScanOutcomeRecord:
     """
     Result of a streaming read operation.
@@ -19797,10 +21080,10 @@ class ScanOutcomeRecord:
     def __init__(self, *, visited:int, stopped:bool):
         self.visited = visited
         self.stopped = stopped
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ScanOutcomeRecord(visited={}, stopped={})".format(self.visited, self.stopped)
     def __eq__(self, other):
@@ -19846,10 +21129,10 @@ class SecondaryIndexLimitsRecord:
         self.max_verification_entries = max_verification_entries
         self.max_write_retries = max_write_retries
         self.max_build_retries = max_build_retries
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SecondaryIndexLimitsRecord(max_term_bytes={}, max_projection_bytes={}, max_all_value_bytes={}, max_terms_per_record={}, max_projected_bytes_per_record={}, max_derived_mutations_per_transaction={}, max_projected_bytes_per_transaction={}, max_indexes={}, build_page_size={}, max_temporary_sort_bytes={}, max_bundle_nodes={}, max_bundle_bytes={}, max_verification_entries={}, max_write_retries={}, max_build_retries={})".format(self.max_term_bytes, self.max_projection_bytes, self.max_all_value_bytes, self.max_terms_per_record, self.max_projected_bytes_per_record, self.max_derived_mutations_per_transaction, self.max_projected_bytes_per_transaction, self.max_indexes, self.build_page_size, self.max_temporary_sort_bytes, self.max_bundle_nodes, self.max_bundle_bytes, self.max_verification_entries, self.max_write_retries, self.max_build_retries)
     def __eq__(self, other):
@@ -19947,10 +21230,10 @@ class SnapshotBundleNodeRecord:
     def __init__(self, *, cid:bytes, bytes:bytes):
         self.cid = cid
         self.bytes = bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotBundleNodeRecord(cid={}, bytes={})".format(self.cid, self.bytes)
     def __eq__(self, other):
@@ -20007,10 +21290,10 @@ class SnapshotBundleRecord:
         self.format_version = format_version
         self.tree = tree
         self.nodes = nodes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotBundleRecord(format_version={}, tree={}, nodes={})".format(self.format_version, self.tree, self.nodes)
     def __eq__(self, other):
@@ -20052,10 +21335,10 @@ class SnapshotBundleSummaryRecord:
         self.byte_count = byte_count
         self.min_node_bytes = min_node_bytes
         self.max_node_bytes = max_node_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotBundleSummaryRecord(format_version={}, root={}, node_count={}, byte_count={}, min_node_bytes={}, max_node_bytes={})".format(self.format_version, self.root, self.node_count, self.byte_count, self.min_node_bytes, self.max_node_bytes)
     def __eq__(self, other):
@@ -20112,10 +21395,10 @@ class SnapshotBundleVerificationRecord:
         self.reachable_bytes = reachable_bytes
         self.missing_cids = missing_cids
         self.extra_cids = extra_cids
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotBundleVerificationRecord(valid={}, summary={}, reachable_nodes={}, reachable_bytes={}, missing_cids={}, extra_cids={})".format(self.valid, self.summary, self.reachable_nodes, self.reachable_bytes, self.missing_cids, self.extra_cids)
     def __eq__(self, other):
@@ -20169,15 +21452,15 @@ class _UniffiFfiConverterTypeSnapshotBundleVerificationRecord(_UniffiConverterRu
 
 
 class SnapshotNamespaceKind(enum.Enum):
-
+    
     BRANCH = 0
-
+    
     TAG = 1
-
+    
     CHECKPOINT = 2
-
+    
     CUSTOM = 3
-
+    
 
 
 class _UniffiFfiConverterTypeSnapshotNamespaceKind(_UniffiConverterRustBuffer):
@@ -20224,10 +21507,10 @@ class SnapshotNamespaceRecord:
     def __init__(self, *, kind:SnapshotNamespaceKind, custom_prefix:typing.Optional[bytes]):
         self.kind = kind
         self.custom_prefix = custom_prefix
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotNamespaceRecord(kind={}, custom_prefix={})".format(self.kind, self.custom_prefix)
     def __eq__(self, other):
@@ -20263,10 +21546,10 @@ class SnapshotRecord:
         self.tree = tree
         self.created_at_millis = created_at_millis
         self.updated_at_millis = updated_at_millis
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotRecord(id={}, name={}, tree={}, created_at_millis={}, updated_at_millis={})".format(self.id, self.name, self.tree, self.created_at_millis, self.updated_at_millis)
     def __eq__(self, other):
@@ -20337,10 +21620,10 @@ class SnapshotSelectionRecord:
     def __init__(self, *, snapshots:typing.List[SnapshotRecord], missing_ids:typing.List[bytes]):
         self.snapshots = snapshots
         self.missing_ids = missing_ids
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "SnapshotSelectionRecord(snapshots={}, missing_ids={})".format(self.snapshots, self.missing_ids)
     def __eq__(self, other):
@@ -20373,10 +21656,10 @@ class TreeStatsLevelU64Record:
     def __init__(self, *, level:int, value:int):
         self.level = level
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeStatsLevelU64Record(level={}, value={})".format(self.level, self.value)
     def __eq__(self, other):
@@ -20432,10 +21715,10 @@ class TreeStatsLevelF64Record:
     def __init__(self, *, level:int, value:float):
         self.level = level
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeStatsLevelF64Record(level={}, value={})".format(self.level, self.value)
     def __eq__(self, other):
@@ -20518,10 +21801,10 @@ class TreeStatsRecord:
         self.max_value_size_bytes = max_value_size_bytes
         self.total_keys_size_bytes = total_keys_size_bytes
         self.total_values_size_bytes = total_values_size_bytes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeStatsRecord(num_nodes={}, num_leaves={}, num_internal_nodes={}, tree_height={}, total_key_value_pairs={}, total_tree_size_bytes={}, avg_node_size_bytes={}, min_node_size_bytes={}, max_node_size_bytes={}, avg_entries_per_node={}, nodes_per_level={}, avg_node_size_per_level={}, avg_entries_per_level={}, min_entries_per_level={}, max_entries_per_level={}, avg_fanout={}, min_fanout={}, max_fanout={}, avg_fill_factor={}, avg_leaf_fill_factor={}, avg_internal_fill_factor={}, avg_key_size_bytes={}, avg_value_size_bytes={}, min_key_size_bytes={}, max_key_size_bytes={}, min_value_size_bytes={}, max_value_size_bytes={}, total_keys_size_bytes={}, total_values_size_bytes={})".format(self.num_nodes, self.num_leaves, self.num_internal_nodes, self.tree_height, self.total_key_value_pairs, self.total_tree_size_bytes, self.avg_node_size_bytes, self.min_node_size_bytes, self.max_node_size_bytes, self.avg_entries_per_node, self.nodes_per_level, self.avg_node_size_per_level, self.avg_entries_per_level, self.min_entries_per_level, self.max_entries_per_level, self.avg_fanout, self.min_fanout, self.max_fanout, self.avg_fill_factor, self.avg_leaf_fill_factor, self.avg_internal_fill_factor, self.avg_key_size_bytes, self.avg_value_size_bytes, self.min_key_size_bytes, self.max_key_size_bytes, self.min_value_size_bytes, self.max_value_size_bytes, self.total_keys_size_bytes, self.total_values_size_bytes)
     def __eq__(self, other):
@@ -20737,10 +22020,10 @@ class StatsDiffRecord:
         self.max_value_size_bytes_diff = max_value_size_bytes_diff
         self.total_keys_size_bytes_diff = total_keys_size_bytes_diff
         self.total_values_size_bytes_diff = total_values_size_bytes_diff
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "StatsDiffRecord(num_nodes_diff={}, num_leaves_diff={}, num_internal_nodes_diff={}, tree_height_diff={}, total_key_value_pairs_diff={}, total_tree_size_bytes_diff={}, avg_node_size_bytes_diff={}, min_node_size_bytes_diff={}, max_node_size_bytes_diff={}, avg_entries_per_node_diff={}, avg_fanout_diff={}, min_fanout_diff={}, max_fanout_diff={}, avg_fill_factor_diff={}, avg_leaf_fill_factor_diff={}, avg_internal_fill_factor_diff={}, avg_key_size_bytes_diff={}, avg_value_size_bytes_diff={}, min_key_size_bytes_diff={}, max_key_size_bytes_diff={}, min_value_size_bytes_diff={}, max_value_size_bytes_diff={}, total_keys_size_bytes_diff={}, total_values_size_bytes_diff={})".format(self.num_nodes_diff, self.num_leaves_diff, self.num_internal_nodes_diff, self.tree_height_diff, self.total_key_value_pairs_diff, self.total_tree_size_bytes_diff, self.avg_node_size_bytes_diff, self.min_node_size_bytes_diff, self.max_node_size_bytes_diff, self.avg_entries_per_node_diff, self.avg_fanout_diff, self.min_fanout_diff, self.max_fanout_diff, self.avg_fill_factor_diff, self.avg_leaf_fill_factor_diff, self.avg_internal_fill_factor_diff, self.avg_key_size_bytes_diff, self.avg_value_size_bytes_diff, self.min_key_size_bytes_diff, self.max_key_size_bytes_diff, self.min_value_size_bytes_diff, self.max_value_size_bytes_diff, self.total_keys_size_bytes_diff, self.total_values_size_bytes_diff)
     def __eq__(self, other):
@@ -20905,10 +22188,10 @@ class StatsPercentageChangeRecord:
         self.max_value_size_bytes_pct = max_value_size_bytes_pct
         self.total_keys_size_bytes_pct = total_keys_size_bytes_pct
         self.total_values_size_bytes_pct = total_values_size_bytes_pct
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "StatsPercentageChangeRecord(num_nodes_pct={}, num_leaves_pct={}, num_internal_nodes_pct={}, tree_height_pct={}, total_key_value_pairs_pct={}, total_tree_size_bytes_pct={}, avg_node_size_bytes_pct={}, min_node_size_bytes_pct={}, max_node_size_bytes_pct={}, avg_entries_per_node_pct={}, avg_fanout_pct={}, min_fanout_pct={}, max_fanout_pct={}, avg_fill_factor_pct={}, avg_leaf_fill_factor_pct={}, avg_internal_fill_factor_pct={}, avg_key_size_bytes_pct={}, avg_value_size_bytes_pct={}, min_key_size_bytes_pct={}, max_key_size_bytes_pct={}, min_value_size_bytes_pct={}, max_value_size_bytes_pct={}, total_keys_size_bytes_pct={}, total_values_size_bytes_pct={})".format(self.num_nodes_pct, self.num_leaves_pct, self.num_internal_nodes_pct, self.tree_height_pct, self.total_key_value_pairs_pct, self.total_tree_size_bytes_pct, self.avg_node_size_bytes_pct, self.min_node_size_bytes_pct, self.max_node_size_bytes_pct, self.avg_entries_per_node_pct, self.avg_fanout_pct, self.min_fanout_pct, self.max_fanout_pct, self.avg_fill_factor_pct, self.avg_leaf_fill_factor_pct, self.avg_internal_fill_factor_pct, self.avg_key_size_bytes_pct, self.avg_value_size_bytes_pct, self.min_key_size_bytes_pct, self.max_key_size_bytes_pct, self.min_value_size_bytes_pct, self.max_value_size_bytes_pct, self.total_keys_size_bytes_pct, self.total_values_size_bytes_pct)
     def __eq__(self, other):
@@ -21053,10 +22336,10 @@ class StatsComparisonRecord:
         self.after = after
         self.absolute = absolute
         self.percentage = percentage
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "StatsComparisonRecord(before={}, after={}, absolute={}, percentage={})".format(self.before, self.after, self.absolute, self.percentage)
     def __eq__(self, other):
@@ -21094,19 +22377,308 @@ class _UniffiFfiConverterTypeStatsComparisonRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeStatsDiffRecord.write(value.absolute, buf)
         _UniffiFfiConverterTypeStatsPercentageChangeRecord.write(value.percentage, buf)
 
+@dataclass
+class StoreCapabilitiesRecord:
+    def __init__(self, *, native_batch_reads:bool, atomic_batch_writes:bool, node_scan:bool, hints:bool, atomic_nodes_and_hint:bool, root_scan:bool, root_compare_and_swap:bool, transactions:bool, read_parallelism:int):
+        self.native_batch_reads = native_batch_reads
+        self.atomic_batch_writes = atomic_batch_writes
+        self.node_scan = node_scan
+        self.hints = hints
+        self.atomic_nodes_and_hint = atomic_nodes_and_hint
+        self.root_scan = root_scan
+        self.root_compare_and_swap = root_compare_and_swap
+        self.transactions = transactions
+        self.read_parallelism = read_parallelism
+        
+        
+
+    
+    def __str__(self):
+        return "StoreCapabilitiesRecord(native_batch_reads={}, atomic_batch_writes={}, node_scan={}, hints={}, atomic_nodes_and_hint={}, root_scan={}, root_compare_and_swap={}, transactions={}, read_parallelism={})".format(self.native_batch_reads, self.atomic_batch_writes, self.node_scan, self.hints, self.atomic_nodes_and_hint, self.root_scan, self.root_compare_and_swap, self.transactions, self.read_parallelism)
+    def __eq__(self, other):
+        if self.native_batch_reads != other.native_batch_reads:
+            return False
+        if self.atomic_batch_writes != other.atomic_batch_writes:
+            return False
+        if self.node_scan != other.node_scan:
+            return False
+        if self.hints != other.hints:
+            return False
+        if self.atomic_nodes_and_hint != other.atomic_nodes_and_hint:
+            return False
+        if self.root_scan != other.root_scan:
+            return False
+        if self.root_compare_and_swap != other.root_compare_and_swap:
+            return False
+        if self.transactions != other.transactions:
+            return False
+        if self.read_parallelism != other.read_parallelism:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreCapabilitiesRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreCapabilitiesRecord(
+            native_batch_reads=_UniffiFfiConverterBoolean.read(buf),
+            atomic_batch_writes=_UniffiFfiConverterBoolean.read(buf),
+            node_scan=_UniffiFfiConverterBoolean.read(buf),
+            hints=_UniffiFfiConverterBoolean.read(buf),
+            atomic_nodes_and_hint=_UniffiFfiConverterBoolean.read(buf),
+            root_scan=_UniffiFfiConverterBoolean.read(buf),
+            root_compare_and_swap=_UniffiFfiConverterBoolean.read(buf),
+            transactions=_UniffiFfiConverterBoolean.read(buf),
+            read_parallelism=_UniffiFfiConverterUInt32.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.native_batch_reads)
+        _UniffiFfiConverterBoolean.check_lower(value.atomic_batch_writes)
+        _UniffiFfiConverterBoolean.check_lower(value.node_scan)
+        _UniffiFfiConverterBoolean.check_lower(value.hints)
+        _UniffiFfiConverterBoolean.check_lower(value.atomic_nodes_and_hint)
+        _UniffiFfiConverterBoolean.check_lower(value.root_scan)
+        _UniffiFfiConverterBoolean.check_lower(value.root_compare_and_swap)
+        _UniffiFfiConverterBoolean.check_lower(value.transactions)
+        _UniffiFfiConverterUInt32.check_lower(value.read_parallelism)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.native_batch_reads, buf)
+        _UniffiFfiConverterBoolean.write(value.atomic_batch_writes, buf)
+        _UniffiFfiConverterBoolean.write(value.node_scan, buf)
+        _UniffiFfiConverterBoolean.write(value.hints, buf)
+        _UniffiFfiConverterBoolean.write(value.atomic_nodes_and_hint, buf)
+        _UniffiFfiConverterBoolean.write(value.root_scan, buf)
+        _UniffiFfiConverterBoolean.write(value.root_compare_and_swap, buf)
+        _UniffiFfiConverterBoolean.write(value.transactions, buf)
+        _UniffiFfiConverterUInt32.write(value.read_parallelism, buf)
+
+@dataclass
+class StoreLimitsRecord:
+    def __init__(self, *, max_batch_read_items:typing.Optional[int], max_batch_write_items:typing.Optional[int], max_transaction_operations:typing.Optional[int], max_node_bytes:typing.Optional[int]):
+        self.max_batch_read_items = max_batch_read_items
+        self.max_batch_write_items = max_batch_write_items
+        self.max_transaction_operations = max_transaction_operations
+        self.max_node_bytes = max_node_bytes
+        
+        
+
+    
+    def __str__(self):
+        return "StoreLimitsRecord(max_batch_read_items={}, max_batch_write_items={}, max_transaction_operations={}, max_node_bytes={})".format(self.max_batch_read_items, self.max_batch_write_items, self.max_transaction_operations, self.max_node_bytes)
+    def __eq__(self, other):
+        if self.max_batch_read_items != other.max_batch_read_items:
+            return False
+        if self.max_batch_write_items != other.max_batch_write_items:
+            return False
+        if self.max_transaction_operations != other.max_transaction_operations:
+            return False
+        if self.max_node_bytes != other.max_node_bytes:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreLimitsRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreLimitsRecord(
+            max_batch_read_items=_UniffiFfiConverterOptionalUInt32.read(buf),
+            max_batch_write_items=_UniffiFfiConverterOptionalUInt32.read(buf),
+            max_transaction_operations=_UniffiFfiConverterOptionalUInt32.read(buf),
+            max_node_bytes=_UniffiFfiConverterOptionalUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.max_batch_read_items)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.max_batch_write_items)
+        _UniffiFfiConverterOptionalUInt32.check_lower(value.max_transaction_operations)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.max_node_bytes)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalUInt32.write(value.max_batch_read_items, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.max_batch_write_items, buf)
+        _UniffiFfiConverterOptionalUInt32.write(value.max_transaction_operations, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.max_node_bytes, buf)
+
+@dataclass
+class StoreDescriptorRecord:
+    def __init__(self, *, protocol_major:int, adapter_name:str, provider:str, schema_version:int, capabilities:StoreCapabilitiesRecord, limits:StoreLimitsRecord):
+        self.protocol_major = protocol_major
+        self.adapter_name = adapter_name
+        self.provider = provider
+        self.schema_version = schema_version
+        self.capabilities = capabilities
+        self.limits = limits
+        
+        
+
+    
+    def __str__(self):
+        return "StoreDescriptorRecord(protocol_major={}, adapter_name={}, provider={}, schema_version={}, capabilities={}, limits={})".format(self.protocol_major, self.adapter_name, self.provider, self.schema_version, self.capabilities, self.limits)
+    def __eq__(self, other):
+        if self.protocol_major != other.protocol_major:
+            return False
+        if self.adapter_name != other.adapter_name:
+            return False
+        if self.provider != other.provider:
+            return False
+        if self.schema_version != other.schema_version:
+            return False
+        if self.capabilities != other.capabilities:
+            return False
+        if self.limits != other.limits:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreDescriptorRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreDescriptorRecord(
+            protocol_major=_UniffiFfiConverterUInt32.read(buf),
+            adapter_name=_UniffiFfiConverterString.read(buf),
+            provider=_UniffiFfiConverterString.read(buf),
+            schema_version=_UniffiFfiConverterUInt32.read(buf),
+            capabilities=_UniffiFfiConverterTypeStoreCapabilitiesRecord.read(buf),
+            limits=_UniffiFfiConverterTypeStoreLimitsRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.protocol_major)
+        _UniffiFfiConverterString.check_lower(value.adapter_name)
+        _UniffiFfiConverterString.check_lower(value.provider)
+        _UniffiFfiConverterUInt32.check_lower(value.schema_version)
+        _UniffiFfiConverterTypeStoreCapabilitiesRecord.check_lower(value.capabilities)
+        _UniffiFfiConverterTypeStoreLimitsRecord.check_lower(value.limits)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.protocol_major, buf)
+        _UniffiFfiConverterString.write(value.adapter_name, buf)
+        _UniffiFfiConverterString.write(value.provider, buf)
+        _UniffiFfiConverterUInt32.write(value.schema_version, buf)
+        _UniffiFfiConverterTypeStoreCapabilitiesRecord.write(value.capabilities, buf)
+        _UniffiFfiConverterTypeStoreLimitsRecord.write(value.limits, buf)
+
+class _UniffiFfiConverterOptionalTypeStoreDescriptorRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeStoreDescriptorRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeStoreDescriptorRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeStoreDescriptorRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class StoreDescriptorResultRecord:
+    def __init__(self, *, value:typing.Optional[StoreDescriptorRecord], error:typing.Optional[StoreErrorRecord]):
+        self.value = value
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "StoreDescriptorResultRecord(value={}, error={})".format(self.value, self.error)
+    def __eq__(self, other):
+        if self.value != other.value:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreDescriptorResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreDescriptorResultRecord(
+            value=_UniffiFfiConverterOptionalTypeStoreDescriptorRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalTypeStoreDescriptorRecord.check_lower(value.value)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalTypeStoreDescriptorRecord.write(value.value, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
+@dataclass
+class StoreTransactionConflictRecord:
+    def __init__(self, *, name:bytes, expected:OptionalBytesRecord, current:OptionalBytesRecord):
+        self.name = name
+        self.expected = expected
+        self.current = current
+        
+        
+
+    
+    def __str__(self):
+        return "StoreTransactionConflictRecord(name={}, expected={}, current={})".format(self.name, self.expected, self.current)
+    def __eq__(self, other):
+        if self.name != other.name:
+            return False
+        if self.expected != other.expected:
+            return False
+        if self.current != other.current:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStoreTransactionConflictRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StoreTransactionConflictRecord(
+            name=_UniffiFfiConverterBytes.read(buf),
+            expected=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+            current=_UniffiFfiConverterTypeOptionalBytesRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.name)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.expected)
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(value.current)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.name, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.expected, buf)
+        _UniffiFfiConverterTypeOptionalBytesRecord.write(value.current, buf)
+
 
 
 
 
 
 class StructuralDiffMarkerKind(enum.Enum):
-
+    
     COMPARE = 0
-
+    
     ADDED = 1
-
+    
     REMOVED = 2
-
+    
 
 
 class _UniffiFfiConverterTypeStructuralDiffMarkerKind(_UniffiConverterRustBuffer):
@@ -21150,10 +22722,10 @@ class StructuralDiffMarkerRecord:
         self.other_cid = other_cid
         self.span_end = span_end
         self.cid = cid
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "StructuralDiffMarkerRecord(kind={}, base_cid={}, other_cid={}, span_end={}, cid={})".format(self.kind, self.base_cid, self.other_cid, self.span_end, self.cid)
     def __eq__(self, other):
@@ -21226,10 +22798,10 @@ class StructuralDiffCursorRecord:
         self.other_root = other_root
         self.markers = markers
         self.pending = pending
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "StructuralDiffCursorRecord(base_root={}, other_root={}, markers={}, pending={})".format(self.base_root, self.other_root, self.markers, self.pending)
     def __eq__(self, other):
@@ -21299,10 +22871,10 @@ class StructuralDiffPageRecord:
         self.next_cursor_json = next_cursor_json
         self.stats = stats
         self.next_cursor = next_cursor
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "StructuralDiffPageRecord(diffs={}, next_cursor_json={}, stats={}, next_cursor={})".format(self.diffs, self.next_cursor_json, self.stats, self.next_cursor)
     def __eq__(self, other):
@@ -21345,10 +22917,10 @@ class TimestampedValueRecord:
     def __init__(self, *, value:bytes, timestamp:int):
         self.value = value
         self.timestamp = timestamp
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TimestampedValueRecord(value={}, timestamp={})".format(self.value, self.timestamp)
     def __eq__(self, other):
@@ -21381,10 +22953,10 @@ class TombstoneMetadataRecord:
     def __init__(self, *, key:str, value:bytes):
         self.key = key
         self.value = value
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TombstoneMetadataRecord(key={}, value={})".format(self.key, self.value)
     def __eq__(self, other):
@@ -21441,10 +23013,10 @@ class TombstoneRecord:
         self.actor = actor
         self.timestamp_millis = timestamp_millis
         self.causal_metadata = causal_metadata
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TombstoneRecord(actor={}, timestamp_millis={}, causal_metadata={})".format(self.actor, self.timestamp_millis, self.causal_metadata)
     def __eq__(self, other):
@@ -21483,10 +23055,10 @@ class TransactionConflictRecord:
         self.name = name
         self.expected = expected
         self.current = current
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TransactionConflictRecord(name={}, expected={}, current={})".format(self.name, self.expected, self.current)
     def __eq__(self, other):
@@ -21518,6 +23090,73 @@ class _UniffiFfiConverterTypeTransactionConflictRecord(_UniffiConverterRustBuffe
         _UniffiFfiConverterBytes.write(value.name, buf)
         _UniffiFfiConverterOptionalTypeRootManifestRecord.write(value.expected, buf)
         _UniffiFfiConverterOptionalTypeRootManifestRecord.write(value.current, buf)
+
+class _UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeStoreTransactionConflictRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeStoreTransactionConflictRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeStoreTransactionConflictRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class TransactionResultRecord:
+    def __init__(self, *, applied:bool, conflict:typing.Optional[StoreTransactionConflictRecord], error:typing.Optional[StoreErrorRecord]):
+        self.applied = applied
+        self.conflict = conflict
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "TransactionResultRecord(applied={}, conflict={}, error={})".format(self.applied, self.conflict, self.error)
+    def __eq__(self, other):
+        if self.applied != other.applied:
+            return False
+        if self.conflict != other.conflict:
+            return False
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeTransactionResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return TransactionResultRecord(
+            applied=_UniffiFfiConverterBoolean.read(buf),
+            conflict=_UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord.read(buf),
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBoolean.check_lower(value.applied)
+        _UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord.check_lower(value.conflict)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBoolean.write(value.applied, buf)
+        _UniffiFfiConverterOptionalTypeStoreTransactionConflictRecord.write(value.conflict, buf)
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
 
 class _UniffiFfiConverterOptionalTypeTransactionConflictRecord(_UniffiConverterRustBuffer):
     @classmethod
@@ -21552,10 +23191,10 @@ class TransactionUpdateRecord:
         self.nodes_written = nodes_written
         self.roots_written = roots_written
         self.conflict_detail = conflict_detail
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TransactionUpdateRecord(applied={}, conflict={}, nodes_written={}, roots_written={}, conflict_detail={})".format(self.applied, self.conflict, self.nodes_written, self.roots_written, self.conflict_detail)
     def __eq__(self, other):
@@ -21604,13 +23243,13 @@ class _UniffiFfiConverterTypeTransactionUpdateRecord(_UniffiConverterRustBuffer)
 
 
 class TreeDebugNodeStatusKind(enum.Enum):
-
+    
     SHARED = 0
-
+    
     LEFT_ONLY = 1
-
+    
     RIGHT_ONLY = 2
-
+    
 
 
 class _UniffiFfiConverterTypeTreeDebugNodeStatusKind(_UniffiConverterRustBuffer):
@@ -21658,10 +23297,10 @@ class TreeDebugNodeRecord:
         self.encoded_bytes = encoded_bytes
         self.first_key = first_key
         self.last_key = last_key
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeDebugNodeRecord(cid={}, leaf={}, level={}, entry_count={}, max_entries={}, fill_factor={}, encoded_bytes={}, first_key={}, last_key={})".format(self.cid, self.leaf, self.level, self.entry_count, self.max_entries, self.fill_factor, self.encoded_bytes, self.first_key, self.last_key)
     def __eq__(self, other):
@@ -21729,10 +23368,10 @@ class TreeDebugComparedNodeRecord:
     def __init__(self, *, status:TreeDebugNodeStatusKind, node:TreeDebugNodeRecord):
         self.status = status
         self.node = node
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeDebugComparedNodeRecord(status={}, node={})".format(self.status, self.node)
     def __eq__(self, other):
@@ -21794,10 +23433,10 @@ class TreeDebugComparisonLevelRecord:
         self.left_only_bytes = left_only_bytes
         self.right_only_bytes = right_only_bytes
         self.nodes = nodes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeDebugComparisonLevelRecord(level={}, shared_nodes={}, left_only_nodes={}, right_only_nodes={}, shared_bytes={}, left_only_bytes={}, right_only_bytes={}, nodes={})".format(self.level, self.shared_nodes, self.left_only_nodes, self.right_only_nodes, self.shared_bytes, self.left_only_bytes, self.right_only_bytes, self.nodes)
     def __eq__(self, other):
@@ -21888,10 +23527,10 @@ class TreeDebugComparisonRecord:
         self.left_only_bytes = left_only_bytes
         self.right_only_bytes = right_only_bytes
         self.levels = levels
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeDebugComparisonRecord(shared_nodes={}, left_only_nodes={}, right_only_nodes={}, shared_bytes={}, left_only_bytes={}, right_only_bytes={}, levels={})".format(self.shared_nodes, self.left_only_nodes, self.right_only_nodes, self.shared_bytes, self.left_only_bytes, self.right_only_bytes, self.levels)
     def __eq__(self, other):
@@ -21972,10 +23611,10 @@ class TreeDebugLevelRecord:
     def __init__(self, *, level:int, nodes:typing.List[TreeDebugNodeRecord]):
         self.level = level
         self.nodes = nodes
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeDebugLevelRecord(level={}, nodes={})".format(self.level, self.nodes)
     def __eq__(self, other):
@@ -22030,10 +23669,10 @@ class _UniffiFfiConverterSequenceTypeTreeDebugLevelRecord(_UniffiConverterRustBu
 class TreeDebugViewRecord:
     def __init__(self, *, levels:typing.List[TreeDebugLevelRecord]):
         self.levels = levels
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "TreeDebugViewRecord(levels={})".format(self.levels)
     def __eq__(self, other):
@@ -22056,17 +23695,47 @@ class _UniffiFfiConverterTypeTreeDebugViewRecord(_UniffiConverterRustBuffer):
     def write(value, buf):
         _UniffiFfiConverterSequenceTypeTreeDebugLevelRecord.write(value.levels, buf)
 
+@dataclass
+class UnitResultRecord:
+    def __init__(self, *, error:typing.Optional[StoreErrorRecord]):
+        self.error = error
+        
+        
+
+    
+    def __str__(self):
+        return "UnitResultRecord(error={})".format(self.error)
+    def __eq__(self, other):
+        if self.error != other.error:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeUnitResultRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return UnitResultRecord(
+            error=_UniffiFfiConverterOptionalTypeStoreErrorRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.check_lower(value.error)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalTypeStoreErrorRecord.write(value.error, buf)
+
 
 
 
 
 
 class ValueRefKind(enum.Enum):
-
+    
     INLINE = 0
-
+    
     BLOB = 1
-
+    
 
 
 class _UniffiFfiConverterTypeValueRefKind(_UniffiConverterRustBuffer):
@@ -22127,10 +23796,10 @@ class ValueRefRecord:
         self.kind = kind
         self.value = value
         self.blob = blob
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "ValueRefRecord(kind={}, value={}, blob={})".format(self.kind, self.value, self.blob)
     def __eq__(self, other):
@@ -22168,10 +23837,10 @@ class VersionPruneRecord:
     def __init__(self, *, retained:typing.List[bytes], removed:typing.List[bytes]):
         self.retained = retained
         self.removed = removed
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "VersionPruneRecord(retained={}, removed={})".format(self.retained, self.removed)
     def __eq__(self, other):
@@ -22204,10 +23873,10 @@ class VersionedMapBatchResultRecord:
     def __init__(self, *, version:MapVersionRecord, stats:BatchApplyStatsRecord):
         self.version = version
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "VersionedMapBatchResultRecord(version={}, stats={})".format(self.version, self.stats)
     def __eq__(self, other):
@@ -22265,10 +23934,10 @@ class VersionedTransactionCommitRecord:
         self.versions = versions
         self.conflict_map_id = conflict_map_id
         self.conflict_current = conflict_current
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "VersionedTransactionCommitRecord(applied={}, versions={}, conflict_map_id={}, conflict_current={})".format(self.applied, self.versions, self.conflict_map_id, self.conflict_current)
     def __eq__(self, other):
@@ -22313,10 +23982,10 @@ class VersionedValueRecord:
         self.version = version
         self.encoding = encoding
         self.payload = payload
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "VersionedValueRecord(schema={}, version={}, encoding={}, payload={})".format(self.schema, self.version, self.encoding, self.payload)
     def __eq__(self, other):
@@ -22369,10 +24038,10 @@ class WriteStatsRecord:
         self.resync_distance_nodes = resync_distance_nodes
         self.used_key_stable_fast_path = used_key_stable_fast_path
         self.used_batched_value_update_path = used_batched_value_update_path
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
     def __eq__(self, other):
@@ -22455,10 +24124,10 @@ class WriteResultRecord:
     def __init__(self, *, tree:TreeRecord, stats:WriteStatsRecord):
         self.tree = tree
         self.stats = stats
+        
+        
 
-
-
-
+    
     def __str__(self):
         return "WriteResultRecord(tree={}, stats={})".format(self.tree, self.stats)
     def __eq__(self, other):
@@ -22485,6 +24154,806 @@ class _UniffiFfiConverterTypeWriteResultRecord(_UniffiConverterRustBuffer):
     def write(value, buf):
         _UniffiFfiConverterTypeTreeRecord.write(value.tree, buf)
         _UniffiFfiConverterTypeWriteStatsRecord.write(value.stats, buf)
+
+class _UniffiFfiConverterSequenceTypeMutationRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeMutationRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeMutationRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeMutationRecord.read(buf) for i in range(count)
+        ]
+
+
+class AsyncProllyTransactionProtocol(typing.Protocol):
+    
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        raise NotImplementedError
+    async def commit(self, ) -> TransactionUpdateRecord:
+        raise NotImplementedError
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        raise NotImplementedError
+    async def create(self, ) -> TreeRecord:
+        raise NotImplementedError
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def delete_named_root(self, name: bytes) -> None:
+        raise NotImplementedError
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        raise NotImplementedError
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        raise NotImplementedError
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        raise NotImplementedError
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+        raise NotImplementedError
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def rollback(self, ) -> None:
+        raise NotImplementedError
+
+class AsyncProllyTransaction(AsyncProllyTransactionProtocol):
+    
+    _handle: ctypes.c_uint64
+    
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollytransaction, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollytransaction, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceTypeMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_batch(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def commit(self, ) -> TransactionUpdateRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTransactionUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_commit(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(replacement)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(expected),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(replacement),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedRootUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_compare_and_swap_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def create(self, ) -> TreeRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_create(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_named_root(self, name: bytes) -> None:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_delete_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_get(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_load_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterUInt64.check_lower(timestamp_millis)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterUInt64.lower(timestamp_millis),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_publish_named_root_at_millis(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_put(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def rollback(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollytransaction_rollback(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+
+
+
+
+
+class _UniffiFfiConverterTypeAsyncProllyTransaction:
+    @staticmethod
+    def lift(value: int) -> AsyncProllyTransaction:
+        return AsyncProllyTransaction._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: AsyncProllyTransaction):
+        if not isinstance(value, AsyncProllyTransaction):
+            raise TypeError("Expected AsyncProllyTransaction instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: AsyncProllyTransaction) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> AsyncProllyTransaction:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: AsyncProllyTransaction, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
+
+class AsyncProllyEngineProtocol(typing.Protocol):
+    
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        raise NotImplementedError
+    async def begin_transaction(self, ) -> AsyncProllyTransaction:
+        raise NotImplementedError
+    async def collect_stats(self, tree: TreeRecord) -> TreeStatsRecord:
+        raise NotImplementedError
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        raise NotImplementedError
+    def create(self, ) -> TreeRecord:
+        raise NotImplementedError
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def delete_named_root(self, name: bytes) -> None:
+        raise NotImplementedError
+    async def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
+        raise NotImplementedError
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        raise NotImplementedError
+    async def get_many(self, tree: TreeRecord,keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
+        raise NotImplementedError
+    async def list_named_roots(self, ) -> typing.List[NamedRootRecord]:
+        raise NotImplementedError
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        raise NotImplementedError
+    async def merge(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: typing.Optional[str]) -> TreeRecord:
+        raise NotImplementedError
+    async def prefix(self, tree: TreeRecord,prefix: bytes) -> typing.List[EntryRecord]:
+        raise NotImplementedError
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        raise NotImplementedError
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+        raise NotImplementedError
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        raise NotImplementedError
+    async def range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+        raise NotImplementedError
+    async def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+        raise NotImplementedError
+
+class AsyncProllyEngine(AsyncProllyEngineProtocol):
+    
+    _handle: ctypes.c_uint64
+    def __init__(self, *args, **kw):
+        raise ValueError("async constructors not supported.")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_asyncprollyengine, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_asyncprollyengine, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    async def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceTypeMutationRecord.lower(mutations),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_batch(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def begin_transaction(self, ) -> AsyncProllyTransaction:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeAsyncProllyTransaction.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_begin_transaction(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_u64,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_u64,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_u64,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def collect_stats(self, tree: TreeRecord) -> TreeStatsRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeStatsRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_collect_stats(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
+
+        _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(replacement)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(expected),
+            _UniffiFfiConverterOptionalTypeTreeRecord.lower(replacement),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedRootUpdateRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_compare_and_swap_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    def create(self, ) -> TreeRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_create,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    async def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_named_root(self, name: bytes) -> None:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_delete_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(other)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(other),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeDiffRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_diff(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_many(self, tree: TreeRecord,keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterSequenceBytes.check_lower(keys)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterSequenceBytes.lower(keys),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceOptionalBytes.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_get_many(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def list_named_roots(self, ) -> typing.List[NamedRootRecord]:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeNamedRootRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_list_named_roots(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_load_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def merge(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: typing.Optional[str]) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(base)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(left)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(right)
+
+        _UniffiFfiConverterOptionalString.check_lower(resolver)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(base),
+            _UniffiFfiConverterTypeTreeRecord.lower(left),
+            _UniffiFfiConverterTypeTreeRecord.lower(right),
+            _UniffiFfiConverterOptionalString.lower(resolver),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_merge(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def prefix(self, tree: TreeRecord,prefix: bytes) -> typing.List[EntryRecord]:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(prefix)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(prefix),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_prefix(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterUInt64.check_lower(timestamp_millis)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterUInt64.lower(timestamp_millis),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_publish_named_root_at_millis(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_void,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTreeRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_put(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def range(self, tree: TreeRecord,start: bytes,end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterBytes.check_lower(start)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(end)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterBytes.lower(start),
+            _UniffiFfiConverterOptionalBytes.lower(end),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceTypeEntryRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],end: typing.Optional[bytes],limit: int) -> RangePageRecord:
+        
+        _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
+
+        _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
+
+        _UniffiFfiConverterOptionalBytes.check_lower(end)
+
+        _UniffiFfiConverterUInt64.check_lower(limit)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeTreeRecord.lower(tree),
+            _UniffiFfiConverterOptionalTypeRangeCursorRecord.lower(cursor),
+            _UniffiFfiConverterOptionalBytes.lower(end),
+            _UniffiFfiConverterUInt64.lower(limit),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeRangePageRecord.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_asyncprollyengine_range_page(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+
+
+
+
+
+class _UniffiFfiConverterTypeAsyncProllyEngine:
+    @staticmethod
+    def lift(value: int) -> AsyncProllyEngine:
+        return AsyncProllyEngine._uniffi_make_instance(value)
+
+    @staticmethod
+    def check_lower(value: AsyncProllyEngine):
+        if not isinstance(value, AsyncProllyEngine):
+            raise TypeError("Expected AsyncProllyEngine instance, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: AsyncProllyEngine) -> ctypes.c_uint64:
+        return value._uniffi_clone_handle()
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer) -> AsyncProllyEngine:
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: AsyncProllyEngine, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
 
 class _UniffiFfiConverterOptionalTypeSecondaryIndexLimitsRecord(_UniffiConverterRustBuffer):
     @classmethod
@@ -22536,14 +25005,14 @@ class _UniffiFfiConverterSequenceTypeIndexEntryRecord(_UniffiConverterRustBuffer
 
 
 class SecondaryIndexExtractorCallback():
-
+    
     def extract(self, primary_key: bytes,source_value: bytes) -> typing.List[IndexEntryRecord]:
         raise NotImplementedError
 
 class SecondaryIndexExtractorCallbackImpl(SecondaryIndexExtractorCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -22565,7 +25034,7 @@ class SecondaryIndexExtractorCallbackImpl(SecondaryIndexExtractorCallback):
         inst._handle = handle
         return inst
     def extract(self, primary_key: bytes,source_value: bytes) -> typing.List[IndexEntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(primary_key)
 
         _UniffiFfiConverterBytes.check_lower(source_value)
@@ -22671,14 +25140,14 @@ class _UniffiFfiConverterTypeSecondaryIndexExtractorCallback:
 
 
 class BindingIndexRegistryProtocol(typing.Protocol):
-
+    
     def len(self, ) -> int:
         raise NotImplementedError
     def register(self, name: bytes,generation: int,extractor_id: str,projection: IndexProjectionRecord,limits: typing.Optional[SecondaryIndexLimitsRecord],extractor: SecondaryIndexExtractorCallback) -> None:
         raise NotImplementedError
 
 class BindingIndexRegistry(BindingIndexRegistryProtocol):
-
+    
     _handle: ctypes.c_uint64
     def __init__(self, ):
         _uniffi_lowered_args = (
@@ -22722,7 +25191,7 @@ class BindingIndexRegistry(BindingIndexRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def register(self, name: bytes,generation: int,extractor_id: str,projection: IndexProjectionRecord,limits: typing.Optional[SecondaryIndexLimitsRecord],extractor: SecondaryIndexExtractorCallback) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterUInt64.check_lower(generation)
@@ -22781,29 +25250,6 @@ class _UniffiFfiConverterTypeBindingIndexRegistry:
     def write(cls, value: BindingIndexRegistry, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
-class _UniffiFfiConverterSequenceTypeMutationRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeMutationRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeMutationRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeMutationRecord.read(buf) for i in range(count)
-        ]
-
 class _UniffiFfiConverterSequenceTypeIndexedSourceRecord(_UniffiConverterRustBuffer):
     @classmethod
     def check_lower(cls, value):
@@ -22829,7 +25275,7 @@ class _UniffiFfiConverterSequenceTypeIndexedSourceRecord(_UniffiConverterRustBuf
 
 
 class BindingSecondaryIndexSnapshotProtocol(typing.Protocol):
-
+    
     def exact(self, term: bytes) -> typing.List[IndexMatchRecord]:
         raise NotImplementedError
     def exact_page(self, term: bytes,cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
@@ -22856,9 +25302,9 @@ class BindingSecondaryIndexSnapshotProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -22880,7 +25326,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         inst._handle = handle
         return inst
     def exact(self, term: bytes) -> typing.List[IndexMatchRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(term)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -22895,7 +25341,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def exact_page(self, term: bytes,cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(term)
 
         _UniffiFfiConverterOptionalBytes.check_lower(cursor)
@@ -22916,7 +25362,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def exact_reverse_page(self, term: bytes,cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(term)
 
         _UniffiFfiConverterOptionalBytes.check_lower(cursor)
@@ -22961,7 +25407,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix(self, prefix: bytes) -> typing.List[IndexMatchRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -22976,7 +25422,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_page(self, prefix: bytes,cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterOptionalBytes.check_lower(cursor)
@@ -22997,7 +25443,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_reverse_page(self, prefix: bytes,cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterOptionalBytes.check_lower(cursor)
@@ -23018,7 +25464,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range(self, start: bytes,range_end: typing.Optional[bytes]) -> typing.List[IndexMatchRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -23036,7 +25482,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_page(self, start: bytes,range_end: typing.Optional[bytes],cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -23060,7 +25506,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_reverse_page(self, start: bytes,range_end: typing.Optional[bytes],cursor: typing.Optional[bytes],limit: int) -> IndexPageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -23084,7 +25530,7 @@ class BindingSecondaryIndexSnapshot(BindingSecondaryIndexSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def records(self, term: bytes) -> typing.List[IndexedSourceRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(term)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23130,16 +25576,16 @@ class _UniffiFfiConverterTypeBindingSecondaryIndexSnapshot:
 
 
 class BindingIndexedSnapshotProtocol(typing.Protocol):
-
+    
     def id(self, ) -> IndexedSnapshotIdRecord:
         raise NotImplementedError
     def index(self, name: bytes) -> BindingSecondaryIndexSnapshot:
         raise NotImplementedError
 
 class BindingIndexedSnapshot(BindingIndexedSnapshotProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -23173,7 +25619,7 @@ class BindingIndexedSnapshot(BindingIndexedSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def index(self, name: bytes) -> BindingSecondaryIndexSnapshot:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23242,7 +25688,7 @@ class _UniffiFfiConverterSequenceTypeIndexVerificationRecord(_UniffiConverterRus
 
 
 class BindingIndexedMapProtocol(typing.Protocol):
-
+    
     def apply(self, mutations: typing.List[MutationRecord]) -> IndexedVersionRecord:
         raise NotImplementedError
     def apply_if(self, expected_source: typing.Optional[bytes],mutations: typing.List[MutationRecord]) -> IndexedUpdateRecord:
@@ -23289,10 +25735,10 @@ class BindingIndexedMapProtocol(typing.Protocol):
         raise NotImplementedError
 
 class BindingIndexedMap(BindingIndexedMapProtocol):
-
+    
     _handle: ctypes.c_uint64
     def __init__(self, engine: ProllyEngine,id: bytes,registry: BindingIndexRegistry):
-
+        
         _UniffiFfiConverterTypeProllyEngine.check_lower(engine)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -23330,7 +25776,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         inst._handle = handle
         return inst
     def apply(self, mutations: typing.List[MutationRecord]) -> IndexedVersionRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23345,7 +25791,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def apply_if(self, expected_source: typing.Optional[bytes],mutations: typing.List[MutationRecord]) -> IndexedUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected_source)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -23363,7 +25809,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def deactivate_index(self, name: bytes) -> IndexedVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23378,7 +25824,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete(self, key: bytes) -> IndexedVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23393,7 +25839,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def ensure_index(self, name: bytes) -> IndexBuildResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23432,7 +25878,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23471,7 +25917,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def import_current(self, bundle: bytes,expected_source: typing.Optional[bytes]) -> IndexedVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(bundle)
 
         _UniffiFfiConverterOptionalBytes.check_lower(expected_source)
@@ -23489,7 +25935,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def keep_last(self, count: int) -> IndexedRetentionRecord:
-
+        
         _UniffiFfiConverterUInt64.check_lower(count)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23528,7 +25974,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put(self, key: bytes,value: bytes) -> IndexedVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
 
         _UniffiFfiConverterBytes.check_lower(value)
@@ -23546,7 +25992,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def repair_index(self, name: bytes,source_version: bytes) -> IndexVerificationRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterBytes.check_lower(source_version)
@@ -23564,7 +26010,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def replace_index(self, name: bytes,generation: int,extractor_id: str,projection: IndexProjectionRecord,limits: typing.Optional[SecondaryIndexLimitsRecord],extractor: SecondaryIndexExtractorCallback) -> IndexBuildResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterUInt64.check_lower(generation)
@@ -23606,7 +26052,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def snapshot_at(self, source_version: bytes) -> BindingIndexedSnapshot:
-
+        
         _UniffiFfiConverterBytes.check_lower(source_version)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23621,7 +26067,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def snapshot_by_id(self, snapshot_id: IndexedSnapshotIdRecord) -> BindingIndexedSnapshot:
-
+        
         _UniffiFfiConverterTypeIndexedSnapshotIdRecord.check_lower(snapshot_id)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23636,7 +26082,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def verify_all(self, source_version: bytes) -> typing.List[IndexVerificationRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(source_version)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23651,7 +26097,7 @@ class BindingIndexedMap(BindingIndexedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def verify_index(self, name: bytes,source_version: bytes) -> IndexVerificationRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterBytes.check_lower(source_version)
@@ -23725,7 +26171,7 @@ class _UniffiFfiConverterOptionalTypeChangedSpanHintRecord(_UniffiConverterRustB
 
 
 class DiffVisitorCallback():
-
+    
     def visit(self, diff: DiffRecord) -> bool:
         """
         Return `true` to continue or `false` to stop after this diff.
@@ -23733,9 +26179,9 @@ class DiffVisitorCallback():
         raise NotImplementedError
 
 class DiffVisitorCallbackImpl(DiffVisitorCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -23760,7 +26206,7 @@ class DiffVisitorCallbackImpl(DiffVisitorCallback):
         """
         Return `true` to continue or `false` to stop after this diff.
 """
-
+        
         _UniffiFfiConverterTypeDiffRecord.check_lower(diff)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -23863,7 +26309,7 @@ class BindingMapComparisonProtocol(typing.Protocol):
     """
     Owned version-pinned comparison. It never re-resolves head.
 """
-
+    
     def base(self, ) -> MapVersionRecord:
         raise NotImplementedError
     def changed_spans(self, ) -> typing.Optional[ChangedSpanHintRecord]:
@@ -23891,9 +26337,9 @@ class BindingMapComparison(BindingMapComparisonProtocol):
     """
     Owned version-pinned comparison. It never re-resolves head.
 """
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -23963,7 +26409,7 @@ class BindingMapComparison(BindingMapComparisonProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def diff_page(self, cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> DiffPageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -23984,7 +26430,7 @@ class BindingMapComparison(BindingMapComparisonProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_diff_page(self, cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedDiffPageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -24005,7 +26451,7 @@ class BindingMapComparison(BindingMapComparisonProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_changed_spans(self, spans: typing.List[ChangedSpanRecord]) -> bool:
-
+        
         _UniffiFfiConverterSequenceTypeChangedSpanRecord.check_lower(spans)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24020,7 +26466,7 @@ class BindingMapComparison(BindingMapComparisonProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_diff(self, visitor: DiffVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterTypeDiffVisitorCallback.check_lower(visitor)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24047,7 +26493,7 @@ class BindingMapComparison(BindingMapComparisonProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def structural_diff_page(self, cursor: typing.Optional[StructuralDiffCursorRecord],limit: int) -> StructuralDiffPageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeStructuralDiffCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
@@ -24108,14 +26554,14 @@ class _UniffiFfiConverterTypeBindingMapComparison:
 
 
 class MergeResolverCallback():
-
+    
     def resolve(self, conflict: ConflictRecord) -> ResolutionRecord:
         raise NotImplementedError
 
 class MergeResolverCallbackImpl(MergeResolverCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -24137,7 +26583,7 @@ class MergeResolverCallbackImpl(MergeResolverCallback):
         inst._handle = handle
         return inst
     def resolve(self, conflict: ConflictRecord) -> ResolutionRecord:
-
+        
         _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24237,7 +26683,7 @@ class _UniffiFfiConverterTypeMergeResolverCallback:
 
 
 class MergePolicyRegistryProtocol(typing.Protocol):
-
+    
     def has_default(self, ) -> bool:
         raise NotImplementedError
     def is_empty(self, ) -> bool:
@@ -24258,7 +26704,7 @@ class MergePolicyRegistryProtocol(typing.Protocol):
         raise NotImplementedError
 
 class MergePolicyRegistry(MergePolicyRegistryProtocol):
-
+    
     _handle: ctypes.c_uint64
     def __init__(self, ):
         _uniffi_lowered_args = (
@@ -24326,7 +26772,7 @@ class MergePolicyRegistry(MergePolicyRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def push_exact_resolver(self, key: bytes,resolver: MergeResolverCallback) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
 
         _UniffiFfiConverterTypeMergeResolverCallback.check_lower(resolver)
@@ -24344,7 +26790,7 @@ class MergePolicyRegistry(MergePolicyRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def push_exact_resolver_name(self, key: bytes,name: str) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
 
         _UniffiFfiConverterString.check_lower(name)
@@ -24362,7 +26808,7 @@ class MergePolicyRegistry(MergePolicyRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def push_prefix_resolver(self, prefix: bytes,resolver: MergeResolverCallback) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterTypeMergeResolverCallback.check_lower(resolver)
@@ -24380,7 +26826,7 @@ class MergePolicyRegistry(MergePolicyRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def push_prefix_resolver_name(self, prefix: bytes,name: str) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterString.check_lower(name)
@@ -24398,7 +26844,7 @@ class MergePolicyRegistry(MergePolicyRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def set_default_resolver(self, resolver: MergeResolverCallback) -> None:
-
+        
         _UniffiFfiConverterTypeMergeResolverCallback.check_lower(resolver)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24413,7 +26859,7 @@ class MergePolicyRegistry(MergePolicyRegistryProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def set_default_resolver_name(self, name: str) -> None:
-
+        
         _UniffiFfiConverterString.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24459,7 +26905,7 @@ class _UniffiFfiConverterTypeMergePolicyRegistry:
 
 
 class ConflictVisitorCallback():
-
+    
     def visit(self, conflict: ConflictRecord) -> bool:
         """
         Return `true` to continue or `false` to stop after this conflict.
@@ -24467,9 +26913,9 @@ class ConflictVisitorCallback():
         raise NotImplementedError
 
 class ConflictVisitorCallbackImpl(ConflictVisitorCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -24494,7 +26940,7 @@ class ConflictVisitorCallbackImpl(ConflictVisitorCallback):
         """
         Return `true` to continue or `false` to stop after this conflict.
 """
-
+        
         _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24597,7 +27043,7 @@ class BindingMapMergeProtocol(typing.Protocol):
     """
     Three-way merge pinned to a concrete base, head, and candidate.
 """
-
+    
     def base(self, ) -> MapVersionRecord:
         raise NotImplementedError
     def candidate(self, ) -> MapVersionRecord:
@@ -24630,9 +27076,9 @@ class BindingMapMerge(BindingMapMergeProtocol):
     """
     Three-way merge pinned to a concrete base, head, and candidate.
 """
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -24678,7 +27124,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def conflict_page(self, cursor: typing.Optional[RangeCursorRecord],limit: int) -> ConflictPageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterUInt64.check_lower(limit)
@@ -24696,7 +27142,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def crdt_merge(self, config: CrdtConfigRecord) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeCrdtConfigRecord.check_lower(config)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24711,7 +27157,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def crdt_merge_explain(self, config: CrdtConfigRecord) -> MergeExplanationRecord:
-
+        
         _UniffiFfiConverterTypeCrdtConfigRecord.check_lower(config)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24738,7 +27184,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge(self, resolver: typing.Optional[str]) -> TreeRecord:
-
+        
         _UniffiFfiConverterOptionalString.check_lower(resolver)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24753,7 +27199,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_with_policy(self, policy: MergePolicyRegistry) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeMergePolicyRegistry.check_lower(policy)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24771,7 +27217,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         """
         Publish only if the head pinned when this object was created is still current.
 """
-
+        
         _UniffiFfiConverterOptionalString.check_lower(resolver)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24786,7 +27232,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_crdt(self, config: CrdtConfigRecord) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterTypeCrdtConfigRecord.check_lower(config)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24801,7 +27247,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_with_policy(self, policy: MergePolicyRegistry) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterTypeMergePolicyRegistry.check_lower(policy)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24816,7 +27262,7 @@ class BindingMapMerge(BindingMapMergeProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_conflicts(self, visitor: ConflictVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterTypeConflictVisitorCallback.check_lower(visitor)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -24862,7 +27308,7 @@ class _UniffiFfiConverterTypeBindingMapMerge:
 
 
 class ProllyTransactionProtocol(typing.Protocol):
-
+    
     def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
         raise NotImplementedError
     def commit(self, ) -> TransactionUpdateRecord:
@@ -24887,9 +27333,9 @@ class ProllyTransactionProtocol(typing.Protocol):
         raise NotImplementedError
 
 class ProllyTransaction(ProllyTransactionProtocol):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -24911,7 +27357,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         inst._handle = handle
         return inst
     def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -24941,7 +27387,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
@@ -24974,7 +27420,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -24992,7 +27438,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete_named_root(self, name: bytes) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25007,7 +27453,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -25025,7 +27471,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25040,7 +27486,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -25058,7 +27504,7 @@ class ProllyTransaction(ProllyTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -25127,7 +27573,7 @@ class BindingVersionedTransactionProtocol(typing.Protocol):
     owned form, provide read-your-writes, and execute through Rust's strict
     `VersionedMapsTransaction` at commit.
 """
-
+    
     def apply(self, map_id: bytes,mutations: typing.List[MutationRecord]) -> MapVersionRecord:
         raise NotImplementedError
     def apply_if(self, map_id: bytes,expected: typing.Optional[bytes],mutations: typing.List[MutationRecord]) -> MapUpdateRecord:
@@ -25151,9 +27597,9 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
     owned form, provide read-your-writes, and execute through Rust's strict
     `VersionedMapsTransaction` at commit.
 """
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -25175,7 +27621,7 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
         inst._handle = handle
         return inst
     def apply(self, map_id: bytes,mutations: typing.List[MutationRecord]) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(map_id)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -25193,7 +27639,7 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def apply_if(self, map_id: bytes,expected: typing.Optional[bytes],mutations: typing.List[MutationRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(map_id)
 
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
@@ -25226,7 +27672,7 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete(self, map_id: bytes,key: bytes) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(map_id)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -25244,7 +27690,7 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, map_id: bytes,key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterBytes.check_lower(map_id)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -25262,7 +27708,7 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def head(self, map_id: bytes) -> typing.Optional[MapVersionRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(map_id)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25277,7 +27723,7 @@ class BindingVersionedTransaction(BindingVersionedTransactionProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put(self, map_id: bytes,key: bytes,value: bytes) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(map_id)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -25364,14 +27810,14 @@ class _UniffiFfiConverterSequenceTypeProximityRecordRecord(_UniffiConverterRustB
 
 
 class CrdtResolverCallback():
-
+    
     def resolve(self, conflict: ConflictRecord) -> CrdtResolutionRecord:
         raise NotImplementedError
 
 class CrdtResolverCallbackImpl(CrdtResolverCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -25393,7 +27839,7 @@ class CrdtResolverCallbackImpl(CrdtResolverCallback):
         inst._handle = handle
         return inst
     def resolve(self, conflict: ConflictRecord) -> CrdtResolutionRecord:
-
+        
         _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25518,7 +27964,7 @@ class _UniffiFfiConverterOptionalTypeEntryRecord(_UniffiConverterRustBuffer):
 
 
 class ProllyBlobStoreProtocol(typing.Protocol):
-
+    
     def blob_count(self, ) -> int:
         raise NotImplementedError
     def delete_blob(self, reference: BlobRefRecord) -> None:
@@ -25531,11 +27977,11 @@ class ProllyBlobStoreProtocol(typing.Protocol):
         raise NotImplementedError
 
 class ProllyBlobStore(ProllyBlobStoreProtocol):
-
+    
     _handle: ctypes.c_uint64
     @classmethod
     def file(cls, path: str) -> ProllyBlobStore:
-
+        
         _UniffiFfiConverterString.check_lower(path)
         _uniffi_lowered_args = (
             _UniffiFfiConverterString.lower(path),
@@ -25560,7 +28006,7 @@ class ProllyBlobStore(ProllyBlobStoreProtocol):
             *_uniffi_lowered_args,
         )
         return cls._uniffi_make_instance(_uniffi_ffi_result)
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -25594,7 +28040,7 @@ class ProllyBlobStore(ProllyBlobStoreProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete_blob(self, reference: BlobRefRecord) -> None:
-
+        
         _UniffiFfiConverterTypeBlobRefRecord.check_lower(reference)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25609,7 +28055,7 @@ class ProllyBlobStore(ProllyBlobStoreProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_blob(self, reference: BlobRefRecord) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterTypeBlobRefRecord.check_lower(reference)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25636,7 +28082,7 @@ class ProllyBlobStore(ProllyBlobStoreProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_blob(self, bytes: bytes) -> BlobRefRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(bytes)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25753,7 +28199,7 @@ class _UniffiFfiConverterSequenceTypeTreeRecord(_UniffiConverterRustBuffer):
 
 
 class EntryVisitorCallback():
-
+    
     def visit(self, entry: EntryRecord) -> bool:
         """
         Return `true` to continue or `false` to stop after this entry.
@@ -25761,9 +28207,9 @@ class EntryVisitorCallback():
         raise NotImplementedError
 
 class EntryVisitorCallbackImpl(EntryVisitorCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -25788,7 +28234,7 @@ class EntryVisitorCallbackImpl(EntryVisitorCallback):
         """
         Return `true` to continue or `false` to stop after this entry.
 """
-
+        
         _UniffiFfiConverterTypeEntryRecord.check_lower(entry)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25892,7 +28338,7 @@ class ProllyReadSessionProtocol(typing.Protocol):
     A root-bound read object that amortizes tree decoding and ownership across
     repeated foreign-language reads.
 """
-
+    
     def fast_handle(self, ) -> int:
         """
         Internal opaque transport handle used by handwritten native adapters.
@@ -25932,9 +28378,9 @@ class ProllyReadSession(ProllyReadSessionProtocol):
     A root-bound read object that amortizes tree decoding and ownership across
     repeated foreign-language reads.
 """
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -25976,7 +28422,7 @@ class ProllyReadSession(ProllyReadSessionProtocol):
         Return an owned value while reusing the decoded tree bound to this
         session. This is the portable UniFFI session API.
 """
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -25994,7 +28440,7 @@ class ProllyReadSession(ProllyReadSessionProtocol):
         """
         Batch point reads while serializing the key set and result only once.
 """
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26012,7 +28458,7 @@ class ProllyReadSession(ProllyReadSessionProtocol):
         """
         Stream genuine three-way conflicts. The receiver is the merge base.
 """
-
+        
         _UniffiFfiConverterTypeProllyReadSession.check_lower(left)
 
         _UniffiFfiConverterTypeProllyReadSession.check_lower(right)
@@ -26037,7 +28483,7 @@ class ProllyReadSession(ProllyReadSessionProtocol):
         Stream a half-open range without retransmitting the tree on every
         operation. Callback records remain owned for compatibility.
 """
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -26061,7 +28507,7 @@ class ProllyReadSession(ProllyReadSessionProtocol):
         """
         Stream structural differences against another root-bound session.
 """
-
+        
         _UniffiFfiConverterTypeProllyReadSession.check_lower(other)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -26194,7 +28640,7 @@ class BindingMapSubscriptionProtocol(typing.Protocol):
     """
     Resumable polling subscription with portable owned state.
 """
-
+    
     def last_seen(self, ) -> typing.Optional[bytes]:
         raise NotImplementedError
     def poll(self, ) -> typing.Optional[MapChangeEventRecord]:
@@ -26204,9 +28650,9 @@ class BindingMapSubscription(BindingMapSubscriptionProtocol):
     """
     Resumable polling subscription with portable owned state.
 """
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -26286,7 +28732,7 @@ class BindingVersionedMapProtocol(typing.Protocol):
     """
     Application-facing managed map with version history and optimistic updates.
 """
-
+    
     def append(self, mutations: typing.List[MutationRecord]) -> MapVersionRecord:
         raise NotImplementedError
     def apply(self, mutations: typing.List[MutationRecord]) -> MapVersionRecord:
@@ -26438,10 +28884,10 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
     """
     Application-facing managed map with version history and optimistic updates.
 """
-
+    
     _handle: ctypes.c_uint64
     def __init__(self, engine: ProllyEngine,id: bytes):
-
+        
         _UniffiFfiConverterTypeProllyEngine.check_lower(engine)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -26476,7 +28922,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         inst._handle = handle
         return inst
     def append(self, mutations: typing.List[MutationRecord]) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26491,7 +28937,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def apply(self, mutations: typing.List[MutationRecord]) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26506,7 +28952,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def apply_at_millis(self, mutations: typing.List[MutationRecord],timestamp_millis: int) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
 
         _UniffiFfiConverterUInt64.check_lower(timestamp_millis)
@@ -26524,7 +28970,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def apply_if(self, expected: typing.Optional[bytes],mutations: typing.List[MutationRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -26542,7 +28988,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def apply_if_at_millis(self, expected: typing.Optional[bytes],mutations: typing.List[MutationRecord],timestamp_millis: int) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -26575,7 +29021,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def changes_since(self, base: bytes) -> typing.List[DiffRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(base)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26590,7 +29036,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare(self, base: bytes,target: bytes) -> BindingMapComparison:
-
+        
         _UniffiFfiConverterBytes.check_lower(base)
 
         _UniffiFfiConverterBytes.check_lower(target)
@@ -26608,7 +29054,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_to_head(self, base: bytes) -> BindingMapComparison:
-
+        
         _UniffiFfiConverterBytes.check_lower(base)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26623,7 +29069,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def contains_key(self, key: bytes) -> bool:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26638,7 +29084,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete(self, key: bytes) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26653,7 +29099,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete_if(self, expected: typing.Optional[bytes],key: bytes) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -26671,7 +29117,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def diff(self, base: bytes,target: bytes) -> typing.List[DiffRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(base)
 
         _UniffiFfiConverterBytes.check_lower(target)
@@ -26689,7 +29135,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def edit(self, mutations: typing.List[MutationRecord]) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26704,7 +29150,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def edit_if(self, expected: typing.Optional[bytes],mutations: typing.List[MutationRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -26722,7 +29168,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26737,7 +29183,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_at(self, id: bytes,key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -26755,7 +29201,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_large_value(self, blob_store: ProllyBlobStore,key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -26773,7 +29219,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_many(self, keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26788,7 +29234,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_many_at(self, id: bytes,keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
@@ -26806,7 +29252,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_value_ref(self, key: bytes) -> typing.Optional[ValueRefRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26821,7 +29267,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_value_ref_at(self, id: bytes,key: bytes) -> typing.Optional[ValueRefRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -26887,7 +29333,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def import_as_head(self, bundle: SnapshotBundleRecord) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(bundle)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26902,7 +29348,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def import_as_head_at_millis(self, bundle: SnapshotBundleRecord,timestamp_millis: int) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(bundle)
 
         _UniffiFfiConverterUInt64.check_lower(timestamp_millis)
@@ -26932,7 +29378,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def initialize_sorted(self, entries: typing.List[EntryRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterSequenceTypeEntryRecord.check_lower(entries)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26959,7 +29405,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def keep_for(self, max_age_millis: int) -> VersionPruneRecord:
-
+        
         _UniffiFfiConverterUInt64.check_lower(max_age_millis)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -26974,7 +29420,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def keep_for_at(self, now_millis: int,max_age_millis: int) -> VersionPruneRecord:
-
+        
         _UniffiFfiConverterUInt64.check_lower(now_millis)
 
         _UniffiFfiConverterUInt64.check_lower(max_age_millis)
@@ -26992,7 +29438,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def keep_last(self, count: int) -> VersionPruneRecord:
-
+        
         _UniffiFfiConverterUInt64.check_lower(count)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27007,7 +29453,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def keep_versions(self, ids: typing.List[bytes]) -> VersionPruneRecord:
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(ids)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27022,7 +29468,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def parallel_apply(self, mutations: typing.List[MutationRecord],config: ParallelConfigRecord) -> VersionedMapBatchResultRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
 
         _UniffiFfiConverterTypeParallelConfigRecord.check_lower(config)
@@ -27040,7 +29486,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_blob_gc(self, blob_store: ProllyBlobStore) -> BlobGcPlanRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27067,7 +29513,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix(self, prefix: bytes) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27082,7 +29528,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_at(self, id: bytes,prefix: bytes) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -27100,7 +29546,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_page(self, prefix: bytes,cursor: typing.Optional[RangeCursorRecord],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
@@ -27121,7 +29567,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_page_at(self, id: bytes,prefix: bytes,cursor: typing.Optional[RangeCursorRecord],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -27145,7 +29591,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prepare_merge(self, base: bytes,candidate: bytes) -> BindingMapMerge:
-
+        
         _UniffiFfiConverterBytes.check_lower(base)
 
         _UniffiFfiConverterBytes.check_lower(candidate)
@@ -27163,7 +29609,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prune_versions(self, keep_latest: int) -> VersionPruneRecord:
-
+        
         _UniffiFfiConverterUInt64.check_lower(keep_latest)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27178,7 +29624,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put(self, key: bytes,value: bytes) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
 
         _UniffiFfiConverterBytes.check_lower(value)
@@ -27196,7 +29642,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_if(self, expected: typing.Optional[bytes],key: bytes,value: bytes) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -27217,7 +29663,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_large_value(self, blob_store: ProllyBlobStore,key: bytes,value: bytes,config: LargeValueConfigRecord) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -27241,7 +29687,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_large_value_if(self, blob_store: ProllyBlobStore,expected: typing.Optional[bytes],key: bytes,value: bytes,config: LargeValueConfigRecord) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
@@ -27268,7 +29714,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range(self, start: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -27286,7 +29732,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_at(self, id: bytes,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -27307,7 +29753,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_page(self, cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -27328,7 +29774,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_page_at(self, id: bytes,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
@@ -27364,7 +29810,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def rebuild_from_entries_if(self, expected: typing.Optional[bytes],entries: typing.List[EntryRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterSequenceTypeEntryRecord.check_lower(entries)
@@ -27382,7 +29828,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def rebuild_from_iter_if(self, expected: typing.Optional[bytes],entries: typing.List[EntryRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterSequenceTypeEntryRecord.check_lower(entries)
@@ -27400,7 +29846,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def rebuild_sorted_if(self, expected: typing.Optional[bytes],entries: typing.List[EntryRecord]) -> MapUpdateRecord:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(expected)
 
         _UniffiFfiConverterSequenceTypeEntryRecord.check_lower(entries)
@@ -27418,7 +29864,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def restore_backup(self, bytes: bytes) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(bytes)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27445,7 +29891,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def rollback_to(self, id: bytes) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27460,7 +29906,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_prefix(self, prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
@@ -27478,7 +29924,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_prefix_at(self, id: bytes,prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -27499,7 +29945,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_range(self, start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -27520,7 +29966,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_range_at(self, id: bytes,start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -27556,7 +30002,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def snapshot_at(self, id: bytes) -> typing.Optional[BindingMapSnapshot]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27583,7 +30029,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def subscribe_from(self, last_seen: typing.Optional[bytes]) -> BindingMapSubscription:
-
+        
         _UniffiFfiConverterOptionalBytes.check_lower(last_seen)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27598,7 +30044,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def sweep_blob_gc(self, blob_store: ProllyBlobStore) -> BlobGcSweepRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27637,7 +30083,7 @@ class BindingVersionedMap(BindingVersionedMapProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def version(self, id: bytes) -> typing.Optional[MapVersionRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -27707,7 +30153,7 @@ class _UniffiFfiConverterTypeBindingVersionedMap:
 
 
 class ProllyEngineProtocol(typing.Protocol):
-
+    
     def append_batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
         raise NotImplementedError
     def append_batch_with_stats(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> BatchApplyResultRecord:
@@ -28021,11 +30467,11 @@ class ProllyEngineProtocol(typing.Protocol):
         raise NotImplementedError
 
 class ProllyEngine(ProllyEngineProtocol):
-
+    
     _handle: ctypes.c_uint64
     @classmethod
     def custom_store(cls, callback: HostStoreCallback,config: ConfigRecord) -> ProllyEngine:
-
+        
         _UniffiFfiConverterTypeHostStoreCallback.check_lower(callback)
 
         _UniffiFfiConverterTypeConfigRecord.check_lower(config)
@@ -28043,7 +30489,7 @@ class ProllyEngine(ProllyEngineProtocol):
         return cls._uniffi_make_instance(_uniffi_ffi_result)
     @classmethod
     def file(cls, path: str,config: ConfigRecord) -> ProllyEngine:
-
+        
         _UniffiFfiConverterString.check_lower(path)
 
         _UniffiFfiConverterTypeConfigRecord.check_lower(config)
@@ -28061,7 +30507,7 @@ class ProllyEngine(ProllyEngineProtocol):
         return cls._uniffi_make_instance(_uniffi_ffi_result)
     @classmethod
     def memory(cls, config: ConfigRecord) -> ProllyEngine:
-
+        
         _UniffiFfiConverterTypeConfigRecord.check_lower(config)
         _uniffi_lowered_args = (
             _UniffiFfiConverterTypeConfigRecord.lower(config),
@@ -28076,7 +30522,7 @@ class ProllyEngine(ProllyEngineProtocol):
         return cls._uniffi_make_instance(_uniffi_ffi_result)
     @classmethod
     def sqlite(cls, path: str,config: ConfigRecord) -> ProllyEngine:
-
+        
         _UniffiFfiConverterString.check_lower(path)
 
         _UniffiFfiConverterTypeConfigRecord.check_lower(config)
@@ -28094,7 +30540,7 @@ class ProllyEngine(ProllyEngineProtocol):
         return cls._uniffi_make_instance(_uniffi_ffi_result)
     @classmethod
     def sqlite_in_memory(cls, config: ConfigRecord) -> ProllyEngine:
-
+        
         _UniffiFfiConverterTypeConfigRecord.check_lower(config)
         _uniffi_lowered_args = (
             _UniffiFfiConverterTypeConfigRecord.lower(config),
@@ -28107,7 +30553,7 @@ class ProllyEngine(ProllyEngineProtocol):
             *_uniffi_lowered_args,
         )
         return cls._uniffi_make_instance(_uniffi_ffi_result)
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -28129,7 +30575,7 @@ class ProllyEngine(ProllyEngineProtocol):
         inst._handle = handle
         return inst
     def append_batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -28147,7 +30593,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def append_batch_with_stats(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> BatchApplyResultRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -28165,7 +30611,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -28183,7 +30629,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def batch_with_stats(self, tree: TreeRecord,mutations: typing.List[MutationRecord]) -> BatchApplyResultRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -28225,7 +30671,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_from_entries(self, entries: typing.List[EntryRecord]) -> TreeRecord:
-
+        
         _UniffiFfiConverterSequenceTypeEntryRecord.check_lower(entries)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28240,7 +30686,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def build_from_sorted_entries(self, entries: typing.List[EntryRecord]) -> TreeRecord:
-
+        
         _UniffiFfiConverterSequenceTypeEntryRecord.check_lower(entries)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28259,7 +30705,7 @@ class ProllyEngine(ProllyEngineProtocol):
         Canonically build one immutable proximity map and return its
         descriptor-bound application handle.
 """
-
+        
         _UniffiFfiConverterTypeProximityConfigRecord.check_lower(config)
 
         _UniffiFfiConverterSequenceTypeProximityRecordRecord.check_lower(records)
@@ -28304,7 +30750,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def collect_stats(self, tree: TreeRecord) -> TreeStatsRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28319,7 +30765,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def collect_stats_json(self, tree: TreeRecord) -> JsonDocumentRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28334,7 +30780,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_and_swap_named_root(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
@@ -28355,7 +30801,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_and_swap_named_root_at_millis(self, name: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord],timestamp_millis: int) -> NamedRootUpdateRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterOptionalTypeTreeRecord.check_lower(expected)
@@ -28379,7 +30825,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_and_swap_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord]) -> NamedRootUpdateRecord:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -28403,7 +30849,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_and_swap_snapshot_at_millis(self, namespace: SnapshotNamespaceRecord,id: bytes,expected: typing.Optional[TreeRecord],replacement: typing.Optional[TreeRecord],timestamp_millis: int) -> NamedRootUpdateRecord:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -28430,7 +30876,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def conflict_page(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,cursor: typing.Optional[RangeCursorRecord],limit: int) -> ConflictPageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -28457,7 +30903,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def copy_missing_nodes(self, tree: TreeRecord,destination: ProllyEngine) -> MissingNodeCopyRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterTypeProllyEngine.check_lower(destination)
@@ -28475,7 +30921,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def crdt_merge(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,config: CrdtConfigRecord) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -28499,7 +30945,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def crdt_merge_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,delete_policy: CrdtDeletePolicyKind,resolver: CrdtResolverCallback) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -28538,7 +30984,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def cursor_window(self, tree: TreeRecord,key: bytes,range_end: typing.Optional[bytes],limit: int) -> CursorWindowRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -28562,7 +31008,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def debug_compare_trees(self, left: TreeRecord,right: TreeRecord) -> TreeDebugComparisonRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(right)
@@ -28580,7 +31026,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def debug_compare_trees_json(self, left: TreeRecord,right: TreeRecord) -> JsonDocumentRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(right)
@@ -28598,7 +31044,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def debug_compare_trees_text(self, left: TreeRecord,right: TreeRecord) -> str:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(right)
@@ -28616,7 +31062,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def debug_tree(self, tree: TreeRecord) -> TreeDebugViewRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28631,7 +31077,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def debug_tree_json(self, tree: TreeRecord) -> JsonDocumentRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28646,7 +31092,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def debug_tree_text(self, tree: TreeRecord) -> str:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28661,7 +31107,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete(self, tree: TreeRecord,key: bytes) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -28679,7 +31125,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete_named_root(self, name: bytes) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28697,7 +31143,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Delete every raw-byte key in the half-open range `[start, end)`.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -28721,7 +31167,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Delete every raw-byte key in `[start, end)` and return write statistics.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -28742,7 +31188,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes) -> None:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -28760,7 +31206,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def diff(self, base: TreeRecord,other: TreeRecord) -> typing.List[DiffRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -28778,7 +31224,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def diff_from_cursor(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -28802,7 +31248,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> DiffPageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -28829,7 +31275,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def export_snapshot(self, tree: TreeRecord) -> SnapshotBundleRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28844,7 +31290,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def first_entry(self, tree: TreeRecord) -> typing.Optional[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28859,7 +31305,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -28877,7 +31323,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_large_value(self, blob_store: ProllyBlobStore,tree: TreeRecord,key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -28898,7 +31344,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_many(self, tree: TreeRecord,keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
@@ -28916,7 +31362,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_value_ref(self, tree: TreeRecord,key: bytes) -> typing.Optional[ValueRefRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -28934,7 +31380,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def hydrate_prefix_path_hint(self, tree: TreeRecord,prefix: bytes) -> bool:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -28952,7 +31398,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def import_snapshot(self, bundle: SnapshotBundleRecord) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(bundle)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -28971,7 +31417,7 @@ class ProllyEngine(ProllyEngineProtocol):
         Open an application-facing indexed map using a frozen snapshot of the
         supplied extractor registry.
 """
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
 
         _UniffiFfiConverterTypeBindingIndexRegistry.check_lower(registry)
@@ -28989,7 +31435,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def last_entry(self, tree: TreeRecord) -> typing.Optional[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29040,7 +31486,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def list_snapshots(self, namespace: SnapshotNamespaceRecord) -> typing.List[SnapshotRecord]:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29055,7 +31501,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_changed_spans_hint(self, base: TreeRecord,changed: TreeRecord) -> typing.Optional[ChangedSpanHintRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(changed)
@@ -29073,7 +31519,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_named_root(self, name: bytes) -> typing.Optional[TreeRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29088,7 +31534,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_named_roots(self, names: typing.List[bytes]) -> NamedRootSelectionRecord:
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(names)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29107,7 +31553,7 @@ class ProllyEngine(ProllyEngineProtocol):
         Reopen and validate an immutable proximity descriptor from this
         engine's content store.
 """
-
+        
         _UniffiFfiConverterBytes.check_lower(descriptor)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29122,7 +31568,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_retained_named_roots(self, retention: NamedRootRetentionRecord) -> NamedRootSelectionRecord:
-
+        
         _UniffiFfiConverterTypeNamedRootRetentionRecord.check_lower(retention)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29137,7 +31583,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes) -> typing.Optional[TreeRecord]:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -29155,7 +31601,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def load_snapshots(self, namespace: SnapshotNamespaceRecord,ids: typing.List[bytes]) -> SnapshotSelectionRecord:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterSequenceBytes.check_lower(ids)
@@ -29173,7 +31619,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def lower_bound(self, tree: TreeRecord,key: bytes) -> typing.Optional[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -29191,7 +31637,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def mark_reachable(self, roots: typing.List[TreeRecord]) -> GcReachabilityRecord:
-
+        
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29206,7 +31652,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def mark_reachable_blobs(self, roots: typing.List[TreeRecord]) -> BlobGcReachabilityRecord:
-
+        
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29221,7 +31667,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: typing.Optional[str]) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29245,7 +31691,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_explain(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: typing.Optional[str]) -> MergeExplanationRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29269,7 +31715,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_explain_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,policy: MergePolicyRegistry) -> MergeExplanationRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29293,7 +31739,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_explain_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: MergeResolverCallback) -> MergeExplanationRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29317,7 +31763,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_prefix(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,prefix: bytes,resolver: typing.Optional[str]) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29344,7 +31790,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_prefix_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,prefix: bytes,policy: MergePolicyRegistry) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29371,7 +31817,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_prefix_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,prefix: bytes,resolver: MergeResolverCallback) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29398,7 +31844,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_range(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],resolver: typing.Optional[str]) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29428,7 +31874,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_range_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],policy: MergePolicyRegistry) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29458,7 +31904,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_range_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,start: bytes,range_end: typing.Optional[bytes],resolver: MergeResolverCallback) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29488,7 +31934,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_with_policy(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,policy: MergePolicyRegistry) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29512,7 +31958,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def merge_with_resolver(self, base: TreeRecord,left: TreeRecord,right: TreeRecord,resolver: MergeResolverCallback) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -29548,7 +31994,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def parallel_batch(self, tree: TreeRecord,mutations: typing.List[MutationRecord],config: ParallelConfigRecord) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -29569,7 +32015,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def parallel_batch_with_stats(self, tree: TreeRecord,mutations: typing.List[MutationRecord],config: ParallelConfigRecord) -> BatchApplyResultRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(mutations)
@@ -29590,7 +32036,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def pin_tree_path(self, tree: TreeRecord,key: bytes) -> int:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -29608,7 +32054,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def pin_tree_root(self, tree: TreeRecord) -> int:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29623,7 +32069,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_blob_gc(self, blob_store: ProllyBlobStore,roots: typing.List[TreeRecord],candidate_blobs: typing.List[BlobRefRecord]) -> BlobGcPlanRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
@@ -29644,7 +32090,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_blob_store_gc(self, blob_store: ProllyBlobStore,roots: typing.List[TreeRecord]) -> BlobGcPlanRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
@@ -29662,7 +32108,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_gc(self, roots: typing.List[TreeRecord],candidate_cids: typing.List[bytes]) -> GcPlanRecord:
-
+        
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
 
         _UniffiFfiConverterSequenceBytes.check_lower(candidate_cids)
@@ -29680,7 +32126,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_missing_nodes(self, tree: TreeRecord,destination: ProllyEngine) -> MissingNodePlanRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterTypeProllyEngine.check_lower(destination)
@@ -29698,7 +32144,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_store_gc(self, roots: typing.List[TreeRecord]) -> GcPlanRecord:
-
+        
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29713,7 +32159,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_store_gc_for_retention(self, retention: NamedRootRetentionRecord) -> GcPlanRecord:
-
+        
         _UniffiFfiConverterTypeNamedRootRetentionRecord.check_lower(retention)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29728,7 +32174,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix(self, tree: TreeRecord,prefix: bytes) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -29746,7 +32192,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_page(self, tree: TreeRecord,prefix: bytes,cursor: typing.Optional[RangeCursorRecord],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -29770,7 +32216,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_reverse_page(self, tree: TreeRecord,prefix: bytes,cursor: typing.Optional[ReverseCursorRecord],limit: int) -> ReversePageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -29794,7 +32240,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_diff_page(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedDiffPageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -29821,7 +32267,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_key(self, tree: TreeRecord,key: bytes) -> KeyProofRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -29839,7 +32285,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_keys(self, tree: TreeRecord,keys: typing.List[bytes]) -> MultiKeyProofRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
@@ -29857,7 +32303,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_prefix(self, tree: TreeRecord,prefix: bytes) -> RangeProofRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -29875,7 +32321,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> RangeProofRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -29896,7 +32342,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedRangePageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
@@ -29925,7 +32371,7 @@ class ProllyEngine(ProllyEngineProtocol):
         object across searches preserves validated content-cache entries and
         exposes cumulative physical I/O counters.
 """
-
+        
         _UniffiFfiConverterTypeProximitySearchRuntimePolicyRecord.check_lower(policy)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -29940,7 +32386,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_changed_spans_hint(self, base: TreeRecord,changed: TreeRecord,spans: typing.List[ChangedSpanRecord]) -> bool:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(changed)
@@ -29961,7 +32407,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_named_root(self, name: bytes,tree: TreeRecord) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -29979,7 +32425,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_named_root_at_millis(self, name: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -30000,7 +32446,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_prefix_path_hint(self, tree: TreeRecord,prefix: bytes) -> bool:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -30018,7 +32464,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_snapshot(self, namespace: SnapshotNamespaceRecord,id: bytes,tree: TreeRecord) -> None:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -30039,7 +32485,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_snapshot_at_millis(self, namespace: SnapshotNamespaceRecord,id: bytes,tree: TreeRecord,timestamp_millis: int) -> None:
-
+        
         _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(id)
@@ -30063,7 +32509,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put(self, tree: TreeRecord,key: bytes,value: bytes) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -30084,7 +32530,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_large_value(self, blob_store: ProllyBlobStore,tree: TreeRecord,key: bytes,value: bytes,config: LargeValueConfigRecord) -> TreeRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
@@ -30111,7 +32557,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range(self, tree: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -30132,7 +32578,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_after(self, tree: TreeRecord,after_key: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(after_key)
@@ -30153,7 +32599,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_diff(self, base: TreeRecord,other: TreeRecord,start: bytes,range_end: typing.Optional[bytes]) -> typing.List[DiffRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -30177,7 +32623,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_from_cursor(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
@@ -30198,7 +32644,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_page(self, tree: TreeRecord,cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
@@ -30227,7 +32673,7 @@ class ProllyEngine(ProllyEngineProtocol):
         issue repeated reads should prefer this over retransmitting `TreeRecord`
         on every operation.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30254,7 +32700,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def reverse_page(self, tree: TreeRecord,cursor: typing.Optional[ReverseCursorRecord],start: bytes,limit: int) -> ReversePageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterOptionalTypeReverseCursorRecord.check_lower(cursor)
@@ -30281,7 +32727,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream genuine three-way conflicts without allocating a complete list.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(left)
@@ -30308,7 +32754,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream structural differences without first allocating a complete list.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -30332,7 +32778,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream all entries with `prefix` through the borrowed Rust traversal.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -30356,7 +32802,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream a prefix in descending key order.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(prefix)
@@ -30380,7 +32826,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream a half-open range through the borrowed Rust traversal.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -30407,7 +32853,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream structural differences whose keys fall in `[start, end)`.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -30437,7 +32883,7 @@ class ProllyEngine(ProllyEngineProtocol):
         """
         Stream a half-open range in descending key order.
 """
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -30461,7 +32907,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def stats_diff(self, before: TreeRecord,after: TreeRecord) -> StatsComparisonRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(before)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(after)
@@ -30479,7 +32925,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def stats_diff_json(self, before: TreeRecord,after: TreeRecord) -> JsonDocumentRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(before)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(after)
@@ -30497,7 +32943,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def structural_diff_page(self, base: TreeRecord,other: TreeRecord,cursor_json: typing.Optional[str],limit: int) -> StructuralDiffPageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -30521,7 +32967,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def structural_diff_page_with_cursor(self, base: TreeRecord,other: TreeRecord,cursor: typing.Optional[StructuralDiffCursorRecord],limit: int) -> StructuralDiffPageRecord:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(base)
 
         _UniffiFfiConverterTypeTreeRecord.check_lower(other)
@@ -30545,7 +32991,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def sweep_blob_gc(self, blob_store: ProllyBlobStore,roots: typing.List[TreeRecord],candidate_blobs: typing.List[BlobRefRecord]) -> BlobGcSweepRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
@@ -30566,7 +33012,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def sweep_blob_store_gc(self, blob_store: ProllyBlobStore,roots: typing.List[TreeRecord]) -> BlobGcSweepRecord:
-
+        
         _UniffiFfiConverterTypeProllyBlobStore.check_lower(blob_store)
 
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
@@ -30584,7 +33030,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def sweep_gc(self, roots: typing.List[TreeRecord],candidate_cids: typing.List[bytes]) -> GcSweepRecord:
-
+        
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
 
         _UniffiFfiConverterSequenceBytes.check_lower(candidate_cids)
@@ -30602,7 +33048,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def sweep_store_gc(self, roots: typing.List[TreeRecord]) -> GcSweepRecord:
-
+        
         _UniffiFfiConverterSequenceTypeTreeRecord.check_lower(roots)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30617,7 +33063,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def sweep_store_gc_for_retention(self, retention: NamedRootRetentionRecord) -> GcSweepRecord:
-
+        
         _UniffiFfiConverterTypeNamedRootRetentionRecord.check_lower(retention)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30644,7 +33090,7 @@ class ProllyEngine(ProllyEngineProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def upper_bound(self, tree: TreeRecord,key: bytes) -> typing.Optional[EntryRecord]:
-
+        
         _UniffiFfiConverterTypeTreeRecord.check_lower(tree)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -30666,7 +33112,7 @@ class ProllyEngine(ProllyEngineProtocol):
         Open an application-facing managed map. The returned object shares the
         underlying engine and may outlive this particular foreign handle.
 """
-
+        
         _UniffiFfiConverterBytes.check_lower(id)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30715,7 +33161,7 @@ class BindingMapSnapshotProtocol(typing.Protocol):
     """
     Owned immutable snapshot that remains valid while the managed head advances.
 """
-
+    
     def contains_key(self, key: bytes) -> bool:
         raise NotImplementedError
     def copy_missing_nodes(self, destination: ProllyEngine) -> MissingNodeCopyRecord:
@@ -30797,9 +33243,9 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
     """
     Owned immutable snapshot that remains valid while the managed head advances.
 """
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -30821,7 +33267,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         inst._handle = handle
         return inst
     def contains_key(self, key: bytes) -> bool:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30836,7 +33282,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def copy_missing_nodes(self, destination: ProllyEngine) -> MissingNodeCopyRecord:
-
+        
         _UniffiFfiConverterTypeProllyEngine.check_lower(destination)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30851,7 +33297,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def cursor_window(self, key: bytes,range_end: typing.Optional[bytes],limit: int) -> CursorWindowRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -30908,7 +33354,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get(self, key: bytes) -> typing.Optional[bytes]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30923,7 +33369,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_many(self, keys: typing.List[bytes]) -> typing.List[typing.Optional[bytes]]:
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30938,7 +33384,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_value_ref(self, key: bytes) -> typing.Optional[ValueRefRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30953,7 +33399,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def hydrate_prefix_hint(self, prefix: bytes) -> bool:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -30992,7 +33438,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def lower_bound(self, key: bytes) -> typing.Optional[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31007,7 +33453,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def pin_path(self, key: bytes) -> int:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31034,7 +33480,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def plan_missing_nodes(self, destination: ProllyEngine) -> MissingNodePlanRecord:
-
+        
         _UniffiFfiConverterTypeProllyEngine.check_lower(destination)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31049,7 +33495,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix(self, prefix: bytes) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31064,7 +33510,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_page(self, prefix: bytes,cursor: typing.Optional[RangeCursorRecord],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
@@ -31085,7 +33531,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prefix_reverse_page(self, prefix: bytes,cursor: typing.Optional[ReverseCursorRecord],limit: int) -> ReversePageRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterOptionalTypeReverseCursorRecord.check_lower(cursor)
@@ -31106,7 +33552,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_key(self, key: bytes) -> KeyProofRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31121,7 +33567,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_keys(self, keys: typing.List[bytes]) -> MultiKeyProofRecord:
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31136,7 +33582,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_prefix(self, prefix: bytes) -> RangeProofRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31151,7 +33597,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_range(self, start: bytes,range_end: typing.Optional[bytes]) -> RangeProofRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -31169,7 +33615,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def prove_range_page(self, cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> ProvedRangePageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -31190,7 +33636,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def publish_prefix_hint(self, prefix: bytes) -> bool:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31205,7 +33651,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def push_to(self, destination: BindingVersionedMap) -> MapVersionRecord:
-
+        
         _UniffiFfiConverterTypeBindingVersionedMap.check_lower(destination)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31220,7 +33666,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range(self, start: bytes,range_end: typing.Optional[bytes]) -> typing.List[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -31238,7 +33684,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def range_page(self, cursor: typing.Optional[RangeCursorRecord],range_end: typing.Optional[bytes],limit: int) -> RangePageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeRangeCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -31275,7 +33721,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def reverse_page(self, cursor: typing.Optional[ReverseCursorRecord],start: bytes,limit: int) -> ReversePageRecord:
-
+        
         _UniffiFfiConverterOptionalTypeReverseCursorRecord.check_lower(cursor)
 
         _UniffiFfiConverterBytes.check_lower(start)
@@ -31296,7 +33742,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_prefix(self, prefix: bytes,visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(prefix)
 
         _UniffiFfiConverterTypeEntryVisitorCallback.check_lower(visitor)
@@ -31314,7 +33760,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def scan_range(self, start: bytes,range_end: typing.Optional[bytes],visitor: EntryVisitorCallback) -> ScanOutcomeRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(start)
 
         _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -31359,7 +33805,7 @@ class BindingMapSnapshot(BindingMapSnapshotProtocol):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def upper_bound(self, key: bytes) -> typing.Optional[EntryRecord]:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31415,9 +33861,1060 @@ class _UniffiFfiConverterTypeBindingMapSnapshot:
     def write(cls, value: BindingMapSnapshot, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
+class _UniffiFfiConverterSequenceTypeNodeMutationRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNodeMutationRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNodeMutationRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNodeMutationRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterSequenceTypeNodeEntryRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNodeEntryRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNodeEntryRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNodeEntryRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterSequenceTypeRootConditionRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeRootConditionRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeRootConditionRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeRootConditionRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterSequenceTypeRootWriteRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeRootWriteRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeRootWriteRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeRootWriteRecord.read(buf) for i in range(count)
+        ]
+
+
+class ForeignRemoteStore():
+    
+    async def descriptor(self, ) -> StoreDescriptorResultRecord:
+        raise NotImplementedError
+    async def get_node(self, cid: bytes) -> OptionalBytesResultRecord:
+        raise NotImplementedError
+    async def put_node(self, cid: bytes,value: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def delete_node(self, cid: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def batch_nodes(self, ops: typing.List[NodeMutationRecord]) -> UnitResultRecord:
+        raise NotImplementedError
+    async def batch_get_nodes_ordered(self, cids: typing.List[bytes]) -> OptionalBytesListResultRecord:
+        raise NotImplementedError
+    async def list_node_cids(self, ) -> BytesListResultRecord:
+        raise NotImplementedError
+    async def get_hint(self, namespace: bytes,key: bytes) -> OptionalBytesResultRecord:
+        raise NotImplementedError
+    async def put_hint(self, namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def batch_put_nodes_with_hint(self, nodes: typing.List[NodeEntryRecord],namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def get_root_manifest(self, name: bytes) -> OptionalBytesResultRecord:
+        raise NotImplementedError
+    async def put_root_manifest(self, name: bytes,manifest: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def delete_root_manifest(self, name: bytes) -> UnitResultRecord:
+        raise NotImplementedError
+    async def compare_and_swap_root_manifest(self, name: bytes,expected: OptionalBytesRecord,new: OptionalBytesRecord) -> RootCasResultRecord:
+        raise NotImplementedError
+    async def list_root_manifests(self, ) -> NamedBytesListResultRecord:
+        raise NotImplementedError
+    async def commit_transaction(self, nodes: typing.List[NodeMutationRecord],conditions: typing.List[RootConditionRecord],roots: typing.List[RootWriteRecord]) -> TransactionResultRecord:
+        raise NotImplementedError
+
+class ForeignRemoteStoreImpl(ForeignRemoteStore):
+    
+    _handle: ctypes.c_uint64
+    
+    def __init__(self, *args, **kwargs):
+        raise ValueError("This class has no default constructor")
+
+    def __del__(self):
+        # In case of partial initialization of instances.
+        handle = getattr(self, "_handle", None)
+        if handle is not None:
+            _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_free_foreignremotestore, handle)
+
+    def _uniffi_clone_handle(self):
+        return _uniffi_rust_call(_UniffiLib.uniffi_prolly_bindings_fn_clone_foreignremotestore, self._handle)
+
+    # Used by alternative constructors or any methods which return this type.
+    @classmethod
+    def _uniffi_make_instance(cls, handle):
+        # Lightly yucky way to bypass the usual __init__ logic
+        # and just create a new instance with the required handle.
+        inst = cls.__new__(cls)
+        inst._handle = handle
+        return inst
+    async def descriptor(self, ) -> StoreDescriptorResultRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeStoreDescriptorResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_descriptor(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_node(self, cid: bytes) -> OptionalBytesResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(cid)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(cid),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_node(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put_node(self, cid: bytes,value: bytes) -> UnitResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(cid)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(cid),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_node(self, cid: bytes) -> UnitResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(cid)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(cid),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def batch_nodes(self, ops: typing.List[NodeMutationRecord]) -> UnitResultRecord:
+        
+        _UniffiFfiConverterSequenceTypeNodeMutationRecord.check_lower(ops)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeNodeMutationRecord.lower(ops),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def batch_get_nodes_ordered(self, cids: typing.List[bytes]) -> OptionalBytesListResultRecord:
+        
+        _UniffiFfiConverterSequenceBytes.check_lower(cids)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceBytes.lower(cids),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesListResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def list_node_cids(self, ) -> BytesListResultRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBytesListResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_node_cids(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_hint(self, namespace: bytes,key: bytes) -> OptionalBytesResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(namespace)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(namespace),
+            _UniffiFfiConverterBytes.lower(key),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_hint(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put_hint(self, namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(namespace)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(namespace),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_hint(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def batch_put_nodes_with_hint(self, nodes: typing.List[NodeEntryRecord],namespace: bytes,key: bytes,value: bytes) -> UnitResultRecord:
+        
+        _UniffiFfiConverterSequenceTypeNodeEntryRecord.check_lower(nodes)
+
+        _UniffiFfiConverterBytes.check_lower(namespace)
+
+        _UniffiFfiConverterBytes.check_lower(key)
+
+        _UniffiFfiConverterBytes.check_lower(value)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeNodeEntryRecord.lower(nodes),
+            _UniffiFfiConverterBytes.lower(namespace),
+            _UniffiFfiConverterBytes.lower(key),
+            _UniffiFfiConverterBytes.lower(value),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_put_nodes_with_hint(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def get_root_manifest(self, name: bytes) -> OptionalBytesResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeOptionalBytesResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_get_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def put_root_manifest(self, name: bytes,manifest: bytes) -> UnitResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterBytes.check_lower(manifest)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterBytes.lower(manifest),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_put_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def delete_root_manifest(self, name: bytes) -> UnitResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_delete_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def compare_and_swap_root_manifest(self, name: bytes,expected: OptionalBytesRecord,new: OptionalBytesRecord) -> RootCasResultRecord:
+        
+        _UniffiFfiConverterBytes.check_lower(name)
+
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(expected)
+
+        _UniffiFfiConverterTypeOptionalBytesRecord.check_lower(new)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterBytes.lower(name),
+            _UniffiFfiConverterTypeOptionalBytesRecord.lower(expected),
+            _UniffiFfiConverterTypeOptionalBytesRecord.lower(new),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeRootCasResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_compare_and_swap_root_manifest(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def list_root_manifests(self, ) -> NamedBytesListResultRecord:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeNamedBytesListResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_list_root_manifests(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def commit_transaction(self, nodes: typing.List[NodeMutationRecord],conditions: typing.List[RootConditionRecord],roots: typing.List[RootWriteRecord]) -> TransactionResultRecord:
+        
+        _UniffiFfiConverterSequenceTypeNodeMutationRecord.check_lower(nodes)
+
+        _UniffiFfiConverterSequenceTypeRootConditionRecord.check_lower(conditions)
+
+        _UniffiFfiConverterSequenceTypeRootWriteRecord.check_lower(roots)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterSequenceTypeNodeMutationRecord.lower(nodes),
+            _UniffiFfiConverterSequenceTypeRootConditionRecord.lower(conditions),
+            _UniffiFfiConverterSequenceTypeRootWriteRecord.lower(roots),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeTransactionResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_commit_transaction(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+
+
+
+
+# Put all the bits inside a class to keep the top-level namespace clean
+class _UniffiTraitImplForeignRemoteStoreImpl:
+    # For each method, generate a callback function to pass to Rust
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD0
+    def descriptor(
+            uniffi_handle,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = ()
+            uniffi_method = uniffi_obj.descriptor
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeStoreDescriptorResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD1
+    def get_node(
+            uniffi_handle,
+            cid,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(cid), )
+            uniffi_method = uniffi_obj.get_node
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2
+    def put_node(
+            uniffi_handle,
+            cid,
+            value,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(cid), _UniffiFfiConverterBytes.lift(value), )
+            uniffi_method = uniffi_obj.put_node
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3
+    def delete_node(
+            uniffi_handle,
+            cid,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(cid), )
+            uniffi_method = uniffi_obj.delete_node
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4
+    def batch_nodes(
+            uniffi_handle,
+            ops,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceTypeNodeMutationRecord.lift(ops), )
+            uniffi_method = uniffi_obj.batch_nodes
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5
+    def batch_get_nodes_ordered(
+            uniffi_handle,
+            cids,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceBytes.lift(cids), )
+            uniffi_method = uniffi_obj.batch_get_nodes_ordered
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesListResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6
+    def list_node_cids(
+            uniffi_handle,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = ()
+            uniffi_method = uniffi_obj.list_node_cids
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeBytesListResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7
+    def get_hint(
+            uniffi_handle,
+            namespace,
+            key,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(namespace), _UniffiFfiConverterBytes.lift(key), )
+            uniffi_method = uniffi_obj.get_hint
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8
+    def put_hint(
+            uniffi_handle,
+            namespace,
+            key,
+            value,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(namespace), _UniffiFfiConverterBytes.lift(key), _UniffiFfiConverterBytes.lift(value), )
+            uniffi_method = uniffi_obj.put_hint
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9
+    def batch_put_nodes_with_hint(
+            uniffi_handle,
+            nodes,
+            namespace,
+            key,
+            value,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceTypeNodeEntryRecord.lift(nodes), _UniffiFfiConverterBytes.lift(namespace), _UniffiFfiConverterBytes.lift(key), _UniffiFfiConverterBytes.lift(value), )
+            uniffi_method = uniffi_obj.batch_put_nodes_with_hint
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10
+    def get_root_manifest(
+            uniffi_handle,
+            name,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), )
+            uniffi_method = uniffi_obj.get_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeOptionalBytesResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11
+    def put_root_manifest(
+            uniffi_handle,
+            name,
+            manifest,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), _UniffiFfiConverterBytes.lift(manifest), )
+            uniffi_method = uniffi_obj.put_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12
+    def delete_root_manifest(
+            uniffi_handle,
+            name,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), )
+            uniffi_method = uniffi_obj.delete_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13
+    def compare_and_swap_root_manifest(
+            uniffi_handle,
+            name,
+            expected,
+            new,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterBytes.lift(name), _UniffiFfiConverterTypeOptionalBytesRecord.lift(expected), _UniffiFfiConverterTypeOptionalBytesRecord.lift(new), )
+            uniffi_method = uniffi_obj.compare_and_swap_root_manifest
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeRootCasResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14
+    def list_root_manifests(
+            uniffi_handle,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = ()
+            uniffi_method = uniffi_obj.list_root_manifests
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeNamedBytesListResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15
+    def commit_transaction(
+            uniffi_handle,
+            nodes,
+            conditions,
+            roots,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterSequenceTypeNodeMutationRecord.lift(nodes), _UniffiFfiConverterSequenceTypeRootConditionRecord.lift(conditions), _UniffiFfiConverterSequenceTypeRootWriteRecord.lift(roots), )
+            uniffi_method = uniffi_obj.commit_transaction
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeTransactionResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_FREE_PROLLY_FOREIGN_REMOTE_STORE
+    def _uniffi_free(uniffi_handle):
+        _UniffiFfiConverterTypeForeignRemoteStore._handle_map.remove(uniffi_handle)
+
+    @_UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE
+    def _uniffi_clone(uniffi_handle):
+        return _UniffiFfiConverterTypeForeignRemoteStore._handle_map.clone(uniffi_handle)
+
+    # Generate the FFI VTable.  This has a field for each callback interface method.
+    _uniffi_vtable = _UniffiVTableCallbackInterfaceProllyForeignRemoteStore(
+        _uniffi_free,
+        _uniffi_clone,
+        descriptor,
+        get_node,
+        put_node,
+        delete_node,
+        batch_nodes,
+        batch_get_nodes_ordered,
+        list_node_cids,
+        get_hint,
+        put_hint,
+        batch_put_nodes_with_hint,
+        get_root_manifest,
+        put_root_manifest,
+        delete_root_manifest,
+        compare_and_swap_root_manifest,
+        list_root_manifests,
+        commit_transaction,
+    )
+    # Send Rust a pointer to the VTable.  Note: this means we need to keep the struct alive forever,
+    # or else bad things will happen when Rust tries to access it.
+    _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore(ctypes.byref(_uniffi_vtable))
+
+class _UniffiFfiConverterTypeForeignRemoteStore:
+    _handle_map = _UniffiHandleMap()
+
+    @staticmethod
+    def lift(value: int):
+        if (value & 1) == 0:
+            # Rust-generated handle, construct a new class that uses the handle to implement the
+            # interface
+            return ForeignRemoteStoreImpl._uniffi_make_instance(value)
+        else:
+            # Python-generated handle, get the object from the handle map
+            return _UniffiFfiConverterTypeForeignRemoteStore._handle_map.remove(value)
+
+    @staticmethod
+    def check_lower(value: ForeignRemoteStore):
+        if not isinstance(value, ForeignRemoteStore):
+            raise TypeError("Expected ForeignRemoteStore subclass, {} found".format(type(value).__name__))
+
+    @staticmethod
+    def lower(value: ForeignRemoteStore):
+         if isinstance(value, ForeignRemoteStoreImpl):
+            # Rust-implementated object.  Clone the handle and return it
+            return value._uniffi_clone_handle()
+         else:
+            # Python-implementated object, generate a new vtable handle and return that.
+            return _UniffiFfiConverterTypeForeignRemoteStore._handle_map.insert(value)
+
+    @classmethod
+    def read(cls, buf: _UniffiRustBuffer):
+        ptr = buf.read_u64()
+        if ptr == 0:
+            raise InternalError("Raw handle value was null")
+        return cls.lift(ptr)
+
+    @classmethod
+    def write(cls, value: ForeignRemoteStore, buf: _UniffiRustBuffer):
+        buf.write_u64(cls.lower(value))
+
 
 class HostStoreCallback():
-
+    
     def get(self, key: bytes) -> HostStoreBytesResultRecord:
         raise NotImplementedError
     def put(self, key: bytes,value: bytes) -> HostStoreUnitResultRecord:
@@ -31450,9 +34947,9 @@ class HostStoreCallback():
         raise NotImplementedError
 
 class HostStoreCallbackImpl(HostStoreCallback):
-
+    
     _handle: ctypes.c_uint64
-
+    
     def __init__(self, *args, **kwargs):
         raise ValueError("This class has no default constructor")
 
@@ -31474,7 +34971,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         inst._handle = handle
         return inst
     def get(self, key: bytes) -> HostStoreBytesResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31489,7 +34986,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put(self, key: bytes,value: bytes) -> HostStoreUnitResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
 
         _UniffiFfiConverterBytes.check_lower(value)
@@ -31507,7 +35004,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete(self, key: bytes) -> HostStoreUnitResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(key)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31522,7 +35019,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def batch(self, ops: typing.List[MutationRecord]) -> HostStoreUnitResultRecord:
-
+        
         _UniffiFfiConverterSequenceTypeMutationRecord.check_lower(ops)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31537,7 +35034,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def batch_get_ordered(self, keys: typing.List[bytes]) -> HostStoreBatchGetResultRecord:
-
+        
         _UniffiFfiConverterSequenceBytes.check_lower(keys)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31576,7 +35073,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_hint(self, namespace: bytes,key: bytes) -> HostStoreBytesResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -31594,7 +35091,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_hint(self, namespace: bytes,key: bytes,value: bytes) -> HostStoreUnitResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(namespace)
 
         _UniffiFfiConverterBytes.check_lower(key)
@@ -31627,7 +35124,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def get_root(self, name: bytes) -> HostStoreRootResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31642,7 +35139,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def put_root(self, name: bytes,manifest: RootManifestRecord) -> HostStoreUnitResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterTypeRootManifestRecord.check_lower(manifest)
@@ -31660,7 +35157,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def delete_root(self, name: bytes) -> HostStoreUnitResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
@@ -31675,7 +35172,7 @@ class HostStoreCallbackImpl(HostStoreCallback):
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
     def compare_and_swap_root(self, name: bytes,expected: typing.Optional[RootManifestRecord],replacement: typing.Optional[RootManifestRecord]) -> HostStoreRootCasResultRecord:
-
+        
         _UniffiFfiConverterBytes.check_lower(name)
 
         _UniffiFfiConverterOptionalTypeRootManifestRecord.check_lower(expected)
@@ -32138,7 +35635,7 @@ class _UniffiFfiConverterOptionalTypeTombstoneRecord(_UniffiConverterRustBuffer)
         else:
             raise InternalError("Unexpected flag byte for optional type")
 def authenticated_proof_envelope_from_bytes(bytes: bytes) -> AuthenticatedProofEnvelopeRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32152,7 +35649,7 @@ def authenticated_proof_envelope_from_bytes(bytes: bytes) -> AuthenticatedProofE
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def authenticated_proof_envelope_to_bytes(envelope: AuthenticatedProofEnvelopeRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeAuthenticatedProofEnvelopeRecord.check_lower(envelope)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeAuthenticatedProofEnvelopeRecord.lower(envelope),
@@ -32166,7 +35663,7 @@ def authenticated_proof_envelope_to_bytes(envelope: AuthenticatedProofEnvelopeRe
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def blob_ref_validate_bytes(reference: BlobRefRecord,bytes: bytes) -> None:
-
+    
     _UniffiFfiConverterTypeBlobRefRecord.check_lower(reference)
 
     _UniffiFfiConverterBytes.check_lower(bytes)
@@ -32183,7 +35680,7 @@ def blob_ref_validate_bytes(reference: BlobRefRecord,bytes: bytes) -> None:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def changed_span(start: bytes,range_end: typing.Optional[bytes]) -> ChangedSpanRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(start)
 
     _UniffiFfiConverterOptionalBytes.check_lower(range_end)
@@ -32200,7 +35697,7 @@ def changed_span(start: bytes,range_end: typing.Optional[bytes]) -> ChangedSpanR
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def changed_span_for_prefix(prefix: bytes) -> ChangedSpanRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(prefix),
@@ -32214,7 +35711,7 @@ def changed_span_for_prefix(prefix: bytes) -> ChangedSpanRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def changed_span_from_key(key: bytes) -> ChangedSpanRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(key),
@@ -32228,7 +35725,7 @@ def changed_span_from_key(key: bytes) -> ChangedSpanRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def cid_from_bytes(bytes: bytes) -> bytes:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32242,7 +35739,7 @@ def cid_from_bytes(bytes: bytes) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def crdt_config_lww(delete_policy: CrdtDeletePolicyKind) -> CrdtConfigRecord:
-
+    
     _UniffiFfiConverterTypeCrdtDeletePolicyKind.check_lower(delete_policy)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeCrdtDeletePolicyKind.lower(delete_policy),
@@ -32256,7 +35753,7 @@ def crdt_config_lww(delete_policy: CrdtDeletePolicyKind) -> CrdtConfigRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def crdt_config_multi_value(delete_policy: CrdtDeletePolicyKind) -> CrdtConfigRecord:
-
+    
     _UniffiFfiConverterTypeCrdtDeletePolicyKind.check_lower(delete_policy)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeCrdtDeletePolicyKind.lower(delete_policy),
@@ -32281,7 +35778,7 @@ def crdt_resolution_delete() -> CrdtResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def crdt_resolution_value(value: bytes) -> CrdtResolutionRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(value),
@@ -32295,7 +35792,7 @@ def crdt_resolution_value(value: bytes) -> CrdtResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def debug_key(key: bytes) -> str:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(key),
@@ -32309,7 +35806,7 @@ def debug_key(key: bytes) -> str:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def decode_segments(key: bytes) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(key),
@@ -32444,7 +35941,7 @@ def default_pq_config() -> ProductQuantizationConfigRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def default_proximity_config(dimensions: int) -> ProximityConfigRecord:
-
+    
     _UniffiFfiConverterUInt32.check_lower(dimensions)
     _uniffi_lowered_args = (
         _UniffiFfiConverterUInt32.lower(dimensions),
@@ -32480,7 +35977,7 @@ def default_secondary_index_limits() -> SecondaryIndexLimitsRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def delete_mutation(key: bytes) -> MutationRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(key),
@@ -32494,7 +35991,7 @@ def delete_mutation(key: bytes) -> MutationRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def diff_page_proof_from_bytes(bytes: bytes) -> DiffPageProofRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32508,7 +36005,7 @@ def diff_page_proof_from_bytes(bytes: bytes) -> DiffPageProofRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def diff_page_proof_to_bytes(proof: DiffPageProofRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeDiffPageProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeDiffPageProofRecord.lower(proof),
@@ -32522,7 +36019,7 @@ def diff_page_proof_to_bytes(proof: DiffPageProofRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def encode_segment(segment: bytes) -> bytes:
-
+    
     _UniffiFfiConverterBytes.check_lower(segment)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(segment),
@@ -32547,7 +36044,7 @@ def encoding_cbor() -> EncodingRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def encoding_custom(name: str) -> EncodingRecord:
-
+    
     _UniffiFfiConverterString.check_lower(name)
     _uniffi_lowered_args = (
         _UniffiFfiConverterString.lower(name),
@@ -32583,7 +36080,7 @@ def encoding_raw() -> EncodingRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def exact_proximity_search_request(query: typing.List[float],k: int) -> ProximitySearchRequestRecord:
-
+    
     _UniffiFfiConverterSequenceFloat32.check_lower(query)
 
     _UniffiFfiConverterUInt64.check_lower(k)
@@ -32600,7 +36097,7 @@ def exact_proximity_search_request(query: typing.List[float],k: int) -> Proximit
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def i128_key(value: str) -> bytes:
-
+    
     _UniffiFfiConverterString.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterString.lower(value),
@@ -32614,7 +36111,7 @@ def i128_key(value: str) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def i64_key(value: int) -> bytes:
-
+    
     _UniffiFfiConverterInt64.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterInt64.lower(value),
@@ -32628,7 +36125,7 @@ def i64_key(value: int) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def inspect_proof_bundle(bytes: bytes) -> ProofBundleSummaryRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32641,8 +36138,31 @@ def inspect_proof_bundle(bytes: bytes) -> ProofBundleSummaryRecord:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
-def is_tombstone_value(bytes: bytes) -> bool:
+def is_boundary_config(config: ConfigRecord,count: int,key: bytes,value: bytes) -> bool:
+    
+    _UniffiFfiConverterTypeConfigRecord.check_lower(config)
 
+    _UniffiFfiConverterUInt64.check_lower(count)
+
+    _UniffiFfiConverterBytes.check_lower(key)
+
+    _UniffiFfiConverterBytes.check_lower(value)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterTypeConfigRecord.lower(config),
+        _UniffiFfiConverterUInt64.lower(count),
+        _UniffiFfiConverterBytes.lower(key),
+        _UniffiFfiConverterBytes.lower(value),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
+def is_tombstone_value(bytes: bytes) -> bool:
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32656,7 +36176,7 @@ def is_tombstone_value(bytes: bytes) -> bool:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def key_from_prefixed_segments(prefix: bytes,segments: typing.List[bytes]) -> bytes:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
 
     _UniffiFfiConverterSequenceBytes.check_lower(segments)
@@ -32673,7 +36193,7 @@ def key_from_prefixed_segments(prefix: bytes,segments: typing.List[bytes]) -> by
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def key_from_segments(segments: typing.List[bytes]) -> bytes:
-
+    
     _UniffiFfiConverterSequenceBytes.check_lower(segments)
     _uniffi_lowered_args = (
         _UniffiFfiConverterSequenceBytes.lower(segments),
@@ -32687,7 +36207,7 @@ def key_from_segments(segments: typing.List[bytes]) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def key_proof_from_bytes(bytes: bytes) -> KeyProofRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32701,7 +36221,7 @@ def key_proof_from_bytes(bytes: bytes) -> KeyProofRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def key_proof_from_node_bytes(root: typing.Optional[bytes],key: bytes,path_node_bytes: typing.List[bytes]) -> KeyProofRecord:
-
+    
     _UniffiFfiConverterOptionalBytes.check_lower(root)
 
     _UniffiFfiConverterBytes.check_lower(key)
@@ -32721,7 +36241,7 @@ def key_proof_from_node_bytes(root: typing.Optional[bytes],key: bytes,path_node_
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def key_proof_path_node_bytes(proof: KeyProofRecord) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterTypeKeyProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeKeyProofRecord.lower(proof),
@@ -32735,7 +36255,7 @@ def key_proof_path_node_bytes(proof: KeyProofRecord) -> typing.List[bytes]:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def key_proof_to_bytes(proof: KeyProofRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeKeyProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeKeyProofRecord.lower(proof),
@@ -32749,7 +36269,7 @@ def key_proof_to_bytes(proof: KeyProofRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def large_value_config(inline_threshold: int) -> LargeValueConfigRecord:
-
+    
     _UniffiFfiConverterUInt64.check_lower(inline_threshold)
     _uniffi_lowered_args = (
         _UniffiFfiConverterUInt64.lower(inline_threshold),
@@ -32763,7 +36283,7 @@ def large_value_config(inline_threshold: int) -> LargeValueConfigRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_key_proof_from_bytes(bytes: bytes) -> MultiKeyProofRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32777,7 +36297,7 @@ def multi_key_proof_from_bytes(bytes: bytes) -> MultiKeyProofRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_key_proof_from_node_bytes(root: typing.Optional[bytes],keys: typing.List[bytes],path_node_bytes: typing.List[bytes]) -> MultiKeyProofRecord:
-
+    
     _UniffiFfiConverterOptionalBytes.check_lower(root)
 
     _UniffiFfiConverterSequenceBytes.check_lower(keys)
@@ -32797,7 +36317,7 @@ def multi_key_proof_from_node_bytes(root: typing.Optional[bytes],keys: typing.Li
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_key_proof_path_node_bytes(proof: MultiKeyProofRecord) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterTypeMultiKeyProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeMultiKeyProofRecord.lower(proof),
@@ -32811,7 +36331,7 @@ def multi_key_proof_path_node_bytes(proof: MultiKeyProofRecord) -> typing.List[b
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_key_proof_to_bytes(proof: MultiKeyProofRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeMultiKeyProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeMultiKeyProofRecord.lower(proof),
@@ -32825,7 +36345,7 @@ def multi_key_proof_to_bytes(proof: MultiKeyProofRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_value_set_from_bytes(bytes: bytes) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32839,7 +36359,7 @@ def multi_value_set_from_bytes(bytes: bytes) -> typing.List[bytes]:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_value_set_merge(left: typing.List[bytes],right: typing.List[bytes]) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterSequenceBytes.check_lower(left)
 
     _UniffiFfiConverterSequenceBytes.check_lower(right)
@@ -32856,7 +36376,7 @@ def multi_value_set_merge(left: typing.List[bytes],right: typing.List[bytes]) ->
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def multi_value_set_to_bytes(values: typing.List[bytes]) -> bytes:
-
+    
     _UniffiFfiConverterSequenceBytes.check_lower(values)
     _uniffi_lowered_args = (
         _UniffiFfiConverterSequenceBytes.lower(values),
@@ -32870,7 +36390,7 @@ def multi_value_set_to_bytes(values: typing.List[bytes]) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def node_cid(node: NodeRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeNodeRecord.check_lower(node)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeNodeRecord.lower(node),
@@ -32884,7 +36404,7 @@ def node_cid(node: NodeRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def node_from_bytes(bytes: bytes) -> NodeRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -32898,7 +36418,7 @@ def node_from_bytes(bytes: bytes) -> NodeRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def node_to_bytes(node: NodeRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeNodeRecord.check_lower(node)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeNodeRecord.lower(node),
@@ -32911,8 +36431,27 @@ def node_to_bytes(node: NodeRecord) -> bytes:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
-def parallel_config(max_threads: int,parallelism_threshold: int) -> ParallelConfigRecord:
+async def open_remote_prolly_engine(store: ForeignRemoteStore,config: ConfigRecord) -> AsyncProllyEngine:
+    
+    _UniffiFfiConverterTypeForeignRemoteStore.check_lower(store)
 
+    _UniffiFfiConverterTypeConfigRecord.check_lower(config)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterTypeForeignRemoteStore.lower(store),
+        _UniffiFfiConverterTypeConfigRecord.lower(config),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeAsyncProllyEngine.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeProllyBindingError
+    return await _uniffi_rust_call_async(
+        _UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine(*_uniffi_lowered_args),
+        _UniffiLib.ffi_prolly_bindings_rust_future_poll_u64,
+        _UniffiLib.ffi_prolly_bindings_rust_future_complete_u64,
+        _UniffiLib.ffi_prolly_bindings_rust_future_free_u64,
+        _uniffi_lift_return,
+        _uniffi_error_converter,
+    )
+def parallel_config(max_threads: int,parallelism_threshold: int) -> ParallelConfigRecord:
+    
     _UniffiFfiConverterUInt64.check_lower(max_threads)
 
     _UniffiFfiConverterUInt64.check_lower(parallelism_threshold)
@@ -32940,7 +36479,7 @@ def parallel_config_sequential() -> ParallelConfigRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def prefix_end(prefix: bytes) -> typing.Optional[bytes]:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(prefix),
@@ -32954,7 +36493,7 @@ def prefix_end(prefix: bytes) -> typing.Optional[bytes]:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def prefix_range(prefix: bytes) -> RangeBoundsRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(prefix),
@@ -32968,7 +36507,7 @@ def prefix_range(prefix: bytes) -> RangeBoundsRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_cursor_after_key(key: bytes) -> RangeCursorRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(key),
@@ -32993,7 +36532,7 @@ def range_cursor_start() -> RangeCursorRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_page_proof_from_bytes(bytes: bytes) -> RangePageProofRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33007,7 +36546,7 @@ def range_page_proof_from_bytes(bytes: bytes) -> RangePageProofRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_page_proof_from_node_bytes(root: typing.Optional[bytes],after: typing.Optional[bytes],range_end: typing.Optional[bytes],path_node_bytes: typing.List[bytes]) -> RangePageProofRecord:
-
+    
     _UniffiFfiConverterOptionalBytes.check_lower(root)
 
     _UniffiFfiConverterOptionalBytes.check_lower(after)
@@ -33030,7 +36569,7 @@ def range_page_proof_from_node_bytes(root: typing.Optional[bytes],after: typing.
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_page_proof_path_node_bytes(proof: RangePageProofRecord) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterTypeRangePageProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRangePageProofRecord.lower(proof),
@@ -33044,7 +36583,7 @@ def range_page_proof_path_node_bytes(proof: RangePageProofRecord) -> typing.List
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_page_proof_to_bytes(proof: RangePageProofRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeRangePageProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRangePageProofRecord.lower(proof),
@@ -33058,7 +36597,7 @@ def range_page_proof_to_bytes(proof: RangePageProofRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_proof_from_bytes(bytes: bytes) -> RangeProofRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33072,7 +36611,7 @@ def range_proof_from_bytes(bytes: bytes) -> RangeProofRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_proof_from_node_bytes(root: typing.Optional[bytes],start: bytes,range_end: typing.Optional[bytes],path_node_bytes: typing.List[bytes]) -> RangeProofRecord:
-
+    
     _UniffiFfiConverterOptionalBytes.check_lower(root)
 
     _UniffiFfiConverterBytes.check_lower(start)
@@ -33095,7 +36634,7 @@ def range_proof_from_node_bytes(root: typing.Optional[bytes],start: bytes,range_
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_proof_path_node_bytes(proof: RangeProofRecord) -> typing.List[bytes]:
-
+    
     _UniffiFfiConverterTypeRangeProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRangeProofRecord.lower(proof),
@@ -33109,7 +36648,7 @@ def range_proof_path_node_bytes(proof: RangeProofRecord) -> typing.List[bytes]:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def range_proof_to_bytes(proof: RangeProofRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeRangeProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRangeProofRecord.lower(proof),
@@ -33145,7 +36684,7 @@ def resolution_unresolved() -> ResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def resolution_value(value: bytes) -> ResolutionRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(value),
@@ -33159,7 +36698,7 @@ def resolution_value(value: bytes) -> ResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def resolve_delete_wins(conflict: ConflictRecord) -> ResolutionRecord:
-
+    
     _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeConflictRecord.lower(conflict),
@@ -33173,7 +36712,7 @@ def resolve_delete_wins(conflict: ConflictRecord) -> ResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def resolve_prefer_left(conflict: ConflictRecord) -> ResolutionRecord:
-
+    
     _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeConflictRecord.lower(conflict),
@@ -33187,7 +36726,7 @@ def resolve_prefer_left(conflict: ConflictRecord) -> ResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def resolve_prefer_right(conflict: ConflictRecord) -> ResolutionRecord:
-
+    
     _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeConflictRecord.lower(conflict),
@@ -33201,7 +36740,7 @@ def resolve_prefer_right(conflict: ConflictRecord) -> ResolutionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def resolve_update_wins(conflict: ConflictRecord) -> ResolutionRecord:
-
+    
     _UniffiFfiConverterTypeConflictRecord.check_lower(conflict)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeConflictRecord.lower(conflict),
@@ -33226,7 +36765,7 @@ def retain_all_named_roots() -> NamedRootRetentionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def retain_exact_named_roots(names: typing.List[bytes]) -> NamedRootRetentionRecord:
-
+    
     _UniffiFfiConverterSequenceBytes.check_lower(names)
     _uniffi_lowered_args = (
         _UniffiFfiConverterSequenceBytes.lower(names),
@@ -33240,7 +36779,7 @@ def retain_exact_named_roots(names: typing.List[bytes]) -> NamedRootRetentionRec
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def retain_named_root_prefix(prefix: bytes) -> NamedRootRetentionRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(prefix),
@@ -33254,7 +36793,7 @@ def retain_named_root_prefix(prefix: bytes) -> NamedRootRetentionRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def retain_named_roots_updated_since(prefix: bytes,min_updated_at_millis: int) -> NamedRootRetentionRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
 
     _UniffiFfiConverterUInt64.check_lower(min_updated_at_millis)
@@ -33271,7 +36810,7 @@ def retain_named_roots_updated_since(prefix: bytes,min_updated_at_millis: int) -
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def retain_newest_named_roots(prefix: bytes,count: int) -> NamedRootRetentionRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
 
     _UniffiFfiConverterUInt64.check_lower(count)
@@ -33288,7 +36827,7 @@ def retain_newest_named_roots(prefix: bytes,count: int) -> NamedRootRetentionRec
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def reverse_cursor_before_key(key: bytes) -> ReverseCursorRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(key),
@@ -33313,7 +36852,7 @@ def reverse_cursor_end() -> ReverseCursorRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def root_manifest_from_bytes(bytes: bytes) -> RootManifestRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33327,7 +36866,7 @@ def root_manifest_from_bytes(bytes: bytes) -> RootManifestRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def root_manifest_to_bytes(record: RootManifestRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeRootManifestRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRootManifestRecord.lower(record),
@@ -33341,7 +36880,7 @@ def root_manifest_to_bytes(record: RootManifestRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def sign_proof_bundle_hmac_sha256(proof_bundle: bytes,key_id: bytes,secret: bytes,context: bytes,issued_at_millis: typing.Optional[int],expires_at_millis: typing.Optional[int],nonce: bytes) -> AuthenticatedProofEnvelopeRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(proof_bundle)
 
     _UniffiFfiConverterBytes.check_lower(key_id)
@@ -33373,7 +36912,7 @@ def sign_proof_bundle_hmac_sha256(proof_bundle: bytes,key_id: bytes,secret: byte
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_bundle_digest(record: SnapshotBundleRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeSnapshotBundleRecord.lower(record),
@@ -33387,7 +36926,7 @@ def snapshot_bundle_digest(record: SnapshotBundleRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_bundle_digest_bytes(bytes: bytes) -> bytes:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33401,7 +36940,7 @@ def snapshot_bundle_digest_bytes(bytes: bytes) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_bundle_from_bytes(bytes: bytes) -> SnapshotBundleRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33415,7 +36954,7 @@ def snapshot_bundle_from_bytes(bytes: bytes) -> SnapshotBundleRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_bundle_summary(record: SnapshotBundleRecord) -> SnapshotBundleSummaryRecord:
-
+    
     _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeSnapshotBundleRecord.lower(record),
@@ -33429,7 +36968,7 @@ def snapshot_bundle_summary(record: SnapshotBundleRecord) -> SnapshotBundleSumma
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_bundle_summary_from_bytes(bytes: bytes) -> SnapshotBundleSummaryRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33443,7 +36982,7 @@ def snapshot_bundle_summary_from_bytes(bytes: bytes) -> SnapshotBundleSummaryRec
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_bundle_to_bytes(record: SnapshotBundleRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeSnapshotBundleRecord.lower(record),
@@ -33457,7 +36996,7 @@ def snapshot_bundle_to_bytes(record: SnapshotBundleRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_id_from_name(namespace: SnapshotNamespaceRecord,name: bytes) -> typing.Optional[bytes]:
-
+    
     _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
     _UniffiFfiConverterBytes.check_lower(name)
@@ -33496,7 +37035,7 @@ def snapshot_namespace_checkpoint() -> SnapshotNamespaceRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_namespace_custom(prefix: bytes) -> SnapshotNamespaceRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(prefix)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(prefix),
@@ -33521,7 +37060,7 @@ def snapshot_namespace_tag() -> SnapshotNamespaceRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def snapshot_root_name(namespace: SnapshotNamespaceRecord,id: bytes) -> bytes:
-
+    
     _UniffiFfiConverterTypeSnapshotNamespaceRecord.check_lower(namespace)
 
     _UniffiFfiConverterBytes.check_lower(id)
@@ -33538,7 +37077,7 @@ def snapshot_root_name(namespace: SnapshotNamespaceRecord,id: bytes) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def timestamp_millis_key(value: int) -> bytes:
-
+    
     _UniffiFfiConverterUInt64.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterUInt64.lower(value),
@@ -33552,7 +37091,7 @@ def timestamp_millis_key(value: int) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def timestamped_value_from_bytes(bytes: bytes) -> TimestampedValueRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33566,7 +37105,7 @@ def timestamped_value_from_bytes(bytes: bytes) -> TimestampedValueRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def timestamped_value_now(value: bytes) -> TimestampedValueRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(value),
@@ -33580,7 +37119,7 @@ def timestamped_value_now(value: bytes) -> TimestampedValueRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def timestamped_value_to_bytes(record: TimestampedValueRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeTimestampedValueRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeTimestampedValueRecord.lower(record),
@@ -33594,7 +37133,7 @@ def timestamped_value_to_bytes(record: TimestampedValueRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tombstone_compaction_mutation(key: bytes,stored_value: bytes) -> typing.Optional[MutationRecord]:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
 
     _UniffiFfiConverterBytes.check_lower(stored_value)
@@ -33611,7 +37150,7 @@ def tombstone_compaction_mutation(key: bytes,stored_value: bytes) -> typing.Opti
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tombstone_from_bytes(bytes: bytes) -> TombstoneRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33625,7 +37164,7 @@ def tombstone_from_bytes(bytes: bytes) -> TombstoneRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tombstone_from_stored_bytes(bytes: bytes) -> typing.Optional[TombstoneRecord]:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33639,7 +37178,7 @@ def tombstone_from_stored_bytes(bytes: bytes) -> typing.Optional[TombstoneRecord
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tombstone_to_bytes(record: TombstoneRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeTombstoneRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeTombstoneRecord.lower(record),
@@ -33653,7 +37192,7 @@ def tombstone_to_bytes(record: TombstoneRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tombstone_upsert_mutation(key: bytes,tombstone: TombstoneRecord) -> MutationRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
 
     _UniffiFfiConverterTypeTombstoneRecord.check_lower(tombstone)
@@ -33670,7 +37209,7 @@ def tombstone_upsert_mutation(key: bytes,tombstone: TombstoneRecord) -> Mutation
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tree_config(min_chunk_size: int,max_chunk_size: int,chunking_factor: int,hash_seed: int,encoding: EncodingRecord,node_cache_max_nodes: typing.Optional[int],node_cache_max_bytes: typing.Optional[int]) -> ConfigRecord:
-
+    
     _UniffiFfiConverterUInt64.check_lower(min_chunk_size)
 
     _UniffiFfiConverterUInt64.check_lower(max_chunk_size)
@@ -33702,7 +37241,7 @@ def tree_config(min_chunk_size: int,max_chunk_size: int,chunking_factor: int,has
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def tree_config_from_format_bytes(format_bytes: bytes,node_cache_max_nodes: typing.Optional[int],node_cache_max_bytes: typing.Optional[int]) -> ConfigRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(format_bytes)
 
     _UniffiFfiConverterOptionalUInt64.check_lower(node_cache_max_nodes)
@@ -33722,7 +37261,7 @@ def tree_config_from_format_bytes(format_bytes: bytes,node_cache_max_nodes: typi
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def u128_key(value: str) -> bytes:
-
+    
     _UniffiFfiConverterString.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterString.lower(value),
@@ -33736,7 +37275,7 @@ def u128_key(value: str) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def u64_key(value: int) -> bytes:
-
+    
     _UniffiFfiConverterUInt64.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterUInt64.lower(value),
@@ -33750,7 +37289,7 @@ def u64_key(value: int) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def upsert_mutation(key: bytes,value: bytes) -> MutationRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(key)
 
     _UniffiFfiConverterBytes.check_lower(value)
@@ -33767,7 +37306,7 @@ def upsert_mutation(key: bytes,value: bytes) -> MutationRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def value_ref_from_bytes(bytes: bytes) -> ValueRefRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33781,7 +37320,7 @@ def value_ref_from_bytes(bytes: bytes) -> ValueRefRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def value_ref_from_stored_bytes(bytes: bytes) -> ValueRefRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33795,7 +37334,7 @@ def value_ref_from_stored_bytes(bytes: bytes) -> ValueRefRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def value_ref_inline_requires_escape(value: bytes) -> bool:
-
+    
     _UniffiFfiConverterBytes.check_lower(value)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(value),
@@ -33809,7 +37348,7 @@ def value_ref_inline_requires_escape(value: bytes) -> bool:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def value_ref_to_bytes(record: ValueRefRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeValueRefRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeValueRefRecord.lower(record),
@@ -33823,7 +37362,7 @@ def value_ref_to_bytes(record: ValueRefRecord) -> bytes:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_authenticated_proof_bundle(envelope_bytes: bytes,secret: bytes,now_millis: typing.Optional[int]) -> AuthenticatedProofBundleVerificationRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(envelope_bytes)
 
     _UniffiFfiConverterBytes.check_lower(secret)
@@ -33843,7 +37382,7 @@ def verify_authenticated_proof_bundle(envelope_bytes: bytes,secret: bytes,now_mi
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_authenticated_proof_envelope(envelope: AuthenticatedProofEnvelopeRecord,secret: bytes,now_millis: typing.Optional[int]) -> AuthenticatedProofEnvelopeVerificationRecord:
-
+    
     _UniffiFfiConverterTypeAuthenticatedProofEnvelopeRecord.check_lower(envelope)
 
     _UniffiFfiConverterBytes.check_lower(secret)
@@ -33863,7 +37402,7 @@ def verify_authenticated_proof_envelope(envelope: AuthenticatedProofEnvelopeReco
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_diff_page_proof(proof: DiffPageProofRecord) -> DiffPageProofVerificationRecord:
-
+    
     _UniffiFfiConverterTypeDiffPageProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeDiffPageProofRecord.lower(proof),
@@ -33877,7 +37416,7 @@ def verify_diff_page_proof(proof: DiffPageProofRecord) -> DiffPageProofVerificat
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_key_proof(proof: KeyProofRecord) -> KeyProofVerificationRecord:
-
+    
     _UniffiFfiConverterTypeKeyProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeKeyProofRecord.lower(proof),
@@ -33891,7 +37430,7 @@ def verify_key_proof(proof: KeyProofRecord) -> KeyProofVerificationRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_multi_key_proof(proof: MultiKeyProofRecord) -> MultiKeyProofVerificationRecord:
-
+    
     _UniffiFfiConverterTypeMultiKeyProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeMultiKeyProofRecord.lower(proof),
@@ -33905,7 +37444,7 @@ def verify_multi_key_proof(proof: MultiKeyProofRecord) -> MultiKeyProofVerificat
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_proof_bundle(bytes: bytes) -> ProofBundleVerificationRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -33919,7 +37458,7 @@ def verify_proof_bundle(bytes: bytes) -> ProofBundleVerificationRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_proximity_membership_proof(proof: ProximityMembershipProofRecord,expected_descriptor: typing.Optional[bytes]) -> ProximityMembershipVerificationRecord:
-
+    
     _UniffiFfiConverterTypeProximityMembershipProofRecord.check_lower(proof)
 
     _UniffiFfiConverterOptionalBytes.check_lower(expected_descriptor)
@@ -33936,7 +37475,7 @@ def verify_proximity_membership_proof(proof: ProximityMembershipProofRecord,expe
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_proximity_structure_proof(proof: ProximityStructuralProofRecord,expected_descriptor: typing.Optional[bytes],limits: ContentGraphLimitsRecord) -> ProximityStructuralVerificationRecord:
-
+    
     _UniffiFfiConverterTypeProximityStructuralProofRecord.check_lower(proof)
 
     _UniffiFfiConverterOptionalBytes.check_lower(expected_descriptor)
@@ -33956,7 +37495,7 @@ def verify_proximity_structure_proof(proof: ProximityStructuralProofRecord,expec
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_range_page_proof(proof: RangePageProofRecord) -> RangePageProofVerificationRecord:
-
+    
     _UniffiFfiConverterTypeRangePageProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRangePageProofRecord.lower(proof),
@@ -33970,7 +37509,7 @@ def verify_range_page_proof(proof: RangePageProofRecord) -> RangePageProofVerifi
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_range_proof(proof: RangeProofRecord) -> RangeProofVerificationRecord:
-
+    
     _UniffiFfiConverterTypeRangeProofRecord.check_lower(proof)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeRangeProofRecord.lower(proof),
@@ -33984,7 +37523,7 @@ def verify_range_proof(proof: RangeProofRecord) -> RangeProofVerificationRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_snapshot_bundle(record: SnapshotBundleRecord) -> SnapshotBundleVerificationRecord:
-
+    
     _UniffiFfiConverterTypeSnapshotBundleRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeSnapshotBundleRecord.lower(record),
@@ -33998,7 +37537,7 @@ def verify_snapshot_bundle(record: SnapshotBundleRecord) -> SnapshotBundleVerifi
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def verify_snapshot_bundle_bytes(bytes: bytes) -> SnapshotBundleVerificationRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -34012,7 +37551,7 @@ def verify_snapshot_bundle_bytes(bytes: bytes) -> SnapshotBundleVerificationReco
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def versioned_value_bytes_matches_schema(bytes: bytes,schema: str,version: int) -> bool:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
 
     _UniffiFfiConverterString.check_lower(schema)
@@ -34032,7 +37571,7 @@ def versioned_value_bytes_matches_schema(bytes: bytes,schema: str,version: int) 
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def versioned_value_bytes_require_schema(bytes: bytes,schema: str,version: int) -> None:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
 
     _UniffiFfiConverterString.check_lower(schema)
@@ -34052,7 +37591,7 @@ def versioned_value_bytes_require_schema(bytes: bytes,schema: str,version: int) 
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def versioned_value_from_bytes(bytes: bytes) -> VersionedValueRecord:
-
+    
     _UniffiFfiConverterBytes.check_lower(bytes)
     _uniffi_lowered_args = (
         _UniffiFfiConverterBytes.lower(bytes),
@@ -34066,7 +37605,7 @@ def versioned_value_from_bytes(bytes: bytes) -> VersionedValueRecord:
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def versioned_value_matches_schema(record: VersionedValueRecord,schema: str,version: int) -> bool:
-
+    
     _UniffiFfiConverterTypeVersionedValueRecord.check_lower(record)
 
     _UniffiFfiConverterString.check_lower(schema)
@@ -34086,7 +37625,7 @@ def versioned_value_matches_schema(record: VersionedValueRecord,schema: str,vers
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def versioned_value_require_schema(record: VersionedValueRecord,schema: str,version: int) -> None:
-
+    
     _UniffiFfiConverterTypeVersionedValueRecord.check_lower(record)
 
     _UniffiFfiConverterString.check_lower(schema)
@@ -34106,7 +37645,7 @@ def versioned_value_require_schema(record: VersionedValueRecord,schema: str,vers
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
 def versioned_value_to_bytes(record: VersionedValueRecord) -> bytes:
-
+    
     _UniffiFfiConverterTypeVersionedValueRecord.check_lower(record)
     _uniffi_lowered_args = (
         _UniffiFfiConverterTypeVersionedValueRecord.lower(record),
@@ -34175,6 +37714,8 @@ __all__ = [
     "BlobGcReachabilityRecord",
     "BlobGcPlanRecord",
     "BlobGcSweepRecord",
+    "StoreErrorRecord",
+    "BytesListResultRecord",
     "CacheStatsRecord",
     "ChangedSpanRecord",
     "ChangedSpanHintRecord",
@@ -34270,11 +37811,18 @@ __all__ = [
     "MultiKeyProofRecord",
     "MultiKeyProofVerificationRecord",
     "MutationRecord",
+    "NamedBytesRecord",
+    "NamedBytesListResultRecord",
     "NamedRootManifestRecord",
     "NamedRootRecord",
     "NamedRootRetentionRecord",
     "NamedRootSelectionRecord",
     "NamedRootUpdateRecord",
+    "NodeEntryRecord",
+    "OptionalBytesRecord",
+    "NodeMutationRecord",
+    "OptionalBytesListResultRecord",
+    "OptionalBytesResultRecord",
     "ParallelConfigRecord",
     "ProvedDiffPageRecord",
     "RangePageRecord",
@@ -34288,6 +37836,9 @@ __all__ = [
     "ResolutionRecord",
     "ReverseCursorRecord",
     "ReversePageRecord",
+    "RootCasResultRecord",
+    "RootConditionRecord",
+    "RootWriteRecord",
     "ScanOutcomeRecord",
     "SecondaryIndexLimitsRecord",
     "SnapshotBundleNodeRecord",
@@ -34303,6 +37854,11 @@ __all__ = [
     "StatsDiffRecord",
     "StatsPercentageChangeRecord",
     "StatsComparisonRecord",
+    "StoreCapabilitiesRecord",
+    "StoreLimitsRecord",
+    "StoreDescriptorRecord",
+    "StoreDescriptorResultRecord",
+    "StoreTransactionConflictRecord",
     "StructuralDiffMarkerRecord",
     "StructuralDiffCursorRecord",
     "StructuralDiffPageRecord",
@@ -34310,6 +37866,7 @@ __all__ = [
     "TombstoneMetadataRecord",
     "TombstoneRecord",
     "TransactionConflictRecord",
+    "TransactionResultRecord",
     "TransactionUpdateRecord",
     "TreeDebugNodeRecord",
     "TreeDebugComparedNodeRecord",
@@ -34317,6 +37874,7 @@ __all__ = [
     "TreeDebugComparisonRecord",
     "TreeDebugLevelRecord",
     "TreeDebugViewRecord",
+    "UnitResultRecord",
     "ValueRefRecord",
     "VersionPruneRecord",
     "VersionedMapBatchResultRecord",
@@ -34363,6 +37921,7 @@ __all__ = [
     "i128_key",
     "i64_key",
     "inspect_proof_bundle",
+    "is_boundary_config",
     "is_tombstone_value",
     "key_from_prefixed_segments",
     "key_from_segments",
@@ -34381,6 +37940,7 @@ __all__ = [
     "node_cid",
     "node_from_bytes",
     "node_to_bytes",
+    "open_remote_prolly_engine",
     "parallel_config",
     "parallel_config_sequential",
     "prefix_end",
@@ -34480,6 +38040,10 @@ __all__ = [
     "BindingProximityMapProtocol",
     "BindingCompositeAccelerator",
     "BindingCompositeAcceleratorProtocol",
+    "AsyncProllyTransaction",
+    "AsyncProllyTransactionProtocol",
+    "AsyncProllyEngine",
+    "AsyncProllyEngineProtocol",
     "SecondaryIndexExtractorCallbackImpl",
     "SecondaryIndexExtractorCallback",
     "BindingIndexRegistry",
@@ -34522,6 +38086,8 @@ __all__ = [
     "ProllyEngineProtocol",
     "BindingMapSnapshot",
     "BindingMapSnapshotProtocol",
+    "ForeignRemoteStoreImpl",
+    "ForeignRemoteStore",
     "HostStoreCallbackImpl",
     "HostStoreCallback",
 ]

@@ -189,6 +189,12 @@ impl BindingIndexRegistry {
     }
 }
 
+impl Default for BindingIndexRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[uniffi::export]
 impl BindingIndexRegistry {
     #[uniffi::constructor]
@@ -225,6 +231,7 @@ impl BindingIndexRegistry {
         Ok(())
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> Result<u64, ProllyBindingError> {
         self.inner
             .lock()

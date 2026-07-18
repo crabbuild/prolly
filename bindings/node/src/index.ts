@@ -45,9 +45,18 @@ export {
   VersionedMap,
   VersionedTransaction,
 } from "./versioned.ts";
+export { RemoteAsyncProllyEngine } from "./remote-async.ts";
+export * from "./remote-store.ts";
 export type * from "./indexed.ts";
 export type * from "./proximity.ts";
 export type * from "./versioned.ts";
+
+const MASK64 = (1n << 64n) - 1n;
+const PRIME64_1 = 11400714785074694791n;
+const PRIME64_2 = 14029467366897019727n;
+const PRIME64_3 = 1609587929392839161n;
+const PRIME64_4 = 9650029242287828579n;
+const PRIME64_5 = 2870177450012600261n;
 
 export class Engine implements Disposable {
   #module?: any;
@@ -689,6 +698,72 @@ export function diffEntries(base: [Uint8Array, Uint8Array][], other: [Uint8Array
   return out;
 }
 
+export function isBoundaryConfig(config: Config, count: number, key: Uint8Array, value: Uint8Array): boolean {
+  if (count < config.minChunkSize) return false;
+  if (count >= config.maxChunkSize) return true;
+  const hashValue = Number(xxh64(concatBytes([key, value]), config.hashSeed) & 0xFFFF_FFFFn);
+  const threshold = Math.floor(0xFFFF_FFFF / config.chunkingFactor);
+  return hashValue <= threshold;
+}
+
+export function xxh64(data: Uint8Array, seed = 0n): bigint {
+  const rotl = (value: bigint, bits: bigint) => ((value << bits) | (value >> (64n - bits))) & MASK64;
+  const round64 = (accIn: bigint, lane: bigint) => {
+    let acc = (accIn + lane * PRIME64_2) & MASK64;
+    acc = rotl(acc, 31n);
+    return (acc * PRIME64_1) & MASK64;
+  };
+  const mergeRound = (accIn: bigint, value: bigint) => ((accIn ^ round64(0n, value)) * PRIME64_1 + PRIME64_4) & MASK64;
+  let index = 0;
+  let h64: bigint;
+  seed &= MASK64;
+  if (data.length >= 32) {
+    let v1 = (seed + PRIME64_1 + PRIME64_2) & MASK64;
+    let v2 = (seed + PRIME64_2) & MASK64;
+    let v3 = seed;
+    let v4 = (seed - PRIME64_1) & MASK64;
+    const limit = data.length - 32;
+    while (index <= limit) {
+      v1 = round64(v1, readU64le(data, index));
+      v2 = round64(v2, readU64le(data, index + 8));
+      v3 = round64(v3, readU64le(data, index + 16));
+      v4 = round64(v4, readU64le(data, index + 24));
+      index += 32;
+    }
+    h64 = (rotl(v1, 1n) + rotl(v2, 7n) + rotl(v3, 12n) + rotl(v4, 18n)) & MASK64;
+    h64 = mergeRound(h64, v1);
+    h64 = mergeRound(h64, v2);
+    h64 = mergeRound(h64, v3);
+    h64 = mergeRound(h64, v4);
+  } else {
+    h64 = (seed + PRIME64_5) & MASK64;
+  }
+  h64 = (h64 + BigInt(data.length)) & MASK64;
+  while (index + 8 <= data.length) {
+    h64 ^= round64(0n, readU64le(data, index));
+    h64 = (rotl(h64, 27n) * PRIME64_1 + PRIME64_4) & MASK64;
+    index += 8;
+  }
+  if (index + 4 <= data.length) {
+    h64 ^= (readU32le(data, index) * PRIME64_1) & MASK64;
+    h64 &= MASK64;
+    h64 = (rotl(h64, 23n) * PRIME64_2 + PRIME64_3) & MASK64;
+    index += 4;
+  }
+  while (index < data.length) {
+    h64 ^= (BigInt(data[index]) * PRIME64_5) & MASK64;
+    h64 &= MASK64;
+    h64 = (rotl(h64, 11n) * PRIME64_1) & MASK64;
+    index += 1;
+  }
+  h64 ^= h64 >> 33n;
+  h64 = (h64 * PRIME64_2) & MASK64;
+  h64 ^= h64 >> 29n;
+  h64 = (h64 * PRIME64_3) & MASK64;
+  h64 ^= h64 >> 32n;
+  return h64 & MASK64;
+}
+
 export function prefixEnd(prefix: Uint8Array): Uint8Array | undefined {
   if (prefix.length === 0) return undefined;
   const end = Array.from(prefix);
@@ -1028,6 +1103,16 @@ function commonPrefixLen(left: Uint8Array, right: Uint8Array): number {
 
 function pushBytes(out: number[], bytes: Uint8Array): void {
   for (const byte of bytes) out.push(byte);
+}
+
+function readU64le(data: Uint8Array, offset: number): bigint {
+  let value = 0n;
+  for (let i = 7; i >= 0; i--) value = (value << 8n) | BigInt(data[offset + i]);
+  return value;
+}
+
+function readU32le(data: Uint8Array, offset: number): bigint {
+  return BigInt(data[offset]) | (BigInt(data[offset + 1]) << 8n) | (BigInt(data[offset + 2]) << 16n) | (BigInt(data[offset + 3]) << 24n);
 }
 
 function readU64be(data: Uint8Array, offset: number): bigint {

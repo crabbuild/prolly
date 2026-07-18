@@ -976,7 +976,7 @@ export interface NativeProllyEngine {
   ): NativeRangePageRecord;
   reversePage(
     tree: NativeTreeRecord,
-    cursor?: NativeReverseCursorRecord | null,
+    cursor: NativeReverseCursorRecord | null,
     start: Uint8Array,
     limit?: string,
   ): NativeReversePageRecord;
@@ -1226,7 +1226,174 @@ export interface NativeProllyEngine {
   importSnapshot(bundle: NativeSnapshotBundleRecord): NativeTreeRecord;
 }
 
+export interface NativeRemoteStoreCapabilitiesRecord {
+  nativeBatchReads: boolean;
+  atomicBatchWrites: boolean;
+  nodeScan: boolean;
+  hints: boolean;
+  atomicNodesAndHint: boolean;
+  rootScan: boolean;
+  rootCompareAndSwap: boolean;
+  transactions: boolean;
+  readParallelism: number;
+}
+
+export interface NativeRemoteStoreLimitsRecord {
+  maxBatchReadItems?: number | null;
+  maxBatchWriteItems?: number | null;
+  maxTransactionOperations?: number | null;
+  maxNodeBytes?: string | null;
+}
+
+export interface NativeRemoteStoreDescriptorRecord {
+  protocolMajor: number;
+  adapterName: string;
+  provider: string;
+  schemaVersion: number;
+  capabilities: NativeRemoteStoreCapabilitiesRecord;
+  limits: NativeRemoteStoreLimitsRecord;
+}
+
+export interface NativeRemoteStoreErrorRecord {
+  code: string;
+  message: string;
+  retryable: boolean;
+  providerCode?: string | null;
+}
+
+export interface NativeRemoteOptionalBytesRecord {
+  present: boolean;
+  value: Uint8Array;
+}
+
+export interface NativeRemoteMutationRecord {
+  cid: Uint8Array;
+  value: NativeRemoteOptionalBytesRecord;
+}
+
+export interface NativeRemoteEntryRecord {
+  cid: Uint8Array;
+  node: Uint8Array;
+}
+
+export interface NativeRemoteNamedRootRecord {
+  name: Uint8Array;
+  manifest: Uint8Array;
+}
+
+export interface NativeRemoteRootConditionRecord {
+  name: Uint8Array;
+  expected: NativeRemoteOptionalBytesRecord;
+}
+
+export interface NativeRemoteRootWriteRecord {
+  name: Uint8Array;
+  replacement: NativeRemoteOptionalBytesRecord;
+}
+
+export interface NativeRemoteRootCasRecord {
+  applied: boolean;
+  current: NativeRemoteOptionalBytesRecord;
+}
+
+export interface NativeRemoteTransactionConflictRecord {
+  name: Uint8Array;
+  expected: NativeRemoteOptionalBytesRecord;
+  current: NativeRemoteOptionalBytesRecord;
+}
+
+export interface NativeRemoteTransactionRecord {
+  applied: boolean;
+  conflict?: NativeRemoteTransactionConflictRecord | null;
+}
+
+export interface NativeRemoteStoreRequest {
+  operation: string;
+  requestId: string;
+  bytes?: Uint8Array[] | null;
+  optionalBytes?: NativeRemoteOptionalBytesRecord[] | null;
+  mutations?: NativeRemoteMutationRecord[] | null;
+  entries?: NativeRemoteEntryRecord[] | null;
+  conditions?: NativeRemoteRootConditionRecord[] | null;
+  roots?: NativeRemoteRootWriteRecord[] | null;
+}
+
+export interface NativeRemoteStoreResponse {
+  descriptor?: NativeRemoteStoreDescriptorRecord | null;
+  optionalBytes?: NativeRemoteOptionalBytesRecord | null;
+  optionalValues?: NativeRemoteOptionalBytesRecord[] | null;
+  bytesValues?: Uint8Array[] | null;
+  namedRoots?: NativeRemoteNamedRootRecord[] | null;
+  rootCas?: NativeRemoteRootCasRecord | null;
+  transaction?: NativeRemoteTransactionRecord | null;
+  error?: NativeRemoteStoreErrorRecord | null;
+}
+
+export type NativeRemoteStoreDispatcher = (
+  request: NativeRemoteStoreRequest,
+) => Promise<NativeRemoteStoreResponse>;
+
+export interface NativeRemoteProllyEngine {
+  create(): NativeTreeRecord;
+  get(tree: NativeTreeRecord, key: Uint8Array, requestId: string): Promise<Uint8Array | null>;
+  getMany(
+    tree: NativeTreeRecord,
+    keys: Uint8Array[],
+    requestId: string,
+  ): Promise<Array<Uint8Array | null>>;
+  put(
+    tree: NativeTreeRecord,
+    key: Uint8Array,
+    value: Uint8Array,
+    requestId: string,
+  ): Promise<NativeTreeRecord>;
+  delete(tree: NativeTreeRecord, key: Uint8Array, requestId: string): Promise<NativeTreeRecord>;
+  batch(
+    tree: NativeTreeRecord,
+    mutations: NativeMutationRecord[],
+    requestId: string,
+  ): Promise<NativeTreeRecord>;
+  range(
+    tree: NativeTreeRecord,
+    start: Uint8Array,
+    end: Uint8Array | null | undefined,
+    requestId: string,
+  ): Promise<NativeEntryRecord[]>;
+  loadNamedRoot(name: Uint8Array, requestId: string): Promise<NativeTreeRecord | null>;
+  publishNamedRoot(name: Uint8Array, tree: NativeTreeRecord, requestId: string): Promise<void>;
+  compareAndSwapNamedRoot(
+    name: Uint8Array,
+    expected: NativeTreeRecord | null | undefined,
+    replacement: NativeTreeRecord | null | undefined,
+    requestId: string,
+  ): Promise<NativeNamedRootUpdateRecord>;
+  beginTransaction(requestId: string): Promise<NativeRemoteProllyTransaction>;
+  close(): void;
+}
+
+export interface NativeRemoteProllyTransaction {
+  create(requestId: string): Promise<NativeTreeRecord>;
+  get(tree: NativeTreeRecord, key: Uint8Array, requestId: string): Promise<Uint8Array | null>;
+  put(
+    tree: NativeTreeRecord,
+    key: Uint8Array,
+    value: Uint8Array,
+    requestId: string,
+  ): Promise<NativeTreeRecord>;
+  publishNamedRoot(name: Uint8Array, tree: NativeTreeRecord, requestId: string): Promise<void>;
+  commit(requestId: string): Promise<NativeTransactionUpdateRecord>;
+  rollback(requestId: string): Promise<void>;
+  close(): void;
+}
+
 export interface NativeModule {
+  NativeRemoteProllyEngine: {
+    open(
+      dispatcher: NativeRemoteStoreDispatcher,
+      config: NativeConfigRecord | null | undefined,
+      requestId: string,
+    ): Promise<NativeRemoteProllyEngine>;
+  };
   NativeProllyBlobStore: {
     memory(): NativeProllyBlobStore;
     file(path: string): NativeProllyBlobStore;

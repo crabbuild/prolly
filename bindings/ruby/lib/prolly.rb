@@ -848,4 +848,5 @@ module Prolly
 end
 
 require_relative 'prolly/packed_page'
+require_relative 'prolly/remote_store'
 require_relative 'prolly/api'

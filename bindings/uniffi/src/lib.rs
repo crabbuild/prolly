@@ -35,6 +35,9 @@ use thiserror::Error;
 
 mod domain;
 mod fast_abi;
+mod async_store;
+
+pub use async_store::*;
 
 pub use domain::indexed::{
     default_secondary_index_limits, ActiveIndexHealthRecord, BindingIndexRegistry,
@@ -1587,7 +1590,7 @@ impl MergePolicyRegistry {
 
     pub fn set_default_host_resolver<F>(&self, resolver: F) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -1601,7 +1604,7 @@ impl MergePolicyRegistry {
         resolver: F,
     ) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -1615,7 +1618,7 @@ impl MergePolicyRegistry {
         resolver: F,
     ) -> Result<(), ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let policy = policy_fn_from_host_callback(resolver);
         self.lock()?
@@ -4504,7 +4507,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4526,7 +4529,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<MergeExplanationRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4548,7 +4551,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -4578,7 +4581,7 @@ impl ProllyEngine {
         resolver: F,
     ) -> Result<TreeRecord, ProllyBindingError>
     where
-        F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+        F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
     {
         let base = base.try_into()?;
         let left = left.try_into()?;
@@ -7795,7 +7798,7 @@ fn resolver_from_callback(callback: Arc<dyn MergeResolverCallback>) -> Resolver 
 
 fn resolver_from_host_callback<F>(callback: F) -> Resolver
 where
-    F: Fn(ConflictRecord) -> ResolutionRecord + 'static,
+    F: Fn(ConflictRecord) -> ResolutionRecord + Send + Sync + 'static,
 {
     Box::new(move |conflict| callback(ConflictRecord::from(conflict)).into())
 }
@@ -8332,9 +8335,11 @@ mod tests {
         assert_eq!(config.node_cache_max_nodes, Some(16));
         assert_eq!(config.node_cache_max_bytes, Some(4096));
 
-        let mut format = prolly::TreeFormat::default();
-        format.chunking = prolly::chunking::logical_bytes_key_weibull();
-        format.node_layout = prolly::NodeLayoutSpec::Plain;
+        let format = prolly::TreeFormat {
+            chunking: prolly::chunking::logical_bytes_key_weibull(),
+            node_layout: prolly::NodeLayoutSpec::Plain,
+            ..Default::default()
+        };
         let format_bytes = format.canonical_bytes().unwrap();
         let configured = tree_config_from_format_bytes(format_bytes, None, None).unwrap();
         assert_eq!(Config::try_from(configured).unwrap().format, format);

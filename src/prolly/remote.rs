@@ -1424,4 +1424,54 @@ mod tests {
             );
         });
     }
+
+    #[test]
+    fn owned_async_transaction_outlives_manager_borrow() {
+        block_on(async {
+            let store = Arc::new(MemoryBackend::default());
+            let transaction = {
+                let adapter = RemoteProllyStore::new(store.clone());
+                let prolly = AsyncProlly::new(adapter, Config::default());
+                prolly.begin_owned_transaction().unwrap()
+            };
+
+            let tree = transaction
+                .put(&transaction.create(), b"a".to_vec(), b"1".to_vec())
+                .await
+                .unwrap();
+            transaction
+                .publish_named_root(b"main", &tree)
+                .await
+                .unwrap();
+            assert!(matches!(
+                transaction.commit().await.unwrap(),
+                crate::prolly::transaction::TransactionUpdate::Applied { .. }
+            ));
+
+            let adapter = RemoteProllyStore::new(store);
+            let prolly = AsyncProlly::new(adapter, Config::default());
+            assert_eq!(prolly.load_named_root(b"main").await.unwrap(), Some(tree));
+        });
+    }
+
+    #[test]
+    fn dropping_owned_async_transaction_discards_overlay() {
+        block_on(async {
+            let store = Arc::new(MemoryBackend::default());
+            let adapter = RemoteProllyStore::new(store);
+            let prolly = AsyncProlly::new(adapter, Config::default());
+            let transaction = prolly.begin_owned_transaction().unwrap();
+            let tree = transaction
+                .put(&transaction.create(), b"a".to_vec(), b"1".to_vec())
+                .await
+                .unwrap();
+            transaction
+                .publish_named_root(b"main", &tree)
+                .await
+                .unwrap();
+            drop(transaction);
+
+            assert_eq!(prolly.load_named_root(b"main").await.unwrap(), None);
+        });
+    }
 }

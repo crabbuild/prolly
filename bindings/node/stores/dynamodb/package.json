@@ -1,0 +1,10 @@
+{
+  "name": "@trail/prolly-store-dynamodb",
+  "version": "0.1.0",
+  "type": "module",
+  "files": ["src", "README.md"],
+  "scripts": {"check": "tsc --noEmit", "test": "node --test test/*.test.ts"},
+  "dependencies": {"@aws-sdk/client-dynamodb": "3.1089.0", "@trail/prolly-node": "file:../.."},
+  "devDependencies": {"@trail/prolly-storetest": "file:../../storetest", "@types/node": "20.19.25", "typescript": "5.9.3"},
+  "exports": "./src/index.ts"
+}
