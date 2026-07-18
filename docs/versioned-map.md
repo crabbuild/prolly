@@ -64,7 +64,7 @@ the Rust library import is named `prolly`:
 
 ```toml
 [dependencies]
-prolly-map = "0.2"
+prolly-map = "0.4"
 ```
 
 Here is a complete introductory example:
@@ -1374,7 +1374,7 @@ Enable the `async-store` feature for remote, browser, and async-native stores:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.2", features = ["async-store"] }
+prolly-map = { version = "0.4", features = ["async-store"] }
 ```
 
 The Rust import name remains `prolly`.
