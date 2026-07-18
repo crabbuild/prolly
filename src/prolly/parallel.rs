@@ -137,9 +137,9 @@ pub(crate) fn parallel_batch_with_stats<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
-    _config: &ParallelConfig,
+    config: &ParallelConfig,
 ) -> Result<BatchApplyResult, Error> {
-    batch::apply_with_stats(prolly, tree, mutations)
+    batch::apply_with_stats_configured(prolly, tree, mutations, config)
 }
 
 #[cfg(test)]

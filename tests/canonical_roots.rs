@@ -471,12 +471,14 @@ fn parallel_batch_matches_the_canonical_batch_root() {
         .chunking(chunking::entry_count_key_hash())
         .node_layout(NodeLayoutSpec::Plain)
         .build();
-    let manager = Prolly::new(Arc::new(MemStore::new()), config);
+    let manager = Prolly::new(Arc::new(MemStore::new()), config.clone());
+    let original = records();
     let base = manager
         .batch(
             &manager.create(),
-            records()
-                .into_iter()
+            original
+                .iter()
+                .cloned()
                 .map(|(key, val)| Mutation::Upsert { key, val })
                 .collect(),
         )
@@ -498,9 +500,27 @@ fn parallel_batch_matches_the_canonical_batch_root() {
         .collect::<Vec<_>>();
 
     let canonical = manager.batch(&base, mutations.clone()).unwrap();
-    let parallel = manager
-        .parallel_batch(&base, mutations, &ParallelConfig::new(0, 1))
-        .unwrap();
+    for width in [1, 2, 4, 8, 0] {
+        let parallel = manager
+            .parallel_batch(&base, mutations.clone(), &ParallelConfig::new(width, 1))
+            .unwrap();
+        assert_eq!(parallel.root, canonical.root, "width={width}");
+    }
 
-    assert_eq!(parallel.root, canonical.root);
+    let mut expected_entries = original.into_iter().collect::<BTreeMap<_, _>>();
+    for mutation in mutations {
+        match mutation {
+            Mutation::Upsert { key, val } => {
+                expected_entries.insert(key, val);
+            }
+            Mutation::Delete { key } => {
+                expected_entries.remove(&key);
+            }
+        }
+    }
+    let mut bulk = BatchBuilder::new(Arc::new(MemStore::new()), config);
+    for (key, value) in expected_entries {
+        bulk.add(key, value);
+    }
+    assert_eq!(canonical.root, bulk.build().unwrap().root);
 }

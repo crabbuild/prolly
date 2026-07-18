@@ -4514,9 +4514,9 @@ impl<S: Store> Prolly<S> {
         &self,
         tree: &Tree,
         mutations: Vec<Mutation>,
-        _config: &parallel::ParallelConfig,
+        config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        write::apply_tree(self, tree, mutations)
+        write::apply_tree_configured(self, tree, mutations, config)
     }
 
     /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.
@@ -9001,6 +9001,13 @@ mod tests {
             .collect();
 
         let expected = prolly.batch(&tree, update_mutations.clone()).unwrap();
+        let sequential = prolly
+            .parallel_batch_with_stats(
+                &tree,
+                update_mutations.clone(),
+                &parallel::ParallelConfig::sequential(),
+            )
+            .unwrap();
         let result = prolly
             .parallel_batch_with_stats(
                 &tree,
@@ -9009,6 +9016,12 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(sequential.stats.parallel_width, 1);
+        assert!(result.stats.parallel_width >= 1);
+        if rayon::current_num_threads() > 1 {
+            assert!(result.stats.parallel_width > 1);
+        }
+        assert_eq!(sequential.tree.root, result.tree.root);
         assert_eq!(result.stats.input_mutations, 8);
         assert_eq!(result.stats.effective_mutations, 8);
         assert!(result.stats.used_coalesced_rebuild);
