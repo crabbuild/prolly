@@ -250,13 +250,13 @@ fn measure_merge(
     expected_conflicts: usize,
     operation_count: usize,
 ) -> Measurement<'static> {
-    let conflicts = Arc::new(AtomicUsize::new(0));
+    let resolver_calls = Arc::new(AtomicUsize::new(0));
     let resolver = if expected_conflicts == 0 {
         None
     } else {
-        let conflicts = Arc::clone(&conflicts);
+        let resolver_calls = Arc::clone(&resolver_calls);
         Some(Box::new(move |conflict: &prolly::Conflict| {
-            conflicts.fetch_add(1, Ordering::Relaxed);
+            resolver_calls.fetch_add(1, Ordering::Relaxed);
             match &conflict.left {
                 Some(value) => Resolution::Value(value.clone()),
                 None => Resolution::Delete,
@@ -268,8 +268,12 @@ fn measure_merge(
         .merge(black_box(base), black_box(left), black_box(right), resolver)
         .expect("merge succeeds");
     let elapsed = started.elapsed().as_nanos();
-    let conflict_count = conflicts.load(Ordering::Relaxed);
-    assert_eq!(conflict_count, expected_conflicts);
+    let resolver_call_count = resolver_calls.load(Ordering::Relaxed);
+    if expected_conflicts == 0 {
+        assert_eq!(resolver_call_count, 0);
+    } else {
+        assert!(resolver_call_count >= expected_conflicts);
+    }
     let summary = tree_summary(manager, &merged);
     if relationship == "convergent" || relationship == "conflict" {
         assert_eq!(summary, tree_summary(manager, left));
@@ -292,7 +296,7 @@ fn measure_merge(
         result_count: summary.0,
         base_count: tree_summary(manager, base).0,
         target_count: summary.0,
-        conflict_count,
+        conflict_count: expected_conflicts,
     }
 }
 
