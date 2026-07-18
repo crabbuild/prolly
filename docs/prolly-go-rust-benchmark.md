@@ -12,6 +12,19 @@ Run the complete requested matrix:
 scripts/run_prolly_comparison.sh
 ```
 
+The driver fetches `https://github.com/dolthub/dolt.git`, resolves
+`origin/main` once, detaches the benchmark checkout at that exact commit, copies
+the checked-in command from `benchmarks/dolt-prolly-compare/`, tests it inside
+Dolt's Go module, and builds both release binaries. No manually patched `dolt/`
+checkout is required.
+
+Reproduce a recorded Dolt revision exactly:
+
+```sh
+DOLT_REV=9e80d3aa2cf8ff473765f5603af32304d72c67b5 \
+  scripts/run_prolly_comparison.sh
+```
+
 Run a quick parity and smoke comparison:
 
 ```sh
@@ -20,8 +33,11 @@ BENCH_SIZES="10000" BENCH_RUNS=1 BENCH_LARGE_RUNS=1 \
 ```
 
 Results are written under `performance-results/dolt-rust/`. Set `BENCH_OUT` to
-retain multiple named runs. The runner stops on any failed process. The
-summarizer also rejects mismatched workload digests, operation counts, or result
+retain multiple named runs. The current default is
+`performance-results/dolt-current-rust-canonical-2026-07-17/`. The runner stops
+on any failed process or malformed output. The summarizer rejects missing or
+duplicate repetitions, incomplete scenario matrices, unvalidated rows, and
+mismatched contract versions, workload digests, operation counts, or result
 cardinalities between implementations.
 
 ## Method
@@ -45,6 +61,9 @@ cardinalities between implementations.
 - Reports record the Rust source hash, Go runner hash, and SHA-256 digest of
   each copied executable. A dirty implementation is never represented by the
   last commit SHA alone.
+- `/usr/bin/time` records peak process RSS for every scenario. RSS covers the
+  entire process, including untimed fixture and tuple construction; it is not
+  memory attributable only to the measured operation.
 - Logical fixture construction and Dolt tuple encoding happen outside timed write
   regions. Sorting, mutation buffering, chunking, hashing, encoding tree nodes,
   and in-memory node-store writes remain timed.
@@ -52,6 +71,22 @@ cardinalities between implementations.
 The comparison intentionally uses each implementation's default encoding and
 chunking configuration. It measures the products presented to callers, not a
 forced common wire format.
+
+## Verified current-main run (2026-07-17)
+
+The complete current-main matrix ran all five sizes three times: 180 successful
+scenario processes, 540 validated operation rows, 270 exact Rust/Go pairs, and
+no estimated results. See the
+[current performance report](prolly-rust-go-performance-report-2026-07-17.md),
+[normalized measurements](../performance-results/dolt-current-rust-canonical-2026-07-17/results.csv),
+and [median summary](../performance-results/dolt-current-rust-canonical-2026-07-17/summary.csv).
+
+Rust won 88 of 90 medians against Dolt current main: 28/30 writes, 30/30 point
+reads, and 30/30 scans. Median Go/Rust ratios were 2.32x, 2.59x, and 5.21x,
+respectively. Dolt retained the 10K and 50K random-mutation write wins. Compared
+with the July 16 Rust baseline under the same logical contract, 80/90 current
+Rust medians improved, with an 11.0% median improvement; all ten measured
+regressions occurred at 10M and are disclosed in the report.
 
 ## Verified final zero-copy run (2026-07-16)
 
