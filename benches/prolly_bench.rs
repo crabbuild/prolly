@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prolly::{
-    append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryDetector,
-    BoundaryRule, ChunkingSpec, Config, MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly,
-    Resolution, Resolver, SortedBatchBuilder, Store, Tree,
+    append_batch, chunking, BatchBuilder, BoundaryDetector, BoundaryRule, ChunkingSpec, Config,
+    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver,
+    SortedBatchBuilder, Store, Tree,
 };
 
 const DEFAULT_SCALE: usize = 10_000;
@@ -78,8 +78,6 @@ fn main() {
     bench_append_batch_direct(scale);
     bench_append_batch_chain(scale);
     bench_append_batch_chain_cold(scale);
-    bench_batch_mutations_no_prefetch(scale);
-    bench_batch_mutations_bottom_up(scale);
     bench_parallel_batch_mutations(scale);
     bench_diff_identical(scale);
     bench_diff_sparse(scale);
@@ -471,41 +469,6 @@ fn bench_append_batch_chain_cold(items: usize) {
             black_box(tree.root);
         },
     );
-}
-
-fn bench_batch_mutations_no_prefetch(items: usize) {
-    let data = data_set(items);
-    let (_, prolly, base) = build_tree(&data);
-    let mutation_count = mutation_count(items);
-    let mutations = update_mutations(items, mutation_count, "no-prefetch");
-    let writer = BatchWriter::with_config(BatchWriterConfig::new().with_prefetch(false));
-
-    measure(
-        "batch_mutations_no_prefetch_mem",
-        20,
-        mutation_count,
-        || {
-            let tree = writer
-                .apply_batch(&prolly, &base, black_box(mutations.clone()))
-                .unwrap();
-            black_box(tree.root);
-        },
-    );
-}
-
-fn bench_batch_mutations_bottom_up(items: usize) {
-    let data = data_set(items);
-    let (_, prolly, base) = build_tree(&data);
-    let mutation_count = mutation_count(items);
-    let mutations = update_mutations(items, mutation_count, "bottom-up");
-    let writer = BatchWriter::with_config(BatchWriterConfig::new().with_bottom_up_rebuild(true));
-
-    measure("batch_mutations_bottom_up_mem", 20, mutation_count, || {
-        let tree = writer
-            .apply_batch(&prolly, &base, black_box(mutations.clone()))
-            .unwrap();
-        black_box(tree.root);
-    });
 }
 
 fn bench_parallel_batch_mutations(items: usize) {

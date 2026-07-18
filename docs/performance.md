@@ -92,10 +92,13 @@ This reduces repeated path rewrites compared with applying many `put` or `delete
 
 Batch paths also support:
 
-- prefetching when stores prefer batch reads
+- bounded ordered route hydration when stores prefer batch reads
 - append-heavy right-edge optimization
-- bottom-up rebuild strategies through `BatchWriterConfig`
-- deferred mutation planning for large mutation sets
+- proof-gated parallel mutation islands for independent structural changes
+- deterministic coalescing into the canonical sequential fallback
+
+`ParallelConfig` controls only scheduling width and threshold. All worker
+counts use the same boundary detector and canonical frontier assembly.
 
 ### Bulk builders
 

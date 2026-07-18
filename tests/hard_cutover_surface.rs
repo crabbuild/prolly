@@ -26,6 +26,7 @@ fn legacy_chunking_and_rebalancing_surfaces_are_absent() {
         ["Parallel", "Rebalancer"].concat(),
         ["DefaultParallel", "Rebalancer"].concat(),
         ["rebalance", "::"].concat(),
+        ["BatchWriter", "Config"].concat(),
     ];
     let mut files = Vec::new();
     for directory in ["src", "bindings"] {

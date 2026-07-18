@@ -24569,6 +24569,14 @@ data class BatchApplyStatsRecord (
     var `usedBottomUpRebuild`: kotlin.Boolean
     ,
     var `cacheWrittenNodes`: kotlin.Boolean
+    ,
+    var `parallelWidth`: kotlin.ULong
+    ,
+    var `parallelTasks`: kotlin.ULong
+    ,
+    var `structuralIslands`: kotlin.ULong
+    ,
+    var `coalescedIslands`: kotlin.ULong
 
 ){
 
@@ -24599,6 +24607,10 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
@@ -24616,7 +24628,11 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterBoolean.allocationSize(value.`usedCoalescedRebuild`) +
             FfiConverterBoolean.allocationSize(value.`usedDeferredRebalancing`) +
             FfiConverterBoolean.allocationSize(value.`usedBottomUpRebuild`) +
-            FfiConverterBoolean.allocationSize(value.`cacheWrittenNodes`)
+            FfiConverterBoolean.allocationSize(value.`cacheWrittenNodes`) +
+            FfiConverterULong.allocationSize(value.`parallelWidth`) +
+            FfiConverterULong.allocationSize(value.`parallelTasks`) +
+            FfiConverterULong.allocationSize(value.`structuralIslands`) +
+            FfiConverterULong.allocationSize(value.`coalescedIslands`)
     )
 
     override fun write(value: BatchApplyStatsRecord, buf: ByteBuffer) {
@@ -24634,6 +24650,10 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterBoolean.write(value.`usedDeferredRebalancing`, buf)
             FfiConverterBoolean.write(value.`usedBottomUpRebuild`, buf)
             FfiConverterBoolean.write(value.`cacheWrittenNodes`, buf)
+            FfiConverterULong.write(value.`parallelWidth`, buf)
+            FfiConverterULong.write(value.`parallelTasks`, buf)
+            FfiConverterULong.write(value.`structuralIslands`, buf)
+            FfiConverterULong.write(value.`coalescedIslands`, buf)
     }
 }
 
@@ -33618,6 +33638,14 @@ data class WriteStatsRecord (
     var `usedKeyStableFastPath`: kotlin.Boolean
     ,
     var `usedBatchedValueUpdatePath`: kotlin.Boolean
+    ,
+    var `parallelWidth`: kotlin.ULong
+    ,
+    var `parallelTasks`: kotlin.ULong
+    ,
+    var `structuralIslands`: kotlin.ULong
+    ,
+    var `coalescedIslands`: kotlin.ULong
 
 ){
 
@@ -33646,6 +33674,10 @@ public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStat
             FfiConverterULong.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
@@ -33661,7 +33693,11 @@ public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStat
             FfiConverterULong.allocationSize(value.`resyncDistanceEntries`) +
             FfiConverterULong.allocationSize(value.`resyncDistanceNodes`) +
             FfiConverterBoolean.allocationSize(value.`usedKeyStableFastPath`) +
-            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`)
+            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`) +
+            FfiConverterULong.allocationSize(value.`parallelWidth`) +
+            FfiConverterULong.allocationSize(value.`parallelTasks`) +
+            FfiConverterULong.allocationSize(value.`structuralIslands`) +
+            FfiConverterULong.allocationSize(value.`coalescedIslands`)
     )
 
     override fun write(value: WriteStatsRecord, buf: ByteBuffer) {
@@ -33677,6 +33713,10 @@ public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStat
             FfiConverterULong.write(value.`resyncDistanceNodes`, buf)
             FfiConverterBoolean.write(value.`usedKeyStableFastPath`, buf)
             FfiConverterBoolean.write(value.`usedBatchedValueUpdatePath`, buf)
+            FfiConverterULong.write(value.`parallelWidth`, buf)
+            FfiConverterULong.write(value.`parallelTasks`, buf)
+            FfiConverterULong.write(value.`structuralIslands`, buf)
+            FfiConverterULong.write(value.`coalescedIslands`, buf)
     }
 }
 

@@ -8,9 +8,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use prolly::{
-    BatchApplyStats, BatchOp, BatchWriter, BatchWriterConfig, Config, ManifestStore,
-    ManifestStoreScan, ManifestUpdate, Mutation, NamedRootManifest, Prolly, RootManifest, Store,
-    Tree, TreeStats,
+    BatchApplyStats, BatchOp, BatchWriter, Config, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    Mutation, NamedRootManifest, Prolly, RootManifest, Store, Tree, TreeStats,
 };
 use prolly_store_slatedb::{SlateDbStore, SlateDbStoreConfig};
 use slatedb::config::{CompressionCodec, Settings};
@@ -325,9 +324,7 @@ fn main() {
         workload.store_config.clone(),
     )));
     let prolly = Prolly::new(store.clone(), workload.tree_config.clone());
-    let writer = BatchWriter::with_config(
-        BatchWriterConfig::new().with_cache_written_nodes(workload.cache_written_nodes),
-    );
+    let writer = BatchWriter::new();
     let mut tree = prolly.create();
     let mut total_records = 0usize;
     let mut deleted = HashSet::new();
@@ -1211,7 +1208,6 @@ struct WorkloadConfig {
     max_object_bytes: u64,
     stats_max_records: usize,
     keep_db: bool,
-    cache_written_nodes: bool,
     path: String,
     endpoint: String,
     bucket: String,
@@ -1252,8 +1248,6 @@ impl WorkloadConfig {
         let stats_max_records = env_count("PROLLY_SLATEDB_WORKLOAD_STATS_MAX_RECORDS")
             .unwrap_or(DEFAULT_STATS_MAX_RECORDS);
         let keep_db = env_bool("PROLLY_SLATEDB_WORKLOAD_KEEP_DB").unwrap_or(false);
-        let cache_written_nodes =
-            env_bool("PROLLY_SLATEDB_WORKLOAD_CACHE_WRITTEN_NODES").unwrap_or(true);
         let endpoint = slatedb_endpoint();
         let bucket = slatedb_bucket();
 
@@ -1271,7 +1265,6 @@ impl WorkloadConfig {
             max_object_bytes,
             stats_max_records,
             keep_db,
-            cache_written_nodes,
             path: db_path(),
             endpoint,
             bucket,

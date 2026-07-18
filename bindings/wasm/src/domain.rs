@@ -1931,6 +1931,10 @@ fn versioned_batch_stats_object(stats: prolly::BatchApplyStats) -> Result<Object
         &"cacheWrittenNodes".into(),
         &stats.cache_written_nodes.into(),
     )?;
+    set_count(&object, "parallelWidth", stats.parallel_width)?;
+    set_count(&object, "parallelTasks", stats.parallel_tasks)?;
+    set_count(&object, "structuralIslands", stats.structural_islands)?;
+    set_count(&object, "coalescedIslands", stats.coalesced_islands)?;
     Ok(object)
 }
 

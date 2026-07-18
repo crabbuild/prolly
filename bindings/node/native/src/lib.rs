@@ -238,6 +238,10 @@ pub struct NodeBatchApplyStatsRecord {
     pub used_deferred_rebalancing: bool,
     pub used_bottom_up_rebuild: bool,
     pub cache_written_nodes: bool,
+    pub parallel_width: String,
+    pub parallel_tasks: String,
+    pub structural_islands: String,
+    pub coalesced_islands: String,
 }
 
 #[napi(object)]
@@ -260,6 +264,10 @@ pub struct NodeWriteStatsRecord {
     pub resync_distance_nodes: String,
     pub used_key_stable_fast_path: bool,
     pub used_batched_value_update_path: bool,
+    pub parallel_width: String,
+    pub parallel_tasks: String,
+    pub structural_islands: String,
+    pub coalesced_islands: String,
 }
 
 #[napi(object)]
@@ -3851,6 +3859,10 @@ impl From<BindingBatchApplyStatsRecord> for NodeBatchApplyStatsRecord {
             used_deferred_rebalancing: stats.used_deferred_rebalancing,
             used_bottom_up_rebuild: stats.used_bottom_up_rebuild,
             cache_written_nodes: stats.cache_written_nodes,
+            parallel_width: stats.parallel_width.to_string(),
+            parallel_tasks: stats.parallel_tasks.to_string(),
+            structural_islands: stats.structural_islands.to_string(),
+            coalesced_islands: stats.coalesced_islands.to_string(),
         }
     }
 }
@@ -3879,6 +3891,10 @@ impl From<BindingWriteStatsRecord> for NodeWriteStatsRecord {
             resync_distance_nodes: stats.resync_distance_nodes.to_string(),
             used_key_stable_fast_path: stats.used_key_stable_fast_path,
             used_batched_value_update_path: stats.used_batched_value_update_path,
+            parallel_width: stats.parallel_width.to_string(),
+            parallel_tasks: stats.parallel_tasks.to_string(),
+            structural_islands: stats.structural_islands.to_string(),
+            coalesced_islands: stats.coalesced_islands.to_string(),
         }
     }
 }

@@ -44,6 +44,10 @@ export interface WasmBatchApplyStatsRecord {
   usedDeferredRebalancing: boolean;
   usedBottomUpRebuild: boolean;
   cacheWrittenNodes: boolean;
+  parallelWidth: number;
+  parallelTasks: number;
+  structuralIslands: number;
+  coalescedIslands: number;
 }
 
 export interface WasmBatchApplyResultRecord {
@@ -64,6 +68,10 @@ export interface WasmWriteStatsRecord {
   resyncDistanceNodes: number;
   usedKeyStableFastPath: boolean;
   usedBatchedValueUpdatePath: boolean;
+  parallelWidth: number;
+  parallelTasks: number;
+  structuralIslands: number;
+  coalescedIslands: number;
 }
 
 export interface WasmWriteResultRecord {
