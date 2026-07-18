@@ -4,16 +4,18 @@
 
 **Goal:** Turn `parallel_batch` into a configurable, deterministic many-core writer while preserving byte-identical canonical roots and the existing low-latency sequential fast paths.
 
-**Architecture:** `ParallelConfig` produces one internal `ExecutionPolicy` used by the canonical writer, batched route planner, key-stable leaf executor, and structural mutation-island executor. Parallel stages operate on indexed work in bounded waves, gather results in key order, and never decide chunk boundaries; failed structural speculation coalesces into the existing canonical resynchronizing fallback.
+**Architecture:** `ParallelConfig` produces one internal `ExecutionPolicy` used by the canonical writer, batched route planner, key-stable leaf executor, and structural mutation-island executor. Parallel stages operate on indexed work in bounded waves, gather results in key order, and never decide chunk boundaries; dense structural work is rejected before replay and any failed proof immediately invokes the existing canonical resynchronizing fallback.
 
 **Tech Stack:** Rust 2021, Rayon indexed parallel iterators, existing `Store`, `BoundaryDetector`, `LevelEmitter`, `BatchWriteCollector`, canonical-root tests, and the repository’s release benchmark harness.
+
+**Implementation outcome:** Delivered through Tasks 1-7 and measured on a 12-core Apple M2 Max. Retained commands, raw results, regression gates, and limitations are in [`performance-results/canonical-parallel-executor-2026-07-17`](../../../performance-results/canonical-parallel-executor-2026-07-17/README.md). Automatic value-only execution improved 24.5% at median and 24.4% at p95 versus true width one; protected old/new medians and p95 did not regress. Dense structural workloads report width one and zero tasks.
 
 ## Global Constraints
 
 - Correctness is the release gate; performance changes may not select a different chunking algorithm.
 - Worker count and completion order must not change serialized node bytes, CIDs, reachable node sets, or final roots.
 - Use the shared Rayon pool; never construct a thread pool per mutation call.
-- Bound work waves to `4 * effective_width` tasks.
+- Bound structural-island waves to `4 * effective_width`; use exactly the configured partitions for explicitly bounded leaf work and indexed Rayon splitting at full shared-pool width.
 - `ParallelConfig::max_threads`, `parallelism_threshold`, and `sequential()` must have observable effects.
 - Remove inert batch-writer tuning choices instead of retaining compatibility branches.
 - Preserve the current canonical sequential path for small, append-fast-path, point-mutation, and non-independent workloads.
@@ -31,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: public `ParallelConfig { max_threads, parallelism_threshold }`.
-- Produces: `ExecutionPolicy::from_config`, `ExecutionPolicy::automatic`, `ExecutionPolicy::sequential`, `ExecutionPolicy::enabled`, `ExecutionPolicy::width`, `ExecutionPolicy::wave_size`, `ExecutionPolicy::limit_to`, and `ExecutionPolicy::ranges`.
+- Produces: `ExecutionPolicy::from_config`, `ExecutionPolicy::automatic`, `ExecutionPolicy::sequential`, `ExecutionPolicy::enabled`, `ExecutionPolicy::width`, `ExecutionPolicy::read_width`, `ExecutionPolicy::wave_size`, `ExecutionPolicy::limit_to`, `ExecutionPolicy::ranges`, and the active-write concurrency guard.
 
 - [ ] **Step 1: Implement the internal policy and indexed range partitioning**
 
@@ -123,6 +125,8 @@ impl ExecutionPolicy {
     }
 }
 ```
+
+Measured hardening extends this skeleton with a separate ordered-read width and an RAII active-write counter. Explicit `max_threads` caps both widths; automatic scheduling retains up to 16 ordered-read partitions, and inner execution drops to width one when active callers would leave fewer than three shared-pool threads per write.
 
 - [ ] **Step 2: Add policy tests after the implementation**
 
@@ -281,7 +285,7 @@ pub structural_islands: usize,
 pub coalesced_islands: usize,
 ```
 
-Set `parallel_width` from the effective policy and leave the task/island counts zero until later tasks. Tests must be able to distinguish `sequential()` from an enabled configuration even when roots match.
+Initialize `parallel_width` to one and raise it only when an admitted executor actually launches independent work. Leave task/island counts zero until later tasks. Tests must be able to distinguish `sequential()` from an enabled configuration even when roots match, and a rejected route must not claim an unused width.
 
 - [ ] **Step 5: Add routing and root-equivalence tests**
 
@@ -340,37 +344,19 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
 ) -> Result<KeyStableBatchAttempt, Error>
 ```
 
-Pass `policy.width()` into `group_mutations_by_leaf_with_paths_batched`. The eligibility predicate must require `policy.enabled()`, a store that prefers batch reads, and the existing safety floor of 256 mutations. `parallelism_threshold` may raise that floor through the already-calculated policy, but it does not force undersized batches into a route whose overhead is known to dominate.
+Pass `policy.read_width()` into `group_mutations_by_leaf_with_paths_batched`. Explicit `max_threads` caps CPU and ordered-read width; automatic scheduling retains up to 16 ordered-read partitions on smaller pools. The eligibility predicate must require effective width four or greater, `policy.enabled()`, a store that prefers batch reads, and the existing safety floor of 256 mutations. `parallelism_threshold` may raise that floor through the already-calculated policy, but it does not force undersized batches into a route whose overhead is known to dominate.
 
-- [ ] **Step 2: Process independent leaf groups in bounded waves**
+Before the full route, hydrate one representative mutation through the same owned-node cache. A missing or growing value rejects pure insert/growth batches cheaply. The full route still validates every mutation. Admit direct leaf replacement only for key-only entry-count hashing; route-path ancestry must classify rightmost leaves correctly, and rightmost status must never bypass the value-stability requirement for key+value, byte-measured, rolling, or Weibull policies.
 
-Change `prepare_leaf_groups_for_coalesced_rebuild` to accept `ExecutionPolicy`. Preserve the sequential loop when disabled. For enabled execution, process no more than `policy.wave_size()` groups at once:
+- [ ] **Step 2: Process independent leaf groups with bounded partitions**
 
-```rust
-let mut prepared = Vec::with_capacity(groups.len());
-let mut groups = groups.into_iter();
-loop {
-    let wave = groups
-        .by_ref()
-        .take(policy.wave_size())
-        .collect::<Vec<_>>();
-    if wave.is_empty() {
-        break;
-    }
-    let mut output = wave
-        .into_par_iter()
-        .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
-        .collect::<Vec<_>>();
-    prepared.append(&mut output);
-}
-prepared
-```
+Change `prepare_leaf_groups_for_coalesced_rebuild` to accept `ExecutionPolicy`. Preserve the sequential loop when disabled. At full shared-pool width, use one indexed Rayon iterator so work stealing balances uneven leaves without allocating hundreds of waves. For an explicit width below the pool, split the ordered groups into exactly `policy.width()` partitions and process each partition sequentially inside one Rayon task.
 
-Rayon indexed collection preserves wave and group order. Do not invoke a nested parallel iterator while a wave is executing.
+Rayon indexed collection preserves group and partition order. Do not invoke a nested parallel iterator while a partition is executing.
 
 - [ ] **Step 3: Record actual task counts**
 
-Return the number of prepared leaf groups from the batched update result and add it to `WriteStats.parallel_tasks`. Set `parallel_width` to one when fewer than two affected leaves are found even if the requested configuration was wider.
+Return the number of scheduled partitions from the batched update result and add it to `WriteStats.parallel_tasks`. Set `parallel_width` to one when fewer than two affected leaves are found even if the requested configuration was wider.
 
 - [ ] **Step 4: Add bounded-read and deterministic-leaf tests**
 
@@ -520,7 +506,7 @@ git commit -m "refactor: extract canonical mutation island replay"
 
 **Interfaces:**
 - Consumes: `ExecutionPolicy`, `MutationIsland`, and `IslandReplay`.
-- Produces: `execute_mutation_islands` and deterministic retry/coalescing before the existing frontier assembly.
+- Produces: `execute_mutation_islands`, bounded admission, and immediate canonical fallback before the existing frontier assembly.
 
 - [ ] **Step 1: Add ordered bounded execution helper**
 
@@ -537,11 +523,11 @@ fn execute_mutation_islands<S: Store>(
 ) -> Result<Vec<IslandReplay>, Error>
 ```
 
-When disabled or only one island exists, execute in order. Otherwise, process `policy.wave_size()` islands per wave with an indexed `par_iter`, collecting ordered `Result<IslandReplay, Error>` values.
+When disabled or only one island exists, execute in order. Otherwise, process `policy.wave_size()` islands per wave with indexed partitions, collecting ordered `Result<IslandReplay, Error>` values.
 
-- [ ] **Step 2: Coalesce failed or touching islands deterministically**
+- [ ] **Step 2: Bound admission and fall back immediately on a failed proof**
 
-After each wave, collect `Vec<Result<IslandReplay, Error>>`, scan it left to right, and return the first error in island order. Keep proved-independent islands. Merge an unproved island with its right neighbor, or with its left neighbor if it is last, by taking the union of both leaf and mutation ranges. Retry merged islands. Stop after the island count no longer decreases and execute the resulting region through the existing sequential canonical loop.
+Before replay, reject dense spans, plans whose guarded leaf coverage exceeds 25%, and plans whose candidates collapse by more than 4:1. After the single bounded wave, scan ordered `Result<IslandReplay, Error>` values left to right and return the first real error. If any replay cannot prove independence, discard every speculative result and execute the existing sequential canonical loop immediately. Do not retry progressively larger regions; empirical testing showed O(n log n) work and pathological tail latency.
 
 Never add emitted bytes from an unproved replay to the publication collector.
 
@@ -559,7 +545,7 @@ stats.coalesced_islands += coalesced_count as u64;
 
 - [ ] **Step 4: Add worker-count and fallback matrices**
 
-For widths `[1, 2, 4, 8, 0]`, compare batch, parallel batch, and fresh-build roots for distant clusters, adjacent clusters, inserts, deletes, and mixed mutations under every built-in chunking policy. Assert at least one distant-cluster fixture uses more than one island on a machine with more than one Rayon worker. Assert the adjacent fixture coalesces and remains canonical.
+For widths `[1, 2, 4, 8, 0]`, compare batch, parallel batch, and fresh-build roots for distant clusters, adjacent clusters, inserts, deletes, and mixed mutations under every built-in chunking policy. Assert at least one distant-cluster fixture uses more than one island on a machine with more than one Rayon worker. Assert the adjacent fixture is rejected by admission and remains canonical.
 
 - [ ] **Step 5: Verify and commit structural parallelism**
 
@@ -684,7 +670,7 @@ git commit -m "refactor: remove inert batch execution controls"
 Add `parallel-scaling` and `parallel-callers` benchmark modes. Parse `PROLLY_WORKERS` as a comma-separated list and default to `1,2,4,8,12,16,0`. For each width, report CSV fields:
 
 ```text
-workload,base_entries,mutations,workers,callers,run,elapsed_ns,ops_per_sec,p50_ns,p95_ns,p99_ns,peak_rss_bytes,nodes_read,nodes_written,bytes_read,bytes_written,batch_get_calls,batch_put_calls,parallel_tasks,structural_islands,coalesced_islands,root
+workload,base_entries,mutations,workers,effective_workers,callers,run,elapsed_ns,ops_per_sec,p50_ns,p95_ns,p99_ns,peak_rss_bytes,nodes_read,nodes_written,bytes_read,bytes_written,batch_get_calls,batch_put_calls,parallel_tasks,structural_islands,coalesced_islands,root
 ```
 
 Before timing, build each fixture once. Outside the timed interval, compare the produced root with width one and a fresh canonical build.
@@ -699,7 +685,7 @@ Use `std::thread::scope` and a barrier to launch 2, 4, and 8 callers against the
 
 - [ ] **Step 4: Capture baseline and candidate measurements**
 
-Run at least five samples per cell in release mode. Record exact commands and host metadata in `README.md`. Minimum commands:
+Run at least five samples per cell in release mode. Round samples up to a complete rotation of configured widths so every width occupies every measurement position equally. Use at least 20 samples for p95/p99 decisions. Record exact commands and host metadata in `README.md`. Minimum commands:
 
 ```bash
 cargo bench --bench prolly_bench -- parallel-scaling 1000000

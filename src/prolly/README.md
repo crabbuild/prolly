@@ -341,8 +341,13 @@ returned by `batch_with_stats`.
 
 `ParallelConfig` changes scheduling only. Width one, explicit wider widths,
 and automatic width use the same canonical boundary engine and produce
-byte-identical roots. Work that cannot prove independence coalesces into the
-sequential canonical fallback.
+byte-identical roots. Dense structural work is rejected before speculation;
+an admitted island that cannot prove independence immediately uses the
+sequential canonical fallback. Under saturated concurrent callers, the
+effective inner width drops to one so caller threads provide the parallelism.
+The reported width is the maximum width actually used; a rejected parallel
+route reports width one and zero tasks. Direct parallel leaf replacement is
+limited to non-growing value updates under key-only entry-count hashing.
 
 ```rust
 use prolly::ParallelConfig;

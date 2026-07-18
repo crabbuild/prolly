@@ -1,16 +1,100 @@
+use std::collections::BTreeMap;
 use std::hint::black_box;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use prolly::{
-    append_batch, chunking, BatchBuilder, BoundaryDetector, BoundaryRule, ChunkingSpec, Config,
-    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver,
-    SortedBatchBuilder, Store, Tree,
+    append_batch, chunking, BatchApplyStats, BatchBuilder, BoundaryDetector, BoundaryRule,
+    ChunkingSpec, Config, MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly,
+    ProllyMetricsSnapshot, Resolution, Resolver, SortedBatchBuilder, Store, Tree,
 };
 
 const DEFAULT_SCALE: usize = 10_000;
+const PARALLEL_BENCH_SEED: u64 = 0xC4A0_11E1_5EED_2026;
+
+#[derive(Clone, Copy, Debug)]
+enum ParallelWorkload {
+    Append,
+    Random,
+    Clustered,
+    ValueOnly,
+    InsertOnly,
+    DeleteOnly,
+    Mixed,
+}
+
+impl ParallelWorkload {
+    const ALL: [Self; 7] = [
+        Self::Append,
+        Self::Random,
+        Self::Clustered,
+        Self::ValueOnly,
+        Self::InsertOnly,
+        Self::DeleteOnly,
+        Self::Mixed,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Append => "append",
+            Self::Random => "random",
+            Self::Clustered => "clustered",
+            Self::ValueOnly => "value-only",
+            Self::InsertOnly => "insert-only",
+            Self::DeleteOnly => "delete-only",
+            Self::Mixed => "mixed-60-20-20",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|workload| workload.name() == value)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ParallelObservation {
+    elapsed_ns: u128,
+    peak_rss_bytes: u64,
+    nodes_read: u64,
+    nodes_written: u64,
+    bytes_read: u64,
+    bytes_written: u64,
+    batch_get_calls: u64,
+    batch_put_calls: u64,
+    effective_workers: usize,
+    parallel_tasks: usize,
+    structural_islands: usize,
+    coalesced_islands: usize,
+    root: String,
+}
 
 fn main() {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    let explicit_mode = args.first().map(String::as_str);
+    let environment_mode = std::env::var("PROLLY_BENCH_ONLY").ok();
+    let mode = explicit_mode.or(environment_mode.as_deref());
+    if matches!(mode, Some("parallel-scaling" | "parallel-callers")) {
+        let base_entries = benchmark_sizes(
+            args.get(1),
+            "PROLLY_BASE_ENTRIES",
+            &[100_000, 1_000_000, 10_000_000],
+        );
+        let mutations = benchmark_sizes(
+            args.get(2),
+            "PROLLY_MUTATIONS",
+            &[1_000, 10_000, 100_000, 1_000_000],
+        );
+        match mode {
+            Some("parallel-scaling") => bench_parallel_scaling(&base_entries, &mutations),
+            Some("parallel-callers") => bench_parallel_callers(&base_entries, &mutations),
+            _ => unreachable!(),
+        }
+        return;
+    }
+
     let scale = std::env::var("PROLLY_BENCH_SCALE")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -89,6 +173,596 @@ fn main() {
     bench_range_diff_window(scale);
     bench_merge_sparse(scale);
     bench_merge_conflict_resolved(scale);
+}
+
+fn bench_parallel_scaling(base_sizes: &[usize], mutation_sizes: &[usize]) {
+    let workers = parse_usize_list("PROLLY_WORKERS", &[1, 2, 4, 8, 12, 16, 0]);
+    let workloads = parallel_workloads();
+    let runs = balanced_benchmark_runs(benchmark_runs(), workers.len());
+    print_parallel_csv_header();
+
+    for &base_entries in base_sizes {
+        let entries = data_set(base_entries);
+        let config = bench_config();
+        let store = Arc::new(MemStore::new());
+        let base = build_tree_on_store(store.clone(), &config, &entries);
+
+        for &mutations_len in mutation_sizes {
+            for &workload in &workloads {
+                let mutations = parallel_mutations(workload, base_entries, mutations_len, 0);
+                let reference = apply_parallel_once(store.clone(), &config, &base, &mutations, 1);
+                let fresh = fresh_canonical_root(&config, &entries, &mutations);
+                assert_eq!(
+                    reference.root,
+                    tree_root_hex(&fresh),
+                    "fresh canonical root mismatch for {} base={} mutations={}",
+                    workload.name(),
+                    base_entries,
+                    mutations_len
+                );
+
+                let mut observations_by_worker = workers
+                    .iter()
+                    .map(|_| Vec::with_capacity(runs))
+                    .collect::<Vec<_>>();
+                for run in 0..runs {
+                    for offset in 0..workers.len() {
+                        let worker_index = (run + offset) % workers.len();
+                        let requested_workers = workers[worker_index];
+                        let observation = apply_parallel_once(
+                            store.clone(),
+                            &config,
+                            &base,
+                            &mutations,
+                            requested_workers,
+                        );
+                        assert_eq!(
+                            observation.root,
+                            reference.root,
+                            "worker root mismatch for {} base={} mutations={} workers={}",
+                            workload.name(),
+                            base_entries,
+                            mutations_len,
+                            requested_workers
+                        );
+                        observations_by_worker[worker_index].push(observation);
+                    }
+                }
+
+                for (worker_index, &requested_workers) in workers.iter().enumerate() {
+                    let observations = &observations_by_worker[worker_index];
+                    let latencies = observations
+                        .iter()
+                        .map(|observation| observation.elapsed_ns)
+                        .collect::<Vec<_>>();
+                    let percentiles = latency_percentiles(&latencies);
+                    for (run, observation) in observations.iter().enumerate() {
+                        print_parallel_csv_row(
+                            workload.name(),
+                            base_entries,
+                            mutations_len,
+                            requested_workers,
+                            1,
+                            run + 1,
+                            observation,
+                            percentiles,
+                            mutations_len,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn bench_parallel_callers(base_sizes: &[usize], mutation_sizes: &[usize]) {
+    let workers = parse_usize_list("PROLLY_WORKERS", &[1, 2, 4, 8, 12, 16, 0]);
+    let callers = parse_usize_list("PROLLY_CALLERS", &[2, 4, 8]);
+    let workloads = parallel_workloads();
+    let runs = balanced_benchmark_runs(benchmark_runs(), workers.len());
+    print_parallel_csv_header();
+
+    for &base_entries in base_sizes {
+        let entries = data_set(base_entries);
+        let config = bench_config();
+        let store = Arc::new(MemStore::new());
+        let base = build_tree_on_store(store.clone(), &config, &entries);
+
+        for &mutations_len in mutation_sizes {
+            for &workload in &workloads {
+                let max_callers = callers.iter().copied().max().unwrap_or(0);
+                let all_caller_mutations = (0..max_callers)
+                    .map(|caller| {
+                        Arc::new(parallel_mutations(
+                            workload,
+                            base_entries,
+                            mutations_len,
+                            caller + 1,
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+                let all_reference_roots = all_caller_mutations
+                    .iter()
+                    .map(|mutations| {
+                        let reference =
+                            apply_parallel_once(store.clone(), &config, &base, mutations, 1);
+                        let fresh = fresh_canonical_root(&config, &entries, mutations);
+                        assert_eq!(
+                            reference.root,
+                            tree_root_hex(&fresh),
+                            "fresh caller root mismatch for {}",
+                            workload.name(),
+                        );
+                        reference.root
+                    })
+                    .collect::<Vec<_>>();
+
+                for &caller_count in &callers {
+                    let caller_mutations = &all_caller_mutations[..caller_count];
+                    let reference_roots = &all_reference_roots[..caller_count];
+
+                    let mut observations_by_worker = workers
+                        .iter()
+                        .map(|_| Vec::with_capacity(runs))
+                        .collect::<Vec<_>>();
+                    let mut latencies_by_worker = workers
+                        .iter()
+                        .map(|_| Vec::with_capacity(runs * caller_count))
+                        .collect::<Vec<_>>();
+                    for run in 0..runs {
+                        for offset in 0..workers.len() {
+                            let worker_index = (run + offset) % workers.len();
+                            let requested_workers = workers[worker_index];
+                            let barrier = Arc::new(Barrier::new(caller_count + 1));
+                            let (total_elapsed, observations) = thread::scope(|scope| {
+                                let mut handles = Vec::with_capacity(caller_count);
+                                for mutations in caller_mutations {
+                                    let store = store.clone();
+                                    let config = config.clone();
+                                    let base = base.clone();
+                                    let barrier = barrier.clone();
+                                    let mutations = mutations.clone();
+                                    handles.push(scope.spawn(move || {
+                                        let manager = Prolly::new(store, config);
+                                        let mutations = (*mutations).clone();
+                                        barrier.wait();
+                                        let start = Instant::now();
+                                        let result = manager
+                                            .parallel_batch_with_stats(
+                                                &base,
+                                                mutations,
+                                                &ParallelConfig::new(requested_workers, 1),
+                                            )
+                                            .unwrap();
+                                        let elapsed = start.elapsed();
+                                        parallel_observation(
+                                            elapsed,
+                                            result.stats,
+                                            manager.metrics(),
+                                            &result.tree,
+                                        )
+                                    }));
+                                }
+
+                                let start = Instant::now();
+                                barrier.wait();
+                                let observations = handles
+                                    .into_iter()
+                                    .map(|handle| handle.join().unwrap())
+                                    .collect::<Vec<_>>();
+                                (start.elapsed(), observations)
+                            });
+
+                            for (caller, observation) in observations.iter().enumerate() {
+                                assert_eq!(
+                                    observation.root,
+                                    reference_roots[caller],
+                                    "concurrent root mismatch for {} callers={} workers={} caller={}",
+                                    workload.name(),
+                                    caller_count,
+                                    requested_workers,
+                                    caller
+                                );
+                                latencies_by_worker[worker_index].push(observation.elapsed_ns);
+                            }
+                            observations_by_worker[worker_index].push(
+                                aggregate_parallel_observations(total_elapsed, &observations),
+                            );
+                        }
+                    }
+
+                    for (worker_index, &requested_workers) in workers.iter().enumerate() {
+                        let percentiles = latency_percentiles(&latencies_by_worker[worker_index]);
+                        let run_observations = &observations_by_worker[worker_index];
+                        for (run, observation) in run_observations.iter().enumerate() {
+                            print_parallel_csv_row(
+                                workload.name(),
+                                base_entries,
+                                mutations_len,
+                                requested_workers,
+                                caller_count,
+                                run + 1,
+                                observation,
+                                percentiles,
+                                mutations_len.saturating_mul(caller_count),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn apply_parallel_once(
+    store: Arc<MemStore>,
+    config: &Config,
+    base: &Tree,
+    mutations: &[Mutation],
+    requested_workers: usize,
+) -> ParallelObservation {
+    let manager = Prolly::new(store, config.clone());
+    let start = Instant::now();
+    let result = manager
+        .parallel_batch_with_stats(
+            base,
+            mutations.to_vec(),
+            &ParallelConfig::new(requested_workers, 1),
+        )
+        .unwrap();
+    parallel_observation(
+        start.elapsed(),
+        result.stats,
+        manager.metrics(),
+        &result.tree,
+    )
+}
+
+fn parallel_observation(
+    elapsed: Duration,
+    stats: BatchApplyStats,
+    metrics: ProllyMetricsSnapshot,
+    tree: &Tree,
+) -> ParallelObservation {
+    ParallelObservation {
+        elapsed_ns: elapsed.as_nanos(),
+        peak_rss_bytes: peak_rss_bytes(),
+        nodes_read: metrics.nodes_read,
+        nodes_written: metrics.nodes_written,
+        bytes_read: metrics.bytes_read,
+        bytes_written: metrics.bytes_written,
+        batch_get_calls: metrics.store_batch_get_calls,
+        batch_put_calls: metrics.store_batch_put_calls,
+        effective_workers: stats.parallel_width,
+        parallel_tasks: stats.parallel_tasks,
+        structural_islands: stats.structural_islands,
+        coalesced_islands: stats.coalesced_islands,
+        root: tree_root_hex(tree),
+    }
+}
+
+fn aggregate_parallel_observations(
+    total_elapsed: Duration,
+    observations: &[ParallelObservation],
+) -> ParallelObservation {
+    ParallelObservation {
+        elapsed_ns: total_elapsed.as_nanos(),
+        peak_rss_bytes: observations
+            .iter()
+            .map(|observation| observation.peak_rss_bytes)
+            .max()
+            .unwrap_or_default(),
+        nodes_read: observations.iter().map(|value| value.nodes_read).sum(),
+        nodes_written: observations.iter().map(|value| value.nodes_written).sum(),
+        bytes_read: observations.iter().map(|value| value.bytes_read).sum(),
+        bytes_written: observations.iter().map(|value| value.bytes_written).sum(),
+        batch_get_calls: observations.iter().map(|value| value.batch_get_calls).sum(),
+        batch_put_calls: observations.iter().map(|value| value.batch_put_calls).sum(),
+        effective_workers: observations
+            .iter()
+            .map(|value| value.effective_workers)
+            .max()
+            .unwrap_or(1),
+        parallel_tasks: observations.iter().map(|value| value.parallel_tasks).sum(),
+        structural_islands: observations
+            .iter()
+            .map(|value| value.structural_islands)
+            .sum(),
+        coalesced_islands: observations
+            .iter()
+            .map(|value| value.coalesced_islands)
+            .sum(),
+        root: observations
+            .iter()
+            .map(|value| value.root.as_str())
+            .collect::<Vec<_>>()
+            .join("|"),
+    }
+}
+
+fn fresh_canonical_root(
+    config: &Config,
+    base_entries: &[(Vec<u8>, Vec<u8>)],
+    mutations: &[Mutation],
+) -> Tree {
+    let mut expected = base_entries.iter().cloned().collect::<BTreeMap<_, _>>();
+    for mutation in mutations {
+        match mutation {
+            Mutation::Upsert { key, val } => {
+                expected.insert(key.clone(), val.clone());
+            }
+            Mutation::Delete { key } => {
+                expected.remove(key);
+            }
+        }
+    }
+    let store = Arc::new(MemStore::new());
+    let mut builder = SortedBatchBuilder::new(store, config.clone());
+    for (key, value) in expected {
+        builder.add(key, value).unwrap();
+    }
+    builder.build().unwrap()
+}
+
+fn parallel_mutations(
+    workload: ParallelWorkload,
+    base_entries: usize,
+    mutation_count: usize,
+    lane: usize,
+) -> Vec<Mutation> {
+    let seed = PARALLEL_BENCH_SEED ^ (lane as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let (offset, step) = permutation_parameters(base_entries, seed);
+    let existing_index = |index: usize| {
+        if base_entries == 0 {
+            0
+        } else {
+            (offset + index.wrapping_mul(step)) % base_entries
+        }
+    };
+    let clustered_span = base_entries
+        .min(mutation_count.max((base_entries / 100).max(1)))
+        .max(1);
+    let clustered_start = base_entries.saturating_sub(clustered_span) / 2;
+
+    (0..mutation_count)
+        .map(|index| {
+            let existing = existing_index(index);
+            // Keep updates no larger than the base fixture values so the
+            // key-stable workload measures parallel rewrite work rather than
+            // intentionally triggering the hard-byte-cap fallback.
+            let value = || format!("{:016x}", splitmix64(seed ^ index as u64)).into_bytes();
+            let insert = || Mutation::Upsert {
+                key: format!("key-{existing:08}-insert-{lane:04}-{index:012}").into_bytes(),
+                val: value(),
+            };
+            match workload {
+                ParallelWorkload::Append => Mutation::Upsert {
+                    key: key_for_index(
+                        base_entries
+                            .saturating_add(lane.saturating_mul(mutation_count))
+                            .saturating_add(index),
+                    ),
+                    val: value(),
+                },
+                ParallelWorkload::Random => match index % 4 {
+                    0 | 1 => Mutation::Upsert {
+                        key: key_for_index(existing),
+                        val: value(),
+                    },
+                    2 => Mutation::Delete {
+                        key: key_for_index(existing),
+                    },
+                    _ => insert(),
+                },
+                ParallelWorkload::Clustered => {
+                    let clustered = clustered_start + index % clustered_span;
+                    match index % 5 {
+                        0 => Mutation::Delete {
+                            key: key_for_index(clustered),
+                        },
+                        1 => Mutation::Upsert {
+                            key: format!("key-{clustered:08}-cluster-{lane:04}-{index:012}")
+                                .into_bytes(),
+                            val: value(),
+                        },
+                        _ => Mutation::Upsert {
+                            key: key_for_index(clustered),
+                            val: value(),
+                        },
+                    }
+                }
+                ParallelWorkload::ValueOnly => Mutation::Upsert {
+                    key: key_for_index(existing),
+                    val: value(),
+                },
+                ParallelWorkload::InsertOnly => insert(),
+                ParallelWorkload::DeleteOnly => Mutation::Delete {
+                    key: key_for_index(existing),
+                },
+                ParallelWorkload::Mixed => match index % 5 {
+                    0 => Mutation::Delete {
+                        key: key_for_index(existing),
+                    },
+                    1 => insert(),
+                    _ => Mutation::Upsert {
+                        key: key_for_index(existing),
+                        val: value(),
+                    },
+                },
+            }
+        })
+        .collect()
+}
+
+fn permutation_parameters(modulus: usize, seed: u64) -> (usize, usize) {
+    if modulus <= 1 {
+        return (0, 1);
+    }
+    let offset = (splitmix64(seed) as usize) % modulus;
+    let mut step = ((splitmix64(seed ^ 0xA076_1D64_78BD_642F) as usize) % modulus).max(1);
+    while greatest_common_divisor(step, modulus) != 1 {
+        step = step.wrapping_add(1) % modulus;
+        if step == 0 {
+            step = 1;
+        }
+    }
+    (offset, step)
+}
+
+fn greatest_common_divisor(mut left: usize, mut right: usize) -> usize {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left
+}
+
+fn splitmix64(mut value: u64) -> u64 {
+    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut mixed = value;
+    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    mixed ^ (mixed >> 31)
+}
+
+fn benchmark_sizes(
+    positional: Option<&String>,
+    environment: &str,
+    defaults: &[usize],
+) -> Vec<usize> {
+    if let Some(value) = positional {
+        return value
+            .parse::<usize>()
+            .ok()
+            .filter(|value| *value > 0)
+            .into_iter()
+            .collect::<Vec<_>>();
+    }
+    parse_usize_list(environment, defaults)
+}
+
+fn parse_usize_list(environment: &str, defaults: &[usize]) -> Vec<usize> {
+    std::env::var(environment)
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .filter_map(|part| part.trim().parse::<usize>().ok())
+                .collect::<Vec<_>>()
+        })
+        .filter(|values| !values.is_empty())
+        .unwrap_or_else(|| defaults.to_vec())
+}
+
+fn parallel_workloads() -> Vec<ParallelWorkload> {
+    std::env::var("PROLLY_WORKLOADS")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .filter_map(|part| ParallelWorkload::parse(part.trim()))
+                .collect::<Vec<_>>()
+        })
+        .filter(|values| !values.is_empty())
+        .unwrap_or_else(|| ParallelWorkload::ALL.to_vec())
+}
+
+fn benchmark_runs() -> usize {
+    std::env::var("PROLLY_BENCH_RUNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(5)
+        .max(1)
+}
+
+fn balanced_benchmark_runs(requested: usize, widths: usize) -> usize {
+    requested
+        .div_ceil(widths.max(1))
+        .saturating_mul(widths.max(1))
+}
+
+fn latency_percentiles(samples: &[u128]) -> (u128, u128, u128) {
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+    let percentile = |percent: usize| {
+        let rank = (percent * sorted.len()).div_ceil(100).max(1);
+        sorted[rank - 1]
+    };
+    (percentile(50), percentile(95), percentile(99))
+}
+
+fn print_parallel_csv_header() {
+    println!(
+        "workload,base_entries,mutations,workers,effective_workers,callers,run,elapsed_ns,ops_per_sec,p50_ns,p95_ns,p99_ns,peak_rss_bytes,nodes_read,nodes_written,bytes_read,bytes_written,batch_get_calls,batch_put_calls,parallel_tasks,structural_islands,coalesced_islands,root"
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn print_parallel_csv_row(
+    workload: &str,
+    base_entries: usize,
+    mutations: usize,
+    requested_workers: usize,
+    callers: usize,
+    run: usize,
+    observation: &ParallelObservation,
+    percentiles: (u128, u128, u128),
+    total_operations: usize,
+) {
+    let operations_per_second =
+        total_operations as f64 * 1_000_000_000.0 / observation.elapsed_ns.max(1) as f64;
+    println!(
+        "{workload},{base_entries},{mutations},{requested_workers},{},{callers},{run},{},{operations_per_second:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+        observation.effective_workers,
+        observation.elapsed_ns,
+        percentiles.0,
+        percentiles.1,
+        percentiles.2,
+        observation.peak_rss_bytes,
+        observation.nodes_read,
+        observation.nodes_written,
+        observation.bytes_read,
+        observation.bytes_written,
+        observation.batch_get_calls,
+        observation.batch_put_calls,
+        observation.parallel_tasks,
+        observation.structural_islands,
+        observation.coalesced_islands,
+        observation.root,
+    );
+}
+
+fn tree_root_hex(tree: &Tree) -> String {
+    tree.root
+        .as_ref()
+        .map(|root| {
+            root.as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        })
+        .unwrap_or_else(|| "empty".to_owned())
+}
+
+#[cfg(unix)]
+fn peak_rss_bytes() -> u64 {
+    let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
+    let status = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
+    if status != 0 {
+        return 0;
+    }
+    let resident = unsafe { usage.assume_init() }.ru_maxrss.max(0) as u64;
+    if cfg!(any(target_os = "macos", target_os = "ios")) {
+        resident
+    } else {
+        resident.saturating_mul(1024)
+    }
+}
+
+#[cfg(not(unix))]
+fn peak_rss_bytes() -> u64 {
+    0
 }
 
 fn bench_boundary_hot_path() {

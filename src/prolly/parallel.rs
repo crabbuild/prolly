@@ -3,12 +3,36 @@
 //! Parallel configuration may change bounded I/O scheduling, but never the
 //! chunking algorithm or resulting root.
 
+use std::cell::Cell;
 use std::ops::Range;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::batch::{self, BatchApplyResult};
 use super::error::{Error, Mutation};
 use super::store::Store;
 use super::{Prolly, Tree};
+
+static ACTIVE_CANONICAL_WRITES: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    static CANONICAL_WRITE_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+pub(crate) struct CanonicalWriteConcurrencyGuard;
+
+impl CanonicalWriteConcurrencyGuard {
+    pub(crate) fn enter() -> Self {
+        CANONICAL_WRITE_DEPTH.with(|depth| depth.set(depth.get().saturating_add(1)));
+        ACTIVE_CANONICAL_WRITES.fetch_add(1, Ordering::AcqRel);
+        Self
+    }
+}
+
+impl Drop for CanonicalWriteConcurrencyGuard {
+    fn drop(&mut self) {
+        ACTIVE_CANONICAL_WRITES.fetch_sub(1, Ordering::AcqRel);
+        CANONICAL_WRITE_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
+    }
+}
 
 /// Runtime-only parallelism preferences for canonical batch writes.
 #[derive(Clone, Debug)]
@@ -53,6 +77,7 @@ impl ParallelConfig {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ExecutionPolicy {
     width: usize,
+    read_width: usize,
     wave_size: usize,
     enabled: bool,
 }
@@ -64,7 +89,17 @@ impl ExecutionPolicy {
         independent_work: usize,
     ) -> Self {
         let pool_width = rayon::current_num_threads().max(1);
-        let configured = if config.max_threads == 0 {
+        let active_writes = CANONICAL_WRITE_DEPTH.with(|depth| {
+            if depth.get() == 0 {
+                1
+            } else {
+                ACTIVE_CANONICAL_WRITES.load(Ordering::Acquire).max(1)
+            }
+        });
+        let saturated_by_callers = active_writes.saturating_mul(3) > pool_width;
+        let configured = if saturated_by_callers {
+            1
+        } else if config.max_threads == 0 {
             pool_width
         } else {
             config.max_threads.min(pool_width).max(1)
@@ -74,8 +109,18 @@ impl ExecutionPolicy {
             && independent_work > 1
             && effective_mutations >= config.parallelism_threshold;
         let width = if enabled { width } else { 1 };
+        let read_width = if enabled {
+            if config.max_threads == 0 {
+                16.max(pool_width).min(independent_work.max(1))
+            } else {
+                width
+            }
+        } else {
+            1
+        };
         Self {
             width,
+            read_width,
             wave_size: width.saturating_mul(4).max(1),
             enabled,
         }
@@ -93,6 +138,7 @@ impl ExecutionPolicy {
     pub(crate) fn sequential() -> Self {
         Self {
             width: 1,
+            read_width: 1,
             wave_size: 1,
             enabled: false,
         }
@@ -106,6 +152,10 @@ impl ExecutionPolicy {
         self.width
     }
 
+    pub(crate) fn read_width(self) -> usize {
+        self.read_width
+    }
+
     pub(crate) fn wave_size(self) -> usize {
         self.wave_size
     }
@@ -114,8 +164,14 @@ impl ExecutionPolicy {
         let width = self.width.min(independent_work.max(1));
         let enabled = self.enabled && width > 1 && independent_work > 1;
         let width = if enabled { width } else { 1 };
+        let read_width = if enabled {
+            self.read_width.min(independent_work.max(1))
+        } else {
+            1
+        };
         Self {
             width,
+            read_width,
             wave_size: width.saturating_mul(4).max(1),
             enabled,
         }
@@ -145,7 +201,7 @@ pub(crate) fn parallel_batch_with_stats<S: Store>(
 
 #[cfg(test)]
 mod tests {
-    use super::{ExecutionPolicy, ParallelConfig};
+    use super::{CanonicalWriteConcurrencyGuard, ExecutionPolicy, ParallelConfig};
 
     #[test]
     fn execution_policy_honors_threshold_and_width() {
@@ -173,5 +229,17 @@ mod tests {
         let covered = ranges.into_iter().flatten().collect::<Vec<_>>();
         assert_eq!(covered, (0..17).collect::<Vec<_>>());
         assert!(policy.ranges(0).is_empty());
+    }
+
+    #[test]
+    fn execution_policy_disables_inner_work_when_callers_saturate_the_pool() {
+        let guards = (0..rayon::current_num_threads().max(1))
+            .map(|_| CanonicalWriteConcurrencyGuard::enter())
+            .collect::<Vec<_>>();
+        let policy = ExecutionPolicy::from_config(&ParallelConfig::new(0, 1), 1_000, 1_000);
+
+        assert_eq!(policy.width(), 1);
+        assert!(!policy.enabled());
+        drop(guards);
     }
 }
