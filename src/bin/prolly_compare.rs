@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use prolly::{Config, MemStore, Mutation, Prolly, Tree};
 
 const CLUSTER_SIZE: usize = 1_000;
+const CONTRACT_VERSION: &str = "prolly-compare-v1";
 const DEFAULT_POINT_READS: usize = 100_000;
 const RANDOM_SEED: u64 = 0x6a09_e667_f3bc_c909;
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -76,9 +77,7 @@ fn main() {
     let revision = env::var("BENCH_REVISION").unwrap_or_else(|_| "unknown".to_string());
     let result = run_scenario(&args);
 
-    println!(
-        "implementation,revision,records,phase,workload,operation,operations,elapsed_ns,ns_per_op,ops_per_sec,workload_digest,result_count,validated"
-    );
+    println!("{}", csv_header());
     emit(
         &revision,
         &args,
@@ -467,6 +466,29 @@ fn digest_bytes(mut digest: u64, bytes: &[u8]) -> u64 {
     digest
 }
 
+#[cfg(test)]
+fn workload_digest(phase: Phase, workload: Workload, records: usize) -> u64 {
+    let operations = match phase {
+        Phase::Fresh => records,
+        Phase::Mutation => records * 30 / 100,
+    };
+    let mut digest = FNV_OFFSET;
+    for index in 0..operations {
+        let (position, generation) = match phase {
+            Phase::Fresh => (fresh_id(workload, index, records) * 2, 0),
+            Phase::Mutation => (mutation_position(workload, index, records, operations), 1),
+        };
+        let key = key_for_position(position);
+        let value = value_for_position(position, generation);
+        digest = digest_operation(digest, &key, &value);
+    }
+    digest
+}
+
+fn csv_header() -> &'static str {
+    "implementation,revision,contract_version,records,phase,workload,operation,operations,elapsed_ns,ns_per_op,ops_per_sec,workload_digest,result_count,validated"
+}
+
 fn emit(
     revision: &str,
     args: &Args,
@@ -480,7 +502,7 @@ fn emit(
     let ns_per_op = elapsed_ns as f64 / operations.max(1) as f64;
     let ops_per_sec = operations as f64 * 1_000_000_000.0 / elapsed_ns.max(1) as f64;
     println!(
-        "rust,{revision},{},{},{},{operation},{operations},{elapsed_ns},{ns_per_op:.3},{ops_per_sec:.3},{digest:016x},{result_count},true",
+        "rust,{revision},{CONTRACT_VERSION},{},{},{},{operation},{operations},{elapsed_ns},{ns_per_op:.3},{ops_per_sec:.3},{digest:016x},{result_count},true",
         args.records,
         args.phase.name(),
         args.workload.name(),
@@ -539,35 +561,59 @@ mod tests {
     fn mutation_mix_has_equal_updates_and_inserts() {
         let records = 10_000;
         let writes = records * 30 / 100;
-        let positions = (0..writes)
-            .map(|index| mutation_position(Workload::Random, index, records, writes))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            positions
-                .iter()
-                .filter(|position| **position % 2 == 0)
-                .count(),
-            1_500
-        );
-        assert_eq!(
-            positions
-                .iter()
-                .filter(|position| **position % 2 == 1)
-                .count(),
-            1_500
-        );
-        assert_eq!(positions.iter().collect::<BTreeSet<_>>().len(), writes);
+        for workload in [Workload::Random, Workload::Clustered] {
+            let positions = (0..writes)
+                .map(|index| mutation_position(workload, index, records, writes))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                positions
+                    .iter()
+                    .filter(|position| **position % 2 == 0)
+                    .count(),
+                1_500,
+                "{workload:?} update count"
+            );
+            assert_eq!(
+                positions
+                    .iter()
+                    .filter(|position| **position % 2 == 1)
+                    .count(),
+                1_500,
+                "{workload:?} insert count"
+            );
+            assert_eq!(
+                positions.iter().collect::<BTreeSet<_>>().len(),
+                writes,
+                "{workload:?} mutation positions must be unique"
+            );
+        }
     }
 
     #[test]
-    fn workload_contract_has_stable_digest() {
-        let mut digest = FNV_OFFSET;
-        for index in 0..10_000 {
-            let id = fresh_id(Workload::Random, index, 10_000);
-            let key = key_for_position(id * 2);
-            let value = value_for_position(id * 2, 0);
-            digest = digest_operation(digest, &key, &value);
+    fn workload_contract_has_stable_digests() {
+        let cases = [
+            (Phase::Fresh, Workload::Append, 0x51f5_5fcd_5918_7cbf),
+            (Phase::Fresh, Workload::Random, 0x0041_97dd_790a_1245),
+            (Phase::Fresh, Workload::Clustered, 0x86e3_8047_f6ae_04b3),
+            (Phase::Mutation, Workload::Append, 0x2ef1_df79_e122_6620),
+            (Phase::Mutation, Workload::Random, 0x3bc7_e45e_f276_a1c5),
+            (Phase::Mutation, Workload::Clustered, 0x5cae_d8db_d305_6277),
+        ];
+        for (phase, workload, expected) in cases {
+            assert_eq!(
+                workload_digest(phase, workload, 10_000),
+                expected,
+                "{phase:?}/{workload:?}"
+            );
         }
-        assert_eq!(digest, 0x0041_97dd_790a_1245);
+    }
+
+    #[test]
+    fn csv_schema_includes_contract_version() {
+        assert_eq!(CONTRACT_VERSION, "prolly-compare-v1");
+        assert_eq!(
+            csv_header(),
+            "implementation,revision,contract_version,records,phase,workload,operation,operations,elapsed_ns,ns_per_op,ops_per_sec,workload_digest,result_count,validated"
+        );
     }
 }
