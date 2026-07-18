@@ -23,6 +23,8 @@ fn legacy_chunking_and_rebalancing_surfaces_are_absent() {
     let forbidden = [
         ["is_boundary", "_config"].concat(),
         ["is_hash_boundary", "_config"].concat(),
+        ["isBoundary", "Config"].concat(),
+        ["isBoundary", "ConfigJson"].concat(),
         ["Parallel", "Rebalancer"].concat(),
         ["DefaultParallel", "Rebalancer"].concat(),
         ["rebalance", "::"].concat(),

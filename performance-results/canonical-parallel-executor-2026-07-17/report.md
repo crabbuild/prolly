@@ -59,6 +59,8 @@ Pure insert batches also stayed at width one: the representative route preflight
 - Batched route safety now reads the actual shared route path rather than an empty legacy ancestor vector.
 - Rightmost leaves no longer bypass the value-stability requirement. Only key-only entry-count hashing can use the direct value executor.
 - `parallel_width` reports width actually used. A policy that admits width 12 but performs no independent work reports width one and zero tasks.
+- Explicitly bounded work now creates exactly the admitted partition count with balanced contiguous ranges; the prior ceiling-based splitter could under-partition near one-item-per-worker inputs.
+- The binding hard cutover was completed after the benchmark run: Go decoders now consume the four executor telemetry fields, public Go/Node/JVM facades expose them, and the remaining Node entry-count boundary helper was removed. Cross-language parity tests cover width-one telemetry so a shortened wire decoder fails immediately.
 
 ## Memory and limitations
 

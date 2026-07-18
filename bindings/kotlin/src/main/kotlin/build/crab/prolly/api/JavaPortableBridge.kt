@@ -115,6 +115,10 @@ data class JavaBatchApplyStats(
     val usedDeferredRebalancing: Boolean,
     val usedBottomUpRebuild: Boolean,
     val cacheWrittenNodes: Boolean,
+    val parallelWidth: Long,
+    val parallelTasks: Long,
+    val structuralIslands: Long,
+    val coalescedIslands: Long,
 )
 
 data class JavaVersionedMapBatchResult(
@@ -797,6 +801,8 @@ private fun BatchApplyStatsRecord.toJava() = JavaBatchApplyStats(
     affectedLeaves.toLong(), changedLeaves.toLong(), sparseLeafApplies.toLong(),
     writtenNodes.toLong(), writtenBytes.toLong(), usedAppendFastPath, usedBatchedRoute,
     usedCoalescedRebuild, usedDeferredRebalancing, usedBottomUpRebuild, cacheWrittenNodes,
+    parallelWidth.toLong(), parallelTasks.toLong(), structuralIslands.toLong(),
+    coalescedIslands.toLong(),
 )
 
 object JavaPortableBridge {

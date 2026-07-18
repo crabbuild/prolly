@@ -75,6 +75,8 @@ test("async native wrapper preserves core tree behavior", { skip: native === nul
   assert.equal(parallelStats.stats.inputMutations, "2");
   assert.equal(parallelStats.stats.effectiveMutations, "2");
   assert.notEqual(parallelStats.stats.writtenNodes, "0");
+  assert.equal(parallelStats.stats.parallelWidth, "1");
+  assert.equal(parallelStats.stats.parallelTasks, "0");
 
   const changed = await engine.put(tree, bytes("b"), bytes("22"));
   const diffs = await engine.diff(tree, changed);

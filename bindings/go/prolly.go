@@ -562,6 +562,10 @@ type BatchApplyStats struct {
 	UsedDeferredRebalancing bool
 	UsedBottomUpRebuild     bool
 	CacheWrittenNodes       bool
+	ParallelWidth           uint64
+	ParallelTasks           uint64
+	StructuralIslands       uint64
+	CoalescedIslands        uint64
 }
 
 type BatchApplyResult struct {
@@ -582,6 +586,10 @@ type WriteStats struct {
 	ResyncDistanceNodes        uint64
 	UsedKeyStableFastPath      bool
 	UsedBatchedValueUpdatePath bool
+	ParallelWidth              uint64
+	ParallelTasks              uint64
+	StructuralIslands          uint64
+	CoalescedIslands           uint64
 }
 
 type WriteResult struct {
@@ -9743,6 +9751,22 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 	if err != nil {
 		return BatchApplyStats{}, err
 	}
+	parallelWidth, err := d.readUint64()
+	if err != nil {
+		return BatchApplyStats{}, err
+	}
+	parallelTasks, err := d.readUint64()
+	if err != nil {
+		return BatchApplyStats{}, err
+	}
+	structuralIslands, err := d.readUint64()
+	if err != nil {
+		return BatchApplyStats{}, err
+	}
+	coalescedIslands, err := d.readUint64()
+	if err != nil {
+		return BatchApplyStats{}, err
+	}
 	return BatchApplyStats{
 		InputMutations:          inputMutations,
 		EffectiveMutations:      effectiveMutations,
@@ -9758,6 +9782,10 @@ func (d *byteDecoder) readBatchApplyStats() (BatchApplyStats, error) {
 		UsedDeferredRebalancing: usedDeferredRebalancing,
 		UsedBottomUpRebuild:     usedBottomUpRebuild,
 		CacheWrittenNodes:       cacheWrittenNodes,
+		ParallelWidth:           parallelWidth,
+		ParallelTasks:           parallelTasks,
+		StructuralIslands:       structuralIslands,
+		CoalescedIslands:        coalescedIslands,
 	}, nil
 }
 
@@ -9810,6 +9838,22 @@ func (d *byteDecoder) readWriteStats() (WriteStats, error) {
 	if err != nil {
 		return WriteStats{}, err
 	}
+	parallelWidth, err := d.readUint64()
+	if err != nil {
+		return WriteStats{}, err
+	}
+	parallelTasks, err := d.readUint64()
+	if err != nil {
+		return WriteStats{}, err
+	}
+	structuralIslands, err := d.readUint64()
+	if err != nil {
+		return WriteStats{}, err
+	}
+	coalescedIslands, err := d.readUint64()
+	if err != nil {
+		return WriteStats{}, err
+	}
 	return WriteStats{
 		InputMutations:             inputMutations,
 		EffectiveMutations:         effectiveMutations,
@@ -9823,6 +9867,10 @@ func (d *byteDecoder) readWriteStats() (WriteStats, error) {
 		ResyncDistanceNodes:        resyncDistanceNodes,
 		UsedKeyStableFastPath:      usedKeyStableFastPath,
 		UsedBatchedValueUpdatePath: usedBatchedValueUpdatePath,
+		ParallelWidth:              parallelWidth,
+		ParallelTasks:              parallelTasks,
+		StructuralIslands:          structuralIslands,
+		CoalescedIslands:           coalescedIslands,
 	}, nil
 }
 

@@ -515,6 +515,12 @@ test("versioned maps expose owned batch CAS and version-pinned point reads", asy
     assert.equal(Buffer.from(await map.getAt(first.id, bytes("a")) ?? []).toString(), "one");
     const batch = await map.applyIf(applied.current!.id, [{ kind: "delete", key: bytes("b") }]);
     assert.equal(batch.kind, "applied");
+    const parallel = await map.parallelApply(
+      [{ kind: "upsert", key: bytes("parallel"), value: bytes("stats") }],
+      { maxThreads: 1n, parallelismThreshold: 1n },
+    );
+    assert.equal(parallel.stats.parallelWidth, 1n);
+    assert.equal(parallel.stats.parallelTasks, 0n);
   } finally {
     engine.close();
   }

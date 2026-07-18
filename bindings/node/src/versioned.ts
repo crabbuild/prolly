@@ -49,6 +49,10 @@ export interface VersionedBatchApplyStats {
   usedDeferredRebalancing: boolean;
   usedBottomUpRebuild: boolean;
   cacheWrittenNodes: boolean;
+  parallelWidth: bigint;
+  parallelTasks: bigint;
+  structuralIslands: bigint;
+  coalescedIslands: bigint;
 }
 export interface VersionedMapBatchResult { version: MapVersion; stats: VersionedBatchApplyStats; }
 export interface CatalogVerification {
@@ -382,6 +386,7 @@ interface NativeVersionedBatchApplyStats {
   writtenNodes: string; writtenBytes: string; usedAppendFastPath: boolean;
   usedBatchedRoute: boolean; usedCoalescedRebuild: boolean; usedDeferredRebalancing: boolean;
   usedBottomUpRebuild: boolean; cacheWrittenNodes: boolean;
+  parallelWidth: string; parallelTasks: string; structuralIslands: string; coalescedIslands: string;
 }
 interface NativeVersionedMapBatchResult { version: NativeMapVersion; stats: NativeVersionedBatchApplyStats; }
 
@@ -573,6 +578,10 @@ function versionedBatchResult(value: NativeVersionedMapBatchResult): VersionedMa
       usedDeferredRebalancing: value.stats.usedDeferredRebalancing,
       usedBottomUpRebuild: value.stats.usedBottomUpRebuild,
       cacheWrittenNodes: value.stats.cacheWrittenNodes,
+      parallelWidth: BigInt(value.stats.parallelWidth),
+      parallelTasks: BigInt(value.stats.parallelTasks),
+      structuralIslands: BigInt(value.stats.structuralIslands),
+      coalescedIslands: BigInt(value.stats.coalescedIslands),
     },
   };
 }

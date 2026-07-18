@@ -705,6 +705,9 @@ func TestMemoryEngineDeleteRangeUsesHalfOpenBounds(t *testing.T) {
 	if got := []string{string(entries[0].Key), string(entries[1].Key), string(entries[2].Key)}; !reflect.DeepEqual(got, []string{"a", "e", "f"}) {
 		t.Fatalf("range delete with stats keys = %v, want [a e f]", got)
 	}
+	if withStats.Stats.ParallelWidth != 0 || withStats.Stats.ParallelTasks != 0 {
+		t.Fatalf("unexpected range-delete parallel telemetry: %#v", withStats.Stats)
+	}
 }
 
 func TestMemoryEngineTransactionCommitsNamedRoots(t *testing.T) {
@@ -1522,6 +1525,9 @@ func TestParityBatchPagesMergeAndNamedRoots(t *testing.T) {
 	}
 	if parallelStats.Stats.InputMutations != 2 || parallelStats.Stats.EffectiveMutations != 2 || parallelStats.Stats.WrittenNodes == 0 {
 		t.Fatalf("unexpected parallel batch stats: %#v", parallelStats.Stats)
+	}
+	if parallelStats.Stats.ParallelWidth != 1 || parallelStats.Stats.ParallelTasks != 0 {
+		t.Fatalf("unexpected width-one telemetry: %#v", parallelStats.Stats)
 	}
 	parallelStatsValue, ok, err := engine.Get(parallelStats.Tree, []byte("s"))
 	if err != nil {

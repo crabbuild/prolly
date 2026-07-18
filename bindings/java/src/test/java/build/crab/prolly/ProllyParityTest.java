@@ -270,6 +270,8 @@ class ProllyParityTest {
             assertEquals(2, parallelStats.stats().inputMutations());
             assertEquals(2, parallelStats.stats().effectiveMutations());
             assertTrue(parallelStats.stats().writtenNodes() > 0);
+            assertEquals(1, parallelStats.stats().parallelWidth());
+            assertEquals(0, parallelStats.stats().parallelTasks());
 
             TreeRecord appended = prolly.appendBatch(
                     built,
