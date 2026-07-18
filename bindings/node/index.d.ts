@@ -554,6 +554,10 @@ export interface NodeBatchApplyStatsRecord {
   usedDeferredRebalancing: boolean
   usedBottomUpRebuild: boolean
   cacheWrittenNodes: boolean
+  parallelWidth: string
+  parallelTasks: string
+  structuralIslands: string
+  coalescedIslands: string
 }
 export interface NodeBatchApplyResultRecord {
   tree: NodeTreeRecord
@@ -572,6 +576,10 @@ export interface NodeWriteStatsRecord {
   resyncDistanceNodes: string
   usedKeyStableFastPath: boolean
   usedBatchedValueUpdatePath: boolean
+  parallelWidth: string
+  parallelTasks: string
+  structuralIslands: string
+  coalescedIslands: string
 }
 export interface NodeWriteResultRecord {
   tree: NodeTreeRecord
@@ -1081,7 +1089,6 @@ export declare function keyProofFromNodeBytes(root: Buffer | undefined | null, k
 export declare function multiKeyProofFromNodeBytes(root: Buffer | undefined | null, keys: Array<Buffer>, pathNodeBytes: Array<Buffer>): NodeMultiKeyProofRecord
 export declare function rangeProofFromNodeBytes(root: Buffer | undefined | null, start: Buffer, end: Buffer | undefined | null, pathNodeBytes: Array<Buffer>): NodeRangeProofRecord
 export declare function rangePageProofFromNodeBytes(root: Buffer | undefined | null, after: Buffer | undefined | null, end: Buffer | undefined | null, pathNodeBytes: Array<Buffer>): NodeRangePageProofRecord
-export declare function isBoundaryConfigJson(configJson: string, count: string, key: Buffer, value: Buffer): boolean
 export declare function prefixEnd(prefix: Buffer): Buffer | null
 export declare function prefixRange(prefix: Buffer): NodeRangeBoundsRecord
 export declare function rangeCursorStart(): NodeRangeCursorRecord

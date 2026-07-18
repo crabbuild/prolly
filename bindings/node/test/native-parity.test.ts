@@ -377,6 +377,8 @@ test("native batch, getMany, pages, and diff pages use Rust engine", { skip: nat
   assert.equal(parallelStats.stats.inputMutations, "2");
   assert.equal(parallelStats.stats.effectiveMutations, "2");
   assert.notEqual(parallelStats.stats.writtenNodes, "0");
+  assert.equal(parallelStats.stats.parallelWidth, "1");
+  assert.equal(parallelStats.stats.parallelTasks, "0");
 
   const appended = engine.appendBatch(built, [
     { kind: "upsert", key: bytes("d"), value: bytes("4") },

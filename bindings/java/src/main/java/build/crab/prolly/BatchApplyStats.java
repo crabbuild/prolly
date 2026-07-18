@@ -15,6 +15,10 @@ public final class BatchApplyStats {
     private final boolean usedDeferredRebalancing;
     private final boolean usedBottomUpRebuild;
     private final boolean cacheWrittenNodes;
+    private final long parallelWidth;
+    private final long parallelTasks;
+    private final long structuralIslands;
+    private final long coalescedIslands;
 
     BatchApplyStats(BatchApplyStatsRecord record) {
         this.inputMutations = ProllyJavaAdapters.batchStatsInputMutations(record);
@@ -31,6 +35,10 @@ public final class BatchApplyStats {
         this.usedDeferredRebalancing = record.getUsedDeferredRebalancing();
         this.usedBottomUpRebuild = record.getUsedBottomUpRebuild();
         this.cacheWrittenNodes = record.getCacheWrittenNodes();
+        this.parallelWidth = ProllyJavaAdapters.batchStatsParallelWidth(record);
+        this.parallelTasks = ProllyJavaAdapters.batchStatsParallelTasks(record);
+        this.structuralIslands = ProllyJavaAdapters.batchStatsStructuralIslands(record);
+        this.coalescedIslands = ProllyJavaAdapters.batchStatsCoalescedIslands(record);
     }
 
     public long inputMutations() {
@@ -88,4 +96,12 @@ public final class BatchApplyStats {
     public boolean cacheWrittenNodes() {
         return cacheWrittenNodes;
     }
+
+    public long parallelWidth() { return parallelWidth; }
+
+    public long parallelTasks() { return parallelTasks; }
+
+    public long structuralIslands() { return structuralIslands; }
+
+    public long coalescedIslands() { return coalescedIslands; }
 }

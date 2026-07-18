@@ -305,6 +305,8 @@ class ProllyParityTest {
             assertEquals(2UL, parallelStats.stats.inputMutations)
             assertEquals(2UL, parallelStats.stats.effectiveMutations)
             assertTrue(parallelStats.stats.writtenNodes > 0UL)
+            assertEquals(1UL, parallelStats.stats.parallelWidth)
+            assertEquals(0UL, parallelStats.stats.parallelTasks)
 
             val appended = engine.appendBatch(
                 built,

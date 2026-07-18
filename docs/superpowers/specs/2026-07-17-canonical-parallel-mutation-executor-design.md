@@ -32,6 +32,7 @@ The removed `ParallelRebalancer` is not a suitable foundation. It ran independen
 8. No inert public knobs: obsolete `BatchWriterConfig` choices are removed or replaced by the single execution configuration used by the canonical writer.
 9. No compatibility branches or legacy writer selection.
 10. Performance claims require release-mode worker-scaling evidence, including tail latency and memory.
+11. Binding decoders and public facades must expose the same execution telemetry as Rust; no language-specific helper may substitute entry-count key/value hashing for the canonical chunker.
 
 ## API and Configuration
 

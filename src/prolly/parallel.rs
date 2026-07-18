@@ -182,10 +182,14 @@ impl ExecutionPolicy {
             return Vec::new();
         }
         let partitions = self.width.min(len).max(1);
-        let chunk = len.div_ceil(partitions);
-        (0..len)
-            .step_by(chunk)
-            .map(|start| start..(start + chunk).min(len))
+        let base = len / partitions;
+        let remainder = len % partitions;
+        (0..partitions)
+            .map(|partition| {
+                let start = partition * base + partition.min(remainder);
+                let width = base + usize::from(partition < remainder);
+                start..start + width
+            })
             .collect()
     }
 }
@@ -226,9 +230,17 @@ mod tests {
     fn execution_policy_ranges_cover_input_once_in_order() {
         let policy = ExecutionPolicy::from_config(&ParallelConfig::new(4, 1), 17, 17);
         let ranges = policy.ranges(17);
+        assert_eq!(ranges.len(), policy.width());
+        assert!(ranges
+            .windows(2)
+            .all(|pair| pair[0].len().abs_diff(pair[1].len()) <= 1));
         let covered = ranges.into_iter().flatten().collect::<Vec<_>>();
         assert_eq!(covered, (0..17).collect::<Vec<_>>());
         assert!(policy.ranges(0).is_empty());
+
+        let nearly_one_per_partition =
+            ExecutionPolicy::from_config(&ParallelConfig::new(12, 1), 13, 13);
+        assert_eq!(nearly_one_per_partition.ranges(13).len(), 12);
     }
 
     #[test]

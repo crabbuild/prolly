@@ -698,14 +698,6 @@ export function diffEntries(base: [Uint8Array, Uint8Array][], other: [Uint8Array
   return out;
 }
 
-export function isBoundaryConfig(config: Config, count: number, key: Uint8Array, value: Uint8Array): boolean {
-  if (count < config.minChunkSize) return false;
-  if (count >= config.maxChunkSize) return true;
-  const hashValue = Number(xxh64(concatBytes([key, value]), config.hashSeed) & 0xFFFF_FFFFn);
-  const threshold = Math.floor(0xFFFF_FFFF / config.chunkingFactor);
-  return hashValue <= threshold;
-}
-
 export function xxh64(data: Uint8Array, seed = 0n): bigint {
   const rotl = (value: bigint, bits: bigint) => ((value << bits) | (value >> (64n - bits))) & MASK64;
   const round64 = (accIn: bigint, lane: bigint) => {

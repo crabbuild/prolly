@@ -67,6 +67,10 @@ export interface NativeBatchApplyStatsRecord {
   usedDeferredRebalancing: boolean;
   usedBottomUpRebuild: boolean;
   cacheWrittenNodes: boolean;
+  parallelWidth: string;
+  parallelTasks: string;
+  structuralIslands: string;
+  coalescedIslands: string;
 }
 
 export interface NativeBatchApplyResultRecord {
@@ -87,6 +91,10 @@ export interface NativeWriteStatsRecord {
   resyncDistanceNodes: string;
   usedKeyStableFastPath: boolean;
   usedBatchedValueUpdatePath: boolean;
+  parallelWidth: string;
+  parallelTasks: string;
+  structuralIslands: string;
+  coalescedIslands: string;
 }
 
 export interface NativeWriteResultRecord {

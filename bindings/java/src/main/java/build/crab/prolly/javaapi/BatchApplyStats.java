@@ -14,7 +14,11 @@ public record BatchApplyStats(
         boolean usedCoalescedRebuild,
         boolean usedDeferredRebalancing,
         boolean usedBottomUpRebuild,
-        boolean cacheWrittenNodes) {
+        boolean cacheWrittenNodes,
+        long parallelWidth,
+        long parallelTasks,
+        long structuralIslands,
+        long coalescedIslands) {
     static BatchApplyStats fromBridge(build.crab.prolly.api.JavaBatchApplyStats value) {
         return new BatchApplyStats(
                 value.getInputMutations(), value.getEffectiveMutations(), value.getPreprocessInputSorted(),
@@ -22,6 +26,7 @@ public record BatchApplyStats(
                 value.getWrittenNodes(), value.getWrittenBytes(), value.getUsedAppendFastPath(),
                 value.getUsedBatchedRoute(), value.getUsedCoalescedRebuild(),
                 value.getUsedDeferredRebalancing(), value.getUsedBottomUpRebuild(),
-                value.getCacheWrittenNodes());
+                value.getCacheWrittenNodes(), value.getParallelWidth(), value.getParallelTasks(),
+                value.getStructuralIslands(), value.getCoalescedIslands());
     }
 }

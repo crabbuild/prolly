@@ -117,16 +117,20 @@ impl ExecutionPolicy {
             return Vec::new();
         }
         let partitions = self.width.min(len).max(1);
-        let chunk = len.div_ceil(partitions);
-        (0..len)
-            .step_by(chunk)
-            .map(|start| start..(start + chunk).min(len))
+        let base = len / partitions;
+        let remainder = len % partitions;
+        (0..partitions)
+            .map(|partition| {
+                let start = partition * base + partition.min(remainder);
+                let width = base + usize::from(partition < remainder);
+                start..start + width
+            })
             .collect()
     }
 }
 ```
 
-Measured hardening extends this skeleton with a separate ordered-read width and an RAII active-write counter. Explicit `max_threads` caps both widths; automatic scheduling retains up to 16 ordered-read partitions, and inner execution drops to width one when active callers would leave fewer than three shared-pool threads per write.
+Measured hardening extends this skeleton with a separate ordered-read width and an RAII active-write counter. Explicit `max_threads` caps both widths; automatic scheduling retains up to 16 ordered-read partitions, and inner execution drops to width one when active callers would leave fewer than three shared-pool threads per write. Balanced range construction creates exactly the admitted partition count, including near one-item-per-worker inputs.
 
 - [ ] **Step 2: Add policy tests after the implementation**
 
