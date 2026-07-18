@@ -13,6 +13,10 @@ public final class WriteStats {
     private final long resyncDistanceNodes;
     private final boolean usedKeyStableFastPath;
     private final boolean usedBatchedValueUpdatePath;
+    private final long parallelWidth;
+    private final long parallelTasks;
+    private final long structuralIslands;
+    private final long coalescedIslands;
 
     WriteStats(WriteStatsRecord record) {
         this.inputMutations = ProllyJavaAdapters.writeStatsInputMutations(record);
@@ -27,6 +31,10 @@ public final class WriteStats {
         this.resyncDistanceNodes = ProllyJavaAdapters.writeStatsResyncDistanceNodes(record);
         this.usedKeyStableFastPath = ProllyJavaAdapters.writeStatsUsedKeyStableFastPath(record);
         this.usedBatchedValueUpdatePath = ProllyJavaAdapters.writeStatsUsedBatchedValueUpdatePath(record);
+        this.parallelWidth = ProllyJavaAdapters.writeStatsParallelWidth(record);
+        this.parallelTasks = ProllyJavaAdapters.writeStatsParallelTasks(record);
+        this.structuralIslands = ProllyJavaAdapters.writeStatsStructuralIslands(record);
+        this.coalescedIslands = ProllyJavaAdapters.writeStatsCoalescedIslands(record);
     }
 
     public long inputMutations() { return inputMutations; }
@@ -41,4 +49,8 @@ public final class WriteStats {
     public long resyncDistanceNodes() { return resyncDistanceNodes; }
     public boolean usedKeyStableFastPath() { return usedKeyStableFastPath; }
     public boolean usedBatchedValueUpdatePath() { return usedBatchedValueUpdatePath; }
+    public long parallelWidth() { return parallelWidth; }
+    public long parallelTasks() { return parallelTasks; }
+    public long structuralIslands() { return structuralIslands; }
+    public long coalescedIslands() { return coalescedIslands; }
 }

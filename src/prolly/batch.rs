@@ -183,61 +183,22 @@
 //! }
 //! ```
 //!
-//! ## Configuring Batch Operations
+//! ## Configuring Batch Scheduling
 //!
-//! Use `BatchWriter` with `BatchWriterConfig` for fine-grained control:
+//! `ParallelConfig` controls scheduling width and the mutation threshold for
+//! parallel work. It never selects a different chunking, merge, or rebuild
+//! algorithm; every width uses the same canonical writer and produces the
+//! same root.
 //!
 //! ```rust
-//! use prolly::{BatchWriter, BatchWriterConfig, Prolly, MemStore, Config, Mutation};
+//! use prolly::{BatchWriter, ParallelConfig};
 //!
-//! let store = MemStore::new();
-//! let prolly = Prolly::new(store, Config::default());
-//! let tree = prolly.create();
-//!
-//! // Configure the merge strategy
-//! let config = BatchWriterConfig::new()
-//!     .with_optimized_merge(true);
-//!
-//! let writer = BatchWriter::with_config(config);
-//!
-//! let mutations = vec![
-//!     Mutation::Upsert { key: b"key".to_vec(), val: b"value".to_vec() },
-//! ];
-//!
-//! let new_tree = writer.apply_batch(&prolly, &tree, mutations).unwrap();
+//! let writer = BatchWriter::with_config(ParallelConfig::new(8, 256));
+//! assert_eq!(writer.config().max_threads, 8);
 //! ```
 //!
-//! ### Configuration Options
-//!
-//! | Option | Default | Description |
-//! |--------|---------|-------------|
-//! | `enable_prefetch` | `true` | Legacy compatibility flag; current route planning hydrates affected leaves directly |
-//! | `use_optimized_merge` | `true` | Use O(n+m) two-pointer merge |
-//! | `prefetch_parallelism` | `16` | Max ordered route-hydration batch width |
-//!
-//! ### Recommended Configurations
-//!
-//! **In-memory store:**
-//! ```rust
-//! # use prolly::BatchWriterConfig;
-//! let config = BatchWriterConfig::new()
-//!     .with_optimized_merge(true);
-//! ```
-//!
-//! **Network store with high latency:**
-//! ```rust
-//! # use prolly::BatchWriterConfig;
-//! let config = BatchWriterConfig::new()
-//!     .with_prefetch_parallelism(32);  // Wider route-hydration batches for high latency
-//! ```
-//!
-//! **Debugging/comparison:**
-//! ```rust
-//! # use prolly::BatchWriterConfig;
-//! let config = BatchWriterConfig::new()
-//!     .with_optimized_merge(false);  // Use binary search for comparison
-//! ```
-
+//! Use `ParallelConfig::sequential()` as the deterministic width-one baseline.
+//! A zero `max_threads` uses the current shared Rayon pool width.
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
@@ -250,13 +211,13 @@ use super::cursor::Cursor;
 use super::error::Error;
 use super::error::Mutation;
 use super::node::Node;
+use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
 use super::tree::Tree;
 
 use super::Prolly;
 
 const PARALLEL_COLLECTOR_ADD_THRESHOLD: usize = 16;
-const PARALLEL_LEAF_APPLY_THRESHOLD: usize = 16;
 const SPARSE_LEAF_APPLY_MAX_MUTATIONS: usize = 8;
 const SPARSE_LEAF_APPLY_MIN_LEAF_TO_MUTATION_RATIO: usize = 8;
 const EXISTING_KEY_LINEAR_SCAN_MIN_MUTATIONS: usize = 16;
@@ -498,28 +459,35 @@ pub struct BatchApplyStats {
     pub effective_mutations: usize,
     /// Whether the input mutation keys were already sorted before preprocessing.
     pub preprocess_input_sorted: bool,
-    /// Number of distinct leaf groups planned for this batch.
-    pub affected_leaves: usize,
-    /// Number of affected leaves whose contents actually changed.
-    pub changed_leaves: usize,
-    /// Number of leaf groups applied with sparse binary-search mutation.
-    pub sparse_leaf_applies: usize,
-    /// Unique content-addressed nodes written by the batch collector.
+    /// Logical entries streamed through canonical emitters.
+    pub entries_streamed: usize,
+    /// Content-addressed nodes loaded by the write.
+    pub nodes_read: usize,
+    /// Unique content-addressed nodes written by the write.
     pub written_nodes: usize,
-    /// Total serialized bytes for unique nodes written by the batch collector.
+    /// Existing content-addressed nodes reused without rewriting.
+    pub nodes_reused: usize,
+    /// Serialized node bytes loaded by the write.
+    pub bytes_read: usize,
+    /// Total serialized bytes for unique nodes written by the write.
     pub written_bytes: usize,
-    /// Whether the append-only right-edge fast path completed the batch.
-    pub used_append_fast_path: bool,
-    /// Whether planning used the batched read routing path.
-    pub used_batched_route: bool,
-    /// Whether the multi-leaf coalesced rebuild path was used.
-    pub used_coalesced_rebuild: bool,
-    /// Whether the deferred single-leaf/group rebalance path was used.
-    pub used_deferred_rebalancing: bool,
-    /// Whether the configured bottom-up rebuild path was used.
-    pub used_bottom_up_rebuild: bool,
-    /// Whether newly written nodes were retained in the in-process node cache.
-    pub cache_written_nodes: bool,
+    /// Entries replayed before canonical CID resynchronization.
+    pub resync_distance_entries: usize,
+    /// Nodes traversed before canonical CID resynchronization.
+    pub resync_distance_nodes: usize,
+    /// Whether a key-stability proof enabled direct value replacement.
+    pub used_key_stable_fast_path: bool,
+    /// Whether value updates used batched canonical route hydration.
+    pub used_batched_value_update_path: bool,
+    /// Maximum CPU partition width actually used by an admitted leaf/island
+    /// executor. Ordered store-read fan-out is reported by store metrics.
+    pub parallel_width: usize,
+    /// Number of logical independent CPU partitions scheduled by this write.
+    pub parallel_tasks: usize,
+    /// Number of structural mutation islands planned by this write.
+    pub structural_islands: usize,
+    /// Number of structural mutation islands coalesced before replay.
+    pub coalesced_islands: usize,
 }
 
 /// Result of applying a batch with execution stats.
@@ -531,17 +499,54 @@ pub struct BatchApplyResult {
     pub stats: BatchApplyStats,
 }
 
+impl BatchApplyResult {
+    fn from_write_stats(
+        tree: Tree,
+        write_stats: super::write::WriteStats,
+        input_sorted: bool,
+    ) -> Self {
+        Self {
+            tree,
+            stats: BatchApplyStats {
+                input_mutations: write_stats.input_mutations as usize,
+                effective_mutations: write_stats.effective_mutations as usize,
+                preprocess_input_sorted: input_sorted,
+                entries_streamed: write_stats.entries_streamed as usize,
+                nodes_read: write_stats.nodes_read as usize,
+                written_nodes: write_stats.nodes_written as usize,
+                nodes_reused: write_stats.nodes_reused as usize,
+                bytes_read: write_stats.bytes_read as usize,
+                written_bytes: write_stats.bytes_written as usize,
+                resync_distance_entries: write_stats.resync_distance_entries as usize,
+                resync_distance_nodes: write_stats.resync_distance_nodes as usize,
+                used_key_stable_fast_path: write_stats.used_key_stable_fast_path,
+                used_batched_value_update_path: write_stats.used_batched_value_update_path,
+                parallel_width: write_stats.parallel_width as usize,
+                parallel_tasks: write_stats.parallel_tasks as usize,
+                structural_islands: write_stats.structural_islands as usize,
+                coalesced_islands: write_stats.coalesced_islands as usize,
+            },
+        }
+    }
+}
+
 pub(crate) struct KeyStableBatchResult {
     pub(crate) tree: Tree,
     pub(crate) affected_leaves: usize,
     pub(crate) entries_streamed: usize,
     pub(crate) written_nodes: usize,
     pub(crate) written_bytes: usize,
+    pub(crate) parallel_width: usize,
+    pub(crate) parallel_tasks: usize,
 }
 
 pub(crate) enum KeyStableBatchAttempt {
     Applied(Box<KeyStableBatchResult>),
-    Fallback(Vec<Mutation>),
+    Fallback {
+        mutations: Vec<Mutation>,
+        parallel_width: usize,
+        parallel_tasks: usize,
+    },
 }
 
 impl Default for BatchWriteCollector {
@@ -2239,36 +2244,41 @@ pub(crate) fn apply_with_stats<S: Store>(
         .windows(2)
         .all(|pair| pair[0].key() <= pair[1].key());
     let (tree, write_stats) = super::write::apply(prolly, tree, mutations)?;
-    Ok(BatchApplyResult {
+    Ok(BatchApplyResult::from_write_stats(
         tree,
-        stats: BatchApplyStats {
-            input_mutations: write_stats.input_mutations as usize,
-            effective_mutations: write_stats.effective_mutations as usize,
-            preprocess_input_sorted: input_sorted,
-            affected_leaves: write_stats.resync_distance_nodes as usize,
-            changed_leaves: write_stats.nodes_written as usize,
-            sparse_leaf_applies: 0,
-            written_nodes: write_stats.nodes_written as usize,
-            written_bytes: write_stats.bytes_written as usize,
-            used_append_fast_path: false,
-            used_batched_route: write_stats.used_batched_value_update_path,
-            used_coalesced_rebuild: true,
-            used_deferred_rebalancing: false,
-            used_bottom_up_rebuild: false,
-            cache_written_nodes: false,
-        },
-    })
+        write_stats,
+        input_sorted,
+    ))
+}
+
+pub(crate) fn apply_with_stats_configured<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<BatchApplyResult, Error> {
+    let input_sorted = mutations
+        .windows(2)
+        .all(|pair| pair[0].key() <= pair[1].key());
+    let (tree, write_stats) = super::write::apply_configured(prolly, tree, mutations, config)?;
+    Ok(BatchApplyResult::from_write_stats(
+        tree,
+        write_stats,
+        input_sorted,
+    ))
 }
 
 const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;
-const BATCHED_VALUE_UPDATE_PARALLELISM: usize = 16;
 
 pub(crate) fn should_try_batched_value_updates<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutation_count: usize,
+    policy: ExecutionPolicy,
 ) -> bool {
-    mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    policy.enabled()
+        && policy.width() >= 4
+        && mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
         && tree.root.is_some()
         && prolly.store().prefers_batch_reads()
 }
@@ -2277,16 +2287,26 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
+    policy: ExecutionPolicy,
 ) -> Result<KeyStableBatchAttempt, Error> {
-    if !should_try_batched_value_updates(prolly, tree, mutations.len()) {
-        return Ok(KeyStableBatchAttempt::Fallback(mutations));
+    if !should_try_batched_value_updates(prolly, tree, mutations.len(), policy) {
+        return Ok(KeyStableBatchAttempt::Fallback {
+            mutations,
+            parallel_width: 1,
+            parallel_tasks: 0,
+        });
     }
 
+    let mut route_parallel_width = 1usize;
+    let mut route_parallel_tasks = 0usize;
     let groups = group_mutations_by_leaf_with_paths_batched(
         prolly,
         tree,
         mutations,
-        BATCHED_VALUE_UPDATE_PARALLELISM,
+        policy.read_width(),
+        policy.width(),
+        &mut route_parallel_width,
+        &mut route_parallel_tasks,
     )?;
     if groups.is_empty() || !groups.iter().all(key_stable_group_is_safe) {
         let mut mutations = groups
@@ -2294,13 +2314,18 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
             .flat_map(|group| group.mutations.into_owned())
             .collect::<Vec<_>>();
         mutations.sort_by(|left, right| left.key().cmp(right.key()));
-        return Ok(KeyStableBatchAttempt::Fallback(mutations));
+        return Ok(KeyStableBatchAttempt::Fallback {
+            mutations,
+            parallel_width: route_parallel_width,
+            parallel_tasks: route_parallel_tasks,
+        });
     }
 
     let affected_leaves = groups.len();
+    let leaf_policy = policy.limit_to(affected_leaves);
     let entries_streamed = groups.iter().map(|group| group.leaf.len()).sum();
     let mut collector = batch_write_collector(false);
-    let applied = apply_groups_coalesced(prolly, tree, groups, true, &mut collector)?;
+    let applied = apply_groups_coalesced(prolly, tree, groups, true, leaf_policy, &mut collector)?;
     flush_batch_collector(prolly, &collector, false)?;
 
     Ok(KeyStableBatchAttempt::Applied(Box::new(
@@ -2313,8 +2338,35 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
             entries_streamed,
             written_nodes: collector.len(),
             written_bytes: collector.bytes_len(),
+            parallel_width: leaf_policy.width().max(route_parallel_width),
+            parallel_tasks: route_parallel_tasks
+                + if leaf_policy.enabled() {
+                    leaf_policy.ranges(affected_leaves).len()
+                } else {
+                    0
+                },
         },
     )))
+}
+
+pub(crate) fn sampled_value_updates_are_likely_key_stable<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    policy: ExecutionPolicy,
+) -> Result<bool, Error> {
+    let mut parallel_width = 1usize;
+    let mut parallel_tasks = 0usize;
+    let groups = group_mutations_by_leaf_with_paths_batched(
+        prolly,
+        tree,
+        mutations,
+        policy.read_width(),
+        policy.width(),
+        &mut parallel_width,
+        &mut parallel_tasks,
+    )?;
+    Ok(!groups.is_empty() && groups.iter().all(key_stable_group_is_safe))
 }
 
 fn key_stable_group_is_safe(group: &LeafMutationGroupWithPath) -> bool {
@@ -2323,24 +2375,36 @@ fn key_stable_group_is_safe(group: &LeafMutationGroupWithPath) -> bool {
     if group.leaf.encoded_len() >= hard_max {
         return false;
     }
-    let rightmost = group
-        .ancestors
-        .iter()
-        .all(|(ancestor, index)| index.saturating_add(1) == ancestor.len());
-    if !rightmost {
-        let Some(last_key) = group.leaf.keys.last() else {
-            return false;
-        };
-        if !super::boundary::entry_count_boundary(
-            &group.leaf.format.chunking,
-            u16::from(group.leaf.level),
-            group.leaf.len(),
-            last_key,
-        )
-        .unwrap_or(false)
-        {
-            return false;
+    let rightmost = if let Some(path) = &group.route_path {
+        let mut current = Some(path.clone());
+        let mut rightmost = true;
+        while let Some(path) = current {
+            rightmost &= path.child_index.saturating_add(1) == path.node.len();
+            current = path.parent.clone();
         }
+        rightmost
+    } else {
+        group
+            .ancestors
+            .iter()
+            .all(|(ancestor, index)| index.saturating_add(1) == ancestor.len())
+    };
+    let Some(last_key) = group.leaf.keys.last() else {
+        return false;
+    };
+    let Ok(ends_on_value_stable_boundary) = super::boundary::entry_count_boundary(
+        &group.leaf.format.chunking,
+        u16::from(group.leaf.level),
+        group.leaf.len(),
+        last_key,
+    ) else {
+        // Rightmost leaves do not require a terminal boundary, but their
+        // internal boundaries must still be invariant under value changes.
+        // Only key-only entry-count hashing has that property here.
+        return false;
+    };
+    if !rightmost && !ends_on_value_stable_boundary {
+        return false;
     }
     let mutations = group.mutations.as_slice();
     if mutations.len().saturating_mul(8) < group.leaf.len() {
@@ -2603,7 +2667,17 @@ fn group_mutations_by_leaf_optimized<S: Store>(
     mutations: Vec<Mutation>,
 ) -> Result<Vec<LeafMutationGroup>, Error> {
     let groups = if prolly.store().prefers_batch_reads() {
-        group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, usize::MAX)?
+        let mut parallel_width = 1usize;
+        let mut parallel_tasks = 0usize;
+        group_mutations_by_leaf_with_paths_batched(
+            prolly,
+            tree,
+            mutations,
+            usize::MAX,
+            rayon::current_num_threads(),
+            &mut parallel_width,
+            &mut parallel_tasks,
+        )?
     } else {
         group_mutations_by_leaf_with_paths(prolly, tree, mutations)?
     };
@@ -2616,6 +2690,9 @@ fn group_mutations_by_leaf_with_paths_batched<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
     prefetch_parallelism: usize,
+    decode_parallelism: usize,
+    parallel_width: &mut usize,
+    parallel_tasks: &mut usize,
 ) -> Result<Vec<LeafMutationGroupWithPath>, Error> {
     if mutations.is_empty() {
         return Ok(Vec::new());
@@ -2647,7 +2724,14 @@ fn group_mutations_by_leaf_with_paths_batched<S: Store>(
             .iter()
             .map(|frame| frame.cid.clone())
             .collect::<Vec<_>>();
-        let nodes = prolly.load_many_ordered_with_parallelism(&cids, prefetch_parallelism)?;
+        let execution = prolly.load_many_ordered_with_widths_and_stats(
+            &cids,
+            prefetch_parallelism,
+            decode_parallelism,
+        )?;
+        *parallel_width = (*parallel_width).max(execution.parallel_width);
+        *parallel_tasks = parallel_tasks.saturating_add(execution.parallel_tasks);
+        let nodes = execution.nodes;
         let mut next_frames = Vec::with_capacity(frames.len());
 
         for (frame, node) in frames.into_iter().zip(nodes) {
@@ -3401,6 +3485,7 @@ fn apply_groups_coalesced<S: Store>(
     tree: &Tree,
     groups: Vec<LeafMutationGroupWithPath>,
     use_optimized_merge: bool,
+    policy: ExecutionPolicy,
     collector: &mut BatchWriteCollector,
 ) -> Result<CoalescedApplyResult, Error> {
     let group_count = groups.len();
@@ -3410,7 +3495,7 @@ fn apply_groups_coalesced<S: Store>(
     let mut root_replacement: Option<Vec<ChildRef>> = None;
     let mut changed = false;
 
-    for group in prepare_leaf_groups_for_coalesced_rebuild(groups, use_optimized_merge) {
+    for group in prepare_leaf_groups_for_coalesced_rebuild(groups, use_optimized_merge, policy) {
         let PreparedLeafMutationGroup {
             modified_leaf,
             ancestors,
@@ -3487,18 +3572,40 @@ fn apply_groups_coalesced<S: Store>(
 fn prepare_leaf_groups_for_coalesced_rebuild(
     groups: Vec<LeafMutationGroupWithPath>,
     use_optimized_merge: bool,
+    policy: ExecutionPolicy,
 ) -> Vec<PreparedLeafMutationGroup> {
-    if groups.len() < PARALLEL_LEAF_APPLY_THRESHOLD {
+    let policy = policy.limit_to(groups.len());
+    if !policy.enabled() {
         return groups
             .into_iter()
             .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
             .collect();
     }
 
-    groups
+    if policy.width() == rayon::current_num_threads().max(1) {
+        return groups
+            .into_par_iter()
+            .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
+            .collect();
+    }
+
+    let ranges = policy.ranges(groups.len());
+    let mut groups = groups.into_iter();
+    let partitions = ranges
+        .into_iter()
+        .map(|range| groups.by_ref().take(range.len()).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+
+    let output = partitions
         .into_par_iter()
-        .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
-        .collect()
+        .map(|partition| {
+            partition
+                .into_iter()
+                .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    output.into_iter().flatten().collect()
 }
 
 fn prepare_leaf_group_for_coalesced_rebuild(
@@ -3774,365 +3881,19 @@ fn build_root_from_child_refs<S: Store>(
     }
 }
 
-/// Configuration for batch write operations.
+/// Convenience writer using the canonical configured mutation executor.
 ///
-/// `BatchWriterConfig` provides tunable settings for batch operations, allowing
-/// you to optimize performance for your specific storage backend and workload.
-///
-/// # Fields
-///
-/// - `prefetch_parallelism`: Maximum ordered route-hydration batch width (default: 16)
-/// - `enable_prefetch`: Legacy compatibility flag (default: true)
-/// - `use_optimized_merge`: Whether to use two-pointer merge vs binary search (default: true)
-/// - `use_bottom_up_rebuild`: Whether to use bottom-up rebuild strategy (default: false)
-/// - `enable_deferred_rebalancing`: Whether to enable deferred rebalancing optimization (default: true)
-/// - `force_deferred`: Force deferred rebalancing regardless of pattern detection (default: false)
-/// - `cache_written_nodes`: Warm the in-process node cache after successful batch writes (default: false)
-///
-/// # Example
+/// [`ParallelConfig`] changes scheduling only. Chunk boundaries, serialized
+/// nodes, and roots are invariant across worker widths.
 ///
 /// ```rust
-/// use prolly::BatchWriterConfig;
+/// use prolly::{BatchWriter, ParallelConfig};
 ///
-/// // Create with defaults
-/// let config = BatchWriterConfig::default();
-///
-/// // Create with builder pattern
-/// let config = BatchWriterConfig::new()
-///     .with_prefetch_parallelism(32)
-///     .with_prefetch(true)
-///     .with_optimized_merge(true)
-///     .with_bottom_up_rebuild(true)
-///     .with_deferred_rebalancing(true)
-///     .with_force_deferred(false)
-///     .with_cache_written_nodes(false);
-///
-/// ```
-#[derive(Debug, Clone)]
-pub struct BatchWriterConfig {
-    /// Maximum ordered route-hydration batch width.
-    ///
-    /// Controls how many node CIDs are fetched per ordered batch while routing
-    /// random updates through stores that prefer batched reads. Higher values
-    /// may improve high-latency stores but increase transient memory usage.
-    pub prefetch_parallelism: usize,
-
-    /// Legacy compatibility flag for speculative leaf prefetch.
-    ///
-    /// Current route planning hydrates the affected leaves before mutation
-    /// application, so the writer does not issue a second post-routing
-    /// prefetch. Stores that prefer batched reads still use ordered batched
-    /// route planning even when this is disabled, because that path is
-    /// required node hydration rather than speculative prefetch.
-    pub enable_prefetch: bool,
-
-    /// Whether to use the optimized two-pointer merge algorithm.
-    ///
-    /// When enabled, uses O(n+m) two-pointer merge instead of O(m log n)
-    /// binary search approach. Should generally be left enabled unless
-    /// debugging or comparing performance.
-    pub use_optimized_merge: bool,
-
-    /// Whether to use bottom-up rebuild strategy for parent reconstruction.
-    ///
-    /// When enabled, uses a bottom-up approach to rebuild parent nodes after
-    /// leaf modifications. This can be more efficient when multiple leaves
-    /// are modified, as it ensures each node is written exactly once.
-    ///
-    /// The bottom-up rebuild strategy:
-    /// 1. Applies mutations to all affected leaves
-    /// 2. Rebuilds parent nodes from leaves to root in a single pass
-    /// 3. Ensures each modified node is written exactly once
-    ///
-    /// This is particularly beneficial for large batch operations that
-    /// affect many leaves across the tree.
-    pub use_bottom_up_rebuild: bool,
-
-    /// Whether to enable deferred rebalancing optimization.
-    ///
-    /// When enabled, the batch processor will:
-    /// 1. Detect append patterns and single-leaf groups
-    /// 2. Apply all mutations before rebalancing
-    /// 3. Rebuild the tree in a single bottom-up pass
-    ///
-    /// Default: true (enabled)
-    pub enable_deferred_rebalancing: bool,
-
-    /// Force deferred rebalancing regardless of pattern detection.
-    ///
-    /// When true, deferred rebalancing is used even if the pattern
-    /// detection would normally disable it. Useful for testing or
-    /// when the caller knows the access pattern.
-    ///
-    /// Default: false
-    pub force_deferred: bool,
-
-    /// Whether to cache newly written nodes after a successful batch flush.
-    ///
-    /// When enabled, read-after-write workloads such as immediate random
-    /// `get`, `diff`, `stream_diff`, `range_diff`, or merge validation can
-    /// reuse the rewritten frontier without fetching it back from the store.
-    /// Keep this disabled for pure write-heavy ingest jobs where cache memory
-    /// and cache-warming CPU are not worth paying during the write.
-    ///
-    /// Default: false
-    pub cache_written_nodes: bool,
-}
-
-impl Default for BatchWriterConfig {
-    fn default() -> Self {
-        Self {
-            prefetch_parallelism: 16,
-            enable_prefetch: true,
-            use_optimized_merge: true,
-            use_bottom_up_rebuild: false,
-            enable_deferred_rebalancing: true,
-            force_deferred: false,
-            cache_written_nodes: false,
-        }
-    }
-}
-
-impl BatchWriterConfig {
-    /// Create a new configuration with default values.
-    ///
-    /// # Returns
-    /// A new `BatchWriterConfig` with:
-    /// - `prefetch_parallelism`: 16
-    /// - `enable_prefetch`: true
-    /// - `use_optimized_merge`: true
-    /// - `use_bottom_up_rebuild`: false
-    /// - `enable_deferred_rebalancing`: true
-    /// - `force_deferred`: false
-    /// - `cache_written_nodes`: false
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// let config = BatchWriterConfig::new();
-    /// assert_eq!(config.prefetch_parallelism, 16);
-    /// assert!(config.enable_prefetch);
-    /// assert!(config.use_optimized_merge);
-    /// assert!(!config.use_bottom_up_rebuild);
-    /// assert!(config.enable_deferred_rebalancing);
-    /// assert!(!config.force_deferred);
-    /// assert!(!config.cache_written_nodes);
-    /// ```
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set the prefetch parallelism level.
-    ///
-    /// # Arguments
-    /// * `parallelism` - Maximum concurrent prefetch operations
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// let config = BatchWriterConfig::new()
-    ///     .with_prefetch_parallelism(32);
-    /// assert_eq!(config.prefetch_parallelism, 32);
-    /// ```
-    pub fn with_prefetch_parallelism(mut self, parallelism: usize) -> Self {
-        self.prefetch_parallelism = parallelism;
-        self
-    }
-
-    /// Set the legacy prefetch compatibility flag.
-    ///
-    /// The current writer hydrates affected leaves during route planning and
-    /// does not issue a second post-routing leaf prefetch. This setter is kept
-    /// for source compatibility and for callers that inspect the config.
-    ///
-    /// # Arguments
-    /// * `enabled` - Stored value for the legacy prefetch flag
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// let config = BatchWriterConfig::new()
-    ///     .with_prefetch(false);
-    /// assert!(!config.enable_prefetch);
-    /// ```
-    pub fn with_prefetch(mut self, enabled: bool) -> Self {
-        self.enable_prefetch = enabled;
-        self
-    }
-
-    /// Enable or disable the optimized two-pointer merge algorithm.
-    ///
-    /// # Arguments
-    /// * `enabled` - Whether to use optimized merge
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// // Use binary search approach (for comparison/debugging)
-    /// let config = BatchWriterConfig::new()
-    ///     .with_optimized_merge(false);
-    /// assert!(!config.use_optimized_merge);
-    /// ```
-    pub fn with_optimized_merge(mut self, enabled: bool) -> Self {
-        self.use_optimized_merge = enabled;
-        self
-    }
-
-    /// Enable or disable the bottom-up rebuild strategy.
-    ///
-    /// When enabled, uses a bottom-up approach to rebuild parent nodes after
-    /// leaf modifications. This can be more efficient when multiple leaves
-    /// are modified, as it ensures each node is written exactly once.
-    ///
-    /// # Arguments
-    /// * `enabled` - Whether to use bottom-up rebuild
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// // Enable bottom-up rebuild for large batch operations
-    /// let config = BatchWriterConfig::new()
-    ///     .with_bottom_up_rebuild(true);
-    /// assert!(config.use_bottom_up_rebuild);
-    /// ```
-    pub fn with_bottom_up_rebuild(mut self, enabled: bool) -> Self {
-        self.use_bottom_up_rebuild = enabled;
-        self
-    }
-
-    /// Enable or disable deferred rebalancing optimization.
-    ///
-    /// When enabled, the batch processor will:
-    /// 1. Detect append patterns and single-leaf groups
-    /// 2. Apply all mutations before rebalancing
-    /// 3. Rebuild the tree in a single bottom-up pass
-    ///
-    /// This optimization significantly improves performance for append patterns
-    /// (inserting keys at the end of the tree) by avoiding cascading splits.
-    ///
-    /// # Arguments
-    /// * `enabled` - Whether to enable deferred rebalancing
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// // Disable deferred rebalancing to use standard sequential approach
-    /// let config = BatchWriterConfig::new()
-    ///     .with_deferred_rebalancing(false);
-    /// assert!(!config.enable_deferred_rebalancing);
-    /// ```
-    pub fn with_deferred_rebalancing(mut self, enabled: bool) -> Self {
-        self.enable_deferred_rebalancing = enabled;
-        self
-    }
-
-    /// Force deferred rebalancing regardless of pattern detection.
-    ///
-    /// When enabled, deferred rebalancing is used even if the pattern
-    /// detection would normally disable it. This is useful for testing
-    /// or when the caller knows the access pattern in advance.
-    ///
-    /// Note: This setting only has effect when `enable_deferred_rebalancing`
-    /// is also true.
-    ///
-    /// # Arguments
-    /// * `force` - Whether to force deferred rebalancing
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// // Force deferred rebalancing for testing
-    /// let config = BatchWriterConfig::new()
-    ///     .with_force_deferred(true);
-    /// assert!(config.force_deferred);
-    /// ```
-    pub fn with_force_deferred(mut self, force: bool) -> Self {
-        self.force_deferred = force;
-        self
-    }
-
-    /// Enable or disable cache warming for nodes written by batch operations.
-    ///
-    /// This is useful when a workload performs random updates and then
-    /// immediately reads, diffs, streams diffs, range-diffs, or merges the
-    /// updated tree. It should usually stay disabled for write-only ingest.
-    ///
-    /// # Arguments
-    /// * `enabled` - Whether to cache newly written batch nodes after flush
-    ///
-    /// # Returns
-    /// Self for method chaining
-    ///
-    /// # Example
-    /// ```rust
-    /// use prolly::BatchWriterConfig;
-    ///
-    /// let config = BatchWriterConfig::new()
-    ///     .with_cache_written_nodes(true);
-    /// assert!(config.cache_written_nodes);
-    /// ```
-    pub fn with_cache_written_nodes(mut self, enabled: bool) -> Self {
-        self.cache_written_nodes = enabled;
-        self
-    }
-}
-
-/// Batch writer with configurable settings.
-///
-/// `BatchWriter` provides a configurable interface for applying batch mutations
-/// to Prolly trees. It wraps the batch operation logic and applies the configured
-/// optimizations.
-///
-/// # Example
-///
-/// ```rust
-/// use prolly::{BatchWriter, BatchWriterConfig, Prolly, MemStore, Config, Mutation};
-///
-/// let store = MemStore::new();
-/// let prolly = Prolly::new(store, Config::default());
-/// let tree = prolly.create();
-///
-/// // Create a batch writer with custom configuration
-/// let config = BatchWriterConfig::new()
-///     .with_optimized_merge(true);
-///
-/// let writer = BatchWriter::with_config(config);
-///
-/// // Apply mutations using the configured writer
-/// let mutations = vec![
-///     Mutation::Upsert { key: b"a".to_vec(), val: b"1".to_vec() },
-///     Mutation::Upsert { key: b"b".to_vec(), val: b"2".to_vec() },
-/// ];
-///
-/// let new_tree = writer.apply_batch(&prolly, &tree, mutations).unwrap();
+/// let writer = BatchWriter::with_config(ParallelConfig::new(4, 256));
+/// assert_eq!(writer.config().max_threads, 4);
 /// ```
 pub struct BatchWriter {
-    config: BatchWriterConfig,
+    config: ParallelConfig,
 }
 
 impl Default for BatchWriter {
@@ -4155,58 +3916,35 @@ impl BatchWriter {
     /// ```
     pub fn new() -> Self {
         Self {
-            config: BatchWriterConfig::default(),
+            config: ParallelConfig::default(),
         }
     }
 
-    /// Create a new batch writer with custom configuration.
+    /// Create a writer with explicit canonical scheduling preferences.
     ///
-    /// # Arguments
-    /// * `config` - The configuration to use
-    ///
-    /// # Returns
-    /// A new `BatchWriter` with the specified configuration.
-    ///
-    /// # Example
     /// ```rust
-    /// use prolly::{BatchWriter, BatchWriterConfig};
+    /// use prolly::{BatchWriter, ParallelConfig};
     ///
-    /// let config = BatchWriterConfig::new()
-    ///     .with_prefetch_parallelism(32);
-    ///
-    /// let writer = BatchWriter::with_config(config);
+    /// let writer = BatchWriter::with_config(ParallelConfig::new(8, 512));
+    /// assert_eq!(writer.config().parallelism_threshold, 512);
     /// ```
-    pub fn with_config(config: BatchWriterConfig) -> Self {
+    pub fn with_config(config: ParallelConfig) -> Self {
         Self { config }
     }
 
-    /// Get a reference to the current configuration.
+    /// Return the writer's scheduling policy.
     ///
-    /// # Returns
-    /// A reference to the `BatchWriterConfig`.
-    ///
-    /// # Example
     /// ```rust
-    /// use prolly::{BatchWriter, BatchWriterConfig};
+    /// use prolly::BatchWriter;
     ///
     /// let writer = BatchWriter::new();
-    /// let config = writer.config();
-    /// assert_eq!(config.prefetch_parallelism, 16);
+    /// assert_eq!(writer.config().parallelism_threshold, 100);
     /// ```
-    pub fn config(&self) -> &BatchWriterConfig {
+    pub fn config(&self) -> &ParallelConfig {
         &self.config
     }
 
-    /// Apply batch mutations using the configured settings.
-    ///
-    /// This method applies mutations to a tree using the optimizations
-    /// specified in the configuration:
-    ///
-    /// - Stores that prefer batched reads hydrate mutation paths in ordered batches
-    /// - If `use_optimized_merge` is true, uses O(n+m) two-pointer merge
-    /// - Otherwise, uses O(m log n) binary search approach
-    /// - If `use_bottom_up_rebuild` is true, uses bottom-up rebuild strategy
-    ///   for parent reconstruction (ensures each node is written exactly once)
+    /// Apply mutations through the canonical writer using this scheduling policy.
     ///
     /// # Arguments
     /// * `prolly` - Reference to the Prolly tree manager
@@ -4238,7 +3976,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<Tree, Error> {
-        super::write::apply_tree(prolly, tree, mutations)
+        super::write::apply_tree_configured(prolly, tree, mutations, &self.config)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -4253,7 +3991,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<BatchApplyResult, Error> {
-        apply_with_stats(prolly, tree, mutations)
+        apply_with_stats_configured(prolly, tree, mutations, &self.config)
     }
 }
 
@@ -4541,45 +4279,77 @@ mod tests {
 
     #[test]
     fn batched_value_update_route_requires_every_eligibility_condition() {
-        let config = Config::default();
-        let preferred = Prolly::new(
-            CountingStore {
-                prefer_batch_reads: true,
-                ..CountingStore::default()
-            },
-            config.clone(),
-        );
-        let populated = Tree {
-            root: Some(Cid::from_bytes(b"route-classifier-root")),
-            config: config.clone(),
-        };
-        let empty = Tree {
-            root: None,
-            config: config.clone(),
-        };
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let config = Config::default();
+                let preferred = Prolly::new(
+                    CountingStore {
+                        prefer_batch_reads: true,
+                        ..CountingStore::default()
+                    },
+                    config.clone(),
+                );
+                let populated = Tree {
+                    root: Some(Cid::from_bytes(b"route-classifier-root")),
+                    config: config.clone(),
+                };
+                let empty = Tree {
+                    root: None,
+                    config: config.clone(),
+                };
+                let parallel = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(4, 1),
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                );
+                let width_two = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(2, 1),
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                );
 
-        assert!(!should_try_batched_value_updates(
-            &preferred,
-            &populated,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS - 1
-        ));
-        assert!(should_try_batched_value_updates(
-            &preferred,
-            &populated,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        ));
-        assert!(!should_try_batched_value_updates(
-            &preferred,
-            &empty,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS - 1,
+                    parallel,
+                ));
+                assert!(should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    parallel,
+                ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    width_two,
+                ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    ExecutionPolicy::sequential(),
+                ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &empty,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    parallel,
+                ));
 
-        let nonpreferred = Prolly::new(CountingStore::default(), config);
-        assert!(!should_try_batched_value_updates(
-            &nonpreferred,
-            &populated,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        ));
+                let nonpreferred = Prolly::new(CountingStore::default(), config);
+                assert!(!should_try_batched_value_updates(
+                    &nonpreferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    parallel,
+                ));
+            });
     }
 
     /// Helper function to create a tree with the given key-value pairs
@@ -4993,6 +4763,51 @@ mod tests {
 
         assert_eq!(ancestors, vec![(root, 1), (child, 0)]);
         assert_eq!(ancestor_cids, vec![root_cid, child_cid]);
+    }
+
+    #[test]
+    fn key_stable_admission_uses_route_position_and_rejects_value_sensitive_policies() {
+        let group = |policy, child_index| {
+            let config = Config::builder().chunking(policy).build();
+            let mut leaf = create_test_leaf(vec![b"a".to_vec()], vec![b"old".to_vec()]);
+            leaf.format = config.format;
+            let parent = create_test_internal(vec![b"a".to_vec(), b"m".to_vec()]);
+            let route_path = Arc::new(MutationRoutePath {
+                parent: None,
+                node: Arc::new(parent),
+                cid: Cid::from_bytes(b"route-parent"),
+                child_index,
+                depth: 1,
+            });
+            LeafMutationGroupWithPath {
+                leaf,
+                ancestors: Vec::new(),
+                ancestor_cids: Vec::new(),
+                route_path: Some(route_path),
+                mutations: vec![Mutation::Upsert {
+                    key: b"a".to_vec(),
+                    val: b"new".to_vec(),
+                }]
+                .into(),
+            }
+        };
+
+        assert!(!key_stable_group_is_safe(&group(
+            crate::chunking::entry_count_key_hash(),
+            0,
+        )));
+        assert!(key_stable_group_is_safe(&group(
+            crate::chunking::entry_count_key_hash(),
+            1,
+        )));
+        assert!(!key_stable_group_is_safe(&group(
+            crate::chunking::entry_count_key_value_hash(),
+            1,
+        )));
+        assert!(!key_stable_group_is_safe(&group(
+            crate::chunking::logical_bytes_rolling_hash(),
+            1,
+        )));
     }
 
     #[test]
@@ -5787,7 +5602,7 @@ mod tests {
 
     #[test]
     fn coalesced_leaf_preparation_parallel_path_preserves_order_and_detects_noops() {
-        let group_count = PARALLEL_LEAF_APPLY_THRESHOLD + 4;
+        let group_count = 20;
         let groups = (0..group_count)
             .map(|idx| {
                 let key = format!("k{idx:03}").into_bytes();
@@ -5808,7 +5623,18 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let prepared = prepare_leaf_groups_for_coalesced_rebuild(groups, true);
+        let prepared = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let policy = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(4, 1),
+                    group_count,
+                    group_count,
+                );
+                prepare_leaf_groups_for_coalesced_rebuild(groups, true, policy)
+            });
 
         assert_eq!(prepared.len(), group_count);
         for (idx, group) in prepared.iter().enumerate() {
@@ -6236,11 +6062,7 @@ mod tests {
         }
         let base = builder.build().unwrap();
         let prolly = Prolly::new(store.clone(), config);
-        let writer = BatchWriter::with_config(
-            BatchWriterConfig::new()
-                .with_prefetch(true)
-                .with_deferred_rebalancing(false),
-        );
+        let writer = BatchWriter::with_config(ParallelConfig::sequential());
         prolly.clear_cache();
         let batch_gets_before = store.batch_get_calls.load(Ordering::Relaxed);
 
@@ -6255,9 +6077,8 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(result.stats.affected_leaves, 1);
-        assert_eq!(result.stats.changed_leaves, 1);
-        assert!(!result.stats.used_deferred_rebalancing);
+        assert_eq!(result.stats.resync_distance_nodes, 1);
+        assert!(result.stats.used_key_stable_fast_path);
         assert_eq!(
             store.batch_get_calls.load(Ordering::Relaxed),
             batch_gets_before,
@@ -6724,7 +6545,7 @@ mod tests {
         assert_eq!(updated.keys.len(), 64);
     }
     #[test]
-    fn batch_apply_with_stats_does_not_count_forced_binary_search_as_sparse() {
+    fn configured_batch_writer_matches_the_public_parallel_batch_route() {
         let store = MemStore::new();
         let config = Config::builder()
             .min_chunk_size(128)
@@ -6741,22 +6562,23 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let tree = create_tree_with_entries(&prolly, &entries);
-        let writer = BatchWriter::with_config(BatchWriterConfig::new().with_optimized_merge(false));
+        let execution = ParallelConfig::new(2, 1);
+        let writer = BatchWriter::with_config(execution.clone());
+        let mutations = vec![Mutation::Upsert {
+            key: b"k0032a".to_vec(),
+            val: b"inserted".to_vec(),
+        }];
 
         let result = writer
-            .apply_batch_with_stats(
-                &prolly,
-                &tree,
-                vec![Mutation::Upsert {
-                    key: b"k0032a".to_vec(),
-                    val: b"inserted".to_vec(),
-                }],
-            )
+            .apply_batch_with_stats(&prolly, &tree, mutations.clone())
+            .unwrap();
+        let public = prolly
+            .parallel_batch_with_stats(&tree, mutations, &execution)
             .unwrap();
 
-        assert_eq!(result.stats.affected_leaves, 1);
-        assert_eq!(result.stats.changed_leaves, 1);
-        assert_eq!(result.stats.sparse_leaf_applies, 0);
+        assert_eq!(writer.config().max_threads, 2);
+        assert_eq!(result.tree.root, public.tree.root);
+        assert_eq!(result.stats, public.stats);
         assert_eq!(
             prolly.get(&result.tree, b"k0032a").unwrap(),
             Some(b"inserted".to_vec())

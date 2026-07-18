@@ -305,6 +305,8 @@ class ProllyParityTest {
             assertEquals(2UL, parallelStats.stats.inputMutations)
             assertEquals(2UL, parallelStats.stats.effectiveMutations)
             assertTrue(parallelStats.stats.writtenNodes > 0UL)
+            assertEquals(1UL, parallelStats.stats.parallelWidth)
+            assertEquals(0UL, parallelStats.stats.parallelTasks)
 
             val appended = engine.appendBatch(
                 built,
@@ -327,7 +329,7 @@ class ProllyParityTest {
             assertEquals(3UL, appendedStats.stats.inputMutations)
             assertEquals(2UL, appendedStats.stats.effectiveMutations)
             assertFalse(appendedStats.stats.preprocessInputSorted)
-            assertTrue(appendedStats.stats.usedCoalescedRebuild)
+            assertTrue(appendedStats.stats.entriesStreamed >= appendedStats.stats.effectiveMutations)
             assertTrue(appendedStats.stats.writtenNodes > 0UL)
 
             val firstPage = engine.rangePage(tree, null, null, 1UL)

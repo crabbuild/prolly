@@ -286,6 +286,9 @@ end
     
     
     
+
+
+
   end
 
   def self.alloc_from_TypeBatchApplyStatsRecord(v)
@@ -4287,6 +4290,10 @@ end
     
     
     
+
+
+
+
   end
 
   def self.alloc_from_TypeWriteStatsRecord(v)
@@ -7291,17 +7298,20 @@ class RustBufferStream
       input_mutations: readU64,
       effective_mutations: readU64,
       preprocess_input_sorted: readBool,
-      affected_leaves: readU64,
-      changed_leaves: readU64,
-      sparse_leaf_applies: readU64,
+      entries_streamed: readU64,
+      nodes_read: readU64,
       written_nodes: readU64,
+      nodes_reused: readU64,
+      bytes_read: readU64,
       written_bytes: readU64,
-      used_append_fast_path: readBool,
-      used_batched_route: readBool,
-      used_coalesced_rebuild: readBool,
-      used_deferred_rebalancing: readBool,
-      used_bottom_up_rebuild: readBool,
-      cache_written_nodes: readBool
+      resync_distance_entries: readU64,
+      resync_distance_nodes: readU64,
+      used_key_stable_fast_path: readBool,
+      used_batched_value_update_path: readBool,
+      parallel_width: readU64,
+      parallel_tasks: readU64,
+      structural_islands: readU64,
+      coalesced_islands: readU64
     )
   end
 
@@ -9344,7 +9354,11 @@ class RustBufferStream
       resync_distance_entries: readU64,
       resync_distance_nodes: readU64,
       used_key_stable_fast_path: readBool,
-      used_batched_value_update_path: readBool
+      used_batched_value_update_path: readBool,
+      parallel_width: readU64,
+      parallel_tasks: readU64,
+      structural_islands: readU64,
+      coalesced_islands: readU64
     )
   end
 
@@ -12001,17 +12015,20 @@ class RustBufferBuilder
     self.write_U64(v.input_mutations)
     self.write_U64(v.effective_mutations)
     self.write_Bool(v.preprocess_input_sorted)
-    self.write_U64(v.affected_leaves)
-    self.write_U64(v.changed_leaves)
-    self.write_U64(v.sparse_leaf_applies)
+    self.write_U64(v.entries_streamed)
+    self.write_U64(v.nodes_read)
     self.write_U64(v.written_nodes)
+    self.write_U64(v.nodes_reused)
+    self.write_U64(v.bytes_read)
     self.write_U64(v.written_bytes)
-    self.write_Bool(v.used_append_fast_path)
-    self.write_Bool(v.used_batched_route)
-    self.write_Bool(v.used_coalesced_rebuild)
-    self.write_Bool(v.used_deferred_rebalancing)
-    self.write_Bool(v.used_bottom_up_rebuild)
-    self.write_Bool(v.cache_written_nodes)
+    self.write_U64(v.resync_distance_entries)
+    self.write_U64(v.resync_distance_nodes)
+    self.write_Bool(v.used_key_stable_fast_path)
+    self.write_Bool(v.used_batched_value_update_path)
+    self.write_U64(v.parallel_width)
+    self.write_U64(v.parallel_tasks)
+    self.write_U64(v.structural_islands)
+    self.write_U64(v.coalesced_islands)
   end
 
   # The Record type BlobGcPlanRecord.
@@ -13699,6 +13716,10 @@ class RustBufferBuilder
     self.write_U64(v.resync_distance_nodes)
     self.write_Bool(v.used_key_stable_fast_path)
     self.write_Bool(v.used_batched_value_update_path)
+    self.write_U64(v.parallel_width)
+    self.write_U64(v.parallel_tasks)
+    self.write_U64(v.structural_islands)
+    self.write_U64(v.coalesced_islands)
   end
 
   # The Enum type AdaptiveQualityRecord.
@@ -17011,9 +17032,6 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_inspect_proof_bundle,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
-  attach_function :uniffi_prolly_bindings_fn_func_is_boundary_config,
-    [RustBuffer.by_value, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
-    :int8
   attach_function :uniffi_prolly_bindings_fn_func_is_tombstone_value,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     :int8
@@ -17435,9 +17453,6 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_inspect_proof_bundle,
-    [RustCallStatus.by_ref],
-    :uint16
-  attach_function :uniffi_prolly_bindings_checksum_func_is_boundary_config,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_is_tombstone_value,
@@ -19879,23 +19894,26 @@ end
   
   # Record type BatchApplyStatsRecord
 class BatchApplyStatsRecord
-  attr_reader :input_mutations, :effective_mutations, :preprocess_input_sorted, :affected_leaves, :changed_leaves, :sparse_leaf_applies, :written_nodes, :written_bytes, :used_append_fast_path, :used_batched_route, :used_coalesced_rebuild, :used_deferred_rebalancing, :used_bottom_up_rebuild, :cache_written_nodes
+  attr_reader :input_mutations, :effective_mutations, :preprocess_input_sorted, :entries_streamed, :nodes_read, :written_nodes, :nodes_reused, :bytes_read, :written_bytes, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path, :parallel_width, :parallel_tasks, :structural_islands, :coalesced_islands
 
-  def initialize(input_mutations:, effective_mutations:, preprocess_input_sorted:, affected_leaves:, changed_leaves:, sparse_leaf_applies:, written_nodes:, written_bytes:, used_append_fast_path:, used_batched_route:, used_coalesced_rebuild:, used_deferred_rebalancing:, used_bottom_up_rebuild:, cache_written_nodes:)
+  def initialize(input_mutations:, effective_mutations:, preprocess_input_sorted:, entries_streamed:, nodes_read:, written_nodes:, nodes_reused:, bytes_read:, written_bytes:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:, parallel_width:, parallel_tasks:, structural_islands:, coalesced_islands:)
     @input_mutations = input_mutations
     @effective_mutations = effective_mutations
     @preprocess_input_sorted = preprocess_input_sorted
-    @affected_leaves = affected_leaves
-    @changed_leaves = changed_leaves
-    @sparse_leaf_applies = sparse_leaf_applies
+    @entries_streamed = entries_streamed
+    @nodes_read = nodes_read
     @written_nodes = written_nodes
+    @nodes_reused = nodes_reused
+    @bytes_read = bytes_read
     @written_bytes = written_bytes
-    @used_append_fast_path = used_append_fast_path
-    @used_batched_route = used_batched_route
-    @used_coalesced_rebuild = used_coalesced_rebuild
-    @used_deferred_rebalancing = used_deferred_rebalancing
-    @used_bottom_up_rebuild = used_bottom_up_rebuild
-    @cache_written_nodes = cache_written_nodes
+    @resync_distance_entries = resync_distance_entries
+    @resync_distance_nodes = resync_distance_nodes
+    @used_key_stable_fast_path = used_key_stable_fast_path
+    @used_batched_value_update_path = used_batched_value_update_path
+    @parallel_width = parallel_width
+    @parallel_tasks = parallel_tasks
+    @structural_islands = structural_islands
+    @coalesced_islands = coalesced_islands
   end
 
   def ==(other)
@@ -19908,37 +19926,46 @@ class BatchApplyStatsRecord
     if @preprocess_input_sorted != other.preprocess_input_sorted
       return false
     end
-    if @affected_leaves != other.affected_leaves
+    if @entries_streamed != other.entries_streamed
       return false
     end
-    if @changed_leaves != other.changed_leaves
-      return false
-    end
-    if @sparse_leaf_applies != other.sparse_leaf_applies
+    if @nodes_read != other.nodes_read
       return false
     end
     if @written_nodes != other.written_nodes
       return false
     end
+    if @nodes_reused != other.nodes_reused
+      return false
+    end
+    if @bytes_read != other.bytes_read
+      return false
+    end
     if @written_bytes != other.written_bytes
       return false
     end
-    if @used_append_fast_path != other.used_append_fast_path
+    if @resync_distance_entries != other.resync_distance_entries
       return false
     end
-    if @used_batched_route != other.used_batched_route
+    if @resync_distance_nodes != other.resync_distance_nodes
       return false
     end
-    if @used_coalesced_rebuild != other.used_coalesced_rebuild
+    if @used_key_stable_fast_path != other.used_key_stable_fast_path
       return false
     end
-    if @used_deferred_rebalancing != other.used_deferred_rebalancing
+    if @used_batched_value_update_path != other.used_batched_value_update_path
       return false
     end
-    if @used_bottom_up_rebuild != other.used_bottom_up_rebuild
+    if @parallel_width != other.parallel_width
       return false
     end
-    if @cache_written_nodes != other.cache_written_nodes
+    if @parallel_tasks != other.parallel_tasks
+      return false
+    end
+    if @structural_islands != other.structural_islands
+      return false
+    end
+    if @coalesced_islands != other.coalesced_islands
       return false
     end
 
@@ -22995,9 +23022,9 @@ end
   
   # Record type WriteStatsRecord
 class WriteStatsRecord
-  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path
+  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path, :parallel_width, :parallel_tasks, :structural_islands, :coalesced_islands
 
-  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:)
+  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:, parallel_width:, parallel_tasks:, structural_islands:, coalesced_islands:)
     @input_mutations = input_mutations
     @effective_mutations = effective_mutations
     @entries_streamed = entries_streamed
@@ -23010,6 +23037,10 @@ class WriteStatsRecord
     @resync_distance_nodes = resync_distance_nodes
     @used_key_stable_fast_path = used_key_stable_fast_path
     @used_batched_value_update_path = used_batched_value_update_path
+    @parallel_width = parallel_width
+    @parallel_tasks = parallel_tasks
+    @structural_islands = structural_islands
+    @coalesced_islands = coalesced_islands
   end
 
   def ==(other)
@@ -23047,6 +23078,18 @@ class WriteStatsRecord
       return false
     end
     if @used_batched_value_update_path != other.used_batched_value_update_path
+      return false
+    end
+    if @parallel_width != other.parallel_width
+      return false
+    end
+    if @parallel_tasks != other.parallel_tasks
+      return false
+    end
+    if @structural_islands != other.structural_islands
+      return false
+    end
+    if @coalesced_islands != other.coalesced_islands
       return false
     end
 
@@ -25815,27 +25858,6 @@ def self.inspect_proof_bundle(bytes)
     
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_inspect_proof_bundle,RustBuffer.allocFromBytes(bytes))
   return result.consumeIntoTypeProofBundleSummaryRecord
-end
-
-
-  
-  
-
-def self.is_boundary_config(config, count, key, value)
-    config = config
-    RustBuffer.check_lower_TypeConfigRecord(config)
-    
-    count = Prolly::uniffi_in_range(count, "u64", 0, 2**64)
-    
-    
-    key = Prolly::uniffi_bytes(key)
-    
-    
-    value = Prolly::uniffi_bytes(value)
-    
-    
-  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_is_boundary_config,RustBuffer.alloc_from_TypeConfigRecord(config),count,RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
-  return 1 == result
 end
 
 
@@ -29884,7 +29906,7 @@ end
 
   def len()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexregistry_len,uniffi_clone_handle(),)
-    return result.to_i
+    return result
   end
   def register(name, generation, extractor_id, projection, limits, extractor)
         name = Prolly::uniffi_bytes(name)
@@ -29999,7 +30021,7 @@ end
   end
   def fast_handle()
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_bindingindexedmap_fast_handle,uniffi_clone_handle(),)
-    return result
+    return result.to_i
   end
   def get(key)
         key = Prolly::uniffi_bytes(key)

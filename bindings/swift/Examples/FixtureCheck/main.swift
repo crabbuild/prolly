@@ -963,7 +963,10 @@ try expect(appendedStatsValue == Data("44".utf8), "append_batch_with_stats value
 try expect(appendedStats.stats.inputMutations == 3, "append input mutation count mismatch")
 try expect(appendedStats.stats.effectiveMutations == 2, "append effective mutation count mismatch")
 try expect(!appendedStats.stats.preprocessInputSorted, "append sorted flag mismatch")
-try expect(appendedStats.stats.usedCoalescedRebuild, "canonical rebuild flag mismatch")
+try expect(
+    appendedStats.stats.entriesStreamed >= appendedStats.stats.effectiveMutations,
+    "batch streaming telemetry mismatch"
+)
 try expect(appendedStats.stats.writtenNodes > 0, "append written nodes missing")
 
 print("Swift fixture_check scenario passed")

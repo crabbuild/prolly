@@ -5,25 +5,25 @@
     "async-store"
   ],
   "summary": {
-    "release_complete": 357,
+    "release_complete": 354,
     "reviewed_incomplete": 405,
-    "unreviewed_runtime_candidate": 645,
+    "unreviewed_runtime_candidate": 652,
     "unreviewed_data_model": 1473,
     "unreviewed_rust_abstraction": 0
   },
   "family_counts": {
-    "core": 1525,
-    "indexed-map": 248,
+    "core": 1524,
+    "indexed-map": 249,
     "maintenance": 294,
     "proof": 171,
-    "proximity-map": 387,
-    "session": 113,
-    "versioned-map": 142
+    "proximity-map": 389,
+    "session": 114,
+    "versioned-map": 143
   },
   "owner_counts": {
     "prolly::Prolly": 147,
-    "prolly::AsyncProlly": 97,
-    "prolly::VersionedMap": 76,
+    "prolly::AsyncProlly": 98,
+    "prolly::VersionedMap": 77,
     "prolly::Error": 47,
     "prolly::MapSnapshot": 46,
     "prolly::TreeStats": 39,
@@ -32,16 +32,16 @@
     "prolly::Node": 25,
     "prolly::StatsDiff": 25,
     "prolly::StatsPercentageChange": 25,
-    "prolly::ReadSession": 22,
+    "prolly::ReadSession": 23,
     "prolly::RemoteStoreBackend": 22,
     "prolly::ProximityMap": 21,
     "prolly::AsyncStore": 19,
     "prolly::IndexedSnapshotBundle": 19,
     "prolly::MergePolicyRegistry": 19,
+    "prolly::BatchApplyStats": 18,
     "prolly::Store": 18,
-    "prolly::BatchWriterConfig": 16,
+    "prolly::WriteStats": 17,
     "prolly::SecondaryIndexLimits": 16,
-    "prolly::BatchApplyStats": 15,
     "prolly::IndexedMapMetricsSnapshot": 15,
     "prolly::RootManifest": 15,
     "prolly::VersionedValue": 15,
@@ -61,10 +61,10 @@
     "prolly::AuthenticatedProofEnvelopeVerification": 13,
     "prolly::CompositeAccelerator": 13,
     "prolly::ContentObjectKind": 13,
+    "prolly::OwnedAsyncProllyTransaction": 13,
     "prolly::ProllyTransaction": 13,
     "prolly::ProximitySearchProof": 13,
     "prolly::SnapshotBundle": 13,
-    "prolly::WriteStats": 13,
     "prolly::AuthenticatedProofEnvelope": 12,
     "prolly::ChunkingSpec": 12,
     "prolly::HnswIndex": 12,
@@ -120,6 +120,7 @@
     "prolly::IndexedSnapshotBundleSummary": 8,
     "prolly::MissingNodePlan": 8,
     "prolly::ProximitySearchRequest": 8,
+    "prolly::SecondaryIndexRegistry": 8,
     "prolly::TreeFormat": 8,
     "prolly::VersionedMapsTransaction": 8,
     "prolly::ActiveIndexHealth": 7,
@@ -142,13 +143,14 @@
     "prolly::ProductQuantizationConfig": 7,
     "prolly::ProofBundleKind": 7,
     "prolly::ProximityMembershipProof": 7,
+    "prolly::ProximityReadSession": 7,
+    "prolly::ProximityVectorRef": 7,
     "prolly::RangePageProofVerification": 7,
     "prolly::RangeProofVerification": 7,
     "prolly::Resolution": 7,
     "prolly::SearchPlan": 7,
     "prolly::SearchRuntimePolicy": 7,
     "prolly::SecondaryIndexCursor": 7,
-    "prolly::SecondaryIndexRegistry": 7,
     "prolly::SnapshotBundleSummary": 7,
     "prolly::SnapshotBundleVerification": 7,
     "prolly::StructuralDiffCursor": 7,
@@ -183,9 +185,7 @@
     "prolly::NamedRootUpdate": 6,
     "prolly::ProximityFilter": 6,
     "prolly::ProximityProofFilter": 6,
-    "prolly::ProximityReadSession": 6,
     "prolly::ProximityTree": 6,
-    "prolly::ProximityVectorRef": 6,
     "prolly::SearchBackend": 6,
     "prolly::SearchBudget": 6,
     "prolly::SearchCompletion": 6,
@@ -322,7 +322,6 @@
     "prolly::NodeStoreScan": 3,
     "prolly::OwnedRangeScanSession": 3,
     "prolly::OwnedValueLease": 3,
-    "prolly::ParallelRebalancer": 3,
     "prolly::PendingValue": 3,
     "prolly::ProductQuantizationQuality": 3,
     "prolly::ProvedDiffPage": 3,
@@ -357,7 +356,6 @@
     "prolly::BorrowedMergeResolver": 2,
     "prolly::ConflictFreeMerger": 2,
     "prolly::DefaultConflictFreeMerger": 2,
-    "prolly::DefaultParallelRebalancer": 2,
     "prolly::DefaultStreamingDiffer": 2,
     "prolly::DiffCursor": 2,
     "prolly::HashAlgorithm": 2,
@@ -397,6 +395,7 @@
     "prolly::MemBlobStoreError": 1,
     "prolly::MemStoreError": 1,
     "prolly::MergePolicyFn": 1,
+    "prolly::OwnedAsyncTransactionOverlayStore": 1,
     "prolly::OwnedTransactionOverlayStore": 1,
     "prolly::ProjectedIndexEntry": 1,
     "prolly::Resolver": 1,
@@ -447,8 +446,6 @@
     "prolly::i64_key": 1,
     "prolly::index_map_id": 1,
     "prolly::inspect_proof_bundle": 1,
-    "prolly::is_boundary": 1,
-    "prolly::is_boundary_config": 1,
     "prolly::is_tombstone_value": 1,
     "prolly::load_named_content_root": 1,
     "prolly::load_named_content_root_with_limits": 1,
@@ -1643,6 +1640,16 @@
     },
     {
       "rust": "prolly::AsyncProlly::batch",
+      "kind": "function",
+      "owner": "prolly::AsyncProlly",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncProlly::begin_owned_transaction",
       "kind": "function",
       "owner": "prolly::AsyncProlly",
       "member_kind": "inherent-item",
@@ -3752,7 +3759,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::affected_leaves",
+      "rust": "prolly::BatchApplyStats::bytes_read",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3762,17 +3769,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::cache_written_nodes",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::changed_leaves",
+      "rust": "prolly::BatchApplyStats::coalesced_islands",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3792,7 +3789,57 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::BatchApplyStats::entries_streamed",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::BatchApplyStats::input_mutations",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::nodes_read",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::nodes_reused",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::parallel_tasks",
+      "kind": "struct_field",
+      "owner": "prolly::BatchApplyStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::BatchApplyStats::parallel_width",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3812,7 +3859,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::sparse_leaf_applies",
+      "rust": "prolly::BatchApplyStats::resync_distance_entries",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3822,7 +3869,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::used_append_fast_path",
+      "rust": "prolly::BatchApplyStats::resync_distance_nodes",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3832,7 +3879,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::used_batched_route",
+      "rust": "prolly::BatchApplyStats::structural_islands",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3842,7 +3889,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::used_bottom_up_rebuild",
+      "rust": "prolly::BatchApplyStats::used_batched_value_update_path",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -3852,17 +3899,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::BatchApplyStats::used_coalesced_rebuild",
-      "kind": "struct_field",
-      "owner": "prolly::BatchApplyStats",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchApplyStats::used_deferred_rebalancing",
+      "rust": "prolly::BatchApplyStats::used_key_stable_fast_path",
       "kind": "struct_field",
       "owner": "prolly::BatchApplyStats",
       "member_kind": "field",
@@ -4015,166 +4052,6 @@
       "rust": "prolly::BatchWriter::with_config",
       "kind": "function",
       "owner": "prolly::BatchWriter",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::cache_written_nodes",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::enable_deferred_rebalancing",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::enable_prefetch",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::force_deferred",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::new",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::prefetch_parallelism",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::use_bottom_up_rebuild",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::use_optimized_merge",
-      "kind": "struct_field",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_bottom_up_rebuild",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_cache_written_nodes",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_deferred_rebalancing",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_force_deferred",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_optimized_merge",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_prefetch",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_prefetch_parallelism",
-      "kind": "function",
-      "owner": "prolly::BatchWriterConfig",
       "member_kind": "inherent-item",
       "family": "core",
       "classification": "portable",
@@ -7015,26 +6892,6 @@
       "rust": "prolly::DefaultConflictFreeMerger::new",
       "kind": "function",
       "owner": "prolly::DefaultConflictFreeMerger",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::DefaultParallelRebalancer",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::DefaultParallelRebalancer::new",
-      "kind": "function",
-      "owner": "prolly::DefaultParallelRebalancer",
       "member_kind": "inherent-item",
       "family": "core",
       "classification": "portable",
@@ -14772,6 +14629,146 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::OwnedAsyncProllyTransaction",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::batch",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::commit",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::compare_and_swap_named_root",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::create",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::delete",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::delete_named_root",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::get",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::load_named_root",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::publish_named_root",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::publish_named_root_at_millis",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::put",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::rollback",
+      "kind": "function",
+      "owner": "prolly::OwnedAsyncProllyTransaction",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::OwnedAsyncTransactionOverlayStore",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::OwnedProllyTransaction",
       "kind": "struct",
       "owner": null,
@@ -15110,36 +15107,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::ParallelRebalancer",
-      "kind": "trait",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::ParallelRebalancer::parallel_batch",
-      "kind": "function",
-      "owner": "prolly::ParallelRebalancer",
-      "member_kind": "trait-item",
-      "family": "core",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::ParallelRebalancer::parallel_rebalance",
-      "kind": "function",
-      "owner": "prolly::ParallelRebalancer",
-      "member_kind": "trait-item",
-      "family": "core",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
     },
     {
       "rust": "prolly::PendingValue",
@@ -18552,6 +18519,16 @@
       "bucket": "reviewed_incomplete"
     },
     {
+      "rust": "prolly::ProximityReadSession::get_lease",
+      "kind": "function",
+      "owner": "prolly::ProximityReadSession",
+      "member_kind": "inherent-item",
+      "family": "proximity-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::ProximityReadSession::get_with",
       "kind": "function",
       "owner": "prolly::ProximityReadSession",
@@ -19322,6 +19299,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::ProximityVectorRef::as_le_bytes",
+      "kind": "function",
+      "owner": "prolly::ProximityVectorRef",
+      "member_kind": "inherent-item",
+      "family": "proximity-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::ProximityVectorRef::component",
       "kind": "function",
       "owner": "prolly::ProximityVectorRef",
@@ -19990,6 +19977,16 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::ReadSession::get_lease",
+      "kind": "function",
+      "owner": "prolly::ReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::ReadSession::get_many_with",
@@ -22950,6 +22947,16 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::SecondaryIndexRegistry::replace",
+      "kind": "function",
+      "owner": "prolly::SecondaryIndexRegistry",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::SecondaryIndexSnapshot",
@@ -27212,6 +27219,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::VersionedMap::get_lease",
+      "kind": "function",
+      "owner": "prolly::VersionedMap",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::VersionedMap::get_many",
       "kind": "function",
       "owner": "prolly::VersionedMap",
@@ -28422,6 +28439,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::WriteStats::coalesced_islands",
+      "kind": "struct_field",
+      "owner": "prolly::WriteStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::WriteStats::effective_mutations",
       "kind": "struct_field",
       "owner": "prolly::WriteStats",
@@ -28482,6 +28509,26 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::WriteStats::parallel_tasks",
+      "kind": "struct_field",
+      "owner": "prolly::WriteStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::WriteStats::parallel_width",
+      "kind": "struct_field",
+      "owner": "prolly::WriteStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::WriteStats::resync_distance_entries",
       "kind": "struct_field",
       "owner": "prolly::WriteStats",
@@ -28493,6 +28540,16 @@
     },
     {
       "rust": "prolly::WriteStats::resync_distance_nodes",
+      "kind": "struct_field",
+      "owner": "prolly::WriteStats",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::WriteStats::structural_islands",
       "kind": "struct_field",
       "owner": "prolly::WriteStats",
       "member_kind": "field",
@@ -28870,26 +28927,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::is_boundary",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::is_boundary_config",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::is_tombstone_value",

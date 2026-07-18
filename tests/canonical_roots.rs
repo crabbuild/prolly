@@ -1,9 +1,87 @@
 use prolly::{
-    chunking, BatchBuilder, BatchWriter, Config, Error, MemStore, Mutation, NodeLayoutSpec,
-    ParallelConfig, Prolly,
+    chunking, BatchBuilder, BatchOp, BatchWriter, Config, Error, MemStore, Mutation,
+    NodeLayoutSpec, ParallelConfig, Prolly, Store,
 };
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+static PARALLEL_TELEMETRY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Debug)]
+struct PublicationStoreError(String);
+
+impl std::fmt::Display for PublicationStoreError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PublicationStoreError {}
+
+#[derive(Default)]
+struct PublicationStore {
+    inner: MemStore,
+    batch_put_calls: AtomicUsize,
+    fail_batch_put: AtomicBool,
+}
+
+impl PublicationStore {
+    fn map_error(error: prolly::MemStoreError) -> PublicationStoreError {
+        PublicationStoreError(error.to_string())
+    }
+}
+
+impl Store for PublicationStore {
+    type Error = PublicationStoreError;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key).map_err(Self::map_error)
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put(key, value).map_err(Self::map_error)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key).map_err(Self::map_error)
+    }
+
+    fn batch(&self, ops: &[BatchOp]) -> Result<(), Self::Error> {
+        self.inner.batch(ops).map_err(Self::map_error)
+    }
+
+    fn batch_get(&self, keys: &[&[u8]]) -> Result<HashMap<Vec<u8>, Vec<u8>>, Self::Error> {
+        self.inner.batch_get(keys).map_err(Self::map_error)
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered(keys).map_err(Self::map_error)
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner
+            .batch_get_ordered_unique(keys)
+            .map_err(Self::map_error)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        self.batch_put_calls.fetch_add(1, Ordering::Relaxed);
+        if self.fail_batch_put.load(Ordering::Acquire) {
+            return Err(PublicationStoreError(
+                "injected atomic publication failure".to_owned(),
+            ));
+        }
+        self.inner.batch_put(entries).map_err(Self::map_error)
+    }
+}
 
 fn records() -> Vec<(Vec<u8>, Vec<u8>)> {
     (0..180)
@@ -471,12 +549,14 @@ fn parallel_batch_matches_the_canonical_batch_root() {
         .chunking(chunking::entry_count_key_hash())
         .node_layout(NodeLayoutSpec::Plain)
         .build();
-    let manager = Prolly::new(Arc::new(MemStore::new()), config);
+    let manager = Prolly::new(Arc::new(MemStore::new()), config.clone());
+    let original = records();
     let base = manager
         .batch(
             &manager.create(),
-            records()
-                .into_iter()
+            original
+                .iter()
+                .cloned()
                 .map(|(key, val)| Mutation::Upsert { key, val })
                 .collect(),
         )
@@ -498,9 +578,386 @@ fn parallel_batch_matches_the_canonical_batch_root() {
         .collect::<Vec<_>>();
 
     let canonical = manager.batch(&base, mutations.clone()).unwrap();
-    let parallel = manager
-        .parallel_batch(&base, mutations, &ParallelConfig::new(0, 1))
-        .unwrap();
+    for width in [1, 2, 4, 8, 0] {
+        let parallel = manager
+            .parallel_batch(&base, mutations.clone(), &ParallelConfig::new(width, 1))
+            .unwrap();
+        assert_eq!(parallel.root, canonical.root, "width={width}");
+    }
 
-    assert_eq!(parallel.root, canonical.root);
+    let mut expected_entries = original.into_iter().collect::<BTreeMap<_, _>>();
+    for mutation in mutations {
+        match mutation {
+            Mutation::Upsert { key, val } => {
+                expected_entries.insert(key, val);
+            }
+            Mutation::Delete { key } => {
+                expected_entries.remove(&key);
+            }
+        }
+    }
+    let mut bulk = BatchBuilder::new(Arc::new(MemStore::new()), config);
+    for (key, value) in expected_entries {
+        bulk.add(key, value);
+    }
+    assert_eq!(canonical.root, bulk.build().unwrap().root);
+}
+
+#[test]
+fn parallel_structural_islands_match_canonical_roots_for_every_policy_and_width() {
+    let _telemetry_lock = PARALLEL_TELEMETRY_TEST_LOCK.lock().unwrap();
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap()
+        .install(|| {
+            let original = (0..4_096)
+                .map(|index| {
+                    (
+                        format!("k{index:05}").into_bytes(),
+                        vec![(index % 251) as u8; 32],
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut saw_parallel_distant_islands = false;
+            let mut saw_adjacent_admission_bypass = false;
+
+            for (policy_index, mut policy) in [
+                chunking::entry_count_key_hash(),
+                chunking::entry_count_key_value_hash(),
+                chunking::logical_bytes_key_weibull(),
+                chunking::logical_bytes_rolling_hash(),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                match policy.measure {
+                    prolly::ChunkMeasure::EntryCount => {
+                        policy.min = 2;
+                        policy.target = 4;
+                        policy.max = 8;
+                        policy.hard_max_node_bytes = 2_048;
+                    }
+                    _ => {
+                        policy.min = 96;
+                        policy.target = 192;
+                        policy.max = 384;
+                        policy.hard_max_node_bytes = 1_024;
+                    }
+                }
+                let config = Config::builder()
+                    .chunking(policy.clone())
+                    .node_layout(NodeLayoutSpec::PrefixCompressed)
+                    .build();
+                let manager = Prolly::new(Arc::new(MemStore::new()), config.clone());
+                let base = manager
+                    .batch(
+                        &manager.create(),
+                        original
+                            .iter()
+                            .cloned()
+                            .map(|(key, val)| Mutation::Upsert { key, val })
+                            .collect(),
+                    )
+                    .unwrap();
+                let fixtures = [
+                    (
+                        "distant-inserts",
+                        vec![
+                            Mutation::Upsert {
+                                key: b"k00256a".to_vec(),
+                                val: vec![b'a'; 32],
+                            },
+                            Mutation::Upsert {
+                                key: b"k03500a".to_vec(),
+                                val: vec![b'b'; 32],
+                            },
+                        ],
+                    ),
+                    (
+                        "adjacent-inserts",
+                        vec![
+                            Mutation::Upsert {
+                                key: b"k01000a".to_vec(),
+                                val: vec![b'c'; 32],
+                            },
+                            Mutation::Upsert {
+                                key: b"k01016a".to_vec(),
+                                val: vec![b'd'; 32],
+                            },
+                        ],
+                    ),
+                    (
+                        "distant-deletes",
+                        vec![
+                            Mutation::Delete {
+                                key: b"k00500".to_vec(),
+                            },
+                            Mutation::Delete {
+                                key: b"k03000".to_vec(),
+                            },
+                        ],
+                    ),
+                    (
+                        "distant-mixed",
+                        vec![
+                            Mutation::Delete {
+                                key: b"k00750".to_vec(),
+                            },
+                            Mutation::Upsert {
+                                key: b"k02000a".to_vec(),
+                                val: vec![b'e'; 32],
+                            },
+                            Mutation::Upsert {
+                                key: b"k03200".to_vec(),
+                                val: vec![b'f'; 32],
+                            },
+                        ],
+                    ),
+                ];
+
+                for (fixture_name, mutations) in fixtures {
+                    let sequential = manager
+                        .parallel_batch_with_stats(
+                            &base,
+                            mutations.clone(),
+                            &ParallelConfig::sequential(),
+                        )
+                        .unwrap();
+                    let automatic = manager.batch(&base, mutations.clone()).unwrap();
+                    assert_eq!(
+                        automatic.root, sequential.tree.root,
+                        "policy={:?}, fixture={fixture_name}",
+                        policy.rule
+                    );
+
+                    let mut widest = None;
+                    for width in [1, 2, 4, 8, 0] {
+                        let result = manager
+                            .parallel_batch_with_stats(
+                                &base,
+                                mutations.clone(),
+                                &ParallelConfig::new(width, 1),
+                            )
+                            .unwrap();
+                        assert_eq!(
+                            result.tree.root, sequential.tree.root,
+                            "policy={:?}, fixture={fixture_name}, width={width}",
+                            policy.rule
+                        );
+                        if fixture_name == "distant-inserts"
+                            && width == 4
+                            && result.stats.structural_islands > 1
+                        {
+                            assert!(result.stats.parallel_tasks > 1);
+                            saw_parallel_distant_islands = true;
+                        }
+                        if policy_index == 0
+                            && fixture_name == "adjacent-inserts"
+                            && width == 4
+                            && result.stats.structural_islands == 0
+                            && result.stats.parallel_tasks == 0
+                        {
+                            saw_adjacent_admission_bypass = true;
+                        }
+                        if width == 0 {
+                            widest = Some(result.tree);
+                        }
+                    }
+
+                    let mut expected = original.iter().cloned().collect::<BTreeMap<_, _>>();
+                    for mutation in mutations {
+                        match mutation {
+                            Mutation::Upsert { key, val } => {
+                                expected.insert(key, val);
+                            }
+                            Mutation::Delete { key } => {
+                                expected.remove(&key);
+                            }
+                        }
+                    }
+                    let expected = expected.into_iter().collect::<Vec<_>>();
+                    assert_eq!(
+                        sequential.tree.root,
+                        build_records(config.clone(), &expected).root,
+                        "policy={:?}, fixture={fixture_name}, fresh build",
+                        policy.rule
+                    );
+                    assert_eq!(
+                        manager.export_snapshot(&sequential.tree).unwrap(),
+                        manager.export_snapshot(&widest.unwrap()).unwrap(),
+                    );
+                }
+            }
+
+            assert!(saw_parallel_distant_islands);
+            assert!(saw_adjacent_admission_bypass);
+        });
+}
+
+#[test]
+fn failed_structural_proof_falls_back_before_one_atomic_publication() {
+    let _telemetry_lock = PARALLEL_TELEMETRY_TEST_LOCK.lock().unwrap();
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap()
+        .install(|| {
+            let config = Config::builder()
+                .min_chunk_size(2)
+                .max_chunk_size(4)
+                .chunking_factor(u32::MAX)
+                .node_layout(NodeLayoutSpec::PrefixCompressed)
+                .build();
+            let records = (0..4_096)
+                .map(|index| {
+                    (
+                        format!("k{index:05}").into_bytes(),
+                        vec![(index % 251) as u8; 32],
+                    )
+                })
+                .collect::<Vec<_>>();
+            let store = Arc::new(PublicationStore::default());
+            let mut builder = BatchBuilder::new(store.clone(), config.clone());
+            for (key, value) in &records {
+                builder.add(key.clone(), value.clone());
+            }
+            let base = builder.build().unwrap();
+            store.batch_put_calls.store(0, Ordering::Relaxed);
+            let manager = Prolly::new(store.clone(), config.clone());
+            let mutations = (0..10)
+                .map(|island| Mutation::Upsert {
+                    key: format!("k{:05}a", 256 + island * 350).into_bytes(),
+                    val: vec![b'a' + island as u8; 32],
+                })
+                .collect::<Vec<_>>();
+
+            let result = manager
+                .parallel_batch_with_stats(&base, mutations.clone(), &ParallelConfig::new(2, 1))
+                .unwrap();
+            if result.stats.structural_islands > 0 {
+                assert_eq!(result.stats.structural_islands, 10);
+                assert_eq!(result.stats.coalesced_islands, 0);
+                assert_eq!(result.stats.parallel_tasks, 2);
+            }
+            assert_eq!(store.batch_put_calls.load(Ordering::Relaxed), 1);
+
+            let mut expected = records.into_iter().collect::<BTreeMap<_, _>>();
+            for mutation in mutations {
+                match mutation {
+                    Mutation::Upsert { key, val } => {
+                        expected.insert(key, val);
+                    }
+                    Mutation::Delete { key } => {
+                        expected.remove(&key);
+                    }
+                }
+            }
+            let expected = expected.into_iter().collect::<Vec<_>>();
+            assert_eq!(result.tree.root, build_records(config, &expected).root);
+        });
+}
+
+#[test]
+fn configured_executor_returns_no_root_when_atomic_publication_fails() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap()
+        .install(|| {
+            let config = Config::builder()
+                .chunking(chunking::entry_count_key_hash())
+                .build();
+            let records = numbered_records(5_000);
+            let store = Arc::new(PublicationStore::default());
+            let mut builder = BatchBuilder::new(store.clone(), config.clone());
+            for (key, value) in &records {
+                builder.add(key.clone(), value.clone());
+            }
+            let base = builder.build().unwrap();
+            let manager = Prolly::new(store.clone(), config);
+            let mutations = (0..256)
+                .map(|index| Mutation::Upsert {
+                    key: format!("key-{:06}", index * 16 + 1).into_bytes(),
+                    val: vec![b'z'; 32],
+                })
+                .collect::<Vec<_>>();
+
+            store.batch_put_calls.store(0, Ordering::Relaxed);
+            store.fail_batch_put.store(true, Ordering::Release);
+            let error = manager
+                .parallel_batch_with_stats(&base, mutations.clone(), &ParallelConfig::new(4, 1))
+                .unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("injected atomic publication failure"));
+            assert_eq!(store.batch_put_calls.load(Ordering::Relaxed), 1);
+
+            store.fail_batch_put.store(false, Ordering::Release);
+            let recovered = manager
+                .parallel_batch(&base, mutations.clone(), &ParallelConfig::new(4, 1))
+                .unwrap();
+            let sequential = manager
+                .parallel_batch(&base, mutations, &ParallelConfig::sequential())
+                .unwrap();
+            assert_eq!(recovered.root, sequential.root);
+        });
+}
+
+#[test]
+fn concurrent_configured_callers_match_sequential_roots() {
+    let _telemetry_lock = PARALLEL_TELEMETRY_TEST_LOCK.lock().unwrap();
+    let config = Config::builder()
+        .chunking(chunking::entry_count_key_hash())
+        .build();
+    let records = numbered_records(10_000);
+    let store = Arc::new(MemStore::new());
+    let mut builder = BatchBuilder::new(store.clone(), config.clone());
+    for (key, value) in &records {
+        builder.add(key.clone(), value.clone());
+    }
+    let base = builder.build().unwrap();
+    let manager = Arc::new(Prolly::new(store, config));
+    let workloads = (0..8)
+        .map(|caller| {
+            (0..64)
+                .map(|index| Mutation::Upsert {
+                    key: format!("key-{:06}", index * 137).into_bytes(),
+                    val: vec![b'a' + caller as u8; 32],
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let expected = workloads
+        .iter()
+        .map(|mutations| {
+            manager
+                .parallel_batch(&base, mutations.clone(), &ParallelConfig::sequential())
+                .unwrap()
+                .root
+        })
+        .collect::<Vec<_>>();
+    let barrier = Arc::new(std::sync::Barrier::new(workloads.len()));
+
+    std::thread::scope(|scope| {
+        let handles = workloads
+            .into_iter()
+            .zip(expected)
+            .map(|(mutations, expected)| {
+                let manager = manager.clone();
+                let base = base.clone();
+                let barrier = barrier.clone();
+                scope.spawn(move || {
+                    barrier.wait();
+                    let result = manager
+                        .parallel_batch_with_stats(&base, mutations, &ParallelConfig::default())
+                        .unwrap();
+                    assert_eq!(result.tree.root, expected);
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    });
 }

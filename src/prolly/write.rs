@@ -1,13 +1,18 @@
 //! Deterministic mutation stream and resynchronizing tree writer.
 
 use std::collections::HashSet;
+use std::ops::Range;
+
+use rayon::prelude::*;
 
 use super::boundary::entry_count_boundary;
 use super::builder::{BatchBuilder, LevelEmitter, NodeSummary};
 use super::cid::Cid;
+use super::config::Config;
 use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
 use super::node::Node;
+use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
 use super::{Prolly, Tree};
 
@@ -28,6 +33,10 @@ pub struct WriteStats {
     pub resync_distance_nodes: u64,
     pub used_key_stable_fast_path: bool,
     pub used_batched_value_update_path: bool,
+    pub parallel_width: u64,
+    pub parallel_tasks: u64,
+    pub structural_islands: u64,
+    pub coalesced_islands: u64,
 }
 
 pub(crate) struct EmittedLeaf {
@@ -40,6 +49,50 @@ struct EmittedInternal {
     cid: Cid,
     bytes: Vec<u8>,
     node: Node,
+}
+
+const MUTATION_ISLAND_GUARD_LEAVES: usize = 8;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MutationIsland {
+    /// Existing leaf range owned by this replay. The end advances to the
+    /// matched anchor after a successful replay.
+    leaf_range: Range<usize>,
+    /// Normalized mutations owned exclusively by this replay.
+    mutation_range: Range<usize>,
+    /// Exclusive old-leaf guard that replay must not cross.
+    protected_end: usize,
+}
+
+struct IslandReplay {
+    island: MutationIsland,
+    summaries: Vec<NodeSummary>,
+    emitted: Vec<EmittedLeaf>,
+    resynced_at: Option<usize>,
+    entries_streamed: u64,
+    nodes_read: u64,
+    bytes_read: u64,
+}
+
+impl IslandReplay {
+    fn proved_independent(&self) -> bool {
+        self.resynced_at
+            .map(|index| index < self.island.protected_end)
+            .unwrap_or(false)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MutationIslandCandidate {
+    first_leaf: usize,
+    last_leaf: usize,
+    first_mutation: usize,
+    mutation_end: usize,
+}
+
+struct StructuralIslandReplay {
+    summaries: Vec<NodeSummary>,
+    emitted: Vec<EmittedLeaf>,
 }
 
 pub(crate) struct LeafEmitter {
@@ -93,7 +146,16 @@ pub(crate) fn apply<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<(Tree, WriteStats), Error> {
-    apply_impl(manager, tree, mutations, true)
+    apply_impl(manager, tree, mutations, true, None)
+}
+
+pub(crate) fn apply_configured<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<(Tree, WriteStats), Error> {
+    apply_impl(manager, tree, mutations, true, Some(config))
 }
 
 pub(crate) fn apply_tree<S: Store>(
@@ -101,7 +163,16 @@ pub(crate) fn apply_tree<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    Ok(apply_impl(manager, tree, mutations, false)?.0)
+    Ok(apply_impl(manager, tree, mutations, false, None)?.0)
+}
+
+pub(crate) fn apply_tree_configured<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<Tree, Error> {
+    Ok(apply_impl(manager, tree, mutations, false, Some(config))?.0)
 }
 
 fn apply_impl<S: Store>(
@@ -109,7 +180,11 @@ fn apply_impl<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
     measure_read_bytes: bool,
+    parallel_config: Option<&ParallelConfig>,
 ) -> Result<(Tree, WriteStats), Error> {
+    let parallel_threshold = parallel_config
+        .map(|config| config.parallelism_threshold)
+        .unwrap_or_else(|| ParallelConfig::default().parallelism_threshold);
     let mut stats = WriteStats {
         input_mutations: mutations.len() as u64,
         ..WriteStats::default()
@@ -129,6 +204,17 @@ fn apply_impl<S: Store>(
 
     let mut mutations = normalize(mutations);
     stats.effective_mutations = mutations.len() as u64;
+    let _concurrency_guard = (mutations.len() >= parallel_threshold
+        && rayon::current_num_threads() > 1)
+        .then(super::parallel::CanonicalWriteConcurrencyGuard::enter);
+    let policy = parallel_config.map_or_else(
+        || ExecutionPolicy::automatic(mutations.len(), mutations.len()),
+        |config| ExecutionPolicy::from_config(config, mutations.len(), mutations.len()),
+    );
+    // Report the maximum width actually used, not merely the width admitted
+    // by policy. Canonical fallbacks that execute no independent work remain
+    // honest width-one operations in public telemetry.
+    stats.parallel_width = 1;
     if tree.root.is_none() {
         return build_empty_base(manager, tree, mutations, stats);
     }
@@ -141,11 +227,17 @@ fn apply_impl<S: Store>(
     )? {
         return Ok(result);
     }
-    mutations =
-        match try_direct_value_updates(manager, tree, mutations, &mut stats, measure_read_bytes)? {
-            DirectValueUpdateAttempt::Applied(result) => return Ok(*result),
-            DirectValueUpdateAttempt::Fallback(mutations) => mutations,
-        };
+    mutations = match try_direct_value_updates(
+        manager,
+        tree,
+        mutations,
+        &mut stats,
+        measure_read_bytes,
+        policy,
+    )? {
+        DirectValueUpdateAttempt::Applied(result) => return Ok(*result),
+        DirectValueUpdateAttempt::Fallback(mutations) => mutations,
+    };
     if let Some(result) =
         try_direct_single_delete(manager, tree, &mutations, &mut stats, measure_read_bytes)?
     {
@@ -161,39 +253,78 @@ fn apply_impl<S: Store>(
     if old_leaves.is_empty() {
         return build_empty_base(manager, tree, mutations, stats);
     }
-    let mut mutation_index = 0;
-    let mut old_cursor = 0usize;
-    let mut summaries = Vec::with_capacity(old_leaves.len());
-    let mut emitted = Vec::<EmittedLeaf>::new();
+    let parallel_replay = try_parallel_structural_islands(
+        manager,
+        tree,
+        &old_leaves,
+        &mutations,
+        policy,
+        &mut stats,
+        measure_read_bytes,
+    )?;
+    let (summaries, emitted) = if let Some(replay) = parallel_replay {
+        (replay.summaries, replay.emitted)
+    } else {
+        let mut mutation_index = 0;
+        let mut old_cursor = 0usize;
+        let mut summaries = Vec::with_capacity(old_leaves.len());
+        let mut emitted = Vec::<EmittedLeaf>::new();
 
-    while mutation_index < mutations.len() {
-        let start = old_leaves
-            .partition_point(|leaf| {
-                leaf.first_key.as_slice() <= mutations[mutation_index].0.as_slice()
-            })
-            // A hard-cap split occurs immediately before the entry that did
-            // not fit. If that entry shrinks, the canonical split can move
-            // into the preceding leaf, so replay one predecessor as context.
-            .saturating_sub(2)
-            .max(old_cursor);
-        summaries.extend_from_slice(&old_leaves[old_cursor..start]);
-        stats.nodes_reused += start.saturating_sub(old_cursor) as u64;
+        while mutation_index < mutations.len() {
+            let start = old_leaves
+                .partition_point(|leaf| {
+                    leaf.first_key.as_slice() <= mutations[mutation_index].0.as_slice()
+                })
+                // A hard-cap split occurs immediately before the entry that did
+                // not fit. If that entry shrinks, the canonical split can move
+                // into the preceding leaf, so replay one predecessor as context.
+                .saturating_sub(2)
+                .max(old_cursor);
+            summaries.extend_from_slice(&old_leaves[old_cursor..start]);
+            stats.nodes_reused += start.saturating_sub(old_cursor) as u64;
 
-        let mut emitter = LeafEmitter::new(&tree.config)?;
-        let mut resynced_at = None;
-        let first_pending_mutation = mutation_index;
-        for leaf_index in start..old_leaves.len() {
-            let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
-            stats.nodes_read += 1;
-            if measure_read_bytes {
-                stats.bytes_read += leaf.encoded_len() as u64;
-            }
-            if !leaf.leaf || leaf.keys.len() != leaf.vals.len() {
-                return Err(Error::InvalidNode);
-            }
+            let mut emitter = LeafEmitter::new(&tree.config)?;
+            let mut resynced_at = None;
+            let first_pending_mutation = mutation_index;
+            for leaf_index in start..old_leaves.len() {
+                let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
+                stats.nodes_read += 1;
+                if measure_read_bytes {
+                    stats.bytes_read += leaf.encoded_len() as u64;
+                }
+                if !leaf.leaf || leaf.keys.len() != leaf.vals.len() {
+                    return Err(Error::InvalidNode);
+                }
 
-            for (key, value) in leaf.keys.iter().cloned().zip(leaf.vals.iter().cloned()) {
-                while mutation_index < mutations.len() && mutations[mutation_index].0 < key {
+                for (key, value) in leaf.keys.iter().cloned().zip(leaf.vals.iter().cloned()) {
+                    while mutation_index < mutations.len() && mutations[mutation_index].0 < key {
+                        let (mutation_key, mutation_value) =
+                            take_mutation(&mut mutations[mutation_index]);
+                        if let Some(value) = mutation_value {
+                            emitter.push(mutation_key, value)?;
+                            stats.entries_streamed += 1;
+                        }
+                        mutation_index += 1;
+                    }
+                    if mutation_index < mutations.len() && mutations[mutation_index].0 == key {
+                        let (_, mutation_value) = take_mutation(&mut mutations[mutation_index]);
+                        if let Some(value) = mutation_value {
+                            emitter.push(key, value)?;
+                            stats.entries_streamed += 1;
+                        }
+                        mutation_index += 1;
+                    } else {
+                        emitter.push(key, value)?;
+                        stats.entries_streamed += 1;
+                    }
+                }
+
+                let next_first = old_leaves.get(leaf_index + 1).map(|leaf| &leaf.first_key);
+                while mutation_index < mutations.len()
+                    && next_first
+                        .map(|next| mutations[mutation_index].0 < *next)
+                        .unwrap_or(true)
+                {
                     let (mutation_key, mutation_value) =
                         take_mutation(&mut mutations[mutation_index]);
                     if let Some(value) = mutation_value {
@@ -202,25 +333,17 @@ fn apply_impl<S: Store>(
                     }
                     mutation_index += 1;
                 }
-                if mutation_index < mutations.len() && mutations[mutation_index].0 == key {
-                    let (_, mutation_value) = take_mutation(&mut mutations[mutation_index]);
-                    if let Some(value) = mutation_value {
-                        emitter.push(key, value)?;
-                        stats.entries_streamed += 1;
-                    }
-                    mutation_index += 1;
-                } else {
-                    emitter.push(key, value)?;
-                    stats.entries_streamed += 1;
+
+                stats.resync_distance_nodes += 1;
+                if mutation_index > first_pending_mutation
+                    && emitter.is_aligned_with(&old_leaves[leaf_index])
+                {
+                    resynced_at = Some(leaf_index);
+                    break;
                 }
             }
 
-            let next_first = old_leaves.get(leaf_index + 1).map(|leaf| &leaf.first_key);
-            while mutation_index < mutations.len()
-                && next_first
-                    .map(|next| mutations[mutation_index].0 < *next)
-                    .unwrap_or(true)
-            {
+            while mutation_index < mutations.len() && resynced_at.is_none() {
                 let (mutation_key, mutation_value) = take_mutation(&mut mutations[mutation_index]);
                 if let Some(value) = mutation_value {
                     emitter.push(mutation_key, value)?;
@@ -228,34 +351,18 @@ fn apply_impl<S: Store>(
                 }
                 mutation_index += 1;
             }
-
-            stats.resync_distance_nodes += 1;
-            if mutation_index > first_pending_mutation
-                && emitter.is_aligned_with(&old_leaves[leaf_index])
-            {
-                resynced_at = Some(leaf_index);
+            emitter.flush()?;
+            summaries.extend(emitter.emitted.iter().map(|leaf| leaf.summary.clone()));
+            emitted.extend(emitter.emitted);
+            old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
+            if resynced_at.is_none() {
                 break;
             }
         }
-
-        while mutation_index < mutations.len() && resynced_at.is_none() {
-            let (mutation_key, mutation_value) = take_mutation(&mut mutations[mutation_index]);
-            if let Some(value) = mutation_value {
-                emitter.push(mutation_key, value)?;
-                stats.entries_streamed += 1;
-            }
-            mutation_index += 1;
-        }
-        emitter.flush()?;
-        summaries.extend(emitter.emitted.iter().map(|leaf| leaf.summary.clone()));
-        emitted.extend(emitter.emitted);
-        old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
-        if resynced_at.is_none() {
-            break;
-        }
-    }
-    summaries.extend_from_slice(&old_leaves[old_cursor..]);
-    stats.nodes_reused += old_leaves.len().saturating_sub(old_cursor) as u64;
+        summaries.extend_from_slice(&old_leaves[old_cursor..]);
+        stats.nodes_reused += old_leaves.len().saturating_sub(old_cursor) as u64;
+        (summaries, emitted)
+    };
     stats.resync_distance_entries = stats.entries_streamed;
 
     if summaries
@@ -270,9 +377,12 @@ fn apply_impl<S: Store>(
         .iter()
         .map(|leaf| leaf.cid.clone())
         .collect::<HashSet<_>>();
+    let mut changed_cids = HashSet::new();
     let changed_leaves = emitted
         .iter()
-        .filter(|leaf| !old_cids.contains(&leaf.summary.cid))
+        .filter(|leaf| {
+            !old_cids.contains(&leaf.summary.cid) && changed_cids.insert(leaf.summary.cid.clone())
+        })
         .collect::<Vec<_>>();
     let fixed_separators = tree.config.format.chunking.measure == ChunkMeasure::EntryCount
         && tree.config.format.chunking.input == BoundaryInput::Key
@@ -359,6 +469,400 @@ fn apply_impl<S: Store>(
         let _ = manager.load_arc(root)?;
     }
     Ok((written, stats))
+}
+
+/// Plan conservative, non-overlapping mutation regions at canonical leaf
+/// boundaries. Close candidates are coalesced before replay so each remaining
+/// candidate has an untouched, guarded old-leaf interval before its neighbor.
+fn plan_mutation_islands(
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+) -> Vec<MutationIsland> {
+    if old_leaves.is_empty() || mutations.is_empty() {
+        return Vec::new();
+    }
+
+    let candidates = mutation_island_candidates(old_leaves, mutations);
+    let mut islands = Vec::<MutationIsland>::with_capacity(candidates.len());
+    for candidate in candidates {
+        let leaf_end = candidate.last_leaf.saturating_add(1).min(old_leaves.len());
+        let island = MutationIsland {
+            // Exact byte caps can move a split into either predecessor, so
+            // retain the same two-leaf context as the canonical writer.
+            leaf_range: candidate.first_leaf.saturating_sub(2)..leaf_end,
+            mutation_range: candidate.first_mutation..candidate.mutation_end,
+            protected_end: leaf_end
+                .saturating_add(MUTATION_ISLAND_GUARD_LEAVES)
+                .min(old_leaves.len()),
+        };
+
+        if let Some(previous) = islands.last_mut() {
+            if previous.protected_end > island.leaf_range.start {
+                previous.leaf_range.end = island.leaf_range.end;
+                previous.mutation_range.end = island.mutation_range.end;
+                previous.protected_end = previous.protected_end.max(island.protected_end);
+                continue;
+            }
+        }
+        islands.push(island);
+    }
+    islands
+}
+
+fn mutation_island_candidates(
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+) -> Vec<MutationIslandCandidate> {
+    let target_leaf = |key: &[u8]| {
+        old_leaves
+            .partition_point(|leaf| leaf.first_key.as_slice() <= key)
+            .saturating_sub(1)
+    };
+    let mut candidates = Vec::<MutationIslandCandidate>::new();
+    for (mutation_index, (key, _)) in mutations.iter().enumerate() {
+        let leaf_index = target_leaf(key);
+        match candidates.last_mut() {
+            Some(candidate) if leaf_index <= candidate.last_leaf.saturating_add(1) => {
+                candidate.last_leaf = candidate.last_leaf.max(leaf_index);
+                candidate.mutation_end = mutation_index + 1;
+            }
+            _ => candidates.push(MutationIslandCandidate {
+                first_leaf: leaf_index,
+                last_leaf: leaf_index,
+                first_mutation: mutation_index,
+                mutation_end: mutation_index + 1,
+            }),
+        }
+    }
+    candidates
+}
+
+/// Replay one candidate into a private emitter. No bytes are persisted and no
+/// cache entries are published until the caller validates CID resynchronizing.
+fn replay_mutation_island<S: Store>(
+    manager: &Prolly<S>,
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    mut island: MutationIsland,
+    config: &Config,
+    measure_read_bytes: bool,
+) -> Result<IslandReplay, Error> {
+    if island.leaf_range.start >= island.leaf_range.end
+        || island.leaf_range.end > island.protected_end
+        || island.protected_end > old_leaves.len()
+        || island.mutation_range.start >= island.mutation_range.end
+        || island.mutation_range.end > mutations.len()
+    {
+        return Err(Error::InvalidNode);
+    }
+
+    let mutation_end = island.mutation_range.end;
+    let first_pending_mutation = island.mutation_range.start;
+    let mut mutation_index = first_pending_mutation;
+    let mut emitter = LeafEmitter::new(config)?;
+    let mut resynced_at = None;
+    let mut entries_streamed = 0u64;
+    let mut nodes_read = 0u64;
+    let mut bytes_read = 0u64;
+    let mut processed_end = island.leaf_range.start;
+
+    for leaf_index in island.leaf_range.start..island.protected_end {
+        let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
+        nodes_read += 1;
+        if measure_read_bytes {
+            bytes_read += leaf.encoded_len() as u64;
+        }
+        if !leaf.leaf || leaf.keys.len() != leaf.vals.len() || leaf.format != config.format {
+            return Err(Error::InvalidNode);
+        }
+
+        for (key, value) in leaf.keys.iter().cloned().zip(leaf.vals.iter().cloned()) {
+            while mutation_index < mutation_end && mutations[mutation_index].0 < key {
+                let (mutation_key, mutation_value) = &mutations[mutation_index];
+                if let Some(value) = mutation_value {
+                    emitter.push(mutation_key.clone(), value.clone())?;
+                    entries_streamed += 1;
+                }
+                mutation_index += 1;
+            }
+            if mutation_index < mutation_end && mutations[mutation_index].0 == key {
+                if let Some(value) = &mutations[mutation_index].1 {
+                    emitter.push(key, value.clone())?;
+                    entries_streamed += 1;
+                }
+                mutation_index += 1;
+            } else {
+                emitter.push(key, value)?;
+                entries_streamed += 1;
+            }
+        }
+
+        let next_first = old_leaves.get(leaf_index + 1).map(|leaf| &leaf.first_key);
+        while mutation_index < mutation_end
+            && next_first
+                .map(|next| mutations[mutation_index].0 < *next)
+                .unwrap_or(true)
+        {
+            let (mutation_key, mutation_value) = &mutations[mutation_index];
+            if let Some(value) = mutation_value {
+                emitter.push(mutation_key.clone(), value.clone())?;
+                entries_streamed += 1;
+            }
+            mutation_index += 1;
+        }
+
+        processed_end = leaf_index + 1;
+        if mutation_index == mutation_end
+            && mutation_index > first_pending_mutation
+            && emitter.is_aligned_with(&old_leaves[leaf_index])
+        {
+            resynced_at = Some(leaf_index);
+            break;
+        }
+    }
+
+    emitter.flush()?;
+    island.leaf_range.end = processed_end;
+    let summaries = emitter
+        .emitted
+        .iter()
+        .map(|leaf| leaf.summary.clone())
+        .collect();
+    Ok(IslandReplay {
+        island,
+        summaries,
+        emitted: emitter.emitted,
+        resynced_at,
+        entries_streamed,
+        nodes_read,
+        bytes_read,
+    })
+}
+
+fn execute_mutation_islands<S: Store>(
+    manager: &Prolly<S>,
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    config: &Config,
+    islands: Vec<MutationIsland>,
+    policy: ExecutionPolicy,
+    measure_read_bytes: bool,
+) -> Result<(Vec<IslandReplay>, usize), Error> {
+    let policy = policy.limit_to(islands.len());
+    if !policy.enabled() {
+        let mut replayed = Vec::with_capacity(islands.len());
+        for island in islands {
+            let replay = replay_mutation_island(
+                manager,
+                old_leaves,
+                mutations,
+                island,
+                config,
+                measure_read_bytes,
+            )?;
+            let proved_independent = replay.proved_independent();
+            replayed.push(replay);
+            if !proved_independent {
+                break;
+            }
+        }
+        return Ok((replayed, 0));
+    }
+
+    let mut replayed = Vec::with_capacity(islands.len());
+    let mut parallel_tasks = 0usize;
+    let mut islands = islands.into_iter();
+    loop {
+        let wave = islands
+            .by_ref()
+            .take(policy.wave_size())
+            .collect::<Vec<_>>();
+        if wave.is_empty() {
+            break;
+        }
+
+        let ranges = policy.ranges(wave.len());
+        parallel_tasks = parallel_tasks.saturating_add(ranges.len());
+        let mut wave = wave.into_iter();
+        let partitions = ranges
+            .into_iter()
+            .map(|range| wave.by_ref().take(range.len()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let partition_results = partitions
+            .into_par_iter()
+            .map(|partition| {
+                partition
+                    .into_iter()
+                    .map(|island| {
+                        replay_mutation_island(
+                            manager,
+                            old_leaves,
+                            mutations,
+                            island,
+                            config,
+                            measure_read_bytes,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, Error>>()
+            })
+            .collect::<Vec<_>>();
+
+        let mut wave_proved_independent = true;
+        // Partition collection is indexed, so checking results left-to-right
+        // returns the first error in canonical island order.
+        for result in partition_results {
+            let partition = result?;
+            wave_proved_independent &= partition.iter().all(IslandReplay::proved_independent);
+            replayed.extend(partition);
+        }
+        if !wave_proved_independent {
+            // Finish the bounded wave already in flight, then fall back before
+            // any later speculative wave starts.
+            break;
+        }
+    }
+    Ok((replayed, parallel_tasks))
+}
+
+fn merge_proved_island_replays(
+    old_leaves: &[NodeSummary],
+    replays: Vec<IslandReplay>,
+    stats: &mut WriteStats,
+) -> Result<StructuralIslandReplay, Error> {
+    let emitted_capacity = replays.iter().map(|replay| replay.emitted.len()).sum();
+    let mut summaries = Vec::with_capacity(old_leaves.len());
+    let mut emitted = Vec::with_capacity(emitted_capacity);
+    let mut old_cursor = 0usize;
+
+    for replay in replays {
+        if !replay.proved_independent()
+            || replay.island.leaf_range.start < old_cursor
+            || replay.island.leaf_range.end > old_leaves.len()
+        {
+            return Err(Error::InvalidNode);
+        }
+        summaries.extend_from_slice(&old_leaves[old_cursor..replay.island.leaf_range.start]);
+        stats.nodes_reused += replay.island.leaf_range.start.saturating_sub(old_cursor) as u64;
+        summaries.extend(replay.summaries);
+        emitted.extend(replay.emitted);
+        old_cursor = replay.island.leaf_range.end;
+    }
+    summaries.extend_from_slice(&old_leaves[old_cursor..]);
+    stats.nodes_reused += old_leaves.len().saturating_sub(old_cursor) as u64;
+    Ok(StructuralIslandReplay { summaries, emitted })
+}
+
+fn try_parallel_structural_islands<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    policy: ExecutionPolicy,
+    stats: &mut WriteStats,
+    measure_read_bytes: bool,
+) -> Result<Option<StructuralIslandReplay>, Error> {
+    if !policy.enabled() {
+        return Ok(None);
+    }
+    if !structural_mutations_can_form_distant_islands(old_leaves, mutations) {
+        return Ok(None);
+    }
+
+    let initial_count = mutation_island_candidates(old_leaves, mutations).len();
+    let islands = plan_mutation_islands(old_leaves, mutations);
+    stats.structural_islands += initial_count as u64;
+    stats.coalesced_islands += initial_count.saturating_sub(islands.len()) as u64;
+    let island_policy = policy.limit_to(islands.len());
+    if !island_policy.enabled()
+        || !structural_islands_worth_speculating(
+            initial_count,
+            &islands,
+            old_leaves.len(),
+            island_policy,
+        )
+    {
+        return Ok(None);
+    }
+    stats.parallel_width = island_policy.width() as u64;
+
+    let execution_policy = policy.limit_to(islands.len());
+    let (replays, parallel_tasks) = execute_mutation_islands(
+        manager,
+        old_leaves,
+        mutations,
+        &tree.config,
+        islands,
+        execution_policy,
+        measure_read_bytes,
+    )?;
+    stats.parallel_tasks += parallel_tasks as u64;
+    for replay in &replays {
+        stats.entries_streamed += replay.entries_streamed;
+        stats.nodes_read += replay.nodes_read;
+        stats.bytes_read += replay.bytes_read;
+        stats.resync_distance_nodes += replay.nodes_read;
+    }
+
+    if replays.iter().all(IslandReplay::proved_independent) {
+        return Ok(Some(merge_proved_island_replays(
+            old_leaves, replays, stats,
+        )?));
+    }
+
+    // One failed CID proof is enough to invalidate independence. Retrying
+    // progressively larger speculative regions can turn a bounded miss into
+    // O(n log n) replay work, so fall back immediately.
+    Ok(None)
+}
+
+/// Fast rejection for a dense mutation span. At least two guarded islands
+/// require gaps wider than the predecessor context plus the proof guard. If
+/// the average leaf spacing cannot provide that gap, candidate planning can
+/// only coalesce the work into one local region.
+fn structural_mutations_can_form_distant_islands(
+    old_leaves: &[NodeSummary],
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+) -> bool {
+    let Some((first, last)) = mutations.first().zip(mutations.last()) else {
+        return false;
+    };
+    let target_leaf = |key: &[u8]| {
+        old_leaves
+            .partition_point(|leaf| leaf.first_key.as_slice() <= key)
+            .saturating_sub(1)
+    };
+    let first_leaf = target_leaf(&first.0);
+    let last_leaf = target_leaf(&last.0);
+    let leaf_span = last_leaf.saturating_sub(first_leaf).saturating_add(1);
+    let minimum_separation = MUTATION_ISLAND_GUARD_LEAVES.saturating_add(3);
+    leaf_span > 1 && mutations.len().saturating_mul(minimum_separation) < leaf_span
+}
+
+/// Reject island layouts whose up-front guard coalescing already proves that
+/// speculative replay would duplicate most of the canonical sequential scan.
+/// This is a scheduling decision only; rejected layouts immediately use the
+/// same canonical fallback that would run after a failed proof.
+fn structural_islands_worth_speculating(
+    candidate_count: usize,
+    islands: &[MutationIsland],
+    leaf_count: usize,
+    policy: ExecutionPolicy,
+) -> bool {
+    if islands.len() < 2 || leaf_count == 0 || !policy.enabled() {
+        return false;
+    }
+
+    // Many small candidates collapsing into very few guarded regions is the
+    // dense/random case. Replaying those regions and then falling back can
+    // read the tree twice without exposing enough independent CPU work.
+    if candidate_count > islands.len().saturating_mul(4) {
+        return false;
+    }
+
+    let guarded_leaves = islands.iter().fold(0usize, |total, island| {
+        total.saturating_add(island.protected_end.saturating_sub(island.leaf_range.start))
+    });
+    guarded_leaves.saturating_mul(4) <= leaf_count
 }
 
 fn try_localized_height_two_deletes<S: Store>(
@@ -814,12 +1318,62 @@ enum DirectValueUpdateAttempt {
     Fallback(Vec<(Vec<u8>, Option<Vec<u8>>)>),
 }
 
+fn sampled_value_updates_are_likely_key_stable<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    policy: ExecutionPolicy,
+) -> Result<bool, Error> {
+    // A single representative route catches pure insert batches without
+    // duplicating meaningful work for the dominant key-stable update case.
+    // The full route still proves every mutation before applying anything.
+    const PREFLIGHT_SAMPLES: usize = 1;
+
+    let sample_count = mutations.len().min(PREFLIGHT_SAMPLES);
+    if sample_count == 0 {
+        return Ok(false);
+    }
+    let indexes = (0..sample_count)
+        .map(|sample| {
+            if sample_count == 1 {
+                0
+            } else {
+                sample * (mutations.len() - 1) / (sample_count - 1)
+            }
+        })
+        .collect::<Vec<_>>();
+    let samples = indexes
+        .into_iter()
+        .map(|index| Mutation::Upsert {
+            key: mutations[index].0.clone(),
+            val: mutations[index]
+                .1
+                .clone()
+                .expect("direct value path rejects deletes before routing"),
+        })
+        .collect::<Vec<_>>();
+    super::batch::sampled_value_updates_are_likely_key_stable(manager, tree, samples, policy)
+}
+
+fn add_write_read_metric_delta(
+    stats: &mut WriteStats,
+    before: super::ProllyMetricsSnapshot,
+    after: super::ProllyMetricsSnapshot,
+    measure_read_bytes: bool,
+) {
+    stats.nodes_read += after.nodes_read.saturating_sub(before.nodes_read);
+    if measure_read_bytes {
+        stats.bytes_read += after.bytes_read.saturating_sub(before.bytes_read);
+    }
+}
+
 fn try_direct_value_updates<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     stats: &mut WriteStats,
     measure_read_bytes: bool,
+    policy: ExecutionPolicy,
 ) -> Result<DirectValueUpdateAttempt, Error> {
     let chunking = &tree.config.format.chunking;
     if chunking.measure != ChunkMeasure::EntryCount
@@ -837,42 +1391,65 @@ fn try_direct_value_updates<S: Store>(
     };
 
     let mutations =
-        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len()) {
-            let batched_mutations = mutations
-                .into_iter()
-                .map(|(key, value)| Mutation::Upsert {
-                    key,
-                    val: value.expect("direct value path rejects deletes before routing"),
-                })
-                .collect::<Vec<_>>();
+        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len(), policy) {
             let metrics_before = manager.metrics();
-            match super::batch::try_apply_batched_value_updates(manager, tree, batched_mutations)? {
-                super::batch::KeyStableBatchAttempt::Applied(result) => {
-                    let metrics_after = manager.metrics();
-                    stats.nodes_read += metrics_after
-                        .nodes_read
-                        .saturating_sub(metrics_before.nodes_read);
-                    if measure_read_bytes {
-                        stats.bytes_read += metrics_after
-                            .bytes_read
-                            .saturating_sub(metrics_before.bytes_read);
-                    }
-                    stats.nodes_written += result.written_nodes as u64;
-                    stats.bytes_written += result.written_bytes as u64;
-                    stats.entries_streamed += result.entries_streamed as u64;
-                    stats.resync_distance_entries = result.entries_streamed as u64;
-                    stats.resync_distance_nodes = result.affected_leaves as u64;
-                    stats.used_key_stable_fast_path = true;
-                    stats.used_batched_value_update_path = true;
-                    return Ok(DirectValueUpdateAttempt::Applied(Box::new((
-                        result.tree,
-                        *stats,
-                    ))));
-                }
-                super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+            if sampled_value_updates_are_likely_key_stable(manager, tree, &mutations, policy)? {
+                let batched_mutations = mutations
                     .into_iter()
-                    .map(mutation_parts)
-                    .collect::<Vec<_>>(),
+                    .map(|(key, value)| Mutation::Upsert {
+                        key,
+                        val: value.expect("direct value path rejects deletes before routing"),
+                    })
+                    .collect::<Vec<_>>();
+                let attempt = super::batch::try_apply_batched_value_updates(
+                    manager,
+                    tree,
+                    batched_mutations,
+                    policy,
+                )?;
+                add_write_read_metric_delta(
+                    stats,
+                    metrics_before,
+                    manager.metrics(),
+                    measure_read_bytes,
+                );
+                match attempt {
+                    super::batch::KeyStableBatchAttempt::Applied(result) => {
+                        stats.nodes_written += result.written_nodes as u64;
+                        stats.bytes_written += result.written_bytes as u64;
+                        stats.entries_streamed += result.entries_streamed as u64;
+                        stats.resync_distance_entries = result.entries_streamed as u64;
+                        stats.resync_distance_nodes = result.affected_leaves as u64;
+                        stats.used_key_stable_fast_path = true;
+                        stats.used_batched_value_update_path = true;
+                        stats.parallel_width = result.parallel_width as u64;
+                        stats.parallel_tasks += result.parallel_tasks as u64;
+                        return Ok(DirectValueUpdateAttempt::Applied(Box::new((
+                            result.tree,
+                            *stats,
+                        ))));
+                    }
+                    super::batch::KeyStableBatchAttempt::Fallback {
+                        mutations,
+                        parallel_width,
+                        parallel_tasks,
+                    } => {
+                        stats.parallel_width = stats.parallel_width.max(parallel_width as u64);
+                        stats.parallel_tasks += parallel_tasks as u64;
+                        mutations
+                            .into_iter()
+                            .map(mutation_parts)
+                            .collect::<Vec<_>>()
+                    }
+                }
+            } else {
+                add_write_read_metric_delta(
+                    stats,
+                    metrics_before,
+                    manager.metrics(),
+                    measure_read_bytes,
+                );
+                mutations
             }
         } else {
             mutations
@@ -1526,4 +2103,272 @@ fn collect_from_node<S: Store>(
 fn child_cid(bytes: &[u8]) -> Result<Cid, Error> {
     let bytes: [u8; 32] = bytes.try_into().map_err(|_| Error::InvalidNode)?;
     Ok(Cid(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prolly::chunking;
+    use crate::prolly::format::NodeLayoutSpec;
+    use crate::prolly::store::MemStore;
+    use std::sync::Arc;
+
+    fn synthetic_leaf_summaries(count: usize) -> Vec<NodeSummary> {
+        (0..count)
+            .map(|index| NodeSummary {
+                cid: Cid::from_bytes(format!("leaf-{index:04}").as_bytes()),
+                first_key: format!("k{index:04}").into_bytes(),
+                count: 1,
+            })
+            .collect()
+    }
+
+    fn populated_tree(config: Config, count: usize) -> (Prolly<Arc<MemStore>>, Tree) {
+        let manager = Prolly::new(Arc::new(MemStore::new()), config);
+        let mutations = (0..count)
+            .map(|index| Mutation::Upsert {
+                key: format!("k{index:04}").into_bytes(),
+                val: vec![b'v'; 32],
+            })
+            .collect();
+        let tree = manager.batch(&manager.create(), mutations).unwrap();
+        (manager, tree)
+    }
+
+    fn old_leaf_summaries<S: Store>(manager: &Prolly<S>, tree: &Tree) -> Vec<NodeSummary> {
+        collect_leaf_summaries(manager, tree, &mut WriteStats::default(), false)
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn mutation_island_planner_separates_distant_clusters() {
+        let leaves = synthetic_leaf_summaries(64);
+        let mutations = vec![
+            (b"k0010".to_vec(), None),
+            (b"k0040".to_vec(), Some(b"changed".to_vec())),
+        ];
+
+        let islands = plan_mutation_islands(&leaves, &mutations);
+
+        assert_eq!(islands.len(), 2);
+        assert_eq!(islands[0].mutation_range, 0..1);
+        assert_eq!(islands[1].mutation_range, 1..2);
+        assert!(islands[0].protected_end <= islands[1].leaf_range.start);
+    }
+
+    #[test]
+    fn mutation_island_planner_coalesces_adjacent_guards_and_covers_mutations_once() {
+        let leaves = synthetic_leaf_summaries(96);
+        let mutations = vec![
+            (b"k0010".to_vec(), None),
+            (b"k0012".to_vec(), Some(b"a".to_vec())),
+            (b"k0050".to_vec(), Some(b"b".to_vec())),
+            (b"k0080".to_vec(), None),
+        ];
+
+        let islands = plan_mutation_islands(&leaves, &mutations);
+        let covered = islands
+            .iter()
+            .flat_map(|island| island.mutation_range.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(covered, (0..mutations.len()).collect::<Vec<_>>());
+        assert_eq!(islands[0].mutation_range, 0..2);
+        assert!(islands.windows(2).all(|pair| {
+            pair[0].protected_end <= pair[1].leaf_range.start
+                && pair[0].mutation_range.end == pair[1].mutation_range.start
+        }));
+    }
+
+    #[test]
+    fn structural_island_admission_rejects_dense_guards_but_keeps_sparse_work() {
+        let leaves = synthetic_leaf_summaries(128);
+        let dense_mutations = (0..32)
+            .map(|index| (format!("k{:04}", index * 4).into_bytes(), None))
+            .collect::<Vec<_>>();
+        let dense_candidates = mutation_island_candidates(&leaves, &dense_mutations).len();
+        let dense_islands = plan_mutation_islands(&leaves, &dense_mutations);
+        let policy = ExecutionPolicy::from_config(
+            &ParallelConfig::new(4, 1),
+            dense_mutations.len(),
+            dense_islands.len(),
+        );
+
+        assert!(!structural_islands_worth_speculating(
+            dense_candidates,
+            &dense_islands,
+            leaves.len(),
+            policy,
+        ));
+        assert!(!structural_mutations_can_form_distant_islands(
+            &leaves,
+            &dense_mutations,
+        ));
+
+        let sparse_mutations = vec![
+            (b"k0010".to_vec(), None),
+            (b"k0100".to_vec(), Some(b"changed".to_vec())),
+        ];
+        let sparse_candidates = mutation_island_candidates(&leaves, &sparse_mutations).len();
+        let sparse_islands = plan_mutation_islands(&leaves, &sparse_mutations);
+        let policy = ExecutionPolicy::from_config(
+            &ParallelConfig::new(2, 1),
+            sparse_mutations.len(),
+            sparse_islands.len(),
+        );
+
+        assert!(structural_islands_worth_speculating(
+            sparse_candidates,
+            &sparse_islands,
+            leaves.len(),
+            policy,
+        ));
+        assert!(structural_mutations_can_form_distant_islands(
+            &leaves,
+            &sparse_mutations,
+        ));
+    }
+
+    #[test]
+    fn mutation_island_replay_proves_an_unchanged_anchor_without_writes() {
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(1)
+            .build();
+        let (manager, tree) = populated_tree(config, 128);
+        let leaves = old_leaf_summaries(&manager, &tree);
+        let mutations = vec![(b"k0020".to_vec(), Some(vec![b'x'; 32]))];
+        let island = plan_mutation_islands(&leaves, &mutations)
+            .into_iter()
+            .next()
+            .unwrap();
+        let metrics_before = manager.metrics();
+
+        let replay =
+            replay_mutation_island(&manager, &leaves, &mutations, island, &tree.config, true)
+                .unwrap();
+
+        assert!(replay.proved_independent());
+        assert!(replay.entries_streamed > 0);
+        assert!(replay.nodes_read > 0);
+        assert!(replay.bytes_read > 0);
+        assert!(!replay.summaries.is_empty());
+        assert!(!replay.emitted.is_empty());
+        assert_eq!(
+            manager.metrics().nodes_written,
+            metrics_before.nodes_written
+        );
+    }
+
+    #[test]
+    fn mutation_island_replay_rejects_a_cascade_that_reaches_its_guard() {
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(u32::MAX)
+            .build();
+        let (manager, tree) = populated_tree(config, 256);
+        let leaves = old_leaf_summaries(&manager, &tree);
+        let mutations = vec![(b"k0020a".to_vec(), Some(vec![b'x'; 32]))];
+        let island = plan_mutation_islands(&leaves, &mutations)
+            .into_iter()
+            .next()
+            .unwrap();
+
+        let replay =
+            replay_mutation_island(&manager, &leaves, &mutations, island, &tree.config, false)
+                .unwrap();
+
+        assert!(!replay.proved_independent());
+        assert_eq!(replay.resynced_at, None);
+        assert_eq!(replay.island.leaf_range.end, replay.island.protected_end);
+    }
+
+    #[test]
+    fn mutation_island_executor_stops_after_the_first_failed_wave() {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let config = Config::builder()
+                    .min_chunk_size(2)
+                    .max_chunk_size(4)
+                    .chunking_factor(u32::MAX)
+                    .build();
+                let (manager, tree) = populated_tree(config, 4_096);
+                let leaves = old_leaf_summaries(&manager, &tree);
+                let mutations = (0..10)
+                    .map(|island| {
+                        (
+                            format!("k{:04}a", 256 + island * 350).into_bytes(),
+                            Some(vec![b'a' + island as u8; 32]),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let islands = plan_mutation_islands(&leaves, &mutations);
+                assert_eq!(islands.len(), 10);
+                let policy = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(2, 1),
+                    mutations.len(),
+                    islands.len(),
+                );
+
+                let (replays, parallel_tasks) = execute_mutation_islands(
+                    &manager,
+                    &leaves,
+                    &mutations,
+                    &tree.config,
+                    islands,
+                    policy,
+                    false,
+                )
+                .unwrap();
+
+                assert_eq!(parallel_tasks, 2);
+                assert_eq!(replays.len(), policy.wave_size());
+                assert!(replays.iter().any(|replay| !replay.proved_independent()));
+            });
+    }
+
+    #[test]
+    fn mutation_island_replay_for_rolling_and_weibull_never_publishes_speculation() {
+        for mut policy in [
+            chunking::logical_bytes_rolling_hash(),
+            chunking::logical_bytes_key_weibull(),
+        ] {
+            policy.min = 96;
+            policy.target = 192;
+            policy.max = 384;
+            policy.hard_max_node_bytes = 512;
+            let config = Config::builder()
+                .chunking(policy)
+                .node_layout(NodeLayoutSpec::PrefixCompressed)
+                .build();
+            let (manager, tree) = populated_tree(config, 256);
+            let leaves = old_leaf_summaries(&manager, &tree);
+            let mutations = vec![(b"k0064a".to_vec(), Some(vec![b'z'; 32]))];
+            let island = plan_mutation_islands(&leaves, &mutations)
+                .into_iter()
+                .next()
+                .unwrap();
+            let metrics_before = manager.metrics();
+
+            let replay =
+                replay_mutation_island(&manager, &leaves, &mutations, island, &tree.config, true)
+                    .unwrap();
+
+            if replay.proved_independent() {
+                let anchor = replay.resynced_at.unwrap();
+                assert_eq!(replay.summaries.last().unwrap().cid, leaves[anchor].cid);
+            }
+            assert_eq!(
+                manager.metrics().nodes_written,
+                metrics_before.nodes_written
+            );
+            assert_eq!(tree.root, manager.export_snapshot(&tree).unwrap().tree.root);
+        }
+    }
 }

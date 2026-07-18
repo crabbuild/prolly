@@ -336,17 +336,20 @@ pub struct BatchApplyStatsRecord {
     pub input_mutations: u64,
     pub effective_mutations: u64,
     pub preprocess_input_sorted: bool,
-    pub affected_leaves: u64,
-    pub changed_leaves: u64,
-    pub sparse_leaf_applies: u64,
+    pub entries_streamed: u64,
+    pub nodes_read: u64,
     pub written_nodes: u64,
+    pub nodes_reused: u64,
+    pub bytes_read: u64,
     pub written_bytes: u64,
-    pub used_append_fast_path: bool,
-    pub used_batched_route: bool,
-    pub used_coalesced_rebuild: bool,
-    pub used_deferred_rebalancing: bool,
-    pub used_bottom_up_rebuild: bool,
-    pub cache_written_nodes: bool,
+    pub resync_distance_entries: u64,
+    pub resync_distance_nodes: u64,
+    pub used_key_stable_fast_path: bool,
+    pub used_batched_value_update_path: bool,
+    pub parallel_width: u64,
+    pub parallel_tasks: u64,
+    pub structural_islands: u64,
+    pub coalesced_islands: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -369,6 +372,10 @@ pub struct WriteStatsRecord {
     pub resync_distance_nodes: u64,
     pub used_key_stable_fast_path: bool,
     pub used_batched_value_update_path: bool,
+    pub parallel_width: u64,
+    pub parallel_tasks: u64,
+    pub structural_islands: u64,
+    pub coalesced_islands: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -6185,17 +6192,20 @@ impl From<BatchApplyStats> for BatchApplyStatsRecord {
             input_mutations: value.input_mutations as u64,
             effective_mutations: value.effective_mutations as u64,
             preprocess_input_sorted: value.preprocess_input_sorted,
-            affected_leaves: value.affected_leaves as u64,
-            changed_leaves: value.changed_leaves as u64,
-            sparse_leaf_applies: value.sparse_leaf_applies as u64,
+            entries_streamed: value.entries_streamed as u64,
+            nodes_read: value.nodes_read as u64,
             written_nodes: value.written_nodes as u64,
+            nodes_reused: value.nodes_reused as u64,
+            bytes_read: value.bytes_read as u64,
             written_bytes: value.written_bytes as u64,
-            used_append_fast_path: value.used_append_fast_path,
-            used_batched_route: value.used_batched_route,
-            used_coalesced_rebuild: value.used_coalesced_rebuild,
-            used_deferred_rebalancing: value.used_deferred_rebalancing,
-            used_bottom_up_rebuild: value.used_bottom_up_rebuild,
-            cache_written_nodes: value.cache_written_nodes,
+            resync_distance_entries: value.resync_distance_entries as u64,
+            resync_distance_nodes: value.resync_distance_nodes as u64,
+            used_key_stable_fast_path: value.used_key_stable_fast_path,
+            used_batched_value_update_path: value.used_batched_value_update_path,
+            parallel_width: value.parallel_width as u64,
+            parallel_tasks: value.parallel_tasks as u64,
+            structural_islands: value.structural_islands as u64,
+            coalesced_islands: value.coalesced_islands as u64,
         }
     }
 }
@@ -6224,6 +6234,10 @@ impl From<WriteStats> for WriteStatsRecord {
             resync_distance_nodes: value.resync_distance_nodes,
             used_key_stable_fast_path: value.used_key_stable_fast_path,
             used_batched_value_update_path: value.used_batched_value_update_path,
+            parallel_width: value.parallel_width,
+            parallel_tasks: value.parallel_tasks,
+            structural_islands: value.structural_islands,
+            coalesced_islands: value.coalesced_islands,
         }
     }
 }
@@ -9703,7 +9717,7 @@ mod tests {
         assert_eq!(append_result.stats.input_mutations, 3);
         assert_eq!(append_result.stats.effective_mutations, 2);
         assert!(!append_result.stats.preprocess_input_sorted);
-        assert!(append_result.stats.used_coalesced_rebuild);
+        assert!(append_result.stats.entries_streamed >= append_result.stats.effective_mutations);
         assert!(append_result.stats.written_nodes > 0);
         assert_eq!(
             engine.get(appended.clone(), b"d".to_vec()).unwrap(),

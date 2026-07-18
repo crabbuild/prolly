@@ -1069,8 +1069,6 @@ external fun uniffi_prolly_bindings_checksum_func_i64_key(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_inspect_proof_bundle(
 ): Short
-external fun uniffi_prolly_bindings_checksum_func_is_boundary_config(
-): Short
 external fun uniffi_prolly_bindings_checksum_func_is_tombstone_value(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_key_from_prefixed_segments(
@@ -3530,8 +3528,6 @@ external fun uniffi_prolly_bindings_fn_func_i64_key(`value`: Long,uniffi_out_err
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_inspect_proof_bundle(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
-external fun uniffi_prolly_bindings_fn_func_is_boundary_config(`config`: RustBuffer.ByValue,`count`: Long,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Byte
 external fun uniffi_prolly_bindings_fn_func_is_tombstone_value(`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Byte
 external fun uniffi_prolly_bindings_fn_func_key_from_prefixed_segments(`prefix`: RustBuffer.ByValue,`segments`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3950,9 +3946,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316.toShort()) {
@@ -9295,7 +9288,6 @@ open class BindingIndexedMap: Disposable, AutoCloseable, BindingIndexedMapInterf
     }
     )
     }
-
 
 
     override fun `fastHandle`(): kotlin.ULong {
@@ -24556,27 +24548,33 @@ data class BatchApplyStatsRecord (
     ,
     var `preprocessInputSorted`: kotlin.Boolean
     ,
-    var `affectedLeaves`: kotlin.ULong
+    var `entriesStreamed`: kotlin.ULong
     ,
-    var `changedLeaves`: kotlin.ULong
-    ,
-    var `sparseLeafApplies`: kotlin.ULong
+    var `nodesRead`: kotlin.ULong
     ,
     var `writtenNodes`: kotlin.ULong
     ,
+    var `nodesReused`: kotlin.ULong
+    ,
+    var `bytesRead`: kotlin.ULong
+    ,
     var `writtenBytes`: kotlin.ULong
     ,
-    var `usedAppendFastPath`: kotlin.Boolean
+    var `resyncDistanceEntries`: kotlin.ULong
     ,
-    var `usedBatchedRoute`: kotlin.Boolean
+    var `resyncDistanceNodes`: kotlin.ULong
     ,
-    var `usedCoalescedRebuild`: kotlin.Boolean
+    var `usedKeyStableFastPath`: kotlin.Boolean
     ,
-    var `usedDeferredRebalancing`: kotlin.Boolean
+    var `usedBatchedValueUpdatePath`: kotlin.Boolean
     ,
-    var `usedBottomUpRebuild`: kotlin.Boolean
+    var `parallelWidth`: kotlin.ULong
     ,
-    var `cacheWrittenNodes`: kotlin.Boolean
+    var `parallelTasks`: kotlin.ULong
+    ,
+    var `structuralIslands`: kotlin.ULong
+    ,
+    var `coalescedIslands`: kotlin.ULong
 
 ){
 
@@ -24601,12 +24599,15 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
@@ -24614,34 +24615,40 @@ public object FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer<Batc
             FfiConverterULong.allocationSize(value.`inputMutations`) +
             FfiConverterULong.allocationSize(value.`effectiveMutations`) +
             FfiConverterBoolean.allocationSize(value.`preprocessInputSorted`) +
-            FfiConverterULong.allocationSize(value.`affectedLeaves`) +
-            FfiConverterULong.allocationSize(value.`changedLeaves`) +
-            FfiConverterULong.allocationSize(value.`sparseLeafApplies`) +
+            FfiConverterULong.allocationSize(value.`entriesStreamed`) +
+            FfiConverterULong.allocationSize(value.`nodesRead`) +
             FfiConverterULong.allocationSize(value.`writtenNodes`) +
+            FfiConverterULong.allocationSize(value.`nodesReused`) +
+            FfiConverterULong.allocationSize(value.`bytesRead`) +
             FfiConverterULong.allocationSize(value.`writtenBytes`) +
-            FfiConverterBoolean.allocationSize(value.`usedAppendFastPath`) +
-            FfiConverterBoolean.allocationSize(value.`usedBatchedRoute`) +
-            FfiConverterBoolean.allocationSize(value.`usedCoalescedRebuild`) +
-            FfiConverterBoolean.allocationSize(value.`usedDeferredRebalancing`) +
-            FfiConverterBoolean.allocationSize(value.`usedBottomUpRebuild`) +
-            FfiConverterBoolean.allocationSize(value.`cacheWrittenNodes`)
+            FfiConverterULong.allocationSize(value.`resyncDistanceEntries`) +
+            FfiConverterULong.allocationSize(value.`resyncDistanceNodes`) +
+            FfiConverterBoolean.allocationSize(value.`usedKeyStableFastPath`) +
+            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`) +
+            FfiConverterULong.allocationSize(value.`parallelWidth`) +
+            FfiConverterULong.allocationSize(value.`parallelTasks`) +
+            FfiConverterULong.allocationSize(value.`structuralIslands`) +
+            FfiConverterULong.allocationSize(value.`coalescedIslands`)
     )
 
     override fun write(value: BatchApplyStatsRecord, buf: ByteBuffer) {
             FfiConverterULong.write(value.`inputMutations`, buf)
             FfiConverterULong.write(value.`effectiveMutations`, buf)
             FfiConverterBoolean.write(value.`preprocessInputSorted`, buf)
-            FfiConverterULong.write(value.`affectedLeaves`, buf)
-            FfiConverterULong.write(value.`changedLeaves`, buf)
-            FfiConverterULong.write(value.`sparseLeafApplies`, buf)
+            FfiConverterULong.write(value.`entriesStreamed`, buf)
+            FfiConverterULong.write(value.`nodesRead`, buf)
             FfiConverterULong.write(value.`writtenNodes`, buf)
+            FfiConverterULong.write(value.`nodesReused`, buf)
+            FfiConverterULong.write(value.`bytesRead`, buf)
             FfiConverterULong.write(value.`writtenBytes`, buf)
-            FfiConverterBoolean.write(value.`usedAppendFastPath`, buf)
-            FfiConverterBoolean.write(value.`usedBatchedRoute`, buf)
-            FfiConverterBoolean.write(value.`usedCoalescedRebuild`, buf)
-            FfiConverterBoolean.write(value.`usedDeferredRebalancing`, buf)
-            FfiConverterBoolean.write(value.`usedBottomUpRebuild`, buf)
-            FfiConverterBoolean.write(value.`cacheWrittenNodes`, buf)
+            FfiConverterULong.write(value.`resyncDistanceEntries`, buf)
+            FfiConverterULong.write(value.`resyncDistanceNodes`, buf)
+            FfiConverterBoolean.write(value.`usedKeyStableFastPath`, buf)
+            FfiConverterBoolean.write(value.`usedBatchedValueUpdatePath`, buf)
+            FfiConverterULong.write(value.`parallelWidth`, buf)
+            FfiConverterULong.write(value.`parallelTasks`, buf)
+            FfiConverterULong.write(value.`structuralIslands`, buf)
+            FfiConverterULong.write(value.`coalescedIslands`, buf)
     }
 }
 
@@ -33626,6 +33633,14 @@ data class WriteStatsRecord (
     var `usedKeyStableFastPath`: kotlin.Boolean
     ,
     var `usedBatchedValueUpdatePath`: kotlin.Boolean
+    ,
+    var `parallelWidth`: kotlin.ULong
+    ,
+    var `parallelTasks`: kotlin.ULong
+    ,
+    var `structuralIslands`: kotlin.ULong
+    ,
+    var `coalescedIslands`: kotlin.ULong
 
 ){
 
@@ -33654,6 +33669,10 @@ public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStat
             FfiConverterULong.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
@@ -33669,7 +33688,11 @@ public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStat
             FfiConverterULong.allocationSize(value.`resyncDistanceEntries`) +
             FfiConverterULong.allocationSize(value.`resyncDistanceNodes`) +
             FfiConverterBoolean.allocationSize(value.`usedKeyStableFastPath`) +
-            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`)
+            FfiConverterBoolean.allocationSize(value.`usedBatchedValueUpdatePath`) +
+            FfiConverterULong.allocationSize(value.`parallelWidth`) +
+            FfiConverterULong.allocationSize(value.`parallelTasks`) +
+            FfiConverterULong.allocationSize(value.`structuralIslands`) +
+            FfiConverterULong.allocationSize(value.`coalescedIslands`)
     )
 
     override fun write(value: WriteStatsRecord, buf: ByteBuffer) {
@@ -33685,6 +33708,10 @@ public object FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer<WriteStat
             FfiConverterULong.write(value.`resyncDistanceNodes`, buf)
             FfiConverterBoolean.write(value.`usedKeyStableFastPath`, buf)
             FfiConverterBoolean.write(value.`usedBatchedValueUpdatePath`, buf)
+            FfiConverterULong.write(value.`parallelWidth`, buf)
+            FfiConverterULong.write(value.`parallelTasks`, buf)
+            FfiConverterULong.write(value.`structuralIslands`, buf)
+            FfiConverterULong.write(value.`coalescedIslands`, buf)
     }
 }
 
@@ -38122,17 +38149,6 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_inspect_proof_bundle(
 
         FfiConverterByteArray.lower(`bytes`),_status)
-}
-    )
-    }
-
-
-    @Throws(ProllyBindingException::class) fun `isBoundaryConfig`(`config`: ConfigRecord, `count`: kotlin.ULong, `key`: kotlin.ByteArray, `value`: kotlin.ByteArray): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    uniffiRustCallWithError(ProllyBindingException) { _status ->
-    UniffiLib.uniffi_prolly_bindings_fn_func_is_boundary_config(
-
-        FfiConverterTypeConfigRecord.lower(`config`),FfiConverterULong.lower(`count`),FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`value`),_status)
 }
     )
     }

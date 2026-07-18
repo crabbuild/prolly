@@ -56,17 +56,20 @@ export interface NativeBatchApplyStatsRecord {
   inputMutations: string;
   effectiveMutations: string;
   preprocessInputSorted: boolean;
-  affectedLeaves: string;
-  changedLeaves: string;
-  sparseLeafApplies: string;
+  entriesStreamed: string;
+  nodesRead: string;
   writtenNodes: string;
+  nodesReused: string;
+  bytesRead: string;
   writtenBytes: string;
-  usedAppendFastPath: boolean;
-  usedBatchedRoute: boolean;
-  usedCoalescedRebuild: boolean;
-  usedDeferredRebalancing: boolean;
-  usedBottomUpRebuild: boolean;
-  cacheWrittenNodes: boolean;
+  resyncDistanceEntries: string;
+  resyncDistanceNodes: string;
+  usedKeyStableFastPath: boolean;
+  usedBatchedValueUpdatePath: boolean;
+  parallelWidth: string;
+  parallelTasks: string;
+  structuralIslands: string;
+  coalescedIslands: string;
 }
 
 export interface NativeBatchApplyResultRecord {
@@ -87,6 +90,10 @@ export interface NativeWriteStatsRecord {
   resyncDistanceNodes: string;
   usedKeyStableFastPath: boolean;
   usedBatchedValueUpdatePath: boolean;
+  parallelWidth: string;
+  parallelTasks: string;
+  structuralIslands: string;
+  coalescedIslands: string;
 }
 
 export interface NativeWriteResultRecord {

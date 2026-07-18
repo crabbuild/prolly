@@ -253,7 +253,7 @@ mod prolly;
 
 // Re-export public API from prolly module
 pub use prolly::batch::{
-    append_batch, BatchApplyResult, BatchApplyStats, BatchWriter, BatchWriterConfig, MutationBuffer,
+    append_batch, BatchApplyResult, BatchApplyStats, BatchWriter, MutationBuffer,
 };
 #[cfg(feature = "async-store")]
 pub use prolly::blob::{AsyncBlobStore, SyncBlobStoreAsAsync};

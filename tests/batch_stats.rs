@@ -44,8 +44,6 @@ fn batch_with_stats_reports_tree_work() {
     assert_eq!(result.stats.input_mutations, 3);
     assert_eq!(result.stats.effective_mutations, 2);
     assert!(!result.stats.preprocess_input_sorted);
-    assert!(result.stats.affected_leaves > 0);
-    assert!(result.stats.changed_leaves > 0);
     assert!(result.stats.written_nodes > 0);
     assert!(result.stats.written_bytes > 0);
 }
@@ -89,8 +87,7 @@ fn append_batch_with_stats_reports_canonical_path() {
     assert_eq!(result.stats.input_mutations, 2);
     assert_eq!(result.stats.effective_mutations, 2);
     assert!(result.stats.preprocess_input_sorted);
-    assert!(!result.stats.used_append_fast_path);
-    assert!(result.stats.used_coalesced_rebuild);
+    assert!(!result.stats.used_batched_value_update_path);
     assert!(result.stats.written_nodes > 0);
 }
 
@@ -129,6 +126,6 @@ fn append_batch_with_stats_reports_fallback_path() {
     );
     assert_eq!(result.stats.input_mutations, 1);
     assert_eq!(result.stats.effective_mutations, 1);
-    assert!(!result.stats.used_append_fast_path);
-    assert!(result.stats.changed_leaves > 0);
+    assert!(result.stats.used_key_stable_fast_path);
+    assert!(result.stats.written_nodes > 0);
 }

@@ -415,7 +415,7 @@ class UniFfiBindingTests(unittest.TestCase):
         self.assertEqual(appended.stats.input_mutations, 3)
         self.assertEqual(appended.stats.effective_mutations, 2)
         self.assertFalse(appended.stats.preprocess_input_sorted)
-        self.assertTrue(appended.stats.used_coalesced_rebuild)
+        self.assertGreaterEqual(appended.stats.entries_streamed, appended.stats.effective_mutations)
         self.assertGreater(appended.stats.written_nodes, 0)
 
     def test_custom_store_callbacks_drive_engine(self) -> None:

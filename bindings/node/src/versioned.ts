@@ -38,17 +38,20 @@ export interface VersionedBatchApplyStats {
   inputMutations: bigint;
   effectiveMutations: bigint;
   preprocessInputSorted: boolean;
-  affectedLeaves: bigint;
-  changedLeaves: bigint;
-  sparseLeafApplies: bigint;
+  entriesStreamed: bigint;
+  nodesRead: bigint;
   writtenNodes: bigint;
+  nodesReused: bigint;
+  bytesRead: bigint;
   writtenBytes: bigint;
-  usedAppendFastPath: boolean;
-  usedBatchedRoute: boolean;
-  usedCoalescedRebuild: boolean;
-  usedDeferredRebalancing: boolean;
-  usedBottomUpRebuild: boolean;
-  cacheWrittenNodes: boolean;
+  resyncDistanceEntries: bigint;
+  resyncDistanceNodes: bigint;
+  usedKeyStableFastPath: boolean;
+  usedBatchedValueUpdatePath: boolean;
+  parallelWidth: bigint;
+  parallelTasks: bigint;
+  structuralIslands: bigint;
+  coalescedIslands: bigint;
 }
 export interface VersionedMapBatchResult { version: MapVersion; stats: VersionedBatchApplyStats; }
 export interface CatalogVerification {
@@ -378,10 +381,10 @@ interface NativeMapUpdate {
 interface NativeVersionedParallelConfig { maxThreads: string; parallelismThreshold: string; }
 interface NativeVersionedBatchApplyStats {
   inputMutations: string; effectiveMutations: string; preprocessInputSorted: boolean;
-  affectedLeaves: string; changedLeaves: string; sparseLeafApplies: string;
-  writtenNodes: string; writtenBytes: string; usedAppendFastPath: boolean;
-  usedBatchedRoute: boolean; usedCoalescedRebuild: boolean; usedDeferredRebalancing: boolean;
-  usedBottomUpRebuild: boolean; cacheWrittenNodes: boolean;
+  entriesStreamed: string; nodesRead: string; writtenNodes: string; nodesReused: string;
+  bytesRead: string; writtenBytes: string; resyncDistanceEntries: string; resyncDistanceNodes: string;
+  usedKeyStableFastPath: boolean; usedBatchedValueUpdatePath: boolean;
+  parallelWidth: string; parallelTasks: string; structuralIslands: string; coalescedIslands: string;
 }
 interface NativeVersionedMapBatchResult { version: NativeMapVersion; stats: NativeVersionedBatchApplyStats; }
 
@@ -562,17 +565,20 @@ function versionedBatchResult(value: NativeVersionedMapBatchResult): VersionedMa
       inputMutations: BigInt(value.stats.inputMutations),
       effectiveMutations: BigInt(value.stats.effectiveMutations),
       preprocessInputSorted: value.stats.preprocessInputSorted,
-      affectedLeaves: BigInt(value.stats.affectedLeaves),
-      changedLeaves: BigInt(value.stats.changedLeaves),
-      sparseLeafApplies: BigInt(value.stats.sparseLeafApplies),
+      entriesStreamed: BigInt(value.stats.entriesStreamed),
+      nodesRead: BigInt(value.stats.nodesRead),
       writtenNodes: BigInt(value.stats.writtenNodes),
+      nodesReused: BigInt(value.stats.nodesReused),
+      bytesRead: BigInt(value.stats.bytesRead),
       writtenBytes: BigInt(value.stats.writtenBytes),
-      usedAppendFastPath: value.stats.usedAppendFastPath,
-      usedBatchedRoute: value.stats.usedBatchedRoute,
-      usedCoalescedRebuild: value.stats.usedCoalescedRebuild,
-      usedDeferredRebalancing: value.stats.usedDeferredRebalancing,
-      usedBottomUpRebuild: value.stats.usedBottomUpRebuild,
-      cacheWrittenNodes: value.stats.cacheWrittenNodes,
+      resyncDistanceEntries: BigInt(value.stats.resyncDistanceEntries),
+      resyncDistanceNodes: BigInt(value.stats.resyncDistanceNodes),
+      usedKeyStableFastPath: value.stats.usedKeyStableFastPath,
+      usedBatchedValueUpdatePath: value.stats.usedBatchedValueUpdatePath,
+      parallelWidth: BigInt(value.stats.parallelWidth),
+      parallelTasks: BigInt(value.stats.parallelTasks),
+      structuralIslands: BigInt(value.stats.structuralIslands),
+      coalescedIslands: BigInt(value.stats.coalescedIslands),
     },
   };
 }

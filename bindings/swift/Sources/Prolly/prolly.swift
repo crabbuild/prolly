@@ -12753,35 +12753,41 @@ public struct BatchApplyStatsRecord: Equatable, Hashable {
     public var inputMutations: UInt64
     public var effectiveMutations: UInt64
     public var preprocessInputSorted: Bool
-    public var affectedLeaves: UInt64
-    public var changedLeaves: UInt64
-    public var sparseLeafApplies: UInt64
+    public var entriesStreamed: UInt64
+    public var nodesRead: UInt64
     public var writtenNodes: UInt64
+    public var nodesReused: UInt64
+    public var bytesRead: UInt64
     public var writtenBytes: UInt64
-    public var usedAppendFastPath: Bool
-    public var usedBatchedRoute: Bool
-    public var usedCoalescedRebuild: Bool
-    public var usedDeferredRebalancing: Bool
-    public var usedBottomUpRebuild: Bool
-    public var cacheWrittenNodes: Bool
+    public var resyncDistanceEntries: UInt64
+    public var resyncDistanceNodes: UInt64
+    public var usedKeyStableFastPath: Bool
+    public var usedBatchedValueUpdatePath: Bool
+    public var parallelWidth: UInt64
+    public var parallelTasks: UInt64
+    public var structuralIslands: UInt64
+    public var coalescedIslands: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(inputMutations: UInt64, effectiveMutations: UInt64, preprocessInputSorted: Bool, affectedLeaves: UInt64, changedLeaves: UInt64, sparseLeafApplies: UInt64, writtenNodes: UInt64, writtenBytes: UInt64, usedAppendFastPath: Bool, usedBatchedRoute: Bool, usedCoalescedRebuild: Bool, usedDeferredRebalancing: Bool, usedBottomUpRebuild: Bool, cacheWrittenNodes: Bool) {
+    public init(inputMutations: UInt64, effectiveMutations: UInt64, preprocessInputSorted: Bool, entriesStreamed: UInt64, nodesRead: UInt64, writtenNodes: UInt64, nodesReused: UInt64, bytesRead: UInt64, writtenBytes: UInt64, resyncDistanceEntries: UInt64, resyncDistanceNodes: UInt64, usedKeyStableFastPath: Bool, usedBatchedValueUpdatePath: Bool, parallelWidth: UInt64, parallelTasks: UInt64, structuralIslands: UInt64, coalescedIslands: UInt64) {
         self.inputMutations = inputMutations
         self.effectiveMutations = effectiveMutations
         self.preprocessInputSorted = preprocessInputSorted
-        self.affectedLeaves = affectedLeaves
-        self.changedLeaves = changedLeaves
-        self.sparseLeafApplies = sparseLeafApplies
+        self.entriesStreamed = entriesStreamed
+        self.nodesRead = nodesRead
         self.writtenNodes = writtenNodes
+        self.nodesReused = nodesReused
+        self.bytesRead = bytesRead
         self.writtenBytes = writtenBytes
-        self.usedAppendFastPath = usedAppendFastPath
-        self.usedBatchedRoute = usedBatchedRoute
-        self.usedCoalescedRebuild = usedCoalescedRebuild
-        self.usedDeferredRebalancing = usedDeferredRebalancing
-        self.usedBottomUpRebuild = usedBottomUpRebuild
-        self.cacheWrittenNodes = cacheWrittenNodes
+        self.resyncDistanceEntries = resyncDistanceEntries
+        self.resyncDistanceNodes = resyncDistanceNodes
+        self.usedKeyStableFastPath = usedKeyStableFastPath
+        self.usedBatchedValueUpdatePath = usedBatchedValueUpdatePath
+        self.parallelWidth = parallelWidth
+        self.parallelTasks = parallelTasks
+        self.structuralIslands = structuralIslands
+        self.coalescedIslands = coalescedIslands
     }
 
     
@@ -12803,17 +12809,20 @@ public struct FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer {
                 inputMutations: FfiConverterUInt64.read(from: &buf), 
                 effectiveMutations: FfiConverterUInt64.read(from: &buf), 
                 preprocessInputSorted: FfiConverterBool.read(from: &buf), 
-                affectedLeaves: FfiConverterUInt64.read(from: &buf), 
-                changedLeaves: FfiConverterUInt64.read(from: &buf), 
-                sparseLeafApplies: FfiConverterUInt64.read(from: &buf), 
-                writtenNodes: FfiConverterUInt64.read(from: &buf), 
-                writtenBytes: FfiConverterUInt64.read(from: &buf), 
-                usedAppendFastPath: FfiConverterBool.read(from: &buf), 
-                usedBatchedRoute: FfiConverterBool.read(from: &buf), 
-                usedCoalescedRebuild: FfiConverterBool.read(from: &buf), 
-                usedDeferredRebalancing: FfiConverterBool.read(from: &buf), 
-                usedBottomUpRebuild: FfiConverterBool.read(from: &buf), 
-                cacheWrittenNodes: FfiConverterBool.read(from: &buf)
+                entriesStreamed: FfiConverterUInt64.read(from: &buf),
+                nodesRead: FfiConverterUInt64.read(from: &buf),
+                writtenNodes: FfiConverterUInt64.read(from: &buf),
+                nodesReused: FfiConverterUInt64.read(from: &buf),
+                bytesRead: FfiConverterUInt64.read(from: &buf),
+                writtenBytes: FfiConverterUInt64.read(from: &buf),
+                resyncDistanceEntries: FfiConverterUInt64.read(from: &buf),
+                resyncDistanceNodes: FfiConverterUInt64.read(from: &buf),
+                usedKeyStableFastPath: FfiConverterBool.read(from: &buf),
+                usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf),
+                parallelWidth: FfiConverterUInt64.read(from: &buf),
+                parallelTasks: FfiConverterUInt64.read(from: &buf),
+                structuralIslands: FfiConverterUInt64.read(from: &buf),
+                coalescedIslands: FfiConverterUInt64.read(from: &buf)
         )
     }
 
@@ -12821,17 +12830,20 @@ public struct FfiConverterTypeBatchApplyStatsRecord: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.inputMutations, into: &buf)
         FfiConverterUInt64.write(value.effectiveMutations, into: &buf)
         FfiConverterBool.write(value.preprocessInputSorted, into: &buf)
-        FfiConverterUInt64.write(value.affectedLeaves, into: &buf)
-        FfiConverterUInt64.write(value.changedLeaves, into: &buf)
-        FfiConverterUInt64.write(value.sparseLeafApplies, into: &buf)
+        FfiConverterUInt64.write(value.entriesStreamed, into: &buf)
+        FfiConverterUInt64.write(value.nodesRead, into: &buf)
         FfiConverterUInt64.write(value.writtenNodes, into: &buf)
+        FfiConverterUInt64.write(value.nodesReused, into: &buf)
+        FfiConverterUInt64.write(value.bytesRead, into: &buf)
         FfiConverterUInt64.write(value.writtenBytes, into: &buf)
-        FfiConverterBool.write(value.usedAppendFastPath, into: &buf)
-        FfiConverterBool.write(value.usedBatchedRoute, into: &buf)
-        FfiConverterBool.write(value.usedCoalescedRebuild, into: &buf)
-        FfiConverterBool.write(value.usedDeferredRebalancing, into: &buf)
-        FfiConverterBool.write(value.usedBottomUpRebuild, into: &buf)
-        FfiConverterBool.write(value.cacheWrittenNodes, into: &buf)
+        FfiConverterUInt64.write(value.resyncDistanceEntries, into: &buf)
+        FfiConverterUInt64.write(value.resyncDistanceNodes, into: &buf)
+        FfiConverterBool.write(value.usedKeyStableFastPath, into: &buf)
+        FfiConverterBool.write(value.usedBatchedValueUpdatePath, into: &buf)
+        FfiConverterUInt64.write(value.parallelWidth, into: &buf)
+        FfiConverterUInt64.write(value.parallelTasks, into: &buf)
+        FfiConverterUInt64.write(value.structuralIslands, into: &buf)
+        FfiConverterUInt64.write(value.coalescedIslands, into: &buf)
     }
 }
 
@@ -24180,10 +24192,14 @@ public struct WriteStatsRecord: Equatable, Hashable {
     public var resyncDistanceNodes: UInt64
     public var usedKeyStableFastPath: Bool
     public var usedBatchedValueUpdatePath: Bool
+    public var parallelWidth: UInt64
+    public var parallelTasks: UInt64
+    public var structuralIslands: UInt64
+    public var coalescedIslands: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(inputMutations: UInt64, effectiveMutations: UInt64, entriesStreamed: UInt64, nodesRead: UInt64, nodesWritten: UInt64, nodesReused: UInt64, bytesRead: UInt64, bytesWritten: UInt64, resyncDistanceEntries: UInt64, resyncDistanceNodes: UInt64, usedKeyStableFastPath: Bool, usedBatchedValueUpdatePath: Bool) {
+    public init(inputMutations: UInt64, effectiveMutations: UInt64, entriesStreamed: UInt64, nodesRead: UInt64, nodesWritten: UInt64, nodesReused: UInt64, bytesRead: UInt64, bytesWritten: UInt64, resyncDistanceEntries: UInt64, resyncDistanceNodes: UInt64, usedKeyStableFastPath: Bool, usedBatchedValueUpdatePath: Bool, parallelWidth: UInt64, parallelTasks: UInt64, structuralIslands: UInt64, coalescedIslands: UInt64) {
         self.inputMutations = inputMutations
         self.effectiveMutations = effectiveMutations
         self.entriesStreamed = entriesStreamed
@@ -24196,6 +24212,10 @@ public struct WriteStatsRecord: Equatable, Hashable {
         self.resyncDistanceNodes = resyncDistanceNodes
         self.usedKeyStableFastPath = usedKeyStableFastPath
         self.usedBatchedValueUpdatePath = usedBatchedValueUpdatePath
+        self.parallelWidth = parallelWidth
+        self.parallelTasks = parallelTasks
+        self.structuralIslands = structuralIslands
+        self.coalescedIslands = coalescedIslands
     }
 
     
@@ -24225,7 +24245,11 @@ public struct FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer {
                 resyncDistanceEntries: FfiConverterUInt64.read(from: &buf), 
                 resyncDistanceNodes: FfiConverterUInt64.read(from: &buf), 
                 usedKeyStableFastPath: FfiConverterBool.read(from: &buf), 
-                usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf)
+                usedBatchedValueUpdatePath: FfiConverterBool.read(from: &buf),
+                parallelWidth: FfiConverterUInt64.read(from: &buf),
+                parallelTasks: FfiConverterUInt64.read(from: &buf),
+                structuralIslands: FfiConverterUInt64.read(from: &buf),
+                coalescedIslands: FfiConverterUInt64.read(from: &buf)
         )
     }
 
@@ -24242,6 +24266,10 @@ public struct FfiConverterTypeWriteStatsRecord: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.resyncDistanceNodes, into: &buf)
         FfiConverterBool.write(value.usedKeyStableFastPath, into: &buf)
         FfiConverterBool.write(value.usedBatchedValueUpdatePath, into: &buf)
+        FfiConverterUInt64.write(value.parallelWidth, into: &buf)
+        FfiConverterUInt64.write(value.parallelTasks, into: &buf)
+        FfiConverterUInt64.write(value.structuralIslands, into: &buf)
+        FfiConverterUInt64.write(value.coalescedIslands, into: &buf)
     }
 }
 
@@ -29666,16 +29694,6 @@ public func inspectProofBundle(bytes: Data)throws  -> ProofBundleSummaryRecord  
     )
 })
 }
-public func isBoundaryConfig(config: ConfigRecord, count: UInt64, key: Data, value: Data)throws  -> Bool  {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeProllyBindingError_lift) {
-    uniffi_prolly_bindings_fn_func_is_boundary_config(
-        FfiConverterTypeConfigRecord_lower(config),
-        FfiConverterUInt64.lower(count),
-        FfiConverterData.lower(key),
-        FfiConverterData.lower(value),$0
-    )
-})
-}
 public func isTombstoneValue(bytes: Data) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_prolly_bindings_fn_func_is_tombstone_value(
@@ -30577,9 +30595,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_inspect_proof_bundle() != 56731) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_prolly_bindings_checksum_func_is_boundary_config() != 24556) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_func_is_tombstone_value() != 33316) {

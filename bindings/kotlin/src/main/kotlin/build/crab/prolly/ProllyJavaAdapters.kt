@@ -780,6 +780,18 @@ object ProllyJavaAdapters {
         record.usedBatchedValueUpdatePath
 
     @JvmStatic
+    fun writeStatsParallelWidth(record: WriteStatsRecord): Long = record.parallelWidth.toLong()
+
+    @JvmStatic
+    fun writeStatsParallelTasks(record: WriteStatsRecord): Long = record.parallelTasks.toLong()
+
+    @JvmStatic
+    fun writeStatsStructuralIslands(record: WriteStatsRecord): Long = record.structuralIslands.toLong()
+
+    @JvmStatic
+    fun writeStatsCoalescedIslands(record: WriteStatsRecord): Long = record.coalescedIslands.toLong()
+
+    @JvmStatic
     fun batchStatsInputMutations(record: BatchApplyStatsRecord): Long =
         record.inputMutations.toLong()
 
@@ -788,16 +800,17 @@ object ProllyJavaAdapters {
         record.effectiveMutations.toLong()
 
     @JvmStatic
-    fun batchStatsAffectedLeaves(record: BatchApplyStatsRecord): Long =
-        record.affectedLeaves.toLong()
+    fun batchStatsEntriesStreamed(record: BatchApplyStatsRecord): Long =
+        record.entriesStreamed.toLong()
 
     @JvmStatic
-    fun batchStatsChangedLeaves(record: BatchApplyStatsRecord): Long =
-        record.changedLeaves.toLong()
+    fun batchStatsNodesRead(record: BatchApplyStatsRecord): Long = record.nodesRead.toLong()
 
     @JvmStatic
-    fun batchStatsSparseLeafApplies(record: BatchApplyStatsRecord): Long =
-        record.sparseLeafApplies.toLong()
+    fun batchStatsNodesReused(record: BatchApplyStatsRecord): Long = record.nodesReused.toLong()
+
+    @JvmStatic
+    fun batchStatsBytesRead(record: BatchApplyStatsRecord): Long = record.bytesRead.toLong()
 
     @JvmStatic
     fun batchStatsWrittenNodes(record: BatchApplyStatsRecord): Long =
@@ -806,6 +819,26 @@ object ProllyJavaAdapters {
     @JvmStatic
     fun batchStatsWrittenBytes(record: BatchApplyStatsRecord): Long =
         record.writtenBytes.toLong()
+
+    @JvmStatic
+    fun batchStatsResyncDistanceEntries(record: BatchApplyStatsRecord): Long =
+        record.resyncDistanceEntries.toLong()
+
+    @JvmStatic
+    fun batchStatsResyncDistanceNodes(record: BatchApplyStatsRecord): Long =
+        record.resyncDistanceNodes.toLong()
+
+    @JvmStatic
+    fun batchStatsParallelWidth(record: BatchApplyStatsRecord): Long = record.parallelWidth.toLong()
+
+    @JvmStatic
+    fun batchStatsParallelTasks(record: BatchApplyStatsRecord): Long = record.parallelTasks.toLong()
+
+    @JvmStatic
+    fun batchStatsStructuralIslands(record: BatchApplyStatsRecord): Long = record.structuralIslands.toLong()
+
+    @JvmStatic
+    fun batchStatsCoalescedIslands(record: BatchApplyStatsRecord): Long = record.coalescedIslands.toLong()
 
     @JvmStatic
     fun transactionUpdateNodesWritten(record: TransactionUpdateRecord): Long =

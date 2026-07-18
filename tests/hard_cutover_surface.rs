@@ -5,6 +5,9 @@ fn source_files(root: &Path, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(root).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {
+            if path.ends_with("bindings/wasm/pkg") {
+                continue;
+            }
             source_files(&path, out);
         } else if matches!(
             path.extension().and_then(|extension| extension.to_str()),
@@ -23,9 +26,12 @@ fn legacy_chunking_and_rebalancing_surfaces_are_absent() {
     let forbidden = [
         ["is_boundary", "_config"].concat(),
         ["is_hash_boundary", "_config"].concat(),
+        ["isBoundary", "Config"].concat(),
+        ["isBoundary", "ConfigJson"].concat(),
         ["Parallel", "Rebalancer"].concat(),
         ["DefaultParallel", "Rebalancer"].concat(),
         ["rebalance", "::"].concat(),
+        ["BatchWriter", "Config"].concat(),
     ];
     let mut files = Vec::new();
     for directory in ["src", "bindings"] {

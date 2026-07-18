@@ -52,6 +52,7 @@ xxhash-rust = { version = "0.8", features = ["xxh64"] }
 
 [dev-dependencies]
 futures-util = "0.3"
+libc = "0.2"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3.103"

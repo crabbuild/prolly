@@ -270,6 +270,8 @@ class ProllyParityTest {
             assertEquals(2, parallelStats.stats().inputMutations());
             assertEquals(2, parallelStats.stats().effectiveMutations());
             assertTrue(parallelStats.stats().writtenNodes() > 0);
+            assertEquals(1, parallelStats.stats().parallelWidth());
+            assertEquals(0, parallelStats.stats().parallelTasks());
 
             TreeRecord appended = prolly.appendBatch(
                     built,
@@ -288,7 +290,7 @@ class ProllyParityTest {
             assertEquals(3, appendedStats.stats().inputMutations());
             assertEquals(2, appendedStats.stats().effectiveMutations());
             assertFalse(appendedStats.stats().preprocessInputSorted());
-            assertTrue(appendedStats.stats().usedCoalescedRebuild());
+            assertTrue(appendedStats.stats().entriesStreamed() >= appendedStats.stats().effectiveMutations());
             assertTrue(appendedStats.stats().writtenNodes() > 0);
 
             RangePageRecord firstPage = prolly.rangePage(tree, null, Optional.empty(), 1);
