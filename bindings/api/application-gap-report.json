@@ -5,12 +5,12 @@
     "async-store"
   ],
   "summary": {
-    "release_complete_application_operations": 168,
+    "release_complete_application_operations": 174,
     "release_complete_non_application_runtime": 121,
     "bound_pending_manifest_evidence": 0,
     "confirmed_missing_implementation": 0,
     "confirmed_performance_gap": 0,
-    "unmapped_application_operations": 424,
+    "unmapped_application_operations": 418,
     "mapped_missing_evidence": 0,
     "platform_review_required": 0,
     "application_review_required": 645,
@@ -4593,6 +4593,174 @@
       "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
         "bindings/api/idiomatic-equivalents.json#builder-typestate"
+      ]
+    },
+    {
+      "rust": "prolly::VersionedMapsTransaction::apply",
+      "kind": "function",
+      "owner": "prolly::VersionedMapsTransaction",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::multi-map-transactions"
+      ],
+      "performance": "owned",
+      "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle.",
+      "audience": "application",
+      "audience_rationale": "prolly::VersionedMapsTransaction::apply has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedTransaction",
+        "bindings/go/versioned.go#VersionedTransaction",
+        "bindings/node/src/versioned.ts#VersionedTransaction",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedTransaction",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedTransaction.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedTransaction",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedTransaction",
+        "bindings/wasm/src/index.ts#WasmVersionedTransaction"
+      ]
+    },
+    {
+      "rust": "prolly::VersionedMapsTransaction::apply_if",
+      "kind": "function",
+      "owner": "prolly::VersionedMapsTransaction",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::multi-map-transactions"
+      ],
+      "performance": "owned",
+      "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle.",
+      "audience": "application",
+      "audience_rationale": "prolly::VersionedMapsTransaction::apply_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedTransaction",
+        "bindings/go/versioned.go#VersionedTransaction",
+        "bindings/node/src/versioned.ts#VersionedTransaction",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedTransaction",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedTransaction.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedTransaction",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedTransaction",
+        "bindings/wasm/src/index.ts#WasmVersionedTransaction"
+      ]
+    },
+    {
+      "rust": "prolly::VersionedMapsTransaction::delete",
+      "kind": "function",
+      "owner": "prolly::VersionedMapsTransaction",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::multi-map-transactions"
+      ],
+      "performance": "owned",
+      "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle.",
+      "audience": "application",
+      "audience_rationale": "prolly::VersionedMapsTransaction::delete has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedTransaction",
+        "bindings/go/versioned.go#VersionedTransaction",
+        "bindings/node/src/versioned.ts#VersionedTransaction",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedTransaction",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedTransaction.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedTransaction",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedTransaction",
+        "bindings/wasm/src/index.ts#WasmVersionedTransaction"
+      ]
+    },
+    {
+      "rust": "prolly::VersionedMapsTransaction::get",
+      "kind": "function",
+      "owner": "prolly::VersionedMapsTransaction",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::multi-map-transactions"
+      ],
+      "performance": "owned",
+      "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle.",
+      "audience": "application",
+      "audience_rationale": "prolly::VersionedMapsTransaction::get has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedTransaction",
+        "bindings/go/versioned.go#VersionedTransaction",
+        "bindings/node/src/versioned.ts#VersionedTransaction",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedTransaction",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedTransaction.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedTransaction",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedTransaction",
+        "bindings/wasm/src/index.ts#WasmVersionedTransaction"
+      ]
+    },
+    {
+      "rust": "prolly::VersionedMapsTransaction::head",
+      "kind": "function",
+      "owner": "prolly::VersionedMapsTransaction",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::multi-map-transactions"
+      ],
+      "performance": "owned",
+      "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle.",
+      "audience": "application",
+      "audience_rationale": "prolly::VersionedMapsTransaction::head has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedTransaction",
+        "bindings/go/versioned.go#VersionedTransaction",
+        "bindings/node/src/versioned.ts#VersionedTransaction",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedTransaction",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedTransaction.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedTransaction",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedTransaction",
+        "bindings/wasm/src/index.ts#WasmVersionedTransaction"
+      ]
+    },
+    {
+      "rust": "prolly::VersionedMapsTransaction::put",
+      "kind": "function",
+      "owner": "prolly::VersionedMapsTransaction",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "implemented",
+      "missing_languages": [],
+      "tests": [
+        "portable-parity::multi-map-transactions"
+      ],
+      "performance": "owned",
+      "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle.",
+      "audience": "application",
+      "audience_rationale": "prolly::VersionedMapsTransaction::put has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/python/prolly/api.py#VersionedTransaction",
+        "bindings/go/versioned.go#VersionedTransaction",
+        "bindings/node/src/versioned.ts#VersionedTransaction",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#VersionedTransaction",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/VersionedTransaction.java",
+        "bindings/ruby/lib/prolly/api.rb#VersionedTransaction",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#VersionedTransaction",
+        "bindings/wasm/src/index.ts#WasmVersionedTransaction"
       ]
     }
   ],
@@ -17248,90 +17416,6 @@
       "reconciliation_evidence": []
     },
     {
-      "rust": "prolly::VersionedMapsTransaction::apply",
-      "kind": "function",
-      "owner": "prolly::VersionedMapsTransaction",
-      "member_kind": "inherent-item",
-      "family": "versioned-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [
-        "prolly-bindings::domain::versioned"
-      ],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::VersionedMapsTransaction::apply has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": null,
-      "reconciliation_evidence": []
-    },
-    {
-      "rust": "prolly::VersionedMapsTransaction::apply_if",
-      "kind": "function",
-      "owner": "prolly::VersionedMapsTransaction",
-      "member_kind": "inherent-item",
-      "family": "versioned-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [
-        "prolly-bindings::domain::versioned"
-      ],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::VersionedMapsTransaction::apply_if has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": null,
-      "reconciliation_evidence": []
-    },
-    {
-      "rust": "prolly::VersionedMapsTransaction::delete",
-      "kind": "function",
-      "owner": "prolly::VersionedMapsTransaction",
-      "member_kind": "inherent-item",
-      "family": "versioned-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [
-        "prolly-bindings::domain::versioned"
-      ],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::VersionedMapsTransaction::delete has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": null,
-      "reconciliation_evidence": []
-    },
-    {
       "rust": "prolly::VersionedMapsTransaction::edit",
       "kind": "function",
       "owner": "prolly::VersionedMapsTransaction",
@@ -17356,90 +17440,6 @@
       "rationale": null,
       "audience": "application",
       "audience_rationale": "prolly::VersionedMapsTransaction::edit has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": null,
-      "reconciliation_evidence": []
-    },
-    {
-      "rust": "prolly::VersionedMapsTransaction::get",
-      "kind": "function",
-      "owner": "prolly::VersionedMapsTransaction",
-      "member_kind": "inherent-item",
-      "family": "versioned-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [
-        "prolly-bindings::domain::versioned"
-      ],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::VersionedMapsTransaction::get has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": null,
-      "reconciliation_evidence": []
-    },
-    {
-      "rust": "prolly::VersionedMapsTransaction::head",
-      "kind": "function",
-      "owner": "prolly::VersionedMapsTransaction",
-      "member_kind": "inherent-item",
-      "family": "versioned-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [
-        "prolly-bindings::domain::versioned"
-      ],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::VersionedMapsTransaction::head has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
-      "reconciliation": null,
-      "reconciliation_evidence": []
-    },
-    {
-      "rust": "prolly::VersionedMapsTransaction::put",
-      "kind": "function",
-      "owner": "prolly::VersionedMapsTransaction",
-      "member_kind": "inherent-item",
-      "family": "versioned-map",
-      "classification": "portable",
-      "status": "planned",
-      "missing_languages": [
-        "go",
-        "java",
-        "kotlin",
-        "node",
-        "python",
-        "ruby",
-        "swift",
-        "wasm"
-      ],
-      "tests": [
-        "prolly-bindings::domain::versioned"
-      ],
-      "performance": "owned",
-      "rationale": null,
-      "audience": "application",
-      "audience_rationale": "prolly::VersionedMapsTransaction::put has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reconciliation": null,
       "reconciliation_evidence": []
     },
