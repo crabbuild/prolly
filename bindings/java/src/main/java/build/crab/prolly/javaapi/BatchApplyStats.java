@@ -4,17 +4,16 @@ public record BatchApplyStats(
         long inputMutations,
         long effectiveMutations,
         boolean preprocessInputSorted,
-        long affectedLeaves,
-        long changedLeaves,
-        long sparseLeafApplies,
+        long entriesStreamed,
+        long nodesRead,
         long writtenNodes,
+        long nodesReused,
+        long bytesRead,
         long writtenBytes,
-        boolean usedAppendFastPath,
-        boolean usedBatchedRoute,
-        boolean usedCoalescedRebuild,
-        boolean usedDeferredRebalancing,
-        boolean usedBottomUpRebuild,
-        boolean cacheWrittenNodes,
+        long resyncDistanceEntries,
+        long resyncDistanceNodes,
+        boolean usedKeyStableFastPath,
+        boolean usedBatchedValueUpdatePath,
         long parallelWidth,
         long parallelTasks,
         long structuralIslands,
@@ -22,11 +21,11 @@ public record BatchApplyStats(
     static BatchApplyStats fromBridge(build.crab.prolly.api.JavaBatchApplyStats value) {
         return new BatchApplyStats(
                 value.getInputMutations(), value.getEffectiveMutations(), value.getPreprocessInputSorted(),
-                value.getAffectedLeaves(), value.getChangedLeaves(), value.getSparseLeafApplies(),
-                value.getWrittenNodes(), value.getWrittenBytes(), value.getUsedAppendFastPath(),
-                value.getUsedBatchedRoute(), value.getUsedCoalescedRebuild(),
-                value.getUsedDeferredRebalancing(), value.getUsedBottomUpRebuild(),
-                value.getCacheWrittenNodes(), value.getParallelWidth(), value.getParallelTasks(),
-                value.getStructuralIslands(), value.getCoalescedIslands());
+                value.getEntriesStreamed(), value.getNodesRead(), value.getWrittenNodes(),
+                value.getNodesReused(), value.getBytesRead(), value.getWrittenBytes(),
+                value.getResyncDistanceEntries(), value.getResyncDistanceNodes(),
+                value.getUsedKeyStableFastPath(), value.getUsedBatchedValueUpdatePath(),
+                value.getParallelWidth(), value.getParallelTasks(), value.getStructuralIslands(),
+                value.getCoalescedIslands());
     }
 }

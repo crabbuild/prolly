@@ -800,16 +800,17 @@ object ProllyJavaAdapters {
         record.effectiveMutations.toLong()
 
     @JvmStatic
-    fun batchStatsAffectedLeaves(record: BatchApplyStatsRecord): Long =
-        record.affectedLeaves.toLong()
+    fun batchStatsEntriesStreamed(record: BatchApplyStatsRecord): Long =
+        record.entriesStreamed.toLong()
 
     @JvmStatic
-    fun batchStatsChangedLeaves(record: BatchApplyStatsRecord): Long =
-        record.changedLeaves.toLong()
+    fun batchStatsNodesRead(record: BatchApplyStatsRecord): Long = record.nodesRead.toLong()
 
     @JvmStatic
-    fun batchStatsSparseLeafApplies(record: BatchApplyStatsRecord): Long =
-        record.sparseLeafApplies.toLong()
+    fun batchStatsNodesReused(record: BatchApplyStatsRecord): Long = record.nodesReused.toLong()
+
+    @JvmStatic
+    fun batchStatsBytesRead(record: BatchApplyStatsRecord): Long = record.bytesRead.toLong()
 
     @JvmStatic
     fun batchStatsWrittenNodes(record: BatchApplyStatsRecord): Long =
@@ -818,6 +819,14 @@ object ProllyJavaAdapters {
     @JvmStatic
     fun batchStatsWrittenBytes(record: BatchApplyStatsRecord): Long =
         record.writtenBytes.toLong()
+
+    @JvmStatic
+    fun batchStatsResyncDistanceEntries(record: BatchApplyStatsRecord): Long =
+        record.resyncDistanceEntries.toLong()
+
+    @JvmStatic
+    fun batchStatsResyncDistanceNodes(record: BatchApplyStatsRecord): Long =
+        record.resyncDistanceNodes.toLong()
 
     @JvmStatic
     fun batchStatsParallelWidth(record: BatchApplyStatsRecord): Long = record.parallelWidth.toLong()

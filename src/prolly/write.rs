@@ -185,9 +185,6 @@ fn apply_impl<S: Store>(
     let parallel_threshold = parallel_config
         .map(|config| config.parallelism_threshold)
         .unwrap_or_else(|| ParallelConfig::default().parallelism_threshold);
-    let _concurrency_guard = (mutations.len() >= parallel_threshold
-        && rayon::current_num_threads() > 1)
-        .then(super::parallel::CanonicalWriteConcurrencyGuard::enter);
     let mut stats = WriteStats {
         input_mutations: mutations.len() as u64,
         ..WriteStats::default()
@@ -207,6 +204,9 @@ fn apply_impl<S: Store>(
 
     let mut mutations = normalize(mutations);
     stats.effective_mutations = mutations.len() as u64;
+    let _concurrency_guard = (mutations.len() >= parallel_threshold
+        && rayon::current_num_threads() > 1)
+        .then(super::parallel::CanonicalWriteConcurrencyGuard::enter);
     let policy = parallel_config.map_or_else(
         || ExecutionPolicy::automatic(mutations.len(), mutations.len()),
         |config| ExecutionPolicy::from_config(config, mutations.len(), mutations.len()),
@@ -647,25 +647,30 @@ fn execute_mutation_islands<S: Store>(
     islands: Vec<MutationIsland>,
     policy: ExecutionPolicy,
     measure_read_bytes: bool,
-) -> Result<Vec<IslandReplay>, Error> {
+) -> Result<(Vec<IslandReplay>, usize), Error> {
     let policy = policy.limit_to(islands.len());
     if !policy.enabled() {
-        return islands
-            .into_iter()
-            .map(|island| {
-                replay_mutation_island(
-                    manager,
-                    old_leaves,
-                    mutations,
-                    island,
-                    config,
-                    measure_read_bytes,
-                )
-            })
-            .collect();
+        let mut replayed = Vec::with_capacity(islands.len());
+        for island in islands {
+            let replay = replay_mutation_island(
+                manager,
+                old_leaves,
+                mutations,
+                island,
+                config,
+                measure_read_bytes,
+            )?;
+            let proved_independent = replay.proved_independent();
+            replayed.push(replay);
+            if !proved_independent {
+                break;
+            }
+        }
+        return Ok((replayed, 0));
     }
 
     let mut replayed = Vec::with_capacity(islands.len());
+    let mut parallel_tasks = 0usize;
     let mut islands = islands.into_iter();
     loop {
         let wave = islands
@@ -677,6 +682,7 @@ fn execute_mutation_islands<S: Store>(
         }
 
         let ranges = policy.ranges(wave.len());
+        parallel_tasks = parallel_tasks.saturating_add(ranges.len());
         let mut wave = wave.into_iter();
         let partitions = ranges
             .into_iter()
@@ -701,13 +707,21 @@ fn execute_mutation_islands<S: Store>(
             })
             .collect::<Vec<_>>();
 
+        let mut wave_proved_independent = true;
         // Partition collection is indexed, so checking results left-to-right
         // returns the first error in canonical island order.
         for result in partition_results {
-            replayed.extend(result?);
+            let partition = result?;
+            wave_proved_independent &= partition.iter().all(IslandReplay::proved_independent);
+            replayed.extend(partition);
+        }
+        if !wave_proved_independent {
+            // Finish the bounded wave already in flight, then fall back before
+            // any later speculative wave starts.
+            break;
         }
     }
-    Ok(replayed)
+    Ok((replayed, parallel_tasks))
 }
 
 fn merge_proved_island_replays(
@@ -772,15 +786,7 @@ fn try_parallel_structural_islands<S: Store>(
     stats.parallel_width = island_policy.width() as u64;
 
     let execution_policy = policy.limit_to(islands.len());
-    let parallel_partitions = if execution_policy.enabled() {
-        islands
-            .chunks(execution_policy.wave_size())
-            .map(|wave| execution_policy.ranges(wave.len()).len())
-            .sum::<usize>()
-    } else {
-        0
-    };
-    let replays = execute_mutation_islands(
+    let (replays, parallel_tasks) = execute_mutation_islands(
         manager,
         old_leaves,
         mutations,
@@ -789,7 +795,7 @@ fn try_parallel_structural_islands<S: Store>(
         execution_policy,
         measure_read_bytes,
     )?;
-    stats.parallel_tasks += parallel_partitions as u64;
+    stats.parallel_tasks += parallel_tasks as u64;
     for replay in &replays {
         stats.entries_streamed += replay.entries_streamed;
         stats.nodes_read += replay.nodes_read;
@@ -1346,12 +1352,7 @@ fn sampled_value_updates_are_likely_key_stable<S: Store>(
                 .expect("direct value path rejects deletes before routing"),
         })
         .collect::<Vec<_>>();
-    super::batch::sampled_value_updates_are_likely_key_stable(
-        manager,
-        tree,
-        samples,
-        policy.read_width(),
-    )
+    super::batch::sampled_value_updates_are_likely_key_stable(manager, tree, samples, policy)
 }
 
 fn add_write_read_metric_delta(
@@ -1428,10 +1429,18 @@ fn try_direct_value_updates<S: Store>(
                             *stats,
                         ))));
                     }
-                    super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
-                        .into_iter()
-                        .map(mutation_parts)
-                        .collect::<Vec<_>>(),
+                    super::batch::KeyStableBatchAttempt::Fallback {
+                        mutations,
+                        parallel_width,
+                        parallel_tasks,
+                    } => {
+                        stats.parallel_width = stats.parallel_width.max(parallel_width as u64);
+                        stats.parallel_tasks += parallel_tasks as u64;
+                        mutations
+                            .into_iter()
+                            .map(mutation_parts)
+                            .collect::<Vec<_>>()
+                    }
                 }
             } else {
                 add_write_read_metric_delta(
@@ -2275,6 +2284,53 @@ mod tests {
         assert!(!replay.proved_independent());
         assert_eq!(replay.resynced_at, None);
         assert_eq!(replay.island.leaf_range.end, replay.island.protected_end);
+    }
+
+    #[test]
+    fn mutation_island_executor_stops_after_the_first_failed_wave() {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let config = Config::builder()
+                    .min_chunk_size(2)
+                    .max_chunk_size(4)
+                    .chunking_factor(u32::MAX)
+                    .build();
+                let (manager, tree) = populated_tree(config, 4_096);
+                let leaves = old_leaf_summaries(&manager, &tree);
+                let mutations = (0..10)
+                    .map(|island| {
+                        (
+                            format!("k{:04}a", 256 + island * 350).into_bytes(),
+                            Some(vec![b'a' + island as u8; 32]),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let islands = plan_mutation_islands(&leaves, &mutations);
+                assert_eq!(islands.len(), 10);
+                let policy = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(2, 1),
+                    mutations.len(),
+                    islands.len(),
+                );
+
+                let (replays, parallel_tasks) = execute_mutation_islands(
+                    &manager,
+                    &leaves,
+                    &mutations,
+                    &tree.config,
+                    islands,
+                    policy,
+                    false,
+                )
+                .unwrap();
+
+                assert_eq!(parallel_tasks, 2);
+                assert_eq!(replays.len(), policy.wave_size());
+                assert!(replays.iter().any(|replay| !replay.proved_independent()));
+            });
     }
 
     #[test]

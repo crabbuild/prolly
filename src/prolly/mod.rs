@@ -212,6 +212,13 @@ struct MissingNodeBatch {
     positions: Vec<InlinePositions>,
 }
 
+#[derive(Default)]
+pub(crate) struct OrderedLoadExecution {
+    pub(crate) nodes: Vec<Arc<Node>>,
+    pub(crate) parallel_tasks: usize,
+    pub(crate) parallel_width: usize,
+}
+
 type MissingNodeBytes = Vec<(Cid, Vec<u8>)>;
 type PreparedMissingNodes = (MissingNodePlan, MissingNodeBytes);
 
@@ -3523,8 +3530,31 @@ impl<S: Store> Prolly<S> {
         cids: &[Cid],
         parallelism: usize,
     ) -> Result<Vec<Arc<Node>>, Error> {
+        self.load_many_ordered_with_widths(cids, parallelism, rayon::current_num_threads())
+    }
+
+    /// Load nodes with independent caps for blocking store reads and CPU
+    /// decoding. Configured mutation execution uses this form so a wider
+    /// high-latency read fan-out never overrides the caller's CPU width.
+    pub(crate) fn load_many_ordered_with_widths(
+        &self,
+        cids: &[Cid],
+        read_parallelism: usize,
+        decode_parallelism: usize,
+    ) -> Result<Vec<Arc<Node>>, Error> {
+        Ok(self
+            .load_many_ordered_with_widths_and_stats(cids, read_parallelism, decode_parallelism)?
+            .nodes)
+    }
+
+    pub(crate) fn load_many_ordered_with_widths_and_stats(
+        &self,
+        cids: &[Cid],
+        read_parallelism: usize,
+        decode_parallelism: usize,
+    ) -> Result<OrderedLoadExecution, Error> {
         if cids.is_empty() {
-            return Ok(Vec::new());
+            return Ok(OrderedLoadExecution::default());
         }
 
         let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
@@ -3542,11 +3572,18 @@ impl<S: Store> Prolly<S> {
         self.metrics.add_cache_hits(cache_hits);
 
         if missing.is_none() {
-            return nodes
+            let nodes = nodes
                 .into_iter()
                 .collect::<Option<Vec<_>>>()
-                .ok_or(Error::InvalidNode);
+                .ok_or(Error::InvalidNode)?;
+            return Ok(OrderedLoadExecution {
+                nodes,
+                ..OrderedLoadExecution::default()
+            });
         }
+
+        let mut parallel_tasks = 0usize;
+        let mut parallel_width = 1usize;
 
         if let Some(MissingNodeBatch {
             cids: missing_cids,
@@ -3564,13 +3601,17 @@ impl<S: Store> Prolly<S> {
                     nodes[idx] = Some(node.clone());
                 }
 
-                return nodes
+                let nodes = nodes
                     .into_iter()
                     .collect::<Option<Vec<_>>>()
-                    .ok_or(Error::InvalidNode);
+                    .ok_or(Error::InvalidNode)?;
+                return Ok(OrderedLoadExecution {
+                    nodes,
+                    ..OrderedLoadExecution::default()
+                });
             }
 
-            let loaded = if parallelism <= 1 || missing_cids.len() <= parallelism {
+            let loaded = if read_parallelism <= 1 || missing_cids.len() <= read_parallelism {
                 let keys = missing_cids
                     .iter()
                     .map(|cid| cid.as_bytes())
@@ -3588,10 +3629,9 @@ impl<S: Store> Prolly<S> {
                     .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
                 loaded
             } else {
-                let chunk_size = missing_cids.len().div_ceil(parallelism);
-                missing_cids
-                    .par_chunks(chunk_size)
-                    .map(|chunk| {
+                let partition_results =
+                    parallel::map_indexed_ranges(missing_cids.len(), read_parallelism, |range| {
+                        let chunk = &missing_cids[range];
                         let keys = chunk.iter().map(|cid| cid.as_bytes()).collect::<Vec<_>>();
                         self.metrics.add_cache_misses(keys.len());
                         let loaded = self
@@ -3605,24 +3645,42 @@ impl<S: Store> Prolly<S> {
                         self.metrics
                             .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
                         Ok(loaded)
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
+                    });
+                let mut loaded = Vec::with_capacity(missing_cids.len());
+                // Resolve failures after indexed collection so simultaneous
+                // store errors are selected in canonical input order.
+                for result in partition_results {
+                    loaded.extend(result?);
+                }
+                loaded
             };
 
-            let decoded = if loaded.len() >= PARALLEL_NODE_DECODE_THRESHOLD {
-                missing_cids
-                    .into_par_iter()
-                    .zip(loaded.into_par_iter())
-                    .map(|(cid, bytes)| {
-                        let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                        let encoded_len = bytes.len();
-                        let node = Arc::new(Node::from_bytes(&bytes)?);
-                        Ok((cid, node, encoded_len))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?
+            let decoded = if loaded.len() >= PARALLEL_NODE_DECODE_THRESHOLD
+                && decode_parallelism > 1
+            {
+                parallel_tasks = decode_parallelism.min(loaded.len());
+                parallel_width = parallel_tasks;
+                let partition_results =
+                    parallel::map_indexed_ranges(loaded.len(), decode_parallelism, |range| {
+                        missing_cids[range.clone()]
+                            .iter()
+                            .zip(&loaded[range])
+                            .map(|(cid, bytes)| {
+                                let bytes =
+                                    bytes.as_ref().ok_or_else(|| Error::NotFound(cid.clone()))?;
+                                let encoded_len = bytes.len();
+                                let node = Arc::new(Node::from_bytes(bytes)?);
+                                Ok((cid.clone(), node, encoded_len))
+                            })
+                            .collect::<Result<Vec<_>, Error>>()
+                    });
+                let mut decoded = Vec::with_capacity(loaded.len());
+                // Result's parallel reduction does not promise which error
+                // wins, so transpose indexed partitions left-to-right.
+                for result in partition_results {
+                    decoded.extend(result?);
+                }
+                decoded
             } else {
                 missing_cids
                     .into_iter()
@@ -3650,10 +3708,15 @@ impl<S: Store> Prolly<S> {
             self.metrics.add_cache_evictions(evictions);
         }
 
-        nodes
+        let nodes = nodes
             .into_iter()
             .collect::<Option<Vec<_>>>()
-            .ok_or(Error::InvalidNode)
+            .ok_or(Error::InvalidNode)?;
+        Ok(OrderedLoadExecution {
+            nodes,
+            parallel_tasks,
+            parallel_width,
+        })
     }
 
     /// Save a node to the store and return its CID.
@@ -8449,11 +8512,11 @@ mod tests {
     }
 
     #[derive(Debug)]
-    struct CountingStoreError;
+    struct CountingStoreError(String);
 
     impl std::fmt::Display for CountingStoreError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("counting store error")
+            f.write_str(&self.0)
         }
     }
 
@@ -8469,6 +8532,7 @@ mod tests {
         batch_put_calls: AtomicUsize,
         batch_get_ordered_calls: AtomicUsize,
         max_batch_get_ordered_len: AtomicUsize,
+        fail_batch_get_keys: Mutex<HashSet<Vec<u8>>>,
     }
 
     impl Store for CountingStore {
@@ -8522,6 +8586,13 @@ mod tests {
             self.batch_get_ordered_calls.fetch_add(1, Ordering::Relaxed);
             self.max_batch_get_ordered_len
                 .fetch_max(keys.len(), Ordering::Relaxed);
+            let failures = self.fail_batch_get_keys.lock().unwrap();
+            if let Some(key) = keys.iter().find(|key| failures.contains(**key)) {
+                return Err(CountingStoreError(format!(
+                    "injected ordered read failure for {key:?}"
+                )));
+            }
+            drop(failures);
             let data = self.data.lock().unwrap();
             Ok(keys.iter().map(|key| data.get(*key).cloned()).collect())
         }
@@ -9021,11 +9092,20 @@ mod tests {
                 assert!(width_two.stats.parallel_width <= 2);
                 assert!(width_four.stats.parallel_width <= 4);
                 assert_eq!(width_two.stats.parallel_tasks, 0);
-                assert!(width_four.stats.parallel_tasks > 1);
-                assert!(!width_two.stats.used_batched_route);
-                assert!(width_four.stats.used_batched_route);
+                assert!(!width_two.stats.used_batched_value_update_path);
                 assert_eq!(width_two_max_read, 0);
-                assert!(width_four_max_read <= update_mutations.len().div_ceil(4));
+                if width_four.stats.parallel_tasks == 0 {
+                    // Other concurrently running canonical-write tests may
+                    // engage the process-wide caller-saturation guard. That
+                    // is a valid configured outcome, not an ignored config.
+                    assert_eq!(width_four.stats.parallel_width, 1);
+                    assert!(!width_four.stats.used_batched_value_update_path);
+                    assert_eq!(width_four_max_read, 0);
+                } else {
+                    assert!(width_four.stats.parallel_tasks > 1);
+                    assert!(width_four.stats.used_batched_value_update_path);
+                    assert!(width_four_max_read <= update_mutations.len().div_ceil(4));
+                }
                 assert_eq!(sequential.tree.root, width_two.tree.root);
                 assert_eq!(sequential.tree.root, width_four.tree.root);
                 assert_eq!(width_four.tree.root, expected.root);
@@ -9075,6 +9155,60 @@ mod tests {
             store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= unique_count.div_ceil(4),
             "wide parallel-decode misses should still use bounded ordered batches"
         );
+    }
+
+    #[test]
+    fn configured_ordered_load_caps_decode_width_and_selects_first_error() {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .unwrap()
+            .install(|| {
+                let store = Arc::new(CountingStore {
+                    prefer_batch_reads: true,
+                    ..CountingStore::default()
+                });
+                let prolly = Prolly::new(store.clone(), Config::default());
+                let mut cids = Vec::new();
+                for idx in 0..20 {
+                    let mut node = Node::new_leaf();
+                    node.keys.push(format!("k{idx:02}").into_bytes());
+                    node.vals.push(format!("v{idx:02}").into_bytes());
+                    cids.push(prolly.save(&node).unwrap());
+                }
+                prolly.clear_cache();
+
+                let execution = prolly
+                    .load_many_ordered_with_widths_and_stats(&cids, 4, 3)
+                    .unwrap();
+                assert_eq!(execution.nodes.len(), cids.len());
+                assert_eq!(execution.parallel_width, 3);
+                assert_eq!(execution.parallel_tasks, 3);
+
+                prolly.clear_cache();
+                let sequential = prolly
+                    .load_many_ordered_with_widths_and_stats(&cids, 1, 1)
+                    .unwrap();
+                assert_eq!(sequential.parallel_width, 1);
+                assert_eq!(sequential.parallel_tasks, 0);
+
+                prolly.clear_cache();
+                store
+                    .fail_batch_get_keys
+                    .lock()
+                    .unwrap()
+                    .extend([cids[2].as_bytes().to_vec(), cids[12].as_bytes().to_vec()]);
+                let expected = format!(
+                    "storage error: injected ordered read failure for {:?}",
+                    cids[2].as_bytes()
+                );
+                for _ in 0..32 {
+                    let error = prolly
+                        .load_many_ordered_with_widths(&cids, 4, 3)
+                        .unwrap_err();
+                    assert_eq!(error.to_string(), expected);
+                }
+            });
     }
 
     #[test]

@@ -35,6 +35,32 @@ Mixed execution did no parallel work at any width. The +0.4% median difference t
 
 The six-sample all-workload sweep also showed no median regression for append, random, clustered, insert-only, delete-only, or mixed. Automatic scheduling reported effective width one and zero tasks for each. These short cells validate route selection and roots, not stable p95/p99 conclusions.
 
+## Post-review release rerun
+
+The bounded-decode, deterministic-error, first-failed-wave, and truthful-stat
+hardening was rerun for 30 balanced samples on the same 1M-entry/100k-mutation
+cells. These aggregates are retained in `post-review-scaling-summary.csv`.
+
+| Workload | Width | Effective width | Tasks | Median ms | p95 ms | p99 ms | Median vs width 1 | p95 vs width 1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Value-only | 1 | 1 | 0 | 289.095 | 299.511 | 301.171 | baseline | baseline |
+| Value-only | 12 | 12 | 36 | 222.653 | 230.138 | 243.720 | -23.0% | -23.2% |
+| Value-only | automatic | 12 | 36 | 222.429 | 224.709 | 233.292 | -23.1% | -25.0% |
+| Mixed 60/20/20 | 1 | 1 | 0 | 320.223 | 323.748 | 337.886 | baseline | baseline |
+| Mixed 60/20/20 | 12 | 1 | 0 | 320.168 | 323.556 | 324.018 | -0.02% | -0.06% |
+| Mixed 60/20/20 | automatic | 1 | 0 | 320.192 | 324.483 | 325.536 | -0.01% | +0.23% |
+
+The value-only task count is now 36 because truthful telemetry includes route
+decode partitions across levels in addition to leaf partitions; this is an
+accounting correction, not extra unbounded work. Roots, node counts, byte
+counts, and one atomic publication were identical across widths. Mixed work
+again admitted no parallel tasks and stayed inside the protected noise band.
+
+Absolute medians and p95 values were 1.3% to 4.1% lower than the earlier
+same-host scaling run, but the runs were not process-paired. That observation
+rules out an apparent regression in this rerun; it is not claimed as a causal
+speedup from the review fixes.
+
 ## Concurrent callers
 
 The concurrent matrix used a 100k-entry base, 10k mutations per caller, and eight balanced observations per width. Value-only results show the adaptive inner-width policy:
@@ -60,7 +86,8 @@ Pure insert batches also stayed at width one: the representative route preflight
 - Rightmost leaves no longer bypass the value-stability requirement. Only key-only entry-count hashing can use the direct value executor.
 - `parallel_width` reports width actually used. A policy that admits width 12 but performs no independent work reports width one and zero tasks.
 - Explicitly bounded work now creates exactly the admitted partition count with balanced contiguous ranges; the prior ceiling-based splitter could under-partition near one-item-per-worker inputs.
-- The binding hard cutover was completed after the benchmark run: Go decoders now consume the four executor telemetry fields, public Go/Node/JVM facades expose them, and the remaining Node entry-count boundary helper was removed. Cross-language parity tests cover width-one telemetry so a shortened wire decoder fails immediately.
+- The binding hard cutover removes nine fabricated legacy batch-algorithm fields. Batch stats now mirror truthful canonical write work plus input ordering and executor telemetry across Rust, Go, Node, JVM, Python, Ruby, Swift, and WASM. The remaining Node entry-count boundary helper was also removed.
+- Post-review hardening separately caps ordered-read fan-out and CPU decode width, resolves simultaneous partition errors in canonical input order, and stops structural speculation after the first bounded wave containing a failed proof. The 30-sample rerun above confirms the protected cells still pass; it does not make an unpaired causal speedup claim.
 
 ## Memory and limitations
 

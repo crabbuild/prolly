@@ -1896,40 +1896,31 @@ fn versioned_batch_stats_object(stats: prolly::BatchApplyStats) -> Result<Object
         &"preprocessInputSorted".into(),
         &stats.preprocess_input_sorted.into(),
     )?;
-    set_count(&object, "affectedLeaves", stats.affected_leaves)?;
-    set_count(&object, "changedLeaves", stats.changed_leaves)?;
-    set_count(&object, "sparseLeafApplies", stats.sparse_leaf_applies)?;
+    set_count(&object, "entriesStreamed", stats.entries_streamed)?;
+    set_count(&object, "nodesRead", stats.nodes_read)?;
     set_count(&object, "writtenNodes", stats.written_nodes)?;
+    set_count(&object, "nodesReused", stats.nodes_reused)?;
+    set_count(&object, "bytesRead", stats.bytes_read)?;
     set_count(&object, "writtenBytes", stats.written_bytes)?;
     Reflect::set(
         &object,
-        &"usedAppendFastPath".into(),
-        &stats.used_append_fast_path.into(),
+        &"resyncDistanceEntries".into(),
+        &stats.resync_distance_entries.to_string().into(),
     )?;
     Reflect::set(
         &object,
-        &"usedBatchedRoute".into(),
-        &stats.used_batched_route.into(),
+        &"resyncDistanceNodes".into(),
+        &stats.resync_distance_nodes.to_string().into(),
     )?;
     Reflect::set(
         &object,
-        &"usedCoalescedRebuild".into(),
-        &stats.used_coalesced_rebuild.into(),
+        &"usedKeyStableFastPath".into(),
+        &stats.used_key_stable_fast_path.into(),
     )?;
     Reflect::set(
         &object,
-        &"usedDeferredRebalancing".into(),
-        &stats.used_deferred_rebalancing.into(),
-    )?;
-    Reflect::set(
-        &object,
-        &"usedBottomUpRebuild".into(),
-        &stats.used_bottom_up_rebuild.into(),
-    )?;
-    Reflect::set(
-        &object,
-        &"cacheWrittenNodes".into(),
-        &stats.cache_written_nodes.into(),
+        &"usedBatchedValueUpdatePath".into(),
+        &stats.used_batched_value_update_path.into(),
     )?;
     set_count(&object, "parallelWidth", stats.parallel_width)?;
     set_count(&object, "parallelTasks", stats.parallel_tasks)?;

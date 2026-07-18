@@ -4,17 +4,16 @@ public final class BatchApplyStats {
     private final long inputMutations;
     private final long effectiveMutations;
     private final boolean preprocessInputSorted;
-    private final long affectedLeaves;
-    private final long changedLeaves;
-    private final long sparseLeafApplies;
+    private final long entriesStreamed;
+    private final long nodesRead;
     private final long writtenNodes;
+    private final long nodesReused;
+    private final long bytesRead;
     private final long writtenBytes;
-    private final boolean usedAppendFastPath;
-    private final boolean usedBatchedRoute;
-    private final boolean usedCoalescedRebuild;
-    private final boolean usedDeferredRebalancing;
-    private final boolean usedBottomUpRebuild;
-    private final boolean cacheWrittenNodes;
+    private final long resyncDistanceEntries;
+    private final long resyncDistanceNodes;
+    private final boolean usedKeyStableFastPath;
+    private final boolean usedBatchedValueUpdatePath;
     private final long parallelWidth;
     private final long parallelTasks;
     private final long structuralIslands;
@@ -24,78 +23,47 @@ public final class BatchApplyStats {
         this.inputMutations = ProllyJavaAdapters.batchStatsInputMutations(record);
         this.effectiveMutations = ProllyJavaAdapters.batchStatsEffectiveMutations(record);
         this.preprocessInputSorted = record.getPreprocessInputSorted();
-        this.affectedLeaves = ProllyJavaAdapters.batchStatsAffectedLeaves(record);
-        this.changedLeaves = ProllyJavaAdapters.batchStatsChangedLeaves(record);
-        this.sparseLeafApplies = ProllyJavaAdapters.batchStatsSparseLeafApplies(record);
+        this.entriesStreamed = ProllyJavaAdapters.batchStatsEntriesStreamed(record);
+        this.nodesRead = ProllyJavaAdapters.batchStatsNodesRead(record);
         this.writtenNodes = ProllyJavaAdapters.batchStatsWrittenNodes(record);
+        this.nodesReused = ProllyJavaAdapters.batchStatsNodesReused(record);
+        this.bytesRead = ProllyJavaAdapters.batchStatsBytesRead(record);
         this.writtenBytes = ProllyJavaAdapters.batchStatsWrittenBytes(record);
-        this.usedAppendFastPath = record.getUsedAppendFastPath();
-        this.usedBatchedRoute = record.getUsedBatchedRoute();
-        this.usedCoalescedRebuild = record.getUsedCoalescedRebuild();
-        this.usedDeferredRebalancing = record.getUsedDeferredRebalancing();
-        this.usedBottomUpRebuild = record.getUsedBottomUpRebuild();
-        this.cacheWrittenNodes = record.getCacheWrittenNodes();
+        this.resyncDistanceEntries = ProllyJavaAdapters.batchStatsResyncDistanceEntries(record);
+        this.resyncDistanceNodes = ProllyJavaAdapters.batchStatsResyncDistanceNodes(record);
+        this.usedKeyStableFastPath = record.getUsedKeyStableFastPath();
+        this.usedBatchedValueUpdatePath = record.getUsedBatchedValueUpdatePath();
         this.parallelWidth = ProllyJavaAdapters.batchStatsParallelWidth(record);
         this.parallelTasks = ProllyJavaAdapters.batchStatsParallelTasks(record);
         this.structuralIslands = ProllyJavaAdapters.batchStatsStructuralIslands(record);
         this.coalescedIslands = ProllyJavaAdapters.batchStatsCoalescedIslands(record);
     }
 
-    public long inputMutations() {
-        return inputMutations;
-    }
+    public long inputMutations() { return inputMutations; }
 
-    public long effectiveMutations() {
-        return effectiveMutations;
-    }
+    public long effectiveMutations() { return effectiveMutations; }
 
-    public boolean preprocessInputSorted() {
-        return preprocessInputSorted;
-    }
+    public boolean preprocessInputSorted() { return preprocessInputSorted; }
 
-    public long affectedLeaves() {
-        return affectedLeaves;
-    }
+    public long entriesStreamed() { return entriesStreamed; }
 
-    public long changedLeaves() {
-        return changedLeaves;
-    }
+    public long nodesRead() { return nodesRead; }
 
-    public long sparseLeafApplies() {
-        return sparseLeafApplies;
-    }
+    public long writtenNodes() { return writtenNodes; }
 
-    public long writtenNodes() {
-        return writtenNodes;
-    }
+    public long nodesReused() { return nodesReused; }
 
-    public long writtenBytes() {
-        return writtenBytes;
-    }
+    public long bytesRead() { return bytesRead; }
 
-    public boolean usedAppendFastPath() {
-        return usedAppendFastPath;
-    }
+    public long writtenBytes() { return writtenBytes; }
 
-    public boolean usedBatchedRoute() {
-        return usedBatchedRoute;
-    }
+    public long resyncDistanceEntries() { return resyncDistanceEntries; }
 
-    public boolean usedCoalescedRebuild() {
-        return usedCoalescedRebuild;
-    }
+    public long resyncDistanceNodes() { return resyncDistanceNodes; }
 
-    public boolean usedDeferredRebalancing() {
-        return usedDeferredRebalancing;
-    }
+    public boolean usedKeyStableFastPath() { return usedKeyStableFastPath; }
 
-    public boolean usedBottomUpRebuild() {
-        return usedBottomUpRebuild;
-    }
-
-    public boolean cacheWrittenNodes() {
-        return cacheWrittenNodes;
-    }
+    public boolean usedBatchedValueUpdatePath() { return usedBatchedValueUpdatePath; }
 
     public long parallelWidth() { return parallelWidth; }
 

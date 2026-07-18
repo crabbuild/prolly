@@ -459,28 +459,26 @@ pub struct BatchApplyStats {
     pub effective_mutations: usize,
     /// Whether the input mutation keys were already sorted before preprocessing.
     pub preprocess_input_sorted: bool,
-    /// Number of distinct leaf groups planned for this batch.
-    pub affected_leaves: usize,
-    /// Number of affected leaves whose contents actually changed.
-    pub changed_leaves: usize,
-    /// Number of leaf groups applied with sparse binary-search mutation.
-    pub sparse_leaf_applies: usize,
-    /// Unique content-addressed nodes written by the batch collector.
+    /// Logical entries streamed through canonical emitters.
+    pub entries_streamed: usize,
+    /// Content-addressed nodes loaded by the write.
+    pub nodes_read: usize,
+    /// Unique content-addressed nodes written by the write.
     pub written_nodes: usize,
-    /// Total serialized bytes for unique nodes written by the batch collector.
+    /// Existing content-addressed nodes reused without rewriting.
+    pub nodes_reused: usize,
+    /// Serialized node bytes loaded by the write.
+    pub bytes_read: usize,
+    /// Total serialized bytes for unique nodes written by the write.
     pub written_bytes: usize,
-    /// Whether the append-only right-edge fast path completed the batch.
-    pub used_append_fast_path: bool,
-    /// Whether planning used the batched read routing path.
-    pub used_batched_route: bool,
-    /// Whether the multi-leaf coalesced rebuild path was used.
-    pub used_coalesced_rebuild: bool,
-    /// Whether the deferred single-leaf/group rebalance path was used.
-    pub used_deferred_rebalancing: bool,
-    /// Whether the configured bottom-up rebuild path was used.
-    pub used_bottom_up_rebuild: bool,
-    /// Whether newly written nodes were retained in the in-process node cache.
-    pub cache_written_nodes: bool,
+    /// Entries replayed before canonical CID resynchronization.
+    pub resync_distance_entries: usize,
+    /// Nodes traversed before canonical CID resynchronization.
+    pub resync_distance_nodes: usize,
+    /// Whether a key-stability proof enabled direct value replacement.
+    pub used_key_stable_fast_path: bool,
+    /// Whether value updates used batched canonical route hydration.
+    pub used_batched_value_update_path: bool,
     /// Maximum CPU partition width actually used by an admitted leaf/island
     /// executor. Ordered store-read fan-out is reported by store metrics.
     pub parallel_width: usize,
@@ -513,17 +511,16 @@ impl BatchApplyResult {
                 input_mutations: write_stats.input_mutations as usize,
                 effective_mutations: write_stats.effective_mutations as usize,
                 preprocess_input_sorted: input_sorted,
-                affected_leaves: write_stats.resync_distance_nodes as usize,
-                changed_leaves: write_stats.nodes_written as usize,
-                sparse_leaf_applies: 0,
+                entries_streamed: write_stats.entries_streamed as usize,
+                nodes_read: write_stats.nodes_read as usize,
                 written_nodes: write_stats.nodes_written as usize,
+                nodes_reused: write_stats.nodes_reused as usize,
+                bytes_read: write_stats.bytes_read as usize,
                 written_bytes: write_stats.bytes_written as usize,
-                used_append_fast_path: false,
-                used_batched_route: write_stats.used_batched_value_update_path,
-                used_coalesced_rebuild: true,
-                used_deferred_rebalancing: false,
-                used_bottom_up_rebuild: false,
-                cache_written_nodes: false,
+                resync_distance_entries: write_stats.resync_distance_entries as usize,
+                resync_distance_nodes: write_stats.resync_distance_nodes as usize,
+                used_key_stable_fast_path: write_stats.used_key_stable_fast_path,
+                used_batched_value_update_path: write_stats.used_batched_value_update_path,
                 parallel_width: write_stats.parallel_width as usize,
                 parallel_tasks: write_stats.parallel_tasks as usize,
                 structural_islands: write_stats.structural_islands as usize,
@@ -545,7 +542,11 @@ pub(crate) struct KeyStableBatchResult {
 
 pub(crate) enum KeyStableBatchAttempt {
     Applied(Box<KeyStableBatchResult>),
-    Fallback(Vec<Mutation>),
+    Fallback {
+        mutations: Vec<Mutation>,
+        parallel_width: usize,
+        parallel_tasks: usize,
+    },
 }
 
 impl Default for BatchWriteCollector {
@@ -2289,18 +2290,35 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     policy: ExecutionPolicy,
 ) -> Result<KeyStableBatchAttempt, Error> {
     if !should_try_batched_value_updates(prolly, tree, mutations.len(), policy) {
-        return Ok(KeyStableBatchAttempt::Fallback(mutations));
+        return Ok(KeyStableBatchAttempt::Fallback {
+            mutations,
+            parallel_width: 1,
+            parallel_tasks: 0,
+        });
     }
 
-    let groups =
-        group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, policy.read_width())?;
+    let mut route_parallel_width = 1usize;
+    let mut route_parallel_tasks = 0usize;
+    let groups = group_mutations_by_leaf_with_paths_batched(
+        prolly,
+        tree,
+        mutations,
+        policy.read_width(),
+        policy.width(),
+        &mut route_parallel_width,
+        &mut route_parallel_tasks,
+    )?;
     if groups.is_empty() || !groups.iter().all(key_stable_group_is_safe) {
         let mut mutations = groups
             .into_iter()
             .flat_map(|group| group.mutations.into_owned())
             .collect::<Vec<_>>();
         mutations.sort_by(|left, right| left.key().cmp(right.key()));
-        return Ok(KeyStableBatchAttempt::Fallback(mutations));
+        return Ok(KeyStableBatchAttempt::Fallback {
+            mutations,
+            parallel_width: route_parallel_width,
+            parallel_tasks: route_parallel_tasks,
+        });
     }
 
     let affected_leaves = groups.len();
@@ -2320,12 +2338,13 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
             entries_streamed,
             written_nodes: collector.len(),
             written_bytes: collector.bytes_len(),
-            parallel_width: leaf_policy.width(),
-            parallel_tasks: if leaf_policy.enabled() {
-                leaf_policy.ranges(affected_leaves).len()
-            } else {
-                0
-            },
+            parallel_width: leaf_policy.width().max(route_parallel_width),
+            parallel_tasks: route_parallel_tasks
+                + if leaf_policy.enabled() {
+                    leaf_policy.ranges(affected_leaves).len()
+                } else {
+                    0
+                },
         },
     )))
 }
@@ -2334,9 +2353,19 @@ pub(crate) fn sampled_value_updates_are_likely_key_stable<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
-    read_width: usize,
+    policy: ExecutionPolicy,
 ) -> Result<bool, Error> {
-    let groups = group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, read_width)?;
+    let mut parallel_width = 1usize;
+    let mut parallel_tasks = 0usize;
+    let groups = group_mutations_by_leaf_with_paths_batched(
+        prolly,
+        tree,
+        mutations,
+        policy.read_width(),
+        policy.width(),
+        &mut parallel_width,
+        &mut parallel_tasks,
+    )?;
     Ok(!groups.is_empty() && groups.iter().all(key_stable_group_is_safe))
 }
 
@@ -2638,7 +2667,17 @@ fn group_mutations_by_leaf_optimized<S: Store>(
     mutations: Vec<Mutation>,
 ) -> Result<Vec<LeafMutationGroup>, Error> {
     let groups = if prolly.store().prefers_batch_reads() {
-        group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, usize::MAX)?
+        let mut parallel_width = 1usize;
+        let mut parallel_tasks = 0usize;
+        group_mutations_by_leaf_with_paths_batched(
+            prolly,
+            tree,
+            mutations,
+            usize::MAX,
+            rayon::current_num_threads(),
+            &mut parallel_width,
+            &mut parallel_tasks,
+        )?
     } else {
         group_mutations_by_leaf_with_paths(prolly, tree, mutations)?
     };
@@ -2651,6 +2690,9 @@ fn group_mutations_by_leaf_with_paths_batched<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
     prefetch_parallelism: usize,
+    decode_parallelism: usize,
+    parallel_width: &mut usize,
+    parallel_tasks: &mut usize,
 ) -> Result<Vec<LeafMutationGroupWithPath>, Error> {
     if mutations.is_empty() {
         return Ok(Vec::new());
@@ -2682,7 +2724,14 @@ fn group_mutations_by_leaf_with_paths_batched<S: Store>(
             .iter()
             .map(|frame| frame.cid.clone())
             .collect::<Vec<_>>();
-        let nodes = prolly.load_many_ordered_with_parallelism(&cids, prefetch_parallelism)?;
+        let execution = prolly.load_many_ordered_with_widths_and_stats(
+            &cids,
+            prefetch_parallelism,
+            decode_parallelism,
+        )?;
+        *parallel_width = (*parallel_width).max(execution.parallel_width);
+        *parallel_tasks = parallel_tasks.saturating_add(execution.parallel_tasks);
+        let nodes = execution.nodes;
         let mut next_frames = Vec::with_capacity(frames.len());
 
         for (frame, node) in frames.into_iter().zip(nodes) {
@@ -6028,9 +6077,8 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(result.stats.affected_leaves, 1);
-        assert_eq!(result.stats.changed_leaves, 1);
-        assert!(!result.stats.used_deferred_rebalancing);
+        assert_eq!(result.stats.resync_distance_nodes, 1);
+        assert!(result.stats.used_key_stable_fast_path);
         assert_eq!(
             store.batch_get_calls.load(Ordering::Relaxed),
             batch_gets_before,

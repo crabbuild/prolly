@@ -3545,18 +3545,13 @@ fn batch_apply_stats_to_object(stats: BatchApplyStats) -> Result<JsValue, JsValu
     )?;
     Reflect::set(
         &object,
-        &"affectedLeaves".into(),
-        &JsValue::from_f64(stats.affected_leaves as f64),
+        &"entriesStreamed".into(),
+        &JsValue::from_f64(stats.entries_streamed as f64),
     )?;
     Reflect::set(
         &object,
-        &"changedLeaves".into(),
-        &JsValue::from_f64(stats.changed_leaves as f64),
-    )?;
-    Reflect::set(
-        &object,
-        &"sparseLeafApplies".into(),
-        &JsValue::from_f64(stats.sparse_leaf_applies as f64),
+        &"nodesRead".into(),
+        &JsValue::from_f64(stats.nodes_read as f64),
     )?;
     Reflect::set(
         &object,
@@ -3565,38 +3560,38 @@ fn batch_apply_stats_to_object(stats: BatchApplyStats) -> Result<JsValue, JsValu
     )?;
     Reflect::set(
         &object,
+        &"nodesReused".into(),
+        &JsValue::from_f64(stats.nodes_reused as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"bytesRead".into(),
+        &JsValue::from_f64(stats.bytes_read as f64),
+    )?;
+    Reflect::set(
+        &object,
         &"writtenBytes".into(),
         &JsValue::from_f64(stats.written_bytes as f64),
     )?;
     Reflect::set(
         &object,
-        &"usedAppendFastPath".into(),
-        &JsValue::from_bool(stats.used_append_fast_path),
+        &"resyncDistanceEntries".into(),
+        &JsValue::from_f64(stats.resync_distance_entries as f64),
     )?;
     Reflect::set(
         &object,
-        &"usedBatchedRoute".into(),
-        &JsValue::from_bool(stats.used_batched_route),
+        &"resyncDistanceNodes".into(),
+        &JsValue::from_f64(stats.resync_distance_nodes as f64),
     )?;
     Reflect::set(
         &object,
-        &"usedCoalescedRebuild".into(),
-        &JsValue::from_bool(stats.used_coalesced_rebuild),
+        &"usedKeyStableFastPath".into(),
+        &JsValue::from_bool(stats.used_key_stable_fast_path),
     )?;
     Reflect::set(
         &object,
-        &"usedDeferredRebalancing".into(),
-        &JsValue::from_bool(stats.used_deferred_rebalancing),
-    )?;
-    Reflect::set(
-        &object,
-        &"usedBottomUpRebuild".into(),
-        &JsValue::from_bool(stats.used_bottom_up_rebuild),
-    )?;
-    Reflect::set(
-        &object,
-        &"cacheWrittenNodes".into(),
-        &JsValue::from_bool(stats.cache_written_nodes),
+        &"usedBatchedValueUpdatePath".into(),
+        &JsValue::from_bool(stats.used_batched_value_update_path),
     )?;
     Reflect::set(
         &object,

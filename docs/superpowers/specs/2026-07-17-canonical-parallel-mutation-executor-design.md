@@ -72,6 +72,14 @@ Ordinary `batch` uses an internal automatic execution policy selected for the st
 
 The obsolete `BatchWriterConfig` algorithm switches are removed. If `BatchWriter` remains as a convenience object, it stores a `ParallelConfig` and delegates to the canonical configured writer. It must not expose optimized-merge, bottom-up-rebuild, deferred-rebalance, or cache switches unless those switches have distinct canonical implementations and measurements.
 
+`BatchApplyStats` is also a hard-cutover surface. It mirrors canonical write
+work—entries and nodes read/reused/written, bytes read/written,
+resynchronization distances, proved fast-path flags, and parallel/island
+telemetry—plus whether caller input was already sorted. Fabricated legacy
+algorithm flags and synthesized affected/changed-leaf counts are removed from
+Rust and every generated or handwritten binding decoder. The wire field order
+is identical in all languages.
+
 ## Architecture
 
 ### 1. Execution policy and scheduler
@@ -136,7 +144,9 @@ The existing small-write cache policy remains automatic. Cache warming is not ex
 
 Any routing, decoding, boundary, encoding, hashing, or persistence error cancels the call and returns the original error. Rayon results are collected as ordered `Result` values; the first error in input order is returned for deterministic diagnostics.
 
-A failed speculative island is not an error when it merely cannot prove independence. Its local bytes are discarded and the call immediately uses the canonical sequential fallback. A malformed node, format mismatch, or store failure remains an error and is never converted to a fallback.
+Configured route hydration uses separate read and decode widths. Decode work is split into exactly the admitted CPU partitions; width one decodes serially. Partition results are collected first and transposed left-to-right so Rayon reduction order cannot select a different store or decode error.
+
+A failed speculative island is not an error when it merely cannot prove independence. Its bounded wave is allowed to finish, its local bytes are discarded, no later wave starts, and the call immediately uses the canonical sequential fallback. A malformed node, format mismatch, or store failure remains an error and is never converted to a fallback.
 
 Content-addressed nodes written before a later store failure may be unreachable, but no successful root is returned. This matches the existing publication contract.
 

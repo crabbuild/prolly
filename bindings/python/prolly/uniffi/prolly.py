@@ -450,10 +450,6 @@ def _uniffi_load_indirect():
     This is how we find and load the dynamic library provided by the component.
     For now we just look it up by name.
     """
-    override = os.environ.get("PROLLY_BINDINGS_LIBRARY")
-    if override:
-        return ctypes.cdll.LoadLibrary(override)
-
     if sys.platform == "darwin":
         libname = "lib{}.dylib"
     elif sys.platform.startswith("win"):
@@ -9686,21 +9682,20 @@ class _UniffiFfiConverterTypeTreeRecord(_UniffiConverterRustBuffer):
 
 @dataclass
 class BatchApplyStatsRecord:
-    def __init__(self, *, input_mutations:int, effective_mutations:int, preprocess_input_sorted:bool, affected_leaves:int, changed_leaves:int, sparse_leaf_applies:int, written_nodes:int, written_bytes:int, used_append_fast_path:bool, used_batched_route:bool, used_coalesced_rebuild:bool, used_deferred_rebalancing:bool, used_bottom_up_rebuild:bool, cache_written_nodes:bool, parallel_width:int, parallel_tasks:int, structural_islands:int, coalesced_islands:int):
+    def __init__(self, *, input_mutations:int, effective_mutations:int, preprocess_input_sorted:bool, entries_streamed:int, nodes_read:int, written_nodes:int, nodes_reused:int, bytes_read:int, written_bytes:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool, parallel_width:int, parallel_tasks:int, structural_islands:int, coalesced_islands:int):
         self.input_mutations = input_mutations
         self.effective_mutations = effective_mutations
         self.preprocess_input_sorted = preprocess_input_sorted
-        self.affected_leaves = affected_leaves
-        self.changed_leaves = changed_leaves
-        self.sparse_leaf_applies = sparse_leaf_applies
+        self.entries_streamed = entries_streamed
+        self.nodes_read = nodes_read
         self.written_nodes = written_nodes
+        self.nodes_reused = nodes_reused
+        self.bytes_read = bytes_read
         self.written_bytes = written_bytes
-        self.used_append_fast_path = used_append_fast_path
-        self.used_batched_route = used_batched_route
-        self.used_coalesced_rebuild = used_coalesced_rebuild
-        self.used_deferred_rebalancing = used_deferred_rebalancing
-        self.used_bottom_up_rebuild = used_bottom_up_rebuild
-        self.cache_written_nodes = cache_written_nodes
+        self.resync_distance_entries = resync_distance_entries
+        self.resync_distance_nodes = resync_distance_nodes
+        self.used_key_stable_fast_path = used_key_stable_fast_path
+        self.used_batched_value_update_path = used_batched_value_update_path
         self.parallel_width = parallel_width
         self.parallel_tasks = parallel_tasks
         self.structural_islands = structural_islands
@@ -9710,7 +9705,7 @@ class BatchApplyStatsRecord:
 
     
     def __str__(self):
-        return "BatchApplyStatsRecord(input_mutations={}, effective_mutations={}, preprocess_input_sorted={}, affected_leaves={}, changed_leaves={}, sparse_leaf_applies={}, written_nodes={}, written_bytes={}, used_append_fast_path={}, used_batched_route={}, used_coalesced_rebuild={}, used_deferred_rebalancing={}, used_bottom_up_rebuild={}, cache_written_nodes={}, parallel_width={}, parallel_tasks={}, structural_islands={}, coalesced_islands={})".format(self.input_mutations, self.effective_mutations, self.preprocess_input_sorted, self.affected_leaves, self.changed_leaves, self.sparse_leaf_applies, self.written_nodes, self.written_bytes, self.used_append_fast_path, self.used_batched_route, self.used_coalesced_rebuild, self.used_deferred_rebalancing, self.used_bottom_up_rebuild, self.cache_written_nodes, self.parallel_width, self.parallel_tasks, self.structural_islands, self.coalesced_islands)
+        return "BatchApplyStatsRecord(input_mutations={}, effective_mutations={}, preprocess_input_sorted={}, entries_streamed={}, nodes_read={}, written_nodes={}, nodes_reused={}, bytes_read={}, written_bytes={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={}, parallel_width={}, parallel_tasks={}, structural_islands={}, coalesced_islands={})".format(self.input_mutations, self.effective_mutations, self.preprocess_input_sorted, self.entries_streamed, self.nodes_read, self.written_nodes, self.nodes_reused, self.bytes_read, self.written_bytes, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path, self.parallel_width, self.parallel_tasks, self.structural_islands, self.coalesced_islands)
     def __eq__(self, other):
         if self.input_mutations != other.input_mutations:
             return False
@@ -9718,27 +9713,25 @@ class BatchApplyStatsRecord:
             return False
         if self.preprocess_input_sorted != other.preprocess_input_sorted:
             return False
-        if self.affected_leaves != other.affected_leaves:
+        if self.entries_streamed != other.entries_streamed:
             return False
-        if self.changed_leaves != other.changed_leaves:
-            return False
-        if self.sparse_leaf_applies != other.sparse_leaf_applies:
+        if self.nodes_read != other.nodes_read:
             return False
         if self.written_nodes != other.written_nodes:
             return False
+        if self.nodes_reused != other.nodes_reused:
+            return False
+        if self.bytes_read != other.bytes_read:
+            return False
         if self.written_bytes != other.written_bytes:
             return False
-        if self.used_append_fast_path != other.used_append_fast_path:
+        if self.resync_distance_entries != other.resync_distance_entries:
             return False
-        if self.used_batched_route != other.used_batched_route:
+        if self.resync_distance_nodes != other.resync_distance_nodes:
             return False
-        if self.used_coalesced_rebuild != other.used_coalesced_rebuild:
+        if self.used_key_stable_fast_path != other.used_key_stable_fast_path:
             return False
-        if self.used_deferred_rebalancing != other.used_deferred_rebalancing:
-            return False
-        if self.used_bottom_up_rebuild != other.used_bottom_up_rebuild:
-            return False
-        if self.cache_written_nodes != other.cache_written_nodes:
+        if self.used_batched_value_update_path != other.used_batched_value_update_path:
             return False
         if self.parallel_width != other.parallel_width:
             return False
@@ -9757,17 +9750,16 @@ class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
             input_mutations=_UniffiFfiConverterUInt64.read(buf),
             effective_mutations=_UniffiFfiConverterUInt64.read(buf),
             preprocess_input_sorted=_UniffiFfiConverterBoolean.read(buf),
-            affected_leaves=_UniffiFfiConverterUInt64.read(buf),
-            changed_leaves=_UniffiFfiConverterUInt64.read(buf),
-            sparse_leaf_applies=_UniffiFfiConverterUInt64.read(buf),
+            entries_streamed=_UniffiFfiConverterUInt64.read(buf),
+            nodes_read=_UniffiFfiConverterUInt64.read(buf),
             written_nodes=_UniffiFfiConverterUInt64.read(buf),
+            nodes_reused=_UniffiFfiConverterUInt64.read(buf),
+            bytes_read=_UniffiFfiConverterUInt64.read(buf),
             written_bytes=_UniffiFfiConverterUInt64.read(buf),
-            used_append_fast_path=_UniffiFfiConverterBoolean.read(buf),
-            used_batched_route=_UniffiFfiConverterBoolean.read(buf),
-            used_coalesced_rebuild=_UniffiFfiConverterBoolean.read(buf),
-            used_deferred_rebalancing=_UniffiFfiConverterBoolean.read(buf),
-            used_bottom_up_rebuild=_UniffiFfiConverterBoolean.read(buf),
-            cache_written_nodes=_UniffiFfiConverterBoolean.read(buf),
+            resync_distance_entries=_UniffiFfiConverterUInt64.read(buf),
+            resync_distance_nodes=_UniffiFfiConverterUInt64.read(buf),
+            used_key_stable_fast_path=_UniffiFfiConverterBoolean.read(buf),
+            used_batched_value_update_path=_UniffiFfiConverterBoolean.read(buf),
             parallel_width=_UniffiFfiConverterUInt64.read(buf),
             parallel_tasks=_UniffiFfiConverterUInt64.read(buf),
             structural_islands=_UniffiFfiConverterUInt64.read(buf),
@@ -9779,17 +9771,16 @@ class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.check_lower(value.input_mutations)
         _UniffiFfiConverterUInt64.check_lower(value.effective_mutations)
         _UniffiFfiConverterBoolean.check_lower(value.preprocess_input_sorted)
-        _UniffiFfiConverterUInt64.check_lower(value.affected_leaves)
-        _UniffiFfiConverterUInt64.check_lower(value.changed_leaves)
-        _UniffiFfiConverterUInt64.check_lower(value.sparse_leaf_applies)
+        _UniffiFfiConverterUInt64.check_lower(value.entries_streamed)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_read)
         _UniffiFfiConverterUInt64.check_lower(value.written_nodes)
+        _UniffiFfiConverterUInt64.check_lower(value.nodes_reused)
+        _UniffiFfiConverterUInt64.check_lower(value.bytes_read)
         _UniffiFfiConverterUInt64.check_lower(value.written_bytes)
-        _UniffiFfiConverterBoolean.check_lower(value.used_append_fast_path)
-        _UniffiFfiConverterBoolean.check_lower(value.used_batched_route)
-        _UniffiFfiConverterBoolean.check_lower(value.used_coalesced_rebuild)
-        _UniffiFfiConverterBoolean.check_lower(value.used_deferred_rebalancing)
-        _UniffiFfiConverterBoolean.check_lower(value.used_bottom_up_rebuild)
-        _UniffiFfiConverterBoolean.check_lower(value.cache_written_nodes)
+        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_entries)
+        _UniffiFfiConverterUInt64.check_lower(value.resync_distance_nodes)
+        _UniffiFfiConverterBoolean.check_lower(value.used_key_stable_fast_path)
+        _UniffiFfiConverterBoolean.check_lower(value.used_batched_value_update_path)
         _UniffiFfiConverterUInt64.check_lower(value.parallel_width)
         _UniffiFfiConverterUInt64.check_lower(value.parallel_tasks)
         _UniffiFfiConverterUInt64.check_lower(value.structural_islands)
@@ -9800,17 +9791,16 @@ class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.input_mutations, buf)
         _UniffiFfiConverterUInt64.write(value.effective_mutations, buf)
         _UniffiFfiConverterBoolean.write(value.preprocess_input_sorted, buf)
-        _UniffiFfiConverterUInt64.write(value.affected_leaves, buf)
-        _UniffiFfiConverterUInt64.write(value.changed_leaves, buf)
-        _UniffiFfiConverterUInt64.write(value.sparse_leaf_applies, buf)
+        _UniffiFfiConverterUInt64.write(value.entries_streamed, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_read, buf)
         _UniffiFfiConverterUInt64.write(value.written_nodes, buf)
+        _UniffiFfiConverterUInt64.write(value.nodes_reused, buf)
+        _UniffiFfiConverterUInt64.write(value.bytes_read, buf)
         _UniffiFfiConverterUInt64.write(value.written_bytes, buf)
-        _UniffiFfiConverterBoolean.write(value.used_append_fast_path, buf)
-        _UniffiFfiConverterBoolean.write(value.used_batched_route, buf)
-        _UniffiFfiConverterBoolean.write(value.used_coalesced_rebuild, buf)
-        _UniffiFfiConverterBoolean.write(value.used_deferred_rebalancing, buf)
-        _UniffiFfiConverterBoolean.write(value.used_bottom_up_rebuild, buf)
-        _UniffiFfiConverterBoolean.write(value.cache_written_nodes, buf)
+        _UniffiFfiConverterUInt64.write(value.resync_distance_entries, buf)
+        _UniffiFfiConverterUInt64.write(value.resync_distance_nodes, buf)
+        _UniffiFfiConverterBoolean.write(value.used_key_stable_fast_path, buf)
+        _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
         _UniffiFfiConverterUInt64.write(value.parallel_width, buf)
         _UniffiFfiConverterUInt64.write(value.parallel_tasks, buf)
         _UniffiFfiConverterUInt64.write(value.structural_islands, buf)

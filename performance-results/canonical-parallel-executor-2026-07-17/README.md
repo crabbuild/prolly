@@ -8,6 +8,9 @@ This directory contains the retained release-mode measurements for the 2026-07-1
 - `scaling-results.csv`: 30 balanced samples for widths 1, 12, and automatic on the two primary 1M/100k workloads.
 - `caller-results.csv`: 8 balanced samples for widths 1, 4, 12, and automatic with 2, 4, and 8 callers across all seven workloads.
 - `workload-results.csv`: 6 balanced width-1/automatic samples across all seven 1M/100k workloads.
+- `post-review-scaling-summary.csv`: aggregate percentiles from the 30-sample
+  rerun after bounded decode, deterministic-error, first-failed-wave, and
+  truthful batch-stat hardening.
 - `machine.txt`: host, toolchain, seed, and source-revision metadata.
 - `report.md`: interpretation, regression gates, and limitations.
 
@@ -26,6 +29,11 @@ cargo bench --bench prolly_bench -- parallel-callers 100000 10000
 
 PROLLY_WORKERS=1,0 \
 PROLLY_BENCH_RUNS=6 \
+cargo bench --bench prolly_bench -- parallel-scaling 1000000 100000
+
+PROLLY_WORKLOADS=value-only,mixed-60-20-20 \
+PROLLY_WORKERS=1,12,0 \
+PROLLY_BENCH_RUNS=30 \
 cargo bench --bench prolly_bench -- parallel-scaling 1000000 100000
 ```
 
