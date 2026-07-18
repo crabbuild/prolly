@@ -169,6 +169,52 @@ impl CellSpec {
     }
 }
 
+pub fn enumerate_cells(config: &RunConfig, records: usize, repetition: usize) -> Vec<CellSpec> {
+    let operations = config.operations_for(records);
+    let mut cells = Vec::with_capacity(15);
+    for operation in [Operation::Put, Operation::Batch] {
+        for pattern in Pattern::ALL {
+            cells.push(CellSpec {
+                records,
+                repetition,
+                operation,
+                pattern,
+                cache_state: CacheState::NotApplicable,
+                operations,
+                revision: config.revision.clone(),
+                dirty: config.dirty,
+            });
+        }
+    }
+    for pattern in Pattern::ALL {
+        for cache_state in [CacheState::ColdManager, CacheState::WarmManager] {
+            cells.push(CellSpec {
+                records,
+                repetition,
+                operation: Operation::PointRead,
+                pattern,
+                cache_state,
+                operations,
+                revision: config.revision.clone(),
+                dirty: config.dirty,
+            });
+        }
+    }
+    for pattern in Pattern::ALL {
+        cells.push(CellSpec {
+            records,
+            repetition,
+            operation: Operation::RangeScan,
+            pattern,
+            cache_state: CacheState::NotApplicable,
+            operations,
+            revision: config.revision.clone(),
+            dirty: config.dirty,
+        });
+    }
+    cells
+}
+
 pub fn key(id: usize) -> Vec<u8> {
     format!("key-{id:020}").into_bytes()
 }
@@ -256,4 +302,3 @@ fn next_random(state: &mut u64) -> u64 {
     *state ^= *state << 17;
     *state
 }
-
