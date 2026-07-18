@@ -3,7 +3,7 @@ name = "prolly-store-pglite"
 description = "PGlite sidecar store adapter for prolly-map."
 edition = "2021"
 rust-version = "1.81"
-version = "0.1.0"
+version = "0.2.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 hex = "0.4"
-prolly = { package = "prolly-map", path = "../..", version = "0.3.0" }
+prolly = { package = "prolly-map", path = "../..", version = "0.4.0" }
 serde_json = "1.0"
 
 [dev-dependencies]
