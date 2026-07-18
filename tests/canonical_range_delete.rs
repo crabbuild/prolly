@@ -451,7 +451,7 @@ fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild
     policy.min = 1;
     policy.target = 2;
     policy.max = 4;
-    policy.hash_seed = 184;
+    policy.hash_seed = 397;
     let config = Config::builder()
         .chunking(policy)
         .node_layout(NodeLayoutSpec::Plain)
@@ -459,7 +459,7 @@ fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild
     let store = Arc::new(MemStore::new());
     let manager = Prolly::new(store.clone(), config.clone());
     let mut base_builder = BatchBuilder::new(store.clone(), config.clone());
-    for index in 0..24 {
+    for index in 0..40 {
         base_builder.add(key(index), value(index));
     }
     let base = base_builder.build().unwrap();
@@ -474,8 +474,8 @@ fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild
 
     let expected_store = Arc::new(MemStore::new());
     let mut expected_builder = BatchBuilder::new(expected_store.clone(), config);
-    for index in 0..24 {
-        if !(8..14).contains(&index) {
+    for index in 0..40 {
+        if !(13..23).contains(&index) {
             expected_builder.add(key(index), value(index));
         }
     }
@@ -494,7 +494,7 @@ fn value_sensitive_height_two_root_promotion_falls_back_to_the_canonical_rebuild
 
     manager.clear_cache();
     manager.reset_metrics();
-    let deleted = manager.delete_range(&base, &key(8), &key(14)).unwrap();
+    let deleted = manager.delete_range(&base, &key(13), &key(23)).unwrap();
 
     assert_eq!(deleted.root, expected.root);
     assert!(
@@ -509,7 +509,7 @@ fn localized_point_deletes_fall_back_when_the_canonical_root_promotes() {
     policy.min = 1;
     policy.target = 2;
     policy.max = 4;
-    policy.hash_seed = 184;
+    policy.hash_seed = 397;
     let config = Config::builder()
         .chunking(policy)
         .node_layout(NodeLayoutSpec::Plain)
@@ -517,7 +517,7 @@ fn localized_point_deletes_fall_back_when_the_canonical_root_promotes() {
     let store = Arc::new(MemStore::new());
     let manager = Prolly::new(store.clone(), config.clone());
     let mut base_builder = BatchBuilder::new(store.clone(), config.clone());
-    for index in 0..24 {
+    for index in 0..40 {
         base_builder.add(key(index), value(index));
     }
     let base = base_builder.build().unwrap();
@@ -532,8 +532,8 @@ fn localized_point_deletes_fall_back_when_the_canonical_root_promotes() {
 
     let expected_store = Arc::new(MemStore::new());
     let mut expected_builder = BatchBuilder::new(expected_store.clone(), config);
-    for index in 0..24 {
-        if !(8..14).contains(&index) {
+    for index in 0..40 {
+        if !(13..23).contains(&index) {
             expected_builder.add(key(index), value(index));
         }
     }
@@ -553,7 +553,7 @@ fn localized_point_deletes_fall_back_when_the_canonical_root_promotes() {
     let (actual, _) = manager
         .batch_with_write_stats(
             &base,
-            (8..14)
+            (13..23)
                 .map(|index| Mutation::Delete { key: key(index) })
                 .collect(),
         )

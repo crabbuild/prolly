@@ -1152,9 +1152,8 @@ pub struct DeferredMutationResult {
 /// 3. Collect the modified leaf and its ancestor path
 ///
 /// # Key Difference from Standard Processing
-/// Unlike the standard batch processing which calls `rebalance_with_collector`
-/// after each leaf modification, this function simply collects the results.
-/// Rebalancing is deferred to the `rebuild_from_modified_leaves` phase.
+/// This test helper collects modified leaves before rebuilding their shared
+/// ancestors in `rebuild_from_modified_leaves`.
 ///
 /// # Requirements
 /// - Requirement 2.1: Apply all mutations to target leaves before rebalancing

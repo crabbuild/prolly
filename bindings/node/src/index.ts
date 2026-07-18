@@ -689,6 +689,8 @@ export function diffEntries(base: [Uint8Array, Uint8Array][], other: [Uint8Array
   return out;
 }
 
+export function prefixEnd(prefix: Uint8Array): Uint8Array | undefined {
+  if (prefix.length === 0) return undefined;
   const end = Array.from(prefix);
   while (end.length > 0) {
     const last = end.length - 1;

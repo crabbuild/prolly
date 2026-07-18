@@ -240,7 +240,7 @@ fn deterministic_exponential_threshold(delta: u128, scale: u128) -> u64 {
     let mut exponent = scaled_ratio_q62(delta, scale);
     let mut squarings = 0;
     while exponent > Q62 / 16 {
-        exponent = (exponent + 1) / 2;
+        exponent = exponent.div_ceil(2);
         squarings += 1;
     }
 

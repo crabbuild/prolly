@@ -562,7 +562,7 @@ fn chunk_ranges_for_entries_impl(
         if child_counts.is_some() {
             return Err(Error::InvalidNode);
         }
-    } else if child_counts.is_none_or(|counts| counts.len() != entries.len()) {
+    } else if child_counts.map_or(true, |counts| counts.len() != entries.len()) {
         return Err(Error::InvalidNode);
     }
     let mut detector = BoundaryDetector::new(config.format.chunking.clone(), level.into())?;
@@ -745,8 +745,10 @@ mod tests {
             super::super::format::NodeLayoutSpec::OffsetTable,
         ] {
             for leaf in [true, false] {
-                let mut format = super::super::format::TreeFormat::default();
-                format.node_layout = layout.clone();
+                let format = super::super::format::TreeFormat {
+                    node_layout: layout.clone(),
+                    ..Default::default()
+                };
                 let level = if leaf { 0 } else { 1 };
                 let mut sizer = EncodedNodeSizer::new(format.clone(), leaf, level).unwrap();
                 let mut node = Node::builder()
@@ -795,7 +797,7 @@ mod tests {
 
                 for index in 300..16_385_u64 {
                     let key = format!("shared-prefix-{index:020}").into_bytes();
-                    let value = [b'x'];
+                    let value = *b"x";
                     let child_count = (!leaf).then_some(index + 1);
                     sizer
                         .push(
