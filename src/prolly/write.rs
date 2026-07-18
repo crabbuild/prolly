@@ -6,7 +6,7 @@ use std::ops::Range;
 use rayon::prelude::*;
 
 use super::boundary::entry_count_boundary;
-use super::builder::{BatchBuilder, LevelEmitter, NodeSummary};
+use super::builder::{BatchBuilder, EmittedNode, LevelEmitter, NodeSummary};
 use super::cid::Cid;
 use super::config::Config;
 use super::error::{Error, Mutation};
@@ -1275,6 +1275,223 @@ fn try_append<S: Store>(
     )))
 }
 
+/// Append a suffix that is already materialized in another tree from the same
+/// store. Only the boundary leaf is replayed; complete suffix leaves are reused
+/// by CID and the destination's rightmost parent frontier is rebuilt.
+pub(crate) fn append_tree_suffix<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    suffix_tree: &Tree,
+    start_key: &[u8],
+    prepared_suffix_leaves: Option<&[NodeSummary]>,
+    prepared_suffix_internals: Option<&HashSet<Cid>>,
+    prepared_suffix_levels: Option<&[Vec<NodeSummary>]>,
+) -> Result<Option<Tree>, Error> {
+    if tree.root.is_none()
+        || suffix_tree.root.is_none()
+        || tree.config.format != suffix_tree.config.format
+    {
+        return Ok(None);
+    }
+
+    let path = rightmost_internal_path(manager, tree)?;
+    let last_cid = match path.last() {
+        Some((_, node)) => child_cid(node.vals.last().ok_or(Error::InvalidNode)?)?,
+        None => tree.root.clone().ok_or(Error::InvalidNode)?,
+    };
+    let last_leaf = manager.load_arc(&last_cid)?;
+    let Some(max_key) = last_leaf.keys.last() else {
+        return Err(Error::InvalidNode);
+    };
+    if !last_leaf.leaf || last_leaf.keys.len() != last_leaf.vals.len() || start_key <= max_key {
+        return Ok(None);
+    }
+
+    let owned_suffix_leaves;
+    let suffix_leaves = match prepared_suffix_leaves {
+        Some(leaves) => leaves,
+        None => {
+            owned_suffix_leaves = tree_leaf_summaries(manager, suffix_tree)?;
+            &owned_suffix_leaves
+        }
+    };
+    let empty_suffix_internals = HashSet::new();
+    let suffix_internal_cids = prepared_suffix_internals.unwrap_or(&empty_suffix_internals);
+    let owned_suffix_levels;
+    let suffix_levels = match prepared_suffix_levels {
+        Some(levels) => levels,
+        None => {
+            owned_suffix_levels = tree_level_summaries(manager, suffix_tree)?;
+            &owned_suffix_levels
+        }
+    };
+    let first_leaf = suffix_leaves
+        .partition_point(|leaf| leaf.first_key.as_slice() <= start_key)
+        .saturating_sub(1);
+    if first_leaf >= suffix_leaves.len() {
+        return Ok(None);
+    }
+
+    let mut emitter = LeafEmitter::new(&tree.config)?;
+    for (key, value) in last_leaf
+        .keys
+        .iter()
+        .cloned()
+        .zip(last_leaf.vals.iter().cloned())
+    {
+        emitter.push(key, value)?;
+    }
+
+    let mut reused_from = suffix_leaves.len();
+    for (offset, summary) in suffix_leaves[first_leaf..].iter().enumerate() {
+        let leaf = manager.load_arc(&summary.cid)?;
+        if !leaf.leaf || leaf.keys.len() != leaf.vals.len() {
+            return Err(Error::InvalidNode);
+        }
+        for (key, value) in leaf.keys.iter().zip(&leaf.vals) {
+            if key.as_slice() >= start_key {
+                emitter.push(key.clone(), value.clone())?;
+            }
+        }
+        if emitter.is_aligned_with(summary) {
+            reused_from = first_leaf + offset + 1;
+            break;
+        }
+    }
+    emitter.flush()?;
+
+    let mut boundary = emitter
+        .emitted
+        .iter()
+        .map(|leaf| leaf.summary.clone())
+        .collect::<Vec<_>>();
+    let mut source_from = reused_from;
+    let mut internal_nodes = Vec::<EmittedNode>::new();
+    let mut level = 1u8;
+    let root = loop {
+        let source_children = suffix_levels
+            .get(usize::from(level - 1))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let source_parents = suffix_levels
+            .get(usize::from(level))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+
+        let left_node = path
+            .iter()
+            .rev()
+            .find_map(|(_, node)| (node.level == level).then_some(node));
+        let mut level_emitter = LevelEmitter::new(tree.config.clone(), false, level)?;
+        let mut output = Vec::<NodeSummary>::new();
+        if let Some(node) = left_node {
+            let mut children = internal_child_summaries(node)?;
+            children.pop().ok_or(Error::InvalidNode)?;
+            for child in children {
+                level_emitter.push_child_with(child, |emitted| {
+                    output.push(emitted.summary.clone());
+                    internal_nodes.push(emitted);
+                })?;
+            }
+        }
+        for child in std::mem::take(&mut boundary) {
+            level_emitter.push_child_with(child, |emitted| {
+                output.push(emitted.summary.clone());
+                internal_nodes.push(emitted);
+            })?;
+        }
+
+        let mut aligned_parent = None;
+        let mut emitted_nodes = Vec::new();
+        let child_start = source_from.min(source_children.len());
+        for (offset, child) in source_children[child_start..].iter().enumerate() {
+            emitted_nodes.clear();
+            level_emitter.push_child_with(child.clone(), |emitted| emitted_nodes.push(emitted))?;
+            for emitted in emitted_nodes.drain(..) {
+                output.push(emitted.summary.clone());
+                internal_nodes.push(emitted);
+                let next_child = child_start + offset + 1;
+                if next_child == source_children.len() {
+                    aligned_parent = Some(source_parents.len());
+                    break;
+                }
+                let next_key = &source_children[next_child].first_key;
+                let parent_index = source_parents
+                    .partition_point(|parent| parent.first_key.as_slice() < next_key.as_slice());
+                if source_parents
+                    .get(parent_index)
+                    .is_some_and(|parent| parent.first_key == *next_key)
+                {
+                    aligned_parent = Some(parent_index);
+                    break;
+                }
+            }
+            if aligned_parent.is_some() {
+                break;
+            }
+        }
+        if let Some(next_source) = aligned_parent {
+            source_from = next_source;
+        } else {
+            if let Some(emitted) = level_emitter.finish()? {
+                output.push(emitted.summary.clone());
+                internal_nodes.push(emitted);
+            }
+            source_from = source_parents.len();
+        }
+
+        let remaining_source = source_parents.len().saturating_sub(source_from);
+        let destination_root_level = path.first().map(|(_, node)| node.level).unwrap_or(0);
+        if level >= destination_root_level && output.len() + remaining_source == 1 {
+            break output
+                .first()
+                .or_else(|| source_parents.get(source_from))
+                .ok_or(Error::InvalidNode)?
+                .cid
+                .clone();
+        }
+        boundary = output;
+        level = level.checked_add(1).ok_or(Error::InvalidNode)?;
+    };
+
+    let reused_leaf_cid = reused_from
+        .checked_sub(1)
+        .and_then(|index| suffix_leaves.get(index))
+        .map(|leaf| &leaf.cid);
+    let changed_leaves = emitter
+        .emitted
+        .iter()
+        .filter(|leaf| leaf.summary.cid != last_cid && reused_leaf_cid != Some(&leaf.summary.cid))
+        .collect::<Vec<_>>();
+    let writes = changed_leaves
+        .iter()
+        .map(|leaf| (leaf.summary.cid.as_bytes(), leaf.bytes.as_slice()))
+        .chain(
+            internal_nodes
+                .iter()
+                .filter(|node| {
+                    !path.iter().any(|(cid, _)| cid == &node.summary.cid)
+                        && !suffix_internal_cids.contains(&node.summary.cid)
+                })
+                .map(|node| (node.summary.cid.as_bytes(), node.bytes.as_slice())),
+        )
+        .collect::<Vec<_>>();
+    if !writes.is_empty() {
+        manager
+            .store()
+            .batch_put(&writes)
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        manager.record_batch_write_metrics(
+            writes.len(),
+            writes.iter().map(|(_, bytes)| bytes.len()).sum(),
+        );
+    }
+    Ok(Some(Tree {
+        root: Some(root),
+        config: tree.config.clone(),
+    }))
+}
+
 fn rightmost_internal_path<S: Store>(
     manager: &Prolly<S>,
     tree: &Tree,
@@ -2028,6 +2245,66 @@ fn collect_leaf_summaries<S: Store>(
         measure_read_bytes,
     )?;
     Ok((leaves, internals))
+}
+
+pub(crate) fn tree_leaf_summaries<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+) -> Result<Vec<NodeSummary>, Error> {
+    let mut stats = WriteStats::default();
+    collect_leaf_summaries(manager, tree, &mut stats, false).map(|(leaves, _)| leaves)
+}
+
+pub(crate) fn tree_level_summaries<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+) -> Result<Vec<Vec<NodeSummary>>, Error> {
+    fn visit<S: Store>(
+        manager: &Prolly<S>,
+        cid: &Cid,
+        levels: &mut Vec<Vec<NodeSummary>>,
+    ) -> Result<(), Error> {
+        let node = manager.load_arc(cid)?;
+        while levels.len() <= usize::from(node.level) {
+            levels.push(Vec::new());
+        }
+        let count = if node.leaf {
+            node.keys.len() as u64
+        } else {
+            node.child_counts.iter().copied().sum()
+        };
+        levels[usize::from(node.level)].push(NodeSummary {
+            cid: cid.clone(),
+            first_key: node.keys.first().cloned().unwrap_or_default(),
+            count,
+        });
+        if node.level == 1 {
+            while levels.is_empty() {
+                levels.push(Vec::new());
+            }
+            if node.keys.len() != node.vals.len() || node.child_counts.len() != node.len() {
+                return Err(Error::InvalidNode);
+            }
+            for index in 0..node.len() {
+                levels[0].push(NodeSummary {
+                    cid: child_cid(&node.vals[index])?,
+                    first_key: node.keys[index].clone(),
+                    count: node.child_counts[index],
+                });
+            }
+        } else if !node.leaf {
+            for value in &node.vals {
+                visit(manager, &child_cid(value)?, levels)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut levels = Vec::new();
+    if let Some(root) = &tree.root {
+        visit(manager, root, &mut levels)?;
+    }
+    Ok(levels)
 }
 
 fn collect_from_node<S: Store>(

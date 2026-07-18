@@ -50,10 +50,10 @@ def read_manifest(path):
     return result
 
 
-def read_rows(path):
+def read_rows(path, allow_empty=False):
     with path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
-    if not rows:
+    if not rows and not allow_empty:
         raise SystemExit(f"no result rows in {path}")
     for row in rows:
         if row["validated"] != "true":
@@ -78,12 +78,13 @@ def read_rows(path):
     return rows
 
 
-def common_expected(sizes, runs):
+def common_expected(sizes, runs, densities, localities):
     expected = set()
-    scenarios = [(0, "none")] + [
+    scenarios = ([(0, "none")] if 0 in densities else []) + [
         (density, locality)
-        for density in (1, 30)
-        for locality in ("append", "random", "clustered")
+        for density in densities
+        if density != 0
+        for locality in localities
     ]
     for records in sizes:
         for repetition in range(1, runs + 1):
@@ -95,11 +96,22 @@ def common_expected(sizes, runs):
     return expected
 
 
-def lifecycle_expected(sizes, runs):
+def lifecycle_expected(sizes, runs, densities, localities, enabled):
     expected = set()
+    if not enabled:
+        return expected
+    scenarios = {(0, "none"): LIFECYCLE_OPERATIONS[(0, "none")]}
+    scenarios.update(
+        {
+            (density, locality): ("version_publish",)
+            for density in densities
+            if density != 0
+            for locality in localities
+        }
+    )
     for records in sizes:
         for repetition in range(1, runs + 1):
-            for (density, locality), operations in LIFECYCLE_OPERATIONS.items():
+            for (density, locality), operations in scenarios.items():
                 for operation in operations:
                     expected.add(("rust-lifecycle", records, density, locality, operation, repetition))
     return expected
@@ -262,11 +274,15 @@ def summarize_lifecycle(rows, runs):
     return summary
 
 
-def write_csv(path, rows):
+def write_csv(path, rows, fieldnames=None):
     if not rows:
-        raise SystemExit(f"cannot write empty summary: {path}")
+        if fieldnames is None:
+            raise SystemExit(f"cannot write empty summary: {path}")
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n").writeheader()
+        return
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -321,27 +337,30 @@ def render_report(path, manifest, common, lifecycle, winner_flips):
     lines += [
         "",
         "`Rust vs Go` is Dolt Go median latency divided by Rust median latency; values above 1.0 favor Rust.",
-        "Both implementations use native structural patches. Rust v2 emits one verified target-root subtree envelope, while Dolt may emit multiple structural patches. Native item counts can differ, while comparison units and result validation use identical logical changes.",
-        "",
-        f"## Rust lifecycle at {max_size:,} records",
-        "",
-        "| Density | Locality | Operation | Median total | Median normalized | Throughput | CV | Result count |",
-        "|---:|---|---|---:|---:|---:|---:|---:|",
+        "Both implementations use native structural patches. Rust emits one verified target-root subtree envelope, while Dolt may emit multiple structural patches. Native item counts can differ, while comparison units and result validation use identical logical changes.",
     ]
-    for row in lifecycle:
-        if row["records"] != max_size:
-            continue
-        lines.append(
-            f"| {row['density']}% | {row['locality']} | {row['operation']} | "
-            f"{format_ns(row['median_ns'])} | {format_ns(row['median_ns_per_op'])} | "
-            f"{row['median_ops_per_sec']:.1f}/s | {row['cv_percent']:.2f}% | {row['result_count']} |"
-        )
+    if lifecycle:
+        lines += [
+            "",
+            f"## Rust lifecycle at {max_size:,} records",
+            "",
+            "| Density | Locality | Operation | Median total | Median normalized | Throughput | CV | Result count |",
+            "|---:|---|---|---:|---:|---:|---:|---:|",
+        ]
+        for row in lifecycle:
+            if row["records"] != max_size:
+                continue
+            lines.append(
+                f"| {row['density']}% | {row['locality']} | {row['operation']} | "
+                f"{format_ns(row['median_ns'])} | {format_ns(row['median_ns_per_op'])} | "
+                f"{row['median_ops_per_sec']:.1f}/s | {row['cv_percent']:.2f}% | {row['result_count']} |"
+            )
     noisy = sum(value > 10.0 for value in cvs)
     lines += [
         "",
         "## Reproducibility",
         "",
-        "- Complete expected common and lifecycle matrices: PASS",
+        "- Complete expected configured matrices: PASS",
         f"- Repetitions per scenario: {manifest['runs']} (matrix complete): PASS",
         "- Cross-language workload and logical-result identity: PASS",
         "- All runner validation flags: PASS",
@@ -362,16 +381,39 @@ def main():
     manifest = read_manifest(output / "manifest.txt")
     sizes = [int(value) for value in manifest["sizes"].split()]
     runs = int(manifest["runs"])
+    densities = [int(value) for value in manifest.get("densities", "0 1 30").split()]
+    localities = manifest.get("localities", "append random clustered").split()
+    lifecycle_enabled = manifest.get("lifecycle", "1") == "1"
     common_rows = read_rows(output / "results-common.csv")
-    lifecycle_rows = read_rows(output / "results-lifecycle.csv")
-    validate_matrix(common_rows, common_expected(sizes, runs), "common")
-    validate_matrix(lifecycle_rows, lifecycle_expected(sizes, runs), "lifecycle")
+    lifecycle_rows = read_rows(output / "results-lifecycle.csv", allow_empty=not lifecycle_enabled)
+    validate_matrix(common_rows, common_expected(sizes, runs, densities, localities), "common")
+    validate_matrix(
+        lifecycle_rows,
+        lifecycle_expected(sizes, runs, densities, localities, lifecycle_enabled),
+        "lifecycle",
+    )
     validate_pairs(common_rows)
 
     common_summary, winner_flips = summarize_common(common_rows, runs)
     lifecycle_summary = summarize_lifecycle(lifecycle_rows, runs)
     write_csv(output / "summary-common.csv", common_summary)
-    write_csv(output / "summary-lifecycle.csv", lifecycle_summary)
+    write_csv(
+        output / "summary-lifecycle.csv",
+        lifecycle_summary,
+        fieldnames=(
+            "records",
+            "density",
+            "locality",
+            "operation",
+            "relationship",
+            "runs",
+            "median_ns",
+            "median_ns_per_op",
+            "median_ops_per_sec",
+            "cv_percent",
+            "result_count",
+        ),
+    )
 
     cvs = [row["rust_cv_percent"] for row in common_summary]
     cvs += [row["go_cv_percent"] for row in common_summary]

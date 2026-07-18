@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	contractVersion = "prolly-version-compare-v2"
+	contractVersion = "prolly-version-compare-v3"
 	randomSeed      = uint64(0x6a09e667f3bcc909)
 	fnvOffset       = uint64(0xcbf29ce484222325)
 	fnvPrime        = uint64(0x00000100000001b3)

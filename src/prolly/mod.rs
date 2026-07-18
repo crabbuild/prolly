@@ -899,10 +899,101 @@ pub struct Prolly<S: Store> {
     store: S,
     config: Config,
     format_digest: OnceLock<Cid>,
+    branch_lineage: RwLock<BranchLineageCache>,
     node_cache: RwLock<NodeCache>,
     recent_leaf: RwLock<Option<RecentLeafRead>>,
     recent_leaf_misses: AtomicUsize,
     metrics: ProllyMetrics,
+}
+
+struct BranchLineageCache {
+    records: HashMap<(Option<Cid>, Cid), BranchLineage>,
+    insertion_order: VecDeque<(Option<Cid>, Cid)>,
+    max_records: usize,
+}
+
+struct BranchLineage {
+    mutations: Arc<Vec<Mutation>>,
+    leaves: Arc<Vec<builder::NodeSummary>>,
+    internals: Arc<HashSet<Cid>>,
+    levels: Arc<Vec<Vec<builder::NodeSummary>>>,
+    all_upserts: bool,
+}
+
+impl Default for BranchLineageCache {
+    fn default() -> Self {
+        Self {
+            records: HashMap::new(),
+            insertion_order: VecDeque::new(),
+            max_records: 4,
+        }
+    }
+}
+
+impl BranchLineageCache {
+    fn insert(&mut self, parent: Option<Cid>, root: Cid, lineage: BranchLineage) {
+        let key = (parent, root);
+        if self.records.insert(key.clone(), lineage).is_none() {
+            self.insertion_order.push_back(key);
+        }
+        while self.records.len() > self.max_records {
+            let Some(oldest) = self.insertion_order.pop_front() else {
+                break;
+            };
+            self.records.remove(&oldest);
+        }
+    }
+
+    fn direct_changes(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<Vec<Mutation>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.mutations))
+    }
+
+    fn direct_leaves(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<Vec<builder::NodeSummary>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.leaves))
+    }
+
+    fn direct_internals(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<HashSet<Cid>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.internals))
+    }
+
+    fn direct_levels(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<Vec<Vec<builder::NodeSummary>>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.levels))
+    }
+
+    fn direct_all_upserts(&self, parent: &Option<Cid>, child: &Option<Cid>) -> Option<bool> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| lineage.all_upserts)
+    }
 }
 
 struct RecentLeafRead {
@@ -1255,6 +1346,7 @@ impl<S: Store> Prolly<S> {
             store,
             config,
             format_digest,
+            branch_lineage: RwLock::new(BranchLineageCache::default()),
             node_cache: RwLock::new(NodeCache::new(node_cache_max_nodes, node_cache_max_bytes)),
             recent_leaf: RwLock::new(None),
             recent_leaf_misses: AtomicUsize::new(0),
@@ -1269,6 +1361,74 @@ impl<S: Store> Prolly<S> {
         let digest = self.config.format.digest()?;
         let _ = self.format_digest.set(digest.clone());
         Ok(digest)
+    }
+
+    pub(crate) fn direct_branch_changes(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<Mutation>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_changes(&base.root, &branch.root)
+    }
+
+    pub(crate) fn direct_branch_leaves(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<builder::NodeSummary>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_leaves(&base.root, &branch.root)
+    }
+
+    pub(crate) fn direct_branch_internals(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<HashSet<Cid>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_internals(&base.root, &branch.root)
+    }
+
+    pub(crate) fn direct_branch_levels(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<Vec<builder::NodeSummary>>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_levels(&base.root, &branch.root)
+    }
+
+    pub(crate) fn direct_branch_all_upserts(&self, base: &Tree, branch: &Tree) -> Option<bool> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_all_upserts(&base.root, &branch.root)
+    }
+
+    fn record_branch_lineage(&self, base: &Tree, branch: &Tree, lineage_record: BranchLineage) {
+        let Some(root) = branch.root.clone() else {
+            return;
+        };
+        if base.root == branch.root
+            || !lineage_record
+                .mutations
+                .windows(2)
+                .all(|pair| pair[0].key() < pair[1].key())
+        {
+            return;
+        }
+        if let Ok(mut lineage) = self.branch_lineage.write() {
+            lineage.insert(base.root.clone(), root, lineage_record);
+        }
     }
 
     /// Create a new empty tree.
@@ -4437,6 +4597,50 @@ impl<S: Store> Prolly<S> {
     /// ```
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
         write::apply_tree(self, tree, mutations)
+    }
+
+    /// Apply a sorted, unique mutation batch and retain its direct branch
+    /// lineage for subsequent same-manager three-way merges.
+    ///
+    /// The shared mutation vector lets version-oriented callers keep their
+    /// workload description without forcing the manager to retain a second
+    /// copy. Unsorted or duplicate input is still applied correctly, but is not
+    /// admitted to the lineage fast path.
+    pub fn batch_with_lineage(
+        &self,
+        tree: &Tree,
+        mutations: Arc<Vec<Mutation>>,
+    ) -> Result<Tree, Error> {
+        let branch = write::apply_tree(self, tree, mutations.as_ref().clone())?;
+        let levels = write::tree_level_summaries(self, &branch)?;
+        let leaves = levels.first().cloned().unwrap_or_default();
+        if let Some(first_change) = mutations.first() {
+            let boundary = leaves
+                .partition_point(|leaf| leaf.first_key.as_slice() <= first_change.key())
+                .saturating_sub(1);
+            for leaf in leaves.iter().skip(boundary).take(2) {
+                self.load_arc(&leaf.cid)?;
+            }
+        }
+        let internals = levels
+            .iter()
+            .skip(1)
+            .flatten()
+            .map(|summary| summary.cid.clone())
+            .collect();
+        let all_upserts = mutations.iter().all(|mutation| !mutation.is_delete());
+        self.record_branch_lineage(
+            tree,
+            &branch,
+            BranchLineage {
+                mutations,
+                leaves: Arc::new(leaves),
+                internals: Arc::new(internals),
+                levels: Arc::new(levels),
+                all_upserts,
+            },
+        );
+        Ok(branch)
     }
 
     /// Apply mutations and return tree-write work counters.

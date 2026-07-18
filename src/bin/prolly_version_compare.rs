@@ -6,6 +6,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+#[cfg(not(target_arch = "wasm32"))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(not(target_arch = "wasm32"))]
+unsafe extern "C" {
+    fn mi_collect(force: bool);
+}
+
 use prolly::{
     BorrowedMergeResolver, Config, ConflictRef, Diff, MemStore, MergeDecision, Mutation, Prolly,
     Tree,
@@ -47,13 +56,23 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
     assert_eq!(base_summary.0, args.records);
 
     let edits = change_count(args.records, args.density);
-    let left_mutations = branch_mutations(args.records, args.density, args.locality, 0, 1);
-    validate_unique_keys(&left_mutations);
-    let left = build(&manager, Some(&base), left_mutations.clone());
+    let left_mutations = Arc::new(branch_mutations(
+        args.records,
+        args.density,
+        args.locality,
+        0,
+        1,
+    ));
+    validate_unique_keys(left_mutations.as_slice());
+    let left = build_tracked(&manager, &base, Arc::clone(&left_mutations));
     let left_summary = tree_summary(&manager, &left);
-    let (range_start, range_end) =
-        range_bounds(args.records, args.density, args.locality, &left_mutations);
-    let compare_workload = workload_digest(args.records, "compare", &[&left_mutations]);
+    let (range_start, range_end) = range_bounds(
+        args.records,
+        args.density,
+        args.locality,
+        left_mutations.as_slice(),
+    );
+    let compare_workload = workload_digest(args.records, "compare", &[left_mutations.as_slice()]);
     let expected_diffs = manager
         .diff(&base, &left)
         .expect("validation diff succeeds");
@@ -109,6 +128,10 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         target_count: left_summary.0,
         conflict_count: 0,
     });
+    drop(range_diffs);
+    drop(expected_range);
+    drop(diffs);
+    drop(expected_diffs);
 
     let started = Instant::now();
     let patch = manager
@@ -152,6 +175,8 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         target_count: left_summary.0,
         conflict_count: 0,
     });
+    drop(patched);
+    drop(patch);
 
     if args.density == 0 {
         rows.push(measure_merge(
@@ -167,9 +192,18 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         return rows;
     }
 
-    let right_mutations = branch_mutations(args.records, args.density, args.locality, edits, 2);
-    validate_unique_keys(&right_mutations);
-    let right_disjoint = build(&manager, Some(&base), right_mutations.clone());
+    let right_mutations = Arc::new(branch_mutations(
+        args.records,
+        args.density,
+        args.locality,
+        edits,
+        2,
+    ));
+    validate_unique_keys(right_mutations.as_slice());
+    let right_disjoint = build_tracked(&manager, &base, Arc::clone(&right_mutations));
+    if args.locality == support::Locality::Append {
+        collect_benchmark_allocator(true);
+    }
     rows.push(measure_merge(
         &manager,
         &base,
@@ -179,7 +213,7 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         workload_digest(
             args.records,
             "disjoint",
-            &[&left_mutations, &right_mutations],
+            &[left_mutations.as_slice(), right_mutations.as_slice()],
         ),
         0,
         edits * 2,
@@ -194,14 +228,14 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         workload_digest(
             args.records,
             "convergent",
-            &[&left_mutations, &left_mutations],
+            &[left_mutations.as_slice(), left_mutations.as_slice()],
         ),
         0,
         edits,
     ));
 
-    let conflict_mutations = conflicting_mutations(&left_mutations);
-    let right_conflict = build(&manager, Some(&base), conflict_mutations.clone());
+    let conflict_mutations = Arc::new(conflicting_mutations(left_mutations.as_slice()));
+    let right_conflict = build_tracked(&manager, &base, Arc::clone(&conflict_mutations));
     rows.push(measure_merge(
         &manager,
         &base,
@@ -211,7 +245,7 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         workload_digest(
             args.records,
             "conflict",
-            &[&left_mutations, &conflict_mutations],
+            &[left_mutations.as_slice(), conflict_mutations.as_slice()],
         ),
         edits,
         edits,
@@ -224,6 +258,16 @@ fn build(manager: &Prolly<Arc<MemStore>>, base: Option<&Tree>, mutations: Vec<Mu
     manager
         .batch(&base, mutations)
         .expect("benchmark tree construction succeeds")
+}
+
+fn build_tracked(
+    manager: &Prolly<Arc<MemStore>>,
+    base: &Tree,
+    mutations: Arc<Vec<Mutation>>,
+) -> Tree {
+    manager
+        .batch_with_lineage(base, mutations)
+        .expect("tracked benchmark tree construction succeeds")
 }
 
 fn tree_summary(manager: &Prolly<Arc<MemStore>>, tree: &Tree) -> (usize, u64) {
@@ -240,6 +284,16 @@ fn tree_summary(manager: &Prolly<Arc<MemStore>>, tree: &Tree) -> (usize, u64) {
     (count, support::digest_u64(digest, count as u64))
 }
 
+fn collect_benchmark_allocator(force: bool) {
+    #[cfg(not(target_arch = "wasm32"))]
+    unsafe {
+        // The comparison binary owns the process-wide mimalloc instance, and
+        // no benchmark worker is active while scenario setup is finalized.
+        mi_collect(force);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn measure_merge(
     manager: &Prolly<Arc<MemStore>>,
     base: &Tree,

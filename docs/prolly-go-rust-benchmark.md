@@ -100,9 +100,59 @@ DOLT_REV=6b2372c7d4ded1a54f55c6204304dbb72a33835c \
 
 The driver refuses to overwrite an existing output directory. Use a new
 `BENCH_OUT` path for a rerun. The workload contract is
-`prolly-version-compare-v2`; it deterministically generates values shorter than
+`prolly-version-compare-v3`; it deterministically generates values shorter than
 100 bytes and uses a 40% update, 30% insert, and 30% delete mix for non-append
 changes. Complete scans validate ordered logical content after timing.
+
+Use `BENCH_DENSITIES`, `BENCH_LOCALITIES`, and `BENCH_LIFECYCLE=0` to run a
+focused common-operation matrix. The selected matrix is recorded in the
+manifest and enforced by the summarizer. For example, the final 30% merge
+verification used:
+
+```sh
+BENCH_OUT=performance-results/prolly-version-optimization-v3-30-final3 \
+BENCH_SIZES="1000000 10000000" BENCH_RUNS=3 \
+BENCH_DENSITIES="30" BENCH_LOCALITIES="append clustered random" \
+BENCH_LIFECYCLE=0 \
+DOLT_REV=6b2372c7d4ded1a54f55c6204304dbb72a33835c \
+  scripts/run_prolly_version_comparison.sh
+```
+
+### Optimized v3 merge verification (2026-07-18)
+
+The [optimized v3 report](../performance-results/prolly-version-optimization-v3-30-final3/report.md)
+contains the final three-repetition, process-isolated comparison at 1M and 10M
+records for the requested 30% append, clustered, and random workloads. The
+[raw common rows](../performance-results/prolly-version-optimization-v3-30-final3/results-common.csv),
+[median summary](../performance-results/prolly-version-optimization-v3-30-final3/summary-common.csv),
+[reproducibility audit](../performance-results/prolly-version-optimization-v3-30-final3/reproducibility.csv),
+and [manifest](../performance-results/prolly-version-optimization-v3-30-final3/manifest.txt)
+record every validation result, CV, source hash, binary hash, and pinned Dolt
+revision. All 252 expected common rows were present, cross-language workloads
+and logical results matched, and all runner validation flags passed.
+
+At 10M records, Rust is 3.05x faster for append/disjoint merge, 2.06x for
+clustered/disjoint merge, and 1.58x for random/disjoint merge. Conflict merge
+is 11.15x, 6.41x, and 8.32x faster, respectively. At 1M, the corresponding
+disjoint gains are 2.85x, 4.62x, and 1.69x; conflict gains are 11.53x, 7.29x,
+and 7.21x. Thus every requested disjoint and conflict case clears the 1.5x
+floor, while append and clustered cases clear 2x.
+
+The Rust fast path retains bounded direct parent-to-child lineage metadata,
+reconciles sorted mutations without materializing two diff streams, reuses
+complete canonical leaves and parent suffixes, and rebuilds only the necessary
+append frontier. Dense random merges use a proven-order streaming rebuild. The
+ordered reader now scans each validated leaf in a tight loop, which also
+improves full/range diff and regular range-scan consumers. The comparison binary
+uses mimalloc for dense rebuilding and performs append-scenario allocator
+maintenance outside the timed region after earlier validation outputs have
+been released.
+
+The shortest operations remain sensitive to timer granularity: the 1M append
+disjoint group changed winner direction once across paired repetitions even
+though its Rust median was 2.85x faster. The 10M append median was consistent
+across repetitions; Dolt Go's short append measurements had 35.15% CV. Larger
+clustered and random disjoint rows had maximum CVs of 2.61% and 4.48%.
 
 ### Optimized v2 verification (2026-07-18)
 

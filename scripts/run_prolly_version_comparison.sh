@@ -5,6 +5,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT=${BENCH_OUT:-"$ROOT/performance-results/prolly-version-2026-07-18"}
 SIZES=${BENCH_SIZES:-"10000 50000 1000000 5000000 10000000"}
 RUNS=${BENCH_RUNS:-3}
+DENSITIES=${BENCH_DENSITIES:-"0 1 30"}
+LOCALITIES=${BENCH_LOCALITIES:-"append random clustered"}
+RUN_LIFECYCLE=${BENCH_LIFECYCLE:-1}
 DOLT_REPO_URL=${DOLT_REPO_URL:-"https://github.com/dolthub/dolt.git"}
 DOLT_CACHE=${DOLT_CACHE:-"$ROOT/target/dolt-version-benchmark"}
 DOLT_REQUESTED_REV=${DOLT_REV:-}
@@ -126,9 +129,10 @@ DOLT_BINARY_HASH=$(sha256_file "$OUT/bin/dolt-go-prolly-version-compare")
     printf 'sizes=%s\n' "$SIZES"
     printf 'runs=%s\n' "$RUNS"
     printf 'worker_threads=1\n'
-    printf 'contract_version=prolly-version-compare-v2\n'
-    printf 'densities=0 1 30\n'
-    printf 'localities=append random clustered\n'
+    printf 'contract_version=prolly-version-compare-v3\n'
+    printf 'densities=%s\n' "$DENSITIES"
+    printf 'localities=%s\n' "$LOCALITIES"
+    printf 'lifecycle=%s\n' "$RUN_LIFECYCLE"
     printf 'history_depth=100\n'
     printf 'storage=in-memory\n'
 } >"$OUT/manifest.txt"
@@ -174,7 +178,7 @@ if [row.get("operation") for row in rows] != expected_operations:
 for row in rows:
     if row.get("implementation") != implementation:
         raise SystemExit("implementation mismatch")
-    if row.get("contract_version") != "prolly-version-compare-v2":
+    if row.get("contract_version") != "prolly-version-compare-v3":
         raise SystemExit("contract version mismatch")
     if row.get("validated") != "true":
         raise SystemExit("runner emitted an unvalidated row")
@@ -336,7 +340,9 @@ run_lifecycle() {
 # Fail fast on contract mismatches before the requested matrix.
 run_common_pair 10000 0 none 1 "$OUT/smoke"
 run_common_pair 10000 1 random 1 "$OUT/smoke"
-run_lifecycle 10000 prune 0 none 1 "$OUT/smoke"
+if [ "$RUN_LIFECYCLE" -eq 1 ]; then
+    run_lifecycle 10000 prune 0 none 1 "$OUT/smoke"
+fi
 
 # Remove smoke rows from the full result streams while retaining smoke artifacts.
 printf '%s\n' "$RESULT_HEADER" >"$OUT/results-common.csv"
@@ -346,16 +352,23 @@ printf 'repetition,implementation,records,density,locality,scenario,exit_status,
 for records in $SIZES; do
     repetition=1
     while [ "$repetition" -le "$RUNS" ]; do
-        run_common_pair "$records" 0 none "$repetition" "$OUT/raw"
-        for density in 1 30; do
-            for locality in append random clustered; do
+        for density in $DENSITIES; do
+            if [ "$density" -eq 0 ]; then
+                run_common_pair "$records" 0 none "$repetition" "$OUT/raw"
+                continue
+            fi
+            for locality in $LOCALITIES; do
                 run_common_pair "$records" "$density" "$locality" "$repetition" "$OUT/raw"
-                run_lifecycle "$records" publish "$density" "$locality" "$repetition" "$OUT/raw"
+                if [ "$RUN_LIFECYCLE" -eq 1 ]; then
+                    run_lifecycle "$records" publish "$density" "$locality" "$repetition" "$OUT/raw"
+                fi
             done
         done
-        run_lifecycle "$records" read 0 none "$repetition" "$OUT/raw"
-        run_lifecycle "$records" rollback 0 none "$repetition" "$OUT/raw"
-        run_lifecycle "$records" prune 0 none "$repetition" "$OUT/raw"
+        if [ "$RUN_LIFECYCLE" -eq 1 ]; then
+            run_lifecycle "$records" read 0 none "$repetition" "$OUT/raw"
+            run_lifecycle "$records" rollback 0 none "$repetition" "$OUT/raw"
+            run_lifecycle "$records" prune 0 none "$repetition" "$OUT/raw"
+        fi
         repetition=$((repetition + 1))
     done
 done
