@@ -15650,9 +15650,6 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_inspect_proof_bundle,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
-  attach_function :uniffi_prolly_bindings_fn_func_is_boundary_config,
-    [RustBuffer.by_value, :uint64, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
-    :int8
   attach_function :uniffi_prolly_bindings_fn_func_is_tombstone_value,
     [RustBuffer.by_value, RustCallStatus.by_ref],
     :int8
@@ -16071,9 +16068,6 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_inspect_proof_bundle,
-    [RustCallStatus.by_ref],
-    :uint16
-  attach_function :uniffi_prolly_bindings_checksum_func_is_boundary_config,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_func_is_tombstone_value,
@@ -23837,27 +23831,6 @@ def self.inspect_proof_bundle(bytes)
 
   result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_inspect_proof_bundle,RustBuffer.allocFromBytes(bytes))
   return result.consumeIntoTypeProofBundleSummaryRecord
-end
-
-
-
-
-
-def self.is_boundary_config(config, count, key, value)
-    config = config
-    RustBuffer.check_lower_TypeConfigRecord(config)
-
-    count = Prolly::uniffi_in_range(count, "u64", 0, 2**64)
-
-
-    key = Prolly::uniffi_bytes(key)
-
-
-    value = Prolly::uniffi_bytes(value)
-
-
-  result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_func_is_boundary_config,RustBuffer.alloc_from_TypeConfigRecord(config),count,RustBuffer.allocFromBytes(key),RustBuffer.allocFromBytes(value))
-  return 1 == result
 end
 
 

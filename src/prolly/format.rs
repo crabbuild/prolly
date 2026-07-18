@@ -101,9 +101,9 @@ impl ChunkingSpec {
             BoundaryRule::HashThreshold { factor: 0 } => Err(Error::InvalidFormat(
                 "hash threshold factor must be nonzero".to_string(),
             )),
-            BoundaryRule::Weibull { shape: 0 } => Err(Error::InvalidFormat(
-                "Weibull shape must be nonzero".to_string(),
-            )),
+            BoundaryRule::Weibull { shape } if !matches!(shape, 1 | 2) => Err(
+                Error::InvalidFormat("Weibull shape must be 1 or 2".to_string()),
+            ),
             BoundaryRule::RollingBuzHash { window: 0 } => Err(Error::InvalidFormat(
                 "rolling hash window must be nonzero".to_string(),
             )),

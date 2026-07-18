@@ -30,7 +30,7 @@ Current surface:
 - typed stats/debug records, stats/debug JSON and text views, cache stats/pinning, metrics reset, and
   changed-span constructors plus optional performance hint smoke paths;
 - key helpers for prefix ends/ranges, numeric keys, segment encoding/decoding,
-  composite key construction, debug rendering, and boundary checks;
+  composite key construction and debug rendering;
 - structural diff pages with typed cursor resume plus JSON cursor compatibility,
   node reachability/GC plan/sweep, store GC, retained named-root GC, and
   missing-node sync plus portable snapshot bundle export/import between

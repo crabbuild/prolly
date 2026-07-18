@@ -31,20 +31,8 @@ class ProllyFixtureTest {
     }
 
     @Test
-    fun boundaryAndKeyFixturesMatchRust() {
+    fun keyFixturesMatchRust() {
         ProllyNative.useLocalDebugLibrary()
-
-        for (fixture in fixtures["boundary_fixtures"]) {
-            assertEquals(
-                fixture["is_boundary"].asBoolean(),
-                isBoundaryConfig(
-                    configFromFixture(fixture["config"]),
-                    fixture["count"].asText().toULong(),
-                    hex(fixture["key"].asText()),
-                    hex(fixture["value"].asText()),
-                ),
-            )
-        }
 
         for (fixture in fixtures["key_fixtures"]["prefix_end"]) {
             val prefix = hex(fixture["prefix"].asText())

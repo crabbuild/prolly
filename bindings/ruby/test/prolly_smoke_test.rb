@@ -496,16 +496,6 @@ fixtures.fetch('node_fixtures').each do |fixture|
   assert_equal fixture.fetch('cid'), to_hex(Prolly.cid_from_bytes(bytes))
 end
 
-fixtures.fetch('boundary_fixtures').each do |fixture|
-  actual = Prolly.is_boundary_config(
-    config_from_fixture(fixture.fetch('config')),
-    fixture.fetch('count'),
-    hex(fixture.fetch('key')),
-    hex(fixture.fetch('value'))
-  )
-  assert_equal fixture.fetch('is_boundary'), actual
-end
-
 fixtures.fetch('key_fixtures').fetch('prefix_end').each do |fixture|
   prefix = hex(fixture.fetch('prefix'))
   assert_equal fixture['end'], to_hex(Prolly.prefix_end(prefix))

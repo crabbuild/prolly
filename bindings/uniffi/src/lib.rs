@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use prolly::{
-    self, is_boundary_config as core_is_boundary_config, AuthenticatedProofBundleVerification,
+    self, AuthenticatedProofBundleVerification,
     AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
     BatchApplyStats, BatchOp, BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobRef, BlobStore,
     BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow,
@@ -5031,18 +5031,6 @@ pub fn range_page_proof_from_node_bytes(
     RangePageProof::from_node_bytes(root, after, range_end, path_node_bytes)
         .map(RangePageProofRecord::from)
         .map_err(Into::into)
-}
-
-#[uniffi::export]
-pub fn is_boundary_config(
-    config: ConfigRecord,
-    count: u64,
-    key: Vec<u8>,
-    value: Vec<u8>,
-) -> Result<bool, ProllyBindingError> {
-    let config = Config::try_from(config)?;
-    let count = usize::try_from(count).map_err(|_| invalid_argument("count is too large"))?;
-    Ok(core_is_boundary_config(&config, count, &key, &value))
 }
 
 #[uniffi::export]

@@ -225,7 +225,6 @@ func (s *memoryHostStore) ListRoots() ([]NamedRootManifest, error) {
 
 type fixtureFile struct {
 	NodeFixtures     []nodeFixture     `json:"node_fixtures"`
-	BoundaryFixtures []boundaryFixture `json:"boundary_fixtures"`
 	KeyFixtures      keyFixtures       `json:"key_fixtures"`
 	TreeFixtures     []treeFixture     `json:"tree_fixtures"`
 	DiffFixtures     []diffFixture     `json:"diff_fixtures"`
@@ -253,15 +252,6 @@ type nodeFixture struct {
 	Name  string `json:"name"`
 	Bytes string `json:"bytes"`
 	Cid   string `json:"cid"`
-}
-
-type boundaryFixture struct {
-	Name       string        `json:"name"`
-	Config     configFixture `json:"config"`
-	Count      uint64        `json:"count"`
-	Key        string        `json:"key"`
-	Value      string        `json:"value"`
-	IsBoundary bool          `json:"is_boundary"`
 }
 
 type keyFixtures struct {
@@ -3447,19 +3437,8 @@ func TestConformanceNodeFixtures(t *testing.T) {
 	}
 }
 
-func TestConformanceBoundaryAndKeyFixtures(t *testing.T) {
+func TestConformanceKeyFixtures(t *testing.T) {
 	fixtures := loadFixtures(t)
-
-	for _, fixture := range fixtures.BoundaryFixtures {
-		config := configFromFixture(t, fixture.Config)
-		actual, err := IsBoundary(config, fixture.Count, mustHex(t, fixture.Key), mustHex(t, fixture.Value))
-		if err != nil {
-			t.Fatalf("%s: boundary: %v", fixture.Name, err)
-		}
-		if actual != fixture.IsBoundary {
-			t.Fatalf("%s: boundary=%v want %v", fixture.Name, actual, fixture.IsBoundary)
-		}
-	}
 
 	for _, fixture := range fixtures.KeyFixtures.PrefixEnd {
 		prefix := mustHex(t, fixture.Prefix)

@@ -3249,11 +3249,6 @@ RustBuffer uniffi_prolly_bindings_fn_func_i64_key(int64_t value, RustCallStatus 
 RustBuffer uniffi_prolly_bindings_fn_func_inspect_proof_bundle(RustBuffer bytes, RustCallStatus *_Nonnull out_status
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_IS_BOUNDARY_CONFIG
-#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_IS_BOUNDARY_CONFIG
-int8_t uniffi_prolly_bindings_fn_func_is_boundary_config(RustBuffer config, uint64_t count, RustBuffer key, RustBuffer value, RustCallStatus *_Nonnull out_status
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_IS_TOMBSTONE_VALUE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_IS_TOMBSTONE_VALUE
 int8_t uniffi_prolly_bindings_fn_func_is_tombstone_value(RustBuffer bytes, RustCallStatus *_Nonnull out_status
@@ -4237,12 +4232,6 @@ uint16_t uniffi_prolly_bindings_checksum_func_i64_key(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_INSPECT_PROOF_BUNDLE
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_INSPECT_PROOF_BUNDLE
 uint16_t uniffi_prolly_bindings_checksum_func_inspect_proof_bundle(void
-
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_IS_BOUNDARY_CONFIG
-#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_IS_BOUNDARY_CONFIG
-uint16_t uniffi_prolly_bindings_checksum_func_is_boundary_config(void
 
 );
 #endif

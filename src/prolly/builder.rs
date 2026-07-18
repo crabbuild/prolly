@@ -14,6 +14,11 @@ use super::tree::Tree;
 
 use rayon::prelude::*;
 
+mod size;
+pub(crate) use size::EncodedNodeSizer;
+mod streaming;
+pub(crate) use streaming::{EmittedNode, HierarchicalEmitter, LevelEmitter};
+
 const SORTED_BUILDER_NODE_BATCH: usize = 256;
 const PARALLEL_BOUNDARY_HASH_MIN_ENTRIES: usize = 1_024;
 
@@ -75,12 +80,9 @@ pub struct BatchBuilder<S: Store> {
 pub struct SortedBatchBuilder<S: Store> {
     store: S,
     config: Config,
-    current: Node,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
-    leaf_nodes: Vec<NodeSummary>,
     pending_nodes: Vec<BuiltNode>,
-    detector: BoundaryDetector,
-    encoded_bytes: u64,
+    hierarchy: HierarchicalEmitter,
 }
 
 impl<S: Store + Clone + Send + Sync> BatchBuilder<S>
@@ -172,7 +174,8 @@ where
             return Ok(vec![]);
         }
 
-        let chunk_ranges = chunk_ranges_for_entries_parallel(&self.config, INIT_LEVEL, entries)?;
+        let chunk_ranges =
+            chunk_ranges_for_entries_parallel(&self.config, INIT_LEVEL, entries, None)?;
 
         // Create leaf nodes in parallel, then persist them in one batched write.
         let config = &self.config;
@@ -344,8 +347,13 @@ where
             .iter()
             .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
             .collect::<Vec<_>>();
-        let chunk_ranges =
-            chunk_ranges_for_entries_parallel(&self.config, level, &internal_entries)?;
+        let child_counts = children.iter().map(|child| child.count).collect::<Vec<_>>();
+        let chunk_ranges = chunk_ranges_for_entries_parallel(
+            &self.config,
+            level,
+            &internal_entries,
+            Some(&child_counts),
+        )?;
 
         let config = &self.config;
         let nodes: Vec<BuiltNode> = chunk_ranges
@@ -392,34 +400,25 @@ where
         level: u8,
         pending: &mut Vec<DeferredNode>,
     ) -> Result<Vec<NodeSummary>, Error> {
-        let internal_entries = children
-            .iter()
-            .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
-            .collect::<Vec<_>>();
-        let chunk_ranges = chunk_ranges_for_entries(&self.config, level, &internal_entries)?;
-        let mut summaries = Vec::with_capacity(chunk_ranges.len());
-
-        for range in chunk_ranges {
-            let start = *range.start();
-            let end = *range.end();
-            let mut node = new_builder_node(&self.config, false, level);
-            reserve_node_entries(&mut node, end - start + 1);
-            for child in children.iter().take(end + 1).skip(start) {
-                node.keys.push(child.first_key.clone());
-                node.vals.push(child.cid.0.to_vec());
-                node.child_counts.push(child.count);
-            }
-
-            let first_key = node.keys.first().cloned().unwrap_or_default();
-            let count = children[start..=end].iter().map(|child| child.count).sum();
-            let bytes = node.to_bytes();
-            let cid = Cid::from_bytes(&bytes);
-            summaries.push(NodeSummary {
-                cid: cid.clone(),
-                first_key: first_key.clone(),
-                count,
+        let mut emitter = LevelEmitter::new(self.config.clone(), false, level)?;
+        let mut summaries = Vec::new();
+        for child in children {
+            emitter.push_child_with(child, |emitted| {
+                summaries.push(emitted.summary.clone());
+                pending.push(DeferredNode {
+                    cid: emitted.summary.cid,
+                    bytes: emitted.bytes,
+                    node: emitted.node,
+                });
+            })?;
+        }
+        if let Some(emitted) = emitter.finish()? {
+            summaries.push(emitted.summary.clone());
+            pending.push(DeferredNode {
+                cid: emitted.summary.cid,
+                bytes: emitted.bytes,
+                node: emitted.node,
             });
-            pending.push(DeferredNode { cid, bytes, node });
         }
         Ok(summaries)
     }
@@ -445,19 +444,14 @@ where
 {
     /// Create a sorted streaming builder.
     pub fn new(store: S, config: Config) -> Self {
-        let current = new_builder_node(&config, true, INIT_LEVEL);
-        let detector = BoundaryDetector::new(config.format.chunking.clone(), INIT_LEVEL.into())
-            .expect("configuration contains a valid persisted chunking policy");
-        let encoded_bytes = node_encoding_overhead(&config);
+        let hierarchy = HierarchicalEmitter::new(config.clone())
+            .expect("configuration contains a registered persisted tree format");
         Self {
             store,
             config,
-            current,
             pending_entry: None,
-            leaf_nodes: Vec::new(),
             pending_nodes: Vec::new(),
-            detector,
-            encoded_bytes,
+            hierarchy,
         }
     }
 
@@ -489,73 +483,31 @@ where
         let Some((key, val)) = self.pending_entry.take() else {
             return Ok(());
         };
-        let hard_max = self.config.format.chunking.hard_max_node_bytes;
-        let mut encoded_entry_bytes = entry_encoded_len(
-            &self.config,
-            self.current.keys.last().map(Vec::as_slice),
-            &key,
-            &val,
-        ) as u64;
-        if !self.current.is_empty()
-            && self.encoded_bytes.saturating_add(encoded_entry_bytes) > hard_max
-        {
-            self.flush_leaf()?;
-            self.detector.reset();
-            encoded_entry_bytes = entry_encoded_len(&self.config, None, &key, &val) as u64;
-        }
-        if self.encoded_bytes.saturating_add(encoded_entry_bytes) > hard_max {
-            return Err(Error::EntryTooLarge {
-                encoded_bytes: self.encoded_bytes.saturating_add(encoded_entry_bytes),
-                limit: hard_max,
-            });
-        }
-        self.encoded_bytes = self.encoded_bytes.saturating_add(encoded_entry_bytes);
-        let is_boundary = self
-            .detector
-            .observe(&key, &val, encoded_entry_bytes as usize)?;
-        self.current.keys.push(key);
-        self.current.vals.push(val);
-
-        if is_boundary {
-            self.flush_leaf()?;
-        }
+        let emitted = self.hierarchy.push_leaf(key, val)?;
+        self.collect_emitted(emitted)?;
         Ok(())
     }
 
     /// Build a tree from the streamed entries.
     pub fn build(mut self) -> Result<Tree, Error> {
         self.flush_pending_entry()?;
-        self.flush_leaf()?;
+        let (root, emitted) = self.hierarchy.finish()?;
+        self.collect_emitted(emitted)?;
         self.flush_pending_nodes()?;
-        let builder = BatchBuilder::new(self.store.clone(), self.config.clone());
-        builder.build_from_chunks(self.leaf_nodes)
+        Ok(Tree {
+            root: root.map(|summary| summary.cid),
+            config: self.config,
+        })
     }
 
-    fn flush_leaf(&mut self) -> Result<(), Error> {
-        if self.current.keys.is_empty() {
-            return Ok(());
-        }
-
-        let node = std::mem::replace(
-            &mut self.current,
-            new_builder_node(&self.config, true, INIT_LEVEL),
-        );
-        let first_key = node.keys.first().cloned().unwrap_or_default();
-        let bytes = node.to_bytes();
-        debug_assert!(bytes.len() as u64 <= self.config.format.chunking.hard_max_node_bytes);
-        let cid = Cid::from_bytes(&bytes);
-        self.leaf_nodes.push(NodeSummary {
-            cid: cid.clone(),
-            first_key: first_key.clone(),
-            count: node.keys.len() as u64,
-        });
-        self.pending_nodes.push(BuiltNode {
-            cid,
-            first_key,
-            count: node.keys.len() as u64,
-            bytes,
-        });
-        self.encoded_bytes = node_encoding_overhead(&self.config);
+    fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
+        self.pending_nodes
+            .extend(emitted.into_iter().map(|emitted| BuiltNode {
+                cid: emitted.summary.cid,
+                first_key: emitted.summary.first_key,
+                count: emitted.summary.count,
+                bytes: emitted.bytes,
+            }));
         if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
             self.flush_pending_nodes()?;
         }
@@ -577,31 +529,42 @@ fn new_builder_node(config: &Config, leaf: bool, level: u8) -> Node {
         .build()
 }
 
+#[cfg_attr(not(feature = "async-store"), allow(dead_code))]
 pub(crate) fn chunk_ranges_for_entries(
     config: &Config,
     level: u8,
     entries: &[(Vec<u8>, Vec<u8>)],
+    child_counts: Option<&[u64]>,
 ) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
-    chunk_ranges_for_entries_impl(config, level, entries, false)
+    chunk_ranges_for_entries_impl(config, level, entries, child_counts, false)
 }
 
 fn chunk_ranges_for_entries_parallel(
     config: &Config,
     level: u8,
     entries: &[(Vec<u8>, Vec<u8>)],
+    child_counts: Option<&[u64]>,
 ) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
     if entries.len() < PARALLEL_BOUNDARY_HASH_MIN_ENTRIES {
-        return chunk_ranges_for_entries_impl(config, level, entries, false);
+        return chunk_ranges_for_entries_impl(config, level, entries, child_counts, false);
     }
-    chunk_ranges_for_entries_impl(config, level, entries, true)
+    chunk_ranges_for_entries_impl(config, level, entries, child_counts, true)
 }
 
 fn chunk_ranges_for_entries_impl(
     config: &Config,
     level: u8,
     entries: &[(Vec<u8>, Vec<u8>)],
+    child_counts: Option<&[u64]>,
     parallel_hashing: bool,
 ) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
+    if level == 0 {
+        if child_counts.is_some() {
+            return Err(Error::InvalidNode);
+        }
+    } else if child_counts.map_or(true, |counts| counts.len() != entries.len()) {
+        return Err(Error::InvalidNode);
+    }
     let mut detector = BoundaryDetector::new(config.format.chunking.clone(), level.into())?;
     if parallel_hashing && detector.supports_independent_hashing() {
         let boundaries_and_upper_bytes = entries
@@ -611,7 +574,9 @@ fn chunk_ranges_for_entries_impl(
                     detector
                         .independent_hash_boundary(key, value)
                         .expect("independent boundary support was checked"),
-                    entry_encoded_len(config, None, key, value) as u64,
+                    (key.len() as u64)
+                        .saturating_add(value.len() as u64)
+                        .saturating_add(64),
                 )
             })
             .collect::<Vec<_>>();
@@ -621,9 +586,9 @@ fn chunk_ranges_for_entries_impl(
             .max()
             .unwrap_or(0);
         let spec = &config.format.chunking;
-        let overhead = node_encoding_overhead(config);
-        if overhead.saturating_add(max_upper_bytes.saturating_add(10).saturating_mul(spec.max))
-            < spec.hard_max_node_bytes
+        let empty_size = EncodedNodeSizer::new(config.format.clone(), level == 0, level)?.size();
+        if empty_size.saturating_add(max_upper_bytes.saturating_mul(spec.max))
+            <= spec.hard_max_node_bytes
         {
             return Ok(chunk_ranges_from_independent_counts(
                 spec,
@@ -634,40 +599,41 @@ fn chunk_ranges_for_entries_impl(
             .into_iter()
             .map(|(boundary, _)| boundary)
             .collect::<Vec<_>>();
-        return chunk_ranges_from_independent_hashes(config, level, entries, &hash_boundaries);
+        return chunk_ranges_from_independent_hashes(
+            config,
+            level,
+            entries,
+            child_counts,
+            &hash_boundaries,
+        );
     }
 
     let mut ranges = Vec::new();
     let mut start = 0;
-    let mut encoded_bytes = node_encoding_overhead(config);
-    let mut previous_key: Option<&[u8]> = None;
+    let mut sizer = EncodedNodeSizer::new(config.format.clone(), level == 0, level)?;
     for (index, (key, value)) in entries.iter().enumerate() {
-        let mut encoded = entry_encoded_len(config, previous_key, key, value) as u64
-            + if level == 0 { 0 } else { 10 };
-        if index > start
-            && encoded_bytes.saturating_add(encoded) > config.format.chunking.hard_max_node_bytes
-        {
+        let child_count = child_counts.map(|counts| counts[index]);
+        let previous_key = (index > start).then(|| entries[index - 1].0.as_slice());
+        let mut encoded_size = sizer.size_after(previous_key, key, value, child_count)?;
+        if index > start && encoded_size > config.format.chunking.hard_max_node_bytes {
             ranges.push(start..=(index - 1));
             start = index;
             detector.reset();
-            encoded_bytes = node_encoding_overhead(config);
-            encoded = entry_encoded_len(config, None, key, value) as u64
-                + if level == 0 { 0 } else { 10 };
+            sizer.reset();
+            encoded_size = sizer.size_after(None, key, value, child_count)?;
         }
-        if encoded_bytes.saturating_add(encoded) > config.format.chunking.hard_max_node_bytes {
+        if encoded_size > config.format.chunking.hard_max_node_bytes {
             return Err(Error::EntryTooLarge {
-                encoded_bytes: encoded_bytes.saturating_add(encoded),
+                encoded_bytes: encoded_size,
                 limit: config.format.chunking.hard_max_node_bytes,
             });
         }
-        encoded_bytes = encoded_bytes.saturating_add(encoded);
-        if detector.observe(key, value, encoded as usize)? {
+        let encoded_entry_bytes = encoded_size.saturating_sub(sizer.size());
+        sizer.push_sized(key, value, child_count, encoded_size)?;
+        if detector.observe(key, value, encoded_entry_bytes as usize)? {
             ranges.push(start..=index);
             start = index + 1;
-            previous_key = None;
-            encoded_bytes = node_encoding_overhead(config);
-        } else {
-            previous_key = Some(key);
+            sizer.reset();
         }
     }
     if start < entries.len() {
@@ -699,102 +665,46 @@ fn chunk_ranges_from_independent_hashes(
     config: &Config,
     level: u8,
     entries: &[(Vec<u8>, Vec<u8>)],
+    child_counts: Option<&[u64]>,
     hash_boundaries: &[bool],
 ) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
     debug_assert_eq!(entries.len(), hash_boundaries.len());
     let spec = &config.format.chunking;
     let mut ranges = Vec::new();
     let mut start = 0;
-    let overhead = node_encoding_overhead(config);
-    let mut encoded_bytes = overhead;
-    let mut previous_key: Option<&[u8]> = None;
+    let mut sizer = EncodedNodeSizer::new(config.format.clone(), level == 0, level)?;
 
     for (index, ((key, value), hash_boundary)) in entries.iter().zip(hash_boundaries).enumerate() {
-        let mut entry_bytes = entry_encoded_len(config, previous_key, key, value) as u64
-            + if level == 0 { 0 } else { 10 };
-        if index > start && encoded_bytes.saturating_add(entry_bytes) > spec.hard_max_node_bytes {
+        let child_count = child_counts.map(|counts| counts[index]);
+        let previous_key = (index > start).then(|| entries[index - 1].0.as_slice());
+        let mut encoded_size = sizer.size_after(previous_key, key, value, child_count)?;
+        if index > start && encoded_size > spec.hard_max_node_bytes {
             ranges.push(start..=(index - 1));
             start = index;
-            encoded_bytes = overhead;
-            entry_bytes = entry_encoded_len(config, None, key, value) as u64
-                + if level == 0 { 0 } else { 10 };
+            sizer.reset();
+            encoded_size = sizer.size_after(None, key, value, child_count)?;
         }
-        if encoded_bytes.saturating_add(entry_bytes) > spec.hard_max_node_bytes {
+        if encoded_size > spec.hard_max_node_bytes {
             return Err(Error::EntryTooLarge {
-                encoded_bytes: encoded_bytes.saturating_add(entry_bytes),
+                encoded_bytes: encoded_size,
                 limit: spec.hard_max_node_bytes,
             });
         }
-        encoded_bytes = encoded_bytes.saturating_add(entry_bytes);
+        sizer.push_sized(key, value, child_count, encoded_size)?;
         let count = (index - start + 1) as u64;
-        let boundary = encoded_bytes >= spec.hard_max_node_bytes
+        let boundary = encoded_size >= spec.hard_max_node_bytes
             || count >= spec.max
             || (count >= spec.min && *hash_boundary);
         if boundary {
             ranges.push(start..=index);
             start = index + 1;
-            encoded_bytes = overhead;
-            previous_key = None;
-        } else {
-            previous_key = Some(key);
+            sizer.reset();
         }
     }
     if start < entries.len() {
         ranges.push(start..=(entries.len() - 1));
     }
     Ok(ranges)
-}
-
-pub(crate) fn node_encoding_overhead(config: &Config) -> u64 {
-    let format_bytes = if config.format == super::format::TreeFormat::default() {
-        0
-    } else {
-        config
-            .format
-            .canonical_bytes()
-            .map(|bytes| bytes.len() as u64)
-            .unwrap_or(u64::MAX / 2)
-    };
-    format_bytes.saturating_add(64)
-}
-
-pub(crate) fn entry_encoded_len(
-    config: &Config,
-    previous_key: Option<&[u8]>,
-    key: &[u8],
-    value: &[u8],
-) -> usize {
-    use super::format::NodeLayoutSpec;
-    match config.format.node_layout {
-        NodeLayoutSpec::PrefixCompressed => {
-            let shared = previous_key
-                .map(|previous| {
-                    previous
-                        .iter()
-                        .zip(key)
-                        .take_while(|(left, right)| left == right)
-                        .count()
-                })
-                .unwrap_or(0);
-            varint_len(shared as u64) + varint_len((key.len() - shared) as u64) + key.len() - shared
-                + varint_len(value.len() as u64)
-                + value.len()
-        }
-        NodeLayoutSpec::Plain => {
-            varint_len(key.len() as u64) + key.len() + varint_len(value.len() as u64) + value.len()
-        }
-        NodeLayoutSpec::OffsetTable => key.len() + value.len() + 4 * 10,
-        NodeLayoutSpec::Custom { .. } => key.len() + value.len(),
-    }
-}
-
-fn varint_len(mut value: u64) -> usize {
-    let mut len = 1;
-    while value >= 0x80 {
-        value >>= 7;
-        len += 1;
-    }
-    len
 }
 
 fn reserve_node_entries(node: &mut Node, additional: usize) {
@@ -826,6 +736,104 @@ mod tests {
     use crate::MemStore;
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn exact_incremental_sizer_matches_serialized_nodes() {
+        for layout in [
+            super::super::format::NodeLayoutSpec::PrefixCompressed,
+            super::super::format::NodeLayoutSpec::Plain,
+            super::super::format::NodeLayoutSpec::OffsetTable,
+        ] {
+            for leaf in [true, false] {
+                let format = super::super::format::TreeFormat {
+                    node_layout: layout.clone(),
+                    ..Default::default()
+                };
+                let level = if leaf { 0 } else { 1 };
+                let mut sizer = EncodedNodeSizer::new(format.clone(), leaf, level).unwrap();
+                let mut node = Node::builder()
+                    .leaf(leaf)
+                    .level(level)
+                    .tree_format(format)
+                    .build();
+
+                assert_eq!(sizer.size(), node.encoded_len() as u64);
+                for index in 0..300_u64 {
+                    let key = format!("shared-prefix-{index:020}").into_bytes();
+                    let value_len = match index {
+                        126 => 127,
+                        127 => 128,
+                        198 => 16_383,
+                        199 => 16_384,
+                        _ => (index as usize % 41) + 1,
+                    };
+                    let value = vec![index as u8; value_len];
+                    let child_count = (!leaf).then_some(match index {
+                        126 => 127,
+                        127 => 128,
+                        198 => 16_383,
+                        199 => 16_384,
+                        _ => index + 1,
+                    });
+
+                    let previous_key = node.keys.last().map(Vec::as_slice);
+                    let predicted = sizer
+                        .size_after(previous_key, &key, &value, child_count)
+                        .unwrap();
+                    sizer.push(previous_key, &key, &value, child_count).unwrap();
+                    node.keys.push(key);
+                    node.vals.push(value);
+                    if let Some(count) = child_count {
+                        node.child_counts.push(count);
+                    }
+
+                    assert_eq!(predicted, sizer.size());
+                    assert_eq!(
+                        sizer.size(),
+                        node.encoded_len() as u64,
+                        "layout={layout:?} leaf={leaf} index={index}"
+                    );
+                }
+
+                for index in 300..16_385_u64 {
+                    let key = format!("shared-prefix-{index:020}").into_bytes();
+                    let value = *b"x";
+                    let child_count = (!leaf).then_some(index + 1);
+                    sizer
+                        .push(
+                            node.keys.last().map(Vec::as_slice),
+                            &key,
+                            &value,
+                            child_count,
+                        )
+                        .unwrap();
+                    node.keys.push(key);
+                    node.vals.push(value.to_vec());
+                    if let Some(count) = child_count {
+                        node.child_counts.push(count);
+                    }
+                    if matches!(index, 16_382..=16_384) {
+                        assert_eq!(
+                            sizer.size(),
+                            node.encoded_len() as u64,
+                            "count varint transition layout={layout:?} leaf={leaf} index={index}"
+                        );
+                    }
+                }
+
+                sizer.reset();
+                assert_eq!(
+                    sizer.size(),
+                    Node::builder()
+                        .leaf(leaf)
+                        .level(level)
+                        .tree_format(node.format.clone())
+                        .build()
+                        .encoded_len() as u64
+                );
+            }
+        }
+    }
 
     #[derive(Clone, Default)]
     struct CountingStore {
@@ -1139,5 +1147,69 @@ mod tests {
         let err = builder.add(b"a".to_vec(), b"2".to_vec()).unwrap_err();
 
         assert!(matches!(err, Error::UnsortedInput { .. }));
+    }
+
+    #[test]
+    fn sorted_builder_keeps_only_height_bounded_hierarchy_state() {
+        let store = CountingStore::default();
+        let config = Config::builder()
+            .min_chunk_size(8)
+            .max_chunk_size(16)
+            .chunking_factor(16)
+            .build();
+        let mut builder = SortedBatchBuilder::new(store, config);
+        let mut max_levels = 0;
+        let mut max_buffered_entries = 0;
+
+        for index in 0..100_000 {
+            builder
+                .add(
+                    format!("key-{index:08}").into_bytes(),
+                    format!("value-{index:08}").into_bytes(),
+                )
+                .unwrap();
+            max_levels = max_levels.max(builder.hierarchy.active_levels());
+            max_buffered_entries = max_buffered_entries.max(builder.hierarchy.buffered_entries());
+        }
+
+        let tree = builder.build().unwrap();
+        assert!(tree.root.is_some());
+        assert!(max_levels <= 8, "active levels={max_levels}");
+        assert!(
+            max_buffered_entries <= max_levels * 16,
+            "buffered entries={max_buffered_entries}, active levels={max_levels}"
+        );
+    }
+
+    #[test]
+    fn sorted_builder_reuses_cascade_scratch_allocation() {
+        let store = CountingStore::default();
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(4)
+            .build();
+        let mut builder = SortedBatchBuilder::new(store, config);
+
+        for index in 0..32 {
+            builder
+                .add(
+                    format!("key-{index:08}").into_bytes(),
+                    format!("value-{index:08}").into_bytes(),
+                )
+                .unwrap();
+        }
+        let allocation = builder.hierarchy.cascade_scratch_allocation();
+        assert!(allocation.0 > 0);
+
+        for index in 32..10_000 {
+            builder
+                .add(
+                    format!("key-{index:08}").into_bytes(),
+                    format!("value-{index:08}").into_bytes(),
+                )
+                .unwrap();
+            assert_eq!(builder.hierarchy.cascade_scratch_allocation(), allocation);
+        }
     }
 }

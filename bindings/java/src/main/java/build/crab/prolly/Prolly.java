@@ -309,11 +309,6 @@ public final class Prolly implements AutoCloseable {
                 ProllyJavaAdapters.authenticatedProofEnvelopeFromBytes(bytes.clone()));
     }
 
-    public static boolean isBoundaryConfig(ConfigRecord config, long count, byte[] key, byte[] value)
-            throws ProllyBindingException {
-        return ProllyJavaAdapters.isBoundaryConfig(config, count, key.clone(), value.clone());
-    }
-
     public static byte[] prefixEnd(byte[] prefix) {
         byte[] result = ProllyKt.prefixEnd(prefix.clone());
         return result == null ? null : result.clone();

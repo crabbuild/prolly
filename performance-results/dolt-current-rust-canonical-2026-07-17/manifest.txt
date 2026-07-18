@@ -1,0 +1,17 @@
+generated_utc=2026-07-18T01:49:49Z
+rust_commit=a1e31dc403e5237d4db0f0c3a8fc9c480a139ef4
+rust_source_sha256=24beb50ee9ece0cfa17b7fe38b372c912cc6b3e7519312cefda1e0d42ee97f30
+rust_revision=a1e31dc403e5+src.24beb50ee9ec
+dolt_repository=https://github.com/dolthub/dolt.git
+dolt_commit=9e80d3aa2cf8ff473765f5603af32304d72c67b5
+dolt_runner_sha256=6bf12dc88bef4bc40a9a47360681dcfc8f84581f73e440bb38f99eddbd9d7d8b
+dolt_revision=9e80d3aa2cf8+runner.6bf12dc88bef
+rust_binary_sha256=1156f735e5e4eca428cfd4a7b4d50691c14a355d4296392a65271971fa532564
+dolt_binary_sha256=3500ead7856bd10a77152f09ad9b73ac9abb995de12f38c05519f95bf206d8b1
+sizes=10000 50000 1000000 5000000 10000000
+runs=3
+worker_threads=1
+contract_version=prolly-compare-v1
+mutation_ratio=30%
+mutation_insert_update_mix=50/50
+point_read_cap=100000

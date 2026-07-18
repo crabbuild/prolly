@@ -40,21 +40,9 @@ test("native node fixtures decode, encode, and hash", { skip: native === null },
   }
 });
 
-test("native boundary and key fixtures match Rust", { skip: native === null }, () => {
+test("native key fixtures match Rust", { skip: native === null }, () => {
   assert.ok(native);
   const loaded = fixtures();
-
-  for (const fixture of loaded.boundary_fixtures) {
-    assert.equal(
-      native.isBoundaryConfigJson(
-        configJson(fixture.config),
-        String(fixture.count),
-        fromHex(fixture.key),
-        fromHex(fixture.value),
-      ),
-      fixture.is_boundary,
-    );
-  }
 
   for (const fixture of loaded.key_fixtures.prefix_end) {
     const prefix = fromHex(fixture.prefix);

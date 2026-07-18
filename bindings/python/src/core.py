@@ -528,16 +528,6 @@ def key_proof_from_node_bytes(
     return KeyProof.from_node_bytes(root, key, path_node_bytes)
 
 
-def is_boundary_config(config: Config, count: int, key: bytes, value: bytes) -> bool:
-    if count < config.min_chunk_size:
-        return False
-    if count >= config.max_chunk_size:
-        return True
-    hash_value = xxh64(key + value, config.hash_seed) & 0xFFFF_FFFF
-    threshold = 0xFFFF_FFFF // config.chunking_factor
-    return hash_value <= threshold
-
-
 def _coerce_cid(value: Cid | bytes | None) -> Cid | None:
     if value is None:
         return None

@@ -265,19 +265,6 @@ for raw in try array(root["node_fixtures"] as Any, "node_fixtures") {
     try expect(cidFromBytes(bytes: bytes) == expectedCid, "cid_from_bytes mismatch")
 }
 
-for raw in try array(root["boundary_fixtures"] as Any, "boundary_fixtures") {
-    let fixture = try dict(raw, "boundary fixture")
-    let config = try configRecord(try dict(fixture["config"] as Any, "boundary config"))
-    let actual = try isBoundaryConfig(
-        config: config,
-        count: try uint64(fixture["count"], "boundary.count"),
-        key: try hexData(try string(fixture["key"], "boundary.key")),
-        value: try hexData(try string(fixture["value"], "boundary.value"))
-    )
-    let expected = try bool(fixture["is_boundary"], "boundary.is_boundary")
-    try expect(actual == expected, "boundary mismatch")
-}
-
 let keys = try dict(root["key_fixtures"] as Any, "key_fixtures")
 for raw in try array(keys["prefix_end"] as Any, "prefix_end") {
     let fixture = try dict(raw, "prefix fixture")

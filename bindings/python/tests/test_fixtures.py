@@ -20,7 +20,6 @@ from src import (
     from_hex,
     i128_key,
     i64_key,
-    is_boundary_config,
     key_proof_from_node_bytes,
     key_proof_path_node_bytes,
     prefix_end,
@@ -64,20 +63,8 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(Node.from_bytes(encoded), node)
             self.assertEqual(Node.from_bytes(encoded).to_bytes(), encoded)
 
-    def test_boundary_and_key_fixtures_match_rust(self) -> None:
+    def test_key_fixtures_match_rust(self) -> None:
         fixtures = load_fixtures()
-        for fixture in fixtures["boundary_fixtures"]:
-            config = Config.from_fixture(fixture["config"])
-            self.assertEqual(
-                is_boundary_config(
-                    config,
-                    fixture["count"],
-                    from_hex(fixture["key"]),
-                    from_hex(fixture["value"]),
-                ),
-                fixture["is_boundary"],
-            )
-
         for fixture in fixtures["key_fixtures"]["prefix_end"]:
             prefix = from_hex(fixture["prefix"])
             actual = prefix_end(prefix)

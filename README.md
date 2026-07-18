@@ -626,11 +626,11 @@ assert_eq!(rows.len(), 4);
 Single-key writes:
 
 1. `find_path` walks from root to the target leaf.
-2. The leaf is cloned and updated.
-3. `rebalance_with_collector` splits, merges, or propagates changes upward.
-4. New or changed nodes are collected.
-5. The collector flushes node bytes through the store.
-6. The method returns a new `Tree` with the new root CID.
+2. The canonical streaming emitter replays the affected ordered span using the
+   tree's persisted chunking policy and exact byte cap.
+3. Emitted child summaries stream through affected parent levels.
+4. New or changed nodes are collected and flushed through the store.
+5. The method returns a new `Tree` with the new root CID.
 
 The original tree remains valid and shares any unchanged subtrees.
 
@@ -665,12 +665,10 @@ let mutations = vec![
 let tree = prolly.batch(&tree, mutations).unwrap();
 ```
 
-Use `batch_with_stats` or `append_batch_with_stats` when callers need
-telemetry for an operation. The returned `BatchApplyResult` contains the new
-tree plus `BatchApplyStats`, including input/effective mutation counts, whether
-the input was already sorted, the selected route (append fast path, batched
-route, coalesced rebuild, deferred rebalancing, or bottom-up rebuild), and node
-write counts.
+Use `batch_with_stats` or `append_batch_with_stats` when callers need telemetry
+for an operation. Stats-bearing and parallel entry points are adapters over the
+same canonical writer; they cannot select a different boundary or tree
+algorithm.
 
 Batch processing:
 
@@ -684,21 +682,9 @@ Batch processing:
 - Rebuilds affected parents and flushes nodes atomically through store batch
   writes when supported.
 
-For explicit tuning, use `BatchWriter` and `BatchWriterConfig`:
-
-```rust
-use prolly::{BatchWriter, BatchWriterConfig};
-
-let writer = BatchWriter::with_config(
-    BatchWriterConfig::new()
-        .with_prefetch(true)
-        .with_optimized_merge(true)
-        .with_bottom_up_rebuild(true),
-);
-```
-
-The default config enables prefetch, optimized merge, and deferred rebalancing.
-Bottom-up rebuild is available for workloads that touch many leaves.
+Use `BatchWriter` when a writer object is convenient. Writer and parallel
+configuration may provide runtime hints, but persisted policy and canonical
+output remain authoritative.
 
 ## Bulk Building
 
@@ -1908,6 +1894,25 @@ Tuning guide:
 For durable stores, larger chunks generally reduce node count and I/O, while
 smaller chunks can improve edit locality and diff granularity.
 
+Built-in chunking policies are explicit and persisted in the tree format:
+
+| Policy | Choose it when |
+| --- | --- |
+| `entry_count_key_hash()` | You want the default: stable key-only boundaries and predictable fanout. Value-only updates do not move boundaries. |
+| `entry_count_key_value_hash()` | Value content must participate in boundary identity and value updates may intentionally rechunk. |
+| `logical_bytes_key_weibull()` | Records vary substantially in size and you want smooth probabilistic chunks around a byte target. |
+| `logical_bytes_rolling_hash()` | You want content-defined logical-byte chunks with a rolling window and strong resynchronization after shifted content. |
+
+All policies use the same stateful `BoundaryDetector` and canonical node
+emitters. `hard_max_node_bytes` is checked against the exact serialized node in
+release builds. Chunking policy or layout changes alter persisted tree identity;
+they are not runtime tuning switches.
+
+This alpha hard cutover removed stateless boundary probes and direct node
+rebalancer APIs because neither could represent the persisted policy's streamed
+state. Drive `BoundaryDetector::observe` over ordered entries for diagnostics,
+and use `Prolly::batch`, `append_batch`, or their stats variants for writes.
+
 ## Statistics
 
 `collect_stats(&tree)` traverses the tree and returns `TreeStats`, including:
@@ -2075,15 +2080,14 @@ current benchmark coverage, and measured SQLite scale results.
 | `node.rs` | Node layout, compact serialization, node CID calculation. |
 | `cid.rs` | SHA-256 content identifier. |
 | `config.rs` | Chunking and encoding configuration. |
-| `boundary.rs` | xxHash64 content-defined boundary detection. |
-| `rebalance.rs` | Splitting, merging, parent propagation, root changes. |
-| `batch.rs` | Batch mutation processing, append paths, collectors, rebuild helpers. |
-| `builder.rs` | Parallel and sorted bulk tree construction. |
+| `boundary.rs` | Stateful, policy-aware content-defined boundary detection. |
+| `batch.rs` | Batch routing, collectors, and canonical value-update helpers. |
+| `builder.rs` | Parallel bulk construction and canonical streaming node emitters. |
 | `range.rs` | Lazy range iteration. |
 | `cursor.rs` | Cursor traversal and streaming diff cursor. |
 | `diff.rs` | Structural diff, range diff, and three-way merge. |
 | `crdt.rs` | Conflict-free merge strategies. |
-| `parallel.rs` | Parallel batch/rebalance interfaces. |
+| `parallel.rs` | Parallel batch adapters over canonical writes. |
 | `streaming.rs` | Streaming differ trait and default implementation. |
 | `stats.rs` | Tree shape and size metrics. |
 | `store/` | Storage trait and backend implementations. |

@@ -1,7 +1,7 @@
 use prolly::{
-    decode_physical_index_key, index_map_id, is_boundary_config, Config, Encoding, IndexControl,
-    IndexProjection, IndexValue, MemStore, Node, Prolly, RootManifest, SecondaryIndexDescriptor,
-    Store, ValueRef, VersionedValue,
+    decode_physical_index_key, index_map_id, Config, Encoding, IndexControl, IndexProjection,
+    IndexValue, MemStore, Node, Prolly, RootManifest, SecondaryIndexDescriptor, Store, ValueRef,
+    VersionedValue,
 };
 use serde_json::Value;
 
@@ -19,17 +19,6 @@ fn checked_in_conformance_fixtures_are_decodable() {
         assert_eq!(hex(&node.to_bytes()), fixture["bytes"].as_str().unwrap());
 
         node.validate().unwrap();
-    }
-
-    for fixture in fixtures["boundary_fixtures"].as_array().unwrap() {
-        let config = config_from_fixture(&fixture["config"]);
-        let count = fixture["count"].as_u64().unwrap() as usize;
-        let key = from_hex(fixture["key"].as_str().unwrap());
-        let value = from_hex(fixture["value"].as_str().unwrap());
-        assert_eq!(
-            is_boundary_config(&config, count, &key, &value),
-            fixture["is_boundary"].as_bool().unwrap()
-        );
     }
 
     for fixture in fixtures["value_fixtures"].as_array().unwrap() {

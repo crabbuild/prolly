@@ -23,7 +23,6 @@ import {
   fromHex,
   i128Key,
   i64Key,
-  isBoundaryConfig,
   keyFromPrefixedSegments,
   keyFromSegments,
   largeValueConfig,
@@ -104,18 +103,6 @@ test("boundary and key fixtures match Rust", () => {
   assert.deepEqual(largeValueConfig(8), { inlineThreshold: 8 });
   assert.deepEqual(parallelConfig(2, 24), { maxThreads: 2, parallelismThreshold: 24 });
   assert.equal(parallelConfigSequential().maxThreads, 1);
-
-  for (const fixture of loaded.boundary_fixtures) {
-    assert.equal(
-      isBoundaryConfig(
-        Config.fromFixture(fixture.config),
-        fixture.count,
-        fromHex(fixture.key),
-        fromHex(fixture.value),
-      ),
-      fixture.is_boundary,
-    );
-  }
 
   for (const fixture of loaded.key_fixtures.prefix_end) {
     const prefix = fromHex(fixture.prefix);
