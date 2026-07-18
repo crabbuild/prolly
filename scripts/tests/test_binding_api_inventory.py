@@ -9,17 +9,118 @@ from scripts.binding_api_inventory import (
     build_application_gap_report,
     build_classification_audit,
     check_manifest,
+    complete_reviewed_equivalence_entries,
     extract_public_api,
     extract_public_api_items,
     generate_manifest,
     missing_feature_sentinels,
     review_abstraction_entries,
+    review_runtime_equivalence_entries,
     review_runtime_audience_entries,
     validate_equivalence_catalog,
 )
 
 
 class ManifestCheckTests(unittest.TestCase):
+    def test_reviewed_equivalence_evidence_completes_only_explicit_mappings(self) -> None:
+        languages = (
+            "python", "go", "node", "kotlin", "java", "ruby", "swift", "wasm"
+        )
+        manifest = {
+            "operations": [
+                {
+                    "rust": "prolly::Store::get",
+                    "classification": "idiomatic",
+                    "status": "planned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                    "docs": ["bindings/api/idiomatic-equivalents.json#store-trait"],
+                    "equivalence": "store-trait",
+                    "rationale": "Host store protocols preserve the operation.",
+                    "reviewed": True,
+                },
+                {
+                    "rust": "prolly::Unreviewed",
+                    "classification": "idiomatic",
+                    "status": "planned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                    "equivalence": "store-trait",
+                },
+            ]
+        }
+        equivalence = self.complete_equivalence("idiomatic")
+        equivalence["language_symbols"] = {
+            language: f"{language}.HostStore contract ({{rust}})"
+            for language in languages
+        }
+
+        completed = complete_reviewed_equivalence_entries(
+            manifest, {"store-trait": equivalence}
+        )
+        mapped, untouched = completed["operations"]
+
+        self.assertEqual(mapped["status"], "implemented")
+        self.assertEqual(
+            mapped["languages"]["python"],
+            "python.HostStore contract (prolly::Store::get)",
+        )
+        self.assertEqual(mapped["tests"], ["binding.iteration"])
+        self.assertEqual(mapped["reconciliation"], "bound-idiomatic")
+        self.assertEqual(untouched["status"], "planned")
+        self.assertEqual(untouched["languages"], {})
+
+    def test_runtime_equivalence_review_classifies_cursor_and_borrowed_view_methods(self) -> None:
+        manifest = {
+            "operations": [
+                {
+                    "rust": "prolly::Cursor::advance",
+                    "classification": "portable",
+                    "status": "planned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                    "docs": [],
+                    "audience": "rust-extension",
+                    "reviewed": True,
+                },
+                {
+                    "rust": "prolly::ProximityVectorRef::to_vec",
+                    "classification": "portable",
+                    "status": "planned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": [],
+                    "docs": [],
+                    "audience": "rust-extension",
+                    "reviewed": True,
+                },
+                {
+                    "rust": "prolly::VersionedMapEditor::put",
+                    "classification": "idiomatic",
+                    "status": "planned",
+                    "languages": {},
+                    "exclusions": {},
+                    "tests": ["prolly-bindings::domain::versioned"],
+                    "docs": ["conformance/binding-versioned-fixtures.v1.json"],
+                    "audience": "application",
+                    "reviewed": True,
+                },
+            ]
+        }
+
+        reviewed = review_runtime_equivalence_entries(manifest)
+        cursor, view, editor = reviewed["operations"]
+
+        self.assertEqual(cursor["classification"], "idiomatic")
+        self.assertEqual(cursor["equivalence"], "iterator-sequence")
+        self.assertEqual(view["classification"], "idiomatic")
+        self.assertEqual(view["equivalence"], "borrowed-view")
+        self.assertEqual(view["performance"], "scoped-view")
+        self.assertEqual(editor["equivalence"], "builder-typestate")
+
     def test_reconciliation_groups_expand_to_exact_manifest_rows(self) -> None:
         manifest = {
             "operations": [
@@ -33,6 +134,15 @@ class ManifestCheckTests(unittest.TestCase):
                     "rust": ["prolly::VersionedMap::get"],
                     "evidence": ["bindings/python/prolly/api.py"],
                     "rationale": "All public wrappers expose get.",
+                    "language_templates": {
+                        language: f"{language}.VersionedMap.{{camel}}"
+                        for language in (
+                            "python", "go", "node", "kotlin",
+                            "java", "ruby", "swift", "wasm",
+                        )
+                    },
+                    "tests": ["portable-parity::versioned-get"],
+                    "docs": ["bindings/VERIFICATION.md"],
                 }
             ]
         }
@@ -45,6 +155,15 @@ class ManifestCheckTests(unittest.TestCase):
         self.assertEqual(
             reconciled["operations"][0]["reconciliation_evidence"],
             ["bindings/python/prolly/api.py"],
+        )
+        self.assertEqual(reconciled["operations"][0]["status"], "implemented")
+        self.assertEqual(
+            reconciled["operations"][0]["languages"]["node"],
+            "node.VersionedMap.get",
+        )
+        self.assertEqual(
+            reconciled["operations"][0]["tests"],
+            ["portable-parity::versioned-get"],
         )
 
     def test_gap_report_distinguishes_reconciled_binding_and_real_gaps(self) -> None:
@@ -97,6 +216,51 @@ class ManifestCheckTests(unittest.TestCase):
         self.assertEqual(
             [row["rust"] for row in report["confirmed_performance_gap"]],
             ["prolly::VersionedMap::get_with"],
+        )
+
+    def test_gap_report_does_not_count_complete_rust_extensions_as_application(self) -> None:
+        rust = "prolly::Store::get"
+        items = {
+            rust: ApiItem(
+                rust=rust,
+                kind="function",
+                owner="prolly::Store",
+                member_kind="trait-item",
+            )
+        }
+        equivalence = self.complete_equivalence("idiomatic")
+        manifest = {
+            "operations": [
+                {
+                    "rust": rust,
+                    "classification": "idiomatic",
+                    "status": "implemented",
+                    "languages": {
+                        language: f"{language}.Store.get"
+                        for language in (
+                            "python", "go", "node", "kotlin",
+                            "java", "ruby", "swift", "wasm",
+                        )
+                    },
+                    "exclusions": {},
+                    "tests": ["binding.iteration"],
+                    "docs": ["bindings/api/README.md#idiomatic-equivalents"],
+                    "equivalence": "store-trait",
+                    "rationale": "Host store protocols preserve get.",
+                    "reviewed": True,
+                    "audience": "rust-extension",
+                }
+            ]
+        }
+
+        report = build_application_gap_report(
+            items, manifest, {"store-trait": equivalence}
+        )
+
+        self.assertEqual(report["release_complete_application_operations"], [])
+        self.assertEqual(
+            [row["rust"] for row in report["release_complete_non_application_runtime"]],
+            [rust],
         )
 
     def test_runtime_audience_review_is_explicit_and_leaves_core_unreviewed(self) -> None:
@@ -236,7 +400,6 @@ class ManifestCheckTests(unittest.TestCase):
             if entry["rust"] not in {
                 "prolly::internal_helper",
                 "prolly::VersionedValue::version",
-                "prolly::VersionedMap::head",
             }:
                 entry["audience"] = "application"
                 entry["audience_rationale"] = "Runtime behavior is public application API."
@@ -247,6 +410,7 @@ class ManifestCheckTests(unittest.TestCase):
             report["summary"],
             {
                 "release_complete_application_operations": 1,
+                "release_complete_non_application_runtime": 0,
                 "bound_pending_manifest_evidence": 0,
                 "confirmed_missing_implementation": 0,
                 "confirmed_performance_gap": 0,

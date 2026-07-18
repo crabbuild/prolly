@@ -3,16 +3,76 @@
 //! Determines where nodes should split based on content hashing.
 //! Uses xxHash64 for fast, deterministic boundary detection.
 
-use std::collections::VecDeque;
 use std::hash::Hasher;
 use xxhash_rust::xxh64::Xxh64;
 
-use super::config::Config;
 use super::error::Error;
 use super::format::{BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec};
-use super::node::Node;
 
 const LEVEL_SALT: u64 = 0x9e37_79b9_7f4a_7c15;
+
+struct ByteHashCache {
+    seed: u64,
+    values: [u64; 256],
+    initialized: [u64; 4],
+}
+
+impl ByteHashCache {
+    fn new(seed: u64) -> Self {
+        Self {
+            seed,
+            values: [0; 256],
+            initialized: [0; 4],
+        }
+    }
+
+    #[inline]
+    fn get(&mut self, byte: u8) -> u64 {
+        let index = usize::from(byte);
+        let word = index / 64;
+        let mask = 1_u64 << (index % 64);
+        if self.initialized[word] & mask == 0 {
+            self.values[index] = byte_hash(self.seed, byte);
+            self.initialized[word] |= mask;
+        }
+        self.values[index]
+    }
+}
+
+struct RollingWindow {
+    bytes: Vec<u8>,
+    capacity: usize,
+    next: usize,
+}
+
+impl RollingWindow {
+    fn new(capacity: usize) -> Self {
+        Self {
+            bytes: Vec::with_capacity(capacity),
+            capacity,
+            next: 0,
+        }
+    }
+
+    #[inline]
+    fn push(&mut self, byte: u8) -> Option<u8> {
+        if self.bytes.len() < self.capacity {
+            self.bytes.push(byte);
+            return None;
+        }
+        let old = std::mem::replace(&mut self.bytes[self.next], byte);
+        self.next += 1;
+        if self.next == self.capacity {
+            self.next = 0;
+        }
+        Some(old)
+    }
+
+    fn clear(&mut self) {
+        self.bytes.clear();
+        self.next = 0;
+    }
+}
 
 /// Resettable boundary state for one ordered tree level.
 pub struct BoundaryDetector {
@@ -22,19 +82,31 @@ pub struct BoundaryDetector {
     logical_bytes: u64,
     encoded_bytes: u64,
     previous_measure: u64,
-    rolling_window: VecDeque<u8>,
+    rolling_window: RollingWindow,
+    byte_hash_cache: Option<Box<ByteHashCache>>,
     rolling_hash: u64,
 }
 
 impl BoundaryDetector {
     /// Create a detector for a persisted policy and tree level.
-    pub fn new(spec: ChunkingSpec, level: u16) -> Result<Self, Error> {
+    pub fn new(mut spec: ChunkingSpec, level: u16) -> Result<Self, Error> {
         spec.validate()?;
+        if level > 0 && spec.min < 2 {
+            spec.min = 2;
+            spec.target = spec.target.max(2);
+            spec.max = spec.max.max(2);
+        }
         let seed = if spec.level_salt {
             spec.hash_seed ^ u64::from(level).wrapping_mul(LEVEL_SALT)
         } else {
             spec.hash_seed
         };
+        let rolling_window = match spec.rule {
+            BoundaryRule::RollingBuzHash { window } => RollingWindow::new(usize::from(window)),
+            _ => RollingWindow::new(0),
+        };
+        let byte_hash_cache = matches!(spec.rule, BoundaryRule::RollingBuzHash { .. })
+            .then(|| Box::new(ByteHashCache::new(seed)));
         Ok(Self {
             spec,
             seed,
@@ -42,7 +114,8 @@ impl BoundaryDetector {
             logical_bytes: 0,
             encoded_bytes: 0,
             previous_measure: 0,
-            rolling_window: VecDeque::new(),
+            rolling_window,
+            byte_hash_cache,
             rolling_hash: 0,
         })
     }
@@ -93,7 +166,12 @@ impl BoundaryDetector {
                     shape,
                 ),
                 BoundaryRule::RollingBuzHash { .. } => {
-                    self.rolling_hash <= u64::MAX / self.spec.target.max(1)
+                    let eligible_previous = self.previous_measure.max(self.spec.min);
+                    let eligible_current = measure.max(self.spec.min);
+                    let delta = eligible_current.saturating_sub(eligible_previous);
+                    let scale = self.spec.target.saturating_sub(self.spec.min).max(1);
+                    self.rolling_hash
+                        <= deterministic_exponential_threshold(u128::from(delta), u128::from(scale))
                 }
             }
         };
@@ -137,36 +215,43 @@ impl BoundaryDetector {
     }
 
     fn observe_rolling(&mut self, key: &[u8], value: &[u8]) {
-        let window = match self.spec.rule {
-            BoundaryRule::RollingBuzHash { window } => usize::from(window),
-            _ => return,
-        };
-        rolling_feed_len(self, key.len() as u64, window);
+        if !matches!(self.spec.rule, BoundaryRule::RollingBuzHash { .. }) {
+            return;
+        }
+        rolling_feed_len(self, key.len() as u64);
         for byte in key {
-            self.roll_byte(*byte, window);
+            self.roll_byte(*byte);
         }
         if self.spec.input == BoundaryInput::KeyValue {
-            rolling_feed_len(self, value.len() as u64, window);
+            rolling_feed_len(self, value.len() as u64);
             for byte in value {
-                self.roll_byte(*byte, window);
+                self.roll_byte(*byte);
             }
         }
     }
 
-    fn roll_byte(&mut self, byte: u8, window: usize) {
-        self.rolling_hash = self.rolling_hash.rotate_left(1) ^ byte_hash(self.seed, byte);
-        self.rolling_window.push_back(byte);
-        if self.rolling_window.len() > window {
-            if let Some(old) = self.rolling_window.pop_front() {
-                self.rolling_hash ^= byte_hash(self.seed, old).rotate_left((window % 64) as u32);
-            }
+    #[inline]
+    fn roll_byte(&mut self, byte: u8) {
+        let incoming = self
+            .byte_hash_cache
+            .as_mut()
+            .expect("rolling detector has byte hash cache")
+            .get(byte);
+        self.rolling_hash = self.rolling_hash.rotate_left(1) ^ incoming;
+        if let Some(old) = self.rolling_window.push(byte) {
+            let outgoing = self
+                .byte_hash_cache
+                .as_mut()
+                .expect("rolling detector has byte hash cache")
+                .get(old);
+            self.rolling_hash ^= outgoing.rotate_left((self.rolling_window.capacity % 64) as u32);
         }
     }
 }
 
-fn rolling_feed_len(detector: &mut BoundaryDetector, len: u64, window: usize) {
+fn rolling_feed_len(detector: &mut BoundaryDetector, len: u64) {
     for byte in len.to_be_bytes() {
-        detector.roll_byte(byte, window);
+        detector.roll_byte(byte);
     }
 }
 
@@ -219,253 +304,313 @@ pub(crate) fn entry_count_boundary(
     Ok((hash_entry(seed, &spec.input, key, &[]) as u32) <= u32::MAX / factor)
 }
 
+const Q62: u128 = 1_u128 << 62;
+
+fn deterministic_exponential_threshold(delta: u128, scale: u128) -> u64 {
+    if delta == 0 {
+        return 0;
+    }
+    if scale == 0 || delta / scale >= 64 {
+        return u64::MAX;
+    }
+
+    let mut exponent = scaled_ratio_q62(delta, scale);
+    let mut squarings = 0;
+    while exponent > Q62 / 16 {
+        exponent = exponent.div_ceil(2);
+        squarings += 1;
+    }
+
+    let mut survival = exp_neg_series_q62(exponent);
+    for _ in 0..squarings {
+        survival = survival.saturating_mul(survival) / Q62;
+    }
+
+    ((Q62.saturating_sub(survival) * u128::from(u64::MAX)) / Q62) as u64
+}
+
+fn scaled_ratio_q62(numerator: u128, denominator: u128) -> u128 {
+    debug_assert!(denominator > 0);
+    let whole = numerator / denominator;
+    let remainder = numerator % denominator;
+    let fraction = if remainder <= u128::MAX / Q62 {
+        (remainder * Q62) / denominator
+    } else {
+        fractional_ratio_q62(remainder, denominator)
+    };
+    whole.saturating_mul(Q62).saturating_add(fraction)
+}
+
+fn fractional_ratio_q62(mut numerator: u128, denominator: u128) -> u128 {
+    debug_assert!(numerator < denominator);
+    let mut quotient = 0_u128;
+    for _ in 0..62 {
+        quotient <<= 1;
+        let complement = denominator - numerator;
+        if numerator >= complement {
+            numerator -= complement;
+            quotient |= 1;
+        } else {
+            numerator <<= 1;
+        }
+    }
+    quotient
+}
+
+fn exp_neg_series_q62(exponent: u128) -> u128 {
+    debug_assert!(exponent <= Q62 / 16);
+    let mut survival = Q62;
+    let mut term = Q62;
+    for divisor in 1_u128..=8 {
+        term = (term * exponent) / Q62 / divisor;
+        if divisor % 2 == 0 {
+            survival = survival.saturating_add(term);
+        } else {
+            survival = survival.saturating_sub(term);
+        }
+    }
+    survival
+}
+
 fn weibull_boundary(hash: u64, previous: u64, current: u64, target: u64, shape: u32) -> bool {
-    let scale = target.max(1) as f64;
-    let shape = shape as f64;
-    let before = (previous as f64 / scale).powf(shape);
-    let after = (current as f64 / scale).powf(shape);
-    let probability = 1.0 - (-(after - before).max(0.0)).exp();
-    let sample = hash as f64 / u64::MAX as f64;
-    sample <= probability
-}
-
-/// Check if entry at index creates a chunk boundary in a node.
-///
-/// Boundary detection rules:
-/// 1. Below min_chunk_size: never split (returns false)
-/// 2. At or above max_chunk_size: always split (returns true)
-/// 3. Otherwise: hash-based probabilistic boundary
-///
-/// The hash-based boundary uses xxHash64 on the key+value pair.
-/// A boundary is detected when the lower 32 bits of the hash
-/// are less than or equal to `u32::MAX / chunking_factor`.
-///
-/// # Arguments
-/// * `node` - The node containing the entry
-/// * `idx` - Index of the entry to check
-///
-/// # Returns
-/// `true` if a boundary should be created after this entry
-pub fn is_boundary(node: &Node, idx: usize) -> bool {
-    let count = node.keys.len();
-
-    // Below min size: never split
-    if count < node.min_chunk_size() {
-        return false;
-    }
-
-    // At or above max size: always split
-    if count >= node.max_chunk_size() {
-        return true;
-    }
-
-    is_hash_boundary(
-        node.hash_seed(),
-        node.chunking_factor(),
-        &node.keys[idx],
-        &node.vals[idx],
-    )
-}
-
-/// Check if entry creates a chunk boundary using Config.
-///
-/// Same logic as `is_boundary()` but takes Config and entry data directly
-/// instead of a Node reference. Useful for tree-level operations where
-/// you don't have a fully constructed node.
-///
-/// # Arguments
-/// * `config` - Tree configuration with chunking parameters
-/// * `count` - Current number of entries in the node
-/// * `key` - Key bytes of the entry to check
-/// * `val` - Value bytes of the entry to check
-///
-/// # Returns
-/// `true` if a boundary should be created after this entry
-pub fn is_boundary_config(config: &Config, count: usize, key: &[u8], val: &[u8]) -> bool {
-    // Below min size: never split
-    if count < config.min_chunk_size() {
-        return false;
-    }
-
-    // At or above max size: always split
-    if count >= config.max_chunk_size() {
-        return true;
-    }
-
-    is_hash_boundary_config(config, key, val)
-}
-
-/// Check only the hash predicate for a boundary, without applying min/max size rules.
-///
-/// Bulk builders can precompute this part in parallel, then apply the min/max
-/// checks using the current chunk-local entry count.
-pub(crate) fn is_hash_boundary_config(config: &Config, key: &[u8], val: &[u8]) -> bool {
-    is_hash_boundary(config.hash_seed(), config.chunking_factor(), key, val)
-}
-
-fn is_hash_boundary(hash_seed: u64, chunking_factor: u32, key: &[u8], val: &[u8]) -> bool {
-    let mut hasher = Xxh64::new(hash_seed);
-    hasher.write(key);
-    hasher.write(val);
-    let hash = hasher.finish();
-
-    // Use lower 32 bits for threshold comparison
-    let hash_val = (hash & 0xFFFF_FFFF) as u32;
-
-    // Threshold: lower = more boundaries = smaller nodes
-    let threshold = u32::MAX / chunking_factor;
-    hash_val <= threshold
+    let (hazard_delta, hazard_scale) = match shape {
+        1 => (
+            u128::from(current.saturating_sub(previous)),
+            u128::from(target.max(1)),
+        ),
+        2 => (
+            u128::from(current).pow(2) - u128::from(previous).pow(2),
+            u128::from(target.max(1)).pow(2),
+        ),
+        _ => return false,
+    };
+    hash <= deterministic_exponential_threshold(hazard_delta, hazard_scale)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::encoding::Encoding;
+    use std::collections::VecDeque;
+
     use super::*;
 
-    #[test]
-    fn test_is_boundary_below_min_chunk_size() {
-        // Node with fewer entries than min_chunk_size should never trigger boundary
-        let node = Node::builder()
-            .keys(vec![b"a".to_vec(), b"b".to_vec()])
-            .vals(vec![b"1".to_vec(), b"2".to_vec()])
-            .min_chunk_size(4)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .build();
-
-        // 2 entries < min_chunk_size of 4, so no boundary
-        assert!(!is_boundary(&node, 0));
-        assert!(!is_boundary(&node, 1));
+    struct ReferenceRollingDetector {
+        spec: ChunkingSpec,
+        seed: u64,
+        entries: u64,
+        logical_bytes: u64,
+        encoded_bytes: u64,
+        previous_measure: u64,
+        rolling_window: VecDeque<u8>,
+        rolling_hash: u64,
     }
 
-    #[test]
-    fn test_is_boundary_at_max_chunk_size() {
-        // Node at max_chunk_size should always trigger boundary
-        let keys: Vec<Vec<u8>> = (0..10).map(|i| vec![i]).collect();
-        let vals: Vec<Vec<u8>> = (0..10).map(|i| vec![i]).collect();
-
-        let node = Node::builder()
-            .keys(keys)
-            .vals(vals)
-            .min_chunk_size(2)
-            .max_chunk_size(10) // exactly at max
-            .chunking_factor(128)
-            .build();
-
-        // At max_chunk_size, should always return true
-        assert!(is_boundary(&node, 0));
-    }
-
-    #[test]
-    fn test_is_boundary_deterministic() {
-        // Same node should always produce same boundary result
-        let node = Node::builder()
-            .keys(vec![
-                b"key1".to_vec(),
-                b"key2".to_vec(),
-                b"key3".to_vec(),
-                b"key4".to_vec(),
-                b"key5".to_vec(),
-            ])
-            .vals(vec![
-                b"val1".to_vec(),
-                b"val2".to_vec(),
-                b"val3".to_vec(),
-                b"val4".to_vec(),
-                b"val5".to_vec(),
-            ])
-            .min_chunk_size(2)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .hash_seed(42)
-            .build();
-
-        let result1 = is_boundary(&node, 2);
-        let result2 = is_boundary(&node, 2);
-        assert_eq!(result1, result2);
-    }
-
-    #[test]
-    fn test_is_boundary_config_below_min() {
-        let config = Config::builder()
-            .min_chunk_size(4)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .build();
-
-        // count=2 < min_chunk_size=4, so no boundary
-        assert!(!is_boundary_config(&config, 2, b"key", b"val"));
-    }
-
-    #[test]
-    fn test_is_boundary_config_at_max() {
-        let config = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(10)
-            .chunking_factor(128)
-            .build();
-
-        // count=10 >= max_chunk_size=10, so always boundary
-        assert!(is_boundary_config(&config, 10, b"key", b"val"));
-    }
-
-    #[test]
-    fn test_is_boundary_config_deterministic() {
-        let config = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .hash_seed(42)
-            .build();
-
-        let result1 = is_boundary_config(&config, 5, b"test_key", b"test_val");
-        let result2 = is_boundary_config(&config, 5, b"test_key", b"test_val");
-        assert_eq!(result1, result2);
-    }
-
-    #[test]
-    fn test_is_boundary_matches_is_boundary_config() {
-        // Both functions should produce the same result for equivalent inputs
-        let node = Node::builder()
-            .keys(vec![
-                b"a".to_vec(),
-                b"b".to_vec(),
-                b"c".to_vec(),
-                b"d".to_vec(),
-                b"e".to_vec(),
-            ])
-            .vals(vec![
-                b"1".to_vec(),
-                b"2".to_vec(),
-                b"3".to_vec(),
-                b"4".to_vec(),
-                b"5".to_vec(),
-            ])
-            .min_chunk_size(2)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .hash_seed(42)
-            .encoding(Encoding::Raw)
-            .build();
-
-        let config = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .hash_seed(42)
-            .encoding(Encoding::Raw)
-            .build();
-
-        for idx in 0..node.keys.len() {
-            let node_result = is_boundary(&node, idx);
-            let config_result =
-                is_boundary_config(&config, node.keys.len(), &node.keys[idx], &node.vals[idx]);
-            assert_eq!(
-                node_result, config_result,
-                "Mismatch at index {}: is_boundary={}, is_boundary_config={}",
-                idx, node_result, config_result
-            );
+    impl ReferenceRollingDetector {
+        fn new(spec: ChunkingSpec, level: u16) -> Self {
+            let seed = if spec.level_salt {
+                spec.hash_seed ^ u64::from(level).wrapping_mul(LEVEL_SALT)
+            } else {
+                spec.hash_seed
+            };
+            Self {
+                spec,
+                seed,
+                entries: 0,
+                logical_bytes: 0,
+                encoded_bytes: 0,
+                previous_measure: 0,
+                rolling_window: VecDeque::new(),
+                rolling_hash: 0,
+            }
         }
+
+        fn measure(&self) -> u64 {
+            match self.spec.measure {
+                ChunkMeasure::EntryCount => self.entries,
+                ChunkMeasure::LogicalBytes => self.logical_bytes,
+                ChunkMeasure::EncodedBytes => self.encoded_bytes,
+            }
+        }
+
+        fn roll_byte(&mut self, byte: u8, window: usize) {
+            self.rolling_hash = self.rolling_hash.rotate_left(1) ^ byte_hash(self.seed, byte);
+            self.rolling_window.push_back(byte);
+            if self.rolling_window.len() > window {
+                let old = self.rolling_window.pop_front().unwrap();
+                self.rolling_hash ^= byte_hash(self.seed, old).rotate_left((window % 64) as u32);
+            }
+        }
+
+        fn feed_len(&mut self, len: u64, window: usize) {
+            for byte in len.to_be_bytes() {
+                self.roll_byte(byte, window);
+            }
+        }
+
+        fn observe(&mut self, key: &[u8], value: &[u8], encoded_entry_bytes: usize) -> bool {
+            self.previous_measure = self.measure();
+            self.entries = self.entries.saturating_add(1);
+            self.logical_bytes = self
+                .logical_bytes
+                .saturating_add(key.len() as u64)
+                .saturating_add(value.len() as u64);
+            self.encoded_bytes = self
+                .encoded_bytes
+                .saturating_add(encoded_entry_bytes as u64);
+
+            let BoundaryRule::RollingBuzHash { window } = self.spec.rule else {
+                unreachable!();
+            };
+            let window = usize::from(window);
+            self.feed_len(key.len() as u64, window);
+            for &byte in key {
+                self.roll_byte(byte, window);
+            }
+            if self.spec.input == BoundaryInput::KeyValue {
+                self.feed_len(value.len() as u64, window);
+                for &byte in value {
+                    self.roll_byte(byte, window);
+                }
+            }
+
+            let measure = self.measure();
+            let boundary = if self.encoded_bytes >= self.spec.hard_max_node_bytes
+                || measure >= self.spec.max
+            {
+                true
+            } else if measure < self.spec.min {
+                false
+            } else {
+                let eligible_previous = self.previous_measure.max(self.spec.min);
+                let eligible_current = measure.max(self.spec.min);
+                let delta = eligible_current.saturating_sub(eligible_previous);
+                let scale = self.spec.target.saturating_sub(self.spec.min).max(1);
+                self.rolling_hash
+                    <= deterministic_exponential_threshold(u128::from(delta), u128::from(scale))
+            };
+            if boundary {
+                self.reset();
+            }
+            boundary
+        }
+
+        fn reset(&mut self) {
+            self.entries = 0;
+            self.logical_bytes = 0;
+            self.encoded_bytes = 0;
+            self.previous_measure = 0;
+            self.rolling_window.clear();
+            self.rolling_hash = 0;
+        }
+    }
+
+    #[test]
+    fn byte_hash_cache_matches_direct_hash_for_every_byte() {
+        for seed in [0, 1, u64::MAX] {
+            let mut cache = ByteHashCache::new(seed);
+            for byte in u8::MIN..=u8::MAX {
+                assert_eq!(cache.get(byte), byte_hash(seed, byte));
+                assert_eq!(cache.get(byte), byte_hash(seed, byte));
+            }
+        }
+    }
+
+    #[test]
+    fn rolling_window_matches_vec_deque_across_wraps_and_reset() {
+        let mut window = RollingWindow::new(7);
+        let mut reference = VecDeque::new();
+        for byte in 0_u8..100 {
+            let expected = if reference.len() == 7 {
+                reference.pop_front()
+            } else {
+                None
+            };
+            reference.push_back(byte);
+            assert_eq!(window.push(byte), expected);
+        }
+
+        window.clear();
+        reference.clear();
+        for byte in (100_u8..180).rev() {
+            let expected = if reference.len() == 7 {
+                reference.pop_front()
+            } else {
+                None
+            };
+            reference.push_back(byte);
+            assert_eq!(window.push(byte), expected);
+        }
+    }
+
+    #[test]
+    fn optimized_rolling_detector_matches_vec_deque_reference() {
+        let spec = ChunkingSpec {
+            measure: ChunkMeasure::LogicalBytes,
+            input: BoundaryInput::KeyValue,
+            rule: BoundaryRule::RollingBuzHash { window: 17 },
+            min: 32,
+            target: 96,
+            max: 256,
+            hash_seed: 0xfeed_cafe_dead_beef,
+            hard_max_node_bytes: 512,
+            ..ChunkingSpec::default()
+        };
+        let mut optimized = BoundaryDetector::new(spec.clone(), 3).unwrap();
+        let mut reference = ReferenceRollingDetector::new(spec, 3);
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+
+        for index in 0..2_000 {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let key_len = (state as usize % 31) + 1;
+            let value_len = ((state >> 8) as usize % 67) + 1;
+            let mut key = vec![0; key_len];
+            let mut value = vec![0; value_len];
+            for byte in key.iter_mut().chain(value.iter_mut()) {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                *byte = state as u8;
+            }
+            let encoded = key_len + value_len + 9;
+
+            assert_eq!(
+                optimized.observe(&key, &value, encoded).unwrap(),
+                reference.observe(&key, &value, encoded),
+                "boundary mismatch at entry {index}"
+            );
+            assert_eq!(optimized.rolling_hash, reference.rolling_hash);
+            assert_eq!(optimized.entries, reference.entries);
+            assert_eq!(optimized.logical_bytes, reference.logical_bytes);
+            assert_eq!(optimized.encoded_bytes, reference.encoded_bytes);
+
+            if index % 53 == 0 {
+                optimized.reset();
+                reference.reset();
+            }
+        }
+    }
+
+    #[test]
+    fn deterministic_threshold_golden_vectors() {
+        assert_eq!(deterministic_exponential_threshold(0, 12_288), 0);
+        assert_eq!(
+            deterministic_exponential_threshold(44, 12_288),
+            65_934_676_975_190_507
+        );
+        assert_eq!(
+            deterministic_exponential_threshold(4_096, 12_288),
+            5_229_074_366_755_166_475
+        );
+        assert_eq!(
+            deterministic_exponential_threshold(12_288, 12_288),
+            11_660_566_172_440_661_763
+        );
+        assert_eq!(
+            deterministic_exponential_threshold(u128::MAX - 1, u128::MAX),
+            11_660_566_172_440_661_763
+        );
+        assert_eq!(deterministic_exponential_threshold(u128::MAX, 1), u64::MAX);
     }
 
     #[test]
@@ -486,79 +631,6 @@ mod tests {
                 .observe(b"parallel-key", b"ignored-value", 32)
                 .unwrap(),
             independent
-        );
-    }
-
-    #[test]
-    fn test_different_seeds_produce_different_results() {
-        let config1 = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .hash_seed(1)
-            .build();
-
-        let config2 = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(100)
-            .chunking_factor(128)
-            .hash_seed(999999)
-            .build();
-
-        // Test with multiple keys to find at least one difference
-        let mut found_difference = false;
-        for i in 0..100 {
-            let key = format!("key{}", i).into_bytes();
-            let val = format!("val{}", i).into_bytes();
-            let r1 = is_boundary_config(&config1, 5, &key, &val);
-            let r2 = is_boundary_config(&config2, 5, &key, &val);
-            if r1 != r2 {
-                found_difference = true;
-                break;
-            }
-        }
-        assert!(
-            found_difference,
-            "Different seeds should produce different boundary patterns"
-        );
-    }
-
-    #[test]
-    fn test_higher_chunking_factor_fewer_boundaries() {
-        // Higher chunking factor = higher threshold = fewer boundaries
-        let config_low = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(1000)
-            .chunking_factor(4) // Low factor = more boundaries
-            .hash_seed(0)
-            .build();
-
-        let config_high = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(1000)
-            .chunking_factor(1024) // High factor = fewer boundaries
-            .hash_seed(0)
-            .build();
-
-        let mut low_boundaries = 0;
-        let mut high_boundaries = 0;
-
-        for i in 0..1000 {
-            let key = format!("key{:04}", i).into_bytes();
-            let val = format!("val{:04}", i).into_bytes();
-            if is_boundary_config(&config_low, 100, &key, &val) {
-                low_boundaries += 1;
-            }
-            if is_boundary_config(&config_high, 100, &key, &val) {
-                high_boundaries += 1;
-            }
-        }
-
-        assert!(
-            low_boundaries > high_boundaries,
-            "Lower chunking factor should produce more boundaries: low={}, high={}",
-            low_boundaries,
-            high_boundaries
         );
     }
 }

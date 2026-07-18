@@ -9,7 +9,6 @@
 //! Currently, the public API is the concrete `Prolly<S>` struct. These traits
 //! are not exposed publicly but provide a foundation for:
 //!
-//! - Custom rebalancing strategies (e.g., different chunking algorithms)
 //! - Alternative batch mutation implementations
 //! - Different diff/merge algorithms (e.g., streaming vs. collecting)
 //!
@@ -23,11 +22,6 @@
 //! - **Clear boundaries**: Responsibilities are well-defined and documented
 //!
 //! # Trait Hierarchy
-//!
-//! ## TreeRebalancer
-//!
-//! Handles node splitting and merging to maintain tree balance. The default
-//! implementation uses content-defined chunking with probabilistic boundaries.
 //!
 //! ## BatchMutator
 //!
@@ -45,72 +39,15 @@
 //! future to allow users to provide custom implementations. For example:
 //!
 //! - A `StreamingDiffer` that yields differences lazily
-//! - A `ParallelRebalancer` that uses multiple threads
+//! - A scheduler that tunes parallel reads without changing canonical roots
 //! - A `ConflictFreeMerger` for CRDT-style merging
 
 // Allow dead_code since these traits are defined for future extensibility
 #![allow(dead_code)]
 
-use super::cid::Cid;
 use super::error::{Diff, Error, Mutation, Resolver};
-use super::node::Node;
 use super::store::Store;
 use super::tree::Tree;
-
-use super::batch::BatchWriteCollector;
-
-/// Trait for tree rebalancing operations.
-///
-/// Rebalancing ensures that tree nodes stay within configured size bounds
-/// after insertions and deletions. This trait abstracts the rebalancing
-/// strategy, allowing for alternative implementations.
-///
-/// # Responsibilities
-/// - Splitting oversized nodes
-/// - Merging undersized nodes with siblings
-/// - Propagating changes up the tree
-/// - Maintaining tree balance invariants
-///
-/// # Default Implementation
-/// The default implementation uses content-defined chunking with
-/// probabilistic boundaries for deterministic tree structure.
-pub trait TreeRebalancer<S: Store> {
-    /// Rebalance a node after modification.
-    ///
-    /// Called after a node has been modified (insertion or deletion).
-    /// Handles splitting if the node is too large, merging if too small,
-    /// and propagates changes up through the ancestor path.
-    ///
-    /// # Arguments
-    /// * `node` - The modified node to rebalance
-    /// * `ancestors` - Path from root to the node's parent (excluding the node itself)
-    ///
-    /// # Returns
-    /// * `Ok(cid)` - CID of the new root after rebalancing
-    /// * `Err(Error)` - On storage or processing errors
-    fn rebalance(&self, node: Node, ancestors: &[(Node, usize)]) -> Result<Cid, Error>;
-
-    /// Rebalance with batch write collector.
-    ///
-    /// Similar to `rebalance`, but collects nodes for batch writing instead
-    /// of writing immediately. Used during batch mutations for atomic writes.
-    ///
-    /// # Arguments
-    /// * `node` - The modified node to rebalance
-    /// * `ancestors` - Path from root to the node's parent
-    /// * `collector` - Collector for nodes to be written atomically
-    ///
-    /// # Returns
-    /// * `Ok(Some(cid))` - CID of the new root
-    /// * `Ok(None)` - Tree becomes empty
-    /// * `Err(Error)` - On processing errors
-    fn rebalance_with_collector(
-        &self,
-        node: Node,
-        ancestors: &[(Node, usize)],
-        collector: &mut BatchWriteCollector,
-    ) -> Result<Option<Cid>, Error>;
-}
 
 /// Trait for batch mutation operations.
 ///

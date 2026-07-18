@@ -29,7 +29,7 @@ Current surface:
   `digest()`/`digestBytes()`, `summary()`/`summaryFromBytes()`, and `verify()`/`verifyBytes()` for complete
   portable memory-engine tree bundles with pre-import verification;
 - node bytes/CID helpers, prefix bounds, segment encoding/decoding, numeric
-  key helpers, and boundary checks from Rust.
+  and key helpers from Rust.
 
 Filesystem, SQLite, native store constructors, and host callback stores are
 intentionally absent in browser builds. Version-1 async store adapters for

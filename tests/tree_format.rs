@@ -102,3 +102,19 @@ fn empty_custom_format_identifiers_are_rejected() {
 
     assert!(matches!(format.validate(), Err(Error::InvalidFormat(_))));
 }
+
+#[test]
+fn unsupported_weibull_shapes_are_rejected() {
+    for shape in [0, 3, u32::MAX] {
+        let format = TreeFormat {
+            chunking: ChunkingSpec {
+                rule: BoundaryRule::Weibull { shape },
+                ..entry_count_key_hash()
+            },
+            node_layout: NodeLayoutSpec::PrefixCompressed,
+            value_encoding: Encoding::Raw,
+        };
+
+        assert!(matches!(format.validate(), Err(Error::InvalidFormat(_))));
+    }
+}

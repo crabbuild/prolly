@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use super::boundary::{entry_count_boundary, BoundaryDetector};
-use super::builder::{entry_encoded_len, node_encoding_overhead, BatchBuilder, NodeSummary};
+use super::boundary::entry_count_boundary;
+use super::builder::{BatchBuilder, LevelEmitter, NodeSummary};
 use super::cid::Cid;
 use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
@@ -42,86 +42,43 @@ struct EmittedInternal {
     node: Node,
 }
 
-pub(crate) struct LeafEmitter<'a> {
-    config: &'a super::config::Config,
-    detector: BoundaryDetector,
-    current: Node,
+pub(crate) struct LeafEmitter {
+    emitter: LevelEmitter,
     pub(crate) emitted: Vec<EmittedLeaf>,
-    encoded_bytes: u64,
 }
 
-impl<'a> LeafEmitter<'a> {
-    pub(crate) fn new(config: &'a super::config::Config) -> Result<Self, Error> {
+impl LeafEmitter {
+    pub(crate) fn new(config: &super::config::Config) -> Result<Self, Error> {
         Ok(Self {
-            config,
-            detector: BoundaryDetector::new(config.format.chunking.clone(), 0)?,
-            current: Node::builder()
-                .leaf(true)
-                .level(0)
-                .tree_format(config.format.clone())
-                .build(),
+            emitter: LevelEmitter::new(config.clone(), true, 0)?,
             emitted: Vec::new(),
-            encoded_bytes: node_encoding_overhead(config),
         })
     }
 
     pub(crate) fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
-        let hard_max = self.config.format.chunking.hard_max_node_bytes;
-        let mut encoded = entry_encoded_len(
-            self.config,
-            self.current.keys.last().map(Vec::as_slice),
-            &key,
-            &value,
-        ) as u64;
-        if !self.current.is_empty() && self.encoded_bytes.saturating_add(encoded) > hard_max {
-            self.flush();
-            self.detector.reset();
-            encoded = entry_encoded_len(self.config, None, &key, &value) as u64;
-        }
-        if self.encoded_bytes.saturating_add(encoded) > hard_max {
-            return Err(Error::EntryTooLarge {
-                encoded_bytes: self.encoded_bytes.saturating_add(encoded),
-                limit: hard_max,
+        let output = &mut self.emitted;
+        self.emitter.push_leaf_with(key, value, |emitted| {
+            output.push(EmittedLeaf {
+                summary: emitted.summary,
+                bytes: emitted.bytes,
+                node: emitted.node,
             });
-        }
-        self.encoded_bytes = self.encoded_bytes.saturating_add(encoded);
-        let boundary = self.detector.observe(&key, &value, encoded as usize)?;
-        self.current.keys.push(key);
-        self.current.vals.push(value);
-        if boundary {
-            self.flush();
+        })
+    }
+
+    pub(crate) fn flush(&mut self) -> Result<(), Error> {
+        if let Some(emitted) = self.emitter.finish()? {
+            self.emitted.push(EmittedLeaf {
+                summary: emitted.summary,
+                bytes: emitted.bytes,
+                node: emitted.node,
+            });
         }
         Ok(())
     }
 
-    pub(crate) fn flush(&mut self) {
-        if self.current.is_empty() {
-            return;
-        }
-        let node = std::mem::replace(
-            &mut self.current,
-            Node::builder()
-                .leaf(true)
-                .level(0)
-                .tree_format(self.config.format.clone())
-                .build(),
-        );
-        let bytes = node.to_bytes();
-        debug_assert!(bytes.len() as u64 <= self.config.format.chunking.hard_max_node_bytes);
-        self.emitted.push(EmittedLeaf {
-            summary: NodeSummary {
-                cid: Cid::from_bytes(&bytes),
-                first_key: node.keys[0].clone(),
-                count: node.keys.len() as u64,
-            },
-            bytes,
-            node,
-        });
-        self.encoded_bytes = node_encoding_overhead(self.config);
-    }
-
     pub(crate) fn is_aligned_with(&self, old: &NodeSummary) -> bool {
-        self.current.is_empty()
+        self.emitter.is_empty()
             && self
                 .emitted
                 .last()
@@ -289,7 +246,7 @@ fn apply_impl<S: Store>(
             }
             mutation_index += 1;
         }
-        emitter.flush();
+        emitter.flush()?;
         summaries.extend(emitter.emitted.iter().map(|leaf| leaf.summary.clone()));
         emitted.extend(emitter.emitted);
         old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
@@ -554,7 +511,7 @@ fn try_localized_height_two_deletes<S: Store>(
     if resynced_at.is_none() && window_end < root.len() {
         return Ok(None);
     }
-    emitter.flush();
+    emitter.flush()?;
 
     let old_cursor = resynced_at.map_or(old_leaves.len(), |index| index + 1);
     let mut leaf_summaries = Vec::with_capacity(old_leaves.len());
@@ -735,7 +692,7 @@ fn try_append<S: Store>(
         )?;
         stats.entries_streamed += 1;
     }
-    emitter.flush();
+    emitter.flush()?;
 
     let builder = BatchBuilder::new(manager.store(), tree.config.clone());
     let mut current = emitter
@@ -879,42 +836,46 @@ fn try_direct_value_updates<S: Store>(
         return Ok(DirectValueUpdateAttempt::Fallback(mutations));
     };
 
-    let batched_mutations = mutations
-        .into_iter()
-        .map(|(key, value)| Mutation::Upsert {
-            key,
-            val: value.expect("direct value path rejects deletes before routing"),
-        })
-        .collect::<Vec<_>>();
-    let metrics_before = manager.metrics();
     let mutations =
-        match super::batch::try_apply_batched_value_updates(manager, tree, batched_mutations)? {
-            super::batch::KeyStableBatchAttempt::Applied(result) => {
-                let metrics_after = manager.metrics();
-                stats.nodes_read += metrics_after
-                    .nodes_read
-                    .saturating_sub(metrics_before.nodes_read);
-                if measure_read_bytes {
-                    stats.bytes_read += metrics_after
-                        .bytes_read
-                        .saturating_sub(metrics_before.bytes_read);
-                }
-                stats.nodes_written += result.written_nodes as u64;
-                stats.bytes_written += result.written_bytes as u64;
-                stats.entries_streamed += result.entries_streamed as u64;
-                stats.resync_distance_entries = result.entries_streamed as u64;
-                stats.resync_distance_nodes = result.affected_leaves as u64;
-                stats.used_key_stable_fast_path = true;
-                stats.used_batched_value_update_path = true;
-                return Ok(DirectValueUpdateAttempt::Applied(Box::new((
-                    result.tree,
-                    *stats,
-                ))));
-            }
-            super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len()) {
+            let batched_mutations = mutations
                 .into_iter()
-                .map(mutation_parts)
-                .collect::<Vec<_>>(),
+                .map(|(key, value)| Mutation::Upsert {
+                    key,
+                    val: value.expect("direct value path rejects deletes before routing"),
+                })
+                .collect::<Vec<_>>();
+            let metrics_before = manager.metrics();
+            match super::batch::try_apply_batched_value_updates(manager, tree, batched_mutations)? {
+                super::batch::KeyStableBatchAttempt::Applied(result) => {
+                    let metrics_after = manager.metrics();
+                    stats.nodes_read += metrics_after
+                        .nodes_read
+                        .saturating_sub(metrics_before.nodes_read);
+                    if measure_read_bytes {
+                        stats.bytes_read += metrics_after
+                            .bytes_read
+                            .saturating_sub(metrics_before.bytes_read);
+                    }
+                    stats.nodes_written += result.written_nodes as u64;
+                    stats.bytes_written += result.written_bytes as u64;
+                    stats.entries_streamed += result.entries_streamed as u64;
+                    stats.resync_distance_entries = result.entries_streamed as u64;
+                    stats.resync_distance_nodes = result.affected_leaves as u64;
+                    stats.used_key_stable_fast_path = true;
+                    stats.used_batched_value_update_path = true;
+                    return Ok(DirectValueUpdateAttempt::Applied(Box::new((
+                        result.tree,
+                        *stats,
+                    ))));
+                }
+                super::batch::KeyStableBatchAttempt::Fallback(mutations) => mutations
+                    .into_iter()
+                    .map(mutation_parts)
+                    .collect::<Vec<_>>(),
+            }
+        } else {
+            mutations
         };
 
     let mut leaves = Vec::new();

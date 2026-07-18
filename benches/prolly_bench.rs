@@ -3,8 +3,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prolly::{
-    append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryRule, Config,
-    MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly, Resolution, Resolver, Store, Tree,
+    append_batch, chunking, BatchBuilder, BatchWriter, BatchWriterConfig, BoundaryDetector,
+    BoundaryRule, ChunkingSpec, Config, MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly,
+    Resolution, Resolver, SortedBatchBuilder, Store, Tree,
 };
 
 const DEFAULT_SCALE: usize = 10_000;
@@ -17,7 +18,7 @@ fn main() {
         .max(1_000);
 
     println!("prolly benchmark scale={scale}");
-    println!("name,total_ms,iterations,items,ns_per_item");
+    println!("name,total_ms,iterations,items,ns_per_item,median_ns,p95_ns,p99_ns");
 
     match std::env::var("PROLLY_BENCH_ONLY").as_deref() {
         Ok("batch-builder") => {
@@ -53,6 +54,14 @@ fn main() {
             bench_range_scan_window(scale);
             return;
         }
+        Ok("chunking-cutover") => {
+            bench_chunking_cutover(scale);
+            return;
+        }
+        Ok("boundary-hot-path") => {
+            bench_boundary_hot_path();
+            return;
+        }
         Ok(_) | Err(_) => {}
     }
 
@@ -82,6 +91,129 @@ fn main() {
     bench_range_diff_window(scale);
     bench_merge_sparse(scale);
     bench_merge_conflict_resolved(scale);
+}
+
+fn bench_boundary_hot_path() {
+    let entries = std::env::var("PROLLY_BOUNDARY_ENTRIES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(2_000_000)
+        .max(10_000);
+    measure_boundary_detector(
+        "boundary_entry_count_key_hash",
+        chunking::entry_count_key_hash(),
+        entries,
+    );
+    measure_boundary_detector(
+        "boundary_logical_bytes_key_weibull",
+        chunking::logical_bytes_key_weibull(),
+        entries,
+    );
+    measure_boundary_detector(
+        "boundary_logical_bytes_rolling_hash",
+        chunking::logical_bytes_rolling_hash(),
+        entries,
+    );
+}
+
+fn measure_boundary_detector(name: &str, spec: ChunkingSpec, entries: usize) {
+    measure(name, 5, entries, || {
+        let mut detector =
+            BoundaryDetector::new(spec.clone(), 0).expect("built-in policy is valid");
+        let value = [11_u8; 16];
+        let mut boundaries = 0usize;
+        for index in 0..entries {
+            let key = (index as u64).to_be_bytes();
+            boundaries += usize::from(
+                detector
+                    .observe(black_box(&key), black_box(&value), 24)
+                    .expect("fixed entry is valid"),
+            );
+        }
+        black_box(boundaries);
+    });
+}
+
+fn bench_chunking_cutover(items: usize) {
+    let data = data_set(items);
+    let config = bench_config();
+
+    measure("cutover_sorted_build", 20, items, || {
+        let store = Arc::new(MemStore::new());
+        let mut builder = SortedBatchBuilder::new(store, config.clone());
+        for (key, value) in &data {
+            builder.add(key.clone(), value.clone()).unwrap();
+        }
+        black_box(builder.build().unwrap().root);
+    });
+
+    measure("cutover_unsorted_build", 20, items, || {
+        let store = Arc::new(MemStore::new());
+        let mut builder = BatchBuilder::new(store, config.clone());
+        for (key, value) in data.iter().rev() {
+            builder.add(key.clone(), value.clone());
+        }
+        black_box(builder.build().unwrap().root);
+    });
+
+    let store = Arc::new(MemStore::new());
+    let base = build_tree_on_store(store.clone(), &config, &data);
+    let manager = Prolly::new(store, config);
+    for append_count in [1, 64, 4_096] {
+        let mutations = append_mutations(items, append_count, "cutover-append");
+        measure(
+            &format!("cutover_append_{append_count}"),
+            20,
+            append_count,
+            || {
+                black_box(
+                    manager
+                        .append_batch(&base, black_box(mutations.clone()))
+                        .unwrap()
+                        .root,
+                );
+            },
+        );
+    }
+
+    let middle = items / 2;
+    let update = vec![Mutation::Upsert {
+        key: key_for_index(middle),
+        val: b"cutover-middle-update".to_vec(),
+    }];
+    measure("cutover_middle_update", 20, 1, || {
+        black_box(
+            manager
+                .batch(&base, black_box(update.clone()))
+                .unwrap()
+                .root,
+        );
+    });
+
+    let insert = vec![Mutation::Upsert {
+        key: format!("key-{middle:08}-insert").into_bytes(),
+        val: b"cutover-middle-insert".to_vec(),
+    }];
+    measure("cutover_middle_insert", 20, 1, || {
+        black_box(
+            manager
+                .batch(&base, black_box(insert.clone()))
+                .unwrap()
+                .root,
+        );
+    });
+
+    let delete = vec![Mutation::Delete {
+        key: key_for_index(middle),
+    }];
+    measure("cutover_middle_delete", 20, 1, || {
+        black_box(
+            manager
+                .batch(&base, black_box(delete.clone()))
+                .unwrap()
+                .root,
+        );
+    });
 }
 
 fn bench_incremental_insert(items: usize) {
@@ -603,19 +735,31 @@ where
     f();
 
     let mut total = Duration::ZERO;
+    let mut samples = Vec::with_capacity(iterations);
     for _ in 0..iterations {
         let start = Instant::now();
         f();
-        total += start.elapsed();
+        let elapsed = start.elapsed();
+        total += elapsed;
+        samples.push(elapsed.as_nanos() / items.max(1) as u128);
     }
+
+    samples.sort_unstable();
+    let percentile = |percent: usize| {
+        let rank = (percent * samples.len()).div_ceil(100).max(1);
+        samples[rank - 1]
+    };
 
     let total_ns = total.as_nanos();
     let total_items = iterations as u128 * items as u128;
     let ns_per_item = total_ns.checked_div(total_items).unwrap_or_default();
 
     println!(
-        "{name},{:.3},{iterations},{items},{ns_per_item}",
-        total.as_secs_f64() * 1_000.0
+        "{name},{:.3},{iterations},{items},{ns_per_item},{},{},{}",
+        total.as_secs_f64() * 1_000.0,
+        percentile(50),
+        percentile(95),
+        percentile(99)
     );
 }
 

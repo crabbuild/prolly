@@ -441,12 +441,11 @@ The implementation is organized into focused modules:
 - **`batch.rs`**: Batch mutation operations
 - **`diff.rs`**: Tree diff and merge operations
 - **`range.rs`**: Range iteration
-- **`rebalance.rs`**: Tree rebalancing logic
 - **`cursor.rs`**: Cursor-based navigation
 - **`crdt.rs`**: CRDT merge semantics
-- **`parallel.rs`**: Parallel batch processing
+- **`parallel.rs`**: Parallel adapters over canonical batch processing
 - **`streaming.rs`**: Streaming diff operations
-- **`builder.rs`**: Parallel tree construction
+- **`builder.rs`**: Parallel construction and canonical streaming emitters
 - **`utils.rs`**: Shared utility functions
 - **`store/`**: Storage backend implementations
 

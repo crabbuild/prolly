@@ -17,6 +17,27 @@ fn cuts(mut detector: BoundaryDetector, values: &[&[u8]]) -> Vec<usize> {
     result
 }
 
+fn report_distribution(name: &str, spec: &ChunkingSpec, chunk_sizes: &[u64]) {
+    let mut sorted = chunk_sizes.to_vec();
+    sorted.sort_unstable();
+    let percentile = |percent: usize| {
+        let rank = (percent * sorted.len()).div_ceil(100).max(1);
+        sorted[rank - 1]
+    };
+    let mean = sorted.iter().sum::<u64>() / sorted.len() as u64;
+    let forced = sorted.iter().filter(|&&size| size >= spec.max).count();
+    eprintln!(
+        "distribution,name={name},chunks={},mean={mean},median={},p90={},p99={},max={},forced={},forced_ppm={}",
+        sorted.len(),
+        percentile(50),
+        percentile(90),
+        percentile(99),
+        sorted.last().copied().unwrap_or_default(),
+        forced,
+        forced * 1_000_000 / sorted.len(),
+    );
+}
+
 #[test]
 fn built_in_presets_validate() {
     for spec in [
@@ -117,4 +138,76 @@ fn one_entry_larger_than_the_hard_byte_cap_is_rejected() {
         detector.observe(b"key", b"value", 9),
         Err(Error::EntryTooLarge { .. })
     ));
+}
+
+#[test]
+fn rolling_logical_bytes_tracks_target_distribution() {
+    let spec = chunking::logical_bytes_rolling_hash();
+    let mut detector = BoundaryDetector::new(spec.clone(), 0).unwrap();
+    let value = [b'v'; 32];
+    let mut current_bytes = 0_u64;
+    let mut chunk_sizes = Vec::new();
+
+    for index in 0..250_000_u64 {
+        let key = format!("{index:012}");
+        let logical_bytes = (key.len() + value.len()) as u64;
+        current_bytes += logical_bytes;
+        if detector
+            .observe(key.as_bytes(), &value, logical_bytes as usize)
+            .unwrap()
+        {
+            chunk_sizes.push(current_bytes);
+            current_bytes = 0;
+        }
+    }
+
+    assert!(!chunk_sizes.is_empty());
+    let mean = chunk_sizes.iter().sum::<u64>() / chunk_sizes.len() as u64;
+    let forced_max_chunks = chunk_sizes
+        .iter()
+        .filter(|&&chunk_bytes| chunk_bytes >= spec.max)
+        .count();
+    report_distribution("rolling", &spec, &chunk_sizes);
+
+    assert!(
+        mean.abs_diff(spec.target) <= spec.target / 10,
+        "mean={mean}, target={}",
+        spec.target
+    );
+    assert!(
+        forced_max_chunks * 100 < chunk_sizes.len(),
+        "forced={forced_max_chunks}, chunks={}",
+        chunk_sizes.len()
+    );
+}
+
+#[test]
+fn weibull_logical_bytes_tracks_target_distribution() {
+    let spec = chunking::logical_bytes_key_weibull();
+    let mut detector = BoundaryDetector::new(spec.clone(), 0).unwrap();
+    let value = [b'v'; 32];
+    let mut current_bytes = 0_u64;
+    let mut chunk_sizes = Vec::new();
+
+    for index in 0..250_000_u64 {
+        let key = format!("{index:012}");
+        let logical_bytes = (key.len() + value.len()) as u64;
+        current_bytes += logical_bytes;
+        if detector
+            .observe(key.as_bytes(), &value, logical_bytes as usize)
+            .unwrap()
+        {
+            chunk_sizes.push(current_bytes);
+            current_bytes = 0;
+        }
+    }
+
+    assert!(!chunk_sizes.is_empty());
+    let mean = chunk_sizes.iter().sum::<u64>() / chunk_sizes.len() as u64;
+    report_distribution("weibull", &spec, &chunk_sizes);
+    assert!(
+        mean.abs_diff(spec.target) <= spec.target / 10,
+        "mean={mean}, target={}",
+        spec.target
+    );
 }

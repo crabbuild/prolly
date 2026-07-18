@@ -1,4 +1,8 @@
-use prolly::{BoundaryInput, Error, Node, NodeLayoutSpec, TreeFormat};
+use prolly::{
+    chunking, BatchBuilder, BoundaryInput, Config, Error, MemStore, Node, NodeLayoutSpec,
+    SortedBatchBuilder, Store, Tree, TreeFormat,
+};
+use std::sync::Arc;
 
 fn key_only_format(layout: NodeLayoutSpec) -> TreeFormat {
     let mut format = TreeFormat::default();
@@ -60,4 +64,69 @@ fn leaf_nodes_reject_child_counts() {
     node.child_counts.push(2);
 
     assert!(matches!(node.validate(), Err(Error::InvalidNode)));
+}
+
+fn assert_reachable_nodes_fit(store: &Arc<MemStore>, tree: &Tree, hard_cap: usize) {
+    let mut pending = tree.root.iter().cloned().collect::<Vec<_>>();
+    while let Some(cid) = pending.pop() {
+        let bytes = store.get(cid.as_bytes()).unwrap().unwrap();
+        assert!(
+            bytes.len() <= hard_cap,
+            "node {cid:?} uses {} bytes above cap {hard_cap}",
+            bytes.len()
+        );
+        let node = Node::from_bytes(&bytes).unwrap();
+        if !node.leaf {
+            pending.extend(node.vals.into_iter().map(|value| {
+                let bytes: [u8; 32] = value.try_into().unwrap();
+                prolly::Cid(bytes)
+            }));
+        }
+    }
+}
+
+#[test]
+fn every_layout_enforces_the_exact_serialized_hard_cap() {
+    for layout in [
+        NodeLayoutSpec::PrefixCompressed,
+        NodeLayoutSpec::Plain,
+        NodeLayoutSpec::OffsetTable,
+    ] {
+        for hard_cap in [192_u64, 255, 512] {
+            let mut policy = chunking::entry_count_key_hash();
+            policy.min = 4;
+            policy.target = 128;
+            policy.max = 16_384;
+            policy.hard_max_node_bytes = hard_cap;
+            let config = Config::builder()
+                .chunking(policy)
+                .node_layout(layout.clone())
+                .build();
+            let entries = (0..600)
+                .map(|index| {
+                    (
+                        format!("shared-prefix-{index:06}").into_bytes(),
+                        vec![index as u8; 17 + index % 37],
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let batch_store = Arc::new(MemStore::new());
+            let mut batch = BatchBuilder::new(batch_store.clone(), config.clone());
+            for (key, value) in entries.iter().rev() {
+                batch.add(key.clone(), value.clone());
+            }
+            let batch_tree = batch.build().unwrap();
+            assert_reachable_nodes_fit(&batch_store, &batch_tree, hard_cap as usize);
+
+            let sorted_store = Arc::new(MemStore::new());
+            let mut sorted = SortedBatchBuilder::new(sorted_store.clone(), config);
+            for (key, value) in &entries {
+                sorted.add(key.clone(), value.clone()).unwrap();
+            }
+            let sorted_tree = sorted.build().unwrap();
+            assert_reachable_nodes_fit(&sorted_store, &sorted_tree, hard_cap as usize);
+            assert_eq!(batch_tree.root, sorted_tree.root);
+        }
+    }
 }

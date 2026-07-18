@@ -32,7 +32,7 @@ Native and async engines also expose `exportSnapshot`/`importSnapshot`, plus
 
 Key helpers include `prefixEnd`, `prefixRange`, numeric key encoders,
 `encodeSegment`, `keyFromSegments`, `keyFromPrefixedSegments`,
-`decodeSegments`, `debugKey`, and Rust boundary checks.
+`decodeSegments` and `debugKey`.
 
 Native codec helpers include versioned-value byte round trips plus schema
 match/require guards, and value-ref stored-byte decode plus inline-escape

@@ -55,14 +55,17 @@ keys, not by an empty value.
 ## Content-Defined Boundaries
 
 Prolly trees use content-defined chunking instead of fixed B-tree split points.
-For the same ordered entries and config, boundary placement is deterministic.
+For the same ordered entries and persisted `ChunkingSpec`, boundary placement
+is deterministic. One stateful `BoundaryDetector` applies the configured
+measure (entry count, logical bytes, or encoded bytes), boundary input (key or
+key/value), level salt, and hash, Weibull, or rolling rule. It does not cut
+below `min`, forces a cut at `max`, and resets only after emitting the current
+chunk.
 
-Boundary rules:
-
-1. Do not split while the current chunk is below `min_chunk_size`.
-2. Force a split when the current chunk reaches `max_chunk_size`.
-3. Otherwise hash `key || value` with xxHash64 and compare against the
-   configured `chunking_factor`.
+The default is entry-count, key-only hashing, so value-only updates preserve
+boundaries. Logical-byte Weibull and rolling policies target byte-sized chunks
+for variable records. Regardless of policy, canonical emitters enforce
+`hard_max_node_bytes` against exact serialized bytes in release builds.
 
 The practical result is stable structural sharing. A small edit usually rewrites
 one leaf and its ancestor path while untouched subtrees keep the same CIDs.
@@ -76,8 +79,8 @@ Single-key mutation follows a path-copying model:
 
 1. Load the root-to-leaf path.
 2. Clone and update the target leaf.
-3. Rebalance, split, merge, or propagate parent changes.
-4. Collect new nodes.
+3. Replay the affected ordered span through the canonical node emitter.
+4. Stream emitted summaries through affected parent levels and collect nodes.
 5. Flush serialized node bytes to the store.
 6. Return a new `Tree` with the new root CID.
 

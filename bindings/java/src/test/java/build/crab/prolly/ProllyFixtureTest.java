@@ -42,17 +42,7 @@ class ProllyFixtureTest {
     }
 
     @Test
-    void boundaryAndKeyFixturesMatchRust() throws Exception {
-        for (JsonNode fixture : fixtures.get("boundary_fixtures")) {
-            assertEquals(
-                    fixture.get("is_boundary").asBoolean(),
-                    Prolly.isBoundaryConfig(
-                            configFromFixture(fixture.get("config")),
-                            fixture.get("count").asLong(),
-                            hex(fixture.get("key").asText()),
-                            hex(fixture.get("value").asText())));
-        }
-
+    void keyFixturesMatchRust() throws Exception {
         for (JsonNode fixture : fixtures.get("key_fixtures").get("prefix_end")) {
             JsonNode expected = fixture.get("end");
             byte[] prefix = hex(fixture.get("prefix").asText());

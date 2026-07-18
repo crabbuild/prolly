@@ -13,7 +13,7 @@ The generated API includes:
 - named-root manifest metadata and retained named-root GC;
 - portable proof bundles, HMAC proof envelopes, and one-shot verification;
 - parallel batch, batch stats, append batch, and mutation constructors;
-- key encoders, boundary checks, config constructors, value refs, and blob refs;
+- key encoders, config constructors, value refs, and blob refs;
 - snapshot bundles, performance hints, typed stats/debug records, and merge/CRDT helpers.
 
 Merge explanations expose a typed trace event list while retaining the JSON

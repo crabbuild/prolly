@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prolly::{
-    Config, Diff, MemStore, Mutation, Prolly, ProllyMetricsSnapshot, SortedBatchBuilder, Tree,
-    TreeStats,
+    chunking, Config, Diff, MemStore, Mutation, Prolly, ProllyMetricsSnapshot, SortedBatchBuilder,
+    Tree, TreeStats,
 };
 
 const RANDOM_SEED: u64 = 0x6a09_e667_f3bc_c909;
@@ -20,7 +20,7 @@ fn main() {
         "version,records,workload,operations,total_ns,ns_per_op,validated,nodes_read,nodes_written,bytes_read,bytes_written,num_nodes,num_leaves,num_internal,height,tree_bytes"
     );
 
-    let config = Config::default();
+    let config = scale_config();
     let store = Arc::new(MemStore::new());
     let build_started = Instant::now();
     let mut builder = SortedBatchBuilder::new(store.clone(), config.clone());
@@ -407,4 +407,19 @@ fn env_usize(name: &str, default: usize) -> usize {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(default)
+}
+
+fn scale_config() -> Config {
+    let policy = std::env::var("SCALE_POLICY").unwrap_or_else(|_| "entry-count-key".to_string());
+    let chunking = match policy.as_str() {
+        "entry-count-key" => chunking::entry_count_key_hash(),
+        "entry-count-key-value" => chunking::entry_count_key_value_hash(),
+        "logical-bytes-weibull" => chunking::logical_bytes_key_weibull(),
+        "logical-bytes-rolling" => chunking::logical_bytes_rolling_hash(),
+        unknown => panic!(
+            "unsupported SCALE_POLICY={unknown}; expected entry-count-key, \
+             entry-count-key-value, logical-bytes-weibull, or logical-bytes-rolling"
+        ),
+    };
+    Config::builder().chunking(chunking).build()
 }

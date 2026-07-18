@@ -148,18 +148,6 @@ test("wasm fixtures decode, build, and query through Rust memory engine", { skip
     assert.equal(toHex(wasm.cidFromBytes(bytes)), fixture.cid);
   }
 
-  for (const fixture of loaded.boundary_fixtures) {
-    assert.equal(
-      wasm.isBoundaryConfigJson(
-        JSON.stringify(fixture.config),
-        fixture.count,
-        fromHex(fixture.key),
-        fromHex(fixture.value),
-      ),
-      fixture.is_boundary,
-    );
-  }
-
   for (const fixture of loaded.key_fixtures.prefix_end) {
     const prefix = fromHex(fixture.prefix);
     assert.equal(toHex(wasm.prefixEnd(prefix)), fixture.end);
