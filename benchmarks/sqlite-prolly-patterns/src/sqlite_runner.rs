@@ -3,14 +3,16 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
 
-use prolly::{Config, Mutation, Prolly, ProllyMetricsSnapshot, SortedBatchBuilder, Tree, TreeStats};
+use prolly::{
+    Config, Mutation, Prolly, ProllyMetricsSnapshot, SortedBatchBuilder, Tree, TreeStats,
+};
 use prolly_store_sqlite::SqliteStore;
 
 use crate::fixture::{directory_bytes, sqlite_file_bytes, FixtureLayout};
 use crate::measurement::{nearest_rank, rate, FixtureRow, RawRow, SCHEMA_VERSION};
 use crate::model::{
-    key, mutation_ids, range_bounds, range_ids, read_ids, value, CacheState, CellSpec,
-    FixtureSpec, Operation,
+    key, mutation_ids, range_bounds, range_ids, read_ids, value, CacheState, CellSpec, FixtureSpec,
+    Operation,
 };
 
 const BASE_ROOT: &[u8] = b"sqlite-pattern-base";
@@ -142,13 +144,7 @@ pub fn run_cell(spec: &CellSpec, layout: &FixtureLayout) -> Result<RawRow, Strin
         )?;
     }
 
-    Ok(make_row(
-        spec,
-        &outcome,
-        &stats,
-        observed_entries,
-        files,
-    ))
+    Ok(make_row(spec, &outcome, &stats, observed_entries, files))
 }
 
 struct Outcome {
@@ -309,8 +305,7 @@ fn validate_tree(
 ) -> Result<(), String> {
     let observed = manager
         .len(tree)
-        .map_err(|error| format!("failed to count tree: {error}"))?
-        as usize;
+        .map_err(|error| format!("failed to count tree: {error}"))? as usize;
     if observed != expected_entries {
         return Err(format!(
             "tree contains {observed} entries, expected {expected_entries}"

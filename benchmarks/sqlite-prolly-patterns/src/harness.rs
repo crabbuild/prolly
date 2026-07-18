@@ -86,11 +86,7 @@ pub fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
     let plan = enumerate_matrix(&config);
     let mut stats = RunStats::default();
     for fixture_key in plan.fixtures {
-        let mut pending = enumerate_cells(
-            &config,
-            fixture_key.records,
-            fixture_key.repetition,
-        );
+        let mut pending = enumerate_cells(&config, fixture_key.records, fixture_key.repetition);
         if fixture_key.repetition % 2 == 0 {
             pending.reverse();
         }
@@ -107,11 +103,8 @@ pub fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
             fixture_key.repetition,
         );
         layout.remove_source()?;
-        let fixture_spec = FixtureSpec::from_config(
-            &config,
-            fixture_key.records,
-            fixture_key.repetition,
-        );
+        let fixture_spec =
+            FixtureSpec::from_config(&config, fixture_key.records, fixture_key.repetition);
         let fixture = match build_fixture(&fixture_spec, &layout) {
             Ok(row) => row,
             Err(error) => {
@@ -152,11 +145,7 @@ pub fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
 
     let summaries = summarize(&raw_rows, config.runs)?;
     write_summary(&config.output.join("summary.csv"), &summaries)?;
-    write_report(
-        &config.output.join("report.md"),
-        &summaries,
-        &fixture_rows,
-    )?;
+    write_report(&config.output.join("report.md"), &summaries, &fixture_rows)?;
     write_status(&config.output, "complete")?;
     Ok(stats)
 }
@@ -297,4 +286,3 @@ fn validate_fixture_rows(config: &RunConfig, rows: &[FixtureRow]) -> Result<(), 
     }
     Ok(())
 }
-

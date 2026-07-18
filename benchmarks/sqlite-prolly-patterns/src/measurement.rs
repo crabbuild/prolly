@@ -168,4 +168,3 @@ where
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("failed to read {}: {error}", path.display()))
 }
-

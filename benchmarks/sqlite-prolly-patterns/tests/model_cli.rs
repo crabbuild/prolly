@@ -1,7 +1,5 @@
 use prolly_sqlite_pattern_bench::cli::parse_args;
-use prolly_sqlite_pattern_bench::model::{
-    change_count, key, mutation_ids, value, Pattern,
-};
+use prolly_sqlite_pattern_bench::model::{change_count, key, mutation_ids, value, Pattern};
 
 #[test]
 fn record_widths_and_samples_are_exact() {

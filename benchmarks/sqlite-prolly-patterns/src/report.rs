@@ -95,11 +95,17 @@ pub fn write_report(
         .map_err(|error| format!("failed to create {}: {error}", path.display()))?;
     writeln!(file, "# SQLite-backed prolly key-pattern benchmark\n")
         .map_err(|error| error.to_string())?;
-    writeln!(file, "All values below are medians of independent repetitions.\n")
-        .map_err(|error| error.to_string())?;
-    writeln!(file, "## Workloads\n") .map_err(|error| error.to_string())?;
-    writeln!(file, "| Records | Operation | Pattern | Cache | Median ns/op | Median ops/s |")
-        .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "All values below are medians of independent repetitions.\n"
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(file, "## Workloads\n").map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "| Records | Operation | Pattern | Cache | Median ns/op | Median ops/s |"
+    )
+    .map_err(|error| error.to_string())?;
     writeln!(file, "|---:|---|---|---|---:|---:|").map_err(|error| error.to_string())?;
     for row in summaries {
         writeln!(
@@ -115,15 +121,28 @@ pub fn write_report(
         .map_err(|error| error.to_string())?;
     }
     writeln!(file, "\n## Fixture context\n").map_err(|error| error.to_string())?;
-    writeln!(file, "Validated fixture rows: {}.\n", fixtures.iter().filter(|row| row.validated).count())
-        .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "Validated fixture rows: {}.\n",
+        fixtures.iter().filter(|row| row.validated).count()
+    )
+    .map_err(|error| error.to_string())?;
     writeln!(file, "## Interpretation limits\n").map_err(|error| error.to_string())?;
-    writeln!(file, "- End-to-end synchronous `Prolly<SqliteStore>` on one local connection.")
-        .map_err(|error| error.to_string())?;
-    writeln!(file, "- SQLite uses WAL and `synchronous=NORMAL`; this is not `FULL` durability.")
-        .map_err(|error| error.to_string())?;
-    writeln!(file, "- Manager cache state is controlled, but the operating-system filesystem cache is not.")
-        .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- End-to-end synchronous `Prolly<SqliteStore>` on one local connection."
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- SQLite uses WAL and `synchronous=NORMAL`; this is not `FULL` durability."
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- Manager cache state is controlled, but the operating-system filesystem cache is not."
+    )
+    .map_err(|error| error.to_string())?;
     writeln!(file, "- Keys are 24 bytes and values are 100 bytes. Results do not predict concurrent writers, remote filesystems, or raw SQLite.")
         .map_err(|error| error.to_string())
 }

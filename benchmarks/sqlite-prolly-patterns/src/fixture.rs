@@ -164,4 +164,3 @@ pub fn sqlite_file_bytes(database: &Path) -> Result<(u64, u64, u64, u64), String
     let shm = length(&PathBuf::from(format!("{}-shm", database.display())))?;
     Ok((db, wal, shm, db.saturating_add(wal).saturating_add(shm)))
 }
-
