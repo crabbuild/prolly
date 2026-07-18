@@ -250,6 +250,7 @@ use super::cursor::Cursor;
 use super::error::Error;
 use super::error::Mutation;
 use super::node::Node;
+use super::parallel::ParallelConfig;
 use super::store::Store;
 use super::tree::Tree;
 
@@ -520,6 +521,14 @@ pub struct BatchApplyStats {
     pub used_bottom_up_rebuild: bool,
     /// Whether newly written nodes were retained in the in-process node cache.
     pub cache_written_nodes: bool,
+    /// Effective scheduling width selected for this canonical write.
+    pub parallel_width: usize,
+    /// Number of independent parallel tasks executed by this write.
+    pub parallel_tasks: usize,
+    /// Number of structural mutation islands planned by this write.
+    pub structural_islands: usize,
+    /// Number of structural mutation islands coalesced before replay.
+    pub coalesced_islands: usize,
 }
 
 /// Result of applying a batch with execution stats.
@@ -529,6 +538,38 @@ pub struct BatchApplyResult {
     pub tree: Tree,
     /// Store-neutral counters describing the batch execution.
     pub stats: BatchApplyStats,
+}
+
+impl BatchApplyResult {
+    fn from_write_stats(
+        tree: Tree,
+        write_stats: super::write::WriteStats,
+        input_sorted: bool,
+    ) -> Self {
+        Self {
+            tree,
+            stats: BatchApplyStats {
+                input_mutations: write_stats.input_mutations as usize,
+                effective_mutations: write_stats.effective_mutations as usize,
+                preprocess_input_sorted: input_sorted,
+                affected_leaves: write_stats.resync_distance_nodes as usize,
+                changed_leaves: write_stats.nodes_written as usize,
+                sparse_leaf_applies: 0,
+                written_nodes: write_stats.nodes_written as usize,
+                written_bytes: write_stats.bytes_written as usize,
+                used_append_fast_path: false,
+                used_batched_route: write_stats.used_batched_value_update_path,
+                used_coalesced_rebuild: true,
+                used_deferred_rebalancing: false,
+                used_bottom_up_rebuild: false,
+                cache_written_nodes: false,
+                parallel_width: write_stats.parallel_width as usize,
+                parallel_tasks: write_stats.parallel_tasks as usize,
+                structural_islands: write_stats.structural_islands as usize,
+                coalesced_islands: write_stats.coalesced_islands as usize,
+            },
+        }
+    }
 }
 
 pub(crate) struct KeyStableBatchResult {
@@ -2239,25 +2280,28 @@ pub(crate) fn apply_with_stats<S: Store>(
         .windows(2)
         .all(|pair| pair[0].key() <= pair[1].key());
     let (tree, write_stats) = super::write::apply(prolly, tree, mutations)?;
-    Ok(BatchApplyResult {
+    Ok(BatchApplyResult::from_write_stats(
         tree,
-        stats: BatchApplyStats {
-            input_mutations: write_stats.input_mutations as usize,
-            effective_mutations: write_stats.effective_mutations as usize,
-            preprocess_input_sorted: input_sorted,
-            affected_leaves: write_stats.resync_distance_nodes as usize,
-            changed_leaves: write_stats.nodes_written as usize,
-            sparse_leaf_applies: 0,
-            written_nodes: write_stats.nodes_written as usize,
-            written_bytes: write_stats.bytes_written as usize,
-            used_append_fast_path: false,
-            used_batched_route: write_stats.used_batched_value_update_path,
-            used_coalesced_rebuild: true,
-            used_deferred_rebalancing: false,
-            used_bottom_up_rebuild: false,
-            cache_written_nodes: false,
-        },
-    })
+        write_stats,
+        input_sorted,
+    ))
+}
+
+pub(crate) fn apply_with_stats_configured<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<BatchApplyResult, Error> {
+    let input_sorted = mutations
+        .windows(2)
+        .all(|pair| pair[0].key() <= pair[1].key());
+    let (tree, write_stats) = super::write::apply_configured(prolly, tree, mutations, config)?;
+    Ok(BatchApplyResult::from_write_stats(
+        tree,
+        write_stats,
+        input_sorted,
+    ))
 }
 
 const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;

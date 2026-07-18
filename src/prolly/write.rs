@@ -8,6 +8,7 @@ use super::cid::Cid;
 use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
 use super::node::Node;
+use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
 use super::{Prolly, Tree};
 
@@ -28,6 +29,10 @@ pub struct WriteStats {
     pub resync_distance_nodes: u64,
     pub used_key_stable_fast_path: bool,
     pub used_batched_value_update_path: bool,
+    pub parallel_width: u64,
+    pub parallel_tasks: u64,
+    pub structural_islands: u64,
+    pub coalesced_islands: u64,
 }
 
 pub(crate) struct EmittedLeaf {
@@ -93,7 +98,16 @@ pub(crate) fn apply<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<(Tree, WriteStats), Error> {
-    apply_impl(manager, tree, mutations, true)
+    apply_impl(manager, tree, mutations, true, None)
+}
+
+pub(crate) fn apply_configured<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<(Tree, WriteStats), Error> {
+    apply_impl(manager, tree, mutations, true, Some(config))
 }
 
 pub(crate) fn apply_tree<S: Store>(
@@ -101,7 +115,16 @@ pub(crate) fn apply_tree<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    Ok(apply_impl(manager, tree, mutations, false)?.0)
+    Ok(apply_impl(manager, tree, mutations, false, None)?.0)
+}
+
+pub(crate) fn apply_tree_configured<S: Store>(
+    manager: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    config: &ParallelConfig,
+) -> Result<Tree, Error> {
+    Ok(apply_impl(manager, tree, mutations, false, Some(config))?.0)
 }
 
 fn apply_impl<S: Store>(
@@ -109,6 +132,7 @@ fn apply_impl<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
     measure_read_bytes: bool,
+    parallel_config: Option<&ParallelConfig>,
 ) -> Result<(Tree, WriteStats), Error> {
     let mut stats = WriteStats {
         input_mutations: mutations.len() as u64,
@@ -129,6 +153,11 @@ fn apply_impl<S: Store>(
 
     let mut mutations = normalize(mutations);
     stats.effective_mutations = mutations.len() as u64;
+    let policy = parallel_config.map_or_else(
+        || ExecutionPolicy::automatic(mutations.len(), mutations.len()),
+        |config| ExecutionPolicy::from_config(config, mutations.len(), mutations.len()),
+    );
+    stats.parallel_width = policy.width() as u64;
     if tree.root.is_none() {
         return build_empty_base(manager, tree, mutations, stats);
     }
@@ -141,11 +170,17 @@ fn apply_impl<S: Store>(
     )? {
         return Ok(result);
     }
-    mutations =
-        match try_direct_value_updates(manager, tree, mutations, &mut stats, measure_read_bytes)? {
-            DirectValueUpdateAttempt::Applied(result) => return Ok(*result),
-            DirectValueUpdateAttempt::Fallback(mutations) => mutations,
-        };
+    mutations = match try_direct_value_updates(
+        manager,
+        tree,
+        mutations,
+        &mut stats,
+        measure_read_bytes,
+        policy,
+    )? {
+        DirectValueUpdateAttempt::Applied(result) => return Ok(*result),
+        DirectValueUpdateAttempt::Fallback(mutations) => mutations,
+    };
     if let Some(result) =
         try_direct_single_delete(manager, tree, &mutations, &mut stats, measure_read_bytes)?
     {
@@ -820,6 +855,7 @@ fn try_direct_value_updates<S: Store>(
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     stats: &mut WriteStats,
     measure_read_bytes: bool,
+    _policy: ExecutionPolicy,
 ) -> Result<DirectValueUpdateAttempt, Error> {
     let chunking = &tree.config.format.chunking;
     if chunking.measure != ChunkMeasure::EntryCount
