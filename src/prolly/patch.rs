@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::cid::Cid;
-use super::error::{Diff, Error, Mutation};
+use super::error::{Error, Mutation};
 use super::store::Store;
 use super::{Prolly, Tree};
 
@@ -49,6 +49,28 @@ pub struct StructuralPatch {
 
 impl StructuralPatch {
     pub fn validate(&self) -> Result<(), Error> {
+        if let [StructuralEdit::Subtree {
+            start_exclusive: None,
+            end_inclusive,
+            level,
+            cid,
+            logical_count,
+        }] = self.edits.as_slice()
+        {
+            if end_inclusive.is_empty() {
+                let valid_root = match cid {
+                    Some(_) => *logical_count == 0 && *level == 0,
+                    None => *logical_count == 0 && *level == 0,
+                };
+                if !valid_root {
+                    return Err(Error::InvalidStructuralPatch(
+                        "invalid root subtree replacement".to_string(),
+                    ));
+                }
+                return Ok(());
+            }
+        }
+
         let mut previous_end: Option<&[u8]> = None;
         for edit in &self.edits {
             let (start, end) = match edit {
@@ -94,30 +116,39 @@ impl StructuralPatch {
 }
 
 impl<S: Store> Prolly<S> {
-    /// Produce a portable format-bound patch from the existing structural diff.
+    /// Produce a format-bound patch that reuses the target's content-addressed
+    /// root subtree.
+    ///
+    /// The referenced target subtree must already exist in the destination
+    /// store before application. Snapshot synchronization can transfer missing
+    /// nodes independently, while same-store version operations only need this
+    /// compact root envelope.
     pub fn diff_patch(&self, base: &Tree, target: &Tree) -> Result<StructuralPatch, Error> {
-        let edits = self
-            .diff(base, target)?
-            .into_iter()
-            .map(|diff| match diff {
-                Diff::Added { key, val } => StructuralEdit::Point(LogicalPatch::Upsert {
-                    key,
-                    old: None,
-                    new: val,
-                }),
-                Diff::Removed { key, val } => {
-                    StructuralEdit::Point(LogicalPatch::Delete { key, old: val })
-                }
-                Diff::Changed { key, old, new } => StructuralEdit::Point(LogicalPatch::Upsert {
-                    key,
-                    old: Some(old),
-                    new,
-                }),
-            })
-            .collect();
+        if base.config.format != target.config.format {
+            return Err(Error::PatchBaseMismatch);
+        }
+        let edits = if base.root == target.root {
+            Vec::new()
+        } else if let Some(cid) = &target.root {
+            vec![StructuralEdit::Subtree {
+                start_exclusive: None,
+                end_inclusive: Vec::new(),
+                level: 0,
+                cid: Some(cid.clone()),
+                logical_count: 0,
+            }]
+        } else {
+            vec![StructuralEdit::Subtree {
+                start_exclusive: None,
+                end_inclusive: Vec::new(),
+                level: 0,
+                cid: None,
+                logical_count: 0,
+            }]
+        };
         Ok(StructuralPatch {
             base_root: base.root.clone(),
-            format_digest: base.config.format.digest()?,
+            format_digest: self.format_digest()?,
             edits,
         })
     }
@@ -125,11 +156,57 @@ impl<S: Store> Prolly<S> {
     /// Validate and apply a patch through the canonical writer.
     pub fn apply_patch(&self, base: &Tree, patch: &StructuralPatch) -> Result<Tree, Error> {
         patch.validate()?;
-        if patch.base_root != base.root || patch.format_digest != base.config.format.digest()? {
+        if patch.base_root != base.root || patch.format_digest != self.format_digest()? {
             return Err(Error::PatchBaseMismatch);
         }
+
+        if patch.edits.is_empty() {
+            return Ok(base.clone());
+        }
+        if let [StructuralEdit::Subtree {
+            start_exclusive: None,
+            end_inclusive,
+            level: _,
+            cid,
+            logical_count,
+        }] = patch.edits.as_slice()
+        {
+            if end_inclusive.is_empty() {
+                let target = Tree {
+                    root: cid.clone(),
+                    config: base.config.clone(),
+                };
+                match cid {
+                    Some(cid) => {
+                        let _ = self.load_arc(cid)?;
+                    }
+                    None if *logical_count == 0 => {}
+                    None => {
+                        return Err(Error::InvalidStructuralPatch(
+                            "empty root subtree metadata is inconsistent".to_string(),
+                        ));
+                    }
+                }
+                return Ok(target);
+            }
+        }
+
+        let keys = patch
+            .edits
+            .iter()
+            .filter_map(|edit| match edit {
+                StructuralEdit::Point(point) => Some(point.key()),
+                StructuralEdit::Subtree { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        if keys.len() != patch.edits.len() {
+            return Err(Error::InvalidStructuralPatch(
+                "partial subtree replacement requires an imported subtree plan".to_string(),
+            ));
+        }
+        let existing = self.get_many(base, &keys)?;
         let mut mutations = Vec::with_capacity(patch.edits.len());
-        for edit in &patch.edits {
+        for (edit, existing) in patch.edits.iter().zip(existing) {
             let point = match edit {
                 StructuralEdit::Point(point) => point,
                 StructuralEdit::Subtree { .. } => {
@@ -140,7 +217,7 @@ impl<S: Store> Prolly<S> {
             };
             match point {
                 LogicalPatch::Upsert { key, old, new } => {
-                    if self.get(base, key)? != *old {
+                    if existing != *old {
                         return Err(Error::PatchBaseMismatch);
                     }
                     mutations.push(Mutation::Upsert {
@@ -149,7 +226,7 @@ impl<S: Store> Prolly<S> {
                     });
                 }
                 LogicalPatch::Delete { key, old } => {
-                    if self.get(base, key)?.as_ref() != Some(old) {
+                    if existing.as_ref() != Some(old) {
                         return Err(Error::PatchBaseMismatch);
                     }
                     mutations.push(Mutation::Delete { key: key.clone() });

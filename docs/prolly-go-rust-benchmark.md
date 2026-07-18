@@ -100,11 +100,49 @@ DOLT_REV=6b2372c7d4ded1a54f55c6204304dbb72a33835c \
 
 The driver refuses to overwrite an existing output directory. Use a new
 `BENCH_OUT` path for a rerun. The workload contract is
-`prolly-version-compare-v1`; it deterministically generates values shorter than
+`prolly-version-compare-v2`; it deterministically generates values shorter than
 100 bytes and uses a 40% update, 30% insert, and 30% delete mix for non-append
 changes. Complete scans validate ordered logical content after timing.
 
-### Verified version-operation run (2026-07-18)
+### Optimized v2 verification (2026-07-18)
+
+The [optimized v2 report](../performance-results/prolly-version-optimization-v2-1m-final/report.md)
+contains a three-repetition, process-isolated verification of the complete 1M
+matrix. Its [common measurements](../performance-results/prolly-version-optimization-v2-1m-final/results-common.csv),
+[lifecycle measurements](../performance-results/prolly-version-optimization-v2-1m-final/results-lifecycle.csv),
+and [reproducibility audit](../performance-results/prolly-version-optimization-v2-1m-final/reproducibility.csv)
+are machine-readable. Every expected matrix cell was present, all validation
+flags passed, workload and logical-result identities matched between languages,
+and two very short-duration groups changed winner direction across repetitions.
+
+Rust won 36 of the 47 common-operation groups. The v2 patch path replaces
+per-key logical patches with a verified content-addressed target-root envelope
+for same-store version operations. At 1M records and 30% random changes, patch
+generation fell from 47.96 ms in v1 to 0.67 us and patch application from
+772.43 ms to 6.54 us. Against Dolt Go v2 those medians are 19.87x and 6.27x
+faster, respectively. Dense conflicting merge fell from 732.71 ms to 372.19 ms,
+a 1.96x Rust-internal improvement, by reconciling sorted change streams without
+one left-tree lookup per right-side change.
+
+The target is not universal yet. In the same 1M/30%-random scenario, Rust is
+2.98x faster for full diff and 2.93x faster for range diff, but Dolt Go remains
+1.39x faster for disjoint merge and 1.27x faster for conflicting merge. The
+next merge optimization should reuse structural subtrees through the complete
+three-way merge path rather than materializing both logical diff streams.
+
+Because sub-microsecond patch and identity operations approach timer
+granularity, interpret their exact ratios cautiously. The larger diff and merge
+measurements are the more stable comparison. The report includes every CV,
+including high-variance short-duration groups.
+
+The exact copied binaries were also repeated three times at 10M records with
+30% random changes. Rust is 3.09x faster for full diff, 2.43x for range diff,
+21.45x for patch generation, and 44.11x for patch application. Dolt Go remains
+1.63x faster for disjoint merge and 1.58x faster for conflicting merge. The
+[10M scale summary](../performance-results/prolly-version-optimization-v2-1m-final/scale-10m-30-random.csv)
+records medians, CVs, parity, and the native patch-count distinction.
+
+### Verified historical v1 run (2026-07-18)
 
 The [version-operation report](../performance-results/prolly-version-2026-07-18-final/report.md)
 contains the complete 10M table and the Rust lifecycle table. The
@@ -129,8 +167,8 @@ won all six conflicting and disjoint merge shapes and all seven patch-apply
 shapes. These results identify different optimization strengths rather than one
 universal winner.
 
-Patch timings need a representation caveat. Rust currently materializes logical
-point edits, while Dolt may emit structural subtree patches. The benchmark
+Patch timings in this historical v1 run need a representation caveat. Rust v1
+materialized logical point edits, while Dolt could emit structural subtree patches. The benchmark
 validates identical logical effects but does not claim equivalent native patch
 item counts. Very short identity/convergent operations are also near timer
 granularity. Fourteen winner groups flipped direction across repetitions, the

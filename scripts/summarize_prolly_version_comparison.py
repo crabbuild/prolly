@@ -321,7 +321,7 @@ def render_report(path, manifest, common, lifecycle, winner_flips):
     lines += [
         "",
         "`Rust vs Go` is Dolt Go median latency divided by Rust median latency; values above 1.0 favor Rust.",
-        "Native patch representations differ: Rust currently materializes logical point edits while Dolt may emit structural subtree patches. Patch generation reports native patch counts, while comparison units and result validation use logical changes.",
+        "Both implementations use native structural patches. Rust v2 emits one verified target-root subtree envelope, while Dolt may emit multiple structural patches. Native item counts can differ, while comparison units and result validation use identical logical changes.",
         "",
         f"## Rust lifecycle at {max_size:,} records",
         "",

@@ -126,7 +126,7 @@ DOLT_BINARY_HASH=$(sha256_file "$OUT/bin/dolt-go-prolly-version-compare")
     printf 'sizes=%s\n' "$SIZES"
     printf 'runs=%s\n' "$RUNS"
     printf 'worker_threads=1\n'
-    printf 'contract_version=prolly-version-compare-v1\n'
+    printf 'contract_version=prolly-version-compare-v2\n'
     printf 'densities=0 1 30\n'
     printf 'localities=append random clustered\n'
     printf 'history_depth=100\n'
@@ -174,7 +174,7 @@ if [row.get("operation") for row in rows] != expected_operations:
 for row in rows:
     if row.get("implementation") != implementation:
         raise SystemExit("implementation mismatch")
-    if row.get("contract_version") != "prolly-version-compare-v1":
+    if row.get("contract_version") != "prolly-version-compare-v2":
         raise SystemExit("contract version mismatch")
     if row.get("validated") != "true":
         raise SystemExit("runner emitted an unvalidated row")

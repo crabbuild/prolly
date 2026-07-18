@@ -4911,6 +4911,18 @@ pub fn merge_trees_borrowed<S: Store>(
         return Ok(left.clone());
     }
 
+    // In-memory and native multi-get stores can compare the two already-sorted
+    // structural change streams more cheaply than performing one left-tree
+    // lookup per right-side change or speculatively walking the same changed
+    // spans through the structural merge. This is especially important for
+    // dense conflicts that resolve back to the existing left root: no mutation
+    // or rewrite is needed after the streams have been reconciled.
+    if resolver.is_some() && prolly.store().prefers_batch_reads() {
+        let left_diff = compute_diff(prolly, base, left)?;
+        let right_diff = compute_diff(prolly, base, right)?;
+        return merge_trees_with_borrowed_diffs(prolly, left, &left_diff, &right_diff, resolver);
+    }
+
     let mut recorder = MergeTraceRecorder::disabled();
     if let Some(merged) = try_structural_merge_traced(
         prolly,
@@ -4924,6 +4936,60 @@ pub fn merge_trees_borrowed<S: Store>(
     }
 
     merge_borrowed_diff_range(prolly, base, left, right, &[], None, resolver)
+}
+
+fn merge_trees_with_borrowed_diffs<S: Store>(
+    prolly: &Prolly<S>,
+    left: &Tree,
+    left_diff: &[Diff],
+    right_diff: &[Diff],
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error> {
+    let left_changes = build_merge_change_refs(left_diff);
+    let right_changes = build_merge_change_refs(right_diff);
+    let mut left_index = 0usize;
+    let mut mutations = Vec::new();
+    let mut recorder = MergeTraceRecorder::disabled();
+
+    for right_change in right_changes {
+        while left_index < left_changes.len() && left_changes[left_index].key < right_change.key {
+            left_index += 1;
+        }
+        let left_change = left_changes
+            .get(left_index)
+            .filter(|change| change.key == right_change.key);
+        let left_value = left_change.map_or(right_change.base, |change| change.value);
+
+        if left_value == right_change.base {
+            push_change_mutation(&mut mutations, right_change.key, right_change.value);
+            continue;
+        }
+        if left_value == right_change.value {
+            continue;
+        }
+
+        let selected = resolve_conflict(
+            resolver.map(MergeResolverRef::Borrowed),
+            ConflictRef {
+                key: right_change.key,
+                base: right_change.base,
+                left: left_value,
+                right: right_change.value,
+            },
+            MergeTraceStage::Batch,
+            &mut recorder,
+        )
+        .map_err(Error::Conflict)?;
+        if selected.as_deref() != left_value {
+            push_change_mutation(&mut mutations, right_change.key, selected.as_deref());
+        }
+    }
+
+    if mutations.is_empty() {
+        Ok(left.clone())
+    } else {
+        prolly.batch(left, mutations)
+    }
 }
 
 /// Merge right-side changes in `[start, end)` using a borrowed resolver.

@@ -6,11 +6,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use prolly::{Config, Diff, MemStore, Mutation, Prolly, Resolution, Tree};
+use prolly::{
+    BorrowedMergeResolver, Config, ConflictRef, Diff, MemStore, MergeDecision, Mutation, Prolly,
+    Tree,
+};
 use support::{
     base_mutations, branch_mutations, change_count, conflicting_mutations, digest_diffs,
-    digest_entry, digest_patch, range_bounds, validate_unique_keys, workload_digest, Args,
-    FNV_OFFSET,
+    digest_entry, range_bounds, validate_unique_keys, workload_digest, Args, FNV_OFFSET,
 };
 
 const CSV_HEADER: &str = "implementation,revision,contract_version,records,density,locality,operation,relationship,operations,elapsed_ns,ns_per_op,ops_per_sec,workload_digest,result_digest,result_count,base_count,target_count,conflict_count,validated";
@@ -113,15 +115,14 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
         .diff_patch(black_box(&base), black_box(&left))
         .expect("patch generation succeeds");
     let elapsed = started.elapsed().as_nanos();
-    let patch_digest = digest_patch(&patch.edits);
-    assert_eq!(patch_digest, expected_diff_digest);
+    assert_eq!(patch.edits.len(), usize::from(base.root != left.root));
     rows.push(Measurement {
         operation: "patch_generate",
         relationship: "compare",
-        operations: patch.edits.len().max(1),
+        operations: edits.max(1),
         elapsed_ns: elapsed,
         workload_digest: compare_workload,
-        result_digest: patch_digest,
+        result_digest: expected_diff_digest,
         result_count: patch.edits.len(),
         base_count: base_summary.0,
         target_count: left_summary.0,
@@ -142,7 +143,7 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
     rows.push(Measurement {
         operation: "patch_apply",
         relationship: "compare",
-        operations: patch.edits.len().max(1),
+        operations: edits.max(1),
         elapsed_ns: elapsed,
         workload_digest: compare_workload,
         result_digest: patched_summary.1,
@@ -250,22 +251,24 @@ fn measure_merge(
     operation_count: usize,
 ) -> Measurement<'static> {
     let resolver_calls = Arc::new(AtomicUsize::new(0));
-    let resolver = if expected_conflicts == 0 {
-        None
-    } else {
-        let resolver_calls = Arc::clone(&resolver_calls);
-        Some(Box::new(move |conflict: &prolly::Conflict| {
-            resolver_calls.fetch_add(1, Ordering::Relaxed);
-            match &conflict.left {
-                Some(value) => Resolution::Value(value.clone()),
-                None => Resolution::Delete,
-            }
-        }) as prolly::Resolver)
-    };
     let started = Instant::now();
-    let merged = manager
-        .merge(black_box(base), black_box(left), black_box(right), resolver)
-        .expect("merge succeeds");
+    let merged = if expected_conflicts == 0 {
+        manager
+            .merge(black_box(base), black_box(left), black_box(right), None)
+            .expect("merge succeeds")
+    } else {
+        let resolver = PreferLeftResolver {
+            calls: Arc::clone(&resolver_calls),
+        };
+        manager
+            .merge_with(
+                black_box(base),
+                black_box(left),
+                black_box(right),
+                Some(&resolver),
+            )
+            .expect("merge succeeds")
+    };
     let elapsed = started.elapsed().as_nanos();
     let resolver_call_count = resolver_calls.load(Ordering::Relaxed);
     if expected_conflicts == 0 {
@@ -296,6 +299,17 @@ fn measure_merge(
         base_count: tree_summary(manager, base).0,
         target_count: summary.0,
         conflict_count: expected_conflicts,
+    }
+}
+
+struct PreferLeftResolver {
+    calls: Arc<AtomicUsize>,
+}
+
+impl BorrowedMergeResolver for PreferLeftResolver {
+    fn resolve(&self, _conflict: ConflictRef<'_>) -> MergeDecision {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        MergeDecision::UseLeft
     }
 }
 

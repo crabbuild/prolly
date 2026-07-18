@@ -898,6 +898,7 @@ where
 pub struct Prolly<S: Store> {
     store: S,
     config: Config,
+    format_digest: OnceLock<Cid>,
     node_cache: RwLock<NodeCache>,
     recent_leaf: RwLock<Option<RecentLeafRead>>,
     recent_leaf_misses: AtomicUsize,
@@ -1246,14 +1247,28 @@ impl<S: Store> Prolly<S> {
     pub fn new(store: S, config: Config) -> Self {
         let node_cache_max_nodes = config.runtime.node_cache_max_nodes;
         let node_cache_max_bytes = config.runtime.node_cache_max_bytes;
+        let format_digest = OnceLock::new();
+        if let Ok(digest) = config.format.digest() {
+            let _ = format_digest.set(digest);
+        }
         Self {
             store,
             config,
+            format_digest,
             node_cache: RwLock::new(NodeCache::new(node_cache_max_nodes, node_cache_max_bytes)),
             recent_leaf: RwLock::new(None),
             recent_leaf_misses: AtomicUsize::new(0),
             metrics: ProllyMetrics::default(),
         }
+    }
+
+    pub(crate) fn format_digest(&self) -> Result<Cid, Error> {
+        if let Some(digest) = self.format_digest.get() {
+            return Ok(digest.clone());
+        }
+        let digest = self.config.format.digest()?;
+        let _ = self.format_digest.set(digest.clone());
+        Ok(digest)
     }
 
     /// Create a new empty tree.
