@@ -6,6 +6,6 @@ store contract.
 
 ```toml
 [dependencies]
-prolly-map = "0.2"
-prolly-store-slatedb = "0.1"
+prolly-map = "0.4"
+prolly-store-slatedb = "0.2"
 ```
