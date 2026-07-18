@@ -5,8 +5,8 @@
     "async-store"
   ],
   "summary": {
-    "release_complete": 344,
-    "reviewed_incomplete": 418,
+    "release_complete": 357,
+    "reviewed_incomplete": 405,
     "unreviewed_runtime_candidate": 645,
     "unreviewed_data_model": 1473,
     "unreviewed_rust_abstraction": 0
@@ -3288,8 +3288,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::delete",
@@ -3298,8 +3298,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::edit",
@@ -3308,8 +3308,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::get",
@@ -3318,8 +3318,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::head",
@@ -3328,8 +3328,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::id",
@@ -3338,8 +3338,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::new",
@@ -3348,8 +3348,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::put",
@@ -3358,8 +3358,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::snapshot",
@@ -3368,8 +3368,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::snapshot_at",
@@ -3378,8 +3378,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::subscribe",
@@ -3388,8 +3388,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::subscribe_from",
@@ -3398,8 +3398,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AsyncVersionedMap::version",
@@ -3408,8 +3408,8 @@
       "member_kind": "inherent-item",
       "family": "versioned-map",
       "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "status": "implemented",
+      "bucket": "release_complete"
     },
     {
       "rust": "prolly::AuthenticatedProofBundleVerification",
