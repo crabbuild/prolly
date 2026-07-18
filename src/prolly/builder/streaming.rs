@@ -309,6 +309,7 @@ pub(crate) struct HierarchicalEmitter {
     config: Config,
     leaf: LevelEmitter,
     parents: Vec<ParentLevel>,
+    cascade_scratch: Vec<(u8, NodeSummary)>,
 }
 
 impl HierarchicalEmitter {
@@ -317,6 +318,7 @@ impl HierarchicalEmitter {
             leaf: LevelEmitter::new(config.clone(), true, 0)?,
             config,
             parents: Vec::new(),
+            cascade_scratch: Vec::new(),
         })
     }
 
@@ -373,40 +375,47 @@ impl HierarchicalEmitter {
         child: NodeSummary,
         emitted: &mut Vec<EmittedNode>,
     ) -> Result<(), Error> {
-        let mut queue = vec![(child_level, child)];
-        while let Some((level, summary)) = queue.pop() {
-            let parent_level = level.checked_add(1).ok_or(Error::InvalidNode)?;
-            let index = usize::from(parent_level - 1);
-            while self.parents.len() <= index {
-                self.parents.push(ParentLevel::new());
-            }
-            let state = &mut self.parents[index];
-            if state.emitter.is_none() {
-                if state.pending_first.is_none() {
-                    state.pending_first = Some(summary);
-                    continue;
+        let mut queue = std::mem::take(&mut self.cascade_scratch);
+        queue.clear();
+        queue.push((child_level, child));
+        let result = (|| {
+            while let Some((level, summary)) = queue.pop() {
+                let parent_level = level.checked_add(1).ok_or(Error::InvalidNode)?;
+                let index = usize::from(parent_level - 1);
+                while self.parents.len() <= index {
+                    self.parents.push(ParentLevel::new());
                 }
-                let first = state.pending_first.take().expect("pending child exists");
-                let mut emitter = LevelEmitter::new(self.config.clone(), false, parent_level)?;
-                let first_emissions = emitter.push_child(first)?;
-                if !first_emissions.is_empty() {
-                    return Err(Error::InvalidNode);
+                let state = &mut self.parents[index];
+                if state.emitter.is_none() {
+                    if state.pending_first.is_none() {
+                        state.pending_first = Some(summary);
+                        continue;
+                    }
+                    let first = state.pending_first.take().expect("pending child exists");
+                    let mut emitter = LevelEmitter::new(self.config.clone(), false, parent_level)?;
+                    let first_emissions = emitter.push_child(first)?;
+                    if !first_emissions.is_empty() {
+                        return Err(Error::InvalidNode);
+                    }
+                    state.emitter = Some(emitter);
                 }
-                state.emitter = Some(emitter);
-            }
 
-            let nodes = state
-                .emitter
-                .as_mut()
-                .expect("second child creates parent emitter")
-                .push_child(summary)?;
-            for node in nodes {
-                let next = node.summary.clone();
-                emitted.push(node);
-                queue.push((parent_level, next));
+                let nodes = state
+                    .emitter
+                    .as_mut()
+                    .expect("second child creates parent emitter")
+                    .push_child(summary)?;
+                for node in nodes {
+                    let next = node.summary.clone();
+                    emitted.push(node);
+                    queue.push((parent_level, next));
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })();
+        queue.clear();
+        self.cascade_scratch = queue;
+        result
     }
 
     #[cfg(test)]
@@ -429,5 +438,13 @@ impl HierarchicalEmitter {
                             .unwrap_or(0)
                 })
                 .sum::<usize>()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cascade_scratch_allocation(&self) -> (usize, *const (u8, NodeSummary)) {
+        (
+            self.cascade_scratch.capacity(),
+            self.cascade_scratch.as_ptr(),
+        )
     }
 }

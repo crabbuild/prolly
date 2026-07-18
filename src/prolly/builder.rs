@@ -1180,4 +1180,36 @@ mod tests {
             "buffered entries={max_buffered_entries}, active levels={max_levels}"
         );
     }
+
+    #[test]
+    fn sorted_builder_reuses_cascade_scratch_allocation() {
+        let store = CountingStore::default();
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(4)
+            .build();
+        let mut builder = SortedBatchBuilder::new(store, config);
+
+        for index in 0..32 {
+            builder
+                .add(
+                    format!("key-{index:08}").into_bytes(),
+                    format!("value-{index:08}").into_bytes(),
+                )
+                .unwrap();
+        }
+        let allocation = builder.hierarchy.cascade_scratch_allocation();
+        assert!(allocation.0 > 0);
+
+        for index in 32..10_000 {
+            builder
+                .add(
+                    format!("key-{index:08}").into_bytes(),
+                    format!("value-{index:08}").into_bytes(),
+                )
+                .unwrap();
+            assert_eq!(builder.hierarchy.cascade_scratch_allocation(), allocation);
+        }
+    }
 }
