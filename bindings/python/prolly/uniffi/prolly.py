@@ -9686,7 +9686,7 @@ class _UniffiFfiConverterTypeTreeRecord(_UniffiConverterRustBuffer):
 
 @dataclass
 class BatchApplyStatsRecord:
-    def __init__(self, *, input_mutations:int, effective_mutations:int, preprocess_input_sorted:bool, affected_leaves:int, changed_leaves:int, sparse_leaf_applies:int, written_nodes:int, written_bytes:int, used_append_fast_path:bool, used_batched_route:bool, used_coalesced_rebuild:bool, used_deferred_rebalancing:bool, used_bottom_up_rebuild:bool, cache_written_nodes:bool):
+    def __init__(self, *, input_mutations:int, effective_mutations:int, preprocess_input_sorted:bool, affected_leaves:int, changed_leaves:int, sparse_leaf_applies:int, written_nodes:int, written_bytes:int, used_append_fast_path:bool, used_batched_route:bool, used_coalesced_rebuild:bool, used_deferred_rebalancing:bool, used_bottom_up_rebuild:bool, cache_written_nodes:bool, parallel_width:int, parallel_tasks:int, structural_islands:int, coalesced_islands:int):
         self.input_mutations = input_mutations
         self.effective_mutations = effective_mutations
         self.preprocess_input_sorted = preprocess_input_sorted
@@ -9701,12 +9701,16 @@ class BatchApplyStatsRecord:
         self.used_deferred_rebalancing = used_deferred_rebalancing
         self.used_bottom_up_rebuild = used_bottom_up_rebuild
         self.cache_written_nodes = cache_written_nodes
+        self.parallel_width = parallel_width
+        self.parallel_tasks = parallel_tasks
+        self.structural_islands = structural_islands
+        self.coalesced_islands = coalesced_islands
         
         
 
     
     def __str__(self):
-        return "BatchApplyStatsRecord(input_mutations={}, effective_mutations={}, preprocess_input_sorted={}, affected_leaves={}, changed_leaves={}, sparse_leaf_applies={}, written_nodes={}, written_bytes={}, used_append_fast_path={}, used_batched_route={}, used_coalesced_rebuild={}, used_deferred_rebalancing={}, used_bottom_up_rebuild={}, cache_written_nodes={})".format(self.input_mutations, self.effective_mutations, self.preprocess_input_sorted, self.affected_leaves, self.changed_leaves, self.sparse_leaf_applies, self.written_nodes, self.written_bytes, self.used_append_fast_path, self.used_batched_route, self.used_coalesced_rebuild, self.used_deferred_rebalancing, self.used_bottom_up_rebuild, self.cache_written_nodes)
+        return "BatchApplyStatsRecord(input_mutations={}, effective_mutations={}, preprocess_input_sorted={}, affected_leaves={}, changed_leaves={}, sparse_leaf_applies={}, written_nodes={}, written_bytes={}, used_append_fast_path={}, used_batched_route={}, used_coalesced_rebuild={}, used_deferred_rebalancing={}, used_bottom_up_rebuild={}, cache_written_nodes={}, parallel_width={}, parallel_tasks={}, structural_islands={}, coalesced_islands={})".format(self.input_mutations, self.effective_mutations, self.preprocess_input_sorted, self.affected_leaves, self.changed_leaves, self.sparse_leaf_applies, self.written_nodes, self.written_bytes, self.used_append_fast_path, self.used_batched_route, self.used_coalesced_rebuild, self.used_deferred_rebalancing, self.used_bottom_up_rebuild, self.cache_written_nodes, self.parallel_width, self.parallel_tasks, self.structural_islands, self.coalesced_islands)
     def __eq__(self, other):
         if self.input_mutations != other.input_mutations:
             return False
@@ -9736,6 +9740,14 @@ class BatchApplyStatsRecord:
             return False
         if self.cache_written_nodes != other.cache_written_nodes:
             return False
+        if self.parallel_width != other.parallel_width:
+            return False
+        if self.parallel_tasks != other.parallel_tasks:
+            return False
+        if self.structural_islands != other.structural_islands:
+            return False
+        if self.coalesced_islands != other.coalesced_islands:
+            return False
         return True
 
 class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
@@ -9756,6 +9768,10 @@ class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
             used_deferred_rebalancing=_UniffiFfiConverterBoolean.read(buf),
             used_bottom_up_rebuild=_UniffiFfiConverterBoolean.read(buf),
             cache_written_nodes=_UniffiFfiConverterBoolean.read(buf),
+            parallel_width=_UniffiFfiConverterUInt64.read(buf),
+            parallel_tasks=_UniffiFfiConverterUInt64.read(buf),
+            structural_islands=_UniffiFfiConverterUInt64.read(buf),
+            coalesced_islands=_UniffiFfiConverterUInt64.read(buf),
         )
 
     @staticmethod
@@ -9774,6 +9790,10 @@ class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterBoolean.check_lower(value.used_deferred_rebalancing)
         _UniffiFfiConverterBoolean.check_lower(value.used_bottom_up_rebuild)
         _UniffiFfiConverterBoolean.check_lower(value.cache_written_nodes)
+        _UniffiFfiConverterUInt64.check_lower(value.parallel_width)
+        _UniffiFfiConverterUInt64.check_lower(value.parallel_tasks)
+        _UniffiFfiConverterUInt64.check_lower(value.structural_islands)
+        _UniffiFfiConverterUInt64.check_lower(value.coalesced_islands)
 
     @staticmethod
     def write(value, buf):
@@ -9791,6 +9811,10 @@ class _UniffiFfiConverterTypeBatchApplyStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterBoolean.write(value.used_deferred_rebalancing, buf)
         _UniffiFfiConverterBoolean.write(value.used_bottom_up_rebuild, buf)
         _UniffiFfiConverterBoolean.write(value.cache_written_nodes, buf)
+        _UniffiFfiConverterUInt64.write(value.parallel_width, buf)
+        _UniffiFfiConverterUInt64.write(value.parallel_tasks, buf)
+        _UniffiFfiConverterUInt64.write(value.structural_islands, buf)
+        _UniffiFfiConverterUInt64.write(value.coalesced_islands, buf)
 
 @dataclass
 class BatchApplyResultRecord:
@@ -24012,7 +24036,7 @@ class _UniffiFfiConverterTypeVersionedValueRecord(_UniffiConverterRustBuffer):
 
 @dataclass
 class WriteStatsRecord:
-    def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool):
+    def __init__(self, *, input_mutations:int, effective_mutations:int, entries_streamed:int, nodes_read:int, nodes_written:int, nodes_reused:int, bytes_read:int, bytes_written:int, resync_distance_entries:int, resync_distance_nodes:int, used_key_stable_fast_path:bool, used_batched_value_update_path:bool, parallel_width:int, parallel_tasks:int, structural_islands:int, coalesced_islands:int):
         self.input_mutations = input_mutations
         self.effective_mutations = effective_mutations
         self.entries_streamed = entries_streamed
@@ -24025,12 +24049,16 @@ class WriteStatsRecord:
         self.resync_distance_nodes = resync_distance_nodes
         self.used_key_stable_fast_path = used_key_stable_fast_path
         self.used_batched_value_update_path = used_batched_value_update_path
+        self.parallel_width = parallel_width
+        self.parallel_tasks = parallel_tasks
+        self.structural_islands = structural_islands
+        self.coalesced_islands = coalesced_islands
         
         
 
     
     def __str__(self):
-        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path)
+        return "WriteStatsRecord(input_mutations={}, effective_mutations={}, entries_streamed={}, nodes_read={}, nodes_written={}, nodes_reused={}, bytes_read={}, bytes_written={}, resync_distance_entries={}, resync_distance_nodes={}, used_key_stable_fast_path={}, used_batched_value_update_path={}, parallel_width={}, parallel_tasks={}, structural_islands={}, coalesced_islands={})".format(self.input_mutations, self.effective_mutations, self.entries_streamed, self.nodes_read, self.nodes_written, self.nodes_reused, self.bytes_read, self.bytes_written, self.resync_distance_entries, self.resync_distance_nodes, self.used_key_stable_fast_path, self.used_batched_value_update_path, self.parallel_width, self.parallel_tasks, self.structural_islands, self.coalesced_islands)
     def __eq__(self, other):
         if self.input_mutations != other.input_mutations:
             return False
@@ -24056,6 +24084,14 @@ class WriteStatsRecord:
             return False
         if self.used_batched_value_update_path != other.used_batched_value_update_path:
             return False
+        if self.parallel_width != other.parallel_width:
+            return False
+        if self.parallel_tasks != other.parallel_tasks:
+            return False
+        if self.structural_islands != other.structural_islands:
+            return False
+        if self.coalesced_islands != other.coalesced_islands:
+            return False
         return True
 
 class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
@@ -24074,6 +24110,10 @@ class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
             resync_distance_nodes=_UniffiFfiConverterUInt64.read(buf),
             used_key_stable_fast_path=_UniffiFfiConverterBoolean.read(buf),
             used_batched_value_update_path=_UniffiFfiConverterBoolean.read(buf),
+            parallel_width=_UniffiFfiConverterUInt64.read(buf),
+            parallel_tasks=_UniffiFfiConverterUInt64.read(buf),
+            structural_islands=_UniffiFfiConverterUInt64.read(buf),
+            coalesced_islands=_UniffiFfiConverterUInt64.read(buf),
         )
 
     @staticmethod
@@ -24090,6 +24130,10 @@ class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.check_lower(value.resync_distance_nodes)
         _UniffiFfiConverterBoolean.check_lower(value.used_key_stable_fast_path)
         _UniffiFfiConverterBoolean.check_lower(value.used_batched_value_update_path)
+        _UniffiFfiConverterUInt64.check_lower(value.parallel_width)
+        _UniffiFfiConverterUInt64.check_lower(value.parallel_tasks)
+        _UniffiFfiConverterUInt64.check_lower(value.structural_islands)
+        _UniffiFfiConverterUInt64.check_lower(value.coalesced_islands)
 
     @staticmethod
     def write(value, buf):
@@ -24105,6 +24149,10 @@ class _UniffiFfiConverterTypeWriteStatsRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.resync_distance_nodes, buf)
         _UniffiFfiConverterBoolean.write(value.used_key_stable_fast_path, buf)
         _UniffiFfiConverterBoolean.write(value.used_batched_value_update_path, buf)
+        _UniffiFfiConverterUInt64.write(value.parallel_width, buf)
+        _UniffiFfiConverterUInt64.write(value.parallel_tasks, buf)
+        _UniffiFfiConverterUInt64.write(value.structural_islands, buf)
+        _UniffiFfiConverterUInt64.write(value.coalesced_islands, buf)
 
 @dataclass
 class WriteResultRecord:

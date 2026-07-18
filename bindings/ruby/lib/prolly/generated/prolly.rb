@@ -7301,7 +7301,11 @@ class RustBufferStream
       used_coalesced_rebuild: readBool,
       used_deferred_rebalancing: readBool,
       used_bottom_up_rebuild: readBool,
-      cache_written_nodes: readBool
+      cache_written_nodes: readBool,
+      parallel_width: readU64,
+      parallel_tasks: readU64,
+      structural_islands: readU64,
+      coalesced_islands: readU64
     )
   end
 
@@ -9344,7 +9348,11 @@ class RustBufferStream
       resync_distance_entries: readU64,
       resync_distance_nodes: readU64,
       used_key_stable_fast_path: readBool,
-      used_batched_value_update_path: readBool
+      used_batched_value_update_path: readBool,
+      parallel_width: readU64,
+      parallel_tasks: readU64,
+      structural_islands: readU64,
+      coalesced_islands: readU64
     )
   end
 
@@ -12012,6 +12020,10 @@ class RustBufferBuilder
     self.write_Bool(v.used_deferred_rebalancing)
     self.write_Bool(v.used_bottom_up_rebuild)
     self.write_Bool(v.cache_written_nodes)
+    self.write_U64(v.parallel_width)
+    self.write_U64(v.parallel_tasks)
+    self.write_U64(v.structural_islands)
+    self.write_U64(v.coalesced_islands)
   end
 
   # The Record type BlobGcPlanRecord.
@@ -13699,6 +13711,10 @@ class RustBufferBuilder
     self.write_U64(v.resync_distance_nodes)
     self.write_Bool(v.used_key_stable_fast_path)
     self.write_Bool(v.used_batched_value_update_path)
+    self.write_U64(v.parallel_width)
+    self.write_U64(v.parallel_tasks)
+    self.write_U64(v.structural_islands)
+    self.write_U64(v.coalesced_islands)
   end
 
   # The Enum type AdaptiveQualityRecord.
@@ -19873,9 +19889,9 @@ end
   
   # Record type BatchApplyStatsRecord
 class BatchApplyStatsRecord
-  attr_reader :input_mutations, :effective_mutations, :preprocess_input_sorted, :affected_leaves, :changed_leaves, :sparse_leaf_applies, :written_nodes, :written_bytes, :used_append_fast_path, :used_batched_route, :used_coalesced_rebuild, :used_deferred_rebalancing, :used_bottom_up_rebuild, :cache_written_nodes
+  attr_reader :input_mutations, :effective_mutations, :preprocess_input_sorted, :affected_leaves, :changed_leaves, :sparse_leaf_applies, :written_nodes, :written_bytes, :used_append_fast_path, :used_batched_route, :used_coalesced_rebuild, :used_deferred_rebalancing, :used_bottom_up_rebuild, :cache_written_nodes, :parallel_width, :parallel_tasks, :structural_islands, :coalesced_islands
 
-  def initialize(input_mutations:, effective_mutations:, preprocess_input_sorted:, affected_leaves:, changed_leaves:, sparse_leaf_applies:, written_nodes:, written_bytes:, used_append_fast_path:, used_batched_route:, used_coalesced_rebuild:, used_deferred_rebalancing:, used_bottom_up_rebuild:, cache_written_nodes:)
+  def initialize(input_mutations:, effective_mutations:, preprocess_input_sorted:, affected_leaves:, changed_leaves:, sparse_leaf_applies:, written_nodes:, written_bytes:, used_append_fast_path:, used_batched_route:, used_coalesced_rebuild:, used_deferred_rebalancing:, used_bottom_up_rebuild:, cache_written_nodes:, parallel_width:, parallel_tasks:, structural_islands:, coalesced_islands:)
     @input_mutations = input_mutations
     @effective_mutations = effective_mutations
     @preprocess_input_sorted = preprocess_input_sorted
@@ -19890,6 +19906,10 @@ class BatchApplyStatsRecord
     @used_deferred_rebalancing = used_deferred_rebalancing
     @used_bottom_up_rebuild = used_bottom_up_rebuild
     @cache_written_nodes = cache_written_nodes
+    @parallel_width = parallel_width
+    @parallel_tasks = parallel_tasks
+    @structural_islands = structural_islands
+    @coalesced_islands = coalesced_islands
   end
 
   def ==(other)
@@ -19933,6 +19953,18 @@ class BatchApplyStatsRecord
       return false
     end
     if @cache_written_nodes != other.cache_written_nodes
+      return false
+    end
+    if @parallel_width != other.parallel_width
+      return false
+    end
+    if @parallel_tasks != other.parallel_tasks
+      return false
+    end
+    if @structural_islands != other.structural_islands
+      return false
+    end
+    if @coalesced_islands != other.coalesced_islands
       return false
     end
 
@@ -22989,9 +23021,9 @@ end
   
   # Record type WriteStatsRecord
 class WriteStatsRecord
-  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path
+  attr_reader :input_mutations, :effective_mutations, :entries_streamed, :nodes_read, :nodes_written, :nodes_reused, :bytes_read, :bytes_written, :resync_distance_entries, :resync_distance_nodes, :used_key_stable_fast_path, :used_batched_value_update_path, :parallel_width, :parallel_tasks, :structural_islands, :coalesced_islands
 
-  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:)
+  def initialize(input_mutations:, effective_mutations:, entries_streamed:, nodes_read:, nodes_written:, nodes_reused:, bytes_read:, bytes_written:, resync_distance_entries:, resync_distance_nodes:, used_key_stable_fast_path:, used_batched_value_update_path:, parallel_width:, parallel_tasks:, structural_islands:, coalesced_islands:)
     @input_mutations = input_mutations
     @effective_mutations = effective_mutations
     @entries_streamed = entries_streamed
@@ -23004,6 +23036,10 @@ class WriteStatsRecord
     @resync_distance_nodes = resync_distance_nodes
     @used_key_stable_fast_path = used_key_stable_fast_path
     @used_batched_value_update_path = used_batched_value_update_path
+    @parallel_width = parallel_width
+    @parallel_tasks = parallel_tasks
+    @structural_islands = structural_islands
+    @coalesced_islands = coalesced_islands
   end
 
   def ==(other)
@@ -23041,6 +23077,18 @@ class WriteStatsRecord
       return false
     end
     if @used_batched_value_update_path != other.used_batched_value_update_path
+      return false
+    end
+    if @parallel_width != other.parallel_width
+      return false
+    end
+    if @parallel_tasks != other.parallel_tasks
+      return false
+    end
+    if @structural_islands != other.structural_islands
+      return false
+    end
+    if @coalesced_islands != other.coalesced_islands
       return false
     end
 

@@ -339,6 +339,11 @@ Apply batch mutations through the tunable high-throughput batch path.
 Use `parallel_batch_with_stats` when you need the same route/write telemetry
 returned by `batch_with_stats`.
 
+`ParallelConfig` changes scheduling only. Width one, explicit wider widths,
+and automatic width use the same canonical boundary engine and produce
+byte-identical roots. Work that cannot prove independence coalesces into the
+sequential canonical fallback.
+
 ```rust
 use prolly::ParallelConfig;
 

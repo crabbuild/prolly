@@ -347,6 +347,10 @@ pub struct BatchApplyStatsRecord {
     pub used_deferred_rebalancing: bool,
     pub used_bottom_up_rebuild: bool,
     pub cache_written_nodes: bool,
+    pub parallel_width: u64,
+    pub parallel_tasks: u64,
+    pub structural_islands: u64,
+    pub coalesced_islands: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -369,6 +373,10 @@ pub struct WriteStatsRecord {
     pub resync_distance_nodes: u64,
     pub used_key_stable_fast_path: bool,
     pub used_batched_value_update_path: bool,
+    pub parallel_width: u64,
+    pub parallel_tasks: u64,
+    pub structural_islands: u64,
+    pub coalesced_islands: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -6196,6 +6204,10 @@ impl From<BatchApplyStats> for BatchApplyStatsRecord {
             used_deferred_rebalancing: value.used_deferred_rebalancing,
             used_bottom_up_rebuild: value.used_bottom_up_rebuild,
             cache_written_nodes: value.cache_written_nodes,
+            parallel_width: value.parallel_width as u64,
+            parallel_tasks: value.parallel_tasks as u64,
+            structural_islands: value.structural_islands as u64,
+            coalesced_islands: value.coalesced_islands as u64,
         }
     }
 }
@@ -6224,6 +6236,10 @@ impl From<WriteStats> for WriteStatsRecord {
             resync_distance_nodes: value.resync_distance_nodes,
             used_key_stable_fast_path: value.used_key_stable_fast_path,
             used_batched_value_update_path: value.used_batched_value_update_path,
+            parallel_width: value.parallel_width,
+            parallel_tasks: value.parallel_tasks,
+            structural_islands: value.structural_islands,
+            coalesced_islands: value.coalesced_islands,
         }
     }
 }

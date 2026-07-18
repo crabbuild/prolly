@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-17T17:13:31+00:00",
+  "generated_at": "2026-07-18T07:46:49+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -1793,6 +1793,17 @@
     },
     {
       "rust": "prolly::AsyncProlly::batch",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProlly::begin_owned_transaction",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -5167,6 +5178,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::BatchApplyStats::coalesced_islands",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::BatchApplyStats::effective_mutations",
       "classification": "portable",
       "status": "planned",
@@ -5189,6 +5211,28 @@
       "docs": []
     },
     {
+      "rust": "prolly::BatchApplyStats::parallel_tasks",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BatchApplyStats::parallel_width",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::BatchApplyStats::preprocess_input_sorted",
       "classification": "portable",
       "status": "planned",
@@ -5201,6 +5245,17 @@
     },
     {
       "rust": "prolly::BatchApplyStats::sparse_leaf_applies",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BatchApplyStats::structural_islands",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -5421,182 +5476,6 @@
     },
     {
       "rust": "prolly::BatchWriter::with_config",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::cache_written_nodes",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::enable_deferred_rebalancing",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::enable_prefetch",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::force_deferred",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::new",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::prefetch_parallelism",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::use_bottom_up_rebuild",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::use_optimized_merge",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_bottom_up_rebuild",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_cache_written_nodes",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_deferred_rebalancing",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_force_deferred",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_optimized_merge",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_prefetch",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::BatchWriterConfig::with_prefetch_parallelism",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -9252,28 +9131,6 @@
     },
     {
       "rust": "prolly::DefaultConflictFreeMerger::new",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::DefaultParallelRebalancer",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::DefaultParallelRebalancer::new",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -19891,6 +19748,160 @@
       "docs": []
     },
     {
+      "rust": "prolly::OwnedAsyncProllyTransaction",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::batch",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::commit",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::compare_and_swap_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::create",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::delete",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::delete_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::get",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::load_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::publish_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::publish_named_root_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::put",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::rollback",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncTransactionOverlayStore",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::OwnedProllyTransaction",
       "classification": "portable",
       "status": "planned",
@@ -20290,108 +20301,6 @@
       "exclusions": {},
       "tests": [],
       "docs": []
-    },
-    {
-      "rust": "prolly::ParallelRebalancer",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "core",
-      "performance": "owned",
-      "languages": {
-        "python": "validated option record/factory (prolly::ParallelRebalancer)",
-        "go": "validated option struct/constructor (prolly::ParallelRebalancer)",
-        "node": "validated typed option/factory (prolly::ParallelRebalancer)",
-        "kotlin": "validated option data class/builder (prolly::ParallelRebalancer)",
-        "java": "validated immutable option/builder (prolly::ParallelRebalancer)",
-        "ruby": "validated keyword option/factory (prolly::ParallelRebalancer)",
-        "swift": "validated option value/throwing initializer (prolly::ParallelRebalancer)",
-        "wasm": "validated TypeScript option/WASM factory (prolly::ParallelRebalancer)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::configuration-validation"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "equivalence": "builder-typestate",
-      "rationale": "prolly::ParallelRebalancer is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::ParallelRebalancer supports the portable application API through the builder-typestate contract and is not a separately invoked application operation.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "reconciliation_rationale": "The reviewed builder-typestate contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::ParallelRebalancer::parallel_batch",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "core",
-      "performance": "owned",
-      "languages": {
-        "python": "validated option record/factory (prolly::ParallelRebalancer::parallel_batch)",
-        "go": "validated option struct/constructor (prolly::ParallelRebalancer::parallel_batch)",
-        "node": "validated typed option/factory (prolly::ParallelRebalancer::parallel_batch)",
-        "kotlin": "validated option data class/builder (prolly::ParallelRebalancer::parallel_batch)",
-        "java": "validated immutable option/builder (prolly::ParallelRebalancer::parallel_batch)",
-        "ruby": "validated keyword option/factory (prolly::ParallelRebalancer::parallel_batch)",
-        "swift": "validated option value/throwing initializer (prolly::ParallelRebalancer::parallel_batch)",
-        "wasm": "validated TypeScript option/WASM factory (prolly::ParallelRebalancer::parallel_batch)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::configuration-validation"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "equivalence": "builder-typestate",
-      "rationale": "prolly::ParallelRebalancer::parallel_batch is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::ParallelRebalancer::parallel_batch supports the portable application API through the builder-typestate contract and is not a separately invoked application operation.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "reconciliation_rationale": "The reviewed builder-typestate contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::ParallelRebalancer::parallel_rebalance",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "core",
-      "performance": "owned",
-      "languages": {
-        "python": "validated option record/factory (prolly::ParallelRebalancer::parallel_rebalance)",
-        "go": "validated option struct/constructor (prolly::ParallelRebalancer::parallel_rebalance)",
-        "node": "validated typed option/factory (prolly::ParallelRebalancer::parallel_rebalance)",
-        "kotlin": "validated option data class/builder (prolly::ParallelRebalancer::parallel_rebalance)",
-        "java": "validated immutable option/builder (prolly::ParallelRebalancer::parallel_rebalance)",
-        "ruby": "validated keyword option/factory (prolly::ParallelRebalancer::parallel_rebalance)",
-        "swift": "validated option value/throwing initializer (prolly::ParallelRebalancer::parallel_rebalance)",
-        "wasm": "validated TypeScript option/WASM factory (prolly::ParallelRebalancer::parallel_rebalance)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::configuration-validation"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "equivalence": "builder-typestate",
-      "rationale": "prolly::ParallelRebalancer::parallel_rebalance is represented by the reviewed builder-typestate host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::ParallelRebalancer::parallel_rebalance supports the portable application API through the builder-typestate contract and is not a separately invoked application operation.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#builder-typestate"
-      ],
-      "reconciliation_rationale": "The reviewed builder-typestate contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
       "rust": "prolly::PendingValue",
@@ -24857,6 +24766,17 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::ProximityReadSession::get_lease",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ProximityReadSession::get_with",
       "classification": "portable",
       "status": "planned",
@@ -25741,6 +25661,17 @@
     },
     {
       "rust": "prolly::ProximityVectorRef",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProximityVectorRef::as_le_bytes",
       "classification": "portable",
       "status": "planned",
       "family": "proximity-map",
@@ -26758,6 +26689,17 @@
       "audience": "application",
       "audience_rationale": "prolly::ReadSession::first_entry_with has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::ReadSession::get_lease",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::ReadSession::get_many_with",
@@ -30883,6 +30825,17 @@
       "audience": "application",
       "audience_rationale": "prolly::SecondaryIndexRegistry::register has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::SecondaryIndexRegistry::replace",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::SecondaryIndexSnapshot",
@@ -37577,6 +37530,17 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::VersionedMap::get_lease",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::VersionedMap::get_many",
       "classification": "portable",
       "status": "implemented",
@@ -40867,6 +40831,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::WriteStats::coalesced_islands",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::WriteStats::effective_mutations",
       "classification": "portable",
       "status": "planned",
@@ -40933,6 +40908,28 @@
       "docs": []
     },
     {
+      "rust": "prolly::WriteStats::parallel_tasks",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::WriteStats::parallel_width",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::WriteStats::resync_distance_entries",
       "classification": "portable",
       "status": "planned",
@@ -40945,6 +40942,17 @@
     },
     {
       "rust": "prolly::WriteStats::resync_distance_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::WriteStats::structural_islands",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -41386,28 +41394,6 @@
       "audience": "application",
       "audience_rationale": "prolly::inspect_proof_bundle has runtime behavior in the requested proof application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
-    },
-    {
-      "rust": "prolly::is_boundary",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::is_boundary_config",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
     },
     {
       "rust": "prolly::is_tombstone_value",

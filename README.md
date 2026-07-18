@@ -682,9 +682,9 @@ Batch processing:
 - Rebuilds affected parents and flushes nodes atomically through store batch
   writes when supported.
 
-Use `BatchWriter` when a writer object is convenient. Writer and parallel
-configuration may provide runtime hints, but persisted policy and canonical
-output remain authoritative.
+Use `BatchWriter` when a writer object is convenient. Its `ParallelConfig`
+controls only scheduling width and threshold; persisted policy and canonical
+output remain invariant.
 
 ## Bulk Building
 
@@ -923,8 +923,10 @@ private so callers use stable imports such as `prolly::Prolly`,
 `prolly::Store`, `prolly::BatchBuilder`, and `prolly::resolver`.
 
 Low-level route planning and rebuild helpers are crate-internal. Public batch
-tuning is exposed through `append_batch`, `BatchWriter`, `BatchWriterConfig`,
-`BatchApplyStats`, `BatchApplyResult`, and `MutationBuffer`.
+scheduling is exposed through `ParallelConfig`; `BatchWriter` and
+`parallel_batch` both delegate to the same canonical writer. Worker width can
+change scheduling, but never the chunking algorithm, serialized nodes, or root.
+Use `ParallelConfig::sequential()` as the width-one baseline.
 
 ## Compatibility Policy
 

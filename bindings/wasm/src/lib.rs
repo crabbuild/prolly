@@ -3506,6 +3506,10 @@ fn write_stats_to_object(stats: WriteStats) -> Result<JsValue, JsValue> {
         ("bytesWritten", stats.bytes_written),
         ("resyncDistanceEntries", stats.resync_distance_entries),
         ("resyncDistanceNodes", stats.resync_distance_nodes),
+        ("parallelWidth", stats.parallel_width),
+        ("parallelTasks", stats.parallel_tasks),
+        ("structuralIslands", stats.structural_islands),
+        ("coalescedIslands", stats.coalesced_islands),
     ] {
         Reflect::set(&object, &key.into(), &JsValue::from_f64(value as f64))?;
     }
@@ -3593,6 +3597,26 @@ fn batch_apply_stats_to_object(stats: BatchApplyStats) -> Result<JsValue, JsValu
         &object,
         &"cacheWrittenNodes".into(),
         &JsValue::from_bool(stats.cache_written_nodes),
+    )?;
+    Reflect::set(
+        &object,
+        &"parallelWidth".into(),
+        &JsValue::from_f64(stats.parallel_width as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"parallelTasks".into(),
+        &JsValue::from_f64(stats.parallel_tasks as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"structuralIslands".into(),
+        &JsValue::from_f64(stats.structural_islands as f64),
+    )?;
+    Reflect::set(
+        &object,
+        &"coalescedIslands".into(),
+        &JsValue::from_f64(stats.coalesced_islands as f64),
     )?;
     Ok(object.into())
 }

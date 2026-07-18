@@ -5,8 +5,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use prolly::{
-    append_batch, BatchApplyResult, BatchApplyStats, BatchOp, BatchWriter, BatchWriterConfig,
-    Config, Error, Mutation, Prolly, Resolution, Resolver, Store, Tree,
+    append_batch, BatchApplyResult, BatchApplyStats, BatchOp, BatchWriter, Config, Error, Mutation,
+    Prolly, Resolution, Resolver, Store, Tree,
 };
 use prolly_store_slatedb::SlateDbStore;
 use slatedb::object_store::aws::AmazonS3Builder;
@@ -424,82 +424,6 @@ fn main() {
         "random-update",
     );
     print_verify_row("verify_batch_update_random", records, changes, verified);
-
-    let cache_written_writer =
-        BatchWriter::with_config(BatchWriterConfig::new().with_cache_written_nodes(true));
-    let random_updated_cached = measure_batch_tree_row(
-        &store,
-        "batch_update_random_cache_written_nodes",
-        records,
-        changes,
-        || {
-            cache_written_writer
-                .apply_batch_with_stats(&prolly, &base, random_update_ops.clone())
-                .unwrap()
-        },
-    );
-    measure_store_row(
-        &store,
-        "stream_diff_random_update_cache_written_nodes",
-        records,
-        changes,
-        || {
-            let diffs = prolly
-                .stream_diff(&base, &random_updated_cached)
-                .unwrap()
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
-            let count = diffs.len();
-            (count, count == changes)
-        },
-    );
-    measure_store_row(
-        &store,
-        "point_get_random_updated_cache_written_nodes",
-        records,
-        changes,
-        || {
-            let mut found = 0usize;
-            for (i, &idx) in random_update_indices.iter().enumerate() {
-                let expected = format!("random-update-{i:012}");
-                if prolly
-                    .get(&random_updated_cached, &key_for_index(idx))
-                    .unwrap()
-                    .as_deref()
-                    == Some(expected.as_bytes())
-                {
-                    found += 1;
-                }
-            }
-            (found, found == changes)
-        },
-    );
-    measure_store_row(
-        &store,
-        "point_get_random_updated_many_cache_written_nodes",
-        records,
-        changes,
-        || {
-            let values = prolly
-                .get_many(&random_updated_cached, &random_update_keys)
-                .unwrap();
-            let found =
-                count_labeled_values_for_indices(&values, &random_update_indices, "random-update");
-            (found, found == changes)
-        },
-    );
-    let verified = verify_updates_for_indices(
-        &prolly,
-        &random_updated_cached,
-        &random_update_indices,
-        "random-update",
-    );
-    print_verify_row(
-        "verify_batch_update_random_cache_written_nodes",
-        records,
-        changes,
-        verified,
-    );
 
     let clustered_update_indices = clustered_indices(records, changes, 8, seed(b"cluster-update"));
     let clustered_update_ops =

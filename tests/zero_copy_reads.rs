@@ -7,10 +7,10 @@ use std::{
 };
 
 #[cfg(feature = "async-store")]
-use prolly::{AsyncProlly, SyncStoreAsAsync};
+use prolly::{AsyncProlly, Store, SyncStoreAsAsync};
 use prolly::{
     BlobRef, BorrowedMergeResolver, Config, ConflictRef, Error, MemStore, MergeDecision, Mutation,
-    NodeLayoutSpec, Prolly, Store, ValueRef, ValueRefView,
+    NodeLayoutSpec, Prolly, ValueRef, ValueRefView,
 };
 
 struct Select(MergeDecision);
