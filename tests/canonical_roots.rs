@@ -524,3 +524,193 @@ fn parallel_batch_matches_the_canonical_batch_root() {
     }
     assert_eq!(canonical.root, bulk.build().unwrap().root);
 }
+
+#[test]
+fn parallel_structural_islands_match_canonical_roots_for_every_policy_and_width() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap()
+        .install(|| {
+            let original = (0..4_096)
+                .map(|index| {
+                    (
+                        format!("k{index:05}").into_bytes(),
+                        vec![(index % 251) as u8; 32],
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut saw_parallel_distant_islands = false;
+            let mut saw_adjacent_coalescing = false;
+
+            for (policy_index, mut policy) in [
+                chunking::entry_count_key_hash(),
+                chunking::entry_count_key_value_hash(),
+                chunking::logical_bytes_key_weibull(),
+                chunking::logical_bytes_rolling_hash(),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                match policy.measure {
+                    prolly::ChunkMeasure::EntryCount => {
+                        policy.min = 2;
+                        policy.target = 4;
+                        policy.max = 8;
+                        policy.hard_max_node_bytes = 2_048;
+                    }
+                    _ => {
+                        policy.min = 96;
+                        policy.target = 192;
+                        policy.max = 384;
+                        policy.hard_max_node_bytes = 1_024;
+                    }
+                }
+                let config = Config::builder()
+                    .chunking(policy.clone())
+                    .node_layout(NodeLayoutSpec::PrefixCompressed)
+                    .build();
+                let manager = Prolly::new(Arc::new(MemStore::new()), config.clone());
+                let base = manager
+                    .batch(
+                        &manager.create(),
+                        original
+                            .iter()
+                            .cloned()
+                            .map(|(key, val)| Mutation::Upsert { key, val })
+                            .collect(),
+                    )
+                    .unwrap();
+                let fixtures = [
+                    (
+                        "distant-inserts",
+                        vec![
+                            Mutation::Upsert {
+                                key: b"k00256a".to_vec(),
+                                val: vec![b'a'; 32],
+                            },
+                            Mutation::Upsert {
+                                key: b"k03500a".to_vec(),
+                                val: vec![b'b'; 32],
+                            },
+                        ],
+                    ),
+                    (
+                        "adjacent-inserts",
+                        vec![
+                            Mutation::Upsert {
+                                key: b"k01000a".to_vec(),
+                                val: vec![b'c'; 32],
+                            },
+                            Mutation::Upsert {
+                                key: b"k01016a".to_vec(),
+                                val: vec![b'd'; 32],
+                            },
+                        ],
+                    ),
+                    (
+                        "distant-deletes",
+                        vec![
+                            Mutation::Delete {
+                                key: b"k00500".to_vec(),
+                            },
+                            Mutation::Delete {
+                                key: b"k03000".to_vec(),
+                            },
+                        ],
+                    ),
+                    (
+                        "distant-mixed",
+                        vec![
+                            Mutation::Delete {
+                                key: b"k00750".to_vec(),
+                            },
+                            Mutation::Upsert {
+                                key: b"k02000a".to_vec(),
+                                val: vec![b'e'; 32],
+                            },
+                            Mutation::Upsert {
+                                key: b"k03200".to_vec(),
+                                val: vec![b'f'; 32],
+                            },
+                        ],
+                    ),
+                ];
+
+                for (fixture_name, mutations) in fixtures {
+                    let sequential = manager
+                        .parallel_batch_with_stats(
+                            &base,
+                            mutations.clone(),
+                            &ParallelConfig::sequential(),
+                        )
+                        .unwrap();
+                    let automatic = manager.batch(&base, mutations.clone()).unwrap();
+                    assert_eq!(
+                        automatic.root, sequential.tree.root,
+                        "policy={:?}, fixture={fixture_name}",
+                        policy.rule
+                    );
+
+                    let mut widest = None;
+                    for width in [1, 2, 4, 8, 0] {
+                        let result = manager
+                            .parallel_batch_with_stats(
+                                &base,
+                                mutations.clone(),
+                                &ParallelConfig::new(width, 1),
+                            )
+                            .unwrap();
+                        assert_eq!(
+                            result.tree.root, sequential.tree.root,
+                            "policy={:?}, fixture={fixture_name}, width={width}",
+                            policy.rule
+                        );
+                        if fixture_name == "distant-inserts"
+                            && width == 4
+                            && result.stats.structural_islands > 1
+                        {
+                            assert!(result.stats.parallel_tasks > 1);
+                            saw_parallel_distant_islands = true;
+                        }
+                        if policy_index == 0
+                            && fixture_name == "adjacent-inserts"
+                            && width == 4
+                            && result.stats.coalesced_islands > 0
+                        {
+                            saw_adjacent_coalescing = true;
+                        }
+                        if width == 0 {
+                            widest = Some(result.tree);
+                        }
+                    }
+
+                    let mut expected = original.iter().cloned().collect::<BTreeMap<_, _>>();
+                    for mutation in mutations {
+                        match mutation {
+                            Mutation::Upsert { key, val } => {
+                                expected.insert(key, val);
+                            }
+                            Mutation::Delete { key } => {
+                                expected.remove(&key);
+                            }
+                        }
+                    }
+                    let expected = expected.into_iter().collect::<Vec<_>>();
+                    assert_eq!(
+                        sequential.tree.root,
+                        build_records(config.clone(), &expected).root,
+                        "policy={:?}, fixture={fixture_name}, fresh build",
+                        policy.rule
+                    );
+                    assert_eq!(
+                        manager.export_snapshot(&sequential.tree).unwrap(),
+                        manager.export_snapshot(&widest.unwrap()).unwrap(),
+                    );
+                }
+            }
+
+            assert!(saw_parallel_distant_islands);
+            assert!(saw_adjacent_coalescing);
+        });
+}
