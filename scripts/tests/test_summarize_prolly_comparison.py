@@ -209,6 +209,8 @@ class HistoricalComparisonTest(unittest.TestCase):
                 "historical-report.md",
             ):
                 self.assertTrue((out / name).is_file(), name)
+            self.assertNotIn(b"\r\n", (out / "summary.csv").read_bytes())
+            self.assertNotIn(b"\r\n", (out / "historical-delta.csv").read_bytes())
 
     def test_history_rejects_unknown_contract(self):
         summaries = summarize(scenario_rows())
