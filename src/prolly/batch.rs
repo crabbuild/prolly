@@ -250,14 +250,13 @@ use super::cursor::Cursor;
 use super::error::Error;
 use super::error::Mutation;
 use super::node::Node;
-use super::parallel::ParallelConfig;
+use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
 use super::tree::Tree;
 
 use super::Prolly;
 
 const PARALLEL_COLLECTOR_ADD_THRESHOLD: usize = 16;
-const PARALLEL_LEAF_APPLY_THRESHOLD: usize = 16;
 const SPARSE_LEAF_APPLY_MAX_MUTATIONS: usize = 8;
 const SPARSE_LEAF_APPLY_MIN_LEAF_TO_MUTATION_RATIO: usize = 8;
 const EXISTING_KEY_LINEAR_SCAN_MIN_MUTATIONS: usize = 16;
@@ -578,6 +577,8 @@ pub(crate) struct KeyStableBatchResult {
     pub(crate) entries_streamed: usize,
     pub(crate) written_nodes: usize,
     pub(crate) written_bytes: usize,
+    pub(crate) parallel_width: usize,
+    pub(crate) parallel_tasks: usize,
 }
 
 pub(crate) enum KeyStableBatchAttempt {
@@ -2305,14 +2306,15 @@ pub(crate) fn apply_with_stats_configured<S: Store>(
 }
 
 const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;
-const BATCHED_VALUE_UPDATE_PARALLELISM: usize = 16;
 
 pub(crate) fn should_try_batched_value_updates<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutation_count: usize,
+    policy: ExecutionPolicy,
 ) -> bool {
-    mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    policy.enabled()
+        && mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
         && tree.root.is_some()
         && prolly.store().prefers_batch_reads()
 }
@@ -2321,17 +2323,14 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     mutations: Vec<Mutation>,
+    policy: ExecutionPolicy,
 ) -> Result<KeyStableBatchAttempt, Error> {
-    if !should_try_batched_value_updates(prolly, tree, mutations.len()) {
+    if !should_try_batched_value_updates(prolly, tree, mutations.len(), policy) {
         return Ok(KeyStableBatchAttempt::Fallback(mutations));
     }
 
-    let groups = group_mutations_by_leaf_with_paths_batched(
-        prolly,
-        tree,
-        mutations,
-        BATCHED_VALUE_UPDATE_PARALLELISM,
-    )?;
+    let groups =
+        group_mutations_by_leaf_with_paths_batched(prolly, tree, mutations, policy.width())?;
     if groups.is_empty() || !groups.iter().all(key_stable_group_is_safe) {
         let mut mutations = groups
             .into_iter()
@@ -2342,9 +2341,10 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     }
 
     let affected_leaves = groups.len();
+    let leaf_policy = policy.limit_to(affected_leaves);
     let entries_streamed = groups.iter().map(|group| group.leaf.len()).sum();
     let mut collector = batch_write_collector(false);
-    let applied = apply_groups_coalesced(prolly, tree, groups, true, &mut collector)?;
+    let applied = apply_groups_coalesced(prolly, tree, groups, true, leaf_policy, &mut collector)?;
     flush_batch_collector(prolly, &collector, false)?;
 
     Ok(KeyStableBatchAttempt::Applied(Box::new(
@@ -2357,6 +2357,12 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
             entries_streamed,
             written_nodes: collector.len(),
             written_bytes: collector.bytes_len(),
+            parallel_width: leaf_policy.width(),
+            parallel_tasks: if leaf_policy.enabled() {
+                affected_leaves
+            } else {
+                0
+            },
         },
     )))
 }
@@ -3445,6 +3451,7 @@ fn apply_groups_coalesced<S: Store>(
     tree: &Tree,
     groups: Vec<LeafMutationGroupWithPath>,
     use_optimized_merge: bool,
+    policy: ExecutionPolicy,
     collector: &mut BatchWriteCollector,
 ) -> Result<CoalescedApplyResult, Error> {
     let group_count = groups.len();
@@ -3454,7 +3461,7 @@ fn apply_groups_coalesced<S: Store>(
     let mut root_replacement: Option<Vec<ChildRef>> = None;
     let mut changed = false;
 
-    for group in prepare_leaf_groups_for_coalesced_rebuild(groups, use_optimized_merge) {
+    for group in prepare_leaf_groups_for_coalesced_rebuild(groups, use_optimized_merge, policy) {
         let PreparedLeafMutationGroup {
             modified_leaf,
             ancestors,
@@ -3531,18 +3538,48 @@ fn apply_groups_coalesced<S: Store>(
 fn prepare_leaf_groups_for_coalesced_rebuild(
     groups: Vec<LeafMutationGroupWithPath>,
     use_optimized_merge: bool,
+    policy: ExecutionPolicy,
 ) -> Vec<PreparedLeafMutationGroup> {
-    if groups.len() < PARALLEL_LEAF_APPLY_THRESHOLD {
+    let policy = policy.limit_to(groups.len());
+    if !policy.enabled() {
         return groups
             .into_iter()
             .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
             .collect();
     }
 
-    groups
-        .into_par_iter()
-        .map(|group| prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge))
-        .collect()
+    let mut prepared = Vec::with_capacity(groups.len());
+    let mut groups = groups.into_iter();
+    loop {
+        let wave = groups.by_ref().take(policy.wave_size()).collect::<Vec<_>>();
+        if wave.is_empty() {
+            break;
+        }
+
+        // Partition each bounded wave into no more than the configured width.
+        // Each Rayon task processes its partition sequentially, so max_threads
+        // is a real per-call concurrency bound rather than only a read hint.
+        let ranges = policy.ranges(wave.len());
+        let mut wave = wave.into_iter();
+        let partitions = ranges
+            .into_iter()
+            .map(|range| wave.by_ref().take(range.len()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        let output = partitions
+            .into_par_iter()
+            .map(|partition| {
+                partition
+                    .into_iter()
+                    .map(|group| {
+                        prepare_leaf_group_for_coalesced_rebuild(group, use_optimized_merge)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        prepared.extend(output.into_iter().flatten());
+    }
+    prepared
 }
 
 fn prepare_leaf_group_for_coalesced_rebuild(
@@ -4585,45 +4622,66 @@ mod tests {
 
     #[test]
     fn batched_value_update_route_requires_every_eligibility_condition() {
-        let config = Config::default();
-        let preferred = Prolly::new(
-            CountingStore {
-                prefer_batch_reads: true,
-                ..CountingStore::default()
-            },
-            config.clone(),
-        );
-        let populated = Tree {
-            root: Some(Cid::from_bytes(b"route-classifier-root")),
-            config: config.clone(),
-        };
-        let empty = Tree {
-            root: None,
-            config: config.clone(),
-        };
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .unwrap()
+            .install(|| {
+                let config = Config::default();
+                let preferred = Prolly::new(
+                    CountingStore {
+                        prefer_batch_reads: true,
+                        ..CountingStore::default()
+                    },
+                    config.clone(),
+                );
+                let populated = Tree {
+                    root: Some(Cid::from_bytes(b"route-classifier-root")),
+                    config: config.clone(),
+                };
+                let empty = Tree {
+                    root: None,
+                    config: config.clone(),
+                };
+                let parallel = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(2, 1),
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                );
 
-        assert!(!should_try_batched_value_updates(
-            &preferred,
-            &populated,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS - 1
-        ));
-        assert!(should_try_batched_value_updates(
-            &preferred,
-            &populated,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        ));
-        assert!(!should_try_batched_value_updates(
-            &preferred,
-            &empty,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS - 1,
+                    parallel,
+                ));
+                assert!(should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    parallel,
+                ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    ExecutionPolicy::sequential(),
+                ));
+                assert!(!should_try_batched_value_updates(
+                    &preferred,
+                    &empty,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    parallel,
+                ));
 
-        let nonpreferred = Prolly::new(CountingStore::default(), config);
-        assert!(!should_try_batched_value_updates(
-            &nonpreferred,
-            &populated,
-            BATCHED_VALUE_UPDATE_MIN_MUTATIONS
-        ));
+                let nonpreferred = Prolly::new(CountingStore::default(), config);
+                assert!(!should_try_batched_value_updates(
+                    &nonpreferred,
+                    &populated,
+                    BATCHED_VALUE_UPDATE_MIN_MUTATIONS,
+                    parallel,
+                ));
+            });
     }
 
     /// Helper function to create a tree with the given key-value pairs
@@ -5831,7 +5889,7 @@ mod tests {
 
     #[test]
     fn coalesced_leaf_preparation_parallel_path_preserves_order_and_detects_noops() {
-        let group_count = PARALLEL_LEAF_APPLY_THRESHOLD + 4;
+        let group_count = 20;
         let groups = (0..group_count)
             .map(|idx| {
                 let key = format!("k{idx:03}").into_bytes();
@@ -5852,7 +5910,18 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let prepared = prepare_leaf_groups_for_coalesced_rebuild(groups, true);
+        let prepared = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let policy = ExecutionPolicy::from_config(
+                    &ParallelConfig::new(4, 1),
+                    group_count,
+                    group_count,
+                );
+                prepare_leaf_groups_for_coalesced_rebuild(groups, true, policy)
+            });
 
         assert_eq!(prepared.len(), group_count);
         for (idx, group) in prepared.iter().enumerate() {

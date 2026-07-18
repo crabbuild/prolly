@@ -8967,72 +8967,73 @@ mod tests {
 
     #[test]
     fn parallel_batch_with_stats_delegates_to_canonical_writer() {
-        let store = Arc::new(CountingStore {
-            prefer_batch_reads: true,
-            ..CountingStore::default()
-        });
-        let config = Config::builder()
-            .min_chunk_size(2)
-            .max_chunk_size(4)
-            .chunking_factor(u32::MAX)
-            .build();
-        let prolly = Prolly::new(store.clone(), config);
-        let tree = prolly.create();
-        let seed_mutations: Vec<_> = (0..32)
-            .map(|idx| Mutation::Upsert {
-                key: format!("k{idx:03}").into_bytes(),
-                val: format!("v{idx:03}").into_bytes(),
-            })
-            .collect();
-        let tree = prolly.batch(&tree, seed_mutations).unwrap();
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let store = Arc::new(CountingStore {
+                    prefer_batch_reads: true,
+                    ..CountingStore::default()
+                });
+                let config = Config::builder()
+                    .min_chunk_size(2)
+                    .max_chunk_size(4)
+                    .chunking_factor(u32::MAX)
+                    .build();
+                let prolly = Prolly::new(store.clone(), config);
+                let seed_mutations = (0..1_024)
+                    .map(|idx| Mutation::Upsert {
+                        key: format!("k{idx:04}").into_bytes(),
+                        val: vec![b's'; 32],
+                    })
+                    .collect();
+                let tree = prolly.batch(&prolly.create(), seed_mutations).unwrap();
+                let update_mutations = (0..256)
+                    .map(|idx| {
+                        let key_idx = idx * 4 + 1;
+                        Mutation::Upsert {
+                            key: format!("k{key_idx:04}").into_bytes(),
+                            val: vec![(idx % 251) as u8; 32],
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let expected = prolly.batch(&tree, update_mutations.clone()).unwrap();
 
-        prolly.clear_cache();
-        store.batch_get_ordered_calls.store(0, Ordering::Relaxed);
-        store.max_batch_get_ordered_len.store(0, Ordering::Relaxed);
+                let run = |config: parallel::ParallelConfig| {
+                    prolly.clear_cache();
+                    store.batch_get_ordered_calls.store(0, Ordering::Relaxed);
+                    store.max_batch_get_ordered_len.store(0, Ordering::Relaxed);
+                    let result = prolly
+                        .parallel_batch_with_stats(&tree, update_mutations.clone(), &config)
+                        .unwrap();
+                    let max_read = store.max_batch_get_ordered_len.load(Ordering::Relaxed);
+                    (result, max_read)
+                };
 
-        let update_mutations: Vec<_> = (0..8)
-            .map(|idx| {
-                let key_idx = idx * 4 + 1;
-                Mutation::Upsert {
-                    key: format!("k{key_idx:03}").into_bytes(),
-                    val: format!("updated-{key_idx:03}").into_bytes(),
-                }
-            })
-            .collect();
+                let (sequential, sequential_max_read) = run(parallel::ParallelConfig::sequential());
+                let (width_two, width_two_max_read) = run(parallel::ParallelConfig::new(2, 1));
+                let (width_four, width_four_max_read) = run(parallel::ParallelConfig::new(4, 1));
 
-        let expected = prolly.batch(&tree, update_mutations.clone()).unwrap();
-        let sequential = prolly
-            .parallel_batch_with_stats(
-                &tree,
-                update_mutations.clone(),
-                &parallel::ParallelConfig::sequential(),
-            )
-            .unwrap();
-        let result = prolly
-            .parallel_batch_with_stats(
-                &tree,
-                update_mutations,
-                &parallel::ParallelConfig::new(3, 1),
-            )
-            .unwrap();
-
-        assert_eq!(sequential.stats.parallel_width, 1);
-        assert!(result.stats.parallel_width >= 1);
-        if rayon::current_num_threads() > 1 {
-            assert!(result.stats.parallel_width > 1);
-        }
-        assert_eq!(sequential.tree.root, result.tree.root);
-        assert_eq!(result.stats.input_mutations, 8);
-        assert_eq!(result.stats.effective_mutations, 8);
-        assert!(result.stats.used_coalesced_rebuild);
-        assert!(result.stats.affected_leaves > 1);
-        assert!(result.stats.changed_leaves > 1);
-        assert!(result.stats.written_nodes > 0);
-        assert_eq!(result.tree.root, expected.root);
-        assert_eq!(
-            prolly.get(&result.tree, b"k005").unwrap(),
-            Some(b"updated-005".to_vec())
-        );
+                assert_eq!(sequential.stats.parallel_width, 1);
+                assert_eq!(sequential.stats.parallel_tasks, 0);
+                assert_eq!(sequential_max_read, 0);
+                assert!(width_two.stats.parallel_width <= 2);
+                assert!(width_four.stats.parallel_width <= 4);
+                assert!(width_two.stats.parallel_tasks > 1);
+                assert!(width_four.stats.parallel_tasks > 1);
+                assert!(width_two.stats.used_batched_route);
+                assert!(width_four.stats.used_batched_route);
+                assert!(width_two_max_read <= update_mutations.len().div_ceil(2));
+                assert!(width_four_max_read <= update_mutations.len().div_ceil(4));
+                assert_eq!(sequential.tree.root, width_two.tree.root);
+                assert_eq!(sequential.tree.root, width_four.tree.root);
+                assert_eq!(width_four.tree.root, expected.root);
+                assert_eq!(
+                    prolly.export_snapshot(&sequential.tree).unwrap(),
+                    prolly.export_snapshot(&width_four.tree).unwrap(),
+                );
+            });
     }
 
     #[test]

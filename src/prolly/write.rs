@@ -855,7 +855,7 @@ fn try_direct_value_updates<S: Store>(
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     stats: &mut WriteStats,
     measure_read_bytes: bool,
-    _policy: ExecutionPolicy,
+    policy: ExecutionPolicy,
 ) -> Result<DirectValueUpdateAttempt, Error> {
     let chunking = &tree.config.format.chunking;
     if chunking.measure != ChunkMeasure::EntryCount
@@ -873,7 +873,7 @@ fn try_direct_value_updates<S: Store>(
     };
 
     let mutations =
-        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len()) {
+        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len(), policy) {
             let batched_mutations = mutations
                 .into_iter()
                 .map(|(key, value)| Mutation::Upsert {
@@ -882,7 +882,12 @@ fn try_direct_value_updates<S: Store>(
                 })
                 .collect::<Vec<_>>();
             let metrics_before = manager.metrics();
-            match super::batch::try_apply_batched_value_updates(manager, tree, batched_mutations)? {
+            match super::batch::try_apply_batched_value_updates(
+                manager,
+                tree,
+                batched_mutations,
+                policy,
+            )? {
                 super::batch::KeyStableBatchAttempt::Applied(result) => {
                     let metrics_after = manager.metrics();
                     stats.nodes_read += metrics_after
@@ -900,6 +905,8 @@ fn try_direct_value_updates<S: Store>(
                     stats.resync_distance_nodes = result.affected_leaves as u64;
                     stats.used_key_stable_fast_path = true;
                     stats.used_batched_value_update_path = true;
+                    stats.parallel_width = result.parallel_width as u64;
+                    stats.parallel_tasks += result.parallel_tasks as u64;
                     return Ok(DirectValueUpdateAttempt::Applied(Box::new((
                         result.tree,
                         *stats,
