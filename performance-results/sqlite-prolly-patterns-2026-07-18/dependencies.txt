@@ -1,0 +1,83 @@
+prolly-sqlite-pattern-bench v0.0.0 (/Users/haipingfu/CrabDB-prolly-worktrees/sqlite-prolly-pattern-benchmark/benchmarks/sqlite-prolly-patterns)
+├── csv v1.4.0
+│   ├── csv-core v0.1.13
+│   │   └── memchr v2.8.3
+│   ├── itoa v1.0.18
+│   ├── ryu v1.0.23
+│   └── serde_core v1.0.228
+├── prolly-map v0.3.0 (/Users/haipingfu/CrabDB-prolly-worktrees/sqlite-prolly-pattern-benchmark)
+│   ├── rayon v1.12.0
+│   │   ├── either v1.16.0
+│   │   └── rayon-core v1.13.0
+│   │       ├── crossbeam-deque v0.8.7
+│   │       │   ├── crossbeam-epoch v0.9.20
+│   │       │   │   └── crossbeam-utils v0.8.22
+│   │       │   └── crossbeam-utils v0.8.22
+│   │       └── crossbeam-utils v0.8.22
+│   ├── serde v1.0.228
+│   │   ├── serde_core v1.0.228
+│   │   └── serde_derive v1.0.228 (proc-macro)
+│   │       ├── proc-macro2 v1.0.106
+│   │       │   └── unicode-ident v1.0.24
+│   │       ├── quote v1.0.46
+│   │       │   └── proc-macro2 v1.0.106 (*)
+│   │       └── syn v2.0.119
+│   │           ├── proc-macro2 v1.0.106 (*)
+│   │           ├── quote v1.0.46 (*)
+│   │           └── unicode-ident v1.0.24
+│   ├── serde_cbor v0.11.2
+│   │   ├── half v1.8.3
+│   │   └── serde v1.0.228 (*)
+│   ├── serde_json v1.0.150
+│   │   ├── itoa v1.0.18
+│   │   ├── memchr v2.8.3
+│   │   ├── serde_core v1.0.228
+│   │   └── zmij v1.0.23
+│   ├── sha2 v0.10.9
+│   │   ├── cfg-if v1.0.4
+│   │   ├── cpufeatures v0.2.17
+│   │   │   └── libc v0.2.186
+│   │   └── digest v0.10.7
+│   │       ├── block-buffer v0.10.4
+│   │       │   └── generic-array v0.14.7
+│   │       │       └── typenum v1.20.1
+│   │       │       [build-dependencies]
+│   │       │       └── version_check v0.9.5
+│   │       └── crypto-common v0.1.7
+│   │           ├── generic-array v0.14.7 (*)
+│   │           └── typenum v1.20.1
+│   └── xxhash-rust v0.8.17
+├── prolly-store-sqlite v0.1.0 (/Users/haipingfu/CrabDB-prolly-worktrees/sqlite-prolly-pattern-benchmark/stores/prolly-store-sqlite)
+│   ├── prolly-map v0.3.0 (/Users/haipingfu/CrabDB-prolly-worktrees/sqlite-prolly-pattern-benchmark) (*)
+│   └── rusqlite v0.31.0
+│       ├── bitflags v2.13.1
+│       ├── fallible-iterator v0.3.0
+│       ├── fallible-streaming-iterator v0.1.9
+│       ├── hashlink v0.9.1
+│       │   └── hashbrown v0.14.5
+│       │       └── ahash v0.8.12
+│       │           ├── cfg-if v1.0.4
+│       │           ├── once_cell v1.21.4
+│       │           └── zerocopy v0.8.54
+│       │           [build-dependencies]
+│       │           └── version_check v0.9.5
+│       ├── libsqlite3-sys v0.28.0
+│       │   [build-dependencies]
+│       │   ├── cc v1.3.0
+│       │   │   ├── find-msvc-tools v0.1.9
+│       │   │   └── shlex v2.0.1
+│       │   ├── pkg-config v0.3.33
+│       │   └── vcpkg v0.2.15
+│       └── smallvec v1.15.2
+├── serde v1.0.228 (*)
+└── tempfile v3.27.0
+    ├── fastrand v2.4.1
+    ├── getrandom v0.4.3
+    │   ├── cfg-if v1.0.4
+    │   └── libc v0.2.186
+    ├── once_cell v1.21.4
+    └── rustix v1.1.4
+        ├── bitflags v2.13.1
+        ├── errno v0.3.14
+        │   └── libc v0.2.186
+        └── libc v0.2.186

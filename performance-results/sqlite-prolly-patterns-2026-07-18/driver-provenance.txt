@@ -1,0 +1,4 @@
+driver=/Users/haipingfu/CrabDB-prolly-worktrees/sqlite-prolly-pattern-benchmark/scripts/run_sqlite_prolly_pattern_benchmark.sh
+revision=abb1b67a6dabf5a0140012329eff4771957e6e93
+dirty_flag=--dirty
+arguments= --profile full --output performance-results/sqlite-prolly-patterns-2026-07-18 --revision abb1b67a6dabf5a0140012329eff4771957e6e93 --dirty
