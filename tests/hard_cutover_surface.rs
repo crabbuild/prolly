@@ -5,6 +5,9 @@ fn source_files(root: &Path, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(root).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {
+            if path.ends_with("bindings/wasm/pkg") {
+                continue;
+            }
             source_files(&path, out);
         } else if matches!(
             path.extension().and_then(|extension| extension.to_str()),
