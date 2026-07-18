@@ -72,6 +72,79 @@ The comparison intentionally uses each implementation's default encoding and
 chunking configuration. It measures the products presented to callers, not a
 forced common wire format.
 
+## Version-operation benchmark
+
+Run the native common comparison and the separate Rust lifecycle measurements:
+
+```sh
+scripts/run_prolly_version_comparison.sh
+```
+
+The default matrix uses 10K, 50K, 1M, 5M, and 10M base records; 0%, 1%, and
+30% change densities; append, random, and clustered locality; three process-
+isolated repetitions; in-memory stores; and one worker. The common runners time
+full and range diff, native patch generation/application, and no-op, disjoint,
+convergent, and conflicting three-way merge as applicable. The Rust-only runner
+separately measures publication, head and snapshot resolution, historical point
+reads and range scans, version listing, rollback, and retention pruning.
+
+To reproduce the verified run exactly:
+
+```sh
+BENCH_OUT=performance-results/prolly-version-2026-07-18-final \
+BENCH_SIZES="10000 50000 1000000 5000000 10000000" \
+BENCH_RUNS=3 \
+DOLT_REV=6b2372c7d4ded1a54f55c6204304dbb72a33835c \
+  scripts/run_prolly_version_comparison.sh
+```
+
+The driver refuses to overwrite an existing output directory. Use a new
+`BENCH_OUT` path for a rerun. The workload contract is
+`prolly-version-compare-v1`; it deterministically generates values shorter than
+100 bytes and uses a 40% update, 30% insert, and 30% delete mix for non-append
+changes. Complete scans validate ordered logical content after timing.
+
+### Verified version-operation run (2026-07-18)
+
+The [version-operation report](../performance-results/prolly-version-2026-07-18-final/report.md)
+contains the complete 10M table and the Rust lifecycle table. The
+[common raw measurements](../performance-results/prolly-version-2026-07-18-final/results-common.csv),
+[lifecycle raw measurements](../performance-results/prolly-version-2026-07-18-final/results-lifecycle.csv),
+and [reproducibility audit](../performance-results/prolly-version-2026-07-18-final/reproducibility.csv)
+are machine-readable.
+
+The run produced 1,410 validated common rows, 195 validated lifecycle rows, and
+345 successful scenario processes. Every expected matrix cell and all three
+repetitions were present. Workload digests, logical result digests, operation
+counts, cardinalities, and logical conflict counts matched across Rust and Go;
+they were also invariant across repetitions. The copied executable hashes match
+the recorded manifest.
+
+Across all 235 common-operation medians, Rust won 101 and Dolt Go won 134. The
+operation split is more useful than the aggregate: Rust won 34/35 full-diff and
+29/35 range-diff groups, plus every convergent and no-op merge group. Dolt Go
+won every conflicting merge, disjoint merge, and patch-apply group. At 10M,
+Rust won all seven full-diff shapes and five of seven range-diff shapes; Dolt Go
+won all six conflicting and disjoint merge shapes and all seven patch-apply
+shapes. These results identify different optimization strengths rather than one
+universal winner.
+
+Patch timings need a representation caveat. Rust currently materializes logical
+point edits, while Dolt may emit structural subtree patches. The benchmark
+validates identical logical effects but does not claim equivalent native patch
+item counts. Very short identity/convergent operations are also near timer
+granularity. Fourteen winner groups flipped direction across repetitions, the
+median coefficient of variation was 4.91%, and high-CV rows are disclosed in
+the report instead of being hidden.
+
+The measured Rust snapshot was
+`677bc05461ac3ea3da03db9317a78061a07f1b54` with source hash
+`4839a3a46636e273597b90d9f9b2f96f214dbb78e222adc896bd9a29f6df370a`.
+Dolt was pinned at `6b2372c7d4ded1a54f55c6204304dbb72a33835c` with Go runner
+hash `652d11a2d7f29cdcf03a5b717e7198764de3a5f9890fb9b8e73addab3dd5bee5`.
+Machine and toolchain details, plus all copied binary hashes, are recorded in
+the [run manifest](../performance-results/prolly-version-2026-07-18-final/manifest.txt).
+
 ## Verified current-main run (2026-07-17)
 
 The complete current-main matrix ran all five sizes three times: 180 successful

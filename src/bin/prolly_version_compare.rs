@@ -2,14 +2,15 @@
 mod support;
 
 use std::hint::black_box;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use prolly::{Config, Diff, MemStore, Mutation, Prolly, Resolution, Tree};
 use support::{
-    Args, FNV_OFFSET, base_mutations, branch_mutations, change_count, conflicting_mutations,
-    digest_diffs, digest_entry, digest_patch, range_bounds, validate_unique_keys, workload_digest,
+    base_mutations, branch_mutations, change_count, conflicting_mutations, digest_diffs,
+    digest_entry, digest_patch, range_bounds, validate_unique_keys, workload_digest, Args,
+    FNV_OFFSET,
 };
 
 const CSV_HEADER: &str = "implementation,revision,contract_version,records,density,locality,operation,relationship,operations,elapsed_ns,ns_per_op,ops_per_sec,workload_digest,result_digest,result_count,base_count,target_count,conflict_count,validated";
@@ -134,12 +135,10 @@ fn run(args: &Args) -> Vec<Measurement<'static>> {
     let elapsed = started.elapsed().as_nanos();
     let patched_summary = tree_summary(&manager, &patched);
     assert_eq!(patched_summary, left_summary);
-    assert!(
-        manager
-            .diff(&patched, &left)
-            .expect("patch validation diff succeeds")
-            .is_empty()
-    );
+    assert!(manager
+        .diff(&patched, &left)
+        .expect("patch validation diff succeeds")
+        .is_empty());
     rows.push(Measurement {
         operation: "patch_apply",
         relationship: "compare",

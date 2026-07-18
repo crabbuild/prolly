@@ -2,7 +2,9 @@
 
 ## Status
 
-Approved for specification on 2026-07-18. Implementation and the full performance run require review of this written specification.
+Approved, implemented, and verified with the complete 10K-through-10M matrix on
+2026-07-18. The recorded run uses Rust source snapshot `677bc05461ac` and Dolt
+snapshot `6b2372c7d4de`.
 
 ## Objective
 

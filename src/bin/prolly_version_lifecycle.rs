@@ -8,8 +8,8 @@ use std::time::Instant;
 
 use prolly::{Config, MapVersion, MemStore, Mutation, Prolly};
 use support::{
-    FNV_OFFSET, Locality, base_mutations, branch_mutations, digest_bytes, digest_entry, digest_u64,
-    key_for_id, value_for,
+    base_mutations, branch_mutations, digest_bytes, digest_entry, digest_u64, key_for_id,
+    value_for, Locality, FNV_OFFSET,
 };
 
 const CSV_HEADER: &str = "implementation,revision,contract_version,records,density,locality,operation,relationship,operations,elapsed_ns,ns_per_op,ops_per_sec,workload_digest,result_digest,result_count,base_count,target_count,conflict_count,validated";
@@ -315,11 +315,9 @@ fn run_prune(args: &Args) -> Vec<Measurement<'static>> {
     assert_eq!(result.retained.len(), 11);
     let catalog = map.versions().expect("pruned catalog lists");
     assert_eq!(catalog.len(), 11);
-    assert!(
-        catalog
-            .iter()
-            .any(|version| version.id == old_head && version.is_head)
-    );
+    assert!(catalog
+        .iter()
+        .any(|version| version.id == old_head && version.is_head));
     vec![Measurement {
         operation: "retention_prune",
         operations: HISTORY_DEPTH,

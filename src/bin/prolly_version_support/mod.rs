@@ -135,11 +135,9 @@ pub fn branch_mutations(
         }
     }
     mutations.sort_by(|left, right| left.key().cmp(right.key()));
-    assert!(
-        mutations
-            .windows(2)
-            .all(|pair| pair[0].key() < pair[1].key())
-    );
+    assert!(mutations
+        .windows(2)
+        .all(|pair| pair[0].key() < pair[1].key()));
     mutations
 }
 
