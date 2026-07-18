@@ -5,7 +5,16 @@ Redis-backed remote store adapter for `prolly-map`.
 This crate implements `RemoteStoreBackend` for Redis and is intended for async
 `prolly-map` use through `RemoteProllyStore` and `AsyncProlly`.
 
-## When To Use It
+## Installation
+
+```toml
+[dependencies]
+prolly-map = "0.4"
+prolly-store-redis = "0.2.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## When to use it
 
 Use this adapter when you want a low-latency remote Prolly tree store and your
 Redis deployment is configured with the durability level your application needs.
@@ -17,7 +26,7 @@ Do not treat a default in-memory Redis instance as durable storage. For
 production, configure AOF/RDB persistence, replication, backups, eviction
 policy, memory limits, and access control explicitly.
 
-## Data Model
+## Data model
 
 The adapter stores three logical families under a configurable binary key prefix:
 
@@ -48,7 +57,7 @@ Set the connection URL:
 export PROLLY_STORE_REDIS_URL=redis://127.0.0.1:56379/
 ```
 
-## Basic Usage
+## Basic usage
 
 ```rust
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -88,7 +97,7 @@ assert_eq!(
 # }
 ```
 
-## Diff And Merge
+## Diff and merge
 
 Redis stores all nodes needed by multiple immutable tree versions, so you can
 branch, diff, and merge without copying the full map:
@@ -134,7 +143,7 @@ assert_eq!(
 # }
 ```
 
-## Namespacing And Tests
+## Namespacing and cleanup
 
 Use `with_key_prefix` whenever a Redis database is shared by tests, services, or
 tenants. `clear_namespace` deletes every key under the current prefix and should
@@ -149,7 +158,19 @@ backend.clear_namespace().await?;
 # }
 ```
 
-## Running The Example
+## Transactions and durability
+
+The backend advertises strict transaction support. It uses a Lua script to
+validate named-root preconditions and apply the associated node and root writes
+atomically. A stale precondition returns a conflict without applying the staged
+writes.
+
+These atomicity guarantees do not replace Redis persistence. Configure AOF/RDB,
+replication, eviction, backups, and memory limits according to the durability
+required by the application. Deleting a named root does not immediately delete
+unreachable nodes.
+
+## Running the example
 
 From the standalone repository root:
 
@@ -160,3 +181,18 @@ cargo run --manifest-path stores/prolly-store-redis/Cargo.toml --example basic_u
 
 The example writes a unique Redis namespace, publishes a named root, reloads it,
 runs diff/merge, and resolves a merge conflict.
+
+## Testing
+
+The integration test runs when `PROLLY_STORE_REDIS_URL` is set and returns
+without connecting otherwise:
+
+```bash
+export PROLLY_STORE_REDIS_URL=redis://127.0.0.1:56379/
+cargo test --manifest-path stores/prolly-store-redis/Cargo.toml
+```
+
+The test selects a unique key prefix and removes only that namespace.
+
+See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
+async map, transaction, diff, and merge APIs used with this backend.

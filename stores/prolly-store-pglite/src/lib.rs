@@ -1,7 +1,4 @@
-//! PGlite storage backend implementation.
-//!
-//! PGlite runs as a JavaScript/WASM PostgreSQL runtime. The Rust store owns a
-//! Node.js sidecar and exchanges JSONL requests over stdio.
+#![doc = include_str!("../README.md")]
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::{BufRead, BufReader, Write};

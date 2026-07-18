@@ -6,7 +6,20 @@ This crate implements `RemoteStoreBackend` using `gcloud-spanner`. Use it
 through `RemoteProllyStore` and `AsyncProlly` when you need globally consistent
 SQL-backed Prolly tree storage on Google Cloud Spanner.
 
-## When To Use It
+## Installation
+
+The client dependency is listed explicitly because applications construct the
+`ClientConfig` passed to the adapter:
+
+```toml
+[dependencies]
+prolly-map = "0.4"
+prolly-store-spanner = "0.2.1"
+google-cloud-spanner = { package = "gcloud-spanner", version = "=1.8.1" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## When to use it
 
 Use this adapter when your application already runs on Cloud Spanner or when
 named roots need strongly consistent, horizontally scalable SQL storage. It is a
@@ -18,7 +31,7 @@ Use PostgreSQL/MySQL for simpler single-region SQL deployments. Use Redis for
 cache-like state. Use DynamoDB or Cosmos DB when your cloud platform is AWS or
 Azure and you prefer their native NoSQL services.
 
-## Table Model
+## Table model
 
 The adapter expects these GoogleSQL tables:
 
@@ -69,7 +82,7 @@ gcloud spanner databases ddl update <database> \
 Authentication depends on `gcloud-spanner` configuration. In the examples and
 tests, set `PROLLY_STORE_SPANNER_AUTH=1` to call `ClientConfig::with_auth()`.
 
-## Basic Usage
+## Basic usage
 
 ```rust
 use google_cloud_spanner::client::ClientConfig;
@@ -97,7 +110,7 @@ prolly.publish_named_root(b"accounts/main", &tree).await?;
 # }
 ```
 
-## Diff And Merge
+## Diff and merge
 
 ```rust
 # use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -139,10 +152,11 @@ assert_eq!(
 # }
 ```
 
-## Operational Notes
+## Operational notes
 
 - The adapter does not create tables. Apply DDL before startup.
-- Named-root compare-and-swap uses a Spanner read-write transaction.
+- Strict commits validate named-root preconditions and apply node and root
+  mutations in one Spanner read-write transaction.
 - `batch_put_nodes` is applied as Spanner mutations.
 - There is no adapter-level key prefix. Use distinct named-root prefixes for
   tenants or environments, and isolate databases when you need full physical
@@ -150,7 +164,7 @@ assert_eq!(
 - Node garbage collection should be coordinated at the application layer after
   deciding which named roots to retain.
 
-## Running The Example
+## Running the example
 
 From the standalone repository root:
 
@@ -162,3 +176,20 @@ cargo run --manifest-path stores/prolly-store-spanner/Cargo.toml --example basic
 
 The example writes a base tree, diffs and merges branches, resolves a conflict,
 publishes a unique named root, and loads it back.
+
+## Testing
+
+The integration test runs when `PROLLY_STORE_SPANNER_DATABASE` is set. Set
+`PROLLY_STORE_SPANNER_AUTH=1` to use application-default authentication; omit it
+when the client environment already supplies the intended emulator or channel
+configuration:
+
+```bash
+cargo test --manifest-path stores/prolly-store-spanner/Cargo.toml
+```
+
+Use a dedicated test database or distinct named-root prefix. The adapter does
+not provide a backend-wide key prefix or cleanup helper.
+
+See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
+async map, transaction, diff, and merge APIs used with this backend.

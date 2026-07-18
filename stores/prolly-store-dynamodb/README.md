@@ -6,7 +6,20 @@ This crate implements `RemoteStoreBackend` with the AWS SDK for DynamoDB. Use it
 through `RemoteProllyStore` and `AsyncProlly` for serverless, managed,
 content-addressed Prolly tree storage.
 
-## When To Use It
+## Installation
+
+The AWS versions below match the adapter's SDK line:
+
+```toml
+[dependencies]
+prolly-map = "0.4"
+prolly-store-dynamodb = "0.2.1"
+aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
+aws-sdk-dynamodb = "=1.73.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## When to use it
 
 Use this adapter when you want a managed AWS-native store with on-demand
 capacity, simple operational scaling, and low administrative overhead. It is a
@@ -18,7 +31,7 @@ Use DynamoDB Local for integration tests and development. Do not use DynamoDB
 Local performance numbers as production DynamoDB capacity numbers; the local
 Java simulator has very different scaling behavior.
 
-## Table Model
+## Table model
 
 The adapter uses one table with:
 
@@ -36,7 +49,7 @@ Logical records are namespaced by binary prefixes:
 `initialize_schema` creates the table with on-demand billing if it does not
 exist. Existing tables must already have the binary `pk` partition key.
 
-## Local Setup
+## Local setup
 
 Run DynamoDB Local:
 
@@ -59,7 +72,7 @@ export PROLLY_STORE_DYNAMODB_TABLE=prolly_store_example
 export AWS_REGION=us-west-2
 ```
 
-## AWS Setup
+## AWS setup
 
 For AWS DynamoDB, omit `PROLLY_STORE_DYNAMODB_ENDPOINT` and provide normal AWS
 credentials through the environment, profile, instance role, or workload
@@ -74,7 +87,7 @@ aws dynamodb create-table \
   --billing-mode PAY_PER_REQUEST
 ```
 
-## Basic Usage
+## Basic usage
 
 ```rust
 use aws_sdk_dynamodb::config::{BehaviorVersion, Credentials, Region};
@@ -111,7 +124,7 @@ prolly.publish_named_root(b"tasks/main", &tree).await?;
 # }
 ```
 
-## Diff And Merge
+## Diff and merge
 
 Branching is immutable. A branch update writes new content-addressed nodes while
 unchanged subtrees keep their existing CIDs:
@@ -156,17 +169,19 @@ assert_eq!(
 # }
 ```
 
-## Operational Notes
+## Operational notes
 
 - DynamoDB limits batch writes to 25 items; the adapter chunks writes and
   retries unprocessed items.
+- Strict transactions use `TransactWriteItems` and are limited to 100 combined
+  condition checks, node writes, and root writes.
 - Individual serialized nodes must fit DynamoDB item limits.
 - Use `with_key_prefix` for tenant or test isolation inside a shared table.
 - `clear_namespace` scans and deletes every item under the prefix. Use it for
   tests, not as a production cleanup primitive.
 - Root compare-and-swap uses DynamoDB conditional writes.
 
-## Running The Example
+## Running the example
 
 From the standalone repository root:
 
@@ -179,3 +194,18 @@ cargo run --manifest-path stores/prolly-store-dynamodb/Cargo.toml --example basi
 
 The example supports both DynamoDB Local and AWS DynamoDB. With
 `PROLLY_STORE_DYNAMODB_ENDPOINT` set, it uses local test credentials.
+
+## Testing
+
+The integration test runs when `PROLLY_STORE_DYNAMODB_TABLE` is set. Point
+`PROLLY_STORE_DYNAMODB_ENDPOINT` at DynamoDB Local for a credential-free run, or
+omit it to use the normal AWS credential chain:
+
+```bash
+cargo test --manifest-path stores/prolly-store-dynamodb/Cargo.toml
+```
+
+The test uses a unique binary key prefix and clears only that namespace.
+
+See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
+async map, transaction, diff, and merge APIs used with this backend.
