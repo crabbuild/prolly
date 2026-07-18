@@ -89,6 +89,7 @@ impl ExecutionPolicy {
         )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn sequential() -> Self {
         Self {
             width: 1,
