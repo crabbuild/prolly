@@ -1,0 +1,13 @@
+schema=sqlite-prolly-patterns-v1
+revision=1a738fc6c6d24d01c52b2ba19ee5a7e0a493e1df
+dirty=true
+sizes=100
+runs=1
+operations=10
+key_bytes=24
+value_bytes=100
+random_seed=0x6a09e667f3bcc909
+sqlite_journal=WAL
+sqlite_synchronous=NORMAL
+manager_cache=fresh-or-warmed
+os_cache=uncontrolled
