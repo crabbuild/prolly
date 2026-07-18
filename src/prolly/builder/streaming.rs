@@ -2,7 +2,9 @@ use super::{new_builder_node, EncodedNodeSizer, NodeSummary};
 use crate::prolly::boundary::BoundaryDetector;
 use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
+use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
+use crate::prolly::format::{ChunkMeasure, NodeLayoutSpec, TreeFormat};
 use crate::prolly::node::Node;
 
 #[derive(Debug)]
@@ -18,7 +20,9 @@ pub(crate) struct LevelEmitter {
     level: u8,
     current: Node,
     detector: BoundaryDetector,
-    sizer: EncodedNodeSizer,
+    sizer: Option<EncodedNodeSizer>,
+    encoded_measure: bool,
+    upper_size: u64,
 }
 
 impl LevelEmitter {
@@ -26,10 +30,26 @@ impl LevelEmitter {
         if leaf != (level == 0) {
             return Err(Error::InvalidNode);
         }
+        config.format.validate()?;
+        if let NodeLayoutSpec::Custom { id, .. } = &config.format.node_layout {
+            return Err(Error::InvalidFormat(format!(
+                "node layout '{id}' has no registered codec"
+            )));
+        }
+        let encoded_measure = config.format.chunking.measure == ChunkMeasure::EncodedBytes;
+        let sizer = encoded_measure
+            .then(|| EncodedNodeSizer::new(config.format.clone(), leaf, level))
+            .transpose()?;
+        let upper_size = match &sizer {
+            Some(sizer) => sizer.size(),
+            None => conservative_empty_upper(&config.format)?,
+        };
         Ok(Self {
             current: new_builder_node(&config, leaf, level),
             detector: BoundaryDetector::new(config.format.chunking.clone(), u16::from(level))?,
-            sizer: EncodedNodeSizer::new(config.format.clone(), leaf, level)?,
+            encoded_measure,
+            sizer,
+            upper_size,
             config,
             leaf,
             level,
@@ -41,47 +61,111 @@ impl LevelEmitter {
         key: Vec<u8>,
         value: Vec<u8>,
     ) -> Result<Vec<EmittedNode>, Error> {
+        let mut emitted = Vec::new();
+        self.push_leaf_with(key, value, |node| emitted.push(node))?;
+        Ok(emitted)
+    }
+
+    pub(crate) fn push_leaf_with(
+        &mut self,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        emit: impl FnMut(EmittedNode),
+    ) -> Result<(), Error> {
         if !self.leaf {
             return Err(Error::InvalidNode);
         }
-        self.push_entry(key, value, None)
+        self.push_entry_with(key, value, None, emit)
     }
 
     pub(crate) fn push_child(&mut self, child: NodeSummary) -> Result<Vec<EmittedNode>, Error> {
+        let mut emitted = Vec::new();
+        self.push_child_with(child, |node| emitted.push(node))?;
+        Ok(emitted)
+    }
+
+    pub(crate) fn push_child_with(
+        &mut self,
+        child: NodeSummary,
+        emit: impl FnMut(EmittedNode),
+    ) -> Result<(), Error> {
         if self.leaf {
             return Err(Error::InvalidNode);
         }
-        self.push_entry(
+        self.push_entry_with(
             child.first_key,
             child.cid.as_bytes().to_vec(),
             Some(child.count),
+            emit,
         )
     }
 
-    fn push_entry(
+    fn push_entry_with(
         &mut self,
         key: Vec<u8>,
         value: Vec<u8>,
         child_count: Option<u64>,
-    ) -> Result<Vec<EmittedNode>, Error> {
+        mut emit: impl FnMut(EmittedNode),
+    ) -> Result<(), Error> {
         let hard_max = self.config.format.chunking.hard_max_node_bytes;
-        let mut emitted = Vec::new();
-        let mut encoded_size = self.sizer.size_after(&key, &value, child_count)?;
-        if !self.current.is_empty() && encoded_size > hard_max {
-            emitted.push(self.flush_current()?.expect("nonempty node flushes"));
-            self.detector.reset();
-            encoded_size = self.sizer.size_after(&key, &value, child_count)?;
-        }
-        if encoded_size > hard_max {
-            return Err(Error::EntryTooLarge {
-                encoded_bytes: encoded_size,
-                limit: hard_max,
-            });
-        }
+        let encoded_entry_bytes = if self.encoded_measure {
+            let previous_key = self.current.keys.last().map(Vec::as_slice);
+            let mut encoded_size = self
+                .sizer
+                .as_ref()
+                .expect("encoded measure has a sizer")
+                .size_after(previous_key, &key, &value, child_count)?;
+            if !self.current.is_empty() && encoded_size > hard_max {
+                emit(self.flush_current()?.expect("nonempty node flushes"));
+                self.detector.reset();
+                encoded_size = self
+                    .sizer
+                    .as_ref()
+                    .expect("encoded measure has a sizer")
+                    .size_after(None, &key, &value, child_count)?;
+            }
+            if encoded_size > hard_max {
+                return Err(Error::EntryTooLarge {
+                    encoded_bytes: encoded_size,
+                    limit: hard_max,
+                });
+            }
 
-        let encoded_entry_bytes = encoded_size.saturating_sub(self.sizer.size());
-        self.sizer
-            .push_sized(&key, &value, child_count, encoded_size)?;
+            let encoded_entry_bytes = encoded_size.saturating_sub(
+                self.sizer
+                    .as_ref()
+                    .expect("encoded measure has a sizer")
+                    .size(),
+            );
+            self.sizer
+                .as_mut()
+                .expect("encoded measure has a sizer")
+                .push_sized(&key, &value, child_count, encoded_size)?;
+            self.upper_size = encoded_size;
+            encoded_entry_bytes
+        } else {
+            let entry_upper = conservative_entry_upper(&key, &value, child_count)?;
+            let mut encoded_size = self
+                .upper_size
+                .checked_add(entry_upper)
+                .ok_or(Error::InvalidNode)?;
+            if encoded_size > hard_max {
+                encoded_size = self.exact_size_after(&key, &value, child_count)?;
+                if !self.current.is_empty() && encoded_size > hard_max {
+                    emit(self.flush_current()?.expect("nonempty node flushes"));
+                    self.detector.reset();
+                    encoded_size = self.exact_size_after(&key, &value, child_count)?;
+                }
+                if encoded_size > hard_max {
+                    return Err(Error::EntryTooLarge {
+                        encoded_bytes: encoded_size,
+                        limit: hard_max,
+                    });
+                }
+            }
+            self.upper_size = encoded_size;
+            0
+        };
         let boundary = self
             .detector
             .observe(&key, &value, encoded_entry_bytes as usize)?;
@@ -91,12 +175,45 @@ impl LevelEmitter {
             self.current.child_counts.push(count);
         }
         if boundary {
-            emitted.push(
+            emit(
                 self.flush_current()?
                     .expect("observed entry makes node nonempty"),
             );
         }
-        Ok(emitted)
+        Ok(())
+    }
+
+    fn exact_size_after(
+        &self,
+        key: &[u8],
+        value: &[u8],
+        child_count: Option<u64>,
+    ) -> Result<u64, Error> {
+        let mut sizer = EncodedNodeSizer::new(self.config.format.clone(), self.leaf, self.level)?;
+        for index in 0..self.current.len() {
+            let previous_key = index
+                .checked_sub(1)
+                .map(|previous| self.current.keys[previous].as_slice());
+            let buffered_child_count = (!self.leaf).then(|| self.current.child_counts[index]);
+            let size = sizer.size_after(
+                previous_key,
+                &self.current.keys[index],
+                &self.current.vals[index],
+                buffered_child_count,
+            )?;
+            sizer.push_sized(
+                &self.current.keys[index],
+                &self.current.vals[index],
+                buffered_child_count,
+                size,
+            )?;
+        }
+        sizer.size_after(
+            self.current.keys.last().map(Vec::as_slice),
+            key,
+            value,
+            child_count,
+        )
     }
 
     pub(crate) fn finish(&mut self) -> Result<Option<EmittedNode>, Error> {
@@ -132,7 +249,12 @@ impl LevelEmitter {
                 node.child_counts.iter().sum()
             },
         };
-        self.sizer.reset();
+        if let Some(sizer) = &mut self.sizer {
+            sizer.reset();
+            self.upper_size = sizer.size();
+        } else {
+            self.upper_size = conservative_empty_upper(&self.config.format)?;
+        }
         Ok(Some(EmittedNode {
             summary,
             node,
@@ -144,6 +266,29 @@ impl LevelEmitter {
     fn buffered_entries(&self) -> usize {
         self.current.len()
     }
+}
+
+fn conservative_entry_upper(
+    key: &[u8],
+    value: &[u8],
+    child_count: Option<u64>,
+) -> Result<u64, Error> {
+    let key_len = u64::try_from(key.len()).map_err(|_| Error::InvalidNode)?;
+    let value_len = u64::try_from(value.len()).map_err(|_| Error::InvalidNode)?;
+    key_len
+        .checked_add(value_len)
+        .and_then(|size| size.checked_add(if child_count.is_some() { 74 } else { 64 }))
+        .ok_or(Error::InvalidNode)
+}
+
+fn conservative_empty_upper(format: &TreeFormat) -> Result<u64, Error> {
+    let custom_encoding_len = match &format.value_encoding {
+        Encoding::Custom(name) => u64::try_from(name.len()).map_err(|_| Error::InvalidNode)?,
+        Encoding::Raw | Encoding::Cbor | Encoding::Json => 0,
+    };
+    128_u64
+        .checked_add(custom_encoding_len)
+        .ok_or(Error::InvalidNode)
 }
 
 struct ParentLevel {

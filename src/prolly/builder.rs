@@ -400,36 +400,25 @@ where
         level: u8,
         pending: &mut Vec<DeferredNode>,
     ) -> Result<Vec<NodeSummary>, Error> {
-        let internal_entries = children
-            .iter()
-            .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
-            .collect::<Vec<_>>();
-        let child_counts = children.iter().map(|child| child.count).collect::<Vec<_>>();
-        let chunk_ranges =
-            chunk_ranges_for_entries(&self.config, level, &internal_entries, Some(&child_counts))?;
-        let mut summaries = Vec::with_capacity(chunk_ranges.len());
-
-        for range in chunk_ranges {
-            let start = *range.start();
-            let end = *range.end();
-            let mut node = new_builder_node(&self.config, false, level);
-            reserve_node_entries(&mut node, end - start + 1);
-            for child in children.iter().take(end + 1).skip(start) {
-                node.keys.push(child.first_key.clone());
-                node.vals.push(child.cid.0.to_vec());
-                node.child_counts.push(child.count);
-            }
-
-            let first_key = node.keys.first().cloned().unwrap_or_default();
-            let count = children[start..=end].iter().map(|child| child.count).sum();
-            let bytes = node.to_bytes();
-            let cid = Cid::from_bytes(&bytes);
-            summaries.push(NodeSummary {
-                cid: cid.clone(),
-                first_key: first_key.clone(),
-                count,
+        let mut emitter = LevelEmitter::new(self.config.clone(), false, level)?;
+        let mut summaries = Vec::new();
+        for child in children {
+            emitter.push_child_with(child, |emitted| {
+                summaries.push(emitted.summary.clone());
+                pending.push(DeferredNode {
+                    cid: emitted.summary.cid,
+                    bytes: emitted.bytes,
+                    node: emitted.node,
+                });
+            })?;
+        }
+        if let Some(emitted) = emitter.finish()? {
+            summaries.push(emitted.summary.clone());
+            pending.push(DeferredNode {
+                cid: emitted.summary.cid,
+                bytes: emitted.bytes,
+                node: emitted.node,
             });
-            pending.push(DeferredNode { cid, bytes, node });
         }
         Ok(summaries)
     }
@@ -540,6 +529,7 @@ fn new_builder_node(config: &Config, leaf: bool, level: u8) -> Node {
         .build()
 }
 
+#[cfg_attr(not(feature = "async-store"), allow(dead_code))]
 pub(crate) fn chunk_ranges_for_entries(
     config: &Config,
     level: u8,
@@ -623,13 +613,14 @@ fn chunk_ranges_for_entries_impl(
     let mut sizer = EncodedNodeSizer::new(config.format.clone(), level == 0, level)?;
     for (index, (key, value)) in entries.iter().enumerate() {
         let child_count = child_counts.map(|counts| counts[index]);
-        let mut encoded_size = sizer.size_after(key, value, child_count)?;
+        let previous_key = (index > start).then(|| entries[index - 1].0.as_slice());
+        let mut encoded_size = sizer.size_after(previous_key, key, value, child_count)?;
         if index > start && encoded_size > config.format.chunking.hard_max_node_bytes {
             ranges.push(start..=(index - 1));
             start = index;
             detector.reset();
             sizer.reset();
-            encoded_size = sizer.size_after(key, value, child_count)?;
+            encoded_size = sizer.size_after(None, key, value, child_count)?;
         }
         if encoded_size > config.format.chunking.hard_max_node_bytes {
             return Err(Error::EntryTooLarge {
@@ -685,12 +676,13 @@ fn chunk_ranges_from_independent_hashes(
 
     for (index, ((key, value), hash_boundary)) in entries.iter().zip(hash_boundaries).enumerate() {
         let child_count = child_counts.map(|counts| counts[index]);
-        let mut encoded_size = sizer.size_after(key, value, child_count)?;
+        let previous_key = (index > start).then(|| entries[index - 1].0.as_slice());
+        let mut encoded_size = sizer.size_after(previous_key, key, value, child_count)?;
         if index > start && encoded_size > spec.hard_max_node_bytes {
             ranges.push(start..=(index - 1));
             start = index;
             sizer.reset();
-            encoded_size = sizer.size_after(key, value, child_count)?;
+            encoded_size = sizer.size_after(None, key, value, child_count)?;
         }
         if encoded_size > spec.hard_max_node_bytes {
             return Err(Error::EntryTooLarge {
@@ -782,8 +774,11 @@ mod tests {
                         _ => index + 1,
                     });
 
-                    let predicted = sizer.size_after(&key, &value, child_count).unwrap();
-                    sizer.push(&key, &value, child_count).unwrap();
+                    let previous_key = node.keys.last().map(Vec::as_slice);
+                    let predicted = sizer
+                        .size_after(previous_key, &key, &value, child_count)
+                        .unwrap();
+                    sizer.push(previous_key, &key, &value, child_count).unwrap();
                     node.keys.push(key);
                     node.vals.push(value);
                     if let Some(count) = child_count {
@@ -802,7 +797,14 @@ mod tests {
                     let key = format!("shared-prefix-{index:020}").into_bytes();
                     let value = [b'x'];
                     let child_count = (!leaf).then_some(index + 1);
-                    sizer.push(&key, &value, child_count).unwrap();
+                    sizer
+                        .push(
+                            node.keys.last().map(Vec::as_slice),
+                            &key,
+                            &value,
+                            child_count,
+                        )
+                        .unwrap();
                     node.keys.push(key);
                     node.vals.push(value.to_vec());
                     if let Some(count) = child_count {

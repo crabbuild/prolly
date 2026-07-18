@@ -17,7 +17,6 @@ pub(crate) struct EncodedNodeSizer {
     size: u64,
     empty_size: u64,
     payload_len: u64,
-    previous_key: Vec<u8>,
 }
 
 impl EncodedNodeSizer {
@@ -56,7 +55,6 @@ impl EncodedNodeSizer {
             size: empty_size,
             empty_size,
             payload_len: 0,
-            previous_key: Vec::new(),
         })
     }
 
@@ -67,6 +65,7 @@ impl EncodedNodeSizer {
 
     pub(crate) fn size_after(
         &self,
+        previous_key: Option<&[u8]>,
         key: &[u8],
         value: &[u8],
         child_count: Option<u64>,
@@ -81,7 +80,7 @@ impl EncodedNodeSizer {
 
         let entry_delta = match &self.format.node_layout {
             NodeLayoutSpec::PrefixCompressed => {
-                let shared = common_prefix_len(&self.previous_key, key);
+                let shared = previous_key.map_or(0, |previous| common_prefix_len(previous, key));
                 let shared = u64::try_from(shared).map_err(|_| Error::InvalidNode)?;
                 let suffix_len = key_len.checked_sub(shared).ok_or(Error::InvalidNode)?;
                 checked_sum(&[
@@ -134,11 +133,12 @@ impl EncodedNodeSizer {
     #[allow(dead_code)]
     pub(crate) fn push(
         &mut self,
+        previous_key: Option<&[u8]>,
         key: &[u8],
         value: &[u8],
         child_count: Option<u64>,
     ) -> Result<(), Error> {
-        let size = self.size_after(key, value, child_count)?;
+        let size = self.size_after(previous_key, key, value, child_count)?;
         self.push_sized(key, value, child_count, size)
     }
 
@@ -146,10 +146,9 @@ impl EncodedNodeSizer {
         &mut self,
         key: &[u8],
         value: &[u8],
-        child_count: Option<u64>,
+        _child_count: Option<u64>,
         size: u64,
     ) -> Result<(), Error> {
-        debug_assert_eq!(self.size_after(key, value, child_count)?, size);
         self.size = size;
         self.count = self.count.checked_add(1).ok_or(Error::InvalidNode)?;
         let key_len = u64::try_from(key.len()).map_err(|_| Error::InvalidNode)?;
@@ -159,10 +158,6 @@ impl EncodedNodeSizer {
             .checked_add(key_len)
             .and_then(|len| len.checked_add(value_len))
             .ok_or(Error::InvalidNode)?;
-        if matches!(self.format.node_layout, NodeLayoutSpec::PrefixCompressed) {
-            self.previous_key.clear();
-            self.previous_key.extend_from_slice(key);
-        }
         Ok(())
     }
 
@@ -170,7 +165,6 @@ impl EncodedNodeSizer {
         self.count = 0;
         self.size = self.empty_size;
         self.payload_len = 0;
-        self.previous_key.clear();
     }
 
     #[allow(dead_code)]

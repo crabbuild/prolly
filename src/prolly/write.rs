@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use super::boundary::entry_count_boundary;
-use super::builder::{BatchBuilder, EmittedNode, LevelEmitter, NodeSummary};
+use super::builder::{BatchBuilder, LevelEmitter, NodeSummary};
 use super::cid::Cid;
 use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
@@ -56,25 +56,25 @@ impl LeafEmitter {
     }
 
     pub(crate) fn push(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
-        let emitted = self.emitter.push_leaf(key, value)?;
-        self.collect(emitted);
-        Ok(())
+        let output = &mut self.emitted;
+        self.emitter.push_leaf_with(key, value, |emitted| {
+            output.push(EmittedLeaf {
+                summary: emitted.summary,
+                bytes: emitted.bytes,
+                node: emitted.node,
+            });
+        })
     }
 
     pub(crate) fn flush(&mut self) -> Result<(), Error> {
         if let Some(emitted) = self.emitter.finish()? {
-            self.collect(vec![emitted]);
-        }
-        Ok(())
-    }
-
-    fn collect(&mut self, emitted: Vec<EmittedNode>) {
-        self.emitted
-            .extend(emitted.into_iter().map(|emitted| EmittedLeaf {
+            self.emitted.push(EmittedLeaf {
                 summary: emitted.summary,
                 bytes: emitted.bytes,
                 node: emitted.node,
-            }));
+            });
+        }
+        Ok(())
     }
 
     pub(crate) fn is_aligned_with(&self, old: &NodeSummary) -> bool {

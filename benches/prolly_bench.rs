@@ -18,7 +18,7 @@ fn main() {
         .max(1_000);
 
     println!("prolly benchmark scale={scale}");
-    println!("name,total_ms,iterations,items,ns_per_item");
+    println!("name,total_ms,iterations,items,ns_per_item,median_ns,p95_ns,p99_ns");
 
     match std::env::var("PROLLY_BENCH_ONLY").as_deref() {
         Ok("batch-builder") => {
@@ -690,19 +690,31 @@ where
     f();
 
     let mut total = Duration::ZERO;
+    let mut samples = Vec::with_capacity(iterations);
     for _ in 0..iterations {
         let start = Instant::now();
         f();
-        total += start.elapsed();
+        let elapsed = start.elapsed();
+        total += elapsed;
+        samples.push(elapsed.as_nanos() / items.max(1) as u128);
     }
+
+    samples.sort_unstable();
+    let percentile = |percent: usize| {
+        let rank = (percent * samples.len()).div_ceil(100).max(1);
+        samples[rank - 1]
+    };
 
     let total_ns = total.as_nanos();
     let total_items = iterations as u128 * items as u128;
     let ns_per_item = total_ns.checked_div(total_items).unwrap_or_default();
 
     println!(
-        "{name},{:.3},{iterations},{items},{ns_per_item}",
-        total.as_secs_f64() * 1_000.0
+        "{name},{:.3},{iterations},{items},{ns_per_item},{},{},{}",
+        total.as_secs_f64() * 1_000.0,
+        percentile(50),
+        percentile(95),
+        percentile(99)
     );
 }
 

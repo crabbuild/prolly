@@ -357,6 +357,10 @@ impl BatchWriteCollector {
     /// The CID of the node (computed from its serialized bytes).
     pub fn add(&mut self, node: &Node) -> Cid {
         let bytes = node.to_bytes();
+        self.add_encoded(node, bytes)
+    }
+
+    fn add_encoded(&mut self, node: &Node, bytes: Vec<u8>) -> Cid {
         let cid = Cid::from_bytes(&bytes);
         if !self.seen_cids.insert(cid.clone()) {
             return cid;
@@ -3624,19 +3628,20 @@ fn child_refs_from_modified_node<S: Store>(
         return Ok(Vec::new());
     }
 
-    if node.len() <= node.max_chunk_size()
-        && node.to_bytes().len() as u64 <= node.format.chunking.hard_max_node_bytes
-    {
-        let first_key = node.keys.first().cloned().unwrap_or_default();
-        let level = node.level;
-        let count = stored_node_count(&node);
-        let cid = collector.add(&node);
-        return Ok(vec![ChildRef {
-            cid,
-            first_key,
-            level,
-            count,
-        }]);
+    if node.len() <= node.max_chunk_size() {
+        let bytes = node.to_bytes();
+        if bytes.len() as u64 <= node.format.chunking.hard_max_node_bytes {
+            let first_key = node.keys.first().cloned().unwrap_or_default();
+            let level = node.level;
+            let count = stored_node_count(&node);
+            let cid = collector.add_encoded(&node, bytes);
+            return Ok(vec![ChildRef {
+                cid,
+                first_key,
+                level,
+                count,
+            }]);
+        }
     }
 
     Ok(child_refs_from_nodes(

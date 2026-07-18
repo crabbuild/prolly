@@ -17,6 +17,27 @@ fn cuts(mut detector: BoundaryDetector, values: &[&[u8]]) -> Vec<usize> {
     result
 }
 
+fn report_distribution(name: &str, spec: &ChunkingSpec, chunk_sizes: &[u64]) {
+    let mut sorted = chunk_sizes.to_vec();
+    sorted.sort_unstable();
+    let percentile = |percent: usize| {
+        let rank = (percent * sorted.len()).div_ceil(100).max(1);
+        sorted[rank - 1]
+    };
+    let mean = sorted.iter().sum::<u64>() / sorted.len() as u64;
+    let forced = sorted.iter().filter(|&&size| size >= spec.max).count();
+    eprintln!(
+        "distribution,name={name},chunks={},mean={mean},median={},p90={},p99={},max={},forced={},forced_ppm={}",
+        sorted.len(),
+        percentile(50),
+        percentile(90),
+        percentile(99),
+        sorted.last().copied().unwrap_or_default(),
+        forced,
+        forced * 1_000_000 / sorted.len(),
+    );
+}
+
 #[test]
 fn built_in_presets_validate() {
     for spec in [
@@ -146,6 +167,7 @@ fn rolling_logical_bytes_tracks_target_distribution() {
         .iter()
         .filter(|&&chunk_bytes| chunk_bytes >= spec.max)
         .count();
+    report_distribution("rolling", &spec, &chunk_sizes);
 
     assert!(
         mean.abs_diff(spec.target) <= spec.target / 10,
@@ -182,6 +204,7 @@ fn weibull_logical_bytes_tracks_target_distribution() {
 
     assert!(!chunk_sizes.is_empty());
     let mean = chunk_sizes.iter().sum::<u64>() / chunk_sizes.len() as u64;
+    report_distribution("weibull", &spec, &chunk_sizes);
     assert!(
         mean.abs_diff(spec.target) <= spec.target / 10,
         "mean={mean}, target={}",
