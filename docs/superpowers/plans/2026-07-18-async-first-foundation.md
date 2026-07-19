@@ -132,13 +132,13 @@ where
 
 The store adapter supplies named future wrapper types for each operation. Their `Future::poll` calls the synchronous store once and returns `Poll::Ready`; arbitrary user futures cannot implement the sealed marker.
 
-- [ ] Add unit tests for ready success, ready error, nested/reentrant ready execution, exactly-one store call, and a test-only marked future that returns `Pending` and must panic with `"ready-only future returned Pending"`.
-- [ ] Add a compile-fail doctest showing that an arbitrary pending future cannot be passed to `run_ready`.
-- [ ] Run `cargo test --test ready_sync`; verify RED because the contract does not exist.
-- [ ] Implement a no-op `RawWaker`, pin the future locally, poll exactly once, and panic on `Pending`. Do not use `futures::executor`, Tokio, Condvar, thread parking, or spinning.
-- [ ] Add ready wrappers to `SyncStoreAsAsync` without changing native `AsyncStore` implementations.
-- [ ] Run `cargo test --test ready_sync` and `cargo test --doc`.
-- [ ] Commit with `git commit -m "feat: add ready-only sync execution contract"`.
+- [x] Add unit tests for ready success, ready error, nested/reentrant ready execution, exactly-one store call, and a test-only marked future that returns `Pending` and must panic with `"ready-only future returned Pending"`.
+- [x] Add a compile-fail doctest showing that an arbitrary pending future cannot be passed to `run_ready`.
+- [x] Run `cargo test --test ready_sync`; verify RED because the contract does not exist.
+- [x] Implement a no-op `RawWaker`, pin the future locally, poll exactly once, and panic on `Pending`. Do not use `futures::executor`, Tokio, Condvar, thread parking, or spinning.
+- [x] Add ready wrappers to `SyncStoreAsAsync` without changing native `AsyncStore` implementations.
+- [x] Run `cargo test --test ready_sync` and `cargo test --doc`.
+- [x] Commit with `git commit -m "feat: add ready-only sync execution contract"`.
 
 ---
 

@@ -6,9 +6,11 @@ pub use file::{FileNodeStore, FileNodeStoreError};
 pub use memory::{MemStore, MemStoreError};
 
 use std::collections::{hash_map::Entry, HashMap};
+use std::future::Future;
 use std::sync::Arc;
 
 use super::cid::Cid;
+use super::engine::ready::{ready_only, ReadyOnly};
 use super::manifest::{
     AsyncManifestStore, AsyncManifestStoreScan, ManifestStore, ManifestStoreScan, ManifestUpdate,
     NamedRootManifest, RootManifest,
@@ -540,6 +542,15 @@ async fn async_get_indexed<S: AsyncStore + ?Sized>(
 /// This adapter calls the synchronous store directly and does not spawn
 /// blocking work. Runtime-specific `spawn_blocking` adapters can be layered on
 /// top by applications that need them.
+///
+/// Arbitrary futures cannot opt into the internal ready-only contract:
+///
+/// ```compile_fail
+/// use prolly::{MemStore, SyncStoreAsAsync};
+///
+/// let adapter = SyncStoreAsAsync::new(MemStore::new());
+/// adapter.ready(std::future::pending::<()>());
+/// ```
 #[derive(Clone, Debug)]
 pub struct SyncStoreAsAsync<S> {
     inner: S,
@@ -558,6 +569,15 @@ impl<S> SyncStoreAsAsync<S> {
     /// Consume the adapter and return the wrapped store.
     pub fn into_inner(self) -> S {
         self.inner
+    }
+
+    /// Mark an engine operation over this adapter as ready-only.
+    #[expect(
+        dead_code,
+        reason = "used when the synchronous facade is cut over to ProllyEngine"
+    )]
+    pub(crate) fn ready<F: Future>(&self, future: F) -> ReadyOnly<F> {
+        ready_only(future)
     }
 }
 impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
