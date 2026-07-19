@@ -1,0 +1,29 @@
+name: prolly-postgres-scale-bench
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - track_io_timing=on
+      - -c
+      - pg_stat_statements.track=all
+    environment:
+      POSTGRES_DB: prolly
+      POSTGRES_PASSWORD: prolly
+      POSTGRES_USER: prolly
+    ports:
+      - "127.0.0.1:${PROLLY_POSTGRES_BENCH_PORT:-55433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prolly -d prolly"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
