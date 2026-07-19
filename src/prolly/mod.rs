@@ -85,6 +85,7 @@
 //! nature of trees means multiple threads can safely read from the same tree simultaneously.
 
 use futures_util::stream::{self, StreamExt};
+#[cfg(test)]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -94,11 +95,15 @@ use std::ops::Range;
 #[cfg(test)]
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock, RwLock};
+#[cfg(test)]
+use std::sync::RwLock;
+use std::sync::{Arc, OnceLock};
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
 const PARALLEL_NODE_DECODE_THRESHOLD: usize = 16;
+#[cfg(test)]
 const GET_MANY_PREFETCH_PARALLELISM: usize = 16;
 const GET_MANY_BOUNDARY_ROUTE_MIN_POSITIONS: usize = 32;
 #[cfg(test)]
@@ -215,24 +220,11 @@ struct MissingNodeBatch {
     positions: Vec<InlinePositions>,
 }
 
+#[cfg(test)]
 #[derive(Default)]
 pub(crate) struct OrderedLoadExecution {
     pub(crate) nodes: Vec<Arc<Node>>,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "retained until ordered read scheduling moves behind ProllyEngine"
-        )
-    )]
     pub(crate) parallel_tasks: usize,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "retained until ordered read scheduling moves behind ProllyEngine"
-        )
-    )]
     pub(crate) parallel_width: usize,
 }
 
@@ -1067,10 +1059,12 @@ impl<S: Store> Prolly<S> {
         self.engine.store.inner()
     }
 
+    #[cfg(test)]
     fn node_cache(&self) -> &RwLock<NodeCache> {
         &self.engine.node_cache
     }
 
+    #[cfg(test)]
     fn raw_metrics(&self) -> &ProllyMetrics {
         &self.engine.metrics
     }
@@ -2725,9 +2719,6 @@ impl<S: Store> Prolly<S> {
         base: &Tree,
         other: &Tree,
     ) -> Result<Box<dyn Iterator<Item = Result<Diff, Error>> + 'a>, Error> {
-        if let Some(diffs) = diff::try_append_only_diff(self, base, other)? {
-            return Ok(Box::new(diffs.into_iter().map(Ok)));
-        }
         Ok(Box::new(diff::stream_diff(self, base, other)))
     }
 
@@ -2776,15 +2767,18 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Load a node by its CID from the store.
+    #[cfg(test)]
     pub(crate) fn load(&self, cid: &Cid) -> Result<Node, Error> {
         Ok(self.load_arc(cid)?.as_ref().clone())
     }
 
     /// Load a node by its CID, reusing the in-process immutable node cache.
+    #[cfg(test)]
     pub(crate) fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
         self.load_arc_with_format(cid, &self.config().format)
     }
 
+    #[cfg(test)]
     fn load_arc_with_format(
         &self,
         cid: &Cid,
@@ -2836,6 +2830,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Load the immutable packed representation used by read-only traversals.
+    #[cfg(test)]
     pub(crate) fn load_read_arc(&self, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
         let unbounded = if let Ok(cache) = self.node_cache().read() {
             if cache.is_unbounded() {
@@ -2901,6 +2896,7 @@ impl<S: Store> Prolly<S> {
         Ok(node)
     }
 
+    #[cfg(test)]
     pub(crate) fn load_many_read_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<ReadNode>>, Error> {
         if cids.is_empty() {
             return Ok(Vec::new());
@@ -3050,12 +3046,14 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Load nodes by CID in input order, batching cache misses through the store.
+    #[cfg(test)]
     pub(crate) fn load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
         self.load_many_ordered_with_parallelism(cids, 1)
     }
 
     /// Load nodes by CID in input order, splitting cache misses across up to
     /// `parallelism` concurrent ordered batch reads.
+    #[cfg(test)]
     pub(crate) fn load_many_ordered_with_parallelism(
         &self,
         cids: &[Cid],
@@ -3067,6 +3065,7 @@ impl<S: Store> Prolly<S> {
     /// Load nodes with independent caps for blocking store reads and CPU
     /// decoding. Configured mutation execution uses this form so a wider
     /// high-latency read fan-out never overrides the caller's CPU width.
+    #[cfg(test)]
     pub(crate) fn load_many_ordered_with_widths(
         &self,
         cids: &[Cid],
@@ -3078,6 +3077,7 @@ impl<S: Store> Prolly<S> {
             .nodes)
     }
 
+    #[cfg(test)]
     pub(crate) fn load_many_ordered_with_widths_and_stats(
         &self,
         cids: &[Cid],
@@ -3092,6 +3092,7 @@ impl<S: Store> Prolly<S> {
         )
     }
 
+    #[cfg(test)]
     fn load_many_ordered_with_widths_and_stats_for_format(
         &self,
         cids: &[Cid],
@@ -3633,7 +3634,7 @@ impl<S: Store> Prolly<S> {
     ///
     /// Returns a vector of (node, index) pairs representing the traversal path.
     /// The last element is the leaf node where the key would be found/inserted.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn find_path(&self, tree: &Tree, key: &[u8]) -> Result<Vec<(Node, usize)>, Error> {
         let mut path = Vec::new();
 
@@ -5994,6 +5995,36 @@ where
             .into_iter()
             .collect::<Option<Vec<_>>>()
             .ok_or(Error::InvalidNode)
+    }
+
+    pub(crate) async fn load_read_frontier_ordered(
+        &self,
+        cids: &[Cid],
+    ) -> Result<Vec<Arc<ReadNode>>, Error> {
+        if cids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parallelism = self.execution.read_parallelism().get().min(cids.len());
+        if parallelism == 1 || cids.len() <= parallelism {
+            return self.load_many_read_ordered(cids).await;
+        }
+
+        let chunk_size = cids
+            .len()
+            .div_ceil(parallelism)
+            .min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
+        let partitions = stream::iter(
+            cids.chunks(chunk_size)
+                .map(|chunk| async move { self.load_many_read_ordered(chunk).await }),
+        )
+        .buffered(parallelism)
+        .collect::<Vec<_>>()
+        .await;
+        let mut nodes = Vec::with_capacity(cids.len());
+        for partition in partitions {
+            nodes.extend(partition?);
+        }
+        Ok(nodes)
     }
 
     async fn load_arc_pinned(&self, cid: &Cid) -> Result<(Arc<Node>, bool), Error> {

@@ -7,6 +7,7 @@ use std::cell::Cell;
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(test)]
 use rayon::prelude::*;
 
 static ACTIVE_CANONICAL_WRITES: AtomicUsize = AtomicUsize::new(0);
@@ -198,6 +199,7 @@ pub(crate) fn indexed_ranges(len: usize, width: usize) -> Vec<Range<usize>> {
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn map_indexed_ranges<T, F>(len: usize, width: usize, map: F) -> Vec<T>
 where
     T: Send,

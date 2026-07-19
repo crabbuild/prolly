@@ -132,6 +132,7 @@ use super::Prolly;
 
 type ChildSpanCid<'a> = (Option<&'a [u8]>, Cid);
 type BorrowedEntry<'a> = (&'a [u8], &'a [u8]);
+#[cfg(test)]
 const DIFF_COLLECTION_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(test)]
 const DIFF_FRAME_PREFETCH_PARALLELISM: usize = 16;
@@ -1005,11 +1006,15 @@ pub(crate) fn stream_diff<'a, S: Store>(
 /// A retained cursor over one subtree used only for boundary-misaligned
 /// borrowed diff fallback. It keeps memory bounded by tree height and never
 /// materializes complete subtree entries.
+#[cfg(test)]
+#[expect(dead_code, reason = "legacy sync traversal oracle")]
 struct BorrowedSubtreeCursor<'a, S: Store> {
     prolly: &'a Prolly<S>,
     stack: Vec<(Arc<ReadNode>, usize)>,
 }
 
+#[cfg(test)]
+#[expect(dead_code, reason = "legacy sync traversal oracle")]
 impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
     fn new(prolly: &'a Prolly<S>, root: Arc<ReadNode>) -> Result<Self, Error> {
         let mut cursor = Self {
@@ -1331,6 +1336,8 @@ where
     Ok(())
 }
 
+#[cfg(test)]
+#[expect(dead_code, reason = "legacy sync traversal oracle")]
 fn visit_subtree_diff<S, F, B>(
     prolly: &Prolly<S>,
     base: Arc<ReadNode>,
@@ -1388,6 +1395,8 @@ where
     Ok(())
 }
 
+#[cfg(test)]
+#[expect(dead_code, reason = "legacy sync traversal oracle")]
 fn visit_subtree_diff_range<S, F, B>(
     prolly: &Prolly<S>,
     base: Arc<ReadNode>,
@@ -1762,6 +1771,8 @@ fn packed_child_diff_frames(node: &ReadNode, kind: DiffFrameKind) -> Result<Vec<
         .collect()
 }
 
+#[cfg(test)]
+#[expect(dead_code, reason = "legacy sync traversal oracle")]
 fn prefetch_borrowed_frame_roots<S: Store>(
     prolly: &Prolly<S>,
     frames: &[BorrowedDiffFrame],
@@ -1836,11 +1847,13 @@ where
         }
     }
     if !cids.is_empty() {
-        let _ = prolly.load_many_read_ordered(&cids).await?;
+        let _ = prolly.load_read_frontier_ordered(&cids).await?;
     }
     Ok(())
 }
 
+#[cfg(test)]
+#[expect(dead_code, reason = "legacy sync traversal oracle")]
 fn scan_diff_borrowed<S, F, B>(
     prolly: &Prolly<S>,
     base: &Tree,
@@ -2101,7 +2114,9 @@ impl<S: Store> Prolly<S> {
         other: &Tree,
         visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        scan_diff_borrowed(self, base, other, None, None, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_diff_until(base, other, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit differences whose keys fall in `[start, end)`.
@@ -2130,7 +2145,11 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         visit: impl for<'diff> FnMut(DiffRef<'diff>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        scan_diff_borrowed(self, base, other, Some(start), end, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self
+            .engine
+            .scan_range_diff_until(base, other, start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit only genuine three-way conflicts without allocating `Conflict`.
@@ -3957,6 +3976,7 @@ where
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn diff_range_nodes<S: Store>(
     prolly: &Prolly<S>,
     base_cid: &Cid,
@@ -3997,6 +4017,7 @@ fn diff_range_nodes<S: Store>(
     }
 }
 
+#[cfg(test)]
 #[allow(dead_code)]
 fn load_range_diff_node_pair<S: Store>(
     prolly: &Prolly<S>,
@@ -4011,6 +4032,7 @@ fn load_range_diff_node_pair<S: Store>(
     Ok((prolly.load_arc(base_cid)?, prolly.load_arc(other_cid)?))
 }
 
+#[cfg(test)]
 #[allow(dead_code)]
 fn diff_internal_nodes_range<S: Store>(
     prolly: &Prolly<S>,
@@ -4284,6 +4306,7 @@ fn diff_leaf_nodes_range(
     dead_code,
     reason = "retained only as a correctness oracle for sync diff fallback"
 )]
+#[cfg(test)]
 fn diff_collected_nodes<S: Store>(
     prolly: &Prolly<S>,
     base: &Node,
@@ -4298,6 +4321,7 @@ fn diff_collected_nodes<S: Store>(
     Ok(())
 }
 
+#[cfg(test)]
 fn diff_collected_nodes_range<S: Store>(
     prolly: &Prolly<S>,
     base: &Node,
@@ -4411,6 +4435,7 @@ fn collect_entries_from_node<S: Store>(
     Ok(())
 }
 
+#[cfg(test)]
 fn collect_entries_range_from_node<S: Store>(
     prolly: &Prolly<S>,
     node: &Node,
@@ -4451,6 +4476,7 @@ fn collect_entries_range_from_node<S: Store>(
     Ok(())
 }
 
+#[cfg(test)]
 fn collect_added_from_cid<S: Store>(
     prolly: &Prolly<S>,
     cid: &Cid,
@@ -4460,6 +4486,7 @@ fn collect_added_from_cid<S: Store>(
     collect_added_from_node(prolly, &node, diffs)
 }
 
+#[cfg(test)]
 fn collect_added_from_node<S: Store>(
     prolly: &Prolly<S>,
     node: &Node,
@@ -4484,6 +4511,7 @@ fn collect_added_from_node<S: Store>(
     Ok(())
 }
 
+#[cfg(test)]
 #[allow(dead_code)]
 fn collect_added_range_from_cid<S: Store>(
     prolly: &Prolly<S>,
@@ -4497,6 +4525,7 @@ fn collect_added_range_from_cid<S: Store>(
     collect_added_range_from_node(prolly, &node, span_end, range_start, range_end, diffs)
 }
 
+#[cfg(test)]
 #[allow(dead_code)]
 fn collect_added_range_from_node<S: Store>(
     prolly: &Prolly<S>,
@@ -4541,6 +4570,7 @@ fn collect_added_range_from_node<S: Store>(
     Ok(())
 }
 
+#[cfg(test)]
 #[allow(dead_code)]
 fn collect_removed_range_from_cid<S: Store>(
     prolly: &Prolly<S>,
@@ -4554,6 +4584,7 @@ fn collect_removed_range_from_cid<S: Store>(
     collect_removed_range_from_node(prolly, &node, span_end, range_start, range_end, diffs)
 }
 
+#[cfg(test)]
 #[allow(dead_code)]
 fn collect_removed_range_from_node<S: Store>(
     prolly: &Prolly<S>,
@@ -4598,6 +4629,7 @@ fn collect_removed_range_from_node<S: Store>(
     Ok(())
 }
 
+#[cfg(test)]
 fn load_child_nodes<S: Store>(
     prolly: &Prolly<S>,
     child_cids: &[Cid],
@@ -5663,6 +5695,7 @@ fn try_structural_merge_leaf<M: CanonicalWriteManager>(
     )))
 }
 
+#[cfg(test)]
 pub(crate) fn try_append_only_diff<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,
@@ -5693,6 +5726,7 @@ pub(crate) fn try_append_only_diff<S: Store>(
     }
 }
 
+#[cfg(test)]
 fn append_only_diff_nodes<S: Store>(
     prolly: &Prolly<S>,
     base: &Node,
@@ -6587,7 +6621,9 @@ mod tests {
         assert_eq!(diffs.len(), 64);
         assert!(
             store.batch_get_ordered_calls.load(Ordering::Relaxed) >= DIFF_COLLECTION_PREFETCH_PARALLELISM,
-            "wide added-subtree collection should split child hydration into parallel ordered batches"
+            "wide added-subtree collection should split child hydration into parallel ordered batches; calls={}, max_batch={}",
+            store.batch_get_ordered_calls.load(Ordering::Relaxed),
+            store.max_batch_get_ordered_len.load(Ordering::Relaxed),
         );
         assert!(
             store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 4,
