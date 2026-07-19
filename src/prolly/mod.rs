@@ -1815,7 +1815,9 @@ impl<S: Store> Prolly<S> {
         right: &Tree,
         resolver: Option<&dyn read::BorrowedMergeResolver>,
     ) -> Result<Tree, Error> {
-        diff::merge_trees_borrowed(self, base, left, right, resolver)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.merge_with(base, left, right, resolver);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Perform a three-way merge and return structured diagnostic trace events.
@@ -1922,7 +1924,11 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         resolver: Option<&dyn read::BorrowedMergeResolver>,
     ) -> Result<Tree, Error> {
-        diff::merge_trees_range_borrowed(self, base, left, right, start, end, resolver)
+        let ready_store = self.engine.store.clone();
+        let future = self
+            .engine
+            .merge_range_with(base, left, right, start, end, resolver);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Merge only right-side changes whose keys start with `prefix`.
@@ -3292,6 +3298,7 @@ impl<S: Store> Prolly<S> {
         Ok(cid)
     }
 
+    #[cfg(test)]
     pub(crate) fn cache_node(&self, cid: Cid, node: Node) {
         if let Ok(mut cache) = self.node_cache().write() {
             let bytes = node.encoded_len();
@@ -3617,6 +3624,7 @@ impl<S: Store> Prolly<S> {
         self.engine.config()
     }
 
+    #[cfg(test)]
     pub(crate) fn record_batch_write_metrics(&self, nodes: usize, bytes: usize) {
         self.raw_metrics().record_batch_write(nodes, bytes);
     }

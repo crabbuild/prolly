@@ -15,7 +15,9 @@ use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
 use super::node::Node;
 use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
-use super::{Prolly, Tree};
+#[cfg(test)]
+use super::Prolly;
+use super::Tree;
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
 type NormalizedMutation = (Vec<u8>, Option<Vec<u8>>);
@@ -87,6 +89,7 @@ pub(crate) trait CanonicalWriteManager: Sync {
     }
 }
 
+#[cfg(test)]
 impl<S> CanonicalWriteManager for Prolly<S>
 where
     S: Store,
@@ -289,6 +292,11 @@ pub(crate) fn apply_configured<M: CanonicalWriteManager>(
     apply_impl(manager, tree, mutations, true, Some(config))
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for root comparison"
+)]
 pub(crate) fn apply_tree<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,
@@ -297,6 +305,11 @@ pub(crate) fn apply_tree<M: CanonicalWriteManager>(
     Ok(apply_impl(manager, tree, mutations, false, None)?.0)
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for root comparison"
+)]
 pub(crate) fn apply_tree_configured<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,

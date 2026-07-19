@@ -136,6 +136,11 @@ const DIFF_COLLECTION_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(test)]
 const DIFF_FRAME_PREFETCH_PARALLELISM: usize = 16;
 const MERGE_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for merge comparison"
+)]
 const BORROWED_MERGE_MUTATION_BATCH: usize = 4096;
 
 /// A bounded page of diff results.
@@ -4978,6 +4983,11 @@ pub fn merge_trees<S: Store>(
 /// The structural path can select an existing base/left/right value without
 /// constructing an owned conflict. Shape-misaligned changes stream directly
 /// into the mutation layer, avoiding an intermediate owned diff vector.
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for merge comparison"
+)]
 pub fn merge_trees_borrowed<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,
@@ -5011,6 +5021,11 @@ pub fn merge_trees_borrowed<S: Store>(
 }
 
 /// Merge right-side changes in `[start, end)` using a borrowed resolver.
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for merge comparison"
+)]
 pub fn merge_trees_range_borrowed<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,
@@ -5026,6 +5041,11 @@ pub fn merge_trees_range_borrowed<S: Store>(
     merge_borrowed_diff_range(prolly, base, left, right, start, end, resolver)
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for merge comparison"
+)]
 fn merge_borrowed_diff_range<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,

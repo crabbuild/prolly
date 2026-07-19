@@ -2119,7 +2119,7 @@ pub fn append_batch<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    super::write::apply_tree(prolly, tree, mutations)
+    prolly.append_batch(tree, mutations)
 }
 
 fn ensure_node_value_count(node: &Node) -> Result<(), Error> {
@@ -2252,6 +2252,11 @@ fn build_parent_nodes<M: super::write::CanonicalWriteManager>(
     Ok(parents)
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for root comparison"
+)]
 pub(crate) fn apply_with_stats_configured<M: super::write::CanonicalWriteManager>(
     prolly: &M,
     tree: &Tree,
@@ -3997,7 +4002,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<Tree, Error> {
-        super::write::apply_tree_configured(prolly, tree, mutations, &self.config)
+        prolly.parallel_batch(tree, mutations, &self.config)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -4012,7 +4017,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<BatchApplyResult, Error> {
-        apply_with_stats_configured(prolly, tree, mutations, &self.config)
+        prolly.parallel_batch_with_stats(tree, mutations, &self.config)
     }
 }
 

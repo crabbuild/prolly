@@ -3,7 +3,6 @@
 use super::error::{Error, Mutation};
 use super::store::Store;
 use super::tree::Tree;
-use super::write;
 use super::Prolly;
 
 /// Observable logical and physical work performed by [`splice`].
@@ -29,21 +28,20 @@ where
     S: Store,
     S::Error: Send + Sync,
 {
-    if tree.config != *prolly.config() {
-        return Err(Error::SpliceConfigMismatch);
-    }
     let old_root = tree.root.clone();
-    let (tree, stats) = write::apply(prolly, tree, mutations)?;
-    let nodes_written = stats.nodes_written as usize;
+    let result = prolly.batch_with_stats(tree, mutations)?;
+    let tree = result.tree;
+    let stats = result.stats;
+    let nodes_written = stats.written_nodes;
     Ok((
         tree.clone(),
         SpliceStats {
-            entries_scanned: stats.entries_streamed as usize,
-            nodes_read: stats.nodes_read as usize,
+            entries_scanned: stats.entries_streamed,
+            nodes_read: stats.nodes_read,
             nodes_rebuilt: nodes_written,
             nodes_written,
-            nodes_reused: stats.nodes_reused as usize,
-            levels_rebuilt: stats.resync_distance_nodes as usize,
+            nodes_reused: stats.nodes_reused,
+            levels_rebuilt: stats.resync_distance_nodes,
             right_edge_rebuilt: stats.used_key_stable_fast_path,
             root_changed: old_root != tree.root,
         },
