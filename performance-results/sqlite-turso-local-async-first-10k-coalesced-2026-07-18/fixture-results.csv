@@ -1,0 +1,3 @@
+schema,revision,dirty,adapter,records,repetition,build_ns,records_per_sec,database_bytes,observed_records,validated,error
+sqlite-turso-local-v1,async-first-coalesced,true,sqlite-sync,10000,1,9057542,1104052.2914494905,483328,10000,true,
+sqlite-turso-local-v1,async-first-coalesced,true,turso-async,10000,1,11516459,868322.4591864565,515008,10000,true,

@@ -1,0 +1,7 @@
+schema,revision,dirty,adapter,records,repetition,build_ns,records_per_sec,database_bytes,observed_records,validated,error
+sqlite-turso-local-v1,async-first-coalesced,true,sqlite-sync,10000,1,9525750,1049786.106080886,483328,10000,true,
+sqlite-turso-local-v1,async-first-coalesced,true,turso-async,10000,1,12184666,820703.6614709012,515008,10000,true,
+sqlite-turso-local-v1,async-first-coalesced,true,turso-async,10000,2,10472500,954881.83337312,515008,10000,true,
+sqlite-turso-local-v1,async-first-coalesced,true,sqlite-sync,10000,2,5237042,1909474.8524071414,483328,10000,true,
+sqlite-turso-local-v1,async-first-coalesced,true,sqlite-sync,10000,3,5207583,1920276.642734259,483328,10000,true,
+sqlite-turso-local-v1,async-first-coalesced,true,turso-async,10000,3,10605542,942903.2481319673,515008,10000,true,

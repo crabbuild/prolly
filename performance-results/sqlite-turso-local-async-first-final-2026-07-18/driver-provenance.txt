@@ -1,0 +1,11 @@
+started_utc=2026-07-19T05:15:08Z
+revision=7d26dde15b2492a07b58fe908aeecf73978d3abd
+profile=full
+sizes=10000,50000,100000,500000,1000000,2000000
+runs=3
+apis=put,batch,diff,merge
+patterns=append,random,clustered
+adapters=sqlite-sync,turso-async
+tokio_workers=12
+benchmark_command=prolly-sqlite-turso-local-bench --profile full --output /Users/haipingfu/CrabDB-worktrees/prolly-async-first/performance-results/sqlite-turso-local-async-first-final-2026-07-18 --revision 7d26dde15b2492a07b58fe908aeecf73978d3abd --dirty --sizes 10000\,50000\,100000\,500000\,1000000\,2000000 --runs 3 --apis put\,batch\,diff\,merge --patterns append\,random\,clustered --adapters sqlite-sync\,turso-async --tokio-workers 12 --max-seconds 7200 --min-free-gb 15
+ended_utc=2026-07-19T05:36:32Z
