@@ -110,6 +110,9 @@ capture_machine() {
       "$SIZES" "$RUNS" "$CHANGES" "$APIS" "$PATTERNS" "$ADAPTERS"
     printf 'execution=alternating-local-only\nisolate_cells=%s\nmeasurement_samples=%s\nminimum_pairs=%s\ncloud_sync=disabled\n' \
       "$ISOLATE_CELLS" "$MEASUREMENT_SAMPLES" "$MINIMUM_PAIRS"
+    if [[ "$SUITE" == "foundation" ]]; then
+      printf 'foundation_samples=%s\n' "${PROLLY_FOUNDATION_SAMPLES:-30}"
+    fi
   } > "$OUTPUT/provenance.txt"
 }
 
