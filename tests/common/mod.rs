@@ -57,13 +57,22 @@ where
     let bytes = b"published-node";
     let cid = Cid::from_bytes(bytes);
     let entries = [(cid.as_bytes(), bytes.as_slice())];
-    store
-        .publish_nodes(NodePublication::new(
-            &entries,
-            PublicationOrigin::PointUpsert,
-        ))
-        .unwrap();
-    assert_eq!(store.get(cid.as_bytes()).unwrap(), Some(bytes.to_vec()));
+    for origin in [
+        PublicationOrigin::General,
+        PublicationOrigin::PointUpsert,
+        PublicationOrigin::PointDelete,
+        PublicationOrigin::BatchMutation,
+        PublicationOrigin::TreeBuild,
+        PublicationOrigin::Merge,
+        PublicationOrigin::RangeDelete,
+        PublicationOrigin::Replication,
+        PublicationOrigin::Maintenance,
+    ] {
+        store
+            .publish_nodes(NodePublication::new(&entries, origin))
+            .unwrap();
+        assert_eq!(store.get(cid.as_bytes()).unwrap(), Some(bytes.to_vec()));
+    }
 
     store.put(b"alpha", b"1").unwrap();
     store.put(b"beta", b"2").unwrap();

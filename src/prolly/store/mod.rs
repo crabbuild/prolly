@@ -1552,12 +1552,16 @@ mod tests {
         }
     }
 
+    type OwnedNodeEntry = (Vec<u8>, Vec<u8>);
+    type OwnedPublication = Vec<OwnedNodeEntry>;
+    type OwnedPublicationHint = (Vec<u8>, Vec<u8>, Vec<u8>);
+
     #[derive(Default)]
     struct DefaultPublicationStore {
         batch_calls: AtomicUsize,
         hinted_batch_calls: AtomicUsize,
-        published_entries: Mutex<Vec<Vec<(Vec<u8>, Vec<u8>)>>>,
-        last_hint: Mutex<Option<(Vec<u8>, Vec<u8>, Vec<u8>)>>,
+        published_entries: Mutex<Vec<OwnedPublication>>,
+        last_hint: Mutex<Option<OwnedPublicationHint>>,
     }
 
     impl DefaultPublicationStore {

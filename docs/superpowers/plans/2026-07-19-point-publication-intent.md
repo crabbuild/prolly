@@ -1106,7 +1106,7 @@ This task runs the universal contract against all core paths before any performa
 - Consumes: Tasks 1 through 7.
 - Produces: final cross-origin identity, allocation, failure, and coverage evidence.
 
-- [ ] **Step 1: Add the cross-origin identity matrix**
+- [x] **Step 1: Add the cross-origin identity matrix**
 
 For each current origin, execute a representative changed operation through sync and async recording stores. Collect the returned root and every reachable `(Cid, bytes)` pair. Assert:
 
@@ -1125,13 +1125,13 @@ Cover hinted append publication and unhinted random/clustered publication. Asser
 
 Run every canonical sync writer over an inner store whose generic `batch` and `delete` methods panic while its `publish_nodes` override succeeds. This is the regression guard that canonical immutable publication never escapes through the facade's unclassified generic mutation methods.
 
-- [ ] **Step 2: Add failure and allocation checks**
+- [x] **Step 2: Add failure and allocation checks**
 
 Use existing failing stores to make publication fail after canonical generation. Assert no usable tree is returned and the original tree remains readable. Use the repository allocation-counting helper around construction/default dispatch and assert the request itself adds zero allocations; exclude existing `batch_put` fallback allocation from that assertion.
 
 Add an async acknowledgment store whose publication future remains pending until a test flag is released. Assert the engine future cannot return a tree before acknowledgment. Drop one pending publication future and assert no named root changes; unreachable immutable nodes are allowed. Resume a fresh operation and assert normal success, proving cancellation adds no hidden retry or poisoned adapter state.
 
-- [ ] **Step 3: Run the complete local correctness gate**
+- [x] **Step 3: Run the complete local correctness gate**
 
 ```sh
 cargo fmt --all -- --check
@@ -1146,7 +1146,7 @@ git diff --check
 
 Expected: every non-environment-gated test passes; Clippy has no warning; WASM and no-default core remain runtime-neutral.
 
-- [ ] **Step 4: Audit every implementation and publication call site**
+- [x] **Step 4: Audit every implementation and publication call site**
 
 Run:
 
@@ -1159,7 +1159,20 @@ rg -n 'publish_nodes|batch_put|batch_put_with_hint' \
 
 Record each implementation in the task notes as default, transparent forwarding, semantic absorption, validation boundary, foreign boundary, or measured override. No unclassified production implementation may proceed to benchmarks.
 
-- [ ] **Step 5: Commit the final correctness matrix**
+Implementation audit notes:
+
+| Classification | Production implementations |
+| --- | --- |
+| Default | `Store`/`AsyncStore`/`RemoteStoreBackend` trait defaults; `MemStore`; `FileNodeStore`; `SqliteStore`; `RocksDBStore`; `SlateDbStore`; `PgliteStore` |
+| Transparent forwarding | `SyncStoreAsAsync`; `TokioBlockingStore`; `Arc<T>` and `&T` store wrappers; `PublicationStore` (with origin assignment); sync/async `SearchIo`; range-delete `CountingStore`; `Arc<T>` remote backend wrapper |
+| Semantic absorption | `ReplayStore`; owned and borrowed transaction overlay stores |
+| Validation boundary | `RemoteProllyStore` verifies every `(CID, bytes)` pair before forwarding |
+| Foreign boundary | UniFFI `HostStore` and `ForeignRemoteBackend` translate stable publication records and unknown origin codes |
+| Measured override | `TursoBackend` selects deferred transactions only for `PointUpsert`; every other origin remains immediate |
+
+All remaining matches are test or benchmark fixtures. The publication-call-site audit confirms canonical immutable writes route through `publish_nodes`; legacy `batch_put` and `batch_put_with_hint` calls remain only as safe defaults, adapter primitives, fixture instrumentation, or semantic overlay internals.
+
+- [x] **Step 5: Commit the final correctness matrix**
 
 ```sh
 git add tests src/prolly/remote.rs

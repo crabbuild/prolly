@@ -1,15 +1,74 @@
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::cell::Cell;
+use std::convert::Infallible;
+use std::fmt;
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use prolly::{
-    AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp, Cid, Config,
-    DistanceMetric, ManifestStore, ManifestUpdate, MemStore, MemStoreError, MergeTraceEvent,
-    Mutation, NodePublication, NodePublicationHint, Prolly, ProximityConfig, ProximityMap,
-    ProximityMutation, ProximityRecord, PublicationOrigin, Resolution, RootCondition, RootManifest,
-    RootWrite, SearchIo, SearchRuntime, SecondaryIndex, SecondaryIndexRegistry, Store,
-    SyncStoreAsAsync, TransactionNodeWrite, TransactionUpdate, TransactionalStore, Tree,
+    AsyncManifestStore, AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp,
+    Cid, Config, DistanceMetric, ManifestStore, ManifestUpdate, MemStore, MemStoreError,
+    MergeTraceEvent, Mutation, NodePublication, NodePublicationHint, Prolly, ProximityConfig,
+    ProximityMap, ProximityMutation, ProximityRecord, PublicationOrigin, Resolution, RootCondition,
+    RootManifest, RootWrite, SearchIo, SearchRuntime, SecondaryIndex, SecondaryIndexRegistry,
+    Store, SyncStoreAsAsync, TransactionNodeWrite, TransactionUpdate, TransactionalStore, Tree,
 };
+
+struct ThreadCountingAllocator;
+
+thread_local! {
+    static COUNT_ALLOCATIONS: Cell<bool> = const { Cell::new(false) };
+    static ALLOCATION_COUNT: Cell<usize> = const { Cell::new(0) };
+}
+
+unsafe impl GlobalAlloc for ThreadCountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let allocation = unsafe { System.alloc(layout) };
+        if !allocation.is_null() {
+            COUNT_ALLOCATIONS.with(|enabled| {
+                if enabled.get() {
+                    ALLOCATION_COUNT.with(|count| count.set(count.get() + 1));
+                }
+            });
+        }
+        allocation
+    }
+
+    unsafe fn dealloc(&self, allocation: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(allocation, layout) };
+    }
+
+    unsafe fn realloc(&self, allocation: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        let replacement = unsafe { System.realloc(allocation, layout, new_size) };
+        if !replacement.is_null() {
+            COUNT_ALLOCATIONS.with(|enabled| {
+                if enabled.get() {
+                    ALLOCATION_COUNT.with(|count| count.set(count.get() + 1));
+                }
+            });
+        }
+        replacement
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: ThreadCountingAllocator = ThreadCountingAllocator;
+
+fn allocations_during<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+    ALLOCATION_COUNT.with(|count| count.set(0));
+    COUNT_ALLOCATIONS.with(|enabled| {
+        assert!(
+            !enabled.replace(true),
+            "allocation counter cannot be nested"
+        );
+    });
+    let output = operation();
+    COUNT_ALLOCATIONS.with(|enabled| enabled.set(false));
+    let allocations = ALLOCATION_COUNT.with(Cell::get);
+    (output, allocations)
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct RecordedPublication {
@@ -173,9 +232,17 @@ impl TransactionalStore for RecordingSyncStore {
 struct RecordingAsyncStore {
     inner: Arc<MemStore>,
     publications: Arc<Mutex<Vec<RecordedPublication>>>,
+    supports_hints: bool,
 }
 
 impl RecordingAsyncStore {
+    fn with_hints() -> Self {
+        Self {
+            supports_hints: true,
+            ..Self::default()
+        }
+    }
+
     fn take_publications(&self) -> Vec<RecordedPublication> {
         std::mem::take(&mut *self.publications.lock().unwrap())
     }
@@ -234,12 +301,383 @@ impl AsyncStore for RecordingAsyncStore {
         self.inner.batch_put(entries)
     }
 
+    fn supports_hints(&self) -> bool {
+        self.supports_hints
+    }
+
     async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
         self.publications
             .lock()
             .unwrap()
             .push(RecordedPublication::from_request(publication));
         self.inner.publish_nodes(publication)
+    }
+}
+
+#[derive(Default)]
+struct NoAllocationPublicationStore {
+    publication_batches: AtomicUsize,
+}
+
+impl Store for NoAllocationPublicationStore {
+    type Error = Infallible;
+
+    fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        Ok(None)
+    }
+
+    fn put(&self, _key: &[u8], _value: &[u8]) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn delete(&self, _key: &[u8]) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn batch(&self, _ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn batch_put(&self, _entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        self.publication_batches.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
+struct StrictPublicationStore {
+    inner: Arc<MemStore>,
+}
+
+impl Store for StrictPublicationStore {
+    type Error = MemStoreError;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key)
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.inner.get_shared(key)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
+    }
+
+    fn put(&self, _key: &[u8], _value: &[u8]) -> Result<(), Self::Error> {
+        panic!("canonical node publication escaped through Store::put")
+    }
+
+    fn delete(&self, _key: &[u8]) -> Result<(), Self::Error> {
+        panic!("canonical node publication escaped through Store::delete")
+    }
+
+    fn batch(&self, _ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        panic!("canonical node publication escaped through Store::batch")
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered(keys)
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered_unique(keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
+    fn batch_put(&self, _entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        panic!("canonical node publication escaped through Store::batch_put")
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.inner.publish_nodes(publication)
+    }
+}
+
+#[derive(Clone)]
+struct ControlledPublicationStore {
+    inner: Arc<MemStore>,
+    fail: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
+    released: Arc<AtomicBool>,
+    started: Arc<AtomicBool>,
+    publication_calls: Arc<AtomicUsize>,
+}
+
+#[derive(Debug)]
+enum ControlledStoreError {
+    Inner(MemStoreError),
+    InjectedPublicationFailure,
+}
+
+impl fmt::Display for ControlledStoreError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Inner(error) => error.fmt(formatter),
+            Self::InjectedPublicationFailure => formatter.write_str("injected publication failure"),
+        }
+    }
+}
+
+impl std::error::Error for ControlledStoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Inner(error) => Some(error),
+            Self::InjectedPublicationFailure => None,
+        }
+    }
+}
+
+fn controlled<T>(result: Result<T, MemStoreError>) -> Result<T, ControlledStoreError> {
+    result.map_err(ControlledStoreError::Inner)
+}
+
+impl Default for ControlledPublicationStore {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(MemStore::new()),
+            fail: Arc::new(AtomicBool::new(false)),
+            paused: Arc::new(AtomicBool::new(false)),
+            released: Arc::new(AtomicBool::new(true)),
+            started: Arc::new(AtomicBool::new(false)),
+            publication_calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl ControlledPublicationStore {
+    fn set_failure(&self, fail: bool) {
+        self.fail.store(fail, Ordering::Release);
+    }
+
+    fn pause(&self) {
+        self.started.store(false, Ordering::Release);
+        self.released.store(false, Ordering::Release);
+        self.paused.store(true, Ordering::Release);
+    }
+
+    fn release(&self) {
+        self.released.store(true, Ordering::Release);
+    }
+
+    fn started(&self) -> bool {
+        self.started.load(Ordering::Acquire)
+    }
+
+    fn publication_calls(&self) -> usize {
+        self.publication_calls.load(Ordering::Acquire)
+    }
+
+    fn reject_if_configured(&self) -> Result<(), ControlledStoreError> {
+        if self.fail.load(Ordering::Acquire) {
+            Err(ControlledStoreError::InjectedPublicationFailure)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Store for ControlledPublicationStore {
+    type Error = ControlledStoreError;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        controlled(self.inner.get(key))
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        controlled(self.inner.get_shared(key))
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        controlled(self.inner.batch_get_shared_ordered_unique(keys))
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        controlled(self.inner.put(key, value))
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        controlled(self.inner.delete(key))
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        controlled(self.inner.batch(ops))
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        controlled(self.inner.batch_get_ordered(keys))
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        controlled(self.inner.batch_get_ordered_unique(keys))
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        controlled(self.inner.batch_put(entries))
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.publication_calls.fetch_add(1, Ordering::AcqRel);
+        self.reject_if_configured()?;
+        controlled(self.inner.publish_nodes(publication))
+    }
+}
+
+impl AsyncStore for ControlledPublicationStore {
+    type Error = ControlledStoreError;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        controlled(Store::get(&*self.inner, key))
+    }
+
+    async fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        controlled(Store::get_shared(&*self.inner, key))
+    }
+
+    async fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        controlled(Store::batch_get_shared_ordered_unique(&*self.inner, keys))
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
+    }
+
+    async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        controlled(Store::put(&*self.inner, key, value))
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        controlled(Store::delete(&*self.inner, key))
+    }
+
+    async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        controlled(Store::batch(&*self.inner, ops))
+    }
+
+    async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        controlled(Store::batch_get_ordered(&*self.inner, keys))
+    }
+
+    async fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        controlled(Store::batch_get_ordered_unique(&*self.inner, keys))
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
+    async fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        controlled(Store::batch_put(&*self.inner, entries))
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.publication_calls.fetch_add(1, Ordering::AcqRel);
+        self.started.store(true, Ordering::Release);
+        if self.paused.load(Ordering::Acquire) {
+            std::future::poll_fn(|_| {
+                if self.released.load(Ordering::Acquire) {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            })
+            .await;
+        }
+        self.reject_if_configured()?;
+        controlled(Store::publish_nodes(&*self.inner, publication))
+    }
+}
+
+impl ManifestStore for ControlledPublicationStore {
+    type Error = ControlledStoreError;
+
+    fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        controlled(ManifestStore::get_root(&*self.inner, name))
+    }
+
+    fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        controlled(ManifestStore::put_root(&*self.inner, name, manifest))
+    }
+
+    fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        controlled(ManifestStore::delete_root(&*self.inner, name))
+    }
+
+    fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        controlled(ManifestStore::compare_and_swap_root(
+            &*self.inner,
+            name,
+            expected,
+            new,
+        ))
+    }
+}
+
+impl AsyncManifestStore for ControlledPublicationStore {
+    type Error = ControlledStoreError;
+
+    async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        controlled(ManifestStore::get_root(&*self.inner, name))
+    }
+
+    async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        controlled(ManifestStore::put_root(&*self.inner, name, manifest))
+    }
+
+    async fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        controlled(ManifestStore::delete_root(&*self.inner, name))
+    }
+
+    async fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        controlled(ManifestStore::compare_and_swap_root(
+            &*self.inner,
+            name,
+            expected,
+            new,
+        ))
     }
 }
 
@@ -376,6 +814,224 @@ fn assert_publications(publications: Vec<RecordedPublication>, expected: &[Publi
             assert_eq!(key.as_slice(), Cid::from_bytes(&value).as_bytes());
         }
     }
+}
+
+#[test]
+fn publication_request_and_default_dispatch_allocate_nothing() {
+    let store = NoAllocationPublicationStore::default();
+    let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+    let hint = NodePublicationHint::new(b"namespace", b"key", b"value");
+
+    let (unhinted, unhinted_allocations) = allocations_during(|| {
+        Store::publish_nodes(
+            &store,
+            std::hint::black_box(NodePublication::new(
+                &entries,
+                PublicationOrigin::PointUpsert,
+            )),
+        )
+    });
+    unhinted.unwrap();
+
+    let (hinted, hinted_allocations) = allocations_during(|| {
+        Store::publish_nodes(
+            &store,
+            std::hint::black_box(NodePublication::with_hint(
+                &entries,
+                hint,
+                PublicationOrigin::TreeBuild,
+            )),
+        )
+    });
+    hinted.unwrap();
+
+    assert_eq!(unhinted_allocations, 0);
+    assert_eq!(hinted_allocations, 0);
+    assert_eq!(store.publication_batches.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn canonical_sync_writers_use_only_the_classified_publication_boundary() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .build();
+    let store = StrictPublicationStore::default();
+    let prolly = Prolly::new(store.clone(), config.clone());
+
+    let built = prolly
+        .build_from_entries(vec![
+            (b"a".to_vec(), b"one".to_vec()),
+            (b"b".to_vec(), b"two".to_vec()),
+            (b"c".to_vec(), b"three".to_vec()),
+            (b"d".to_vec(), b"four".to_vec()),
+        ])
+        .unwrap();
+    let point = prolly.put(&built, b"e".to_vec(), b"five".to_vec()).unwrap();
+    let deleted = prolly.delete(&point, b"a").unwrap();
+    let batched = prolly
+        .batch(
+            &deleted,
+            vec![
+                Mutation::Upsert {
+                    key: b"b".to_vec(),
+                    val: b"updated".to_vec(),
+                },
+                Mutation::Upsert {
+                    key: b"f".to_vec(),
+                    val: b"six".to_vec(),
+                },
+            ],
+        )
+        .unwrap();
+    let ranged = prolly.delete_range(&batched, b"c", b"e").unwrap();
+
+    let left = prolly
+        .put(&ranged, b"left".to_vec(), b"branch".to_vec())
+        .unwrap();
+    let right = prolly
+        .put(&ranged, b"right".to_vec(), b"branch".to_vec())
+        .unwrap();
+    let merged = prolly.merge(&ranged, &left, &right, None).unwrap();
+    assert_eq!(
+        prolly.get(&merged, b"left").unwrap(),
+        Some(b"branch".to_vec())
+    );
+    assert_eq!(
+        prolly.get(&merged, b"right").unwrap(),
+        Some(b"branch".to_vec())
+    );
+
+    let copied_store = StrictPublicationStore::default();
+    let copied = prolly.copy_missing_nodes(&merged, &copied_store).unwrap();
+    assert!(copied.copied_nodes > 0);
+    let copied_reader = Prolly::new(copied_store, config.clone());
+    assert_eq!(
+        copied_reader.export_snapshot(&merged).unwrap(),
+        prolly.export_snapshot(&merged).unwrap()
+    );
+
+    let bundle = prolly.export_snapshot(&merged).unwrap();
+    let imported_store = StrictPublicationStore::default();
+    let imported = Prolly::new(imported_store, config);
+    let imported_tree = imported.import_snapshot(&bundle).unwrap();
+    assert_eq!(imported.export_snapshot(&imported_tree).unwrap(), bundle);
+}
+
+#[test]
+fn publication_failure_returns_no_tree_and_preserves_the_original() {
+    let sync_store = ControlledPublicationStore::default();
+    let sync = Prolly::new(sync_store.clone(), Config::default());
+    let sync_base = sync
+        .put(&sync.create(), b"stable".to_vec(), b"value".to_vec())
+        .unwrap();
+    sync.publish_named_root(b"main", &sync_base).unwrap();
+    sync_store.set_failure(true);
+
+    let sync_error = sync.put(&sync_base, b"new".to_vec(), b"value".to_vec());
+    assert!(matches!(sync_error, Err(prolly::Error::Store(_))));
+    assert_eq!(
+        sync.get(&sync_base, b"stable").unwrap(),
+        Some(b"value".to_vec())
+    );
+    assert_eq!(sync.load_named_root(b"main").unwrap(), Some(sync_base));
+
+    block_on(async {
+        let async_store = ControlledPublicationStore::default();
+        let async_prolly = AsyncProlly::new(async_store.clone(), Config::default());
+        let async_base = async_prolly
+            .put(
+                &async_prolly.create(),
+                b"stable".to_vec(),
+                b"value".to_vec(),
+            )
+            .await
+            .unwrap();
+        async_prolly
+            .publish_named_root(b"main", &async_base)
+            .await
+            .unwrap();
+        async_store.set_failure(true);
+
+        let async_error = async_prolly
+            .put(&async_base, b"new".to_vec(), b"value".to_vec())
+            .await;
+        assert!(matches!(async_error, Err(prolly::Error::Store(_))));
+        assert_eq!(
+            async_prolly.get(&async_base, b"stable").await.unwrap(),
+            Some(b"value".to_vec())
+        );
+        assert_eq!(
+            async_prolly.load_named_root(b"main").await.unwrap(),
+            Some(async_base)
+        );
+    });
+}
+
+#[test]
+fn async_engine_waits_for_publication_ack_and_recovers_after_cancellation() {
+    let store = ControlledPublicationStore::default();
+    let prolly = AsyncProlly::new(store.clone(), Config::default());
+    let base =
+        block_on(prolly.put(&prolly.create(), b"stable".to_vec(), b"value".to_vec())).unwrap();
+    block_on(prolly.publish_named_root(b"main", &base)).unwrap();
+
+    store.pause();
+    let calls_before_ack = store.publication_calls();
+    let mut acknowledged = Box::pin(prolly.put(&base, b"acknowledged".to_vec(), b"value".to_vec()));
+    let waker = futures_util::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    assert!(matches!(
+        acknowledged.as_mut().poll(&mut context),
+        Poll::Pending
+    ));
+    assert!(store.started());
+    assert_eq!(store.publication_calls(), calls_before_ack + 1);
+    assert_eq!(
+        block_on(prolly.load_named_root(b"main")).unwrap(),
+        Some(base.clone())
+    );
+
+    store.release();
+    let acknowledged_tree = loop {
+        match acknowledged.as_mut().poll(&mut context) {
+            Poll::Ready(result) => break result.unwrap(),
+            Poll::Pending => std::thread::yield_now(),
+        }
+    };
+    drop(acknowledged);
+    assert_eq!(
+        block_on(prolly.get(&acknowledged_tree, b"acknowledged")).unwrap(),
+        Some(b"value".to_vec())
+    );
+
+    store.pause();
+    let calls_before_cancel = store.publication_calls();
+    let mut cancelled =
+        Box::pin(prolly.put(&acknowledged_tree, b"cancelled".to_vec(), b"value".to_vec()));
+    assert!(matches!(
+        cancelled.as_mut().poll(&mut context),
+        Poll::Pending
+    ));
+    assert_eq!(store.publication_calls(), calls_before_cancel + 1);
+    drop(cancelled);
+    assert_eq!(
+        block_on(prolly.load_named_root(b"main")).unwrap(),
+        Some(base)
+    );
+
+    store.release();
+    let recovered =
+        block_on(prolly.put(&acknowledged_tree, b"recovered".to_vec(), b"value".to_vec())).unwrap();
+    assert_eq!(
+        block_on(prolly.get(&recovered, b"recovered")).unwrap(),
+        Some(b"value".to_vec())
+    );
+    assert_eq!(
+        block_on(prolly.get(&recovered, b"cancelled")).unwrap(),
+        None
+    );
 }
 
 #[test]
@@ -555,6 +1211,41 @@ fn sync_hint_capable_point_upserts_publish_the_rightmost_path_atomically() {
     assert_eq!(namespace, b"prolly:rightmost-path:v1");
     assert_eq!(key.as_slice(), second.root.as_ref().unwrap().as_bytes());
     assert!(!value.is_empty());
+}
+
+#[test]
+fn async_hint_capable_appends_publish_once_with_the_rightmost_path() {
+    block_on(async {
+        let store = RecordingAsyncStore::with_hints();
+        let prolly = AsyncProlly::new(store.clone(), Config::default());
+
+        let first = prolly
+            .put(&prolly.create(), b"a".to_vec(), b"one".to_vec())
+            .await
+            .unwrap();
+        let first_publications = store.take_publications();
+        assert_eq!(first_publications.len(), 1);
+        assert_eq!(first_publications[0].origin, PublicationOrigin::PointUpsert);
+        let (namespace, key, value) = first_publications[0].hint.as_ref().unwrap();
+        assert_eq!(namespace, b"prolly:rightmost-path:v1");
+        assert_eq!(key.as_slice(), first.root.as_ref().unwrap().as_bytes());
+        assert!(!value.is_empty());
+
+        let second = prolly
+            .put(&first, b"b".to_vec(), b"two".to_vec())
+            .await
+            .unwrap();
+        let second_publications = store.take_publications();
+        assert_eq!(second_publications.len(), 1);
+        assert_eq!(
+            second_publications[0].origin,
+            PublicationOrigin::PointUpsert
+        );
+        let (namespace, key, value) = second_publications[0].hint.as_ref().unwrap();
+        assert_eq!(namespace, b"prolly:rightmost-path:v1");
+        assert_eq!(key.as_slice(), second.root.as_ref().unwrap().as_bytes());
+        assert!(!value.is_empty());
+    });
 }
 
 #[test]

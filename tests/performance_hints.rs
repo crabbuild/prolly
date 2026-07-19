@@ -177,6 +177,37 @@ fn prefix_path_hint_hydrates_hot_range_path_in_fresh_manager() {
 }
 
 #[test]
+fn hinted_append_uses_one_publication_and_bounded_path_work() {
+    let store = Arc::new(CountingHintStore::default());
+    let config = hint_test_config();
+    let writer = Prolly::new(store.clone(), config.clone());
+    let tree = build_tenant_tree(&writer).unwrap();
+    let height = usize::from(writer.collect_stats(&tree).unwrap().tree_height);
+    assert!(store.put_hint_calls() > 0);
+
+    let fresh = Prolly::new(store.clone(), config);
+    fresh.reset_metrics();
+    store.reset_counts();
+    let updated = fresh
+        .put(&tree, b"tenant/99/k999".to_vec(), b"appended".to_vec())
+        .unwrap();
+    let metrics = fresh.metrics();
+
+    assert_eq!(store.get_hint_calls(), 1);
+    assert!(store.batch_get_ordered_calls() <= 1);
+    assert_eq!(metrics.store_batch_put_calls, 1);
+    assert!(
+        metrics.nodes_written as usize <= 2 * (height + 2),
+        "point append rewrote {} nodes for a height-{height} tree",
+        metrics.nodes_written
+    );
+    assert_eq!(
+        fresh.get(&updated, b"tenant/99/k999").unwrap(),
+        Some(b"appended".to_vec())
+    );
+}
+
+#[test]
 fn malformed_prefix_path_hint_is_ignored_without_breaking_lookup() {
     let store = Arc::new(CountingHintStore::default());
     let config = hint_test_config();
