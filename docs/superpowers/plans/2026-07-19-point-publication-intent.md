@@ -1,5 +1,7 @@
 # Point publication intent implementation plan
 
+> **Superseded:** Do not execute this Turso-scoped plan. The approved [universal node-publication design](../specs/2026-07-19-point-publication-intent-design.md) now covers every synchronous and asynchronous store. A replacement plan will follow written-spec approval.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reduce native local Turso point-put latency by carrying explicit point-publication intent from `AsyncProlly::put` to the backend without changing canonical results or generic write behavior.
