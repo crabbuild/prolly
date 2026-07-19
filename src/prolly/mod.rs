@@ -84,6 +84,7 @@
 //! The `Prolly<S>` struct is `Send` and `Sync` when the underlying store is. The immutable
 //! nature of trees means multiple threads can safely read from the same tree simultaneously.
 
+use futures_util::stream::{self, StreamExt};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -1641,7 +1642,9 @@ impl<S: Store> Prolly<S> {
     /// // diffs contains Added { key: b"b", val: b"2" }
     /// ```
     pub fn diff(&self, base: &Tree, other: &Tree) -> Result<Vec<Diff>, Error> {
-        diff::compute_diff(self, base, other)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.diff(base, other);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Compute the difference between two trees within a half-open key range.
@@ -1656,7 +1659,9 @@ impl<S: Store> Prolly<S> {
         start: &[u8],
         end: Option<&[u8]>,
     ) -> Result<Vec<Diff>, Error> {
-        diff::compute_range_diff(self, base, other, start, end)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.range_diff(base, other, start, end);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Compute diffs from a stable cursor.
@@ -1730,7 +1735,9 @@ impl<S: Store> Prolly<S> {
         cursor: Option<&diff::StructuralDiffCursor>,
         limit: usize,
     ) -> Result<diff::StructuralDiffPage, Error> {
-        diff::structural_diff_page(self, base, other, cursor, limit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.structural_diff_page(base, other, cursor, limit);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Merge two trees using three-way merge.
@@ -1791,7 +1798,9 @@ impl<S: Store> Prolly<S> {
         right: &Tree,
         resolver: Option<Resolver>,
     ) -> Result<Tree, Error> {
-        diff::merge_trees(self, base, left, right, resolver)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.merge(base, left, right, resolver);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Merge two trees with a callback-scoped zero-copy conflict resolver.
@@ -1847,7 +1856,9 @@ impl<S: Store> Prolly<S> {
         right: &Tree,
         resolver: Option<Resolver>,
     ) -> diff::MergeExplanation {
-        diff::merge_trees_explain(self, base, left, right, resolver)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.merge_explain(base, left, right, resolver);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Merge only right-side changes whose keys are in `[start, end)`.
@@ -1893,7 +1904,11 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         resolver: Option<Resolver>,
     ) -> Result<Tree, Error> {
-        diff::merge_trees_range(self, base, left, right, start, end, resolver)
+        let ready_store = self.engine.store.clone();
+        let future = self
+            .engine
+            .merge_range(base, left, right, start, end, resolver);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Merge right-side changes in `[start, end)` with borrowed conflicts.
@@ -4233,15 +4248,6 @@ impl<S: Store> Prolly<S> {
             .build()
     }
 
-    /// Create a new node with the same settings as an existing node.
-    pub(crate) fn new_node_like(&self, template: &Node) -> Node {
-        Node::builder()
-            .leaf(template.leaf)
-            .level(template.level)
-            .tree_format(template.format.clone())
-            .build()
-    }
-
     /// Apply multiple mutations to a tree in a single optimized operation.
     ///
     /// This method enables efficient bulk modifications (upserts and deletes) to an
@@ -6179,13 +6185,28 @@ where
         &self,
         cids: &[Cid],
     ) -> Result<Vec<Arc<Node>>, Error> {
-        if cids.len() <= ASYNC_NODE_PREFETCH_BATCH_SIZE {
+        if cids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let parallelism = self.execution.read_parallelism().get().min(cids.len());
+        if parallelism == 1 || cids.len() <= parallelism {
             return self.load_many_ordered(cids).await;
         }
 
+        let chunk_size = cids
+            .len()
+            .div_ceil(parallelism)
+            .min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
+        let partitions = stream::iter(
+            cids.chunks(chunk_size)
+                .map(|chunk| async move { self.load_many_ordered(chunk).await }),
+        )
+        .buffered(parallelism)
+        .collect::<Vec<_>>()
+        .await;
         let mut nodes = Vec::with_capacity(cids.len());
-        for chunk in cids.chunks(ASYNC_NODE_PREFETCH_BATCH_SIZE) {
-            nodes.extend(self.load_many_ordered(chunk).await?);
+        for partition in partitions {
+            nodes.extend(partition?);
         }
         Ok(nodes)
     }

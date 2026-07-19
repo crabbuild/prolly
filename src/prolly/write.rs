@@ -27,6 +27,30 @@ pub(crate) trait CanonicalWriteManager: Sync {
     fn write_config(&self) -> &Config;
     fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error>;
     fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error>;
+    fn write_load_many_ordered_with_parallelism(
+        &self,
+        cids: &[Cid],
+        parallelism: usize,
+    ) -> Result<Vec<Arc<Node>>, Error> {
+        if cids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let requested_width = parallelism.max(1);
+        if requested_width == 1 || cids.len() <= requested_width {
+            return self.write_load_many_ordered(cids);
+        }
+        let width = requested_width.min(cids.len());
+        let chunk_size = cids.len().div_ceil(width);
+        let partitions = cids
+            .par_chunks(chunk_size)
+            .map(|chunk| self.write_load_many_ordered(chunk))
+            .collect::<Vec<_>>();
+        let mut nodes = Vec::with_capacity(cids.len());
+        for partition in partitions {
+            nodes.extend(partition?);
+        }
+        Ok(nodes)
+    }
     fn write_cache_node(&self, cid: Cid, node: Node);
     fn write_metrics(&self) -> super::ProllyMetricsSnapshot;
     fn write_record_batch_metrics(&self, nodes: usize, bytes: usize);

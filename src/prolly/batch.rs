@@ -396,6 +396,7 @@ impl BatchWriteCollector {
             .map_err(|e| Error::Store(Box::new(e)))
     }
 
+    #[cfg(test)]
     pub(crate) fn cache_nodes<S: Store>(&self, prolly: &Prolly<S>) -> Result<(), Error> {
         if let Some(cache_nodes) = &self.cache_nodes {
             for (cid, node) in cache_nodes {
@@ -409,6 +410,22 @@ impl BatchWriteCollector {
             prolly.cache_node(cid.clone(), node);
         }
 
+        Ok(())
+    }
+
+    pub(crate) fn cache_nodes_with<M: super::write::CanonicalWriteManager>(
+        &self,
+        manager: &M,
+    ) -> Result<(), Error> {
+        if let Some(cache_nodes) = &self.cache_nodes {
+            for (cid, node) in cache_nodes {
+                manager.write_cache_node(cid.clone(), node.clone());
+            }
+            return Ok(());
+        }
+        for (cid, node_bytes) in &self.nodes {
+            manager.write_cache_node(cid.clone(), Node::from_bytes(node_bytes)?);
+        }
         Ok(())
     }
 
@@ -2113,6 +2130,7 @@ fn ensure_node_value_count(node: &Node) -> Result<(), Error> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn get_max_key<S: Store>(
     prolly: &Prolly<S>,
     root_cid: &Cid,
@@ -2721,7 +2739,8 @@ fn group_mutations_by_leaf_with_paths_batched<M: super::write::CanonicalWriteMan
             .iter()
             .map(|frame| frame.cid.clone())
             .collect::<Vec<_>>();
-        let nodes = manager.write_load_many_ordered(&cids)?;
+        let nodes =
+            manager.write_load_many_ordered_with_parallelism(&cids, prefetch_parallelism)?;
         let admitted_width = cids
             .len()
             .min(prefetch_parallelism.max(1))

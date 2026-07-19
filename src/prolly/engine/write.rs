@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, Mutex, RwLock};
 
+use futures_util::stream::{self, StreamExt};
+
 use super::validation;
 use super::ProllyEngine;
 use crate::prolly::error::{Error, Mutation};
@@ -13,6 +15,14 @@ use crate::prolly::{Cid, ProllyMetricsSnapshot};
 
 const MAX_REPLAY_ROUNDS: usize = 256;
 type PublicationWrites = Vec<(Cid, Vec<u8>)>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ReplayIo {
+    pub(crate) nodes_read: usize,
+    pub(crate) bytes_read: usize,
+    pub(crate) nodes_written: usize,
+    pub(crate) bytes_written: usize,
+}
 
 impl<S> ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>
 where
@@ -203,7 +213,7 @@ where
 }
 
 #[derive(Debug)]
-struct ReplayStoreError(&'static str);
+pub(crate) struct ReplayStoreError(&'static str);
 
 impl fmt::Display for ReplayStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -214,7 +224,7 @@ impl fmt::Display for ReplayStoreError {
 impl std::error::Error for ReplayStoreError {}
 
 #[derive(Default)]
-struct ReplayStore {
+pub(crate) struct ReplayStore {
     known: RwLock<HashMap<Vec<u8>, Option<Vec<u8>>>>,
     loaded: Mutex<HashSet<Vec<u8>>>,
     generated: Mutex<HashSet<Vec<u8>>>,
@@ -371,7 +381,7 @@ impl Store for ReplayStore {
     }
 }
 
-struct ReplayWriteManager {
+pub(crate) struct ReplayWriteManager {
     store: Arc<ReplayStore>,
     config: crate::prolly::Config,
 }
@@ -460,6 +470,13 @@ impl crate::prolly::write::CanonicalWriteManager for ReplayWriteManager {
     }
 }
 
+fn update_write_stats(stats: &mut crate::prolly::write::WriteStats, io: ReplayIo) {
+    stats.nodes_read = io.nodes_read as u64;
+    stats.bytes_read = io.bytes_read as u64;
+    stats.nodes_written = io.nodes_written as u64;
+    stats.bytes_written = io.bytes_written as u64;
+}
+
 impl<S> ProllyEngine<S>
 where
     S: AsyncStore,
@@ -502,9 +519,12 @@ where
         } else {
             false
         };
-        self.execute_replay(tree, publish_rightmost_hint, |manager| {
-            crate::prolly::write::apply(manager, tree, mutations.clone())
-        })
+        self.execute_replay(
+            tree,
+            publish_rightmost_hint,
+            |manager| crate::prolly::write::apply(manager, tree, mutations.clone()),
+            update_write_stats,
+        )
         .await
     }
 
@@ -514,20 +534,25 @@ where
         start: &[u8],
         end: &[u8],
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
-        self.execute_replay(tree, false, |manager| {
-            crate::prolly::range_delete::apply(manager, tree, start, end)
-        })
+        self.execute_replay(
+            tree,
+            false,
+            |manager| crate::prolly::range_delete::apply(manager, tree, start, end),
+            update_write_stats,
+        )
         .await
     }
 
-    async fn execute_replay<F>(
+    pub(crate) async fn execute_replay<T, F, U>(
         &self,
         tree: &Tree,
         publish_rightmost_hint: bool,
         mut operation: F,
-    ) -> Result<(Tree, crate::prolly::write::WriteStats), Error>
+        update_io: U,
+    ) -> Result<(Tree, T), Error>
     where
-        F: FnMut(&ReplayWriteManager) -> Result<(Tree, crate::prolly::write::WriteStats), Error>,
+        F: FnMut(&ReplayWriteManager) -> Result<(Tree, T), Error>,
+        U: FnOnce(&mut T, ReplayIo),
     {
         let replay = Arc::new(ReplayStore::default());
         let manager = ReplayWriteManager {
@@ -613,10 +638,15 @@ where
                 self.metrics.add_cache_evictions(evictions);
             }
         }
-        result.1.nodes_read = operation_nodes_read as u64;
-        result.1.bytes_read = operation_bytes_read as u64;
-        result.1.nodes_written = writes.len() as u64;
-        result.1.bytes_written = writes.iter().map(|(_, bytes)| bytes.len() as u64).sum();
+        update_io(
+            &mut result.1,
+            ReplayIo {
+                nodes_read: operation_nodes_read,
+                bytes_read: operation_bytes_read,
+                nodes_written: writes.len(),
+                bytes_written: writes.iter().map(|(_, bytes)| bytes.len()).sum(),
+            },
+        );
         Ok(result)
     }
 
@@ -649,18 +679,32 @@ where
                 backend.push(cid);
             }
         }
-        let mut backend_nodes = 0usize;
-        let mut backend_bytes = 0usize;
-        for chunk in backend.chunks(crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE) {
+        let parallelism = self
+            .execution
+            .read_parallelism()
+            .get()
+            .min(backend.len().max(1));
+        let chunk_size = backend
+            .len()
+            .div_ceil(parallelism)
+            .clamp(1, crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE);
+        let partitions = stream::iter(backend.chunks(chunk_size).map(|chunk| async move {
             let keys = chunk
                 .iter()
                 .map(|cid| cid.as_bytes() as &[u8])
                 .collect::<Vec<_>>();
-            let values = self
-                .store
+            self.store
                 .batch_get_ordered_unique(&keys)
                 .await
-                .map_err(|error| Error::Store(Box::new(error)))?;
+                .map_err(|error| Error::Store(Box::new(error)))
+        }))
+        .buffered(parallelism)
+        .collect::<Vec<_>>()
+        .await;
+        let mut backend_nodes = 0usize;
+        let mut backend_bytes = 0usize;
+        for (chunk, values) in backend.chunks(chunk_size).zip(partitions) {
+            let values = values?;
             if values.len() != chunk.len() {
                 return Err(Error::InvalidNode);
             }
