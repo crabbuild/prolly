@@ -102,12 +102,12 @@ tokio = ["dep:tokio"]
 futures-util = "0.3"
 ```
 
-- [ ] Add a default-feature integration test implementing `AsyncStore` for a minimal in-memory backend and constructing `AsyncProlly`; do not use `#[cfg(feature = "async-store")]` in the test.
-- [ ] Run `cargo test --no-default-features --test async_foundation_default`; verify RED because async APIs are not exported.
-- [ ] Remove `#[cfg(feature = "async-store")]` from `AsyncStore`, `SyncStoreAsAsync`, `AsyncProlly`, required helper imports/modules, and public exports. Keep the Cargo feature as an empty compatibility spelling only for this phase.
-- [ ] Ensure Tokio-specific adapters remain behind `tokio`; async core code must not depend on Tokio.
-- [ ] Run `cargo test --no-default-features --test async_foundation_default`, `cargo test --no-default-features --lib`, and `cargo test --all-features --lib`.
-- [ ] Commit with `git commit -m "refactor: make async storage foundations unconditional"`.
+- [x] Add a default-feature integration test implementing `AsyncStore` for a minimal in-memory backend and constructing `AsyncProlly`; do not use `#[cfg(feature = "async-store")]` in the test.
+- [x] Run `cargo test --no-default-features --test async_foundation_default`; verify RED because async APIs are not exported.
+- [x] Remove `#[cfg(feature = "async-store")]` from `AsyncStore`, `SyncStoreAsAsync`, `AsyncProlly`, required helper imports/modules, and public exports. Keep the Cargo feature as an empty compatibility spelling only for this phase.
+- [x] Ensure Tokio-specific adapters remain behind `tokio`; async core code must not depend on Tokio.
+- [x] Run `cargo test --no-default-features --test async_foundation_default`, `cargo test --no-default-features --lib`, and `cargo test --all-features --lib`.
+- [x] Commit with `git commit -m "refactor: make async storage foundations unconditional"`.
 
 ---
 

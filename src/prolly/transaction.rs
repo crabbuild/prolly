@@ -17,7 +17,6 @@ use super::manifest::{ManifestStore, ManifestUpdate, NamedRootUpdate, RootManife
 use super::store::{BatchOp, OrderedBatchReadPlan, Store};
 use super::tree::Tree;
 use super::Prolly;
-#[cfg(feature = "async-store")]
 use {
     super::manifest::AsyncManifestStore,
     super::store::{AsyncStore, SyncStoreAsAsync},
@@ -185,7 +184,6 @@ where
 }
 
 /// Async store support for strict atomic transaction commits.
-#[cfg(feature = "async-store")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncTransactionalStore: AsyncStore + AsyncManifestStore {
     /// Whether this backend can atomically commit staged nodes and roots.
@@ -205,8 +203,6 @@ pub trait AsyncTransactionalStore: AsyncStore + AsyncManifestStore {
         })
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<T> AsyncTransactionalStore for Arc<T>
 where
     T: AsyncTransactionalStore,
@@ -226,8 +222,6 @@ where
             .await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncTransactionalStore for SyncStoreAsAsync<S>
 where
     S: TransactionalStore,
@@ -647,14 +641,11 @@ where
 }
 
 /// Owned async store overlay used by [`OwnedAsyncProllyTransaction`].
-#[cfg(feature = "async-store")]
 #[derive(Clone)]
 pub struct OwnedAsyncTransactionOverlayStore<S> {
     base: S,
     state: Arc<Mutex<TransactionState>>,
 }
-
-#[cfg(feature = "async-store")]
 impl<S> OwnedAsyncTransactionOverlayStore<S> {
     fn new(base: S, state: Arc<Mutex<TransactionState>>) -> Self {
         Self { base, state }
@@ -664,8 +655,6 @@ impl<S> OwnedAsyncTransactionOverlayStore<S> {
         self.state.lock().map_err(TransactionOverlayError::poisoned)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncStore for OwnedAsyncTransactionOverlayStore<S>
 where
     S: AsyncStore,
@@ -726,8 +715,6 @@ where
         self.base.read_parallelism()
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncManifestStore for OwnedAsyncTransactionOverlayStore<S>
 where
     S: AsyncStore + AsyncManifestStore,
@@ -792,8 +779,6 @@ where
         Ok(ManifestUpdate::Applied)
     }
 }
-
-#[cfg(feature = "async-store")]
 async fn async_overlay_batch_get_ordered<S: AsyncStore>(
     base: &S,
     state: &Arc<Mutex<TransactionState>>,
@@ -838,14 +823,11 @@ where
 }
 
 /// Async store overlay used internally by [`AsyncProllyTransaction`].
-#[cfg(feature = "async-store")]
 #[derive(Clone)]
 pub struct AsyncTransactionOverlayStore<'a, S> {
     base: &'a S,
     state: Arc<Mutex<TransactionState>>,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncTransactionOverlayStore<'a, S> {
     fn new(base: &'a S, state: Arc<Mutex<TransactionState>>) -> Self {
         Self { base, state }
@@ -855,8 +837,6 @@ impl<'a, S> AsyncTransactionOverlayStore<'a, S> {
         self.state.lock().map_err(TransactionOverlayError::poisoned)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncStore for AsyncTransactionOverlayStore<'_, S>
 where
     S: AsyncStore,
@@ -917,8 +897,6 @@ where
         self.base.read_parallelism()
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncManifestStore for AsyncTransactionOverlayStore<'_, S>
 where
     S: AsyncStore + AsyncManifestStore,
@@ -1237,7 +1215,6 @@ where
 ///
 /// This variant is intended for FFI bindings and other APIs that cannot keep a
 /// borrow of an [`AsyncProlly`] manager alive across asynchronous calls.
-#[cfg(feature = "async-store")]
 pub struct OwnedAsyncProllyTransaction<S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1249,8 +1226,6 @@ where
     manager: AsyncProlly<OwnedAsyncTransactionOverlayStore<S>>,
     completed: bool,
 }
-
-#[cfg(feature = "async-store")]
 impl<S> OwnedAsyncProllyTransaction<S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore + Clone,
@@ -1369,7 +1344,6 @@ where
 }
 
 /// A strict optimistic transaction over an [`AsyncProlly`] manager.
-#[cfg(feature = "async-store")]
 pub struct AsyncProllyTransaction<'a, S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1381,8 +1355,6 @@ where
     manager: AsyncProlly<AsyncTransactionOverlayStore<'a, S>>,
     completed: bool,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncProllyTransaction<'a, S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1500,8 +1472,6 @@ where
         Ok(update)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> Drop for AsyncProllyTransaction<'_, S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1539,8 +1509,6 @@ where
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> Drop for OwnedAsyncProllyTransaction<S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1590,8 +1558,6 @@ where
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncProlly<S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1636,7 +1602,6 @@ mod tests {
     use crate::prolly::store::{MemStore, MemStoreError};
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    #[cfg(feature = "async-store")]
     use std::{
         future::Future,
         task::{Context, Poll},
@@ -1735,8 +1700,6 @@ mod tests {
         assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 1);
         assert_eq!(counters.batch_keys.load(Ordering::Relaxed), 2);
     }
-
-    #[cfg(feature = "async-store")]
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
         let mut context = Context::from_waker(&waker);
@@ -1748,8 +1711,6 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_overlay_batch_reads_use_one_base_batch_without_holding_staged_state() {
         use crate::prolly::store::SyncStoreAsAsync;

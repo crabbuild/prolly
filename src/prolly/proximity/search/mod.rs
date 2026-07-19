@@ -1,4 +1,3 @@
-#[cfg(feature = "async-store")]
 mod r#async;
 mod engine;
 mod filter;
@@ -18,11 +17,9 @@ pub(crate) use engine::{
 pub use filter::EligibilityCardinality;
 pub(crate) use filter::PreparedEligibility as PreparedFilter;
 pub(crate) use planner::plan_search;
-#[cfg(feature = "async-store")]
 pub(crate) use planner::plan_search_capabilities;
 pub use planner::{SearchPlan, SearchPlanSummary, SEARCH_PLAN_FORMAT_VERSION};
 pub(crate) use policy::{adaptive_should_stop, AdaptiveContext};
-#[cfg(feature = "async-store")]
 pub use r#async::{AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken};
 pub use runtime::{SearchIo, SearchRuntime, SearchRuntimePolicy, StoreCacheNamespace};
 

@@ -13,11 +13,9 @@ use super::cid::Cid;
 use super::error::{Conflict, Diff, Error};
 use super::key;
 use super::node::ReadNode;
-#[cfg(feature = "async-store")]
 use super::store::AsyncStore;
 use super::store::Store;
 use super::tree::Tree;
-#[cfg(feature = "async-store")]
 use super::AsyncProlly;
 use super::{sorted_key_positions, InlinePositions, KeyLookupFrame, KeyValue, Prolly};
 
@@ -360,7 +358,6 @@ pub struct OwnedRangeScanSession<S: Store> {
 ///
 /// All visitors are synchronous. A node is fully loaded before a visitor sees
 /// a borrowed slice, and the visitor returns before traversal can await again.
-#[cfg(feature = "async-store")]
 pub struct AsyncReadSession<'manager, 'tree, S: AsyncStore> {
     manager: &'manager AsyncProlly<S>,
     tree: &'tree Tree,
@@ -1698,8 +1695,6 @@ fn fill_packed_leaf_locations<K: AsRef<[u8]>>(
     }
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncProlly<S>
 where
     S: AsyncStore,
@@ -1865,8 +1860,6 @@ where
             .await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'manager, 'tree, S> AsyncReadSession<'manager, 'tree, S>
 where
     S: AsyncStore,
@@ -2326,8 +2319,6 @@ where
         Ok(false)
     }
 }
-
-#[cfg(feature = "async-store")]
 fn async_route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
     if !node.is_leaf() && node.is_empty() {
         return Err(Error::InvalidNode);

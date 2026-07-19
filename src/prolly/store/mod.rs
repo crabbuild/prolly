@@ -9,7 +9,6 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 
 use super::cid::Cid;
-#[cfg(feature = "async-store")]
 use super::manifest::{
     AsyncManifestStore, AsyncManifestStoreScan, ManifestStore, ManifestStoreScan, ManifestUpdate,
     NamedRootManifest, RootManifest,
@@ -332,13 +331,12 @@ pub(crate) fn sort_cids(cids: &mut [Cid]) {
 /// Async storage backend trait for Prolly Trees.
 ///
 /// This trait mirrors [`Store`] for remote, browser, object-store, and
-/// background-agent workloads. It is available behind the `async-store`
-/// feature and intentionally does not replace the synchronous `Store` trait.
+/// background-agent workloads. It is part of the runtime-neutral core and
+/// intentionally does not require a Tokio dependency.
 ///
 /// The base trait does not require `Send` or `Sync` so single-threaded browser
 /// stores can implement it. Async managers or native backends may add stronger
 /// bounds when they need cross-thread execution.
-#[cfg(feature = "async-store")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncStore {
     /// Error type for storage operations.
@@ -475,8 +473,6 @@ pub trait AsyncStore {
         self.put_hint(namespace, key, value).await
     }
 }
-
-#[cfg(feature = "async-store")]
 async fn async_batch_get_ordered_with_limit<S: AsyncStore + ?Sized>(
     store: &S,
     keys: &[&[u8]],
@@ -491,8 +487,6 @@ async fn async_batch_get_ordered_with_limit<S: AsyncStore + ?Sized>(
         async_batch_get_ordered_unique_with_limit(store, plan.unique_keys(), max_in_flight).await?;
     Ok(plan.expand_owned(unique_values))
 }
-
-#[cfg(feature = "async-store")]
 async fn async_batch_get_ordered_unique_with_limit<S: AsyncStore + ?Sized>(
     store: &S,
     keys: &[&[u8]],
@@ -533,8 +527,6 @@ async fn async_batch_get_ordered_unique_with_limit<S: AsyncStore + ?Sized>(
 
     Ok(values)
 }
-
-#[cfg(feature = "async-store")]
 async fn async_get_indexed<S: AsyncStore + ?Sized>(
     store: &S,
     idx: usize,
@@ -548,13 +540,10 @@ async fn async_get_indexed<S: AsyncStore + ?Sized>(
 /// This adapter calls the synchronous store directly and does not spawn
 /// blocking work. Runtime-specific `spawn_blocking` adapters can be layered on
 /// top by applications that need them.
-#[cfg(feature = "async-store")]
 #[derive(Clone, Debug)]
 pub struct SyncStoreAsAsync<S> {
     inner: S,
 }
-
-#[cfg(feature = "async-store")]
 impl<S> SyncStoreAsAsync<S> {
     /// Create a new adapter.
     pub fn new(inner: S) -> Self {
@@ -571,8 +560,6 @@ impl<S> SyncStoreAsAsync<S> {
         self.inner
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
     type Error = S::Error;
 
@@ -658,8 +645,6 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
             .batch_put_with_hint(entries, namespace, key, value)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: ManifestStore> AsyncManifestStore for SyncStoreAsAsync<S> {
     type Error = S::Error;
 
@@ -684,8 +669,6 @@ impl<S: ManifestStore> AsyncManifestStore for SyncStoreAsAsync<S> {
         self.inner.compare_and_swap_root(name, expected, new)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: ManifestStoreScan> AsyncManifestStoreScan for SyncStoreAsAsync<S> {
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         self.inner.list_roots()
@@ -1177,8 +1160,6 @@ impl<T: Store + ?Sized> Store for &T {
         (**self).batch_put_with_hint(entries, namespace, key, value)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
     type Error = T::Error;
 
@@ -1276,7 +1257,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
-    #[cfg(feature = "async-store")]
     use std::{
         future::Future,
         pin::Pin,
@@ -1350,8 +1330,6 @@ mod tests {
             Ok(())
         }
     }
-
-    #[cfg(feature = "async-store")]
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
         let mut cx = Context::from_waker(&waker);
@@ -1364,13 +1342,9 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     struct YieldOnce {
         yielded: bool,
     }
-
-    #[cfg(feature = "async-store")]
     impl Future for YieldOnce {
         type Output = ();
 
@@ -1384,8 +1358,6 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     struct DefaultAsyncReadStore {
         data: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
         get_calls: AtomicUsize,
@@ -1393,8 +1365,6 @@ mod tests {
         max_in_flight: AtomicUsize,
         read_parallelism: usize,
     }
-
-    #[cfg(feature = "async-store")]
     impl DefaultAsyncReadStore {
         fn with_entries(read_parallelism: usize, entries: &[(&[u8], &[u8])]) -> Self {
             let mut data = BTreeMap::new();
@@ -1411,8 +1381,6 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     impl AsyncStore for DefaultAsyncReadStore {
         type Error = DefaultReadStoreError;
 
@@ -1572,8 +1540,6 @@ mod tests {
             "unique ordered batch reads for point-read stores should read each requested key once"
         );
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_sync_store_adapter_preserves_default_store_behavior() {
         let store = DefaultReadStore::with_entries(&[(b"a", b"1"), (b"b", b"2")]);
@@ -1607,8 +1573,6 @@ mod tests {
             assert!(!mapped.contains_key(b"b".as_slice()));
         });
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_default_ordered_batch_reads_deduplicate_duplicate_keys() {
         let store = DefaultAsyncReadStore::with_entries(1, &[(b"a", b"1"), (b"b", b"2")]);
@@ -1632,8 +1596,6 @@ mod tests {
             "async ordered batch reads should point-read each unique key at most once"
         );
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_default_ordered_batch_reads_respect_read_parallelism() {
         let store = DefaultAsyncReadStore::with_entries(
@@ -1660,8 +1622,6 @@ mod tests {
             "default async batch reads should cap concurrent point reads"
         );
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn arc_async_store_forwards_ordered_reads() {
         let store = std::sync::Arc::new(DefaultAsyncReadStore::with_entries(

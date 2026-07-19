@@ -37,11 +37,11 @@ path = "src/lib.rs"
 
 [features]
 default = []
-async-store = ["dep:futures-util"]
-tokio = ["async-store", "dep:tokio"]
+async-store = []
+tokio = ["dep:tokio"]
 
 [dependencies]
-futures-util = { version = "0.3", optional = true }
+futures-util = "0.3"
 rayon = "1.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11"

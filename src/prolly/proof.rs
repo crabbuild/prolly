@@ -12,11 +12,9 @@ use super::error::{Diff, Error};
 use super::key;
 use super::node::Node;
 use super::range::{RangeCursor, RangePage};
-#[cfg(feature = "async-store")]
 use super::store::AsyncStore;
 use super::store::Store;
 use super::tree::Tree;
-#[cfg(feature = "async-store")]
 use super::AsyncProlly;
 use super::Prolly;
 use serde::{Deserialize, Serialize};
@@ -1235,8 +1233,6 @@ impl<S: Store> Prolly<S> {
         Ok(())
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncProlly<S>
 where
     S: AsyncStore,

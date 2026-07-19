@@ -528,8 +528,6 @@ fn new_builder_node(config: &Config, leaf: bool, level: u8) -> Node {
         .tree_format(config.format.clone())
         .build()
 }
-
-#[cfg_attr(not(feature = "async-store"), allow(dead_code))]
 pub(crate) fn chunk_ranges_for_entries(
     config: &Config,
     level: u8,

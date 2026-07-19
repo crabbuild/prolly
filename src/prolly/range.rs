@@ -79,15 +79,12 @@
 
 use super::error::Error;
 use super::node::ReadNode;
-#[cfg(feature = "async-store")]
 use super::read::EntryRef;
 use super::store::Store;
 use super::tree::Tree;
 
 use super::Prolly;
-#[cfg(feature = "async-store")]
 use super::{store::AsyncStore, AsyncProlly};
-#[cfg(feature = "async-store")]
 use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -204,11 +201,9 @@ pub struct CursorWindow {
 }
 
 /// Backward-compatible name for async range pages.
-#[cfg(feature = "async-store")]
 pub type AsyncRangePage = RangePage;
 
 /// Backward-compatible name for async reverse range pages.
-#[cfg(feature = "async-store")]
 pub type AsyncReversePage = ReversePage;
 
 /// Create a range iterator over key-value pairs.
@@ -256,7 +251,6 @@ pub fn create_range_after_iter<'a, S: Store>(
 }
 
 /// Create an async range iterator over key-value pairs.
-#[cfg(feature = "async-store")]
 pub async fn create_async_range_iter<'a, S>(
     prolly: &'a AsyncProlly<S>,
     tree: &Tree,
@@ -276,7 +270,6 @@ where
 }
 
 /// Create an async range iterator that starts strictly after `after_key`.
-#[cfg(feature = "async-store")]
 pub async fn create_async_range_after_iter<'a, S>(
     prolly: &'a AsyncProlly<S>,
     tree: &Tree,
@@ -606,7 +599,6 @@ impl<'a, S: Store> Iterator for RangeIter<'a, S> {
 /// Created by [`AsyncProlly::range`](crate::AsyncProlly::range). Call
 /// [`AsyncRangeIter::next`] to lazily read one item at a time, or
 /// [`AsyncRangeIter::into_stream`] to adapt it to a `futures_util::Stream`.
-#[cfg(feature = "async-store")]
 pub struct AsyncRangeIter<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
     stack: Vec<(Arc<ReadNode>, usize)>,
@@ -616,8 +608,6 @@ pub struct AsyncRangeIter<'a, S: AsyncStore> {
     skip_start_key: bool,
     last_location: Option<(Arc<ReadNode>, usize)>,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncRangeIter<'a, S>
 where
     S: AsyncStore,

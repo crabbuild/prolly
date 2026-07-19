@@ -106,6 +106,8 @@
 //! - **Different roots**: O(changed subtrees) when chunk boundaries align, with
 //!   a local full-scan fallback when boundaries diverge
 
+use futures_util::stream::{self, Stream};
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -113,22 +115,15 @@ use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
-#[cfg(feature = "async-store")]
-use futures_util::stream::{self, Stream};
-use serde::{Deserialize, Serialize};
-
 use super::batch::{get_max_key, BatchWriteCollector};
 use super::cid::Cid;
 use super::error::{Conflict, Diff, Error, Mutation, Resolution, Resolver};
 use super::node::{Node, ReadNode};
 use super::range::RangeCursor;
 use super::read::{BorrowedMergeResolver, ConflictRef, DiffRef, MergeDecision, ScanOutcome};
-#[cfg(feature = "async-store")]
 use super::store::AsyncStore;
 use super::store::Store;
 use super::tree::Tree;
-
-#[cfg(feature = "async-store")]
 use super::AsyncProlly;
 use super::Prolly;
 
@@ -223,7 +218,7 @@ pub enum StructuralDiffMarker {
 }
 
 /// Result and trace from [`Prolly::merge_explain`](crate::Prolly::merge_explain)
-/// and its async counterpart when the `async-store` feature is enabled.
+/// and its async counterpart.
 ///
 /// The merge result is kept inside this struct so callers can inspect
 /// [`MergeTrace`] even when the merge fails with [`Error::Conflict`] or a store
@@ -1068,14 +1063,10 @@ impl<'a, S: Store> BorrowedSubtreeCursor<'a, S> {
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 struct AsyncBorrowedSubtreeCursor<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
     stack: Vec<(Arc<ReadNode>, usize)>,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncBorrowedSubtreeCursor<'a, S>
 where
     S: AsyncStore,
@@ -1414,8 +1405,6 @@ where
     }
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn visit_async_subtree_diff<S, F, B>(
     prolly: &AsyncProlly<S>,
     base: Arc<ReadNode>,
@@ -1494,8 +1483,6 @@ where
     }
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn visit_async_subtree_diff_range<S, F, B>(
     prolly: &AsyncProlly<S>,
     base: Arc<ReadNode>,
@@ -1765,8 +1752,6 @@ fn prefetch_borrowed_frame_roots<S: Store>(
     }
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn prefetch_async_borrowed_frame_roots<S>(
     prolly: &AsyncProlly<S>,
     frames: &[BorrowedDiffFrame],
@@ -1920,8 +1905,6 @@ where
     }
     Ok(visitor.finish())
 }
-
-#[cfg(feature = "async-store")]
 async fn scan_diff_borrowed_async<S, F, B>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -2171,8 +2154,6 @@ impl<S: Store> Prolly<S> {
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncProlly<S>
 where
     S: AsyncStore,
@@ -2380,15 +2361,12 @@ pub(crate) fn stream_conflicts<'a, S: Store>(
 /// Created by [`AsyncProlly::stream_conflicts`](crate::AsyncProlly::stream_conflicts).
 /// Each call to [`AsyncConflictIter::next`] advances the async structural diff
 /// just far enough to find the next conflicting key.
-#[cfg(feature = "async-store")]
 pub struct AsyncConflictIter<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
     left: &'a Tree,
     diffs: AsyncDiffIter<'a, S>,
     failed: bool,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncConflictIter<'a, S>
 where
     S: AsyncStore,
@@ -2460,7 +2438,6 @@ where
 /// Each call to [`AsyncDiffIter::next`] advances the structural diff just far
 /// enough to yield the next change, preserving CID-based subtree pruning while
 /// avoiding allocation of the full diff result.
-#[cfg(feature = "async-store")]
 pub struct AsyncDiffIter<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
     base_root: Option<Cid>,
@@ -2470,8 +2447,6 @@ pub struct AsyncDiffIter<'a, S: AsyncStore> {
     failed: bool,
     stats: DiffTraversalStats,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncDiffIter<'a, S>
 where
     S: AsyncStore,
@@ -2972,8 +2947,6 @@ pub fn compute_range_diff<S: Store>(
     prolly.scan_range_diff(base, other, start, end, |diff| diffs.push(diff.to_owned()))?;
     Ok(diffs)
 }
-
-#[cfg(feature = "async-store")]
 pub async fn compute_async_diff<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -2989,8 +2962,6 @@ where
         .await?;
     Ok(diffs)
 }
-
-#[cfg(feature = "async-store")]
 async fn compute_async_diff_with_stats<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3007,8 +2978,6 @@ where
     }
     Ok((diffs, iter.stats))
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn structural_diff_page_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3057,8 +3026,6 @@ where
         stats: iter.stats,
     })
 }
-
-#[cfg(feature = "async-store")]
 pub async fn compute_async_range_diff<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3076,8 +3043,6 @@ where
         .await?;
     Ok(diffs)
 }
-
-#[cfg(feature = "async-store")]
 pub async fn merge_trees_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3108,7 +3073,6 @@ where
 /// Async diff entries are currently retained as owned staging records because
 /// node-backed views may not cross store awaits. Symbolic decisions still avoid
 /// constructing the legacy `Conflict` on successfully resolved conflicts.
-#[cfg(feature = "async-store")]
 pub async fn merge_trees_borrowed_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3135,7 +3099,6 @@ where
 }
 
 /// Async range merge using callback-scoped conflict views.
-#[cfg(feature = "async-store")]
 pub async fn merge_trees_range_borrowed_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3156,8 +3119,6 @@ where
     let right_diff = compute_async_range_diff(prolly, base, right, start, end).await?;
     merge_trees_with_right_diff_borrowed_async(prolly, left, &right_diff, resolver).await
 }
-
-#[cfg(feature = "async-store")]
 async fn merge_trees_with_right_diff_borrowed_async<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,
@@ -3212,7 +3173,6 @@ where
 }
 
 /// Perform an async three-way merge and return structured trace events with the result.
-#[cfg(feature = "async-store")]
 pub async fn merge_trees_explain_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3229,8 +3189,6 @@ where
         merge_trees_explain_async_result(prolly, base, left, right, resolver, &mut trace).await;
     MergeExplanation { result, trace }
 }
-
-#[cfg(feature = "async-store")]
 async fn merge_trees_explain_async_result<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3273,7 +3231,6 @@ where
 }
 
 /// Merge only right-side changes whose keys are in `[start, end)` through an async store.
-#[cfg(feature = "async-store")]
 pub async fn merge_trees_range_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Tree,
@@ -3294,8 +3251,6 @@ where
     let right_diff = compute_async_range_diff(prolly, base, right, start, end).await?;
     merge_trees_with_right_diff_async(prolly, left, &right_diff, resolver).await
 }
-
-#[cfg(feature = "async-store")]
 async fn merge_trees_with_right_diff_async<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,
@@ -3310,8 +3265,6 @@ where
     merge_trees_with_right_diff_async_traced(prolly, left, right_diff, resolver, &mut recorder)
         .await
 }
-
-#[cfg(feature = "async-store")]
 async fn merge_trees_with_right_diff_async_traced<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,
@@ -3384,8 +3337,6 @@ where
         prolly.batch(left, mutations).await
     }
 }
-
-#[cfg(feature = "async-store")]
 #[derive(Clone)]
 #[allow(dead_code)]
 enum RangeDiffFrame {
@@ -3403,8 +3354,6 @@ enum RangeDiffFrame {
         span_end: Option<Vec<u8>>,
     },
 }
-
-#[cfg(feature = "async-store")]
 async fn process_async_diff_compare<S>(
     prolly: &AsyncProlly<S>,
     base_cid: Cid,
@@ -3450,8 +3399,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn enqueue_async_internal_diff<S>(
     prolly: &AsyncProlly<S>,
     base: &Node,
@@ -3528,8 +3475,6 @@ where
     stack.extend(frames.into_iter().rev());
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn process_async_added<S>(
     prolly: &AsyncProlly<S>,
     cid: Cid,
@@ -3562,8 +3507,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn process_async_removed<S>(
     prolly: &AsyncProlly<S>,
     cid: Cid,
@@ -3596,8 +3539,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
 async fn process_async_range_compare<S>(
@@ -3655,8 +3596,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
 async fn enqueue_async_internal_range_diff<S>(
@@ -3774,8 +3713,6 @@ where
     stack.extend(frames.into_iter().rev());
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn prefetch_async_diff_frame_roots<S>(
     prolly: &AsyncProlly<S>,
     frames: &[DiffFrame],
@@ -3818,8 +3755,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 async fn prefetch_async_range_frame_roots<S>(
     prolly: &AsyncProlly<S>,
@@ -4506,8 +4441,6 @@ fn load_child_nodes<S: Store>(
         prolly.load_many_ordered(child_cids)
     }
 }
-
-#[cfg(feature = "async-store")]
 async fn load_child_nodes_async<S>(
     prolly: &AsyncProlly<S>,
     child_cids: &[Cid],
@@ -4518,8 +4451,6 @@ where
 {
     prolly.load_child_frontier_ordered(child_cids).await
 }
-
-#[cfg(feature = "async-store")]
 async fn diff_collected_nodes_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Node,
@@ -4537,8 +4468,6 @@ where
     diff_entry_slices(&base_entries, &other_entries, diffs);
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 async fn diff_collected_nodes_range_async<S>(
     prolly: &AsyncProlly<S>,
@@ -4576,8 +4505,6 @@ where
     diff_entry_slices(&base_entries, &other_entries, diffs);
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 async fn collect_entries_from_node_async<S>(
     prolly: &AsyncProlly<S>,
     node: &Node,
@@ -4606,8 +4533,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 async fn collect_entries_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
@@ -4655,8 +4580,6 @@ where
 
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 async fn collect_added_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
@@ -4688,8 +4611,6 @@ where
     );
     Ok(())
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 async fn collect_removed_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
@@ -5821,8 +5742,6 @@ fn conflict_from_right_diff<S: Store>(
         right_val.map(<[u8]>::to_vec),
     )))
 }
-
-#[cfg(feature = "async-store")]
 async fn conflict_from_right_diff_async<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,

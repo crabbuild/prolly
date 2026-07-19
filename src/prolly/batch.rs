@@ -1528,20 +1528,14 @@ pub(crate) fn rebuild_from_modified_leaves<S: Store>(
     // Return the single root CID
     Ok(current_cids.into_iter().next())
 }
-
-#[cfg(any(test, feature = "async-store"))]
 pub(crate) fn preprocess_mutations(mutations: Vec<Mutation>) -> Vec<Mutation> {
     preprocess_mutations_with_info(mutations).mutations
 }
-
-#[cfg(any(test, feature = "async-store"))]
 struct PreprocessedMutations {
     mutations: Vec<Mutation>,
     #[cfg(test)]
     input_was_sorted: bool,
 }
-
-#[cfg(any(test, feature = "async-store"))]
 fn preprocess_mutations_with_info(mut mutations: Vec<Mutation>) -> PreprocessedMutations {
     if mutations.len() < 2 {
         return PreprocessedMutations {
@@ -1587,8 +1581,6 @@ fn preprocess_mutations_with_info(mut mutations: Vec<Mutation>) -> PreprocessedM
         input_was_sorted,
     }
 }
-
-#[cfg(any(test, feature = "async-store"))]
 fn inspect_sorted_mutations(mutations: &[Mutation]) -> (bool, bool) {
     let mut has_duplicates = false;
     for pair in mutations.windows(2) {

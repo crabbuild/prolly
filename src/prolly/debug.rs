@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::key::debug_key;
-#[cfg(feature = "async-store")]
 use super::store::AsyncStore;
-#[cfg(feature = "async-store")]
 use super::AsyncProlly;
 use super::{child_cid_at, Cid, Error, Prolly, Store, Tree};
 
@@ -254,8 +252,6 @@ pub(crate) fn compare_tree_debug_views<S: Store>(
     let right = collect_tree_debug_view(prolly, right)?;
     Ok(compare_views(left, right))
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn collect_tree_debug_view_async<S>(
     prolly: &AsyncProlly<S>,
     tree: &Tree,
@@ -302,8 +298,6 @@ where
 
     Ok(view_from_grouped(grouped))
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn compare_tree_debug_views_async<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,

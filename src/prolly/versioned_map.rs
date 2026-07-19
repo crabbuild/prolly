@@ -41,8 +41,6 @@ pub(crate) enum MapWriteAuthority<'a> {
     Unmanaged,
     IndexMaintenance(&'a IndexMaintenancePermit),
 }
-
-#[cfg(feature = "async-store")]
 async fn guard_async_managed_map_write<S>(
     tx: &super::transaction::AsyncProllyTransaction<'_, S>,
     map_id: &[u8],
@@ -2268,7 +2266,6 @@ where
 }
 
 /// Async counterpart to [`VersionedMap`] for remote and browser stores.
-#[cfg(feature = "async-store")]
 pub struct AsyncVersionedMap<'a, S: super::store::AsyncStore> {
     prolly: &'a super::AsyncProlly<S>,
     id: Vec<u8>,
@@ -2277,20 +2274,16 @@ pub struct AsyncVersionedMap<'a, S: super::store::AsyncStore> {
 }
 
 /// Immutable version-pinned async read view.
-#[cfg(feature = "async-store")]
 pub struct AsyncMapSnapshot<'a, S: super::store::AsyncStore> {
     prolly: &'a super::AsyncProlly<S>,
     version: MapVersion,
 }
 
 /// Resumable async change subscription driven by explicit polling.
-#[cfg(feature = "async-store")]
 pub struct AsyncMapChangeSubscription<'a, S: super::store::AsyncStore> {
     map: AsyncVersionedMap<'a, S>,
     last_seen: Option<MapVersionId>,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S: super::store::AsyncStore> AsyncVersionedMap<'a, S> {
     /// Create an async managed-map handle.
     pub fn new(prolly: &'a super::AsyncProlly<S>, id: impl AsRef<[u8]>) -> Self {
@@ -2315,8 +2308,6 @@ impl<'a, S: super::store::AsyncStore> AsyncVersionedMap<'a, S> {
         name
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncVersionedMap<'a, S>
 where
     S: super::store::AsyncStore + super::manifest::AsyncManifestStore,
@@ -2407,8 +2398,6 @@ where
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncMapChangeSubscription<'a, S>
 where
     S: super::store::AsyncStore + super::manifest::AsyncManifestStore,
@@ -2452,8 +2441,6 @@ where
         }))
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncMapSnapshot<'a, S>
 where
     S: super::store::AsyncStore,
@@ -2555,8 +2542,6 @@ where
         self.prolly.prove_prefix(self.tree(), prefix).await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncVersionedMap<'_, S>
 where
     S: super::store::AsyncStore
@@ -2647,8 +2632,6 @@ where
         self.apply(editor.into_mutations()).await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: super::store::AsyncStore> super::AsyncProlly<S> {
     /// Open an async managed map.
     pub fn versioned_map(&self, id: impl AsRef<[u8]>) -> AsyncVersionedMap<'_, S> {

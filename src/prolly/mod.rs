@@ -89,7 +89,6 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
-#[cfg(any(feature = "async-store", test))]
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -98,11 +97,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const PARALLEL_NODE_DECODE_THRESHOLD: usize = 16;
 const GET_MANY_PREFETCH_PARALLELISM: usize = 16;
-#[cfg(any(feature = "async-store", test))]
 const GET_MANY_BOUNDARY_ROUTE_MIN_POSITIONS: usize = 32;
 const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
 const RECENT_LEAF_MISS_SAMPLE_INTERVAL: usize = 16;
-#[cfg(feature = "async-store")]
 const ASYNC_NODE_PREFETCH_BATCH_SIZE: usize = 64;
 
 /// An owned key-value entry returned by ordered tree lookups.
@@ -164,7 +161,6 @@ pub mod crdt;
 pub mod diff;
 pub mod parallel;
 pub mod range;
-#[cfg(feature = "async-store")]
 pub mod remote;
 pub mod secondary_index;
 pub mod streaming;
@@ -177,7 +173,6 @@ use self::sync::{MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundl
 use blob::{BlobStore, BlobStoreScan, LargeValueConfig};
 use cid::Cid;
 use config::Config;
-#[cfg(feature = "async-store")]
 use config::RuntimeConfig;
 use encoding::INIT_LEVEL;
 use error::Conflict;
@@ -186,7 +181,6 @@ use error::Error;
 use error::Mutation;
 use error::Resolver;
 use gc::{BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep};
-#[cfg(feature = "async-store")]
 use manifest::{AsyncManifestStore, AsyncManifestStoreScan};
 use manifest::{
     ManifestStore, ManifestStoreScan, NamedRoot, NamedRootRetention, NamedRootSelection,
@@ -195,7 +189,6 @@ use manifest::{
 use node::Node;
 use node::ReadNode;
 use stats::{StatsComparison, TreeStats};
-#[cfg(feature = "async-store")]
 use store::AsyncStore;
 use store::NodeStoreScan;
 use store::Store;
@@ -235,8 +228,6 @@ impl InlinePositions {
             rest: Vec::new(),
         }
     }
-
-    #[cfg(any(feature = "async-store", test))]
     fn with_rest_capacity(first: usize, rest_capacity: usize) -> Self {
         Self {
             first,
@@ -260,8 +251,6 @@ impl InlinePositions {
     fn len(&self) -> usize {
         1 + self.rest.len()
     }
-
-    #[cfg(any(feature = "async-store", test))]
     fn at(&self, offset: usize) -> usize {
         if offset == 0 {
             self.first
@@ -835,8 +824,6 @@ fn loaded_node_totals(loaded: &[Option<Vec<u8>>]) -> (usize, usize) {
             (nodes + 1, bytes + value.len())
         })
 }
-
-#[cfg(feature = "async-store")]
 async fn async_batch_get_ordered_unique_bounded<S>(
     store: &S,
     keys: &[&[u8]],
@@ -905,15 +892,13 @@ struct RecentLeafRead {
 
 /// Async Prolly tree manager.
 ///
-/// `AsyncProlly` is available behind the `async-store` feature. It keeps the
-/// synchronous [`Prolly`] API untouched while allowing remote, browser, and
-/// object-store backends to serve tree reads without blocking on the core
-/// `Store` trait.
+/// `AsyncProlly` is part of the runtime-neutral core. It allows remote,
+/// browser, and object-store backends to serve tree operations without
+/// blocking on the synchronous [`Store`] trait.
 ///
 /// The async surface covers reads, writes, range scans, diff, merge, CRDT merge,
 /// stats, cache pinning, large-value helpers, and route-planned batch mutation
 /// without requiring a Tokio dependency.
-#[cfg(feature = "async-store")]
 pub struct AsyncProlly<S: AsyncStore> {
     store: S,
     config: Config,
@@ -921,22 +906,16 @@ pub struct AsyncProlly<S: AsyncStore> {
     rightmost_path_cache: RwLock<Option<(Cid, Vec<CachedRightmostPathEntry>)>>,
     metrics: ProllyMetrics,
 }
-
-#[cfg(feature = "async-store")]
 struct AsyncWriteCollector {
     nodes: Vec<(Cid, Vec<u8>)>,
     seen_cids: HashSet<Cid>,
     cache_nodes: Vec<(Cid, Node)>,
 }
-
-#[cfg(feature = "async-store")]
 struct AsyncBuildNodeSummary {
     cid: Cid,
     first_key: Vec<u8>,
     count: u64,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 struct AsyncBatchLeafGroup {
     leaf: Node,
@@ -944,8 +923,6 @@ struct AsyncBatchLeafGroup {
     mutations: Arc<Vec<Mutation>>,
     range: Range<usize>,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 struct AsyncBatchRouteFrame {
     cid: Cid,
@@ -953,8 +930,6 @@ struct AsyncBatchRouteFrame {
     mutations: Arc<Vec<Mutation>>,
     range: Range<usize>,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 struct AsyncBatchRoutePath {
     parent: Option<Arc<AsyncBatchRoutePath>>,
@@ -962,8 +937,6 @@ struct AsyncBatchRoutePath {
     cid: Cid,
     child_index: usize,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 #[derive(Clone)]
 struct AsyncBatchChildRef {
@@ -972,35 +945,25 @@ struct AsyncBatchChildRef {
     level: u8,
     count: u64,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 type AsyncBatchChildReplacements = Vec<(usize, Vec<AsyncBatchChildRef>)>;
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 #[derive(Clone)]
 struct AsyncBatchParentLink {
     parent_cid: Cid,
     child_index: usize,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 #[derive(Clone)]
 struct AsyncBatchAncestorContext {
     node: Node,
     parent: Option<AsyncBatchParentLink>,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 struct AsyncBatchApplyResult {
     root: Option<Cid>,
     changed_leaves: usize,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 #[derive(Clone)]
 struct AsyncRightmostPathEntry {
@@ -1008,35 +971,25 @@ struct AsyncRightmostPathEntry {
     node: Node,
     child_index: usize,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 struct AsyncAppendTreeUpdate {
     root: Cid,
     rightmost_path: Vec<AsyncRightmostPathEntry>,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 const RIGHTMOST_PATH_HINT_NAMESPACE: &[u8] = b"prolly:rightmost-path:v1";
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct AsyncRightmostPathHint {
     version: u8,
     entries: Vec<AsyncRightmostPathHintEntry>,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct AsyncRightmostPathHintEntry {
     cid: Cid,
     child_index: usize,
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 impl AsyncWriteCollector {
     fn new_cached() -> Self {
@@ -1125,7 +1078,6 @@ impl AsyncWriteCollector {
 }
 
 #[derive(Clone)]
-#[cfg(feature = "async-store")]
 pub(crate) struct CachedRightmostPathEntry {
     pub cid: Cid,
     pub node: Node,
@@ -4604,8 +4556,6 @@ impl<S: Store> Prolly<S> {
         parallel::parallel_batch_with_stats(self, tree, mutations, config)
     }
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 impl<S> AsyncProlly<S>
 where
@@ -7787,8 +7737,6 @@ where
         merged
     }
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn collect_async_batch_route_contexts(
     path: &Arc<AsyncBatchRoutePath>,
@@ -7812,8 +7760,6 @@ fn collect_async_batch_route_contexts(
         current = path.parent.clone();
     }
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn async_rightmost_entry_from_node_ref((cid, node): &(Cid, Node)) -> AsyncRightmostPathEntry {
     AsyncRightmostPathEntry {
@@ -7822,8 +7768,6 @@ fn async_rightmost_entry_from_node_ref((cid, node): &(Cid, Node)) -> AsyncRightm
         child_index: node.len().saturating_sub(1),
     }
 }
-
-#[cfg(feature = "async-store")]
 fn collect_async_node_with_reuse(
     node: Node,
     reusable: &Cid,
@@ -7841,8 +7785,6 @@ fn collect_async_node_with_reuse(
         count,
     })
 }
-
-#[cfg(feature = "async-store")]
 fn rightmost_path_from_collector(
     root: &Cid,
     collector: &AsyncWriteCollector,
@@ -7867,8 +7809,6 @@ fn rightmost_path_from_collector(
         cid = child_cid_at(node, child_index)?;
     }
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn cached_rightmost_entries(path: &[AsyncRightmostPathEntry]) -> Vec<CachedRightmostPathEntry> {
     path.iter()
@@ -7879,8 +7819,6 @@ fn cached_rightmost_entries(path: &[AsyncRightmostPathEntry]) -> Vec<CachedRight
         })
         .collect()
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn async_rightmost_entries_from_cache(
     path: Vec<CachedRightmostPathEntry>,
@@ -7893,8 +7831,6 @@ fn async_rightmost_entries_from_cache(
         })
         .collect()
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn encode_rightmost_path_hint(path: &[AsyncRightmostPathEntry]) -> Result<Vec<u8>, Error> {
     let hint = AsyncRightmostPathHint {
@@ -7909,8 +7845,6 @@ fn encode_rightmost_path_hint(path: &[AsyncRightmostPathEntry]) -> Result<Vec<u8
     };
     serde_cbor::ser::to_vec_packed(&hint).map_err(|err| Error::Deserialize(err.to_string()))
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn rightmost_path_hint_is_valid(root: &Cid, path: &[AsyncRightmostPathEntry]) -> bool {
     if path.first().map(|entry| &entry.cid) != Some(root) {
@@ -8214,8 +8148,6 @@ fn path_index_for_key(node: &Node, key: &[u8]) -> usize {
         Err(idx) => idx.saturating_sub(1),
     }
 }
-
-#[cfg(feature = "async-store")]
 fn fill_leaf_lookup_values<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8276,8 +8208,6 @@ fn keys_are_sorted<K: AsRef<[u8]>>(keys: &[K]) -> bool {
     keys.windows(2)
         .all(|pair| pair[0].as_ref() <= pair[1].as_ref())
 }
-
-#[cfg(any(feature = "async-store", test))]
 fn route_key_positions_to_children<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8315,8 +8245,6 @@ fn route_key_positions_to_children<K: AsRef<[u8]>>(
 
     Ok(frames)
 }
-
-#[cfg(any(feature = "async-store", test))]
 fn route_key_positions_to_children_by_boundary<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8358,8 +8286,6 @@ fn route_key_positions_to_children_by_boundary<K: AsRef<[u8]>>(
 
     Ok(frames)
 }
-
-#[cfg(any(feature = "async-store", test))]
 fn lower_bound_position_key<K: AsRef<[u8]>>(
     positions: &InlinePositions,
     keys: &[K],
@@ -8380,8 +8306,6 @@ fn lower_bound_position_key<K: AsRef<[u8]>>(
 
     left
 }
-
-#[cfg(any(feature = "async-store", test))]
 fn inline_positions_from_range(
     positions: &InlinePositions,
     range: Range<usize>,
@@ -8396,8 +8320,6 @@ fn inline_positions_from_range(
 
     bucket
 }
-
-#[cfg(any(feature = "async-store", test))]
 fn child_index_for_lookup_key(node: &Node, key: &[u8]) -> usize {
     node.keys
         .partition_point(|candidate| candidate.as_slice() <= key)
@@ -8415,8 +8337,6 @@ fn reverse_scan_end<'a>(
         (None, None) => None,
     }
 }
-
-#[cfg(feature = "async-store")]
 fn leaf_value_at(node: &Node, idx: usize) -> Result<Vec<u8>, Error> {
     node.vals.get(idx).cloned().ok_or(Error::InvalidNode)
 }
@@ -8428,8 +8348,6 @@ fn child_cid_at(node: &Node, idx: usize) -> Result<Cid, Error> {
         .try_into()
         .map_err(|_| Error::InvalidNode)?))
 }
-
-#[cfg(feature = "async-store")]
 fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.keys.reserve(additional);
     node.vals.reserve(additional);
@@ -8437,8 +8355,6 @@ fn reserve_node_entries(node: &mut Node, additional: usize) {
         node.child_counts.reserve(additional);
     }
 }
-
-#[cfg(feature = "async-store")]
 fn stored_logical_count(node: &Node) -> u64 {
     if node.leaf {
         node.len() as u64
@@ -8446,14 +8362,10 @@ fn stored_logical_count(node: &Node) -> u64 {
         node.child_counts.iter().copied().sum()
     }
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn chunks_logical_counts(chunks: &[Node]) -> Vec<u64> {
     chunks.iter().map(stored_logical_count).collect()
 }
-
-#[cfg(feature = "async-store")]
 #[allow(dead_code)]
 fn is_valid_boundary_between(left: &Node, right: &Node) -> Result<bool, Error> {
     if left.is_empty() {
@@ -8506,16 +8418,12 @@ mod tests {
     use std::ops::ControlFlow;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
-    #[cfg(feature = "async-store")]
     use std::{
         future::Future,
         task::{Context, Poll},
     };
-    #[cfg(feature = "async-store")]
     use store::SyncStoreAsAsync;
     use store::{BatchOp, MemStore};
-
-    #[cfg(feature = "async-store")]
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
         let mut cx = Context::from_waker(&waker);
@@ -8793,8 +8701,6 @@ mod tests {
         let error = destination.import_snapshot(&extra_bundle).unwrap_err();
         assert!(matches!(error, Error::InvalidSnapshotBundle(_)));
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_prolly_get_reads_tree_from_async_store() {
         let store = Arc::new(MemStore::new());
@@ -8817,8 +8723,6 @@ mod tests {
         async_prolly.clear_cache();
         assert_eq!(async_prolly.cache_len(), 0);
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_prolly_get_many_preserves_order_duplicates_and_missing_keys() {
         let store = Arc::new(MemStore::new());
@@ -8936,8 +8840,6 @@ mod tests {
                 if expected == first_cid && actual == second_cid
         ));
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_ordered_owned_and_shared_loads_reject_miskeyed_valid_nodes() {
         block_on(async {

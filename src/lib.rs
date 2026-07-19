@@ -255,7 +255,6 @@ mod prolly;
 pub use prolly::batch::{
     append_batch, BatchApplyResult, BatchApplyStats, BatchWriter, MutationBuffer,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::blob::{AsyncBlobStore, SyncBlobStoreAsAsync};
 pub use prolly::blob::{
     BlobRef, BlobStore, BlobStoreScan, FileBlobStore, FileBlobStoreError, LargeValueConfig,
@@ -287,7 +286,6 @@ pub use prolly::debug::{
     TreeDebugComparedNode, TreeDebugComparison, TreeDebugComparisonLevel, TreeDebugLevel,
     TreeDebugNode, TreeDebugNodeStatus, TreeDebugView,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::diff::{AsyncConflictIter, AsyncDiffIter};
 pub use prolly::diff::{
     DiffPage, DiffTraversalStats, MergeExplanation, MergeFallbackReason, MergeFastPath,
@@ -307,7 +305,6 @@ pub use prolly::key::{
     debug_key, decode_segments, encode_segment, encode_segment_prefix, i128_key, i64_key,
     prefix_end, prefix_range, timestamp_millis_key, u128_key, u64_key, KeyBuilder, KeyDecodeError,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::manifest::{AsyncManifestStore, AsyncManifestStoreScan};
 pub use prolly::manifest::{
     ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRoot, NamedRootManifest,
@@ -350,19 +347,23 @@ pub use prolly::proximity::{
     SearchRuntime, SearchRuntimePolicy, StoreCacheNamespace, VectorStorageConfig,
     SEARCH_PLAN_FORMAT_VERSION,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::proximity::{
     AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
     AsyncIoConfig, AsyncProductQuantizer, AsyncProximityMap, AsyncSearchControl, CancellationToken,
 };
+pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};
 pub use prolly::range::{
     CursorWindow, RangeCursor, RangeIter, RangePage, ReverseCursor, ReversePage,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::read::AsyncReadSession;
 pub use prolly::read::{
     BorrowedMergeResolver, ConflictRef, DiffRef, EntryRef, MergeDecision, OwnedRangeScanSession,
     OwnedReadSession, OwnedValueLease, ReadSession, ScanOutcome, ValueRefView,
+};
+pub use prolly::remote::{
+    conformance as remote_conformance, RemoteAdapterError, RemoteBatchOp, RemoteManifestUpdate,
+    RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
+    RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 pub use prolly::secondary_index::{
     catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,
@@ -388,26 +389,14 @@ pub use prolly::snapshot::{
     SnapshotSelection, SNAPSHOT_BRANCH_PREFIX, SNAPSHOT_CHECKPOINT_PREFIX, SNAPSHOT_TAG_PREFIX,
 };
 pub use prolly::splice::{splice, SpliceStats};
-pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
-pub use prolly::write::WriteStats;
-pub use prolly::{ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyMetricsSnapshot};
-
-#[cfg(feature = "async-store")]
-pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};
-#[cfg(feature = "async-store")]
-pub use prolly::remote::{
-    conformance as remote_conformance, RemoteAdapterError, RemoteBatchOp, RemoteManifestUpdate,
-    RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
-    RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
-};
 pub use prolly::stats::{StatsComparison, StatsDiff, StatsPercentageChange, TreeStats};
-#[cfg(feature = "async-store")]
 pub use prolly::store::{AsyncStore, SyncStoreAsAsync};
 pub use prolly::store::{
     BatchOp, FileNodeStore, FileNodeStoreError, MemStore, MemStoreError, NodeStoreScan, Store,
 };
 #[cfg(feature = "tokio")]
 pub use prolly::store::{TokioBlockingStore, TokioBlockingStoreError};
+pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
 pub use prolly::sync::{
     MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode, SnapshotBundleSummary,
     SnapshotBundleVerification, SNAPSHOT_BUNDLE_FORMAT_VERSION,
@@ -415,7 +404,6 @@ pub use prolly::sync::{
 pub use prolly::tombstone::{
     is_tombstone_value, tombstone_compaction, tombstone_upsert, Tombstone,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::transaction::{
     AsyncProllyTransaction, AsyncTransactionOverlayStore, AsyncTransactionalStore,
     OwnedAsyncProllyTransaction, OwnedAsyncTransactionOverlayStore,
@@ -430,7 +418,6 @@ pub use prolly::value::{
     decode_cbor, decode_json, encode_cbor, encode_json, CborCodec, JsonCodec, ValueCodec,
     VersionedCborCodec, VersionedJsonCodec, VersionedValue,
 };
-#[cfg(feature = "async-store")]
 pub use prolly::versioned_map::{AsyncMapChangeSubscription, AsyncMapSnapshot, AsyncVersionedMap};
 pub use prolly::versioned_map::{
     BytesKeyCodec, KeyCodec, MapBackupVersion, MapCatalogVerification, MapChangeEvent,
@@ -440,9 +427,10 @@ pub use prolly::versioned_map::{
     VersionedMapEditor, VersionedMapUpdate, VersionedMapsTransaction,
     DEFAULT_VERSIONED_MAP_RETRIES, VERSIONED_MAP_ROOT_PREFIX,
 };
+pub use prolly::write::WriteStats;
 pub use prolly::write_session::{PendingValue, Savepoint, WriteSession};
-#[cfg(feature = "async-store")]
 pub use prolly::AsyncProlly;
+pub use prolly::{ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyMetricsSnapshot};
 
 // Re-export constants
 pub use prolly::encoding::{
