@@ -1201,7 +1201,7 @@ This task adds deterministic paired tooling before collecting acceptance results
 - Consumes: baseline revision `a2f4e7a3066d2259783c8d815b45c0461c77b06b` and the verified candidate.
 - Produces: alternating process pairs, merged revision-labelled rows, directional gate summaries, and local-only provenance.
 
-- [ ] **Step 1: Extend the in-memory overhead screen**
+- [x] **Step 1: Extend the in-memory overhead screen**
 
 Add point upsert, point delete, one-item batch, build, merge, range delete, and direct request forwarding to `async_first_foundation_bench`. Emit:
 
@@ -1211,7 +1211,7 @@ revision,facade,api,records,items_per_sample,samples,median_ns,p95_ns,throughput
 
 Run sync-ready, async-over-sync, and native async recorder paths with identical seeds and assert equal roots before timing.
 
-- [ ] **Step 2: Implement the all-local-adapter workload harness**
+- [x] **Step 2: Implement the all-local-adapter workload harness**
 
 Create a standalone benchmark package with path dependencies on `prolly-map`, SQLite, RocksDB, SlateDB, PGlite, and Turso. The core crate supplies memory and file stores. Use native synchronous `Store` paths for memory, file, SQLite, RocksDB, SlateDB, and PGlite; use native `AsyncProlly<TursoStore>` for Turso.
 
@@ -1230,7 +1230,7 @@ revision,adapter,records,changes,api,pattern,run,total_ns,operations_per_sec,p50
 
 Each runner must verify values, record count, root stability, reachable CIDs, and reopen behavior before writing `true` validation fields. The harness must skip no requested adapter silently: a missing PGlite sidecar or other prerequisite produces an explicit nonzero exit and a named environment-limitation record from the orchestration script.
 
-- [ ] **Step 3: Implement alternating SQLite/Turso revision orchestration**
+- [x] **Step 3: Implement alternating SQLite/Turso revision orchestration**
 
 The shell script accepts:
 
@@ -1249,7 +1249,7 @@ The shell script accepts:
 
 Build each revision once with separate `CARGO_TARGET_DIR` values and `CARGO_INCREMENTAL=0`. The `foundation` suite runs `async_first_foundation_bench`; the `sqlite-turso` suite runs the existing local comparison binary. For repetition `1..N`, run baseline then candidate on odd repetitions and candidate then baseline on even repetitions. Each invocation uses a fresh output directory and one internal repetition. Concatenate validated raw rows with added `revision_role` and `pair` columns. Refuse a dirty baseline and refuse any dependency graph containing `turso-cloud-sync`.
 
-- [ ] **Step 4: Implement alternating all-local-adapter orchestration**
+- [x] **Step 4: Implement alternating all-local-adapter orchestration**
 
 `run_local_store_publication_revision_gate.sh` accepts the same baseline, candidate, output, and run arguments plus the local-adapter list. Build the harness once per revision in separate target directories. Alternate revision order per repetition, give every cell a fresh database directory on the same volume, concatenate revision-labelled rows, and write `environment-limitations.csv` for prerequisites that are genuinely unavailable.
 
@@ -1259,7 +1259,7 @@ Use this required adapter list unless a recorded prerequisite prevents execution
 memory-sync,file-sync,sqlite-sync,rocksdb-sync,slatedb-sync,pglite-sync,turso-async
 ```
 
-- [ ] **Step 5: Implement directional summarization**
+- [x] **Step 5: Implement directional summarization**
 
 The Python summarizer groups by suite, adapter or facade, records, API, pattern, and revision role. It calculates median total latency, throughput, p50, p95, and percent change. Exit nonzero when:
 
@@ -1271,7 +1271,7 @@ The Python summarizer groups by suite, adapter or facade, records, API, pattern,
 
 Write `summary.csv`, `gate.csv`, and `report.md` with machine and revision provenance.
 
-- [ ] **Step 6: Add post-implementation script tests**
+- [x] **Step 6: Add post-implementation script tests**
 
 Create synthetic CSV fixtures covering pass, latency regression, throughput regression, p95 regression, missing pair, validation failure, environment limitation, and Turso target miss. Assert exact exit codes and gate reasons:
 
@@ -1281,7 +1281,7 @@ self.assertIn("median_latency_regression", result.stderr)
 self.assertIn("turso_point_target_miss", result.stderr)
 ```
 
-- [ ] **Step 7: Verify the tooling with smoke runs**
+- [x] **Step 7: Verify the tooling with smoke runs**
 
 ```sh
 if [[ ! -d /private/tmp/prolly-node-publication-baseline ]]; then
@@ -1316,7 +1316,16 @@ scripts/run_local_store_publication_revision_gate.sh \
 
 Expected: script tests pass, smoke rows validate, and the smoke report is explicitly marked statistically insufficient.
 
-- [ ] **Step 8: Commit reproducible tooling**
+Smoke verification notes:
+
+- the synthetic summarizer suite passed all eight pass/failure/limitation cases;
+- the alternating foundation harness paired baseline and candidate successfully, including the baseline-only compatibility shim and candidate-native `NodePublication` forwarding;
+- the 10K SQLite/Turso matrix emitted 48 validated baseline/candidate rows with no skip;
+- the 10K all-local matrix emitted 216 validated rows across memory, file, SQLite, RocksDB, SlateDB, and Turso;
+- PGlite was recorded in `environment-limitations.csv` because `@electric-sql/pglite` is not installed in the local Node.js environment;
+- every one-pair smoke group was marked statistically insufficient and made no performance claim.
+
+- [x] **Step 8: Commit reproducible tooling**
 
 ```sh
 git add benches/async_first_foundation_bench.rs \

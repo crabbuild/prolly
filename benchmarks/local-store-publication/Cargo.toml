@@ -1,0 +1,21 @@
+[package]
+name = "prolly-local-store-publication-bench"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+csv = "1.3"
+prolly = { package = "prolly-map", path = "../..", features = ["async-store"] }
+prolly-store-pglite = { path = "../../stores/prolly-store-pglite" }
+prolly-store-rocksdb = { path = "../../stores/prolly-store-rocksdb" }
+prolly-store-slatedb = { path = "../../stores/prolly-store-slatedb" }
+prolly-store-sqlite = { path = "../../stores/prolly-store-sqlite" }
+prolly-store-turso = { path = "../../stores/prolly-store-turso" }
+serde = { version = "1.0", features = ["derive"] }
+slatedb = "0.14.0"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }
+
+[lints.rust]
+unsafe_code = "forbid"
