@@ -198,6 +198,8 @@ pub enum Error {
     InvalidNode,
     /// Persisted tree format parameters are invalid.
     InvalidFormat(String),
+    /// Runtime execution limits must be finite and nonzero.
+    InvalidExecutionConfig { field: &'static str, value: usize },
     /// A node was decoded under a different persisted tree format.
     FormatMismatch { expected: Cid, actual: Cid },
     /// One entry cannot fit below the persisted hard byte limit.
@@ -343,6 +345,9 @@ impl std::fmt::Display for Error {
             Error::NotFound(cid) => write!(f, "node not found: {:?}", cid),
             Error::InvalidNode => write!(f, "invalid node structure"),
             Error::InvalidFormat(message) => write!(f, "invalid tree format: {message}"),
+            Error::InvalidExecutionConfig { field, value } => {
+                write!(f, "invalid execution config: {field} must be nonzero, got {value}")
+            }
             Error::FormatMismatch { expected, actual } => write!(
                 f,
                 "tree format mismatch: expected {:?}, got {:?}",

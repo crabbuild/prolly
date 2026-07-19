@@ -168,12 +168,12 @@ pub(crate) struct OperationContext {
 }
 ```
 
-- [ ] Add tests rejecting zero limits, accepting documented defaults, keeping execution settings out of `TreeFormat`, and returning exact operation stats for cache hit/miss, bytes read/written, nodes decoded/written, and peak in-flight reads.
-- [ ] Run `cargo test --test execution_config`; verify RED.
-- [ ] Replace optional/unbounded runtime cache defaults with finite validated defaults. Keep persisted format and execution configuration separate in constructors and manifests.
-- [ ] Implement saturating counters scoped to one public operation. Existing cumulative observability may aggregate completed operation deltas but must never derive a result by subtracting two global snapshots.
-- [ ] Run focused tests plus `cargo test --lib`.
-- [ ] Commit with `git commit -m "feat: add bounded async execution context"`.
+- [x] Add tests rejecting zero limits, accepting documented defaults, keeping execution settings out of `TreeFormat`, and returning exact operation stats for cache hit/miss, bytes read/written, nodes decoded/written, and peak in-flight reads.
+- [x] Run `cargo test --test execution_config`; verify RED.
+- [x] Replace optional/unbounded runtime cache defaults with finite validated defaults. Keep persisted format and execution configuration separate in constructors and manifests.
+- [x] Implement saturating counters scoped to one public operation. Existing cumulative observability may aggregate completed operation deltas but must never derive a result by subtracting two global snapshots.
+- [x] Run focused tests plus `cargo test --lib`.
+- [x] Commit with `git commit -m "feat: add bounded async execution context"`.
 
 ---
 
