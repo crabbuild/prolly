@@ -27,6 +27,62 @@ use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
 const EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP: usize = 64;
 
 #[test]
+fn async_get_rejects_valid_node_bytes_stored_under_wrong_cid() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let config = Config::default();
+        let writer = Prolly::new(store.clone(), config.clone());
+        let tree = writer
+            .put(&writer.create(), b"key".to_vec(), b"value".to_vec())
+            .unwrap();
+        let expected = tree.root.clone().unwrap();
+
+        let encoded = store.get(expected.as_bytes()).unwrap().unwrap();
+        let mut wrong_node = prolly::Node::from_bytes(&encoded).unwrap();
+        wrong_node.vals[0] = b"different-value".to_vec();
+        let wrong_bytes = wrong_node.to_bytes();
+        let actual = Cid::from_bytes(&wrong_bytes);
+        assert_ne!(actual, expected);
+        store.put(expected.as_bytes(), &wrong_bytes).unwrap();
+
+        let reader = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config);
+        let error = reader.get(&tree, b"key").await.unwrap_err();
+        assert!(matches!(
+            error,
+            Error::CidMismatch {
+                expected: found_expected,
+                actual: found_actual,
+            } if found_expected == expected && found_actual == actual
+        ));
+
+        store.put(expected.as_bytes(), &encoded).unwrap();
+        assert_eq!(
+            reader.get(&tree, b"key").await.unwrap(),
+            Some(b"value".to_vec())
+        );
+    });
+}
+
+#[test]
+fn async_get_rejects_correctly_addressed_node_with_wrong_tree_format() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let plain_config = Config::builder().node_layout(NodeLayoutSpec::Plain).build();
+        let writer = Prolly::new(store.clone(), plain_config);
+        let mut tree = writer
+            .put(&writer.create(), b"key".to_vec(), b"value".to_vec())
+            .unwrap();
+        tree.config = Config::default();
+
+        let reader = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        assert!(matches!(
+            reader.get(&tree, b"key").await,
+            Err(Error::FormatMismatch { .. })
+        ));
+    });
+}
+
+#[test]
 fn async_write_assembly_has_no_stateless_legacy_boundary_calls() {
     let source = include_str!("../src/prolly/mod.rs");
     let forbidden = ["boundary::", "is_boundary("].concat();

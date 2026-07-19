@@ -71,13 +71,13 @@ pub(crate) fn decode_read(
 ) -> Result<ReadNode, Error>;
 ```
 
-- [ ] Add sync and async malicious-store tests that return valid node bytes under the wrong requested CID. Exercise owned `load_arc`, shared `load_read_arc`, and ordered batch loading; assert `Error::CidMismatch` and prove a second request reads the store again rather than hitting poisoned cache state.
-- [ ] Add tests that return structurally valid bytes encoded with a different `TreeFormat`; assert `Error::FormatMismatch` for owned, shared, and batch paths.
-- [ ] Run `cargo test --test invariants stored_node -- --nocapture` and `cargo test --features async-store --test async_store stored_node -- --nocapture`; verify RED because owned loads currently accept the wrong CID and manager-format validation is inconsistent.
-- [ ] Implement `validate_cid`, `decode_owned`, and `decode_read`. Map malformed packed decode to `Error::InvalidNode`, compare format after decode, and perform all checks before returning a value eligible for caching.
-- [ ] Replace direct `Node::from_bytes`, `Node::from_bytes_with_format`, and `read_node_from_shared` calls in manager load paths with these functions. Cover cache conversion and ordered batch reads as well as point reads.
-- [ ] Run the focused tests, then `cargo test --lib` and `cargo test --features async-store --lib`.
-- [ ] Commit with `git commit -m "fix: validate every stored prolly node"`.
+- [x] Add sync and async malicious-store tests that return valid node bytes under the wrong requested CID. Exercise owned `load_arc`, shared `load_read_arc`, and ordered batch loading; assert `Error::CidMismatch` and prove a second request reads the store again rather than hitting poisoned cache state.
+- [x] Add tests that return structurally valid bytes encoded with a different `TreeFormat`; assert `Error::FormatMismatch` for owned, shared, and batch paths.
+- [x] Run `cargo test --test invariants stored_node -- --nocapture` and `cargo test --features async-store --test async_store stored_node -- --nocapture`; verify RED because owned loads currently accept the wrong CID and manager-format validation is inconsistent.
+- [x] Implement `validate_cid`, `decode_owned`, and `decode_read`. Map malformed packed decode to `Error::InvalidNode`, compare format after decode, and perform all checks before returning a value eligible for caching.
+- [x] Replace direct `Node::from_bytes`, `Node::from_bytes_with_format`, and `read_node_from_shared` calls in manager load paths with these functions. Cover cache conversion and ordered batch reads as well as point reads.
+- [x] Run the focused tests, then `cargo test --lib` and `cargo test --features async-store --lib`.
+- [x] Commit with `git commit -m "fix: validate every stored prolly node"`.
 
 ---
 

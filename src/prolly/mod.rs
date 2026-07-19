@@ -131,6 +131,7 @@ pub mod content_graph;
 pub mod cursor;
 pub mod debug;
 pub mod encoding;
+pub(crate) mod engine;
 pub mod error;
 pub mod format;
 pub mod gc;
@@ -321,13 +322,6 @@ fn plan_cached_nodes<T>(
     }
     let missing = (!missing.cids.is_empty()).then_some(missing);
     (nodes, missing, cache_hits)
-}
-
-fn read_node_from_shared(bytes: Arc<[u8]>) -> Result<ReadNode, Error> {
-    ReadNode::from_shared(bytes).map_err(|error| match error {
-        Error::Deserialize(_) => Error::InvalidNode,
-        other => other,
-    })
 }
 
 struct NodeCacheEntry {
@@ -3304,7 +3298,11 @@ impl<S: Store> Prolly<S> {
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
         self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(Node::from_bytes(&bytes)?);
+        let node = Arc::new(engine::validation::decode_owned(
+            cid,
+            &self.config.format,
+            &bytes,
+        )?);
 
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.insert(cid.clone(), node.clone(), bytes.len());
@@ -3348,7 +3346,11 @@ impl<S: Store> Prolly<S> {
             None
         };
         if let Some(owned) = owned {
-            let packed = Arc::new(read_node_from_shared(Arc::from(owned.to_bytes()))?);
+            let packed = Arc::new(engine::validation::decode_read(
+                cid,
+                &self.config.format,
+                Arc::from(owned.to_bytes()),
+            )?);
             if let Ok(mut cache) = self.node_cache.write() {
                 let evictions = cache.insert_read(cid.clone(), packed.clone());
                 self.metrics.add_cache_evictions(evictions);
@@ -3364,14 +3366,11 @@ impl<S: Store> Prolly<S> {
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
         self.metrics.record_point_read(bytes.len());
-        let actual = Cid::from_bytes(&bytes);
-        if actual != *cid {
-            return Err(Error::CidMismatch {
-                expected: cid.clone(),
-                actual,
-            });
-        }
-        let node = Arc::new(read_node_from_shared(bytes)?);
+        let node = Arc::new(engine::validation::decode_read(
+            cid,
+            &self.config.format,
+            bytes,
+        )?);
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.insert_read(cid.clone(), node.clone());
             self.metrics.add_cache_evictions(evictions);
@@ -3459,14 +3458,11 @@ impl<S: Store> Prolly<S> {
                     .zip(loaded)
                     .map(|(cid, bytes)| {
                         let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                        let actual = Cid::from_bytes(&bytes);
-                        if actual != cid {
-                            return Err(Error::CidMismatch {
-                                expected: cid,
-                                actual,
-                            });
-                        }
-                        let node = Arc::new(read_node_from_shared(bytes)?);
+                        let node = Arc::new(engine::validation::decode_read(
+                            &cid,
+                            &self.config.format,
+                            bytes,
+                        )?);
                         Ok((node, cid))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -3505,7 +3501,11 @@ impl<S: Store> Prolly<S> {
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
         self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(Node::from_bytes(&bytes)?);
+        let node = Arc::new(engine::validation::decode_owned(
+            cid,
+            &self.config.format,
+            &bytes,
+        )?);
 
         let mut newly_pinned = false;
         if let Ok(mut cache) = self.node_cache.write() {
@@ -3669,7 +3669,11 @@ impl<S: Store> Prolly<S> {
                                 let bytes =
                                     bytes.as_ref().ok_or_else(|| Error::NotFound(cid.clone()))?;
                                 let encoded_len = bytes.len();
-                                let node = Arc::new(Node::from_bytes(bytes)?);
+                                let node = Arc::new(engine::validation::decode_owned(
+                                    cid,
+                                    &self.config.format,
+                                    bytes,
+                                )?);
                                 Ok((cid.clone(), node, encoded_len))
                             })
                             .collect::<Result<Vec<_>, Error>>()
@@ -3688,7 +3692,11 @@ impl<S: Store> Prolly<S> {
                     .map(|(cid, bytes)| {
                         let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
                         let encoded_len = bytes.len();
-                        let node = Arc::new(Node::from_bytes(&bytes)?);
+                        let node = Arc::new(engine::validation::decode_owned(
+                            &cid,
+                            &self.config.format,
+                            &bytes,
+                        )?);
                         Ok((cid, node, encoded_len))
                     })
                     .collect::<Result<Vec<_>, Error>>()?
@@ -7070,7 +7078,11 @@ where
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
         self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(Node::from_bytes(&bytes)?);
+        let node = Arc::new(engine::validation::decode_owned(
+            cid,
+            &self.config.format,
+            &bytes,
+        )?);
 
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.insert(cid.clone(), node.clone(), bytes.len());
@@ -7110,7 +7122,11 @@ where
             None
         };
         if let Some(owned) = owned {
-            let packed = Arc::new(read_node_from_shared(Arc::from(owned.to_bytes()))?);
+            let packed = Arc::new(engine::validation::decode_read(
+                cid,
+                &self.config.format,
+                Arc::from(owned.to_bytes()),
+            )?);
             if let Ok(mut cache) = self.node_cache.write() {
                 let evictions = cache.insert_read(cid.clone(), packed.clone());
                 self.metrics.add_cache_evictions(evictions);
@@ -7127,14 +7143,11 @@ where
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
         self.metrics.record_point_read(bytes.len());
-        let actual = Cid::from_bytes(&bytes);
-        if actual != *cid {
-            return Err(Error::CidMismatch {
-                expected: cid.clone(),
-                actual,
-            });
-        }
-        let node = Arc::new(read_node_from_shared(bytes)?);
+        let node = Arc::new(engine::validation::decode_read(
+            cid,
+            &self.config.format,
+            bytes,
+        )?);
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.insert_read(cid.clone(), node.clone());
             self.metrics.add_cache_evictions(evictions);
@@ -7190,14 +7203,11 @@ where
                 .zip(loaded)
                 .map(|(cid, bytes)| {
                     let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                    let actual = Cid::from_bytes(&bytes);
-                    if actual != cid {
-                        return Err(Error::CidMismatch {
-                            expected: cid,
-                            actual,
-                        });
-                    }
-                    let node = Arc::new(read_node_from_shared(bytes)?);
+                    let node = Arc::new(engine::validation::decode_read(
+                        &cid,
+                        &self.config.format,
+                        bytes,
+                    )?);
                     Ok((node, cid))
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
@@ -7236,7 +7246,11 @@ where
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
         self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(Node::from_bytes(&bytes)?);
+        let node = Arc::new(engine::validation::decode_owned(
+            cid,
+            &self.config.format,
+            &bytes,
+        )?);
 
         let mut newly_pinned = false;
         if let Ok(mut cache) = self.node_cache.write() {
@@ -7365,7 +7379,11 @@ where
                 .zip(loaded)
                 .map(|(cid, bytes)| {
                     let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                    let node = Arc::new(Node::from_bytes(&bytes)?);
+                    let node = Arc::new(engine::validation::decode_owned(
+                        &cid,
+                        &self.config.format,
+                        &bytes,
+                    )?);
                     Ok((cid, node))
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
@@ -8887,6 +8905,71 @@ mod tests {
             0,
             "single-CID miss batches should not pay ordered batch overhead"
         );
+    }
+
+    #[test]
+    fn ordered_owned_and_shared_loads_reject_miskeyed_valid_nodes() {
+        let store = Arc::new(MemStore::new());
+        let prolly = Prolly::new(store.clone(), Config::default());
+        let mut first = Node::new_leaf();
+        first.keys.push(b"a".to_vec());
+        first.vals.push(b"one".to_vec());
+        let first_cid = prolly.save(&first).unwrap();
+        let mut second = Node::new_leaf();
+        second.keys.push(b"b".to_vec());
+        second.vals.push(b"two".to_vec());
+        let second_cid = prolly.save(&second).unwrap();
+        let second_bytes = second.to_bytes();
+        store.put(first_cid.as_bytes(), &second_bytes).unwrap();
+
+        prolly.clear_cache();
+        assert!(matches!(
+            prolly.load_many_ordered(&[first_cid.clone(), second_cid.clone()]),
+            Err(Error::CidMismatch { expected, actual })
+                if expected == first_cid && actual == second_cid
+        ));
+
+        prolly.clear_cache();
+        assert!(matches!(
+            prolly.load_many_read_ordered(&[first_cid.clone(), second_cid.clone()]),
+            Err(Error::CidMismatch { expected, actual })
+                if expected == first_cid && actual == second_cid
+        ));
+    }
+
+    #[cfg(feature = "async-store")]
+    #[test]
+    fn async_ordered_owned_and_shared_loads_reject_miskeyed_valid_nodes() {
+        block_on(async {
+            let store = Arc::new(MemStore::new());
+            let writer = Prolly::new(store.clone(), Config::default());
+            let mut first = Node::new_leaf();
+            first.keys.push(b"a".to_vec());
+            first.vals.push(b"one".to_vec());
+            let first_cid = writer.save(&first).unwrap();
+            let mut second = Node::new_leaf();
+            second.keys.push(b"b".to_vec());
+            second.vals.push(b"two".to_vec());
+            let second_cid = writer.save(&second).unwrap();
+            store.put(first_cid.as_bytes(), &second.to_bytes()).unwrap();
+
+            let prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+            assert!(matches!(
+                prolly
+                    .load_many_ordered(&[first_cid.clone(), second_cid.clone()])
+                    .await,
+                Err(Error::CidMismatch { expected, actual })
+                    if expected == first_cid && actual == second_cid
+            ));
+            prolly.clear_cache();
+            assert!(matches!(
+                prolly
+                    .load_many_read_ordered(&[first_cid.clone(), second_cid.clone()])
+                    .await,
+                Err(Error::CidMismatch { expected, actual })
+                    if expected == first_cid && actual == second_cid
+            ));
+        });
     }
 
     #[test]
