@@ -335,7 +335,7 @@ Default handling is beneficial architecturally: every adapter receives stable se
 
 An adapter override may land only when all correctness tests pass and evidence meets these gates:
 
-- At least five alternating baseline and candidate repetitions
+- At least five alternating baseline and candidate repetitions; directional gates use the median of the within-pair baseline-to-candidate percentage changes so machine drift cannot break the pairing
 - Identical workload bytes, seeds, durability settings, and cache policy
 - No protected median latency increase above 5% and no protected median throughput decrease above 5%
 - No protected p95 latency regression above 10%
@@ -426,7 +426,7 @@ Profile an adapter-specific candidate only after the universal screen passes. Re
 
 Build baseline revision `a2f4e7a3` and the candidate in separate target directories. Run five alternating process pairs for the frozen 10,000-record, 100-change matrix. Cover both adapters, append, deterministic random, clustered patterns, and put, batch, diff, and merge.
 
-Require at least 40% lower Turso point-put median total latency for every pattern. Require no Turso point p50 or p95 regression. Reject any protected SQLite or Turso median regression above 5%. If a protected cell crosses 5%, run five additional alternating pairs and evaluate the combined ten.
+Require at least 40% lower paired Turso point-put median total latency for every pattern. Require no paired Turso point p50 or p95 regression. Reject any protected SQLite or Turso paired median regression above 5%. Keep the independent baseline and candidate medians as descriptive values, but calculate acceptance from within-pair percentage changes. If a protected cell crosses 5%, run five additional alternating pairs and evaluate the combined ten.
 
 ### Full SQLite and Turso matrix
 

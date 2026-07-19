@@ -1261,7 +1261,7 @@ memory-sync,file-sync,sqlite-sync,rocksdb-sync,slatedb-sync,pglite-sync,turso-as
 
 - [x] **Step 5: Implement directional summarization**
 
-The Python summarizer groups by suite, adapter or facade, records, API, pattern, and revision role. It calculates median total latency, throughput, p50, p95, and percent change. Exit nonzero when:
+The Python summarizer groups by suite, adapter or facade, records, API, pattern, and revision role. It retains independent baseline/candidate medians for description, calculates the within-pair percentage change for total latency, throughput, p50, and p95, and gates the median paired change so alternating execution controls temporal drift. Exit nonzero when:
 
 - candidate median latency rises more than 5%;
 - candidate median throughput falls more than 5%;

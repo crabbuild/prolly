@@ -89,6 +89,27 @@ class RevisionGateTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("median_latency_regression", result.stderr)
 
+    def test_uses_alternating_pair_changes_for_directional_gate(self):
+        rows = self.rows()
+        baseline_latencies = [100, 200, 300, 400, 500]
+        candidate_latencies = [100, 200, 3000, 4000, 500]
+        for row in rows:
+            pair = row["pair"] - 1
+            row["total_ns"] = (
+                candidate_latencies[pair]
+                if row["revision_role"] == "candidate"
+                else baseline_latencies[pair]
+            )
+            row["p50_ns"] = 100
+            row["p95_ns"] = 100
+            row["operations_per_sec"] = 100
+        result, root = self.run_gate(rows)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with (root / "report" / "summary.csv").open(newline="", encoding="utf-8") as handle:
+            summary = next(csv.DictReader(handle))
+        self.assertGreater(float(summary["median_latency_change_pct"]), 5.0)
+        self.assertEqual(float(summary["paired_median_latency_change_pct"]), 0.0)
+
     def test_rejects_latency_regression(self):
         result, _ = self.run_gate(self.rows(candidate_latency=106))
         self.assertEqual(result.returncode, 2)
@@ -137,6 +158,19 @@ class RevisionGateTest(unittest.TestCase):
         result, _ = self.run_gate(rows)
         self.assertEqual(result.returncode, 2)
         self.assertIn("turso_point_target_miss", result.stderr)
+
+    def test_rejects_turso_point_percentile_regression(self):
+        rows = self.rows(candidate_latency=50, candidate_throughput=200, candidate_p95=101)
+        for row in rows:
+            row["suite"] = "sqlite-turso"
+            row["adapter"] = "turso-async"
+            row["validated"] = "true"
+            if row["revision_role"] == "candidate":
+                row["p50_ns"] = 101
+        result, _ = self.run_gate(rows)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("turso_point_p50_regression", result.stderr)
+        self.assertIn("turso_point_p95_regression", result.stderr)
 
 
 if __name__ == "__main__":

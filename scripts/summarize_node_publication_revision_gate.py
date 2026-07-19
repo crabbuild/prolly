@@ -167,6 +167,7 @@ def summarize(
         candidate = [row for row in rows if row.role == "candidate"]
         if not baseline or not candidate:
             continue
+        complete_pairs = [roles for roles in pairs.values() if set(roles) == {"baseline", "candidate"}]
         baseline_latency = statistics.median(row.latency for row in baseline)
         candidate_latency = statistics.median(row.latency for row in candidate)
         baseline_throughput = statistics.median(row.throughput for row in baseline)
@@ -179,27 +180,55 @@ def summarize(
         throughput_change = percent_change(baseline_throughput, candidate_throughput)
         p50_change = percent_change(baseline_p50, candidate_p50)
         p95_change = percent_change(baseline_p95, candidate_p95)
-        pair_count = len(
-            [roles for roles in pairs.values() if set(roles) == {"baseline", "candidate"}]
+        paired_latency_change = statistics.median(
+            percent_change(roles["baseline"].latency, roles["candidate"].latency)
+            for roles in complete_pairs
         )
+        paired_throughput_change = statistics.median(
+            percent_change(roles["baseline"].throughput, roles["candidate"].throughput)
+            for roles in complete_pairs
+        )
+        paired_p50_change = statistics.median(
+            percent_change(roles["baseline"].p50, roles["candidate"].p50)
+            for roles in complete_pairs
+        )
+        paired_p95_change = statistics.median(
+            percent_change(roles["baseline"].p95, roles["candidate"].p95)
+            for roles in complete_pairs
+        )
+        pair_count = len(complete_pairs)
         suite, target, records, api, pattern = group
         reasons: list[str] = []
         if pair_count < minimum_pairs:
             reasons.append("statistically_insufficient")
         else:
-            if latency_change > 5.0:
+            if paired_latency_change > 5.0:
                 reasons.append("median_latency_regression")
-            if throughput_change < -5.0:
+            if paired_throughput_change < -5.0:
                 reasons.append("median_throughput_regression")
-            if p95_change > 10.0:
+            if paired_p95_change > 10.0:
                 reasons.append("p95_latency_regression")
             if (
                 suite == "sqlite-turso"
                 and target == "turso-async"
                 and api == "put"
-                and -latency_change < 40.0
+                and -paired_latency_change < 40.0
             ):
                 reasons.append("turso_point_target_miss")
+            if (
+                suite == "sqlite-turso"
+                and target == "turso-async"
+                and api == "put"
+                and paired_p50_change > 0.0
+            ):
+                reasons.append("turso_point_p50_regression")
+            if (
+                suite == "sqlite-turso"
+                and target == "turso-async"
+                and api == "put"
+                and paired_p95_change > 0.0
+            ):
+                reasons.append("turso_point_p95_regression")
         for reason in reasons:
             if reason != "statistically_insufficient":
                 failures.append(f"{reason}:{group}")
@@ -226,11 +255,19 @@ def summarize(
                 "baseline_p95_ns": baseline_p95,
                 "candidate_p95_ns": candidate_p95,
                 "p95_change_pct": p95_change,
+                "paired_median_latency_change_pct": paired_latency_change,
+                "paired_median_throughput_change_pct": paired_throughput_change,
+                "paired_median_p50_change_pct": paired_p50_change,
+                "paired_median_p95_change_pct": paired_p95_change,
             }
         )
         gate_rows.append(
             {
                 **base,
+                "paired_median_latency_change_pct": paired_latency_change,
+                "paired_median_throughput_change_pct": paired_throughput_change,
+                "paired_median_p50_change_pct": paired_p50_change,
+                "paired_median_p95_change_pct": paired_p95_change,
                 "status": "insufficient"
                 if reasons == ["statistically_insufficient"]
                 else ("fail" if reasons else "pass"),
