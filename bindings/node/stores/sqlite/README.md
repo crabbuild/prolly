@@ -1,6 +1,6 @@
 # Node SQLite remote store
 
-`@trail/prolly-store-sqlite` implements store protocol version 1 with an
+`@trail/prolly-store-sqlite` implements store protocol version 2 with an
 application-owned `better-sqlite3` database.
 
 ```ts

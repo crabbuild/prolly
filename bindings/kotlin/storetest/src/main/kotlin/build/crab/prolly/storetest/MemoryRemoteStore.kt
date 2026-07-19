@@ -36,7 +36,7 @@ class MemoryRemoteStore : RemoteStore {
     val nodeCount: Int get() = nodes.size
 
     override suspend fun descriptor(): StoreDescriptor = StoreDescriptor(
-        protocolMajor = 1u,
+        protocolMajor = 2u,
         adapterName = "jvm-test-memory",
         provider = "memory",
         schemaVersion = 1u,

@@ -294,6 +294,22 @@ func prolly_go_host_store_batch(handle C.uint64_t, ops C.RustBuffer, outReturn *
 	writeCallbackReturn(outReturn, encodeHostStoreUnitResult(err))
 }
 
+//export prolly_go_host_store_publish_nodes
+func prolly_go_host_store_publish_nodes(handle C.uint64_t, publication C.RustBuffer, outReturn *C.RustBuffer, outStatus *C.RustCallStatus) {
+	resetCallbackStatus(outStatus)
+	store := getGoHostStore(uint64(handle))
+	publicationBytes := copyCallbackRustBuffer(publication)
+	freeCallbackRustBuffer(publication)
+	decoded, err := decodeNodePublication(publicationBytes)
+	if err == nil && store == nil {
+		err = errMissingHostStore()
+	}
+	if err == nil {
+		err = store.PublishNodes(decoded)
+	}
+	writeCallbackReturn(outReturn, encodeHostStoreUnitResult(err))
+}
+
 //export prolly_go_host_store_batch_get_ordered
 func prolly_go_host_store_batch_get_ordered(handle C.uint64_t, keys C.RustBuffer, outReturn *C.RustBuffer, outStatus *C.RustCallStatus) {
 	resetCallbackStatus(outStatus)

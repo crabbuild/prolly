@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 
 module Prolly
+  STORE_PROTOCOL_MAJOR = 2
+  GENERAL = 0
+  POINT_UPSERT = 1
+  POINT_DELETE = 2
+  BATCH_MUTATION = 3
+  TREE_BUILD = 4
+  MERGE = 5
+  RANGE_DELETE = 6
+  REPLICATION = 7
+  MAINTENANCE = 8
+
+  def self.normalize_publication_origin_code(code)
+    code.between?(GENERAL, MAINTENANCE) ? code : GENERAL
+  end
+
   module UniFFILib
     attach_function :prolly_init_foreign_remote_vtable,
                     :uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore,
@@ -95,6 +110,7 @@ module Prolly
              :put_node, :pointer,
              :delete_node, :pointer,
              :batch_nodes, :pointer,
+             :publish_nodes, :pointer,
              :batch_get_nodes_ordered, :pointer,
              :list_node_cids, :pointer,
              :get_hint, :pointer,
@@ -114,6 +130,7 @@ module Prolly
       [:put_node, %i[consumeIntoBytes consumeIntoBytes], :alloc_from_TypeUnitResultRecord],
       [:delete_node, [:consumeIntoBytes], :alloc_from_TypeUnitResultRecord],
       [:batch_nodes, [:consumeIntoSequenceTypeNodeMutationRecord], :alloc_from_TypeUnitResultRecord],
+      [:publish_nodes, [:consumeIntoTypeNodePublicationRecord], :alloc_from_TypeUnitResultRecord],
       [:batch_get_nodes_ordered, [:consumeIntoSequencebytes], :alloc_from_TypeOptionalBytesListResultRecord],
       [:list_node_cids, [], :alloc_from_TypeBytesListResultRecord],
       [:get_hint, %i[consumeIntoBytes consumeIntoBytes], :alloc_from_TypeOptionalBytesResultRecord],
@@ -215,6 +232,28 @@ module Prolly
         return uniffi_lower_rust_handle(instance) if instance.instance_variable_defined?(:@handle)
 
         RubyForeignRemoteStores.insert(instance)
+      end
+    end
+
+    def publish_nodes(publication)
+      Prolly.normalize_publication_origin_code(publication.origin.code)
+      hint = publication.hint
+      if hint
+        batch_put_nodes_with_hint(
+          publication.nodes,
+          hint.namespace,
+          hint.key,
+          hint.value
+        )
+      else
+        batch_nodes(
+          publication.nodes.map do |node|
+            NodeMutationRecord.new(
+              key: node.key,
+              value: OptionalBytesRecord.new(present: true, value: node.value)
+            )
+          end
+        )
       end
     end
   end

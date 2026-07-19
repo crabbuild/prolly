@@ -1,6 +1,6 @@
 # Kotlin SQLite remote store
 
-`build.crab:prolly-kotlin-store-sqlite` implements store protocol version 1
+`build.crab:prolly-kotlin-store-sqlite` implements store protocol version 2
 with an application-owned JDBC `DataSource`.
 
 ```kotlin

@@ -308,7 +308,7 @@ typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod4)(uint64_t, RustBu
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD5
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD5
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod5)(uint64_t, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod5)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -322,56 +322,63 @@ typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod6)(uint64_t, RustBu
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD7
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD7
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod7)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod7)(uint64_t, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD8
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD8
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod8)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod8)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD9
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD9
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod9)(uint64_t, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod9)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD10
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD10
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod10)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod10)(uint64_t, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD11
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD11
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod11)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod11)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD12
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD12
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod12)(uint64_t, RustBuffer, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod12)(uint64_t, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD13
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD13
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod13)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod13)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD14
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD14
-typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod14)(uint64_t, RustBuffer* _Nonnull, 
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod14)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer* _Nonnull,
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD15
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_HOST_STORE_CALLBACK_METHOD15
+typedef void (*UniffiCallbackInterfaceHostStoreCallbackMethod15)(uint64_t, RustBuffer* _Nonnull,
         RustCallStatus *_Nonnull uniffiCallStatus
     );
 
@@ -421,61 +428,67 @@ typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod5)(uint64_t, RustB
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD6
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD6
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod6)(uint64_t, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod6)(uint64_t, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD7
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD7
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod7)(uint64_t, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod7)(uint64_t, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD8
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD8
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod8)(uint64_t, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod8)(uint64_t, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD9
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD9
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod9)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod9)(uint64_t, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD10
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD10
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod10)(uint64_t, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod10)(uint64_t, RustBuffer, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD11
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD11
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod11)(uint64_t, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod11)(uint64_t, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD12
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD12
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod12)(uint64_t, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod12)(uint64_t, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD13
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD13
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod13)(uint64_t, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod13)(uint64_t, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD14
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD14
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod14)(uint64_t, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod14)(uint64_t, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD15
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD15
-typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod15)(uint64_t, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod15)(uint64_t, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD16
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_FOREIGN_REMOTE_STORE_METHOD16
+typedef void (*UniffiCallbackInterfaceForeignRemoteStoreMethod16)(uint64_t, RustBuffer, RustBuffer, RustBuffer, UniffiForeignFutureCompleteRustBuffer _Nonnull, uint64_t, UniffiForeignFutureDroppedCallbackStruct* _Nonnull
     );
 
 #endif
@@ -538,17 +551,18 @@ typedef struct UniffiVTableCallbackInterfaceHostStoreCallback {
     UniffiCallbackInterfaceHostStoreCallbackMethod1 _Nonnull put;
     UniffiCallbackInterfaceHostStoreCallbackMethod2 _Nonnull delete;
     UniffiCallbackInterfaceHostStoreCallbackMethod3 _Nonnull batch;
-    UniffiCallbackInterfaceHostStoreCallbackMethod4 _Nonnull batchGetOrdered;
-    UniffiCallbackInterfaceHostStoreCallbackMethod5 _Nonnull prefersBatchReads;
-    UniffiCallbackInterfaceHostStoreCallbackMethod6 _Nonnull supportsHints;
-    UniffiCallbackInterfaceHostStoreCallbackMethod7 _Nonnull getHint;
-    UniffiCallbackInterfaceHostStoreCallbackMethod8 _Nonnull putHint;
-    UniffiCallbackInterfaceHostStoreCallbackMethod9 _Nonnull listNodeCids;
-    UniffiCallbackInterfaceHostStoreCallbackMethod10 _Nonnull getRoot;
-    UniffiCallbackInterfaceHostStoreCallbackMethod11 _Nonnull putRoot;
-    UniffiCallbackInterfaceHostStoreCallbackMethod12 _Nonnull deleteRoot;
-    UniffiCallbackInterfaceHostStoreCallbackMethod13 _Nonnull compareAndSwapRoot;
-    UniffiCallbackInterfaceHostStoreCallbackMethod14 _Nonnull listRoots;
+    UniffiCallbackInterfaceHostStoreCallbackMethod4 _Nonnull publishNodes;
+    UniffiCallbackInterfaceHostStoreCallbackMethod5 _Nonnull batchGetOrdered;
+    UniffiCallbackInterfaceHostStoreCallbackMethod6 _Nonnull prefersBatchReads;
+    UniffiCallbackInterfaceHostStoreCallbackMethod7 _Nonnull supportsHints;
+    UniffiCallbackInterfaceHostStoreCallbackMethod8 _Nonnull getHint;
+    UniffiCallbackInterfaceHostStoreCallbackMethod9 _Nonnull putHint;
+    UniffiCallbackInterfaceHostStoreCallbackMethod10 _Nonnull listNodeCids;
+    UniffiCallbackInterfaceHostStoreCallbackMethod11 _Nonnull getRoot;
+    UniffiCallbackInterfaceHostStoreCallbackMethod12 _Nonnull putRoot;
+    UniffiCallbackInterfaceHostStoreCallbackMethod13 _Nonnull deleteRoot;
+    UniffiCallbackInterfaceHostStoreCallbackMethod14 _Nonnull compareAndSwapRoot;
+    UniffiCallbackInterfaceHostStoreCallbackMethod15 _Nonnull listRoots;
 } UniffiVTableCallbackInterfaceHostStoreCallback;
 
 #endif
@@ -571,17 +585,18 @@ typedef struct UniffiVTableCallbackInterfaceForeignRemoteStore {
     UniffiCallbackInterfaceForeignRemoteStoreMethod2 _Nonnull putNode;
     UniffiCallbackInterfaceForeignRemoteStoreMethod3 _Nonnull deleteNode;
     UniffiCallbackInterfaceForeignRemoteStoreMethod4 _Nonnull batchNodes;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod5 _Nonnull batchGetNodesOrdered;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod6 _Nonnull listNodeCids;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod7 _Nonnull getHint;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod8 _Nonnull putHint;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod9 _Nonnull batchPutNodesWithHint;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod10 _Nonnull getRootManifest;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod11 _Nonnull putRootManifest;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod12 _Nonnull deleteRootManifest;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod13 _Nonnull compareAndSwapRootManifest;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod14 _Nonnull listRootManifests;
-    UniffiCallbackInterfaceForeignRemoteStoreMethod15 _Nonnull commitTransaction;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod5 _Nonnull publishNodes;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod6 _Nonnull batchGetNodesOrdered;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod7 _Nonnull listNodeCids;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod8 _Nonnull getHint;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod9 _Nonnull putHint;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod10 _Nonnull batchPutNodesWithHint;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod11 _Nonnull getRootManifest;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod12 _Nonnull putRootManifest;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod13 _Nonnull deleteRootManifest;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod14 _Nonnull compareAndSwapRootManifest;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod15 _Nonnull listRootManifests;
+    UniffiCallbackInterfaceForeignRemoteStoreMethod16 _Nonnull commitTransaction;
 } UniffiVTableCallbackInterfaceForeignRemoteStore;
 
 #endif
@@ -716,6 +731,11 @@ RustBuffer uniffi_prolly_bindings_fn_method_hoststorecallback_delete(uint64_t pt
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_HOSTSTORECALLBACK_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_HOSTSTORECALLBACK_BATCH
 RustBuffer uniffi_prolly_bindings_fn_method_hoststorecallback_batch(uint64_t ptr, RustBuffer ops, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_HOSTSTORECALLBACK_PUBLISH_NODES
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_HOSTSTORECALLBACK_PUBLISH_NODES
+RustBuffer uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes(uint64_t ptr, RustBuffer publication, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_HOSTSTORECALLBACK_BATCH_GET_ORDERED
@@ -1903,6 +1923,11 @@ uint64_t uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(uint64_
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_FOREIGNREMOTESTORE_BATCH_NODES
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_FOREIGNREMOTESTORE_BATCH_NODES
 uint64_t uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(uint64_t ptr, RustBuffer ops
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_FOREIGNREMOTESTORE_PUBLISH_NODES
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_FOREIGNREMOTESTORE_PUBLISH_NODES
+uint64_t uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes(uint64_t ptr, RustBuffer publication
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_METHOD_FOREIGNREMOTESTORE_BATCH_GET_NODES_ORDERED
@@ -4213,6 +4238,11 @@ RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(Rust
 RustBuffer uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(RustBuffer proof, RustBuffer expected_descriptor, RustBuffer limits, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_NORMALIZE_PUBLICATION_ORIGIN_CODE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_FN_FUNC_NORMALIZE_PUBLICATION_ORIGIN_CODE
+uint32_t uniffi_prolly_bindings_fn_func_normalize_publication_origin_code(uint32_t code, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_FFI_PROLLY_BINDINGS_RUSTBUFFER_ALLOC
 #define UNIFFI_FFIDEF_FFI_PROLLY_BINDINGS_RUSTBUFFER_ALLOC
 RustBuffer ffi_prolly_bindings_rustbuffer_alloc(uint64_t size, RustCallStatus *_Nonnull out_status
@@ -5295,6 +5325,12 @@ uint16_t uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof(v
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NORMALIZE_PUBLICATION_ORIGIN_CODE
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_FUNC_NORMALIZE_PUBLICATION_ORIGIN_CODE
+uint16_t uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CONFLICTVISITORCALLBACK_VISIT
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_CONFLICTVISITORCALLBACK_VISIT
 uint16_t uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit(void
@@ -5341,6 +5377,12 @@ uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_delete(void
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_BATCH
 uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_batch(void
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUBLISH_NODES
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_PUBLISH_NODES
+uint16_t uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_HOSTSTORECALLBACK_BATCH_GET_ORDERED
@@ -6589,6 +6631,12 @@ uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node(v
 #define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_NODES
 uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes(void
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUBLISH_NODES
+#define UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_PUBLISH_NODES
+uint16_t uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PROLLY_BINDINGS_CHECKSUM_METHOD_FOREIGNREMOTESTORE_BATCH_GET_NODES_ORDERED

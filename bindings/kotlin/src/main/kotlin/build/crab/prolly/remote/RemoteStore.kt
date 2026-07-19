@@ -1,6 +1,30 @@
 package build.crab.prolly.remote
 
-const val STORE_PROTOCOL_MAJOR: UInt = 1u
+const val STORE_PROTOCOL_MAJOR: UInt = 2u
+
+const val GENERAL: UInt = 0u
+const val POINT_UPSERT: UInt = 1u
+const val POINT_DELETE: UInt = 2u
+const val BATCH_MUTATION: UInt = 3u
+const val TREE_BUILD: UInt = 4u
+const val MERGE: UInt = 5u
+const val RANGE_DELETE: UInt = 6u
+const val REPLICATION: UInt = 7u
+const val MAINTENANCE: UInt = 8u
+
+fun normalizePublicationOriginCode(code: UInt): UInt = when (code) {
+    GENERAL,
+    POINT_UPSERT,
+    POINT_DELETE,
+    BATCH_MUTATION,
+    TREE_BUILD,
+    MERGE,
+    RANGE_DELETE,
+    REPLICATION,
+    MAINTENANCE,
+    -> code
+    else -> GENERAL
+}
 
 data class StoreCapabilities(
     val nativeBatchReads: Boolean,
@@ -93,6 +117,26 @@ class NodeEntry(cid: ByteArray, node: ByteArray) {
     val node: ByteArray get() = ownedNode.copyOf()
 }
 
+data class PublicationOrigin(val code: UInt)
+
+class NodePublicationHint(namespace: ByteArray, key: ByteArray, value: ByteArray) {
+    private val ownedNamespace = namespace.copyOf()
+    private val ownedKey = key.copyOf()
+    private val ownedValue = value.copyOf()
+    val namespace: ByteArray get() = ownedNamespace.copyOf()
+    val key: ByteArray get() = ownedKey.copyOf()
+    val value: ByteArray get() = ownedValue.copyOf()
+}
+
+class NodePublication(
+    nodes: List<NodeEntry>,
+    val hint: NodePublicationHint?,
+    val origin: PublicationOrigin,
+) {
+    private val ownedNodes = nodes.map { NodeEntry(it.cid, it.node) }
+    val nodes: List<NodeEntry> get() = ownedNodes.map { NodeEntry(it.cid, it.node) }
+}
+
 class NamedStoreRoot(name: ByteArray, manifest: ByteArray) {
     private val ownedName = name.copyOf()
     private val ownedManifest = manifest.copyOf()
@@ -161,6 +205,20 @@ interface RemoteStore {
     suspend fun putNode(cid: ByteArray, value: ByteArray)
     suspend fun deleteNode(cid: ByteArray)
     suspend fun batchNodes(operations: List<NodeMutation>)
+    suspend fun publishNodes(publication: NodePublication) {
+        normalizePublicationOriginCode(publication.origin.code)
+        val hint = publication.hint
+        if (hint != null) {
+            batchPutNodesWithHint(
+                publication.nodes,
+                hint.namespace,
+                hint.key,
+                hint.value,
+            )
+        } else {
+            batchNodes(publication.nodes.map { NodeMutation.Upsert(it.cid, it.node) })
+        }
+    }
     suspend fun batchGetNodesOrdered(cids: List<ByteArray>): List<OptionalBytes>
     suspend fun listNodeCids(): List<ByteArray>
     suspend fun getHint(namespace: ByteArray, key: ByteArray): OptionalBytes

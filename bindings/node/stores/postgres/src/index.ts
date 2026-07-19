@@ -13,12 +13,14 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   upsertNode,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -74,7 +76,7 @@ export class PostgresStore implements RemoteStore {
     if (pool == null) throw new StoreError("invalid_argument", "PostgreSQL pool is required");
     this.#pool = pool;
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: options.adapterName?.trim() || "postgres-v1",
       provider: "postgresql",
       schemaVersion: 1,
@@ -137,6 +139,10 @@ export class PostgresStore implements RemoteStore {
     return this.#run("batch_nodes", signal, () =>
       this.#transaction(signal, async (client) => applyNodeMutations(this, client, owned, signal)),
     );
+  }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> {
+    return publishNodesWithGeneralPath(this, publication, signal);
   }
 
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> {

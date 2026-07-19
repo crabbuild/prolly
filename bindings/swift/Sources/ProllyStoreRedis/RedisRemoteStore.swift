@@ -94,7 +94,7 @@ public actor RedisRemoteStore: ForeignRemoteStore {
     public func descriptor() async -> StoreDescriptorResultRecord {
         StoreDescriptorResultRecord(
             value: StoreDescriptorRecord(
-                protocolMajor: 1, adapterName: "redis-v1", provider: "redis", schemaVersion: 1,
+                protocolMajor: 2, adapterName: "redis-v1", provider: "redis", schemaVersion: 1,
                 capabilities: StoreCapabilitiesRecord(
                     nativeBatchReads: true, atomicBatchWrites: true, nodeScan: true,
                     hints: true, atomicNodesAndHint: true, rootScan: true,

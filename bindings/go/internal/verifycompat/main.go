@@ -61,8 +61,8 @@ func main() {
 	if err := json.Unmarshal(contents, &value); err != nil {
 		fail("decode manifest: %v", err)
 	}
-	if value.ProtocolMajor != 1 {
-		fail("protocol_major must be 1")
+	if value.ProtocolMajor != 2 {
+		fail("protocol_major must be 2")
 	}
 	goAdapters := value.Languages["go"]
 	if len(goAdapters) != len(requiredProviders) {
@@ -93,7 +93,7 @@ func validate(provider string, entry adapter) {
 	if entry.Status != "supported" || entry.Module == "" || entry.SDKModule == "" || entry.SDKVersion == "" {
 		fail("Go/%s must be supported with module and SDK metadata", provider)
 	}
-	if entry.ProtocolMajor != 1 || entry.SchemaVersion != 1 {
+	if entry.ProtocolMajor != 2 || entry.SchemaVersion != 1 {
 		fail("Go/%s must use protocol and schema version 1", provider)
 	}
 	if !goVersion.MatchString(entry.MinimumGo) {

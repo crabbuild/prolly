@@ -251,6 +251,7 @@ module Prolly
              :put, :pointer,
              :delete, :pointer,
              :batch, :pointer,
+             :publish_nodes, :pointer,
              :batch_get_ordered, :pointer,
              :prefers_batch_reads, :pointer,
              :supports_hints, :pointer,
@@ -436,6 +437,22 @@ module Prolly
       end
     end
 
+    PUBLISH_NODES = FFI::Function.new(
+      :void,
+      [:uint64, RustBuffer.by_value, :pointer, :pointer]
+    ) do |handle, publication_buffer, out_return, out_status|
+      RubyHostStoreCallbacks.call_with_record(
+        out_return,
+        out_status,
+        :alloc_from_TypeHostStoreUnitResultRecord,
+        RubyHostStoreCallbacks.method(:unit_error)
+      ) do
+        RubyHostStoreCallbacks.callback(handle).publish_nodes(
+          publication_buffer.consumeIntoTypeNodePublicationRecord
+        )
+      end
+    end
+
     BATCH_GET_ORDERED = FFI::Function.new(
       :void,
       [:uint64, RustBuffer.by_value, :pointer, :pointer]
@@ -613,6 +630,7 @@ module Prolly
     VTABLE[:put] = PUT
     VTABLE[:delete] = DELETE
     VTABLE[:batch] = BATCH
+    VTABLE[:publish_nodes] = PUBLISH_NODES
     VTABLE[:batch_get_ordered] = BATCH_GET_ORDERED
     VTABLE[:prefers_batch_reads] = PREFERS_BATCH_READS
     VTABLE[:supports_hints] = SUPPORTS_HINTS

@@ -1166,6 +1166,35 @@ class RustdocExtractionTests(unittest.TestCase):
             "idiomatic",
         )
 
+    def test_generation_preserves_evidence_across_async_engine_rename(self) -> None:
+        previous = {
+            "operations": [
+                {
+                    "rust": "prolly::AsyncProlly::get",
+                    "classification": "idiomatic",
+                    "status": "implemented",
+                    "family": "core",
+                    "performance": "owned",
+                    "languages": {"python": "Engine.get"},
+                    "exclusions": {},
+                    "tests": ["portable-parity::get"],
+                    "docs": [],
+                }
+            ]
+        }
+
+        generated = generate_manifest(
+            {"prolly::ProllyEngine::get"},
+            previous,
+            rustdoc_format_version=57,
+        )
+
+        entry = generated["operations"][0]
+        self.assertEqual(entry["rust"], "prolly::ProllyEngine::get")
+        self.assertEqual(entry["status"], "implemented")
+        self.assertEqual(entry["languages"], {"python": "Engine.get"})
+        self.assertEqual(entry["tests"], ["portable-parity::get"])
+
 
 if __name__ == "__main__":
     unittest.main()

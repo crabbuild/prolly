@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-18T10:23:04+00:00",
+  "generated_at": "2026-07-19T18:34:17+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -640,6 +640,50 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncAcceleratorSet::with_pq has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder::add",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder::build",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder::new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncBlobStore",
@@ -1792,1088 +1836,6 @@
       "docs": []
     },
     {
-      "rust": "prolly::AsyncProlly::batch",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::begin_owned_transaction",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::begin_transaction",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_bytes_len",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_len",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_pinned_bytes_len",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_pinned_len",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::clear_cache",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::collect_stats",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::compare_and_swap_named_root",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::compare_and_swap_named_root_at_millis",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::config",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::copy_missing_nodes",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::crdt_merge",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::crdt_merge_explain",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::create",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::debug_compare_trees",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::debug_tree",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete_named_root",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete_range",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete_range_with_stats",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::diff",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::diff_from_cursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::AsyncProlly::diff_from_cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
-      "rust": "prolly::AsyncProlly::diff_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_large_value",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_many",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_many_with",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_value_ref",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_value_ref_with",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_with",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::list_named_root_manifests",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::list_named_roots",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::load_named_root",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::load_named_roots",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::load_retained_named_roots",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::mark_reachable",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::mark_reachable_blobs",
-      "classification": "portable",
-      "status": "planned",
-      "family": "maintenance",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::AsyncProlly::mark_reachable_blobs has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_explain",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_prefix",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_prefix_with",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_range",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_range_with",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_with",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::metrics",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::new",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::pin_tree_path",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::pin_tree_root",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::plan_blob_gc",
-      "classification": "portable",
-      "status": "planned",
-      "family": "maintenance",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::AsyncProlly::plan_blob_gc has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
-      "rust": "prolly::AsyncProlly::plan_missing_nodes",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prefix",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prefix_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prefix_reverse_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_diff_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_key",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_keys",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_prefix",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_range",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_range_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::publish_named_root",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::publish_named_root_at_millis",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::put",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::put_large_value",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::range",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_after",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_diff",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_from_cursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::AsyncProlly::range_from_cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::read",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::reset_metrics",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::reverse_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::reverse_range_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_conflicts",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_conflicts_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_diff",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_diff_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix_reverse",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix_reverse_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_diff",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_diff_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_reverse",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_reverse_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_until",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::stats_diff",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::store",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::stream_conflicts",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::stream_diff",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::structural_diff_page",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::sweep_blob_gc",
-      "classification": "portable",
-      "status": "planned",
-      "family": "maintenance",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::AsyncProlly::sweep_blob_gc has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
-      "rust": "prolly::AsyncProlly::transaction",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::unpin_all_cache_nodes",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::AsyncProlly::versioned_map",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
       "rust": "prolly::AsyncProllyTransaction",
       "classification": "portable",
       "status": "planned",
@@ -3232,6 +2194,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncReadSession::first_entry_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncReadSession::get_many_with",
       "classification": "portable",
       "status": "planned",
@@ -3272,6 +2245,61 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncReadSession::get_with has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncReadSession::is_empty",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncReadSession::last_entry_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncReadSession::len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncReadSession::lower_bound_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncReadSession::rank",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncReadSession::scan_prefix",
@@ -3386,6 +2414,17 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::AsyncReadSession::select_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncReadSession::tree",
       "classification": "portable",
       "status": "planned",
@@ -3398,6 +2437,17 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncReadSession::tree has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncReadSession::upper_bound_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncReversePage",
@@ -3468,6 +2518,50 @@
     },
     {
       "rust": "prolly::AsyncSearchControl::io",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder::add",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder::build",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder::new",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -3988,6 +3082,17 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::AsyncStore::publish_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncStore::put",
       "classification": "idiomatic",
       "status": "implemented",
@@ -4286,6 +3391,28 @@
       ],
       "reconciliation_rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::apply_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::apply_if_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncVersionedMap::delete",
@@ -8549,333 +7676,6 @@
       "docs": []
     },
     {
-      "rust": "prolly::Cursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::Cursor::advance",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::advance)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::Cursor::advance)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::Cursor::advance is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::Cursor::advance is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::Cursor::at_item",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::at_item)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::Cursor::at_item)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::Cursor::at_item is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::Cursor::at_item is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::Cursor::get_key",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_key)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::Cursor::get_key)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::Cursor::get_key is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::Cursor::get_key is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::Cursor::get_value",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::get_value)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::Cursor::get_value)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::Cursor::get_value is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::Cursor::get_value is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::Cursor::index",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::Cursor::is_at_end",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_at_end)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::Cursor::is_at_end)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::Cursor::is_at_end is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::Cursor::is_at_end is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::Cursor::is_valid",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::Cursor::is_valid)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::Cursor::is_valid)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::Cursor::is_valid is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::Cursor::is_valid is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::Cursor::node",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::Cursor::parent",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::CursorIterator",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::CursorIterator::new",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::new)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::CursorIterator::new)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::CursorIterator::new is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::CursorIterator::new is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::CursorIterator::with_bounds",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::CursorIterator::with_bounds)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::CursorIterator::with_bounds is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::CursorIterator::with_bounds is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
       "rust": "prolly::CursorWindow",
       "classification": "portable",
       "status": "planned",
@@ -9130,28 +7930,6 @@
       "docs": []
     },
     {
-      "rust": "prolly::DefaultStreamingDiffer",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::DefaultStreamingDiffer::new",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
       "rust": "prolly::DeletePolicy",
       "classification": "portable",
       "status": "planned",
@@ -9238,51 +8016,6 @@
       "exclusions": {},
       "tests": [],
       "docs": []
-    },
-    {
-      "rust": "prolly::DiffCursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
-    },
-    {
-      "rust": "prolly::DiffCursor::new",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "session",
-      "performance": "paged",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::DiffCursor::new)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::DiffCursor::new)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::DiffCursor::new is Rust cursor, borrowed-view, or adapter machinery; host applications use the reviewed bounded-page or owned facade.",
-      "reviewed": true,
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::DiffCursor::new is Rust runtime machinery represented by the reviewed iterator-sequence host-language contract.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
       "rust": "prolly::DiffPage",
@@ -10122,6 +8855,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::Error::InvalidExecutionConfig",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::Error::InvalidFormat",
       "classification": "portable",
       "status": "planned",
@@ -10429,6 +9173,72 @@
         "bindings/api/idiomatic-equivalents.json#record-alias"
       ],
       "reconciliation_rationale": "The reviewed record-alias contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::ExecutionConfig",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ExecutionConfig::max_in_flight_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ExecutionConfig::node_cache_max_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ExecutionConfig::node_cache_max_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ExecutionConfig::read_parallelism",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ExecutionConfig::try_new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::FileBlobStore",
@@ -19580,6 +18390,127 @@
       "docs": []
     },
     {
+      "rust": "prolly::NodePublication",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublication::entries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublication::hint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublication::new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublication::origin",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublication::with_hint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublicationHint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublicationHint::key",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublicationHint::namespace",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublicationHint::new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NodePublicationHint::value",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::NodeStoreScan",
       "classification": "idiomatic",
       "status": "implemented",
@@ -20191,17 +19122,6 @@
       "audience": "application",
       "audience_rationale": "prolly::OwnedReadSession::tree has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
-    },
-    {
-      "rust": "prolly::OwnedTransactionOverlayStore",
-      "classification": "portable",
-      "status": "planned",
-      "family": "core",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": []
     },
     {
       "rust": "prolly::OwnedValueLease",
@@ -21140,20 +20060,6 @@
       "docs": []
     },
     {
-      "rust": "prolly::Prolly::cursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::Prolly::cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
       "rust": "prolly::Prolly::cursor_window",
       "classification": "portable",
       "status": "planned",
@@ -21243,20 +20149,6 @@
       "exclusions": {},
       "tests": [],
       "docs": []
-    },
-    {
-      "rust": "prolly::Prolly::diff_cursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::Prolly::diff_cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
     },
     {
       "rust": "prolly::Prolly::diff_from_cursor",
@@ -22004,20 +20896,6 @@
       "docs": []
     },
     {
-      "rust": "prolly::Prolly::range_cursor",
-      "classification": "portable",
-      "status": "planned",
-      "family": "session",
-      "performance": "owned",
-      "languages": {},
-      "exclusions": {},
-      "tests": [],
-      "docs": [],
-      "audience": "application",
-      "audience_rationale": "prolly::Prolly::range_cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
-      "reviewed": true
-    },
-    {
       "rust": "prolly::Prolly::range_diff",
       "classification": "portable",
       "status": "planned",
@@ -22516,6 +21394,1374 @@
     },
     {
       "rust": "prolly::Prolly::write_session",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::batch",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::batch_with_write_stats",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::begin_owned_transaction",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::begin_transaction",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::build_from_entries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::build_from_sorted_entries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_bytes_len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_pinned_bytes_len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_pinned_len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::clear_cache",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::collect_stats",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::compare_and_swap_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::compare_and_swap_named_root_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::config",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::copy_missing_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::crdt_merge",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::crdt_merge_explain",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::create",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::cursor_window",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::debug_compare_trees",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::debug_tree",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete_range",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete_range_with_stats",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::diff_from_cursor",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": [],
+      "audience": "application",
+      "audience_rationale": "prolly::AsyncProlly::diff_from_cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
+      "reviewed": true
+    },
+    {
+      "rust": "prolly::ProllyEngine::diff_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::export_snapshot",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::first_entry",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::first_entry_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_large_value",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_many",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_many_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_value_ref",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_value_ref_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::hydrate_prefix_path_hint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::import_snapshot",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::last_entry",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::last_entry_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::list_named_root_manifests",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::list_named_roots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_changed_spans_hint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_named_roots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_retained_named_roots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::lower_bound",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::lower_bound_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::mark_reachable",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::mark_reachable_blobs",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": [],
+      "audience": "application",
+      "audience_rationale": "prolly::AsyncProlly::mark_reachable_blobs has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
+      "reviewed": true
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_explain",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_prefix",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_prefix_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_range",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_range_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::metrics",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::pin_tree_path",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::pin_tree_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::plan_blob_gc",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": [],
+      "audience": "application",
+      "audience_rationale": "prolly::AsyncProlly::plan_blob_gc has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
+      "reviewed": true
+    },
+    {
+      "rust": "prolly::ProllyEngine::plan_gc",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::plan_missing_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prefix",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prefix_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prefix_reverse_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_diff_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_key",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_keys",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_prefix",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_range",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_range_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_changed_spans_hint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_named_root_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_prefix_path_hint",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::put",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::put_large_value",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::range",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_after",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_from_cursor",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": [],
+      "audience": "application",
+      "audience_rationale": "prolly::AsyncProlly::range_from_cursor has runtime behavior in the requested session application domain and requires direct or idiomatic host evidence.",
+      "reviewed": true
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::rank",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::read",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::reset_metrics",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::reverse_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::reverse_range_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_conflicts",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_conflicts_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_diff_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix_reverse",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix_reverse_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_diff_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_reverse",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_reverse_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::select",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::select_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::stats_diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::store",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::stream_conflicts",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::stream_diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::structural_diff_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::sweep_blob_gc",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": [],
+      "audience": "application",
+      "audience_rationale": "prolly::AsyncProlly::sweep_blob_gc has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
+      "reviewed": true
+    },
+    {
+      "rust": "prolly::ProllyEngine::sweep_gc",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::transaction",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::unpin_all_cache_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::upper_bound",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::upper_bound_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::versioned_map",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::with_execution_config",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -25962,6 +26208,116 @@
       "docs": []
     },
     {
+      "rust": "prolly::PublicationOrigin",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::BatchMutation",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::General",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::Maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::Merge",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::PointDelete",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::PointUpsert",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::RangeDelete",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::Replication",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::PublicationOrigin::TreeBuild",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::QueryKernel",
       "classification": "portable",
       "status": "planned",
@@ -27796,6 +28152,17 @@
         "bindings/api/idiomatic-equivalents.json#store-trait"
       ],
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::RemoteStoreBackend::publish_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_hint",
@@ -33587,6 +33954,17 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::Store::publish_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::Store::put",
       "classification": "idiomatic",
       "status": "implemented",
@@ -33698,74 +34076,6 @@
       "exclusions": {},
       "tests": [],
       "docs": []
-    },
-    {
-      "rust": "prolly::StreamingDiffer",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "core",
-      "performance": "owned",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::StreamingDiffer)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::StreamingDiffer is represented by the reviewed iterator-sequence host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::StreamingDiffer supports the portable application API through the iterator-sequence contract and is not a separately invoked application operation.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
-    },
-    {
-      "rust": "prolly::StreamingDiffer::stream_diff",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "family": "core",
-      "performance": "owned",
-      "languages": {
-        "python": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "go": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "node": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "kotlin": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "java": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "ruby": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "swift": "MapSnapshot/ReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)",
-        "wasm": "WasmMapSnapshot/WasmReadSession bounded-page iteration (prolly::StreamingDiffer::stream_diff)"
-      },
-      "exclusions": {},
-      "tests": [
-        "portable-parity::bounded-ordered-iteration"
-      ],
-      "docs": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "equivalence": "iterator-sequence",
-      "rationale": "prolly::StreamingDiffer::stream_diff is represented by the reviewed iterator-sequence host-language contract instead of a literal Rust declaration.",
-      "reviewed": true,
-      "audience": "rust-extension",
-      "audience_rationale": "prolly::StreamingDiffer::stream_diff supports the portable application API through the iterator-sequence contract and is not a separately invoked application operation.",
-      "reconciliation": "bound-idiomatic",
-      "reconciliation_evidence": [
-        "bindings/api/idiomatic-equivalents.json#iterator-sequence"
-      ],
-      "reconciliation_rationale": "The reviewed iterator-sequence contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
       "rust": "prolly::StreamingSecondaryIndexExtractor",

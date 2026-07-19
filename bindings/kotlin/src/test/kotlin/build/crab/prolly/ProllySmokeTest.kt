@@ -204,6 +204,16 @@ class ProllySmokeTest {
             return HostStoreUnitResultRecord(null)
         }
 
+        override fun publishNodes(publication: NodePublicationRecord): HostStoreUnitResultRecord {
+            for (node in publication.nodes) {
+                nodes[node.key.key()] = node.value.copyOf()
+            }
+            publication.hint?.let { hint ->
+                hints[hint.namespace.key() to hint.key.key()] = hint.value.copyOf()
+            }
+            return HostStoreUnitResultRecord(null)
+        }
+
         override fun batchGetOrdered(keys: List<ByteArray>): HostStoreBatchGetResultRecord =
             HostStoreBatchGetResultRecord(keys.map { nodes[it.key()]?.copyOf() }, null)
 

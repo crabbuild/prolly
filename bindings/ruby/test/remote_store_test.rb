@@ -23,7 +23,7 @@ class RubyMemoryRemoteStore < Prolly::ForeignRemoteStore
       max_transaction_operations: nil, max_node_bytes: nil
     )
     value = Prolly::StoreDescriptorRecord.new(
-      protocol_major: 1, adapter_name: 'ruby-test-memory', provider: 'memory',
+      protocol_major: 2, adapter_name: 'ruby-test-memory', provider: 'memory',
       schema_version: 1, capabilities: capabilities, limits: limits
     )
     Prolly::StoreDescriptorResultRecord.new(value: value, error: nil)

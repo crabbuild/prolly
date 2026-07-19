@@ -231,14 +231,20 @@ func invokeRemoteStore(ctx context.Context, store RemoteStore, method uint32, ar
 			outcome.err = store.BatchNodes(ctx, mutations)
 		}
 	case 5:
+		var publication NodePublication
+		publication, decodeErr = decodeNodePublication(args[0])
+		if decodeErr == nil {
+			outcome.err = store.PublishNodes(ctx, publication)
+		}
+	case 6:
 		var keys [][]byte
 		keys, decodeErr = decodeRemoteByteSequence(args[0])
 		if decodeErr == nil {
 			outcome.optionals, outcome.err = store.BatchGetNodesOrdered(ctx, keys)
 		}
-	case 6:
-		outcome.bytesList, outcome.err = store.ListNodeCIDs(ctx)
 	case 7:
+		outcome.bytesList, outcome.err = store.ListNodeCIDs(ctx)
+	case 8:
 		var namespace, key []byte
 		namespace, decodeErr = decodeRequiredByteArray(args[0])
 		if decodeErr == nil {
@@ -247,7 +253,7 @@ func invokeRemoteStore(ctx context.Context, store RemoteStore, method uint32, ar
 		if decodeErr == nil {
 			outcome.optional, outcome.err = store.GetHint(ctx, namespace, key)
 		}
-	case 8:
+	case 9:
 		var namespace, key, value []byte
 		namespace, decodeErr = decodeRequiredByteArray(args[0])
 		if decodeErr == nil {
@@ -259,7 +265,7 @@ func invokeRemoteStore(ctx context.Context, store RemoteStore, method uint32, ar
 		if decodeErr == nil {
 			outcome.err = store.PutHint(ctx, namespace, key, value)
 		}
-	case 9:
+	case 10:
 		var nodes []NodeEntry
 		var namespace, key, value []byte
 		nodes, decodeErr = decodeNodeEntries(args[0])
@@ -275,13 +281,13 @@ func invokeRemoteStore(ctx context.Context, store RemoteStore, method uint32, ar
 		if decodeErr == nil {
 			outcome.err = store.BatchPutNodesWithHint(ctx, nodes, namespace, key, value)
 		}
-	case 10:
+	case 11:
 		var name []byte
 		name, decodeErr = decodeRequiredByteArray(args[0])
 		if decodeErr == nil {
 			outcome.optional, outcome.err = store.GetRootManifest(ctx, name)
 		}
-	case 11:
+	case 12:
 		var name, manifest []byte
 		name, decodeErr = decodeRequiredByteArray(args[0])
 		if decodeErr == nil {
@@ -290,13 +296,13 @@ func invokeRemoteStore(ctx context.Context, store RemoteStore, method uint32, ar
 		if decodeErr == nil {
 			outcome.err = store.PutRootManifest(ctx, name, manifest)
 		}
-	case 12:
+	case 13:
 		var name []byte
 		name, decodeErr = decodeRequiredByteArray(args[0])
 		if decodeErr == nil {
 			outcome.err = store.DeleteRootManifest(ctx, name)
 		}
-	case 13:
+	case 14:
 		var name []byte
 		var expected, replacement OptionalBytes
 		name, decodeErr = decodeRequiredByteArray(args[0])
@@ -309,9 +315,9 @@ func invokeRemoteStore(ctx context.Context, store RemoteStore, method uint32, ar
 		if decodeErr == nil {
 			outcome.cas, outcome.err = store.CompareAndSwapRootManifest(ctx, name, expected, replacement)
 		}
-	case 14:
-		outcome.roots, outcome.err = store.ListRootManifests(ctx)
 	case 15:
+		outcome.roots, outcome.err = store.ListRootManifests(ctx)
+	case 16:
 		var nodes []NodeMutation
 		var conditions []RootCondition
 		var roots []RootWrite
@@ -402,6 +408,61 @@ func decodeNodeEntries(data []byte) ([]NodeEntry, error) {
 	return result, decoder.done()
 }
 
+func decodeNodePublication(data []byte) (NodePublication, error) {
+	decoder := byteDecoder{data: data}
+	count, err := decoder.readInt32()
+	if err != nil || count < 0 {
+		return NodePublication{}, fmt.Errorf("invalid node publication count %d: %w", count, err)
+	}
+
+	nodes := make([]NodeEntry, 0, count)
+	for range count {
+		key, err := decoder.readByteArray()
+		if err != nil {
+			return NodePublication{}, err
+		}
+		value, err := decoder.readByteArray()
+		if err != nil {
+			return NodePublication{}, err
+		}
+		nodes = append(nodes, NodeEntry{Key: key, Value: value})
+	}
+
+	var hint *NodePublicationHint
+	hasHint, err := decoder.readByte()
+	if err != nil {
+		return NodePublication{}, err
+	}
+	switch hasHint {
+	case 0:
+	case 1:
+		namespace, err := decoder.readByteArray()
+		if err != nil {
+			return NodePublication{}, err
+		}
+		key, err := decoder.readByteArray()
+		if err != nil {
+			return NodePublication{}, err
+		}
+		value, err := decoder.readByteArray()
+		if err != nil {
+			return NodePublication{}, err
+		}
+		hint = &NodePublicationHint{Namespace: namespace, Key: key, Value: value}
+	default:
+		return NodePublication{}, fmt.Errorf("invalid node publication hint flag %d", hasHint)
+	}
+
+	origin, err := decoder.readInt32()
+	if err != nil {
+		return NodePublication{}, err
+	}
+	if err := decoder.done(); err != nil {
+		return NodePublication{}, err
+	}
+	return NodePublication{Nodes: nodes, Hint: hint, Origin: uint32(origin)}, nil
+}
+
 func decodeRootConditions(data []byte) ([]RootCondition, error) {
 	decoder := byteDecoder{data: data}
 	count, err := decoder.readInt32()
@@ -466,28 +527,28 @@ func encodeRemoteOutcome(method uint32, result remoteOutcome) []byte {
 		} else {
 			out.WriteByte(0)
 		}
-	case 1, 7, 10:
+	case 1, 8, 11:
 		encodeRemoteOptionalBytesInto(&out, result.optional)
-	case 5:
+	case 6:
 		writeI32(&out, int32(len(result.optionals)))
 		for _, value := range result.optionals {
 			encodeRemoteOptionalBytesInto(&out, value)
 		}
-	case 6:
+	case 7:
 		writeI32(&out, int32(len(result.bytesList)))
 		for _, value := range result.bytesList {
 			encodeByteArrayInto(&out, value)
 		}
-	case 13:
+	case 14:
 		encodeBoolInto(&out, result.cas.Applied)
 		encodeRemoteOptionalBytesInto(&out, result.cas.Current)
-	case 14:
+	case 15:
 		writeI32(&out, int32(len(result.roots)))
 		for _, root := range result.roots {
 			encodeByteArrayInto(&out, root.Name)
 			encodeByteArrayInto(&out, root.Manifest)
 		}
-	case 15:
+	case 16:
 		encodeBoolInto(&out, result.transaction.Applied)
 		if result.transaction.Conflict == nil {
 			out.WriteByte(0)

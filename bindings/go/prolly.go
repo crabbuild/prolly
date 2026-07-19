@@ -61,6 +61,7 @@ typedef void (*HostStoreGetCallback)(uint64_t handle, RustBuffer key, RustBuffer
 typedef void (*HostStorePutCallback)(uint64_t handle, RustBuffer key, RustBuffer value, RustBuffer *out_return, RustCallStatus *out_status);
 typedef void (*HostStoreDeleteCallback)(uint64_t handle, RustBuffer key, RustBuffer *out_return, RustCallStatus *out_status);
 typedef void (*HostStoreBatchCallback)(uint64_t handle, RustBuffer ops, RustBuffer *out_return, RustCallStatus *out_status);
+typedef void (*HostStorePublishNodesCallback)(uint64_t handle, RustBuffer publication, RustBuffer *out_return, RustCallStatus *out_status);
 typedef void (*HostStoreBatchGetOrderedCallback)(uint64_t handle, RustBuffer keys, RustBuffer *out_return, RustCallStatus *out_status);
 typedef void (*HostStorePrefersBatchReadsCallback)(uint64_t handle, RustBuffer *out_return, RustCallStatus *out_status);
 typedef void (*HostStoreSupportsHintsCallback)(uint64_t handle, RustBuffer *out_return, RustCallStatus *out_status);
@@ -92,6 +93,7 @@ typedef struct UniFfiTraitVtableHostStoreCallback {
 	HostStorePutCallback put;
 	HostStoreDeleteCallback delete_;
 	HostStoreBatchCallback batch;
+	HostStorePublishNodesCallback publish_nodes;
 	HostStoreBatchGetOrderedCallback batch_get_ordered;
 	HostStorePrefersBatchReadsCallback prefers_batch_reads;
 	HostStoreSupportsHintsCallback supports_hints;
@@ -117,6 +119,7 @@ extern void prolly_go_host_store_get(uint64_t handle, RustBuffer key, RustBuffer
 extern void prolly_go_host_store_put(uint64_t handle, RustBuffer key, RustBuffer value, RustBuffer *out_return, RustCallStatus *out_status);
 extern void prolly_go_host_store_delete(uint64_t handle, RustBuffer key, RustBuffer *out_return, RustCallStatus *out_status);
 extern void prolly_go_host_store_batch(uint64_t handle, RustBuffer ops, RustBuffer *out_return, RustCallStatus *out_status);
+extern void prolly_go_host_store_publish_nodes(uint64_t handle, RustBuffer publication, RustBuffer *out_return, RustCallStatus *out_status);
 extern void prolly_go_host_store_batch_get_ordered(uint64_t handle, RustBuffer keys, RustBuffer *out_return, RustCallStatus *out_status);
 extern void prolly_go_host_store_prefers_batch_reads(uint64_t handle, RustBuffer *out_return, RustCallStatus *out_status);
 extern void prolly_go_host_store_supports_hints(uint64_t handle, RustBuffer *out_return, RustCallStatus *out_status);
@@ -151,6 +154,7 @@ static UniFfiTraitVtableHostStoreCallback prolly_go_host_store_vtable = {
 	prolly_go_host_store_put,
 	prolly_go_host_store_delete,
 	prolly_go_host_store_batch,
+	prolly_go_host_store_publish_nodes,
 	prolly_go_host_store_batch_get_ordered,
 	prolly_go_host_store_prefers_batch_reads,
 	prolly_go_host_store_supports_hints,
@@ -1262,6 +1266,7 @@ type HostStore interface {
 	Put(key []byte, value []byte) error
 	Delete(key []byte) error
 	Batch(ops []Mutation) error
+	PublishNodes(publication NodePublication) error
 	BatchGetOrdered(keys [][]byte) ([]HostStoreResult, error)
 	PrefersBatchReads() bool
 	SupportsHints() bool

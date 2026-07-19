@@ -5,26 +5,26 @@
     "async-store"
   ],
   "summary": {
-    "release_complete": 354,
-    "reviewed_incomplete": 405,
-    "unreviewed_runtime_candidate": 652,
-    "unreviewed_data_model": 1473,
-    "unreviewed_rust_abstraction": 0
+    "release_complete": 343,
+    "reviewed_incomplete": 402,
+    "unreviewed_runtime_candidate": 706,
+    "unreviewed_data_model": 1481,
+    "unreviewed_rust_abstraction": 4
   },
   "family_counts": {
-    "core": 1524,
+    "core": 1579,
     "indexed-map": 249,
-    "maintenance": 294,
+    "maintenance": 298,
     "proof": 171,
     "proximity-map": 389,
-    "session": 114,
-    "versioned-map": 143
+    "session": 105,
+    "versioned-map": 145
   },
   "owner_counts": {
-    "prolly::Prolly": 147,
-    "prolly::AsyncProlly": 98,
+    "prolly::Prolly": 144,
+    "prolly::ProllyEngine": 123,
     "prolly::VersionedMap": 77,
-    "prolly::Error": 47,
+    "prolly::Error": 48,
     "prolly::MapSnapshot": 46,
     "prolly::TreeStats": 39,
     "prolly::SecondaryIndexSnapshot": 31,
@@ -33,21 +33,22 @@
     "prolly::StatsDiff": 25,
     "prolly::StatsPercentageChange": 25,
     "prolly::ReadSession": 23,
-    "prolly::RemoteStoreBackend": 22,
+    "prolly::RemoteStoreBackend": 23,
+    "prolly::AsyncReadSession": 21,
     "prolly::ProximityMap": 21,
-    "prolly::AsyncStore": 19,
+    "prolly::AsyncStore": 20,
     "prolly::IndexedSnapshotBundle": 19,
     "prolly::MergePolicyRegistry": 19,
+    "prolly::Store": 19,
     "prolly::BatchApplyStats": 18,
-    "prolly::Store": 18,
     "prolly::WriteStats": 17,
+    "prolly::AsyncVersionedMap": 16,
     "prolly::SecondaryIndexLimits": 16,
     "prolly::IndexedMapMetricsSnapshot": 15,
     "prolly::RootManifest": 15,
     "prolly::VersionedValue": 15,
     "prolly::WriteSession": 15,
     "prolly::AsyncMapSnapshot": 14,
-    "prolly::AsyncVersionedMap": 14,
     "prolly::ConfigBuilder": 14,
     "prolly::DiffPageProofVerification": 14,
     "prolly::KeyBuilder": 14,
@@ -57,7 +58,6 @@
     "prolly::ProofBundleSummary": 14,
     "prolly::ProximityMutationStats": 14,
     "prolly::AsyncProllyTransaction": 13,
-    "prolly::AsyncReadSession": 13,
     "prolly::AuthenticatedProofEnvelopeVerification": 13,
     "prolly::CompositeAccelerator": 13,
     "prolly::ContentObjectKind": 13,
@@ -80,7 +80,6 @@
     "prolly::CompositeBuildStats": 11,
     "prolly::ProximityVerification": 11,
     "prolly::AcceleratorCatalog": 10,
-    "prolly::Cursor": 10,
     "prolly::DiffPageProof": 10,
     "prolly::IndexCheckpoint": 10,
     "prolly::IndexVerification": 10,
@@ -88,6 +87,7 @@
     "prolly::OwnedReadSession": 10,
     "prolly::ProductQuantizer": 10,
     "prolly::ProofAuthentication": 10,
+    "prolly::PublicationOrigin": 10,
     "prolly::RangePageProof": 10,
     "prolly::RangeProof": 10,
     "prolly::TreeDebugNode": 10,
@@ -172,6 +172,7 @@
     "prolly::ConflictRef": 6,
     "prolly::CursorWindow": 6,
     "prolly::DiffRef": 6,
+    "prolly::ExecutionConfig": 6,
     "prolly::HnswBuildLimits": 6,
     "prolly::IndexValue": 6,
     "prolly::IndexValueRef": 6,
@@ -183,6 +184,7 @@
     "prolly::ManifestUpdate": 6,
     "prolly::NamedRootManifest": 6,
     "prolly::NamedRootUpdate": 6,
+    "prolly::NodePublication": 6,
     "prolly::ProximityFilter": 6,
     "prolly::ProximityProofFilter": 6,
     "prolly::ProximityTree": 6,
@@ -214,6 +216,7 @@
     "prolly::MultiKeyProofVerification": 5,
     "prolly::Mutation": 5,
     "prolly::NodeLayoutSpec": 5,
+    "prolly::NodePublicationHint": 5,
     "prolly::OverflowConfig": 5,
     "prolly::ParallelConfig": 5,
     "prolly::PlannerPolicy": 5,
@@ -234,10 +237,12 @@
     "prolly::VersionPruneResult": 5,
     "prolly::AcceleratorCatalogEntry": 4,
     "prolly::AdaptiveQuality": 4,
+    "prolly::AsyncBatchBuilder": 4,
     "prolly::AsyncConflictIter": 4,
     "prolly::AsyncDiffIter": 4,
     "prolly::AsyncIoConfig": 4,
     "prolly::AsyncSearchControl": 4,
+    "prolly::AsyncSortedBatchBuilder": 4,
     "prolly::BatchBuilder": 4,
     "prolly::BlobGcSweep": 4,
     "prolly::BoundaryDetector": 4,
@@ -307,7 +312,6 @@
     "prolly::CompositeBuildOutcome": 3,
     "prolly::ContentManifestUpdate": 3,
     "prolly::ContentRootPublication": 3,
-    "prolly::CursorIterator": 3,
     "prolly::DecodedPhysicalIndexKey": 3,
     "prolly::DecodedPhysicalIndexKeyRef": 3,
     "prolly::DeletePolicy": 3,
@@ -356,8 +360,6 @@
     "prolly::BorrowedMergeResolver": 2,
     "prolly::ConflictFreeMerger": 2,
     "prolly::DefaultConflictFreeMerger": 2,
-    "prolly::DefaultStreamingDiffer": 2,
-    "prolly::DiffCursor": 2,
     "prolly::HashAlgorithm": 2,
     "prolly::HnswRoutingVectorEncoding": 2,
     "prolly::HnswSearchOptions": 2,
@@ -369,9 +371,9 @@
     "prolly::RemoteStoreConfig": 2,
     "prolly::ScalarQuantizationConfig": 2,
     "prolly::SecondaryIndexExtractor": 2,
-    "prolly::StreamingDiffer": 2,
     "prolly::StreamingSecondaryIndexExtractor": 2,
     "prolly::VectorStorageConfig": 2,
+    "prolly::AsyncProlly": 1,
     "prolly::AsyncRangePage": 1,
     "prolly::AsyncReversePage": 1,
     "prolly::AsyncTransactionOverlayStore": 1,
@@ -396,7 +398,6 @@
     "prolly::MemStoreError": 1,
     "prolly::MergePolicyFn": 1,
     "prolly::OwnedAsyncTransactionOverlayStore": 1,
-    "prolly::OwnedTransactionOverlayStore": 1,
     "prolly::ProjectedIndexEntry": 1,
     "prolly::Resolver": 1,
     "prolly::SEARCH_PLAN_FORMAT_VERSION": 1,
@@ -987,6 +988,46 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder::add",
+      "kind": "function",
+      "owner": "prolly::AsyncBatchBuilder",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder::build",
+      "kind": "function",
+      "owner": "prolly::AsyncBatchBuilder",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncBatchBuilder::new",
+      "kind": "function",
+      "owner": "prolly::AsyncBatchBuilder",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::AsyncBlobStore",
@@ -1630,983 +1671,13 @@
     },
     {
       "rust": "prolly::AsyncProlly",
-      "kind": "struct",
+      "kind": "type_alias",
       "owner": null,
       "member_kind": null,
       "family": "core",
       "classification": "portable",
       "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::AsyncProlly::batch",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::begin_owned_transaction",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::begin_transaction",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_bytes_len",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_len",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_pinned_bytes_len",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::cache_pinned_len",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::clear_cache",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::collect_stats",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::compare_and_swap_named_root",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::compare_and_swap_named_root_at_millis",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::config",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::copy_missing_nodes",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::crdt_merge",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::crdt_merge_explain",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::create",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::debug_compare_trees",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::debug_tree",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete_named_root",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete_range",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::delete_range_with_stats",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::diff",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::diff_from_cursor",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::AsyncProlly::diff_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_large_value",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_many",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_many_with",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_value_ref",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_value_ref_with",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::get_with",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::list_named_root_manifests",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::list_named_roots",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::load_named_root",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::load_named_roots",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::load_retained_named_roots",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::mark_reachable",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::mark_reachable_blobs",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "maintenance",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_explain",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_prefix",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_prefix_with",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_range",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_range_with",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::merge_with",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::metrics",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::new",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::pin_tree_path",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::pin_tree_root",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::plan_blob_gc",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "maintenance",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::AsyncProlly::plan_missing_nodes",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prefix",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prefix_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prefix_reverse_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_diff_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_key",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_keys",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_prefix",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_range",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::prove_range_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::publish_named_root",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::publish_named_root_at_millis",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::put",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::put_large_value",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::range",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_after",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_diff",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_from_cursor",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::AsyncProlly::range_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::read",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::reset_metrics",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::reverse_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::reverse_range_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_conflicts",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_conflicts_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_diff",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_diff_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix_reverse",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix_reverse_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_prefix_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_diff",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_diff_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_reverse",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_reverse_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::scan_range_until",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::stats_diff",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::store",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::stream_conflicts",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::stream_diff",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::structural_diff_page",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::sweep_blob_gc",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "maintenance",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::AsyncProlly::transaction",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::unpin_all_cache_nodes",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::AsyncProlly::versioned_map",
-      "kind": "function",
-      "owner": "prolly::AsyncProlly",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
+      "bucket": "unreviewed_rust_abstraction"
     },
     {
       "rust": "prolly::AsyncProllyTransaction",
@@ -2879,6 +1950,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::AsyncReadSession::first_entry_with",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::AsyncReadSession::get_many_with",
       "kind": "function",
       "owner": "prolly::AsyncReadSession",
@@ -2907,6 +1988,56 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::AsyncReadSession::is_empty",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncReadSession::last_entry_with",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncReadSession::len",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncReadSession::lower_bound_with",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncReadSession::rank",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::AsyncReadSession::scan_prefix",
@@ -2989,6 +2120,16 @@
       "bucket": "reviewed_incomplete"
     },
     {
+      "rust": "prolly::AsyncReadSession::select_with",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::AsyncReadSession::tree",
       "kind": "function",
       "owner": "prolly::AsyncReadSession",
@@ -2997,6 +2138,16 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::AsyncReadSession::upper_bound_with",
+      "kind": "function",
+      "owner": "prolly::AsyncReadSession",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::AsyncReversePage",
@@ -3047,6 +2198,46 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder::add",
+      "kind": "function",
+      "owner": "prolly::AsyncSortedBatchBuilder",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder::build",
+      "kind": "function",
+      "owner": "prolly::AsyncSortedBatchBuilder",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncSortedBatchBuilder::new",
+      "kind": "function",
+      "owner": "prolly::AsyncSortedBatchBuilder",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::AsyncStore",
@@ -3199,6 +2390,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::AsyncStore::publish_nodes",
+      "kind": "function",
+      "owner": "prolly::AsyncStore",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
+    },
+    {
       "rust": "prolly::AsyncStore::put",
       "kind": "function",
       "owner": "prolly::AsyncStore",
@@ -3297,6 +2498,26 @@
       "classification": "portable",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::apply_at_millis",
+      "kind": "function",
+      "owner": "prolly::AsyncVersionedMap",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::apply_if_at_millis",
+      "kind": "function",
+      "owner": "prolly::AsyncVersionedMap",
+      "member_kind": "inherent-item",
+      "family": "versioned-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::AsyncVersionedMap::delete",
@@ -6559,136 +5780,6 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::Cursor",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::Cursor::advance",
-      "kind": "function",
-      "owner": "prolly::Cursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::Cursor::at_item",
-      "kind": "function",
-      "owner": "prolly::Cursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::Cursor::get_key",
-      "kind": "function",
-      "owner": "prolly::Cursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::Cursor::get_value",
-      "kind": "function",
-      "owner": "prolly::Cursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::Cursor::index",
-      "kind": "struct_field",
-      "owner": "prolly::Cursor",
-      "member_kind": "field",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::Cursor::is_at_end",
-      "kind": "function",
-      "owner": "prolly::Cursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::Cursor::is_valid",
-      "kind": "function",
-      "owner": "prolly::Cursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::Cursor::node",
-      "kind": "struct_field",
-      "owner": "prolly::Cursor",
-      "member_kind": "field",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::Cursor::parent",
-      "kind": "struct_field",
-      "owner": "prolly::Cursor",
-      "member_kind": "field",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::CursorIterator",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::CursorIterator::new",
-      "kind": "function",
-      "owner": "prolly::CursorIterator",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::CursorIterator::with_bounds",
-      "kind": "function",
-      "owner": "prolly::CursorIterator",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
       "rust": "prolly::CursorWindow",
       "kind": "struct",
       "owner": null,
@@ -6899,26 +5990,6 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::DefaultStreamingDiffer",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::DefaultStreamingDiffer::new",
-      "kind": "function",
-      "owner": "prolly::DefaultStreamingDiffer",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
       "rust": "prolly::DeletePolicy",
       "kind": "enum",
       "owner": null,
@@ -6997,26 +6068,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::DiffCursor",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::DiffCursor::new",
-      "kind": "function",
-      "owner": "prolly::DiffCursor",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
     },
     {
       "rust": "prolly::DiffPage",
@@ -7769,6 +6820,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::Error::InvalidExecutionConfig",
+      "kind": "variant",
+      "owner": "prolly::Error",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::Error::InvalidFormat",
       "kind": "variant",
       "owner": "prolly::Error",
@@ -8027,6 +7088,66 @@
       "classification": "idiomatic",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::ExecutionConfig",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::ExecutionConfig::max_in_flight_bytes",
+      "kind": "function",
+      "owner": "prolly::ExecutionConfig",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ExecutionConfig::node_cache_max_bytes",
+      "kind": "function",
+      "owner": "prolly::ExecutionConfig",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ExecutionConfig::node_cache_max_nodes",
+      "kind": "function",
+      "owner": "prolly::ExecutionConfig",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ExecutionConfig::read_parallelism",
+      "kind": "function",
+      "owner": "prolly::ExecutionConfig",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ExecutionConfig::try_new",
+      "kind": "function",
+      "owner": "prolly::ExecutionConfig",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::FileBlobStore",
@@ -14549,6 +13670,116 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::NodePublication",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::NodePublication::entries",
+      "kind": "function",
+      "owner": "prolly::NodePublication",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublication::hint",
+      "kind": "function",
+      "owner": "prolly::NodePublication",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublication::new",
+      "kind": "function",
+      "owner": "prolly::NodePublication",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublication::origin",
+      "kind": "function",
+      "owner": "prolly::NodePublication",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublication::with_hint",
+      "kind": "function",
+      "owner": "prolly::NodePublication",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublicationHint",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::NodePublicationHint::key",
+      "kind": "function",
+      "owner": "prolly::NodePublicationHint",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublicationHint::namespace",
+      "kind": "function",
+      "owner": "prolly::NodePublicationHint",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublicationHint::new",
+      "kind": "function",
+      "owner": "prolly::NodePublicationHint",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::NodePublicationHint::value",
+      "kind": "function",
+      "owner": "prolly::NodePublicationHint",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::NodeStoreScan",
       "kind": "trait",
       "owner": null,
@@ -15017,16 +14248,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::OwnedTransactionOverlayStore",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
     },
     {
       "rust": "prolly::OwnedValueLease",
@@ -15829,16 +15050,6 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::Prolly::cursor",
-      "kind": "function",
-      "owner": "prolly::Prolly",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
       "rust": "prolly::Prolly::cursor_window",
       "kind": "function",
       "owner": "prolly::Prolly",
@@ -15917,16 +15128,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::Prolly::diff_cursor",
-      "kind": "function",
-      "owner": "prolly::Prolly",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::Prolly::diff_from_cursor",
@@ -16579,16 +15780,6 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::Prolly::range_cursor",
-      "kind": "function",
-      "owner": "prolly::Prolly",
-      "member_kind": "inherent-item",
-      "family": "session",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
       "rust": "prolly::Prolly::range_diff",
       "kind": "function",
       "owner": "prolly::Prolly",
@@ -17022,6 +16213,1236 @@
       "rust": "prolly::Prolly::write_session",
       "kind": "function",
       "owner": "prolly::Prolly",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::ProllyEngine::batch",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::batch_with_write_stats",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::begin_owned_transaction",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::begin_transaction",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::build_from_entries",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::build_from_sorted_entries",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_bytes_len",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_len",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_pinned_bytes_len",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_pinned_len",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::clear_cache",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::collect_stats",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::compare_and_swap_named_root",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::compare_and_swap_named_root_at_millis",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::config",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::copy_missing_nodes",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::crdt_merge",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::crdt_merge_explain",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::create",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::cursor_window",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::debug_compare_trees",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::debug_tree",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete_named_root",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete_range",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::delete_range_with_stats",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::diff",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::diff_from_cursor",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::ProllyEngine::diff_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::export_snapshot",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::first_entry",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::first_entry_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_large_value",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_many",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_many_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_value_ref",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_value_ref_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::get_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::hydrate_prefix_path_hint",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::import_snapshot",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::last_entry",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::last_entry_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::len",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::list_named_root_manifests",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::list_named_roots",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_changed_spans_hint",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_named_root",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_named_roots",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_retained_named_roots",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::lower_bound",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::lower_bound_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::mark_reachable",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::mark_reachable_blobs",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_explain",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_prefix",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_prefix_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_range",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_range_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::merge_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::metrics",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::new",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::pin_tree_path",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::pin_tree_root",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::plan_blob_gc",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::ProllyEngine::plan_gc",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::plan_missing_nodes",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prefix",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prefix_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prefix_reverse_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_diff_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_key",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_keys",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_prefix",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_range",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::prove_range_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_changed_spans_hint",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_named_root",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_named_root_at_millis",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::publish_prefix_path_hint",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::put",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::put_large_value",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::range",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_after",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_diff",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_from_cursor",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::ProllyEngine::range_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::rank",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::read",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::reset_metrics",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::reverse_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::reverse_range_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_conflicts",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_conflicts_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_diff",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_diff_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix_reverse",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix_reverse_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_prefix_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_diff",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_diff_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_reverse",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_reverse_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::scan_range_until",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::select",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::select_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::stats_diff",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::store",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::stream_conflicts",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::stream_diff",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::structural_diff_page",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::sweep_blob_gc",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::ProllyEngine::sweep_gc",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::transaction",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::unpin_all_cache_nodes",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::upper_bound",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::upper_bound_with",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::versioned_map",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::with_execution_config",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
       "member_kind": "inherent-item",
       "family": "core",
       "classification": "portable",
@@ -19469,6 +19890,106 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::PublicationOrigin",
+      "kind": "enum",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::BatchMutation",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::General",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::Maintenance",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::Merge",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::PointDelete",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::PointUpsert",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::RangeDelete",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::Replication",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::PublicationOrigin::TreeBuild",
+      "kind": "variant",
+      "owner": "prolly::PublicationOrigin",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::QueryKernel",
       "kind": "enum",
       "owner": null,
@@ -20607,6 +21128,16 @@
       "classification": "idiomatic",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::RemoteStoreBackend::publish_nodes",
+      "kind": "function",
+      "owner": "prolly::RemoteStoreBackend",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
     },
     {
       "rust": "prolly::RemoteStoreBackend::put_hint",
@@ -24739,6 +25270,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::Store::publish_nodes",
+      "kind": "function",
+      "owner": "prolly::Store",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
+    },
+    {
       "rust": "prolly::Store::put",
       "kind": "function",
       "owner": "prolly::Store",
@@ -24777,26 +25318,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::StreamingDiffer",
-      "kind": "trait",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
-    },
-    {
-      "rust": "prolly::StreamingDiffer::stream_diff",
-      "kind": "function",
-      "owner": "prolly::StreamingDiffer",
-      "member_kind": "trait-item",
-      "family": "core",
-      "classification": "idiomatic",
-      "status": "implemented",
-      "bucket": "release_complete"
     },
     {
       "rust": "prolly::StreamingSecondaryIndexExtractor",

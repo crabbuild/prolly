@@ -37,7 +37,7 @@ module Prolly
         max_transaction_operations: nil, max_node_bytes: nil
       )
       value = StoreDescriptorRecord.new(
-        protocol_major: 1, adapter_name: 'postgres-v1', provider: 'postgresql',
+        protocol_major: STORE_PROTOCOL_MAJOR, adapter_name: 'postgres-v1', provider: 'postgresql',
         schema_version: 1, capabilities: capabilities, limits: limits
       )
       StoreDescriptorResultRecord.new(value: value, error: nil)

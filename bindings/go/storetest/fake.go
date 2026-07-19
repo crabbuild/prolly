@@ -92,6 +92,10 @@ func (s *FakeStore) BatchNodes(ctx context.Context, mutations []prolly.NodeMutat
 	return nil
 }
 
+func (s *FakeStore) PublishNodes(ctx context.Context, publication prolly.NodePublication) error {
+	return prolly.PublishNodesWithGeneralPath(ctx, s, publication)
+}
+
 func (s *FakeStore) BatchGetNodesOrdered(ctx context.Context, keys [][]byte) ([]prolly.OptionalBytes, error) {
 	if err := contextError(ctx); err != nil {
 		return nil, err

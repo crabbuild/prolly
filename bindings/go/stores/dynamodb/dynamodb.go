@@ -77,7 +77,7 @@ func (s *Store) Descriptor(ctx context.Context) (prolly.StoreDescriptor, error) 
 	}
 	readLimit, writeLimit, txLimit := uint32(batchGetLimit), uint32(batchWriteLimit), uint32(transactionLimit)
 	return prolly.StoreDescriptor{
-		ProtocolMajor: 1, AdapterName: s.options.AdapterName, Provider: "dynamodb", SchemaVersion: 1,
+		ProtocolMajor: prolly.StoreProtocolMajor, AdapterName: s.options.AdapterName, Provider: "dynamodb", SchemaVersion: 1,
 		Capabilities: prolly.StoreCapabilities{
 			NativeBatchReads: true, AtomicBatchWrites: false, NodeScan: true, Hints: true,
 			AtomicNodesAndHint: false, RootScan: true, RootCompareAndSwap: true,
@@ -112,6 +112,10 @@ func (s *Store) BatchNodes(ctx context.Context, mutations []prolly.NodeMutation)
 		}
 	}
 	return s.batchWrite(ctx, requests)
+}
+
+func (s *Store) PublishNodes(ctx context.Context, publication prolly.NodePublication) error {
+	return prolly.PublishNodesWithGeneralPath(ctx, s, publication)
 }
 
 func (s *Store) BatchGetNodesOrdered(ctx context.Context, keys [][]byte) ([]prolly.OptionalBytes, error) {

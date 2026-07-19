@@ -127,6 +127,10 @@ func (s *Store) BatchNodes(ctx context.Context, mutations []prolly.NodeMutation)
 	return storeError("batch_nodes_commit", tx.Commit())
 }
 
+func (s *Store) PublishNodes(ctx context.Context, publication prolly.NodePublication) error {
+	return prolly.PublishNodesWithGeneralPath(ctx, s, publication)
+}
+
 func (s *Store) BatchGetNodesOrdered(ctx context.Context, keys [][]byte) ([]prolly.OptionalBytes, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err

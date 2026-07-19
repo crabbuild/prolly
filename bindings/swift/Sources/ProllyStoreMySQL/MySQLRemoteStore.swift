@@ -30,7 +30,7 @@ public actor MySQLRemoteStore: ForeignRemoteStore {
     public func descriptor() async -> StoreDescriptorResultRecord {
         StoreDescriptorResultRecord(
             value: StoreDescriptorRecord(
-                protocolMajor: 1, adapterName: "mysql-v1", provider: "mysql", schemaVersion: 1,
+                protocolMajor: 2, adapterName: "mysql-v1", provider: "mysql", schemaVersion: 1,
                 capabilities: StoreCapabilitiesRecord(
                     nativeBatchReads: false, atomicBatchWrites: true, nodeScan: true,
                     hints: true, atomicNodesAndHint: true, rootScan: true,

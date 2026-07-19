@@ -42,6 +42,7 @@ typedef struct ForeignRemoteStoreVTable {
 	RemoteMethod2 put_node;
 	RemoteMethod1 delete_node;
 	RemoteMethod1 batch_nodes;
+	RemoteMethod1 publish_nodes;
 	RemoteMethod1 batch_get_nodes_ordered;
 	RemoteMethod0 list_node_cids;
 	RemoteMethod2 get_hint;
@@ -74,22 +75,23 @@ static void remote_get_node(uint64_t h, RustBuffer a, UniffiForeignFutureComplet
 static void remote_put_node(uint64_t h, RustBuffer a, RustBuffer b, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch2(2, h, a, b, (uintptr_t)cb, d)); }
 static void remote_delete_node(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(3, h, a, (uintptr_t)cb, d)); }
 static void remote_batch_nodes(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(4, h, a, (uintptr_t)cb, d)); }
-static void remote_batch_get(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(5, h, a, (uintptr_t)cb, d)); }
-static void remote_list_nodes(uint64_t h, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch0(6, h, (uintptr_t)cb, d)); }
-static void remote_get_hint(uint64_t h, RustBuffer a, RustBuffer b, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch2(7, h, a, b, (uintptr_t)cb, d)); }
-static void remote_put_hint(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch3(8, h, a, b, c, (uintptr_t)cb, d)); }
-static void remote_batch_hint(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, RustBuffer e, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch4(9, h, a, b, c, e, (uintptr_t)cb, d)); }
-static void remote_get_root(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(10, h, a, (uintptr_t)cb, d)); }
-static void remote_put_root(uint64_t h, RustBuffer a, RustBuffer b, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch2(11, h, a, b, (uintptr_t)cb, d)); }
-static void remote_delete_root(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(12, h, a, (uintptr_t)cb, d)); }
-static void remote_cas_root(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch3(13, h, a, b, c, (uintptr_t)cb, d)); }
-static void remote_list_roots(uint64_t h, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch0(14, h, (uintptr_t)cb, d)); }
-static void remote_transaction(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch3(15, h, a, b, c, (uintptr_t)cb, d)); }
+static void remote_publish_nodes(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(5, h, a, (uintptr_t)cb, d)); }
+static void remote_batch_get(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(6, h, a, (uintptr_t)cb, d)); }
+static void remote_list_nodes(uint64_t h, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch0(7, h, (uintptr_t)cb, d)); }
+static void remote_get_hint(uint64_t h, RustBuffer a, RustBuffer b, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch2(8, h, a, b, (uintptr_t)cb, d)); }
+static void remote_put_hint(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch3(9, h, a, b, c, (uintptr_t)cb, d)); }
+static void remote_batch_hint(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, RustBuffer e, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch4(10, h, a, b, c, e, (uintptr_t)cb, d)); }
+static void remote_get_root(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(11, h, a, (uintptr_t)cb, d)); }
+static void remote_put_root(uint64_t h, RustBuffer a, RustBuffer b, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch2(12, h, a, b, (uintptr_t)cb, d)); }
+static void remote_delete_root(uint64_t h, RustBuffer a, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch1(13, h, a, (uintptr_t)cb, d)); }
+static void remote_cas_root(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch3(14, h, a, b, c, (uintptr_t)cb, d)); }
+static void remote_list_roots(uint64_t h, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch0(15, h, (uintptr_t)cb, d)); }
+static void remote_transaction(uint64_t h, RustBuffer a, RustBuffer b, RustBuffer c, UniffiForeignFutureCompleteRustBuffer cb, uint64_t d, UniffiForeignFutureDroppedCallbackStruct *out) { remote_set_dropped(out, prolly_go_remote_dispatch3(16, h, a, b, c, (uintptr_t)cb, d)); }
 
 static ForeignRemoteStoreVTable remote_vtable = {
 	prolly_go_remote_store_free, prolly_go_remote_store_clone,
 	remote_descriptor, remote_get_node, remote_put_node, remote_delete_node,
-	remote_batch_nodes, remote_batch_get, remote_list_nodes, remote_get_hint,
+	remote_batch_nodes, remote_publish_nodes, remote_batch_get, remote_list_nodes, remote_get_hint,
 	remote_put_hint, remote_batch_hint, remote_get_root, remote_put_root,
 	remote_delete_root, remote_cas_root, remote_list_roots, remote_transaction
 };

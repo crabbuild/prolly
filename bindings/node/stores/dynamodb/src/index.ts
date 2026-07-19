@@ -22,12 +22,14 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   upsertNode,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -73,7 +75,7 @@ export class DynamoDbStore implements RemoteStore {
     this.#tableName = options.tableName;
     this.#keyPrefix = Buffer.from(options.keyPrefix ?? Buffer.from("prolly:"));
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: options.adapterName?.trim() || "dynamodb-v1",
       provider: "dynamodb",
       schemaVersion: 1,
@@ -142,6 +144,10 @@ export class DynamoDbStore implements RemoteStore {
       ? { PutRequest: { Item: item(this.#familyKey(NODE, operation.cid), ownBytes(operation.node)) } }
       : { DeleteRequest: { Key: keyItem(this.#familyKey(NODE, operation.cid)) } });
     return this.#run("batch_nodes", signal, () => this.#batchWrite(requests, signal));
+  }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> {
+    return publishNodesWithGeneralPath(this, publication, signal);
   }
 
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> {

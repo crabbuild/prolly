@@ -90,6 +90,7 @@ use prolly_bindings::{
     NamedRootRecord as BindingNamedRootRecord, NamedRootRetentionKind, NamedRootRetentionRecord,
     NamedRootSelectionRecord as BindingNamedRootSelectionRecord,
     NamedRootUpdateRecord as BindingNamedRootUpdateRecord,
+    NodePublicationRecord as BindingNodePublicationRecord,
     ParallelConfigRecord as BindingParallelConfigRecord, ProllyBindingError, ProllyBlobStore,
     ProllyEngine, ProllyTransaction as BindingProllyTransaction,
     ProofBundleSummaryRecord as BindingProofBundleSummaryRecord,
@@ -295,6 +296,25 @@ pub struct NodeHostStoreBatchRequest {
 }
 
 #[napi(object)]
+pub struct NodePublicationOriginRecord {
+    pub code: u32,
+}
+
+#[napi(object)]
+pub struct NodeHostStorePublicationHintRecord {
+    pub namespace: Buffer,
+    pub key: Buffer,
+    pub value: Buffer,
+}
+
+#[napi(object)]
+pub struct NodeHostStorePublicationRequest {
+    pub nodes: Vec<NodeEntryRecord>,
+    pub hint: Option<NodeHostStorePublicationHintRecord>,
+    pub origin: NodePublicationOriginRecord,
+}
+
+#[napi(object)]
 pub struct NodeHostStoreBatchGetRequest {
     pub keys: Vec<Buffer>,
 }
@@ -390,6 +410,7 @@ pub struct NodeHostStoreCallbacks {
     pub put: FunctionRef<NodeHostStorePutRequest, NodeHostStoreUnitResult>,
     pub delete: FunctionRef<NodeHostStoreKeyRequest, NodeHostStoreUnitResult>,
     pub batch: FunctionRef<NodeHostStoreBatchRequest, NodeHostStoreUnitResult>,
+    pub publish_nodes: FunctionRef<NodeHostStorePublicationRequest, NodeHostStoreUnitResult>,
     pub batch_get_ordered: FunctionRef<NodeHostStoreBatchGetRequest, NodeHostStoreBatchGetResult>,
     pub prefers_batch_reads: FunctionRef<NodeHostStoreEmptyRequest, NodeHostStoreBoolResult>,
     pub supports_hints: FunctionRef<NodeHostStoreEmptyRequest, NodeHostStoreBoolResult>,
@@ -1132,6 +1153,7 @@ impl NativeHostStore {
         put: FunctionRef<NodeHostStorePutRequest, NodeHostStoreUnitResult>,
         delete: FunctionRef<NodeHostStoreKeyRequest, NodeHostStoreUnitResult>,
         batch: FunctionRef<NodeHostStoreBatchRequest, NodeHostStoreUnitResult>,
+        publish_nodes: FunctionRef<NodeHostStorePublicationRequest, NodeHostStoreUnitResult>,
         batch_get_ordered: FunctionRef<NodeHostStoreBatchGetRequest, NodeHostStoreBatchGetResult>,
         prefers_batch_reads: FunctionRef<NodeHostStoreEmptyRequest, NodeHostStoreBoolResult>,
         supports_hints: FunctionRef<NodeHostStoreEmptyRequest, NodeHostStoreBoolResult>,
@@ -1152,6 +1174,7 @@ impl NativeHostStore {
                     put,
                     delete,
                     batch,
+                    publish_nodes,
                     batch_get_ordered,
                     prefers_batch_reads,
                     supports_hints,
@@ -1277,6 +1300,36 @@ impl BindingHostStoreCallback for NodeHostStore {
     fn batch(&self, ops: Vec<MutationRecord>) -> BindingHostStoreUnitResultRecord {
         let ops = ops.into_iter().map(Into::into).collect();
         match self.call(&self.callbacks.batch, NodeHostStoreBatchRequest { ops }) {
+            Ok(result) => BindingHostStoreUnitResultRecord {
+                error: result.error,
+            },
+            Err(error) => Self::unit_from_error(error),
+        }
+    }
+
+    fn publish_nodes(
+        &self,
+        publication: BindingNodePublicationRecord,
+    ) -> BindingHostStoreUnitResultRecord {
+        let request = NodeHostStorePublicationRequest {
+            nodes: publication
+                .nodes
+                .into_iter()
+                .map(|node| NodeEntryRecord {
+                    key: Buffer::from(node.key),
+                    value: Buffer::from(node.value),
+                })
+                .collect(),
+            hint: publication.hint.map(|hint| NodeHostStorePublicationHintRecord {
+                namespace: Buffer::from(hint.namespace),
+                key: Buffer::from(hint.key),
+                value: Buffer::from(hint.value),
+            }),
+            origin: NodePublicationOriginRecord {
+                code: publication.origin.code,
+            },
+        };
+        match self.call(&self.callbacks.publish_nodes, request) {
             Ok(result) => BindingHostStoreUnitResultRecord {
                 error: result.error,
             },

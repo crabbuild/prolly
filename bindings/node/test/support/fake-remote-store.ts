@@ -3,10 +3,12 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -27,7 +29,7 @@ export class FakeRemoteStore implements RemoteStore {
   async descriptor(signal?: AbortSignal): Promise<StoreDescriptor> {
     throwIfAborted(signal);
     return {
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: "node-test-memory",
       provider: "memory",
       schemaVersion: 1,
@@ -71,6 +73,10 @@ export class FakeRemoteStore implements RemoteStore {
         this.nodes.delete(keyOf(operation.cid));
       }
     }
+  }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> {
+    return publishNodesWithGeneralPath(this, publication, signal);
   }
 
   async batchGetNodesOrdered(

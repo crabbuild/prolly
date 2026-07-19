@@ -47,7 +47,7 @@ class MysqlStore @JvmOverloads constructor(
     private val javaScope = CoroutineScope(SupervisorJob() + dispatcher)
     private val storeDescriptor = validateStoreDescriptor(
         StoreDescriptor(
-            protocolMajor = 1u,
+            protocolMajor = 2u,
             adapterName = options.adapterName.ifBlank { "mysql-v1" },
             provider = "mysql",
             schemaVersion = 1u,

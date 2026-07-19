@@ -1,7 +1,7 @@
 import {
-  StoreError, compareBytes, hex, missingBytes, normalizeOptionalBytes, optionalEqual, ownBytes, presentBytes,
-  throwIfAborted, validateStoreDescriptor,
-  type NamedStoreRoot, type NodeEntry, type NodeMutation, type OptionalBytes, type RemoteStore,
+  STORE_PROTOCOL_MAJOR, StoreError, compareBytes, hex, missingBytes, normalizeOptionalBytes, optionalEqual, ownBytes, presentBytes,
+  publishNodesWithGeneralPath, throwIfAborted, validateStoreDescriptor,
+  type NamedStoreRoot, type NodeEntry, type NodeMutation, type NodePublication, type OptionalBytes, type RemoteStore,
   type RootCasResult, type RootCondition, type RootWrite, type StoreDescriptor, type StoreTransactionResult,
 } from "@trail/prolly-wasm/remote-store";
 
@@ -28,7 +28,7 @@ export class OpfsStore implements RemoteStore {
     this.#directory = directory; this.#fileName = options.fileName?.trim() || "prolly-store-v1.json";
     this.#lockManager = options.lockManager ?? (globalThis.navigator?.locks as OpfsLockManager | undefined);
     this.#storeDescriptor = validateStoreDescriptor({
-      protocolMajor: 1, adapterName: options.adapterName?.trim() || "opfs-v1", provider: "opfs", schemaVersion: 1,
+      protocolMajor: STORE_PROTOCOL_MAJOR, adapterName: options.adapterName?.trim() || "opfs-v1", provider: "opfs", schemaVersion: 1,
       capabilities: { nativeBatchReads: true, atomicBatchWrites: true, nodeScan: true, hints: true, atomicNodesAndHint: true, rootScan: true, rootCompareAndSwap: true, transactions: true, readParallelism: options.readParallelism ?? 1 }, limits: {},
     });
   }
@@ -42,6 +42,7 @@ export class OpfsStore implements RemoteStore {
   async batchNodes(operations: readonly NodeMutation[], signal?: AbortSignal): Promise<void> {
     const owned = operations.map(cloneNodeMutation); return this.#write("batch_nodes", signal, (state) => applyNodes(state, owned));
   }
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> { return publishNodesWithGeneralPath(this, publication, signal); }
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> { const keys = cids.map(hex); return this.#read("batch_get_nodes_ordered", signal, (state) => keys.map((key) => optional(state.nodes.get(key)))); }
   async listNodeCids(signal?: AbortSignal): Promise<Uint8Array[]> { return this.#read("list_node_cids", signal, (state) => [...state.nodes.keys()].map(fromHex).filter((cid) => cid.byteLength === 32).sort(compareBytes)); }
   async getHint(namespace: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<OptionalBytes> { const storageKey = hintKey(namespace, key); return this.#read("get_hint", signal, (state) => optional(state.hints.get(storageKey))); }

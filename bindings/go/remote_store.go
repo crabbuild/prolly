@@ -7,7 +7,19 @@ import (
 	"strings"
 )
 
-const StoreProtocolMajor uint32 = 1
+const StoreProtocolMajor uint32 = 2
+
+const (
+	PublicationOriginGeneral       uint32 = 0
+	PublicationOriginPointUpsert   uint32 = 1
+	PublicationOriginPointDelete   uint32 = 2
+	PublicationOriginBatchMutation uint32 = 3
+	PublicationOriginTreeBuild     uint32 = 4
+	PublicationOriginMerge         uint32 = 5
+	PublicationOriginRangeDelete   uint32 = 6
+	PublicationOriginReplication   uint32 = 7
+	PublicationOriginMaintenance   uint32 = 8
+)
 
 var ErrInvalidStoreDescriptor = errors.New("invalid remote store descriptor")
 
@@ -111,6 +123,32 @@ type NodeEntry struct {
 	Value []byte
 }
 
+// NodePublicationHint carries an adapter hint alongside an immutable-node
+// publication. The hint is advisory and must not change node correctness or
+// durability.
+type NodePublicationHint struct {
+	Namespace []byte
+	Key       []byte
+	Value     []byte
+}
+
+// NodePublication carries immutable nodes and their runtime-only semantic
+// origin. Origin is preserved verbatim for application-defined adapters.
+type NodePublication struct {
+	Nodes  []NodeEntry
+	Hint   *NodePublicationHint
+	Origin uint32
+}
+
+// NormalizePublicationOriginCode keeps known publication origins and maps
+// future or otherwise unknown codes to the safe general path.
+func NormalizePublicationOriginCode(code uint32) uint32 {
+	if code <= PublicationOriginMaintenance {
+		return code
+	}
+	return PublicationOriginGeneral
+}
+
 type NamedStoreRoot struct {
 	Name     []byte
 	Manifest []byte
@@ -174,6 +212,7 @@ type RemoteStore interface {
 	PutNode(context.Context, []byte, []byte) error
 	DeleteNode(context.Context, []byte) error
 	BatchNodes(context.Context, []NodeMutation) error
+	PublishNodes(context.Context, NodePublication) error
 	BatchGetNodesOrdered(context.Context, [][]byte) ([]OptionalBytes, error)
 	ListNodeCIDs(context.Context) ([][]byte, error)
 	GetHint(context.Context, []byte, []byte) (OptionalBytes, error)
@@ -185,6 +224,27 @@ type RemoteStore interface {
 	CompareAndSwapRootManifest(context.Context, []byte, OptionalBytes, OptionalBytes) (RootCASResult, error)
 	ListRootManifests(context.Context) ([]NamedStoreRoot, error)
 	CommitTransaction(context.Context, []NodeMutation, []RootCondition, []RootWrite) (StoreTransactionResult, error)
+}
+
+// PublishNodesWithGeneralPath implements the protocol-safe default for a
+// RemoteStore. Every known or unknown origin uses the existing atomic hinted
+// path when a hint is present and the ordinary batch path otherwise.
+func PublishNodesWithGeneralPath(ctx context.Context, store RemoteStore, publication NodePublication) error {
+	if publication.Hint != nil {
+		return store.BatchPutNodesWithHint(
+			ctx,
+			publication.Nodes,
+			publication.Hint.Namespace,
+			publication.Hint.Key,
+			publication.Hint.Value,
+		)
+	}
+
+	mutations := make([]NodeMutation, 0, len(publication.Nodes))
+	for _, node := range publication.Nodes {
+		mutations = append(mutations, UpsertNode(node.Key, node.Value))
+	}
+	return store.BatchNodes(ctx, mutations)
 }
 
 func cloneRemoteBytes(value []byte) []byte {

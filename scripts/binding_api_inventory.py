@@ -51,6 +51,10 @@ FEATURE_SENTINELS = {
     ),
 }
 
+_RENAMED_PUBLIC_OWNERS = {
+    "prolly::ProllyEngine": "prolly::AsyncProlly",
+}
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -1037,8 +1041,19 @@ def generate_manifest(
         for entry in (previous or {}).get("operations", [])
         if isinstance(entry, dict) and isinstance(entry.get("rust"), str)
     }
+
+    def prior_entry(name: str) -> dict[str, Any]:
+        if name in prior_entries:
+            return prior_entries[name]
+        for current_owner, previous_owner in _RENAMED_PUBLIC_OWNERS.items():
+            if name == current_owner or name.startswith(f"{current_owner}::"):
+                previous_name = f"{previous_owner}{name[len(current_owner):]}"
+                if previous_name in prior_entries:
+                    return {**prior_entries[previous_name], "rust": name}
+        return _default_entry(name)
+
     operations = [
-        prior_entries.get(name, _default_entry(name))
+        prior_entry(name)
         for name in rust_names
     ]
     inventory_unchanged = (

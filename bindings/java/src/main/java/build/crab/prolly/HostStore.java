@@ -25,6 +25,30 @@ public interface HostStore {
         }
     }
 
+    /**
+     * Publishes immutable nodes with runtime-only semantic context.
+     *
+     * <p>The default is deliberately conservative: every known or unknown origin uses the
+     * existing general batch path, followed by the existing hint path when present. Stores that
+     * advertise atomic node-plus-hint support should override this method with their atomic
+     * implementation.
+     */
+    default void publishNodes(NodePublicationRecord publication) throws Exception {
+        PublicationOrigins.normalizePublicationOriginCode(PublicationInterop.originCode(publication));
+        List<MutationRecord> mutations = new ArrayList<>(publication.getNodes().size());
+        for (NodeEntryRecord node : publication.getNodes()) {
+            mutations.add(new MutationRecord(
+                    MutationKind.UPSERT,
+                    node.getKey().clone(),
+                    node.getValue().clone()));
+        }
+        batch(mutations);
+        NodePublicationHintRecord hint = publication.getHint();
+        if (hint != null) {
+            putHint(hint.getNamespace(), hint.getKey(), hint.getValue());
+        }
+    }
+
     default List<Optional<byte[]>> batchGetOrdered(List<byte[]> keys) throws Exception {
         List<Optional<byte[]>> values = new ArrayList<>(keys.size());
         for (byte[] key : keys) {

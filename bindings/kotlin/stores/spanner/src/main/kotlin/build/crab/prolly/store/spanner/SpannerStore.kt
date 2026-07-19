@@ -62,7 +62,7 @@ data class SpannerStoreOptions(val adapterName: String = "spanner-v1", val readP
 class SpannerStore private constructor(private val client: SpannerItemClient, options: SpannerStoreOptions) : RemoteStore, AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val storeDescriptor = validateStoreDescriptor(StoreDescriptor(
-        1u, options.adapterName.ifBlank { "spanner-v1" }, "spanner", 1u,
+        2u, options.adapterName.ifBlank { "spanner-v1" }, "spanner", 1u,
         StoreCapabilities(false, true, true, true, true, true, true, true, options.readParallelism),
         StoreLimits(),
     ))

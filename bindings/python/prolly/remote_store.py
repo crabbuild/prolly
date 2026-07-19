@@ -1,4 +1,4 @@
-"""Shared Python facade for the version-1 asynchronous store protocol."""
+"""Shared Python facade for the version-2 asynchronous store protocol."""
 
 from __future__ import annotations
 
@@ -7,6 +7,24 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from .uniffi import prolly as ffi
+
+STORE_PROTOCOL_MAJOR = 2
+
+GENERAL = 0
+POINT_UPSERT = 1
+POINT_DELETE = 2
+BATCH_MUTATION = 3
+TREE_BUILD = 4
+MERGE = 5
+RANGE_DELETE = 6
+REPLICATION = 7
+MAINTENANCE = 8
+
+
+def normalize_publication_origin_code(code: int) -> int:
+    """Return a known publication code or the conservative general code."""
+
+    return code if GENERAL <= code <= MAINTENANCE else GENERAL
 
 
 @dataclass(frozen=True)
@@ -43,7 +61,7 @@ def descriptor(
     max_node_bytes: int | None = None,
 ) -> ffi.StoreDescriptorRecord:
     return ffi.StoreDescriptorRecord(
-        protocol_major=1,
+        protocol_major=STORE_PROTOCOL_MAJOR,
         adapter_name=adapter_name,
         provider=provider,
         schema_version=1,
@@ -90,6 +108,9 @@ class RemoteStoreAdapter(ffi.ForeignRemoteStore, ABC):
 
     async def batch_nodes(self, operations):
         return await self._unit(self._batch_nodes(tuple(operations)))
+
+    async def publish_nodes(self, publication):
+        return await self._unit(self._publish_nodes(publication))
 
     async def batch_get_nodes_ordered(self, cids):
         try:
@@ -187,6 +208,28 @@ class RemoteStoreAdapter(ffi.ForeignRemoteStore, ABC):
             provider_code=failure.provider_code,
         )
 
+    async def _publish_nodes(self, publication: ffi.NodePublicationRecord) -> None:
+        # Normalize only for dispatch. Application-defined overrides still receive
+        # the exact code in `publication.origin.code`.
+        normalize_publication_origin_code(publication.origin.code)
+        if publication.hint is not None:
+            await self._batch_put_nodes_with_hint(
+                tuple(publication.nodes),
+                bytes(publication.hint.namespace),
+                bytes(publication.hint.key),
+                bytes(publication.hint.value),
+            )
+            return
+        await self._batch_nodes(
+            tuple(
+                ffi.NodeMutationRecord(
+                    key=bytes(node.key),
+                    value=present_bytes(bytes(node.value)),
+                )
+                for node in publication.nodes
+            )
+        )
+
     @abstractmethod
     async def _get_node(self, cid: bytes) -> bytes | None: ...
     @abstractmethod
@@ -220,10 +263,21 @@ class RemoteStoreAdapter(ffi.ForeignRemoteStore, ABC):
 
 
 __all__ = [
+    "BATCH_MUTATION",
+    "GENERAL",
+    "MAINTENANCE",
+    "MERGE",
+    "POINT_DELETE",
+    "POINT_UPSERT",
+    "RANGE_DELETE",
+    "REPLICATION",
     "RemoteStoreAdapter",
+    "STORE_PROTOCOL_MAJOR",
     "StoreFailure",
+    "TREE_BUILD",
     "descriptor",
     "missing_bytes",
+    "normalize_publication_origin_code",
     "optional_bytes",
     "present_bytes",
 ]

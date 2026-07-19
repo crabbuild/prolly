@@ -1,5 +1,5 @@
 {
-  "protocol_major": 1,
+  "protocol_major": 2,
   "cases": [
     {"name": "empty-present", "present": true, "hex": ""},
     {"name": "missing", "present": false, "hex": ""},

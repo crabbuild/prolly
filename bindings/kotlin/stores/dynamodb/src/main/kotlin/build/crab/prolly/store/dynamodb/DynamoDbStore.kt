@@ -79,7 +79,7 @@ class DynamoDbStore constructor(
     private val tableName = options.tableName.also { require(it.isNotBlank()) { "DynamoDB table name is required" } }
     private val keyPrefix = options.keyPrefix.copyOf()
     private val storeDescriptor = validateStoreDescriptor(StoreDescriptor(
-        1u, options.adapterName.ifBlank { "dynamodb-v1" }, "dynamodb", 1u,
+        2u, options.adapterName.ifBlank { "dynamodb-v1" }, "dynamodb", 1u,
         StoreCapabilities(true, false, true, true, false, true, true, true, options.readParallelism),
         StoreLimits(maxBatchReadItems = 100u, maxBatchWriteItems = 25u, maxTransactionOperations = 100u),
     ))

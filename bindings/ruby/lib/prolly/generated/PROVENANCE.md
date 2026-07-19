@@ -22,5 +22,7 @@ Local adaptation:
 
 - the generated `ffi_lib` line accepts `ENV["PROLLY_BINDINGS_LIBRARY"]` so
   tests can use a locally built Cargo debug library.
+- generated async range parameters named `end` are rewritten to `_end` because
+  `end` is a Ruby keyword.
 
 Compiled native libraries are intentionally not checked in.

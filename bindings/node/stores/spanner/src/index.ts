@@ -7,11 +7,13 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -61,7 +63,7 @@ export class SpannerStore implements RemoteStore {
     if (source == null) throw new StoreError("invalid_argument", "Spanner client is required");
     this.#client = isItemClient(source) ? source : new SpannerSdkItemClient(source);
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: options.adapterName?.trim() || "spanner-v1",
       provider: "spanner",
       schemaVersion: 1,
@@ -77,6 +79,7 @@ export class SpannerStore implements RemoteStore {
   async putNode(cid: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<void> { return this.#apply([{ kind: "upsertNode", key: ownBytes(cid), value: ownBytes(value) }], "put_node", signal); }
   async deleteNode(cid: Uint8Array, signal?: AbortSignal): Promise<void> { return this.#apply([{ kind: "deleteNode", key: ownBytes(cid) }], "delete_node", signal); }
   async batchNodes(operations: readonly NodeMutation[], signal?: AbortSignal): Promise<void> { return this.#apply(operations.map(nodeMutation), "batch_nodes", signal); }
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> { return publishNodesWithGeneralPath(this, publication, signal); }
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> { const result: OptionalBytes[] = []; for (const cid of cids) result.push(await this.getNode(cid, signal)); return result; }
   async listNodeCids(signal?: AbortSignal): Promise<Uint8Array[]> { return this.#run("list_node_cids", signal, async () => (await this.#client.listNodeCids(signal)).filter((value) => value.byteLength === 32).map(ownBytes).sort(compareBytes)); }
   async getHint(namespace: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<OptionalBytes> { const ownedNamespace = ownBytes(namespace); const ownedKey = ownBytes(key); return this.#run("get_hint", signal, () => this.#client.getHint(ownedNamespace, ownedKey, signal)); }

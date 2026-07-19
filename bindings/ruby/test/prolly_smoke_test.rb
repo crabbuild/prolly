@@ -110,6 +110,15 @@ class MemoryHostStore < Prolly::HostStoreCallback
     unit
   end
 
+  def publish_nodes(publication)
+    publication.nodes.each { |node| @nodes[key_for(node.key)] = node.value.dup.b }
+    if publication.hint
+      hint = publication.hint
+      @hints[[key_for(hint.namespace), key_for(hint.key)]] = hint.value.dup.b
+    end
+    unit
+  end
+
   def batch_get_ordered(keys)
     Prolly::HostStoreBatchGetResultRecord.new(
       values: keys.map { |key| @nodes[key_for(key)]&.dup },

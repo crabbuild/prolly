@@ -88,7 +88,7 @@ module Prolly
 
     def descriptor
       value = StoreDescriptorRecord.new(
-        protocol_major: 1, adapter_name: 'redis-v1', provider: 'redis', schema_version: 1,
+        protocol_major: STORE_PROTOCOL_MAJOR, adapter_name: 'redis-v1', provider: 'redis', schema_version: 1,
         capabilities: StoreCapabilitiesRecord.new(
           native_batch_reads: true, atomic_batch_writes: true, node_scan: true,
           hints: true, atomic_nodes_and_hint: true, root_scan: true,

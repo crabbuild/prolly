@@ -158,10 +158,23 @@ class ProllySmokeTest {
         MemoryHostStore sourceStore = new MemoryHostStore();
         try (Prolly source = Prolly.customStore(sourceStore)) {
             TreeRecord empty = source.create();
+            TreeRecord point = source.put(empty, "a".getBytes(), "1".getBytes());
+            NodePublicationRecord pointPublication = sourceStore.lastPublication;
+            assertEquals(
+                    PublicationOrigins.POINT_UPSERT,
+                    PublicationInterop.originCode(pointPublication));
+            assertFalse(pointPublication.getNodes().isEmpty());
+            assertTrue(sourceStore.supportsHintsCalls > 0);
+            assertTrue(
+                    pointPublication.getHint() != null,
+                    "supportsHints calls=" + sourceStore.supportsHintsCalls
+                            + ", stored hints=" + sourceStore.hints.size());
+            assertEquals(
+                    PublicationOrigins.GENERAL,
+                    PublicationOrigins.normalizePublicationOriginCode(-1));
             TreeRecord tree = source.batch(
-                    empty,
+                    point,
                     List.of(
-                            Prolly.upsert("a".getBytes(), "1".getBytes()),
                             Prolly.upsert("b".getBytes(), "2".getBytes())));
 
             assertArrayEquals("1".getBytes(), source.get(tree, "a".getBytes()).orElseThrow());
@@ -179,7 +192,7 @@ class ProllySmokeTest {
 
             List<byte[]> cids = source.listNodeCids();
             assertFalse(cids.isEmpty());
-            assertEquals(0, source.planStoreGc(List.of(tree)).reclaimableNodes());
+            assertEquals(1, source.planStoreGc(List.of(tree)).reclaimableNodes());
 
             MemoryHostStore destinationStore = new MemoryHostStore();
             try (Prolly destination = Prolly.customStore(destinationStore)) {
@@ -202,6 +215,8 @@ class ProllySmokeTest {
         private final Map<Key, byte[]> nodes = new HashMap<>();
         private final Map<List<Key>, byte[]> hints = new HashMap<>();
         private final Map<Key, RootManifestRecord> roots = new HashMap<>();
+        private NodePublicationRecord lastPublication;
+        private int supportsHintsCalls;
 
         @Override
         public Optional<byte[]> get(byte[] key) {
@@ -219,12 +234,19 @@ class ProllySmokeTest {
         }
 
         @Override
+        public void publishNodes(NodePublicationRecord publication) throws Exception {
+            lastPublication = PublicationInterop.clonePublication(publication);
+            HostStore.super.publishNodes(publication);
+        }
+
+        @Override
         public boolean prefersBatchReads() {
             return true;
         }
 
         @Override
         public boolean supportsHints() {
+            supportsHintsCalls += 1;
             return true;
         }
 

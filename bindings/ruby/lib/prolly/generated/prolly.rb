@@ -2155,6 +2155,48 @@ end
     end
   end
 
+  # The Record type NodePublicationHintRecord.
+
+  def self.check_lower_TypeNodePublicationHintRecord(v)
+
+
+
+  end
+
+  def self.alloc_from_TypeNodePublicationHintRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeNodePublicationHintRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeNodePublicationHintRecord
+    consumeWithStream do |stream|
+      return stream.readTypeNodePublicationHintRecord
+    end
+  end
+
+  # The Record type NodePublicationRecord.
+
+  def self.check_lower_TypeNodePublicationRecord(v)
+    RustBuffer.check_lower_SequenceTypeNodeEntryRecord(v.nodes)
+    RustBuffer.check_lower_OptionalTypeNodePublicationHintRecord(v.hint)
+    RustBuffer.check_lower_TypePublicationOriginRecord(v.origin)
+  end
+
+  def self.alloc_from_TypeNodePublicationRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypeNodePublicationRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypeNodePublicationRecord
+    consumeWithStream do |stream|
+      return stream.readTypeNodePublicationRecord
+    end
+  end
+
   # The Record type NodeRecord.
 
   def self.check_lower_TypeNodeRecord(v)
@@ -2909,6 +2951,25 @@ end
   def consumeIntoTypeProximityVerificationRecord
     consumeWithStream do |stream|
       return stream.readTypeProximityVerificationRecord
+    end
+  end
+
+  # The Record type PublicationOriginRecord.
+
+  def self.check_lower_TypePublicationOriginRecord(v)
+
+  end
+
+  def self.alloc_from_TypePublicationOriginRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_TypePublicationOriginRecord(v)
+      return builder.finalize
+    end
+  end
+
+  def consumeIntoTypePublicationOriginRecord
+    consumeWithStream do |stream|
+      return stream.readTypePublicationOriginRecord
     end
   end
 
@@ -5477,6 +5538,27 @@ end
   def consumeIntoOptionalTypeMutationRecord
     consumeWithStream do |stream|
       return stream.readOptionalTypeMutationRecord
+    end
+  end
+
+  # The Optional<T> type for TypeNodePublicationHintRecord.
+
+  def self.check_lower_OptionalTypeNodePublicationHintRecord(v)
+    if not v.nil?
+      RustBuffer.check_lower_TypeNodePublicationHintRecord(v)
+    end
+  end
+
+  def self.alloc_from_OptionalTypeNodePublicationHintRecord(v)
+    RustBuffer.allocWithBuilder do |builder|
+      builder.write_OptionalTypeNodePublicationHintRecord(v)
+      return builder.finalize()
+    end
+  end
+
+  def consumeIntoOptionalTypeNodePublicationHintRecord
+    consumeWithStream do |stream|
+      return stream.readOptionalTypeNodePublicationHintRecord
     end
   end
 
@@ -8242,6 +8324,26 @@ class RustBufferStream
     )
   end
 
+  # The Record type NodePublicationHintRecord.
+
+  def readTypeNodePublicationHintRecord
+    NodePublicationHintRecord.new(
+      namespace: readBytes,
+      key: readBytes,
+      value: readBytes
+    )
+  end
+
+  # The Record type NodePublicationRecord.
+
+  def readTypeNodePublicationRecord
+    NodePublicationRecord.new(
+      nodes: readSequenceTypeNodeEntryRecord,
+      hint: readOptionalTypeNodePublicationHintRecord,
+      origin: readTypePublicationOriginRecord
+    )
+  end
+
   # The Record type NodeRecord.
 
   def readTypeNodeRecord
@@ -8633,6 +8735,14 @@ class RustBufferStream
       maximum_level: readU8,
       maximum_node_bytes: readU64,
       distance_checks: readU64
+    )
+  end
+
+  # The Record type PublicationOriginRecord.
+
+  def readTypePublicationOriginRecord
+    PublicationOriginRecord.new(
+      code: readU32
     )
   end
 
@@ -10582,6 +10692,20 @@ class RustBufferStream
       return readTypeMutationRecord
     else
       raise InternalError, 'Unexpected flag byte for OptionalTypeMutationRecord'
+    end
+  end
+
+  # The Optional<T> type for TypeNodePublicationHintRecord.
+
+  def readOptionalTypeNodePublicationHintRecord
+    flag = unpack_from 1, 'c'
+
+    if flag == 0
+      return nil
+    elsif flag == 1
+      return readTypeNodePublicationHintRecord
+    else
+      raise InternalError, 'Unexpected flag byte for OptionalTypeNodePublicationHintRecord'
     end
   end
 
@@ -12790,6 +12914,22 @@ class RustBufferBuilder
     self.write_TypeOptionalBytesRecord(v.value)
   end
 
+  # The Record type NodePublicationHintRecord.
+
+  def write_TypeNodePublicationHintRecord(v)
+    self.write_Bytes(v.namespace)
+    self.write_Bytes(v.key)
+    self.write_Bytes(v.value)
+  end
+
+  # The Record type NodePublicationRecord.
+
+  def write_TypeNodePublicationRecord(v)
+    self.write_SequenceTypeNodeEntryRecord(v.nodes)
+    self.write_OptionalTypeNodePublicationHintRecord(v.hint)
+    self.write_TypePublicationOriginRecord(v.origin)
+  end
+
   # The Record type NodeRecord.
 
   def write_TypeNodeRecord(v)
@@ -13116,6 +13256,12 @@ class RustBufferBuilder
     self.write_U8(v.maximum_level)
     self.write_U64(v.maximum_node_bytes)
     self.write_U64(v.distance_checks)
+  end
+
+  # The Record type PublicationOriginRecord.
+
+  def write_TypePublicationOriginRecord(v)
+    self.write_U32(v.code)
   end
 
   # The Record type RangeBoundsRecord.
@@ -14233,6 +14379,17 @@ class RustBufferBuilder
     end
   end
 
+  # The Optional<T> type for TypeNodePublicationHintRecord.
+
+  def write_OptionalTypeNodePublicationHintRecord(v)
+    if v.nil?
+      pack_into(1, 'c', 0)
+    else
+      pack_into(1, 'c', 1)
+      self.write_TypeNodePublicationHintRecord(v)
+    end
+  end
+
   # The Optional<T> type for TypeProductQuantizationBuildStatsRecord.
 
   def write_OptionalTypeProductQuantizationBuildStatsRecord(v)
@@ -15283,6 +15440,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_method_hoststorecallback_batch,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    RustBuffer.by_value
   attach_function :uniffi_prolly_bindings_fn_method_hoststorecallback_batch_get_ordered,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -15992,6 +16152,9 @@ module UniFFILib
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
   attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes,
+    [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
+    :uint64
+  attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes,
     [:uint64, RustBuffer.by_value, RustCallStatus.by_ref],
     :uint64
   attach_function :uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered,
@@ -17362,6 +17525,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof,
     [RustBuffer.by_value, RustBuffer.by_value, RustBuffer.by_value, RustCallStatus.by_ref],
     RustBuffer.by_value
+  attach_function :uniffi_prolly_bindings_fn_func_normalize_publication_origin_code,
+    [:uint32, RustCallStatus.by_ref],
+    :uint32
   attach_function :ffi_prolly_bindings_rustbuffer_alloc,
     [:uint64, RustCallStatus.by_ref],
     RustBuffer.by_value
@@ -17785,6 +17951,9 @@ module UniFFILib
   attach_function :uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof,
     [RustCallStatus.by_ref],
     :uint16
+  attach_function :uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code,
+    [RustCallStatus.by_ref],
+    :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit,
     [RustCallStatus.by_ref],
     :uint16
@@ -17807,6 +17976,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_hoststorecallback_batch,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered,
@@ -18431,6 +18603,9 @@ module UniFFILib
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes,
+    [RustCallStatus.by_ref],
+    :uint16
+  attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes,
     [RustCallStatus.by_ref],
     :uint16
   attach_function :uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered,
@@ -23160,27 +23335,6 @@ class NamedBytesRecord
   end
 end
   
-  # Record type NodeEntryRecord
-class NodeEntryRecord
-  attr_reader :key, :value
-
-  def initialize(key:, value:)
-    @key = key
-    @value = value
-  end
-
-  def ==(other)
-    if @key != other.key
-      return false
-    end
-    if @value != other.value
-      return false
-    end
-
-    true
-  end
-end
-  
   # Record type NodeMutationRecord
 class NodeMutationRecord
   attr_reader :key, :value
@@ -25553,6 +25707,94 @@ class VersionedTransactionCommitRecord
   end
 end
   
+  # Record type NodeEntryRecord
+class NodeEntryRecord
+  attr_reader :key, :value
+
+  def initialize(key:, value:)
+    @key = key
+    @value = value
+  end
+
+  def ==(other)
+    if @key != other.key
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type NodePublicationHintRecord
+class NodePublicationHintRecord
+  attr_reader :namespace, :key, :value
+
+  def initialize(namespace:, key:, value:)
+    @namespace = namespace
+    @key = key
+    @value = value
+  end
+
+  def ==(other)
+    if @namespace != other.namespace
+      return false
+    end
+    if @key != other.key
+      return false
+    end
+    if @value != other.value
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type NodePublicationRecord
+class NodePublicationRecord
+  attr_reader :nodes, :hint, :origin
+
+  def initialize(nodes:, hint:, origin:)
+    @nodes = nodes
+    @hint = hint
+    @origin = origin
+  end
+
+  def ==(other)
+    if @nodes != other.nodes
+      return false
+    end
+    if @hint != other.hint
+      return false
+    end
+    if @origin != other.origin
+      return false
+    end
+
+    true
+  end
+end
+
+  # Record type PublicationOriginRecord
+class PublicationOriginRecord
+  attr_reader :code
+
+  def initialize(code:)
+    @code = code
+  end
+
+  def ==(other)
+    if @code != other.code
+      return false
+    end
+
+    true
+  end
+end
+
 
   
   
@@ -27275,6 +27517,18 @@ end
 
   
 
+
+def self.normalize_publication_origin_code(code)
+    code = Prolly::uniffi_in_range(code, "u32", 0, 2**32)
+
+
+  result = Prolly.rust_call(:uniffi_prolly_bindings_fn_func_normalize_publication_origin_code,code)
+  return result.to_i
+end
+
+
+
+
   
   class ConflictVisitorCallback
 
@@ -27561,6 +27815,12 @@ end
         ops = ops
         RustBuffer.check_lower_SequenceTypeMutationRecord(ops)
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_hoststorecallback_batch,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeMutationRecord(ops))
+    return result.consumeIntoTypeHostStoreUnitResultRecord
+  end
+  def publish_nodes(publication)
+        publication = publication
+        RustBuffer.check_lower_TypeNodePublicationRecord(publication)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes,uniffi_clone_handle(),RustBuffer.alloc_from_TypeNodePublicationRecord(publication))
     return result.consumeIntoTypeHostStoreUnitResultRecord
   end
   def batch_get_ordered(keys)
@@ -29767,6 +30027,12 @@ end
     result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes,uniffi_clone_handle(),RustBuffer.alloc_from_SequenceTypeNodeMutationRecord(ops))
     return result.consumeIntoTypeUnitResultRecord
   end
+  def publish_nodes(publication)
+        publication = publication
+        RustBuffer.check_lower_TypeNodePublicationRecord(publication)
+    result = Prolly.rust_call(:uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes,uniffi_clone_handle(),RustBuffer.alloc_from_TypeNodePublicationRecord(publication))
+    return result.consumeIntoTypeUnitResultRecord
+  end
   def batch_get_nodes_ordered(cids)
         cids = cids.map { |v| Prolly::uniffi_bytes(v) }
         RustBuffer.check_lower_Sequencebytes(cids)
@@ -29906,7 +30172,7 @@ end
 
   def len()
     result = Prolly.rust_call_with_error(ProllyBindingError,:uniffi_prolly_bindings_fn_method_bindingindexregistry_len,uniffi_clone_handle(),)
-    return result
+    return result.to_i
   end
   def register(name, generation, extractor_id, projection, limits, extractor)
         name = Prolly::uniffi_bytes(name)

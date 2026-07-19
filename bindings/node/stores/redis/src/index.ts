@@ -7,12 +7,14 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   upsertNode,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -120,7 +122,7 @@ export class RedisStore implements RemoteStore {
     this.#client = client.withTypeMapping({ [RESP_TYPES.BLOB_STRING]: Buffer }) as BinaryClient;
     this.#keyPrefix = Buffer.from(options.keyPrefix ?? Buffer.from("prolly:"));
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: options.adapterName?.trim() || "redis-v1",
       provider: "redis",
       schemaVersion: 1,
@@ -170,6 +172,10 @@ export class RedisStore implements RemoteStore {
         : [Buffer.from("0"), Buffer.alloc(0)]);
       await this.#eval(MUTATE_SCRIPT, keys, args, signal);
     });
+  }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> {
+    return publishNodesWithGeneralPath(this, publication, signal);
   }
 
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> {

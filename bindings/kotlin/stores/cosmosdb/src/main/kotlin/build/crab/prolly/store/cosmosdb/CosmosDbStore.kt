@@ -71,7 +71,7 @@ class CosmosDbStore private constructor(
     private val partition = options.partitionKey.ifBlank { "prolly" }
     private val keyPrefix = options.keyPrefix.copyOf()
     private val storeDescriptor = validateStoreDescriptor(StoreDescriptor(
-        1u, options.adapterName.ifBlank { "cosmosdb-v1" }, "cosmosdb", 1u,
+        2u, options.adapterName.ifBlank { "cosmosdb-v1" }, "cosmosdb", 1u,
         StoreCapabilities(false, false, true, true, false, true, true, true, options.readParallelism),
         StoreLimits(maxTransactionOperations = TRANSACTION_LIMIT.toUInt()),
     ))

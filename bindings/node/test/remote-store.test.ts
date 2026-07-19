@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GENERAL,
+  POINT_UPSERT,
   STORE_PROTOCOL_MAJOR,
   deleteNode,
   deleteRoot,
   missingBytes,
   normalizeOptionalBytes,
+  normalizePublicationOriginCode,
   presentBytes,
   putRoot,
   throwIfAborted,
@@ -37,8 +40,8 @@ const descriptor = (): StoreDescriptor => ({
 test("remote store descriptors enforce protocol invariants", () => {
   assert.doesNotThrow(() => validateStoreDescriptor(descriptor()));
   assert.throws(
-    () => validateStoreDescriptor({ ...descriptor(), protocolMajor: 2 }),
-    /protocol major must be 1, got 2/,
+    () => validateStoreDescriptor({ ...descriptor(), protocolMajor: 1 }),
+    /protocol major must be 2, got 1/,
   );
   assert.throws(
     () => validateStoreDescriptor({ ...descriptor(), adapterName: " " }),
@@ -81,6 +84,11 @@ test("remote store descriptors enforce protocol invariants", () => {
       /must be at least 1 when present/,
     );
   }
+});
+
+test("publication origin codes preserve known values and normalize unknown values", () => {
+  assert.equal(normalizePublicationOriginCode(POINT_UPSERT), POINT_UPSERT);
+  assert.equal(normalizePublicationOriginCode(0xffffffff), GENERAL);
 });
 
 test("optional bytes distinguish missing from a present empty value and own inputs", () => {
@@ -148,6 +156,6 @@ test("abort guards return a structured cancellation error", () => {
 
 test("the core package exports the remote protocol without provider modules", async () => {
   const core = await import("../src/index.ts");
-  assert.equal(core.STORE_PROTOCOL_MAJOR, 1);
+  assert.equal(core.STORE_PROTOCOL_MAJOR, 2);
   assert.equal(core.presentBytes(Uint8Array.of(7)).present, true);
 });

@@ -4,6 +4,10 @@ import build.crab.prolly.remote.OptionalBytes
 import build.crab.prolly.remote.NamedStoreRoot
 import build.crab.prolly.remote.NodeEntry
 import build.crab.prolly.remote.NodeMutation
+import build.crab.prolly.remote.NodePublication
+import build.crab.prolly.remote.NodePublicationHint
+import build.crab.prolly.remote.POINT_UPSERT
+import build.crab.prolly.remote.PublicationOrigin
 import build.crab.prolly.remote.RemoteProlly
 import build.crab.prolly.remote.RemoteStore
 import build.crab.prolly.remote.RootCasResult
@@ -14,6 +18,8 @@ import build.crab.prolly.remote.StoreDescriptor
 import build.crab.prolly.remote.StoreTransactionConflict
 import build.crab.prolly.remote.StoreTransactionResult
 import build.crab.prolly.remote.validateStoreDescriptor
+import build.crab.prolly.remote.GENERAL
+import build.crab.prolly.remote.normalizePublicationOriginCode
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -29,7 +35,7 @@ class RemoteStoreTest {
         val descriptor: StoreDescriptor = store.descriptor()
         validateStoreDescriptor(descriptor)
         assertThrows<IllegalArgumentException> {
-            validateStoreDescriptor(descriptor.copy(protocolMajor = 2u))
+            validateStoreDescriptor(descriptor.copy(protocolMajor = 1u))
         }
 
         val cid = "cid".bytes()
@@ -71,6 +77,24 @@ class RemoteStoreTest {
     }
 
     @Test
+    fun publicationPreservesContextAndUnknownCodesUseGeneral() = runBlocking {
+        val store = MemoryRemoteStore()
+        val publication = NodePublication(
+            nodes = listOf(NodeEntry("cid".bytes(), "published-node".bytes())),
+            hint = NodePublicationHint("rightmost".bytes(), "key".bytes(), "cid".bytes()),
+            origin = PublicationOrigin(POINT_UPSERT),
+        )
+
+        store.publishNodes(publication)
+
+        val captured = store.publications.single()
+        assertEquals(POINT_UPSERT, captured.origin.code)
+        assertArrayEquals("published-node".bytes(), captured.nodes.single().node)
+        assertArrayEquals("rightmost".bytes(), requireNotNull(captured.hint).namespace)
+        assertEquals(GENERAL, normalizePublicationOriginCode(UInt.MAX_VALUE))
+    }
+
+    @Test
     fun remoteEngineRunsRustAgainstSuspendingKotlinStore() = runBlocking {
         ProllyNative.useLocalDebugLibrary()
         val store = MemoryRemoteStore()
@@ -89,11 +113,12 @@ private class MemoryRemoteStore : RemoteStore {
     private val nodes = linkedMapOf<BytesKey, ByteArray>()
     private val hints = linkedMapOf<Pair<BytesKey, BytesKey>, ByteArray>()
     private val roots = linkedMapOf<BytesKey, ByteArray>()
+    val publications = mutableListOf<NodePublication>()
 
     val nodeCount: Int get() = nodes.size
 
     override suspend fun descriptor(): StoreDescriptor = StoreDescriptor(
-        protocolMajor = 1u,
+        protocolMajor = 2u,
         adapterName = "kotlin-test-memory",
         provider = "memory",
         schemaVersion = 1u,
@@ -127,6 +152,11 @@ private class MemoryRemoteStore : RemoteStore {
                 is NodeMutation.Delete -> nodes.remove(BytesKey(operation.cid))
             }
         }
+    }
+
+    override suspend fun publishNodes(publication: NodePublication) {
+        publications += publication
+        super<RemoteStore>.publishNodes(publication)
     }
 
     override suspend fun batchGetNodesOrdered(cids: List<ByteArray>): List<OptionalBytes> =
