@@ -636,7 +636,7 @@ impl<S: Store> Prolly<S> {
 }
 
 impl<S: Store> OwnedReadSession<S> {
-    fn get_handle_with_state(
+    async fn get_handle_with_state(
         &self,
         state: &mut OwnedReadSessionState,
         key: &[u8],
@@ -685,7 +685,7 @@ impl<S: Store> OwnedReadSession<S> {
             node = match state.local_nodes.get(&cid) {
                 Some(node) => node,
                 None => {
-                    let node = load_owned_read_node(self.manager.as_ref(), &cid)?;
+                    let node = self.manager.engine.load_read_arc(&cid).await?;
                     if !node.is_leaf() {
                         state.local_nodes.insert(cid, &node);
                     }
@@ -703,7 +703,9 @@ impl<S: Store> OwnedReadSession<S> {
         read: impl FnOnce(&[u8]) -> R,
     ) -> Result<Option<R>, Error> {
         let mut state = self.state.lock().map_err(|_| Error::InvalidNode)?;
-        self.get_handle_with_state(&mut state, key)?
+        let ready_store = self.manager.engine.store.clone();
+        let future = self.get_handle_with_state(&mut state, key);
+        super::engine::ready::run_ready(ready_store.ready(future))?
             .map(|handle| handle.value().map(read))
             .transpose()
     }
@@ -713,7 +715,9 @@ impl<S: Store> OwnedReadSession<S> {
     /// deterministically when the callback returns.
     pub fn get_lease(&self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
         let mut state = self.state.lock().map_err(|_| Error::InvalidNode)?;
-        self.get_handle_with_state(&mut state, key)
+        let ready_store = self.manager.engine.store.clone();
+        let future = self.get_handle_with_state(&mut state, key);
+        super::engine::ready::run_ready(ready_store.ready(future))
             .map(|handle| handle.map(|handle| OwnedValueLease { handle }))
     }
 
@@ -747,41 +751,45 @@ impl<S: Store> OwnedReadSession<S> {
             }
             return Ok(());
         };
-        let positions =
-            InlinePositions::from_vec(sorted_key_positions(keys)).expect("non-empty key positions");
-        let mut frames = vec![(root, positions)];
-        let mut locations: Vec<Option<(Arc<ReadNode>, usize)>> = vec![None; keys.len()];
-        while !frames.is_empty() {
-            let mut children = Vec::new();
-            for (node, positions) in frames {
-                if node.is_leaf() {
-                    fill_packed_leaf_locations(node, positions, keys, &mut locations)?;
-                } else {
-                    children.extend(route_packed_positions(&node, positions, keys)?);
+        let ready_store = self.manager.engine.store.clone();
+        let future = async {
+            let positions = InlinePositions::from_vec(sorted_key_positions(keys))
+                .expect("non-empty key positions");
+            let mut frames = vec![(root, positions)];
+            let mut locations: Vec<Option<(Arc<ReadNode>, usize)>> = vec![None; keys.len()];
+            while !frames.is_empty() {
+                let mut children = Vec::new();
+                for (node, positions) in frames {
+                    if node.is_leaf() {
+                        fill_packed_leaf_locations(node, positions, keys, &mut locations)?;
+                    } else {
+                        children.extend(route_packed_positions(&node, positions, keys)?);
+                    }
                 }
+                if children.is_empty() {
+                    break;
+                }
+                let cids = children
+                    .iter()
+                    .map(|frame| frame.cid.clone())
+                    .collect::<Vec<_>>();
+                let nodes = self.manager.engine.load_many_read_ordered(&cids).await?;
+                frames = children
+                    .into_iter()
+                    .zip(nodes)
+                    .map(|(frame, node)| (node, frame.positions))
+                    .collect();
             }
-            if children.is_empty() {
-                break;
+            for (position, key) in keys.iter().enumerate() {
+                let value = locations[position]
+                    .as_ref()
+                    .map(|(node, index)| node.value(*index).ok_or(Error::InvalidNode))
+                    .transpose()?;
+                visit(position, key.as_ref(), value);
             }
-            let cids = children
-                .iter()
-                .map(|frame| frame.cid.clone())
-                .collect::<Vec<_>>();
-            let nodes = load_owned_read_nodes(self.manager.as_ref(), &cids)?;
-            frames = children
-                .into_iter()
-                .zip(nodes)
-                .map(|(frame, node)| (node, frame.positions))
-                .collect();
-        }
-        for (position, key) in keys.iter().enumerate() {
-            let value = locations[position]
-                .as_ref()
-                .map(|(node, index)| node.value(*index).ok_or(Error::InvalidNode))
-                .transpose()?;
-            visit(position, key.as_ref(), value);
-        }
-        Ok(())
+            Ok(())
+        };
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a half-open range. The owned session keeps the root warm; the
@@ -866,7 +874,9 @@ impl<S: Store> OwnedRangeScanSession<S> {
         let stack = if done {
             Vec::new()
         } else {
-            Self::seek_forward(manager.as_ref(), root, start)?
+            let ready_store = manager.engine.store.clone();
+            let future = Self::seek_forward(&manager.engine, root, start);
+            super::engine::ready::run_ready(ready_store.ready(future))?
         };
         Ok(Self {
             manager,
@@ -876,8 +886,8 @@ impl<S: Store> OwnedRangeScanSession<S> {
         })
     }
 
-    fn seek_forward(
-        manager: &Prolly<S>,
+    async fn seek_forward(
+        manager: &super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
         root: Option<Arc<ReadNode>>,
         key: &[u8],
     ) -> Result<Vec<PathFrame>, Error> {
@@ -897,12 +907,21 @@ impl<S: Store> OwnedRangeScanSession<S> {
                 packed_partition_point(&node, |candidate| candidate <= key).saturating_sub(1);
             let cid = node.child_cid(index)?;
             stack.push(PathFrame { node, index });
-            node = load_owned_read_node(manager, &cid)?;
+            node = manager.load_read_arc(&cid).await?;
         }
     }
 
     /// Continue the retained traversal until its bound or callback stop.
     pub fn next_until<B>(
+        &mut self,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let ready_store = self.manager.engine.store.clone();
+        let future = self.next_until_async(visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    async fn next_until_async<B>(
         &mut self,
         mut visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
@@ -920,7 +939,7 @@ impl<S: Store> OwnedRangeScanSession<S> {
             }
             validate_leaf(&frame.node)?;
             if frame.index >= frame.node.len() {
-                if !advance_forward_sync(self.manager.as_ref(), &mut self.stack)? {
+                if !advance_forward_async(&self.manager.engine, &mut self.stack).await? {
                     self.done = true;
                     return Ok(ScanOutcome::complete(visited));
                 }
@@ -2779,8 +2798,8 @@ fn route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
     })
 }
 
-fn advance_forward_sync<S: Store>(
-    manager: &Prolly<S>,
+async fn advance_forward_async<S: Store>(
+    manager: &super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
     stack: &mut Vec<PathFrame>,
 ) -> Result<bool, Error> {
     stack.pop();
@@ -2792,7 +2811,7 @@ fn advance_forward_sync<S: Store>(
             continue;
         }
         let cid = parent.node.child_cid(parent.index)?;
-        let mut node = load_owned_read_node(manager, &cid)?;
+        let mut node = manager.load_read_arc(&cid).await?;
         loop {
             if node.is_leaf() {
                 validate_leaf(&node)?;
@@ -2802,25 +2821,10 @@ fn advance_forward_sync<S: Store>(
             validate_internal(&node)?;
             let cid = node.child_cid(0)?;
             stack.push(PathFrame { node, index: 0 });
-            node = load_owned_read_node(manager, &cid)?;
+            node = manager.load_read_arc(&cid).await?;
         }
     }
     Ok(false)
-}
-
-fn load_owned_read_node<S: Store>(manager: &Prolly<S>, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
-    let ready_store = manager.engine.store.clone();
-    let future = manager.engine.load_read_arc(cid);
-    super::engine::ready::run_ready(ready_store.ready(future))
-}
-
-fn load_owned_read_nodes<S: Store>(
-    manager: &Prolly<S>,
-    cids: &[Cid],
-) -> Result<Vec<Arc<ReadNode>>, Error> {
-    let ready_store = manager.engine.store.clone();
-    let future = manager.engine.load_many_read_ordered(cids);
-    super::engine::ready::run_ready(ready_store.ready(future))
 }
 
 fn async_route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
