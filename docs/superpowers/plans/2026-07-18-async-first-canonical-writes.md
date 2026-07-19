@@ -24,21 +24,21 @@ fallback and facade-local mutation algorithms are deleted after equivalence.
 
 ## Task 1: Characterize Canonical and I/O Behavior
 
-- [ ] Add sync/async/engine root-equivalence matrices for empty, upsert,
+- [x] Add sync/async/engine root-equivalence matrices for empty, upsert,
   overwrite, missing delete, existing delete, mixed batch, duplicate mutation,
   append, random, and clustered workloads across all built-in layouts.
-- [ ] Add a counting async store test proving a one-key update on a multi-level
+- [x] Add a counting async store test proving a one-key update on a multi-level
   tree does not scan every leaf and uses one atomic `batch_put` publication.
 - [ ] Add injected read/write failure tests proving the old root remains readable
   and no collector-only node is cache-visible.
-- [ ] Run focused tests and capture the full-rebuild I/O assertion RED.
+- [x] Run focused tests and capture the full-rebuild I/O assertion RED.
 
 ## Task 2: Install the Engine Write Boundary
 
 - [ ] Create `src/prolly/engine/write.rs` with operation-local collector,
   validated owned loaders, mutation routing frames, child replacements, and
   canonical parent/root construction.
-- [ ] Expose `ProllyEngine::{put, delete, batch}` and keep format/execution state
+- [x] Expose `ProllyEngine::{put, delete, batch}` and keep format/execution state
   on the engine. Reuse the shared cache and cumulative metrics only after a
   successful store batch.
 - [ ] Wire the existing localized coalesced planner; delete the full-tree
@@ -47,16 +47,16 @@ fallback and facade-local mutation algorithms are deleted after equivalence.
 
 ## Task 3: Canonical Append
 
-- [ ] Move right-edge discovery, hint validation, split propagation, and atomic
+- [x] Move right-edge discovery, hint validation, split propagation, and atomic
   hint publication behind the engine.
-- [ ] Treat a missing/stale/malformed hint as a cache miss and fall back to a
+- [x] Treat a missing/stale/malformed hint as a cache miss and fall back to a
   validated root-to-rightmost path.
-- [ ] Prove all policies/layouts match clean sorted roots and repeated appends
+- [x] Prove all policies/layouts match clean sorted roots and repeated appends
   avoid redundant reads.
 
 ## Task 4: Facade Cutover and Legacy Deletion
 
-- [ ] Make `AsyncProlly` delegate put/delete/batch to the engine.
+- [x] Make `AsyncProlly` delegate put/delete/batch to the engine.
 - [ ] Make `Prolly` delegate the same APIs through `SyncStoreAsAsync::ready` and
   `run_ready`; route range deletion through engine batch.
 - [ ] Delete facade-local collectors, route frames, rebuild helpers, and duplicate
