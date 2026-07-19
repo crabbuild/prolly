@@ -985,7 +985,7 @@ where
         }
 
         let state = Arc::new(Mutex::new(TransactionState::default()));
-        let overlay = TransactionOverlayStore::new(&base.store, state.clone());
+        let overlay = TransactionOverlayStore::new(base.store.as_ref(), state.clone());
         let manager = Prolly::new(overlay, base.config.clone());
         Ok(Self {
             base,
@@ -1120,7 +1120,7 @@ where
             });
         }
 
-        let base_store = base.store.clone();
+        let base_store = base.store.as_ref().clone();
         let state = Arc::new(Mutex::new(TransactionState::default()));
         let overlay = OwnedTransactionOverlayStore::new(base_store.clone(), state.clone());
         let manager = Prolly::new(overlay, base.config.clone());

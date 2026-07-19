@@ -572,10 +572,6 @@ impl<S> SyncStoreAsAsync<S> {
     }
 
     /// Mark an engine operation over this adapter as ready-only.
-    #[expect(
-        dead_code,
-        reason = "used when the synchronous facade is cut over to ProllyEngine"
-    )]
     pub(crate) fn ready<F: Future>(&self, future: F) -> ReadyOnly<F> {
         ready_only(future)
     }

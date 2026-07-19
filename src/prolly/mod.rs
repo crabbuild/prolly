@@ -89,6 +89,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
+use std::ops::Deref;
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -175,6 +176,7 @@ use cid::Cid;
 use config::Config;
 use config::RuntimeConfig;
 use encoding::INIT_LEVEL;
+use engine::execution::ExecutionConfig;
 use error::Conflict;
 use error::Diff;
 use error::Error;
@@ -192,6 +194,7 @@ use stats::{StatsComparison, TreeStats};
 use store::AsyncStore;
 use store::NodeStoreScan;
 use store::Store;
+use store::SyncStoreAsAsync;
 use tree::Tree;
 
 struct KeyLookupFrame {
@@ -877,12 +880,13 @@ where
 /// let tree = prolly.create();
 /// ```
 pub struct Prolly<S: Store> {
-    store: S,
+    store: Arc<S>,
+    engine: engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
     config: Config,
-    node_cache: RwLock<NodeCache>,
+    node_cache: Arc<RwLock<NodeCache>>,
     recent_leaf: RwLock<Option<RecentLeafRead>>,
     recent_leaf_misses: AtomicUsize,
-    metrics: ProllyMetrics,
+    metrics: Arc<ProllyMetrics>,
 }
 
 struct RecentLeafRead {
@@ -900,11 +904,16 @@ struct RecentLeafRead {
 /// stats, cache pinning, large-value helpers, and route-planned batch mutation
 /// without requiring a Tokio dependency.
 pub struct AsyncProlly<S: AsyncStore> {
-    store: S,
-    config: Config,
-    node_cache: RwLock<NodeCache>,
+    engine: engine::ProllyEngine<S>,
     rightmost_path_cache: RwLock<Option<(Cid, Vec<CachedRightmostPathEntry>)>>,
-    metrics: ProllyMetrics,
+}
+
+impl<S: AsyncStore> Deref for AsyncProlly<S> {
+    type Target = engine::ProllyEngine<S>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.engine
+    }
 }
 struct AsyncWriteCollector {
     nodes: Vec<(Cid, Vec<u8>)>,
@@ -1192,13 +1201,27 @@ impl<S: Store> Prolly<S> {
     pub fn new(store: S, config: Config) -> Self {
         let node_cache_max_nodes = config.runtime.node_cache_max_nodes;
         let node_cache_max_bytes = config.runtime.node_cache_max_bytes;
+        let store = Arc::new(store);
+        let node_cache = Arc::new(RwLock::new(NodeCache::new(
+            node_cache_max_nodes,
+            node_cache_max_bytes,
+        )));
+        let metrics = Arc::new(ProllyMetrics::default());
+        let engine = engine::ProllyEngine::with_state(
+            SyncStoreAsAsync::new(store.clone()),
+            config.clone(),
+            ExecutionConfig::default(),
+            node_cache.clone(),
+            metrics.clone(),
+        );
         Self {
             store,
+            engine,
             config,
-            node_cache: RwLock::new(NodeCache::new(node_cache_max_nodes, node_cache_max_bytes)),
+            node_cache,
             recent_leaf: RwLock::new(None),
             recent_leaf_misses: AtomicUsize::new(0),
-            metrics: ProllyMetrics::default(),
+            metrics,
         }
     }
 
@@ -1267,7 +1290,8 @@ impl<S: Store> Prolly<S> {
     /// * `Ok(None)` if the key does not exist
     /// * `Err` on storage or deserialization errors
     pub fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        self.get_with(tree, key, <[u8]>::to_vec)
+        let future = self.engine.get(tree, key);
+        engine::ready::run_ready(self.engine.store.ready(future))
     }
 
     fn maybe_cache_recent_leaf(&self, root: &Cid, node: Arc<ReadNode>) {
@@ -1400,11 +1424,8 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         keys: &[K],
     ) -> Result<Vec<Option<Vec<u8>>>, Error> {
-        let mut values = vec![None; keys.len()];
-        self.get_many_with(tree, keys, |position, _, value| {
-            values[position] = value.map(<[u8]>::to_vec);
-        })?;
-        Ok(values)
+        let future = self.engine.get_many(tree, keys);
+        engine::ready::run_ready(self.engine.store.ready(future))
     }
 
     /// Insert or update a key-value pair in the tree.
@@ -3716,6 +3737,9 @@ impl<S: Store> Prolly<S> {
             *recent = None;
         }
         self.recent_leaf_misses.store(0, Ordering::Relaxed);
+        if let Ok(mut recent) = self.engine.recent_leaf.write() {
+            *recent = None;
+        }
     }
 
     /// Return the number of cached nodes in this Prolly manager.
@@ -4199,7 +4223,7 @@ impl<S: Store> Prolly<S> {
 
     /// Borrow the underlying store.
     pub fn store(&self) -> &S {
-        &self.store
+        self.store.as_ref()
     }
 
     /// Borrow this manager's tree configuration.
@@ -4564,14 +4588,9 @@ where
 {
     /// Create a new async Prolly tree manager.
     pub fn new(store: S, config: Config) -> Self {
-        let node_cache_max_nodes = config.runtime.node_cache_max_nodes;
-        let node_cache_max_bytes = config.runtime.node_cache_max_bytes;
         Self {
-            store,
-            config,
-            node_cache: RwLock::new(NodeCache::new(node_cache_max_nodes, node_cache_max_bytes)),
+            engine: engine::ProllyEngine::new(store, config, ExecutionConfig::default()),
             rightmost_path_cache: RwLock::new(None),
-            metrics: ProllyMetrics::default(),
         }
     }
 
@@ -4595,33 +4614,7 @@ where
 
     /// Get value by key from the tree.
     pub async fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(None);
-        };
-
-        let mut cid = root_cid.clone();
-        loop {
-            let node = self.load_arc(&cid).await?;
-            let idx = match node.search(key) {
-                Ok(i) => i,
-                Err(i) => {
-                    if i == 0 {
-                        return Ok(None);
-                    } else {
-                        i - 1
-                    }
-                }
-            };
-
-            if node.leaf {
-                if node.keys.get(idx).map(|k| k.as_slice()) == Some(key) {
-                    return Ok(Some(leaf_value_at(&node, idx)?));
-                }
-                return Ok(None);
-            }
-
-            cid = child_cid_at(&node, idx)?;
-        }
+        self.engine.get(tree, key).await
     }
 
     /// Get a stored large-value reference by key.
@@ -4670,48 +4663,7 @@ where
         tree: &Tree,
         keys: &[K],
     ) -> Result<Vec<Option<Vec<u8>>>, Error> {
-        let mut values = vec![None; keys.len()];
-        let Some(root_cid) = &tree.root else {
-            return Ok(values);
-        };
-
-        if keys.is_empty() {
-            return Ok(values);
-        }
-
-        let positions = InlinePositions::from_vec(sorted_key_positions(keys))
-            .expect("keys is non-empty after early return");
-
-        let mut frames = vec![KeyLookupFrame {
-            cid: root_cid.clone(),
-            positions,
-        }];
-
-        while !frames.is_empty() {
-            let cids = frames
-                .iter()
-                .map(|frame| frame.cid.clone())
-                .collect::<Vec<_>>();
-            let nodes = self.load_child_frontier_ordered(&cids).await?;
-            let mut next_frames = Vec::new();
-
-            for (frame, node) in frames.into_iter().zip(nodes) {
-                if node.leaf {
-                    fill_leaf_lookup_values(&node, frame.positions, keys, &mut values)?;
-                    continue;
-                }
-
-                next_frames.extend(route_key_positions_to_children(
-                    &node,
-                    frame.positions,
-                    keys,
-                )?);
-            }
-
-            frames = next_frames;
-        }
-
-        Ok(values)
+        self.engine.get_many(tree, keys).await
     }
 
     /// Insert or update a key-value pair in the tree.
@@ -8148,47 +8100,6 @@ fn path_index_for_key(node: &Node, key: &[u8]) -> usize {
         Err(idx) => idx.saturating_sub(1),
     }
 }
-fn fill_leaf_lookup_values<K: AsRef<[u8]>>(
-    node: &Node,
-    positions: InlinePositions,
-    keys: &[K],
-    values: &mut [Option<Vec<u8>>],
-) -> Result<(), Error> {
-    if node.keys.len() != node.vals.len() {
-        return Err(Error::InvalidNode);
-    }
-
-    let mut leaf_idx = 0usize;
-    let mut positions = positions.into_iter().peekable();
-    while let Some(position) = positions.next() {
-        let key = keys[position].as_ref();
-
-        while leaf_idx < node.keys.len() && node.keys[leaf_idx].as_slice() < key {
-            leaf_idx += 1;
-        }
-
-        let found_value = if leaf_idx < node.keys.len() && node.keys[leaf_idx].as_slice() == key {
-            Some(&node.vals[leaf_idx])
-        } else {
-            None
-        };
-
-        if let Some(value) = found_value {
-            values[position] = Some(value.clone());
-        }
-
-        while let Some(next_position) =
-            positions.next_if(|next_position| keys[*next_position].as_ref() == key)
-        {
-            if let Some(value) = found_value {
-                values[next_position] = Some(value.clone());
-            }
-        }
-    }
-
-    Ok(())
-}
-
 fn sorted_key_positions<K: AsRef<[u8]>>(keys: &[K]) -> Vec<usize> {
     let mut positions = (0..keys.len()).collect::<Vec<_>>();
     if keys_are_sorted(keys) {
@@ -8208,6 +8119,7 @@ fn keys_are_sorted<K: AsRef<[u8]>>(keys: &[K]) -> bool {
     keys.windows(2)
         .all(|pair| pair[0].as_ref() <= pair[1].as_ref())
 }
+#[cfg(test)]
 fn route_key_positions_to_children<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8245,6 +8157,7 @@ fn route_key_positions_to_children<K: AsRef<[u8]>>(
 
     Ok(frames)
 }
+#[cfg(test)]
 fn route_key_positions_to_children_by_boundary<K: AsRef<[u8]>>(
     node: &Node,
     positions: InlinePositions,
@@ -8320,6 +8233,7 @@ fn inline_positions_from_range(
 
     bucket
 }
+#[cfg(test)]
 fn child_index_for_lookup_key(node: &Node, key: &[u8]) -> usize {
     node.keys
         .partition_point(|candidate| candidate.as_slice() <= key)
@@ -8337,10 +8251,6 @@ fn reverse_scan_end<'a>(
         (None, None) => None,
     }
 }
-fn leaf_value_at(node: &Node, idx: usize) -> Result<Vec<u8>, Error> {
-    node.vals.get(idx).cloned().ok_or(Error::InvalidNode)
-}
-
 fn child_cid_at(node: &Node, idx: usize) -> Result<Cid, Error> {
     let child = node.vals.get(idx).ok_or(Error::InvalidNode)?;
     Ok(Cid(child

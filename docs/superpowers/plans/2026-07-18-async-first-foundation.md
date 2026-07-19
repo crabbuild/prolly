@@ -214,14 +214,14 @@ impl<S: AsyncStore> ProllyEngine<S> {
 }
 ```
 
-- [ ] Add facade equivalence tests over empty, single-level, and multi-level trees. Assert native async and sync-ready facades return identical values and error variants, preserve input key order and duplicates, and issue the same logical node reads after warmup normalization.
-- [ ] Add a test constructing a manager with a different creation default than the input tree; reads must use `tree.format` and succeed. Add the inverse wrong-node-format test, which must fail.
-- [ ] Run the focused tests; verify RED where manager config currently overrides or rejects the input tree format.
-- [ ] Move cache and metrics ownership behind `ProllyEngine`. Implement only validated point and ordered batch loaders plus `get`/`get_many` in this task.
-- [ ] Make `AsyncProlly<S>` a direct facade over `ProllyEngine<S>`. Make `Prolly<S>` own `ProllyEngine<SyncStoreAsAsync<S>>` and call only the sealed ready path for migrated operations.
-- [ ] Delete the old facade-local point/batch loader implementations after all their callers use the engine. Do not retain fallback reads.
-- [ ] Run `cargo test --test async_store --test ready_sync --test invariants`, `cargo test --no-default-features --lib`, and `cargo test --all-features --lib`.
-- [ ] Commit with `git commit -m "refactor: route prolly reads through async engine"`.
+- [x] Add facade equivalence tests over empty, single-level, and multi-level trees. Assert native async and sync-ready facades return identical values and error variants, preserve input key order and duplicates, and issue the same logical node reads after warmup normalization.
+- [x] Add a test constructing a manager with a different creation default than the input tree; reads must use `tree.format` and succeed. Add the inverse wrong-node-format test, which must fail.
+- [x] Run the focused tests; verify RED where manager config currently overrides or rejects the input tree format.
+- [x] Move cache and metrics ownership behind `ProllyEngine`. Implement only validated point and ordered batch loaders plus `get`/`get_many` in this task.
+- [x] Make `AsyncProlly<S>` a direct facade over `ProllyEngine<S>`. Make `Prolly<S>` own `ProllyEngine<SyncStoreAsAsync<S>>` and call only the sealed ready path for migrated operations.
+- [x] Delete the old facade-local point/batch loader implementations after all their callers use the engine. Do not retain fallback reads.
+- [x] Run `cargo test --test async_store --test ready_sync --test invariants`, `cargo test --no-default-features --lib`, and `cargo test --all-features --lib`.
+- [x] Commit with `git commit -m "refactor: route prolly reads through async engine"`.
 
 ---
 

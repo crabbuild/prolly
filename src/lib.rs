@@ -294,6 +294,7 @@ pub use prolly::diff::{
 };
 pub use prolly::encoding::Encoding;
 pub use prolly::engine::execution::ExecutionConfig;
+pub use prolly::engine::ProllyEngine;
 pub use prolly::error::{resolver, Conflict, Diff, Error, Mutation, Resolution, Resolver};
 pub use prolly::format::{
     BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, HashAlgorithm, NodeLayoutSpec,
