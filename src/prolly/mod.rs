@@ -4836,15 +4836,34 @@ where
     }
 
     async fn rebuild_tree(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        if let Some(root) = &tree.root {
-            let root_node = self.load_arc(root).await?;
-            if root_node.format != tree.config.format {
-                return Err(Error::FormatMismatch {
-                    expected: tree.config.format.digest()?,
-                    actual: root_node.format.digest()?,
-                });
-            }
+        let can_localize = tree.config.format.chunking.measure == format::ChunkMeasure::EntryCount
+            && tree.config.format.chunking.input == format::BoundaryInput::Key;
+        if !can_localize {
+            return self.rebuild_tree_full(tree, mutations).await;
         }
+        let groups = self.group_batch_mutations_by_leaf(tree, mutations).await?;
+        if !batch_groups_are_value_updates_or_noops(&groups) {
+            return self
+                .rebuild_tree_full(tree, flatten_async_batch_groups(groups))
+                .await;
+        }
+        let mut collector = AsyncWriteCollector::new_cached();
+        let result = self.apply_batch_groups_coalesced(tree, groups, &mut collector)?;
+        if result.root == tree.root {
+            return Ok(tree.clone());
+        }
+        self.flush_append_collector(&collector, None).await?;
+        Ok(Tree {
+            root: result.root,
+            config: tree.config.clone(),
+        })
+    }
+
+    async fn rebuild_tree_full(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+    ) -> Result<Tree, Error> {
         let mut entries = std::collections::BTreeMap::new();
         if tree.root.is_some() {
             for (key, value) in self.range(tree, &[], None).await?.collect().await? {
@@ -7759,6 +7778,26 @@ fn collect_async_batch_route_contexts(
 
         current = path.parent.clone();
     }
+}
+
+fn batch_groups_are_value_updates_or_noops(groups: &[AsyncBatchLeafGroup]) -> bool {
+    groups.iter().all(|group| {
+        group.mutations[group.range.clone()]
+            .iter()
+            .all(|mutation| match mutation {
+                Mutation::Upsert { key, .. } => group.leaf.search(key).is_ok(),
+                Mutation::Delete { key } => group.leaf.search(key).is_err(),
+            })
+    })
+}
+
+fn flatten_async_batch_groups(groups: Vec<AsyncBatchLeafGroup>) -> Vec<Mutation> {
+    let mut mutations = groups
+        .into_iter()
+        .flat_map(|group| group.mutations[group.range].to_vec())
+        .collect::<Vec<_>>();
+    mutations.sort_by(|left, right| left.key().cmp(right.key()));
+    mutations
 }
 #[allow(dead_code)]
 fn async_rightmost_entry_from_node_ref((cid, node): &(Cid, Node)) -> AsyncRightmostPathEntry {

@@ -306,6 +306,7 @@ struct CountingBatchStore {
     put_hint_calls: AtomicUsize,
     max_batch_put_len: AtomicUsize,
     batch_get_ordered_unique_calls: AtomicUsize,
+    batch_get_ordered_unique_keys: AtomicUsize,
     max_batch_get_ordered_unique_len: AtomicUsize,
 }
 
@@ -313,6 +314,8 @@ impl CountingBatchStore {
     fn reset_read_counts(&self) {
         self.get_calls.store(0, Ordering::Relaxed);
         self.batch_get_ordered_unique_calls
+            .store(0, Ordering::Relaxed);
+        self.batch_get_ordered_unique_keys
             .store(0, Ordering::Relaxed);
         self.max_batch_get_ordered_unique_len
             .store(0, Ordering::Relaxed);
@@ -362,6 +365,8 @@ impl Store for CountingBatchStore {
     ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
         self.batch_get_ordered_unique_calls
             .fetch_add(1, Ordering::Relaxed);
+        self.batch_get_ordered_unique_keys
+            .fetch_add(keys.len(), Ordering::Relaxed);
         self.max_batch_get_ordered_unique_len
             .fetch_max(keys.len(), Ordering::Relaxed);
         self.inner.batch_get_ordered_unique(keys)
@@ -936,6 +941,13 @@ fn async_batch_sparse_update_matches_the_sync_canonical_root() {
     async_prolly.clear_cache();
     async_prolly.reset_metrics();
     let updated = block_on(async_prolly.batch(&tree, mutations)).unwrap();
+    let update_read_upper_bound = store.get_calls.load(Ordering::Relaxed)
+        + store.batch_get_ordered_unique_keys.load(Ordering::Relaxed);
+
+    assert!(
+        update_read_upper_bound < 16,
+        "one sparse update must route to touched leaves instead of scanning the tree; observed at least {update_read_upper_bound} node reads"
+    );
 
     assert_eq!(
         block_on(async_prolly.get(&updated, b"k042")).unwrap(),
