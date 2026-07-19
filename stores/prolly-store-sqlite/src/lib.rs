@@ -122,8 +122,6 @@ pub struct SqliteStoreConfig {
     pub busy_timeout_ms: u64,
     /// Enable WAL journaling for file-backed databases.
     pub enable_wal: bool,
-    /// Keep the WAL/SHM generation stable when the last short-lived process exits.
-    pub persist_wal: bool,
     /// Set SQLite synchronous mode to NORMAL when applying default pragmas.
     pub synchronous_normal: bool,
 }
@@ -133,7 +131,6 @@ impl Default for SqliteStoreConfig {
         Self {
             busy_timeout_ms: 5_000,
             enable_wal: true,
-            persist_wal: false,
             synchronous_normal: true,
         }
     }
@@ -217,13 +214,27 @@ impl SqliteStore {
         path: P,
         config: SqliteStoreConfig,
     ) -> Result<Self, SqliteStoreError> {
+        Self::open_with_runtime_config(path, config, false)
+    }
+
+    /// Open or create a SQLite database and keep its WAL/SHM generation
+    /// stable when the last short-lived process exits.
+    pub fn open_persistent_wal<P: AsRef<Path>>(path: P) -> Result<Self, SqliteStoreError> {
+        Self::open_with_runtime_config(path, SqliteStoreConfig::default(), true)
+    }
+
+    fn open_with_runtime_config<P: AsRef<Path>>(
+        path: P,
+        config: SqliteStoreConfig,
+        persist_wal: bool,
+    ) -> Result<Self, SqliteStoreError> {
         let conn = Connection::open(path.as_ref()).map_err(|e| {
             SqliteStoreError::from_sqlite(
                 e,
                 format!("Failed to open database at {:?}", path.as_ref()),
             )
         })?;
-        Self::from_connection(conn, config)
+        Self::from_connection(conn, config, persist_wal)
     }
 
     /// Open an existing SQLite database with default runtime configuration.
@@ -240,7 +251,18 @@ impl SqliteStore {
         path: P,
         config: SqliteStoreConfig,
     ) -> Result<Self, SqliteStoreError> {
-        Self::open_existing_verified_with_config(path, config, |_| Ok(()))
+        Self::open_existing_verified_with_runtime_config(path, config, false, |_| Ok(()))
+    }
+
+    /// Open an existing database and keep its WAL/SHM generation stable when
+    /// the last short-lived process exits.
+    pub fn open_existing_persistent_wal<P: AsRef<Path>>(path: P) -> Result<Self, SqliteStoreError> {
+        Self::open_existing_verified_with_runtime_config(
+            path,
+            SqliteStoreConfig::default(),
+            true,
+            |_| Ok(()),
+        )
     }
 
     /// Open an existing database and verify SQLite's actual main-file handle
@@ -266,6 +288,39 @@ impl SqliteStore {
         P: AsRef<Path>,
         F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
     {
+        Self::open_existing_verified_with_runtime_config(path, config, false, verifier)
+    }
+
+    /// Open an existing database with persistent WAL and verify SQLite's
+    /// actual main-file handle before executing SQL.
+    #[cfg(unix)]
+    pub fn open_existing_verified_persistent_wal<P, F>(
+        path: P,
+        verifier: F,
+    ) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        Self::open_existing_verified_with_runtime_config(
+            path,
+            SqliteStoreConfig::default(),
+            true,
+            verifier,
+        )
+    }
+
+    #[cfg(unix)]
+    fn open_existing_verified_with_runtime_config<P, F>(
+        path: P,
+        config: SqliteStoreConfig,
+        persist_wal: bool,
+        verifier: F,
+    ) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
         let conn = Connection::open_with_flags(
             path.as_ref(),
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -277,7 +332,7 @@ impl SqliteStore {
             )
         })?;
         verifier(sqlite_main_file_identity(&conn)?)?;
-        Self::from_existing_connection(conn, config)
+        Self::from_existing_connection(conn, config, persist_wal)
     }
 
     /// Non-Unix platforms cannot currently prove the SQLite VFS handle's
@@ -310,18 +365,51 @@ impl SqliteStore {
         ))
     }
 
+    /// Non-Unix platforms cannot prove SQLite's opened main-file identity, so
+    /// verified persistent-WAL opens fail closed there.
+    #[cfg(not(unix))]
+    pub fn open_existing_verified_persistent_wal<P, F>(
+        _path: P,
+        _verifier: F,
+    ) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        Err(SqliteStoreError::new(
+            "verified existing SQLite opens are unsupported on this platform",
+        ))
+    }
+
+    #[cfg(not(unix))]
+    fn open_existing_verified_with_runtime_config<P, F>(
+        _path: P,
+        _config: SqliteStoreConfig,
+        _persist_wal: bool,
+        _verifier: F,
+    ) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        Err(SqliteStoreError::new(
+            "verified existing SQLite opens are unsupported on this platform",
+        ))
+    }
+
     /// Create an in-memory SQLite store.
     pub fn open_in_memory() -> Result<Self, SqliteStoreError> {
         let conn = Connection::open_in_memory()
             .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to open in-memory database"))?;
-        Self::from_connection(conn, SqliteStoreConfig::default())
+        Self::from_connection(conn, SqliteStoreConfig::default(), false)
     }
 
     fn from_connection(
         conn: Connection,
         config: SqliteStoreConfig,
+        persist_wal: bool,
     ) -> Result<Self, SqliteStoreError> {
-        Self::apply_runtime_config(&conn, &config)?;
+        Self::apply_runtime_config(&conn, &config, persist_wal)?;
         conn.execute_batch(CREATE_TABLE_SQL)
             .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to initialize schema"))?;
         conn.execute_batch(CREATE_HINTS_TABLE_SQL)
@@ -337,8 +425,9 @@ impl SqliteStore {
     fn from_existing_connection(
         conn: Connection,
         config: SqliteStoreConfig,
+        persist_wal: bool,
     ) -> Result<Self, SqliteStoreError> {
-        Self::apply_runtime_config(&conn, &config)?;
+        Self::apply_runtime_config(&conn, &config, persist_wal)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -347,6 +436,7 @@ impl SqliteStore {
     fn apply_runtime_config(
         conn: &Connection,
         config: &SqliteStoreConfig,
+        persist_wal: bool,
     ) -> Result<(), SqliteStoreError> {
         conn.busy_timeout(Duration::from_millis(config.busy_timeout_ms))
             .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to set busy timeout"))?;
@@ -355,7 +445,7 @@ impl SqliteStore {
             conn.pragma_update(None, "journal_mode", "WAL")
                 .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to enable WAL mode"))?;
         }
-        if config.persist_wal {
+        if persist_wal {
             if !config.enable_wal {
                 return Err(SqliteStoreError::new(
                     "persistent WAL requires WAL journaling to be enabled",
@@ -963,17 +1053,15 @@ mod tests {
         assert!(!wal.exists());
 
         {
-            let store = SqliteStore::open_with_config(
-                &database,
-                SqliteStoreConfig {
-                    persist_wal: true,
-                    ..SqliteStoreConfig::default()
-                },
-            )
-            .unwrap();
+            let store = SqliteStore::open_persistent_wal(&database).unwrap();
             store.put(b"persistent", b"value").unwrap();
         }
         assert!(wal.is_file());
+        let _source_compatible_config = SqliteStoreConfig {
+            busy_timeout_ms: 5_000,
+            enable_wal: true,
+            synchronous_normal: true,
+        };
         std::fs::remove_dir_all(temp).unwrap();
     }
 

@@ -207,7 +207,6 @@ fn durable_sqlite_config() -> SqliteStoreConfig {
     SqliteStoreConfig {
         busy_timeout_ms: 5_000,
         enable_wal: true,
-        persist_wal: false,
         synchronous_normal: false,
     }
 }

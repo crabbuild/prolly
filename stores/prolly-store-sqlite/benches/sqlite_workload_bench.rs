@@ -849,7 +849,6 @@ fn open_store(path: &Path, profile: DurabilityProfile) -> Result<SqliteStore, St
         SqliteStoreConfig {
             busy_timeout_ms: 5_000,
             enable_wal: true,
-            persist_wal: false,
             synchronous_normal: matches!(profile, DurabilityProfile::Normal),
         },
     )
