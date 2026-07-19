@@ -27,7 +27,10 @@ pub(crate) fn decode_owned(
     validate_cid(expected_cid, bytes)?;
     // The compact decoder validates the persisted format and structural
     // invariants while materializing entries, avoiding a second node scan.
-    Node::from_bytes_with_format(bytes, expected_format)
+    Node::from_bytes_with_format(bytes, expected_format).map_err(|error| match error {
+        Error::Deserialize(_) => Error::InvalidNode,
+        other => other,
+    })
 }
 
 /// Validate identity, persisted format, and structure while retaining shared bytes.

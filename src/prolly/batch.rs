@@ -5117,7 +5117,10 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(err, Error::InvalidNode));
+        assert!(
+            matches!(err, Error::InvalidNode),
+            "malformed rightmost root returned {err:?}"
+        );
     }
 
     #[test]
