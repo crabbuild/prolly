@@ -685,7 +685,7 @@ impl<S: Store> OwnedReadSession<S> {
             node = match state.local_nodes.get(&cid) {
                 Some(node) => node,
                 None => {
-                    let node = self.manager.load_read_arc(&cid)?;
+                    let node = load_owned_read_node(self.manager.as_ref(), &cid)?;
                     if !node.is_leaf() {
                         state.local_nodes.insert(cid, &node);
                     }
@@ -767,7 +767,7 @@ impl<S: Store> OwnedReadSession<S> {
                 .iter()
                 .map(|frame| frame.cid.clone())
                 .collect::<Vec<_>>();
-            let nodes = self.manager.load_many_read_ordered(&cids)?;
+            let nodes = load_owned_read_nodes(self.manager.as_ref(), &cids)?;
             frames = children
                 .into_iter()
                 .zip(nodes)
@@ -897,7 +897,7 @@ impl<S: Store> OwnedRangeScanSession<S> {
                 packed_partition_point(&node, |candidate| candidate <= key).saturating_sub(1);
             let cid = node.child_cid(index)?;
             stack.push(PathFrame { node, index });
-            node = manager.load_read_arc(&cid)?;
+            node = load_owned_read_node(manager, &cid)?;
         }
     }
 
@@ -2792,7 +2792,7 @@ fn advance_forward_sync<S: Store>(
             continue;
         }
         let cid = parent.node.child_cid(parent.index)?;
-        let mut node = manager.load_read_arc(&cid)?;
+        let mut node = load_owned_read_node(manager, &cid)?;
         loop {
             if node.is_leaf() {
                 validate_leaf(&node)?;
@@ -2802,10 +2802,25 @@ fn advance_forward_sync<S: Store>(
             validate_internal(&node)?;
             let cid = node.child_cid(0)?;
             stack.push(PathFrame { node, index: 0 });
-            node = manager.load_read_arc(&cid)?;
+            node = load_owned_read_node(manager, &cid)?;
         }
     }
     Ok(false)
+}
+
+fn load_owned_read_node<S: Store>(manager: &Prolly<S>, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
+    let ready_store = manager.engine.store.clone();
+    let future = manager.engine.load_read_arc(cid);
+    super::engine::ready::run_ready(ready_store.ready(future))
+}
+
+fn load_owned_read_nodes<S: Store>(
+    manager: &Prolly<S>,
+    cids: &[Cid],
+) -> Result<Vec<Arc<ReadNode>>, Error> {
+    let ready_store = manager.engine.store.clone();
+    let future = manager.engine.load_many_read_ordered(cids);
+    super::engine::ready::run_ready(ready_store.ready(future))
 }
 
 fn async_route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
