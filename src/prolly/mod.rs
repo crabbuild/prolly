@@ -4173,38 +4173,6 @@ impl<S: Store> Prolly<S> {
         Ok(path)
     }
 
-    /// Find a read-only path using the canonical packed representation.
-    pub(crate) fn find_read_path_arcs(
-        &self,
-        tree: &Tree,
-        key: &[u8],
-    ) -> Result<Vec<(Arc<ReadNode>, usize)>, Error> {
-        let mut path = Vec::new();
-        let Some(root_cid) = &tree.root else {
-            return Ok(path);
-        };
-        let mut cid = root_cid.clone();
-        loop {
-            let node = self.load_read_arc(&cid)?;
-            if node.is_empty() {
-                if node.is_leaf() {
-                    path.push((node, 0));
-                    return Ok(path);
-                }
-                return Err(Error::InvalidNode);
-            }
-            let index = match node.search(key) {
-                Ok(index) => index,
-                Err(index) => index.saturating_sub(1),
-            };
-            path.push((node.clone(), index));
-            if node.is_leaf() {
-                return Ok(path);
-            }
-            cid = node.child_cid(index)?;
-        }
-    }
-
     fn find_path_hint_entries(
         &self,
         tree: &Tree,

@@ -91,7 +91,6 @@ use std::sync::Arc;
 
 type RangeItem = Result<(Vec<u8>, Vec<u8>), Error>;
 type LeafEntry = (Vec<u8>, Vec<u8>);
-type OptionalLeafEntry = Result<Option<LeafEntry>, Error>;
 pub(crate) const RANGE_CHILD_PREFETCH_PARALLELISM: usize = 16;
 
 /// Stable cursor token for resumable range scans.
@@ -226,13 +225,10 @@ pub fn create_range_iter<'a, S: Store>(
     start: &[u8],
     end: Option<&[u8]>,
 ) -> Result<RangeIter<'a, S>, Error> {
-    if end.is_some_and(|end| end <= start) {
-        return Ok(RangeIter::new(prolly, Vec::new(), start, end));
-    }
-
-    // Find path to start key
-    let path = prolly.find_read_path_arcs(tree, start)?;
-    Ok(RangeIter::new(prolly, path, start, end))
+    let ready_store = prolly.engine.store.clone();
+    let future = create_async_range_iter(&prolly.engine, tree, start, end);
+    let inner = super::engine::ready::run_ready(ready_store.ready(future))?;
+    Ok(RangeIter { inner })
 }
 
 /// Create a range iterator that starts strictly after `after_key`.
@@ -242,12 +238,10 @@ pub fn create_range_after_iter<'a, S: Store>(
     after_key: &[u8],
     end: Option<&[u8]>,
 ) -> Result<RangeIter<'a, S>, Error> {
-    if end.is_some_and(|end| end <= after_key) {
-        return Ok(RangeIter::new_after(prolly, Vec::new(), after_key, end));
-    }
-
-    let path = prolly.find_read_path_arcs(tree, after_key)?;
-    Ok(RangeIter::new_after(prolly, path, after_key, end))
+    let ready_store = prolly.engine.store.clone();
+    let future = create_async_range_after_iter(&prolly.engine, tree, after_key, end);
+    let inner = super::engine::ready::run_ready(ready_store.ready(future))?;
+    Ok(RangeIter { inner })
 }
 
 /// Create an async range iterator over key-value pairs.
@@ -301,299 +295,25 @@ where
 /// Maintains a stack of (node, index) pairs to track the current position in the tree
 /// and supports optional end bounds for range queries.
 pub struct RangeIter<'a, S: Store> {
-    /// Reference to the Prolly tree manager
-    prolly: &'a Prolly<S>,
-    /// Stack of (node, index) pairs representing the traversal path
-    stack: Vec<(Arc<ReadNode>, usize)>,
-    /// Optional end bound (exclusive)
-    end: Option<Vec<u8>>,
-    /// Whether we've started iteration (for positioning at start key)
-    started: bool,
-    /// The start key for initial positioning
-    start_key: Vec<u8>,
-    /// Whether to skip an entry equal to the start key.
-    skip_start_key: bool,
-    /// Last retained leaf location yielded by this iterator. The key is copied
-    /// only if a resumable cursor is requested.
-    last_location: Option<(Arc<ReadNode>, usize)>,
+    inner: AsyncRangeIter<'a, super::store::SyncStoreAsAsync<Arc<S>>>,
 }
 
-impl<'a, S: Store> RangeIter<'a, S> {
-    /// Create a new range iterator.
-    ///
-    /// # Arguments
-    /// * `prolly` - Reference to the Prolly tree manager
-    /// * `stack` - Initial traversal path from find_path
-    /// * `start` - The starting key (inclusive)
-    /// * `end` - Optional ending key (exclusive)
-    pub(crate) fn new(
-        prolly: &'a Prolly<S>,
-        stack: Vec<(Arc<ReadNode>, usize)>,
-        start: &[u8],
-        end: Option<&[u8]>,
-    ) -> Self {
-        Self {
-            prolly,
-            stack,
-            end: end.map(|e| e.to_vec()),
-            started: false,
-            start_key: start.to_vec(),
-            skip_start_key: false,
-            last_location: None,
-        }
-    }
-
-    pub(crate) fn new_after(
-        prolly: &'a Prolly<S>,
-        stack: Vec<(Arc<ReadNode>, usize)>,
-        after_key: &[u8],
-        end: Option<&[u8]>,
-    ) -> Self {
-        Self {
-            prolly,
-            stack,
-            end: end.map(|e| e.to_vec()),
-            started: false,
-            start_key: after_key.to_vec(),
-            skip_start_key: true,
-            last_location: None,
-        }
-    }
-
+impl<S: Store> RangeIter<'_, S> {
     /// Return a resumable cursor for the last key yielded by this iterator.
-    ///
-    /// If the iterator has not yielded an item yet, this returns
-    /// [`RangeCursor::start`].
     pub fn resume_cursor(&self) -> RangeCursor {
-        self.last_location
-            .as_ref()
-            .and_then(|(node, index)| node.key(*index))
-            .map(<[u8]>::to_vec)
-            .map(RangeCursor::after_key)
-            .unwrap_or_else(RangeCursor::start)
-    }
-
-    /// Position the iterator at the first key >= start_key.
-    ///
-    /// Called on the first iteration to find the correct starting position
-    /// in the leaf node.
-    fn position_at_start(&mut self) -> Option<RangeItem> {
-        self.started = true;
-
-        // If stack is empty, tree is empty
-        if self.stack.is_empty() {
-            return None;
-        }
-
-        // Find the first key >= start_key in the leaf
-        let (node, idx) = self.stack.last_mut()?;
-
-        // If we're at a leaf, find the correct starting position
-        if node.is_leaf() {
-            // Find first key >= start_key
-            let start_idx = match node.search(&self.start_key) {
-                Ok(i) if self.skip_start_key => i.saturating_add(1),
-                Ok(i) => i,  // Exact match
-                Err(i) => i, // First key > start_key
-            };
-
-            *idx = start_idx;
-
-            // Check if we're past the end of this node
-            if *idx >= node.len() {
-                // Need to advance to next node
-                return self.advance_to_next_leaf();
-            }
-
-            match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
-                Ok(Some(entry)) => {
-                    let location = (node.clone(), *idx);
-                    *idx += 1;
-                    self.last_location = Some(location);
-                    return Some(Ok(entry));
-                }
-                Ok(None) => return None,
-                Err(e) => return Some(Err(e)),
-            }
-        }
-
-        // Not at a leaf - descend to the correct leaf
-        self.descend_to_leaf()
-    }
-
-    /// Descend from current internal node to the leftmost leaf.
-    ///
-    /// Follows child pointers until reaching a leaf node, then returns
-    /// the first entry from that leaf.
-    fn descend_to_leaf(&mut self) -> Option<RangeItem> {
-        loop {
-            let (node, idx) = self.stack.last()?;
-
-            if node.is_leaf() {
-                // We're at a leaf, return the current entry
-                if *idx >= node.len() {
-                    return self.advance_to_next_leaf();
-                }
-
-                match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
-                    Ok(Some(entry)) => {
-                        let location = (node.clone(), *idx);
-                        if let Some((_, idx)) = self.stack.last_mut() {
-                            *idx += 1;
-                        }
-                        self.last_location = Some(location);
-                        return Some(Ok(entry));
-                    }
-                    Ok(None) => return None,
-                    Err(e) => return Some(Err(e)),
-                }
-            }
-
-            // Internal node - descend to child
-            if *idx >= node.len() {
-                // No more children, go back up
-                return self.advance_to_next_leaf();
-            }
-
-            match child_starts_at_or_after_end(self.end.as_deref(), node, *idx) {
-                Ok(true) => return None,
-                Ok(false) => {}
-                Err(e) => return Some(Err(e)),
-            }
-
-            match self.load_child_for_descent(node, *idx) {
-                Ok(child) => {
-                    self.stack.push((child, 0));
-                }
-                Err(e) => return Some(Err(e)),
-            }
-        }
-    }
-
-    /// Advance to the next leaf node when current leaf is exhausted.
-    ///
-    /// Pops nodes from the stack until finding a parent with more children,
-    /// then descends to the next child's leftmost leaf.
-    fn advance_to_next_leaf(&mut self) -> Option<RangeItem> {
-        loop {
-            // Pop the current node
-            self.stack.pop();
-
-            if self.stack.is_empty() {
-                return None;
-            }
-
-            // Increment parent's index
-            if let Some((parent, parent_idx)) = self.stack.last_mut() {
-                *parent_idx += 1;
-
-                // Check if parent has more children
-                if *parent_idx < parent.len() {
-                    match child_starts_at_or_after_end(self.end.as_deref(), parent, *parent_idx) {
-                        Ok(true) => return None,
-                        Ok(false) => {}
-                        Err(e) => return Some(Err(e)),
-                    }
-                    // Descend to the next child
-                    return self.descend_to_leaf();
-                }
-                // Otherwise, continue popping
-            }
-        }
-    }
-
-    fn load_child_for_descent(&self, node: &ReadNode, idx: usize) -> Result<Arc<ReadNode>, Error> {
-        let child_cid = node.child_cid(idx)?;
-
-        if !self.prolly.store().prefers_batch_reads() {
-            return self.prolly.load_read_arc(&child_cid);
-        }
-
-        let max_child_idx = node
-            .len()
-            .min(idx.saturating_add(RANGE_CHILD_PREFETCH_PARALLELISM));
-        let mut child_cids = Vec::with_capacity(max_child_idx.saturating_sub(idx));
-        child_cids.push(child_cid);
-
-        for child_idx in idx + 1..max_child_idx {
-            match child_starts_at_or_after_end(self.end.as_deref(), node, child_idx) {
-                Ok(true) => break,
-                Ok(false) => {}
-                Err(_) => break,
-            }
-
-            match node.child_cid(child_idx) {
-                Ok(cid) => child_cids.push(cid),
-                Err(_) => break,
-            }
-        }
-
-        if child_cids.len() == 1 {
-            return self.prolly.load_read_arc(&child_cids[0]);
-        }
-
-        let children = self.prolly.load_many_read_ordered(&child_cids)?;
-        children.into_iter().next().ok_or(Error::InvalidNode)
+        self.inner.resume_cursor()
     }
 }
 
-/// Iterator implementation for RangeIter.
-///
-/// Yields `(key, value)` pairs in lexicographic order, handling cursor advancement
-/// across node boundaries and checking end bounds for each yielded entry.
-impl<'a, S: Store> Iterator for RangeIter<'a, S> {
-    type Item = Result<(Vec<u8>, Vec<u8>), Error>;
+impl<S: Store> Iterator for RangeIter<'_, S> {
+    type Item = RangeItem;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // First call: position at start key
-        if !self.started {
-            return self.position_at_start();
-        }
-
-        loop {
-            let (node, idx) = self.stack.last_mut()?;
-
-            // If we've exhausted this node, advance to next
-            if *idx >= node.len() {
-                return self.advance_to_next_leaf();
-            }
-
-            // If we're at a leaf, yield the current entry
-            if node.is_leaf() {
-                match leaf_entry_before_end(node, *idx, self.end.as_deref()) {
-                    Ok(Some(entry)) => {
-                        let location = (node.clone(), *idx);
-                        *idx += 1;
-                        self.last_location = Some(location);
-                        return Some(Ok(entry));
-                    }
-                    Ok(None) => return None,
-                    Err(e) => return Some(Err(e)),
-                }
-            }
-
-            // Internal node - descend to child
-            match child_starts_at_or_after_end(self.end.as_deref(), node, *idx) {
-                Ok(true) => return None,
-                Ok(false) => {}
-                Err(e) => return Some(Err(e)),
-            }
-
-            let child = {
-                let (node, idx) = self.stack.last()?;
-                self.load_child_for_descent(node, *idx)
-            };
-
-            match child {
-                Ok(child) => {
-                    self.stack.push((child, 0));
-                }
-                Err(e) => return Some(Err(e)),
-            }
-        }
+        let ready_store = self.inner.prolly.store.clone();
+        let future = self.inner.next();
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 }
-
 /// Async iterator over key-value pairs in a range.
 ///
 /// Created by [`AsyncProlly::range`](crate::AsyncProlly::range). Call
@@ -815,18 +535,6 @@ where
         let children = self.prolly.load_many_read_ordered(&child_cids).await?;
         children.into_iter().next().ok_or(Error::InvalidNode)
     }
-}
-
-fn leaf_entry_before_end(node: &ReadNode, idx: usize, end: Option<&[u8]>) -> OptionalLeafEntry {
-    let key = node.key(idx).ok_or(Error::InvalidNode)?;
-    if let Some(end) = end {
-        if key >= end {
-            return Ok(None);
-        }
-    }
-
-    let val = node.value(idx).ok_or(Error::InvalidNode)?;
-    Ok(Some((key.to_vec(), val.to_vec())))
 }
 
 fn child_starts_at_or_after_end(
