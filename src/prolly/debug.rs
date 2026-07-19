@@ -281,7 +281,9 @@ where
     let mut frontier = vec![root_cid.clone()];
 
     while !frontier.is_empty() {
-        let nodes = prolly.load_child_frontier_ordered(&frontier).await?;
+        let nodes = prolly
+            .load_child_frontier_ordered_for_format(&frontier, &tree.config.format)
+            .await?;
         let mut next_frontier = Vec::new();
 
         for (cid, node) in frontier.iter().cloned().zip(nodes) {

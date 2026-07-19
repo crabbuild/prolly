@@ -209,6 +209,22 @@ impl<T: BlobStore> BlobStore for Arc<T> {
     }
 }
 
+impl<T: BlobStore + ?Sized> BlobStore for &T {
+    type Error = T::Error;
+
+    fn get_blob(&self, reference: &BlobRef) -> Result<Option<Vec<u8>>, Self::Error> {
+        (**self).get_blob(reference)
+    }
+
+    fn put_blob(&self, bytes: &[u8]) -> Result<BlobRef, Self::Error> {
+        (**self).put_blob(bytes)
+    }
+
+    fn delete_blob(&self, reference: &BlobRef) -> Result<(), Self::Error> {
+        (**self).delete_blob(reference)
+    }
+}
+
 /// Blob stores that can enumerate known blob references.
 ///
 /// This trait is separate from [`BlobStore`] so simple point-read blob stores

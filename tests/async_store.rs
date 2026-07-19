@@ -106,6 +106,55 @@ fn block_on<F: Future>(future: F) -> F::Output {
 }
 
 #[test]
+fn async_snapshot_and_node_gc_services_are_engine_native() {
+    block_on(async {
+        let source = Arc::new(MemStore::new());
+        let engine = AsyncProlly::new(
+            SyncStoreAsAsync::new(source.clone()),
+            Config::default(),
+        );
+        let first = engine
+            .put(&engine.create(), b"a".to_vec(), b"one".to_vec())
+            .await
+            .unwrap();
+        let current = engine
+            .put(&first, b"b".to_vec(), b"two".to_vec())
+            .await
+            .unwrap();
+
+        let bundle = engine.export_snapshot(&current).await.unwrap();
+        let destination = Arc::new(MemStore::new());
+        let destination_engine = AsyncProlly::new(
+            SyncStoreAsAsync::new(destination.clone()),
+            Config::default(),
+        );
+        let imported = destination_engine.import_snapshot(&bundle).await.unwrap();
+        assert_eq!(
+            destination_engine.get(&imported, b"b").await.unwrap(),
+            Some(b"two".to_vec())
+        );
+
+        let candidates = engine
+            .mark_reachable(&[first.clone(), current.clone()])
+            .await
+            .unwrap()
+            .live_cids;
+        let plan = engine
+            .plan_gc(std::slice::from_ref(&current), &candidates)
+            .await
+            .unwrap();
+        assert!(plan.reclaimable_nodes > 0);
+
+        let swept = engine
+            .sweep_gc(std::slice::from_ref(&current), &candidates)
+            .await
+            .unwrap();
+        assert_eq!(swept.deleted_nodes, plan.reclaimable_nodes);
+        assert_eq!(engine.get(&current, b"a").await.unwrap(), Some(b"one".to_vec()));
+    });
+}
+
+#[test]
 fn async_versioned_map_supports_atomic_updates_pinned_reads_pages_and_proofs() {
     block_on(async {
         let store = Arc::new(MemStore::new());

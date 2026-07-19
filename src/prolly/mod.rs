@@ -101,6 +101,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const PARALLEL_NODE_DECODE_THRESHOLD: usize = 16;
 const GET_MANY_PREFETCH_PARALLELISM: usize = 16;
 const GET_MANY_BOUNDARY_ROUTE_MIN_POSITIONS: usize = 32;
+#[cfg(test)]
 const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(test)]
 const RECENT_LEAF_MISS_SAMPLE_INTERVAL: usize = 16;
@@ -2196,8 +2197,10 @@ impl<S: Store> Prolly<S> {
     where
         D: Store,
     {
-        let (plan, _) = self.prepare_missing_nodes(tree, destination)?;
-        Ok(plan)
+        let destination = SyncStoreAsAsync::new(destination);
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.plan_missing_nodes(tree, &destination);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Copy all destination-missing nodes required by `tree`.
@@ -2234,28 +2237,10 @@ impl<S: Store> Prolly<S> {
     where
         D: Store,
     {
-        let (plan, node_bytes) = self.prepare_missing_nodes(tree, destination)?;
-        let copied_nodes = node_bytes.len();
-        let copied_bytes = node_bytes
-            .iter()
-            .map(|(_, bytes)| bytes.len())
-            .sum::<usize>();
-
-        if !node_bytes.is_empty() {
-            let entries = node_bytes
-                .iter()
-                .map(|(cid, bytes)| (cid.as_bytes(), bytes.as_slice()))
-                .collect::<Vec<_>>();
-            destination
-                .batch_put(&entries)
-                .map_err(|err| Error::Store(Box::new(err)))?;
-        }
-
-        Ok(MissingNodeCopy {
-            plan,
-            copied_nodes,
-            copied_bytes,
-        })
+        let destination = SyncStoreAsAsync::new(destination);
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.copy_missing_nodes(tree, &destination);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Export one tree and all reachable serialized node bytes as a portable bundle.
@@ -2266,20 +2251,9 @@ impl<S: Store> Prolly<S> {
     /// each node byte payload is verified against its CID before the export
     /// succeeds.
     pub fn export_snapshot(&self, tree: &Tree) -> Result<SnapshotBundle, Error> {
-        let reachability = self.mark_reachable(std::slice::from_ref(tree))?;
-        let mut nodes = Vec::with_capacity(reachability.live_cids.len());
-
-        for cid in reachability.live_cids {
-            let bytes = self
-                .store
-                .get(cid.as_bytes())
-                .map_err(|err| Error::Store(Box::new(err)))?
-                .ok_or_else(|| Error::NotFound(cid.clone()))?;
-            self::sync::verify_node_bytes(&cid, &bytes)?;
-            nodes.push(SnapshotBundleNode { cid, bytes });
-        }
-
-        Ok(SnapshotBundle::new(tree.clone(), nodes))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.export_snapshot(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Import a portable tree snapshot bundle into this manager's store.
@@ -2289,117 +2263,9 @@ impl<S: Store> Prolly<S> {
     /// repeated node entries, rejects conflicting duplicates, verifies every
     /// node byte payload against its CID, then writes the validated node set.
     pub fn import_snapshot(&self, bundle: &SnapshotBundle) -> Result<Tree, Error> {
-        let verification = bundle.verify()?;
-        if !verification.valid {
-            if let Some(cid) = verification.missing_cids.first() {
-                return Err(Error::InvalidSnapshotBundle(format!(
-                    "bundle missing reachable node CID {:?}",
-                    cid
-                )));
-            }
-            if let Some(cid) = verification.extra_cids.first() {
-                return Err(Error::InvalidSnapshotBundle(format!(
-                    "bundle contains unreachable node CID {:?}",
-                    cid
-                )));
-            }
-            return Err(Error::InvalidSnapshotBundle(
-                "bundle failed self-contained verification".to_string(),
-            ));
-        }
-
-        if !bundle.nodes.is_empty() {
-            let entries = bundle
-                .nodes
-                .iter()
-                .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
-                .collect::<Vec<_>>();
-            self.store
-                .batch_put(&entries)
-                .map_err(|err| Error::Store(Box::new(err)))?;
-        }
-
-        Ok(bundle.tree.clone())
-    }
-
-    fn prepare_missing_nodes<D>(
-        &self,
-        tree: &Tree,
-        destination: &D,
-    ) -> Result<PreparedMissingNodes, Error>
-    where
-        D: Store,
-    {
-        let reachability = self.mark_reachable(std::slice::from_ref(tree))?;
-        let required_nodes = reachability.live_nodes;
-        let required_bytes = reachability.live_bytes;
-        let required_cids = reachability.live_cids;
-
-        if required_cids.is_empty() {
-            return Ok((
-                MissingNodePlan {
-                    required_cids,
-                    required_nodes,
-                    required_bytes,
-                    missing_cids: Vec::new(),
-                    missing_nodes: 0,
-                    missing_bytes: 0,
-                },
-                Vec::new(),
-            ));
-        }
-
-        let destination_keys = required_cids
-            .iter()
-            .map(|cid| cid.as_bytes())
-            .collect::<Vec<_>>();
-        let destination_values = destination
-            .batch_get_ordered_unique(&destination_keys)
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        if destination_values.len() != required_cids.len() {
-            return Err(Error::InvalidNode);
-        }
-
-        let mut missing_cids = Vec::new();
-        for (cid, value) in required_cids.iter().zip(destination_values) {
-            match value {
-                Some(bytes) => self::sync::verify_node_bytes(cid, &bytes)?,
-                None => missing_cids.push(cid.clone()),
-            }
-        }
-
-        let missing_keys = missing_cids
-            .iter()
-            .map(|cid| cid.as_bytes())
-            .collect::<Vec<_>>();
-        let source_values = self
-            .store
-            .batch_get_ordered_unique(&missing_keys)
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        if source_values.len() != missing_cids.len() {
-            return Err(Error::InvalidNode);
-        }
-
-        let mut missing_bytes = 0usize;
-        let mut node_bytes = Vec::with_capacity(missing_cids.len());
-        for (cid, value) in missing_cids.iter().zip(source_values) {
-            let bytes = value.ok_or_else(|| Error::NotFound(cid.clone()))?;
-            self::sync::verify_node_bytes(cid, &bytes)?;
-            missing_bytes += bytes.len();
-            node_bytes.push((cid.clone(), bytes));
-        }
-
-        Ok((
-            MissingNodePlan {
-                required_cids,
-                required_nodes,
-                required_bytes,
-                missing_nodes: missing_cids.len(),
-                missing_cids,
-                missing_bytes,
-            },
-            node_bytes,
-        ))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.import_snapshot(bundle);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build a dry-run garbage-collection plan from retained roots and
@@ -2415,53 +2281,9 @@ impl<S: Store> Prolly<S> {
         I: IntoIterator<Item = C>,
         C: Borrow<Cid>,
     {
-        let reachability = self.mark_reachable(roots)?;
-        let live_cids = reachability
-            .live_cids
-            .iter()
-            .cloned()
-            .collect::<HashSet<_>>();
-        let mut seen_candidates = HashSet::new();
-        let mut reclaimable_cids = Vec::new();
-        let mut reclaimable_bytes = 0usize;
-        let mut missing_candidates = 0usize;
-        let mut candidate_nodes = 0usize;
-
-        for candidate in candidates {
-            let cid = candidate.borrow();
-            if !seen_candidates.insert(cid.clone()) {
-                continue;
-            }
-            candidate_nodes += 1;
-
-            if live_cids.contains(cid) {
-                continue;
-            }
-
-            match self
-                .store
-                .get(cid.as_bytes())
-                .map_err(|err| Error::Store(Box::new(err)))?
-            {
-                Some(bytes) => {
-                    reclaimable_bytes += bytes.len();
-                    reclaimable_cids.push(cid.clone());
-                }
-                None => {
-                    missing_candidates += 1;
-                }
-            }
-        }
-
-        gc::sort_cids(&mut reclaimable_cids);
-        Ok(GcPlan {
-            reachability,
-            candidate_nodes,
-            reclaimable_nodes: reclaimable_cids.len(),
-            reclaimable_cids,
-            reclaimable_bytes,
-            missing_candidates,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.plan_gc(roots, candidates);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Delete unreachable candidate nodes from the backing store.
@@ -2475,29 +2297,9 @@ impl<S: Store> Prolly<S> {
         I: IntoIterator<Item = C>,
         C: Borrow<Cid>,
     {
-        let plan = self.plan_gc(roots, candidates)?;
-        let deleted_nodes = plan.reclaimable_nodes;
-        let deleted_bytes = plan.reclaimable_bytes;
-
-        if !plan.reclaimable_cids.is_empty() {
-            let ops = plan
-                .reclaimable_cids
-                .iter()
-                .map(|cid| store::BatchOp::Delete {
-                    key: cid.as_bytes(),
-                })
-                .collect::<Vec<_>>();
-            self.store
-                .batch(&ops)
-                .map_err(|err| Error::Store(Box::new(err)))?;
-            self.clear_cache();
-        }
-
-        Ok(GcSweep {
-            plan,
-            deleted_nodes,
-            deleted_bytes,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.sweep_gc(roots, candidates);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Mark all offloaded blobs reachable from retained tree roots.
@@ -2507,83 +2309,9 @@ impl<S: Store> Prolly<S> {
     /// duplicate roots, shared subtrees, and duplicate blob references are
     /// counted once where appropriate.
     pub fn mark_reachable_blobs(&self, roots: &[Tree]) -> Result<BlobGcReachability, Error> {
-        let parallelism = if self.store.prefers_batch_reads() {
-            STATS_FRONTIER_PREFETCH_PARALLELISM
-        } else {
-            1
-        };
-        let mut seen_nodes = HashSet::new();
-        let mut frontier = Vec::new();
-
-        for tree in roots {
-            if let Some(root_cid) = &tree.root {
-                if seen_nodes.insert(root_cid.clone()) {
-                    frontier.push(root_cid.clone());
-                }
-            }
-        }
-
-        let mut live_blobs_by_cid = HashMap::<Cid, blob::BlobRef>::new();
-        let mut scanned_nodes = 0usize;
-        let mut scanned_values = 0usize;
-
-        while !frontier.is_empty() {
-            let current = std::mem::take(&mut frontier);
-            let nodes = self.load_many_ordered_with_parallelism(&current, parallelism)?;
-
-            for node in nodes {
-                if node.keys.len() != node.vals.len() {
-                    return Err(Error::InvalidNode);
-                }
-                scanned_nodes += 1;
-
-                if node.leaf {
-                    scanned_values += node.vals.len();
-                    for value in &node.vals {
-                        if let blob::ValueRef::Blob(reference) =
-                            blob::ValueRef::from_stored_bytes(value)?
-                        {
-                            match live_blobs_by_cid.entry(reference.cid.clone()) {
-                                Entry::Occupied(entry) => {
-                                    if entry.get().len != reference.len {
-                                        return Err(Error::Deserialize(
-                                            "conflicting blob reference lengths for same CID"
-                                                .to_string(),
-                                        ));
-                                    }
-                                }
-                                Entry::Vacant(entry) => {
-                                    entry.insert(reference);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    frontier.reserve(node.vals.len());
-                    for idx in 0..node.len() {
-                        let child_cid = child_cid_at(&node, idx)?;
-                        if seen_nodes.insert(child_cid.clone()) {
-                            frontier.push(child_cid);
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut live_blobs = live_blobs_by_cid.into_values().collect::<Vec<_>>();
-        gc::sort_blob_refs(&mut live_blobs);
-        let live_blob_bytes = live_blobs
-            .iter()
-            .map(|reference| reference.len)
-            .sum::<u64>();
-
-        Ok(BlobGcReachability {
-            live_blob_count: live_blobs.len(),
-            live_blobs,
-            live_blob_bytes,
-            scanned_nodes,
-            scanned_values,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.mark_reachable_blobs(roots);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build a dry-run garbage-collection plan for offloaded blobs.
@@ -2604,53 +2332,10 @@ impl<S: Store> Prolly<S> {
         I: IntoIterator<Item = C>,
         C: Borrow<blob::BlobRef>,
     {
-        let reachability = self.mark_reachable_blobs(roots)?;
-        let live_cids = reachability
-            .live_blobs
-            .iter()
-            .map(|reference| reference.cid.clone())
-            .collect::<HashSet<_>>();
-        let mut seen_candidates = HashSet::new();
-        let mut reclaimable_blobs = Vec::new();
-        let mut reclaimable_blob_bytes = 0u64;
-        let mut missing_candidates = 0usize;
-        let mut candidate_blobs = 0usize;
-
-        for candidate in candidates {
-            let reference = candidate.borrow();
-            if !seen_candidates.insert(reference.cid.clone()) {
-                continue;
-            }
-            candidate_blobs += 1;
-
-            if live_cids.contains(&reference.cid) {
-                continue;
-            }
-
-            match blob_store
-                .get_blob(reference)
-                .map_err(|err| Error::Store(Box::new(err)))?
-            {
-                Some(bytes) => {
-                    reference.validate_bytes(&bytes)?;
-                    reclaimable_blob_bytes += bytes.len() as u64;
-                    reclaimable_blobs.push(reference.clone());
-                }
-                None => {
-                    missing_candidates += 1;
-                }
-            }
-        }
-
-        gc::sort_blob_refs(&mut reclaimable_blobs);
-        Ok(BlobGcPlan {
-            reachability,
-            candidate_blobs,
-            reclaimable_blob_count: reclaimable_blobs.len(),
-            reclaimable_blobs,
-            reclaimable_blob_bytes,
-            missing_candidates,
-        })
+        let blob_store = blob::SyncBlobStoreAsAsync::new(blob_store);
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.plan_blob_gc(&blob_store, roots, candidates);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Delete unreachable candidate blobs from the backing blob store.
@@ -2668,21 +2353,10 @@ impl<S: Store> Prolly<S> {
         I: IntoIterator<Item = C>,
         C: Borrow<blob::BlobRef>,
     {
-        let plan = self.plan_blob_gc(blob_store, roots, candidates)?;
-        let deleted_blobs = plan.reclaimable_blob_count;
-        let deleted_blob_bytes = plan.reclaimable_blob_bytes;
-
-        for reference in &plan.reclaimable_blobs {
-            blob_store
-                .delete_blob(reference)
-                .map_err(|err| Error::Store(Box::new(err)))?;
-        }
-
-        Ok(BlobGcSweep {
-            plan,
-            deleted_blobs,
-            deleted_blob_bytes,
-        })
+        let blob_store = blob::SyncBlobStoreAsAsync::new(blob_store);
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.sweep_blob_gc(&blob_store, roots, candidates);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build a dry-run blob garbage-collection plan using the blob store's full
@@ -4960,7 +4634,7 @@ where
         };
 
         let mut stats = TreeStats::new();
-        self.collect_stats_from_frontier(root_cid, &mut stats)
+        self.collect_stats_from_frontier(root_cid, &tree.config.format, &mut stats)
             .await?;
         stats.finalize();
         Ok(stats)
@@ -5009,7 +4683,7 @@ where
         for tree in roots {
             if let Some(root_cid) = &tree.root {
                 if seen.insert(root_cid.clone()) {
-                    frontier.push(root_cid.clone());
+                    frontier.push((root_cid.clone(), tree.config.format.clone()));
                 }
             }
         }
@@ -5020,8 +4694,20 @@ where
         let mut internal_nodes = 0usize;
 
         while !frontier.is_empty() {
-            let current = std::mem::take(&mut frontier);
-            let nodes = self.load_child_frontier_ordered(&current).await?;
+            let expected_format = frontier[0].1.clone();
+            let mut current = Vec::new();
+            let mut deferred = Vec::new();
+            for (cid, node_format) in std::mem::take(&mut frontier) {
+                if node_format == expected_format {
+                    current.push(cid);
+                } else {
+                    deferred.push((cid, node_format));
+                }
+            }
+            frontier = deferred;
+            let nodes = self
+                .load_child_frontier_ordered_for_format(&current, &expected_format)
+                .await?;
 
             for (cid, node) in current.into_iter().zip(nodes) {
                 if node.keys.len() != node.vals.len() {
@@ -5037,7 +4723,7 @@ where
                     for idx in 0..node.len() {
                         let child_cid = child_cid_at(&node, idx)?;
                         if seen.insert(child_cid.clone()) {
-                            frontier.push(child_cid);
+                            frontier.push((child_cid, expected_format.clone()));
                         }
                     }
                 }
@@ -5108,6 +4794,155 @@ where
             plan,
             copied_nodes,
             copied_bytes,
+        })
+    }
+
+    /// Export one tree and its reachable nodes as a verified portable bundle.
+    pub async fn export_snapshot(&self, tree: &Tree) -> Result<SnapshotBundle, Error> {
+        let reachability = self.mark_reachable(std::slice::from_ref(tree)).await?;
+        let keys = reachability
+            .live_cids
+            .iter()
+            .map(|cid| cid.as_bytes())
+            .collect::<Vec<_>>();
+        let values = async_batch_get_ordered_unique_bounded(
+            &self.store,
+            &keys,
+            ASYNC_NODE_PREFETCH_BATCH_SIZE,
+        )
+        .await?;
+        let mut nodes = Vec::with_capacity(reachability.live_cids.len());
+        for (cid, value) in reachability.live_cids.into_iter().zip(values) {
+            let bytes = value.ok_or_else(|| Error::NotFound(cid.clone()))?;
+            self::sync::verify_node_bytes(&cid, &bytes)?;
+            nodes.push(SnapshotBundleNode { cid, bytes });
+        }
+        Ok(SnapshotBundle::new(tree.clone(), nodes))
+    }
+
+    /// Validate and import a portable tree snapshot into the async node store.
+    pub async fn import_snapshot(&self, bundle: &SnapshotBundle) -> Result<Tree, Error> {
+        let verification = bundle.verify()?;
+        if !verification.valid {
+            if let Some(cid) = verification.missing_cids.first() {
+                return Err(Error::InvalidSnapshotBundle(format!(
+                    "bundle missing reachable node CID {:?}",
+                    cid
+                )));
+            }
+            if let Some(cid) = verification.extra_cids.first() {
+                return Err(Error::InvalidSnapshotBundle(format!(
+                    "bundle contains unreachable node CID {:?}",
+                    cid
+                )));
+            }
+            return Err(Error::InvalidSnapshotBundle(
+                "bundle failed self-contained verification".to_string(),
+            ));
+        }
+
+        if !bundle.nodes.is_empty() {
+            let entries = bundle
+                .nodes
+                .iter()
+                .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
+                .collect::<Vec<_>>();
+            self.store
+                .batch_put(&entries)
+                .await
+                .map_err(|err| Error::Store(Box::new(err)))?;
+        }
+        Ok(bundle.tree.clone())
+    }
+
+    /// Build a dry-run node garbage-collection plan from retained roots and candidates.
+    pub async fn plan_gc<I, C>(&self, roots: &[Tree], candidates: I) -> Result<GcPlan, Error>
+    where
+        I: IntoIterator<Item = C>,
+        C: Borrow<Cid>,
+    {
+        let reachability = self.mark_reachable(roots).await?;
+        let live_cids = reachability
+            .live_cids
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
+        let mut seen_candidates = HashSet::new();
+        let mut unreachable = Vec::new();
+        let mut candidate_nodes = 0usize;
+
+        for candidate in candidates {
+            let cid = candidate.borrow();
+            if !seen_candidates.insert(cid.clone()) {
+                continue;
+            }
+            candidate_nodes += 1;
+            if !live_cids.contains(cid) {
+                unreachable.push(cid.clone());
+            }
+        }
+
+        let keys = unreachable
+            .iter()
+            .map(|cid| cid.as_bytes())
+            .collect::<Vec<_>>();
+        let values = async_batch_get_ordered_unique_bounded(
+            &self.store,
+            &keys,
+            ASYNC_NODE_PREFETCH_BATCH_SIZE,
+        )
+        .await?;
+        let mut reclaimable_cids = Vec::new();
+        let mut reclaimable_bytes = 0usize;
+        let mut missing_candidates = 0usize;
+        for (cid, value) in unreachable.into_iter().zip(values) {
+            match value {
+                Some(bytes) => {
+                    reclaimable_bytes += bytes.len();
+                    reclaimable_cids.push(cid);
+                }
+                None => missing_candidates += 1,
+            }
+        }
+
+        gc::sort_cids(&mut reclaimable_cids);
+        Ok(GcPlan {
+            reachability,
+            candidate_nodes,
+            reclaimable_nodes: reclaimable_cids.len(),
+            reclaimable_cids,
+            reclaimable_bytes,
+            missing_candidates,
+        })
+    }
+
+    /// Delete exactly the unreachable nodes selected by [`Self::plan_gc`].
+    pub async fn sweep_gc<I, C>(&self, roots: &[Tree], candidates: I) -> Result<GcSweep, Error>
+    where
+        I: IntoIterator<Item = C>,
+        C: Borrow<Cid>,
+    {
+        let plan = self.plan_gc(roots, candidates).await?;
+        let deleted_nodes = plan.reclaimable_nodes;
+        let deleted_bytes = plan.reclaimable_bytes;
+        if !plan.reclaimable_cids.is_empty() {
+            let ops = plan
+                .reclaimable_cids
+                .iter()
+                .map(|cid| store::BatchOp::Delete {
+                    key: cid.as_bytes(),
+                })
+                .collect::<Vec<_>>();
+            self.store
+                .batch(&ops)
+                .await
+                .map_err(|err| Error::Store(Box::new(err)))?;
+            self.clear_cache();
+        }
+        Ok(GcSweep {
+            plan,
+            deleted_nodes,
+            deleted_bytes,
         })
     }
 
@@ -5200,7 +5035,7 @@ where
         for tree in roots {
             if let Some(root_cid) = &tree.root {
                 if seen_nodes.insert(root_cid.clone()) {
-                    frontier.push(root_cid.clone());
+                    frontier.push((root_cid.clone(), tree.config.format.clone()));
                 }
             }
         }
@@ -5210,8 +5045,19 @@ where
         let mut scanned_values = 0usize;
 
         while !frontier.is_empty() {
-            let nodes = self.load_child_frontier_ordered(&frontier).await?;
+            let expected_format = frontier[0].1.clone();
+            let mut current = Vec::new();
             let mut next_frontier = Vec::new();
+            for (cid, node_format) in std::mem::take(&mut frontier) {
+                if node_format == expected_format {
+                    current.push(cid);
+                } else {
+                    next_frontier.push((cid, node_format));
+                }
+            }
+            let nodes = self
+                .load_child_frontier_ordered_for_format(&current, &expected_format)
+                .await?;
 
             for node in nodes {
                 if node.keys.len() != node.vals.len() {
@@ -5245,7 +5091,7 @@ where
                     for idx in 0..node.len() {
                         let child_cid = child_cid_at(&node, idx)?;
                         if seen_nodes.insert(child_cid.clone()) {
-                            next_frontier.push(child_cid);
+                            next_frontier.push((child_cid, expected_format.clone()));
                         }
                     }
                 }
@@ -5941,10 +5787,19 @@ where
     }
 
     pub(crate) async fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
+        self.load_arc_for_format(cid, &self.config.format).await
+    }
+
+    pub(crate) async fn load_arc_for_format(
+        &self,
+        cid: &Cid,
+        expected_format: &format::TreeFormat,
+    ) -> Result<Arc<Node>, Error> {
         let unbounded = if let Ok(cache) = self.node_cache.read() {
             if cache.is_unbounded() {
                 if let Some(node) = cache.peek(cid) {
                     self.metrics.add_cache_hits(1);
+                    validate_owned_node_format(&node, expected_format)?;
                     return Ok(node);
                 }
                 true
@@ -5958,6 +5813,7 @@ where
             if let Ok(mut cache) = self.node_cache.write() {
                 if let Some(node) = cache.get(cid) {
                     self.metrics.add_cache_hits(1);
+                    validate_owned_node_format(&node, expected_format)?;
                     return Ok(node);
                 }
             }
@@ -5973,7 +5829,7 @@ where
         self.metrics.record_point_read(bytes.len());
         let node = Arc::new(engine::validation::decode_owned(
             cid,
-            &self.config.format,
+            expected_format,
             &bytes,
         )?);
 
@@ -6159,12 +6015,15 @@ where
     async fn collect_stats_from_frontier(
         &self,
         root_cid: &Cid,
+        expected_format: &format::TreeFormat,
         stats: &mut TreeStats,
     ) -> Result<(), Error> {
         let mut frontier = vec![root_cid.clone()];
 
         while !frontier.is_empty() {
-            let nodes = self.load_child_frontier_ordered(&frontier).await?;
+            let nodes = self
+                .load_child_frontier_ordered_for_format(&frontier, expected_format)
+                .await?;
             let mut next_frontier = Vec::new();
 
             for node in nodes {
@@ -6191,12 +6050,23 @@ where
         &self,
         cids: &[Cid],
     ) -> Result<Vec<Arc<Node>>, Error> {
+        self.load_child_frontier_ordered_for_format(cids, &self.config.format)
+            .await
+    }
+
+    pub(crate) async fn load_child_frontier_ordered_for_format(
+        &self,
+        cids: &[Cid],
+        expected_format: &format::TreeFormat,
+    ) -> Result<Vec<Arc<Node>>, Error> {
         if cids.is_empty() {
             return Ok(Vec::new());
         }
         let parallelism = self.execution.read_parallelism().get().min(cids.len());
         if parallelism == 1 || cids.len() <= parallelism {
-            return self.load_many_ordered(cids).await;
+            return self
+                .load_many_ordered_for_format(cids, expected_format)
+                .await;
         }
 
         let chunk_size = cids
@@ -6205,7 +6075,10 @@ where
             .min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
         let partitions = stream::iter(
             cids.chunks(chunk_size)
-                .map(|chunk| async move { self.load_many_ordered(chunk).await }),
+                .map(|chunk| async move {
+                    self.load_many_ordered_for_format(chunk, expected_format)
+                        .await
+                }),
         )
         .buffered(parallelism)
         .collect::<Vec<_>>()
@@ -6218,6 +6091,15 @@ where
     }
 
     pub(crate) async fn load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
+        self.load_many_ordered_for_format(cids, &self.config.format)
+            .await
+    }
+
+    pub(crate) async fn load_many_ordered_for_format(
+        &self,
+        cids: &[Cid],
+        expected_format: &format::TreeFormat,
+    ) -> Result<Vec<Arc<Node>>, Error> {
         if cids.is_empty() {
             return Ok(Vec::new());
         }
@@ -6237,10 +6119,14 @@ where
         self.metrics.add_cache_hits(cache_hits);
 
         if missing.is_none() {
-            return nodes
+            let nodes = nodes
                 .into_iter()
                 .collect::<Option<Vec<_>>>()
-                .ok_or(Error::InvalidNode);
+                .ok_or(Error::InvalidNode)?;
+            for node in &nodes {
+                validate_owned_node_format(node, expected_format)?;
+            }
+            return Ok(nodes);
         }
 
         if let Some(MissingNodeBatch {
@@ -6250,7 +6136,9 @@ where
         }) = missing
         {
             if missing_cids.len() == 1 && !self.store.prefers_batch_reads() {
-                let node = self.load_arc(&missing_cids[0]).await?;
+                let node = self
+                    .load_arc_for_format(&missing_cids[0], expected_format)
+                    .await?;
                 let positions = missing_positions
                     .into_iter()
                     .next()
@@ -6289,7 +6177,7 @@ where
                     let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
                     let node = Arc::new(engine::validation::decode_owned(
                         &cid,
-                        &self.config.format,
+                        expected_format,
                         &bytes,
                     )?);
                     Ok((cid, node))
@@ -6309,10 +6197,14 @@ where
             self.metrics.add_cache_evictions(evictions);
         }
 
-        nodes
+        let nodes = nodes
             .into_iter()
             .collect::<Option<Vec<_>>>()
-            .ok_or(Error::InvalidNode)
+            .ok_or(Error::InvalidNode)?;
+        for node in &nodes {
+            validate_owned_node_format(node, expected_format)?;
+        }
+        Ok(nodes)
     }
 
     fn cache_node(&self, cid: Cid, node: Node) {
