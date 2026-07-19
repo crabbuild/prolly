@@ -19,7 +19,7 @@ pub(crate) use size::EncodedNodeSizer;
 mod streaming;
 pub(crate) use streaming::{EmittedNode, HierarchicalEmitter, LevelEmitter};
 
-const SORTED_BUILDER_NODE_BATCH: usize = 256;
+const SORTED_BUILDER_NODE_BATCH: usize = 4_096;
 const PARALLEL_BOUNDARY_HASH_MIN_ENTRIES: usize = 1_024;
 
 #[derive(Debug)]
@@ -477,6 +477,31 @@ where
         self.flush_pending_entry()?;
         self.pending_entry = Some((key, val));
         Ok(())
+    }
+
+    /// Add one key/value pair when the internal caller has already proved the
+    /// stream is strictly increasing and duplicate-free.
+    pub(crate) fn add_unique_sorted(&mut self, key: Vec<u8>, val: Vec<u8>) -> Result<(), Error> {
+        debug_assert!(match self.pending_entry.as_ref() {
+            Some((previous, _)) => previous < &key,
+            None => true,
+        });
+        self.flush_pending_entry()?;
+        self.pending_entry = Some((key, val));
+        Ok(())
+    }
+
+    /// Reuse an already-persisted canonical leaf when the stream is currently
+    /// aligned to a leaf boundary. Returns `false` when callers must replay the
+    /// leaf's entries to re-establish alignment.
+    pub(crate) fn add_complete_leaf(&mut self, leaf: NodeSummary) -> Result<bool, Error> {
+        self.flush_pending_entry()?;
+        if !self.hierarchy.leaf_is_empty() {
+            return Ok(false);
+        }
+        let emitted = self.hierarchy.push_complete_leaf(leaf)?;
+        self.collect_emitted(emitted)?;
+        Ok(true)
     }
 
     fn flush_pending_entry(&mut self) -> Result<(), Error> {

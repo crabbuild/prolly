@@ -118,6 +118,7 @@ use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 
 use super::batch::{get_max_key, BatchWriteCollector};
+use super::builder::{NodeSummary, SortedBatchBuilder};
 use super::cid::Cid;
 use super::error::{Conflict, Diff, Error, Mutation, Resolution, Resolver};
 use super::node::{Node, ReadNode};
@@ -4881,6 +4882,18 @@ pub fn merge_trees<S: Store>(
         return Ok(left.clone());
     }
 
+    let mut lineage_recorder = MergeTraceRecorder::disabled();
+    if let Some(merged) = try_lineage_merge(
+        prolly,
+        base,
+        left,
+        right,
+        resolver.as_deref().map(MergeResolverRef::Legacy),
+        &mut lineage_recorder,
+    )? {
+        return Ok(merged);
+    }
+
     if let Some(merged) = try_structural_merge(prolly, base, left, right, resolver.as_deref())? {
         return Ok(merged);
     }
@@ -4911,6 +4924,30 @@ pub fn merge_trees_borrowed<S: Store>(
         return Ok(left.clone());
     }
 
+    let mut lineage_recorder = MergeTraceRecorder::disabled();
+    if let Some(merged) = try_lineage_merge(
+        prolly,
+        base,
+        left,
+        right,
+        resolver.map(MergeResolverRef::Borrowed),
+        &mut lineage_recorder,
+    )? {
+        return Ok(merged);
+    }
+
+    // In-memory and native multi-get stores can compare the two already-sorted
+    // structural change streams more cheaply than performing one left-tree
+    // lookup per right-side change or speculatively walking the same changed
+    // spans through the structural merge. This is especially important for
+    // dense conflicts that resolve back to the existing left root: no mutation
+    // or rewrite is needed after the streams have been reconciled.
+    if resolver.is_some() && prolly.store().prefers_batch_reads() {
+        let left_diff = compute_diff(prolly, base, left)?;
+        let right_diff = compute_diff(prolly, base, right)?;
+        return merge_trees_with_borrowed_diffs(prolly, left, &left_diff, &right_diff, resolver);
+    }
+
     let mut recorder = MergeTraceRecorder::disabled();
     if let Some(merged) = try_structural_merge_traced(
         prolly,
@@ -4924,6 +4961,420 @@ pub fn merge_trees_borrowed<S: Store>(
     }
 
     merge_borrowed_diff_range(prolly, base, left, right, &[], None, resolver)
+}
+
+enum LineageMergePlan<'a> {
+    RightOnly(&'a Mutation),
+    Overlap(&'a Mutation, &'a Mutation),
+}
+
+fn mutation_value(mutation: &Mutation) -> Option<&[u8]> {
+    match mutation {
+        Mutation::Upsert { val, .. } => Some(val),
+        Mutation::Delete { .. } => None,
+    }
+}
+
+fn rebuild_with_sorted_mutations<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: &[Mutation],
+) -> Result<Tree, Error> {
+    let mut builder = SortedBatchBuilder::new(prolly.store(), tree.config.clone());
+    let mut mutation_index = 0usize;
+    let mut build_error = None;
+    prolly.scan_range(tree, &[], None, |entry| {
+        if build_error.is_some() {
+            return;
+        }
+        while mutation_index < mutations.len() && mutations[mutation_index].key() < entry.key() {
+            if let Mutation::Upsert { key, val } = &mutations[mutation_index] {
+                if let Err(error) = builder.add_unique_sorted(key.clone(), val.clone()) {
+                    build_error = Some(error);
+                    return;
+                }
+            }
+            mutation_index += 1;
+        }
+        if mutation_index < mutations.len() && mutations[mutation_index].key() == entry.key() {
+            if let Mutation::Upsert { key, val } = &mutations[mutation_index] {
+                if let Err(error) = builder.add_unique_sorted(key.clone(), val.clone()) {
+                    build_error = Some(error);
+                    return;
+                }
+            }
+            mutation_index += 1;
+        } else if let Err(error) =
+            builder.add_unique_sorted(entry.key().to_vec(), entry.value().to_vec())
+        {
+            build_error = Some(error);
+        }
+    })?;
+    if let Some(error) = build_error {
+        return Err(error);
+    }
+    while mutation_index < mutations.len() {
+        if let Mutation::Upsert { key, val } = &mutations[mutation_index] {
+            builder.add_unique_sorted(key.clone(), val.clone())?;
+        }
+        mutation_index += 1;
+    }
+    builder.build()
+}
+
+fn sorted_mutations_overlap(left: &[Mutation], right: &[Mutation]) -> bool {
+    if left.is_empty()
+        || right.is_empty()
+        || left.last().expect("nonempty").key() < right.first().expect("nonempty").key()
+        || right.last().expect("nonempty").key() < left.first().expect("nonempty").key()
+    {
+        return false;
+    }
+    let mut left_index = 0usize;
+    let mut right_index = 0usize;
+    while left_index < left.len() && right_index < right.len() {
+        match left[left_index].key().cmp(right[right_index].key()) {
+            std::cmp::Ordering::Less => left_index += 1,
+            std::cmp::Ordering::Greater => right_index += 1,
+            std::cmp::Ordering::Equal => return true,
+        }
+    }
+    false
+}
+
+type KeyInterval = (Vec<u8>, Option<Vec<u8>>);
+
+fn right_source_intervals(
+    left: &[Mutation],
+    right: &[Mutation],
+    max_intervals: usize,
+) -> Option<Vec<KeyInterval>> {
+    let mut left_index = 0usize;
+    let mut right_index = 0usize;
+    let mut open: Option<Vec<u8>> = None;
+    let mut intervals = Vec::new();
+    while left_index < left.len() || right_index < right.len() {
+        let take_right = match (left.get(left_index), right.get(right_index)) {
+            (Some(left), Some(right)) => right.key() < left.key(),
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        if take_right {
+            open.get_or_insert_with(|| right[right_index].key().to_vec());
+            right_index += 1;
+        } else {
+            if let Some(start) = open.take() {
+                intervals.push((start, Some(left[left_index].key().to_vec())));
+                if intervals.len() > max_intervals {
+                    return None;
+                }
+            }
+            left_index += 1;
+        }
+    }
+    if let Some(start) = open {
+        intervals.push((start, None));
+    }
+    (intervals.len() <= max_intervals).then_some(intervals)
+}
+
+fn add_tree_segment<S: Store>(
+    prolly: &Prolly<S>,
+    builder: &mut SortedBatchBuilder<&S>,
+    leaves: &[NodeSummary],
+    start: Option<&[u8]>,
+    end: Option<&[u8]>,
+) -> Result<(), Error> {
+    if start.zip(end).is_some_and(|(start, end)| start >= end) || leaves.is_empty() {
+        return Ok(());
+    }
+    let first = start
+        .map(|start| {
+            leaves
+                .partition_point(|leaf| leaf.first_key.as_slice() <= start)
+                .saturating_sub(1)
+        })
+        .unwrap_or(0);
+    let stop = end
+        .map(|end| leaves.partition_point(|leaf| leaf.first_key.as_slice() < end))
+        .unwrap_or(leaves.len());
+    for index in first..stop {
+        let leaf_start = leaves[index].first_key.as_slice();
+        let leaf_end = leaves.get(index + 1).map(|leaf| leaf.first_key.as_slice());
+        let whole_leaf = start.map_or(true, |start| start <= leaf_start)
+            && match (end, leaf_end) {
+                (None, None) => true,
+                (Some(end), Some(leaf_end)) => leaf_end <= end,
+                (None, Some(_)) => true,
+                _ => false,
+            };
+        if whole_leaf && builder.add_complete_leaf(leaves[index].clone())? {
+            continue;
+        }
+        let leaf = prolly.load_arc(&leaves[index].cid)?;
+        if !leaf.leaf || leaf.keys.len() != leaf.vals.len() {
+            return Err(Error::InvalidNode);
+        }
+        for (key, value) in leaf.keys.iter().zip(&leaf.vals) {
+            if start.map_or(true, |start| key.as_slice() >= start)
+                && end.map_or(true, |end| key.as_slice() < end)
+            {
+                builder.add(key.clone(), value.clone())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn rebuild_from_version_segments<S: Store>(
+    prolly: &Prolly<S>,
+    left: &Tree,
+    right: &Tree,
+    intervals: &[(Vec<u8>, Option<Vec<u8>>)],
+    prepared_left_leaves: Option<&[NodeSummary]>,
+    prepared_right_leaves: Option<&[NodeSummary]>,
+) -> Result<Tree, Error> {
+    let owned_left_leaves;
+    let left_leaves = match prepared_left_leaves {
+        Some(leaves) => leaves,
+        None => {
+            owned_left_leaves = super::write::tree_leaf_summaries(prolly, left)?;
+            &owned_left_leaves
+        }
+    };
+    let owned_right_leaves;
+    let right_leaves = match prepared_right_leaves {
+        Some(leaves) => leaves,
+        None => {
+            owned_right_leaves = super::write::tree_leaf_summaries(prolly, right)?;
+            &owned_right_leaves
+        }
+    };
+    let mut builder = SortedBatchBuilder::new(prolly.store(), left.config.clone());
+    let mut cursor: Option<&[u8]> = None;
+    for (start, end) in intervals {
+        add_tree_segment(prolly, &mut builder, left_leaves, cursor, Some(start))?;
+        add_tree_segment(
+            prolly,
+            &mut builder,
+            right_leaves,
+            Some(start),
+            end.as_deref(),
+        )?;
+        cursor = end.as_deref();
+        if cursor.is_none() {
+            break;
+        }
+    }
+    if cursor.is_some() || intervals.is_empty() {
+        add_tree_segment(prolly, &mut builder, left_leaves, cursor, None)?;
+    }
+    builder.build()
+}
+
+fn try_lineage_merge<S: Store>(
+    prolly: &Prolly<S>,
+    base: &Tree,
+    left: &Tree,
+    right: &Tree,
+    resolver: Option<MergeResolverRef<'_>>,
+    recorder: &mut MergeTraceRecorder<'_>,
+) -> Result<Option<Tree>, Error> {
+    let Some(left_changes) = prolly.direct_branch_changes(base, left) else {
+        return Ok(None);
+    };
+    let Some(right_changes) = prolly.direct_branch_changes(base, right) else {
+        return Ok(None);
+    };
+    let left_leaves = prolly.direct_branch_leaves(base, left);
+    let right_leaves = prolly.direct_branch_leaves(base, right);
+    let right_internals = prolly.direct_branch_internals(base, right);
+    let right_levels = prolly.direct_branch_levels(base, right);
+    let right_all_upserts = prolly
+        .direct_branch_all_upserts(base, right)
+        .unwrap_or(false);
+
+    if !sorted_mutations_overlap(&left_changes, &right_changes) {
+        recorder.record(MergeTraceEvent::BatchMerge {
+            right_changes: right_changes.len(),
+            mutations: right_changes.len(),
+            append_only: false,
+        });
+        let append_only = right_all_upserts
+            && match right_changes.first() {
+                Some(mutation) => key_is_after_tree(prolly, mutation.key(), left)?,
+                None => false,
+            };
+        let merged = if append_only {
+            match super::write::append_tree_suffix(
+                prolly,
+                left,
+                right,
+                right_changes.first().expect("nonempty append batch").key(),
+                right_leaves.as_deref().map(Vec::as_slice),
+                right_internals.as_deref(),
+                right_levels.as_deref().map(Vec::as_slice),
+            )? {
+                Some(merged) => merged,
+                None => prolly.batch(left, right_changes.as_ref().clone())?,
+            }
+        } else if let Some(intervals) =
+            right_source_intervals(&left_changes, &right_changes, 16_384)
+        {
+            rebuild_from_version_segments(
+                prolly,
+                left,
+                right,
+                &intervals,
+                left_leaves.as_deref().map(Vec::as_slice),
+                right_leaves.as_deref().map(Vec::as_slice),
+            )?
+        } else {
+            rebuild_with_sorted_mutations(prolly, left, &right_changes)?
+        };
+        return Ok(Some(merged));
+    }
+
+    let mut plan = Vec::with_capacity(right_changes.len());
+    let mut overlap_keys = Vec::new();
+    let mut left_index = 0usize;
+    let mut right_index = 0usize;
+    while left_index < left_changes.len() && right_index < right_changes.len() {
+        match left_changes[left_index]
+            .key()
+            .cmp(right_changes[right_index].key())
+        {
+            std::cmp::Ordering::Less => left_index += 1,
+            std::cmp::Ordering::Greater => {
+                plan.push(LineageMergePlan::RightOnly(&right_changes[right_index]));
+                right_index += 1;
+            }
+            std::cmp::Ordering::Equal => {
+                let key = right_changes[right_index].key();
+                overlap_keys.push(key);
+                plan.push(LineageMergePlan::Overlap(
+                    &left_changes[left_index],
+                    &right_changes[right_index],
+                ));
+                left_index += 1;
+                right_index += 1;
+            }
+        }
+    }
+    plan.extend(
+        right_changes[right_index..]
+            .iter()
+            .map(LineageMergePlan::RightOnly),
+    );
+    let base_values = if overlap_keys.is_empty() {
+        Vec::new()
+    } else {
+        prolly.get_many(base, &overlap_keys)?
+    };
+    let mut overlap_index = 0usize;
+    let mut mutations = Vec::with_capacity(plan.len());
+    for item in plan {
+        match item {
+            LineageMergePlan::RightOnly(mutation) => mutations.push(mutation.clone()),
+            LineageMergePlan::Overlap(left_mutation, right_mutation) => {
+                let key = right_mutation.key();
+                let base_value = base_values[overlap_index].as_deref();
+                let left_value = mutation_value(left_mutation);
+                let right_value = mutation_value(right_mutation);
+                overlap_index += 1;
+
+                if left_value == right_value || right_value == base_value {
+                    continue;
+                }
+                if left_value == base_value {
+                    push_change_mutation(&mut mutations, key, right_value);
+                    continue;
+                }
+
+                let selected = resolve_conflict(
+                    resolver,
+                    ConflictRef {
+                        key,
+                        base: base_value,
+                        left: left_value,
+                        right: right_value,
+                    },
+                    MergeTraceStage::Batch,
+                    recorder,
+                )
+                .map_err(Error::Conflict)?;
+                if selected.as_deref() != left_value {
+                    push_change_mutation(&mut mutations, key, selected.as_deref());
+                }
+            }
+        }
+    }
+
+    recorder.record(MergeTraceEvent::BatchMerge {
+        right_changes: right_changes.len(),
+        mutations: mutations.len(),
+        append_only: false,
+    });
+    if mutations.is_empty() {
+        Ok(Some(left.clone()))
+    } else {
+        let result = rebuild_with_sorted_mutations(prolly, left, &mutations)?;
+        Ok(Some(result))
+    }
+}
+
+fn merge_trees_with_borrowed_diffs<S: Store>(
+    prolly: &Prolly<S>,
+    left: &Tree,
+    left_diff: &[Diff],
+    right_diff: &[Diff],
+    resolver: Option<&dyn BorrowedMergeResolver>,
+) -> Result<Tree, Error> {
+    let left_changes = build_merge_change_refs(left_diff);
+    let right_changes = build_merge_change_refs(right_diff);
+    let mut left_index = 0usize;
+    let mut mutations = Vec::new();
+    let mut recorder = MergeTraceRecorder::disabled();
+
+    for right_change in right_changes {
+        while left_index < left_changes.len() && left_changes[left_index].key < right_change.key {
+            left_index += 1;
+        }
+        let left_change = left_changes
+            .get(left_index)
+            .filter(|change| change.key == right_change.key);
+        let left_value = left_change.map_or(right_change.base, |change| change.value);
+
+        if left_value == right_change.base {
+            push_change_mutation(&mut mutations, right_change.key, right_change.value);
+            continue;
+        }
+        if left_value == right_change.value {
+            continue;
+        }
+
+        let selected = resolve_conflict(
+            resolver.map(MergeResolverRef::Borrowed),
+            ConflictRef {
+                key: right_change.key,
+                base: right_change.base,
+                left: left_value,
+                right: right_change.value,
+            },
+            MergeTraceStage::Batch,
+            &mut recorder,
+        )
+        .map_err(Error::Conflict)?;
+        if selected.as_deref() != left_value {
+            push_change_mutation(&mut mutations, right_change.key, selected.as_deref());
+        }
+    }
+
+    if mutations.is_empty() {
+        Ok(left.clone())
+    } else {
+        prolly.batch(left, mutations)
+    }
 }
 
 /// Merge right-side changes in `[start, end)` using a borrowed resolver.

@@ -1447,21 +1447,20 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
                 return Err(Error::InvalidNode);
             }
             Self::validate_leaf(&frame.node)?;
-            if frame.index >= frame.node.len() {
-                if !Self::advance_forward(self.manager, &mut stack)? {
+            while frame.index < frame.node.len() {
+                let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                if end.is_some_and(|end| key >= end) {
                     return Ok(ScanOutcome::complete(visited));
                 }
-                continue;
+                let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                frame.index += 1;
+                visited = visited.saturating_add(1);
+                if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                    return Ok(ScanOutcome::stopped(visited, value));
+                }
             }
-            let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
-            if end.is_some_and(|end| key >= end) {
+            if !Self::advance_forward(self.manager, &mut stack)? {
                 return Ok(ScanOutcome::complete(visited));
-            }
-            let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
-            frame.index += 1;
-            visited = visited.saturating_add(1);
-            if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
-                return Ok(ScanOutcome::stopped(visited, value));
             }
         }
     }

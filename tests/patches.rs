@@ -68,3 +68,16 @@ fn patch_rejects_wrong_base_and_unverified_subtrees() {
         Err(Error::InvalidStructuralPatch(_))
     ));
 }
+
+#[test]
+fn root_patch_reuses_the_verified_target_subtree() {
+    let manager = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let base = manager
+        .put(&manager.create(), b"a".to_vec(), b"1".to_vec())
+        .unwrap();
+    let target = manager.put(&base, b"b".to_vec(), b"2".to_vec()).unwrap();
+    let patch = manager.diff_patch(&base, &target).unwrap();
+
+    assert_eq!(patch.edits.len(), 1);
+    assert_eq!(manager.apply_patch(&base, &patch).unwrap(), target);
+}
