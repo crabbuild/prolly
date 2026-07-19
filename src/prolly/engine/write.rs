@@ -47,12 +47,150 @@ impl<S> ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>
 where
     S: Store,
 {
-    fn should_use_hint_replay(&self, mutations: &[Mutation]) -> bool {
-        self.store.inner().supports_hints()
-            && !mutations.is_empty()
-            && mutations
+    fn load_rightmost_path_hint_ready(
+        &self,
+        tree: &Tree,
+        root: &Cid,
+    ) -> Result<Option<Vec<crate::prolly::AsyncRightmostPathEntry>>, Error> {
+        let Some(bytes) = self
+            .store
+            .inner()
+            .get_hint(
+                crate::prolly::RIGHTMOST_PATH_HINT_NAMESPACE,
+                root.as_bytes(),
+            )
+            .map_err(|error| Error::Store(Box::new(error)))?
+        else {
+            return Ok(None);
+        };
+        let Ok(hint) = serde_cbor::from_slice::<crate::prolly::AsyncRightmostPathHint>(&bytes)
+        else {
+            return Ok(None);
+        };
+        if hint.version != 2
+            || hint.entries.is_empty()
+            || hint.entries.first().map(|entry| &entry.cid) != Some(root)
+        {
+            return Ok(None);
+        }
+
+        let keys = hint
+            .entries
+            .iter()
+            .map(|entry| entry.cid.as_bytes())
+            .collect::<Vec<_>>();
+        let node_bytes = self
+            .store
+            .inner()
+            .batch_get_ordered_unique(&keys)
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        if node_bytes.len() != hint.entries.len() || node_bytes.iter().any(Option::is_none) {
+            return Ok(None);
+        }
+
+        let mut path = Vec::with_capacity(hint.entries.len());
+        for (entry, bytes) in hint.entries.into_iter().zip(node_bytes) {
+            let Some(bytes) = bytes else {
+                return Ok(None);
+            };
+            let Ok(node) = validation::decode_owned(&entry.cid, &tree.config.format, &bytes) else {
+                return Ok(None);
+            };
+            path.push(crate::prolly::AsyncRightmostPathEntry {
+                cid: entry.cid,
+                node,
+                child_index: entry.child_index,
+            });
+        }
+        if !crate::prolly::rightmost_path_hint_is_valid(root, &path) {
+            return Ok(None);
+        }
+        for entry in &path {
+            self.cache_node(entry.cid.clone(), entry.node.clone());
+        }
+        Ok(Some(path))
+    }
+
+    fn should_publish_ready_hint(
+        &self,
+        tree: &Tree,
+        mutations: &[Mutation],
+    ) -> Result<bool, Error> {
+        if !self.store.inner().supports_hints()
+            || !self.store.inner().prefers_rightmost_path_hints()
+            || mutations.is_empty()
+            || mutations
                 .iter()
-                .all(|mutation| matches!(mutation, Mutation::Upsert { .. }))
+                .any(|mutation| !matches!(mutation, Mutation::Upsert { .. }))
+        {
+            return Ok(false);
+        }
+        let Some(root) = tree.root.as_ref() else {
+            return Ok(true);
+        };
+        let smallest = mutations
+            .iter()
+            .map(Mutation::key)
+            .min()
+            .ok_or(Error::InvalidNode)?;
+        if self.cached_rightmost_path(root).is_none() {
+            if let Some(path) = self.load_rightmost_path_hint_ready(tree, root)? {
+                self.cache_rightmost_path(
+                    root.clone(),
+                    crate::prolly::cached_rightmost_entries(&path),
+                );
+            }
+        }
+        let maximum = if let Some(path) = self.cached_rightmost_path(root) {
+            path.last()
+                .and_then(|entry| entry.node.keys.last())
+                .cloned()
+                .ok_or(Error::InvalidNode)?
+        } else {
+            let manager = ReadyWriteManager::new(self, &tree.config, PublicationOrigin::General);
+            let path = canonical_rightmost_path(&manager, root)?;
+            let maximum = path
+                .last()
+                .and_then(|entry| entry.node.keys.last())
+                .cloned()
+                .ok_or(Error::InvalidNode)?;
+            self.cache_rightmost_path(root.clone(), crate::prolly::cached_rightmost_entries(&path));
+            maximum
+        };
+        Ok(smallest > maximum.as_slice())
+    }
+
+    fn publish_ready_hint(
+        &self,
+        manager: &ReadyWriteManager<'_, S>,
+        tree: &Tree,
+    ) -> Result<(), Error> {
+        if manager.store.buffer_is_empty() {
+            return Ok(());
+        }
+        let root = tree.root.as_ref().ok_or(Error::InvalidNode)?;
+        let path = canonical_rightmost_path(manager, root)?;
+        let hint = crate::prolly::encode_rightmost_path_hint(&path)?;
+        let entries = manager.store.take_buffered_entries();
+        let entry_refs = entries
+            .iter()
+            .map(|(key, value)| (key.as_slice(), value.as_slice()))
+            .collect::<Vec<_>>();
+        manager
+            .store
+            .inner
+            .publish_nodes(NodePublication::with_hint(
+                &entry_refs,
+                NodePublicationHint::new(
+                    crate::prolly::RIGHTMOST_PATH_HINT_NAMESPACE,
+                    root.as_bytes(),
+                    &hint,
+                ),
+                manager.store.origin,
+            ))
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        self.cache_rightmost_path(root.clone(), crate::prolly::cached_rightmost_entries(&path));
+        Ok(())
     }
 
     pub(crate) fn structural_merge_ready(
@@ -72,12 +210,17 @@ where
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
-        if self.should_use_hint_replay(&mutations) {
-            let future = self.canonical_batch(tree, mutations, origin);
-            return super::ready::run_ready(self.store.ready(future));
+        let publish_hint = self.should_publish_ready_hint(tree, &mutations)?;
+        let manager = if publish_hint {
+            ReadyWriteManager::buffered(self, &tree.config, origin)
+        } else {
+            ReadyWriteManager::new(self, &tree.config, origin)
+        };
+        let result = crate::prolly::write::apply(&manager, tree, mutations)?;
+        if publish_hint {
+            self.publish_ready_hint(&manager, &result.0)?;
         }
-        let manager = ReadyWriteManager::new(self, &tree.config, origin);
-        crate::prolly::write::apply(&manager, tree, mutations)
+        Ok(result)
     }
 
     pub(crate) fn canonical_batch_tree_ready(
@@ -86,12 +229,17 @@ where
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        if self.should_use_hint_replay(&mutations) {
-            let future = self.canonical_batch(tree, mutations, origin);
-            return super::ready::run_ready(self.store.ready(future)).map(|(tree, _)| tree);
+        let publish_hint = self.should_publish_ready_hint(tree, &mutations)?;
+        let manager = if publish_hint {
+            ReadyWriteManager::buffered(self, &tree.config, origin)
+        } else {
+            ReadyWriteManager::new(self, &tree.config, origin)
+        };
+        let result = crate::prolly::write::apply_tree(&manager, tree, mutations)?;
+        if publish_hint {
+            self.publish_ready_hint(&manager, &result)?;
         }
-        let manager = ReadyWriteManager::new(self, &tree.config, origin);
-        crate::prolly::write::apply_tree(&manager, tree, mutations)
+        Ok(result)
     }
 
     pub(crate) fn canonical_batch_ready_configured(
@@ -130,11 +278,30 @@ where
 struct PublicationStore<'a, S: Store> {
     inner: &'a S,
     origin: PublicationOrigin,
+    buffer: Option<Arc<Mutex<BufferedPublication>>>,
+}
+
+#[derive(Default)]
+struct BufferedPublication {
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+    positions: HashMap<Vec<u8>, usize>,
 }
 
 impl<'a, S: Store> PublicationStore<'a, S> {
     const fn new(inner: &'a S, origin: PublicationOrigin) -> Self {
-        Self { inner, origin }
+        Self {
+            inner,
+            origin,
+            buffer: None,
+        }
+    }
+
+    fn buffered(inner: &'a S, origin: PublicationOrigin) -> Self {
+        Self {
+            inner,
+            origin,
+            buffer: Some(Arc::new(Mutex::new(BufferedPublication::default()))),
+        }
     }
 
     fn publication<'b>(&self, publication: NodePublication<'b>) -> NodePublication<'b> {
@@ -143,16 +310,75 @@ impl<'a, S: Store> PublicationStore<'a, S> {
             None => NodePublication::new(publication.entries(), self.origin),
         }
     }
+
+    fn buffer_is_empty(&self) -> bool {
+        match self.buffer.as_ref() {
+            Some(buffer) => buffer
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .entries
+                .is_empty(),
+            None => true,
+        }
+    }
+
+    fn buffered_value(&self, key: &[u8]) -> Option<Vec<u8>> {
+        let buffer = self.buffer.as_ref()?;
+        let buffer = buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        buffer
+            .positions
+            .get(key)
+            .map(|position| buffer.entries[*position].1.clone())
+    }
+
+    fn buffer_publication(&self, publication: NodePublication<'_>) -> bool {
+        let Some(buffer) = self.buffer.as_ref() else {
+            return false;
+        };
+        let mut buffer = buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for (key, value) in publication.entries() {
+            if let Some(position) = buffer.positions.get(*key).copied() {
+                buffer.entries[position].1.clear();
+                buffer.entries[position].1.extend_from_slice(value);
+            } else {
+                let position = buffer.entries.len();
+                buffer.entries.push((key.to_vec(), value.to_vec()));
+                buffer.positions.insert(key.to_vec(), position);
+            }
+        }
+        true
+    }
+
+    fn take_buffered_entries(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let Some(buffer) = self.buffer.as_ref() else {
+            return Vec::new();
+        };
+        let mut buffer = buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        buffer.positions.clear();
+        std::mem::take(&mut buffer.entries)
+    }
 }
 
 impl<S: Store> Store for PublicationStore<'_, S> {
     type Error = S::Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        if let Some(value) = self.buffered_value(key) {
+            return Ok(Some(value));
+        }
         self.inner.get(key)
     }
 
     fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        if let Some(value) = self.buffered_value(key) {
+            return Ok(Some(Arc::from(value.into_boxed_slice())));
+        }
         self.inner.get_shared(key)
     }
 
@@ -160,6 +386,9 @@ impl<S: Store> Store for PublicationStore<'_, S> {
         &self,
         keys: &[&[u8]],
     ) -> Result<SharedReadBatch, Self::Error> {
+        if !self.buffer_is_empty() {
+            return keys.iter().map(|key| self.get_shared(key)).collect();
+        }
         self.inner.batch_get_shared_ordered_unique(keys)
     }
 
@@ -169,8 +398,7 @@ impl<S: Store> Store for PublicationStore<'_, S> {
 
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         let entries = [(key, value)];
-        self.inner
-            .publish_nodes(NodePublication::new(&entries, self.origin))
+        self.publish_nodes(NodePublication::new(&entries, self.origin))
     }
 
     fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
@@ -178,14 +406,35 @@ impl<S: Store> Store for PublicationStore<'_, S> {
     }
 
     fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        if self.buffer.is_some() {
+            for operation in ops {
+                match operation {
+                    BatchOp::Upsert { key, value } => self.put(key, value)?,
+                    BatchOp::Delete { key } => self.inner.delete(key)?,
+                }
+            }
+            return Ok(());
+        }
         self.inner.batch(ops)
     }
 
     fn batch_get(&self, keys: &[&[u8]]) -> Result<HashMap<Vec<u8>, Vec<u8>>, Self::Error> {
+        if !self.buffer_is_empty() {
+            let mut values = HashMap::with_capacity(keys.len());
+            for key in keys {
+                if let Some(value) = self.get(key)? {
+                    values.insert(key.to_vec(), value);
+                }
+            }
+            return Ok(values);
+        }
         self.inner.batch_get(keys)
     }
 
     fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        if !self.buffer_is_empty() {
+            return keys.iter().map(|key| self.get(key)).collect();
+        }
         self.inner.batch_get_ordered(keys)
     }
 
@@ -193,6 +442,9 @@ impl<S: Store> Store for PublicationStore<'_, S> {
         &self,
         keys: &[&[u8]],
     ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        if !self.buffer_is_empty() {
+            return keys.iter().map(|key| self.get(key)).collect();
+        }
         self.inner.batch_get_ordered_unique(keys)
     }
 
@@ -201,12 +453,15 @@ impl<S: Store> Store for PublicationStore<'_, S> {
     }
 
     fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
-        self.inner
-            .publish_nodes(NodePublication::new(entries, self.origin))
+        self.publish_nodes(NodePublication::new(entries, self.origin))
     }
 
     fn supports_hints(&self) -> bool {
         self.inner.supports_hints()
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.inner.prefers_rightmost_path_hints()
     }
 
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -224,7 +479,7 @@ impl<S: Store> Store for PublicationStore<'_, S> {
         key: &[u8],
         value: &[u8],
     ) -> Result<(), Self::Error> {
-        self.inner.publish_nodes(NodePublication::with_hint(
+        self.publish_nodes(NodePublication::with_hint(
             entries,
             NodePublicationHint::new(namespace, key, value),
             self.origin,
@@ -232,6 +487,9 @@ impl<S: Store> Store for PublicationStore<'_, S> {
     }
 
     fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        if self.buffer_publication(publication) {
+            return Ok(());
+        }
         self.inner.publish_nodes(self.publication(publication))
     }
 }
@@ -251,6 +509,18 @@ impl<'a, S: Store> ReadyWriteManager<'a, S> {
         Self {
             engine,
             store: PublicationStore::new(engine.store.inner().as_ref(), origin),
+            config,
+        }
+    }
+
+    fn buffered(
+        engine: &'a ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>,
+        config: &'a crate::prolly::Config,
+        origin: PublicationOrigin,
+    ) -> Self {
+        Self {
+            engine,
+            store: PublicationStore::buffered(engine.store.inner().as_ref(), origin),
             config,
         }
     }
@@ -774,7 +1044,10 @@ where
                 .iter()
                 .all(|mutation| matches!(mutation, Mutation::Upsert { .. }));
         if let Some(root) = tree.root.as_ref().filter(|_| {
-            tree.config.format == self.config.format && all_upserts && self.store.supports_hints()
+            tree.config.format == self.config.format
+                && all_upserts
+                && self.store.supports_hints()
+                && self.store.prefers_rightmost_path_hints()
         }) {
             if self.cached_rightmost_path(root).is_none() {
                 if let Some(path) = self.load_rightmost_path_hint(root).await? {
@@ -889,9 +1162,12 @@ where
                 .iter()
                 .map(|(cid, bytes)| (cid.as_bytes(), bytes.as_slice()))
                 .collect::<Vec<_>>();
-            if publish_rightmost_hint && self.store.supports_hints() {
+            if publish_rightmost_hint
+                && self.store.supports_hints()
+                && self.store.prefers_rightmost_path_hints()
+            {
                 let root = result.0.root.as_ref().ok_or(Error::InvalidNode)?;
-                let path = replay_rightmost_path(&manager, root)?;
+                let path = canonical_rightmost_path(&manager, root)?;
                 let hint = crate::prolly::encode_rightmost_path_hint(&path)?;
                 self.store
                     .publish_nodes(NodePublication::with_hint(
@@ -1037,10 +1313,13 @@ where
     }
 }
 
-fn replay_rightmost_path(
-    manager: &ReplayWriteManager,
+fn canonical_rightmost_path<M>(
+    manager: &M,
     root: &Cid,
-) -> Result<Vec<crate::prolly::AsyncRightmostPathEntry>, Error> {
+) -> Result<Vec<crate::prolly::AsyncRightmostPathEntry>, Error>
+where
+    M: CanonicalWriteManager,
+{
     let mut path = Vec::new();
     let mut cid = root.clone();
     loop {

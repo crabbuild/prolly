@@ -202,6 +202,11 @@ pub trait RemoteStoreBackend: Send + Sync {
         false
     }
 
+    /// Whether append-heavy writes should maintain rightmost-path hints.
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        false
+    }
+
     /// Read an optional performance hint.
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let _ = (namespace, key);
@@ -331,6 +336,10 @@ impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
 
     fn supports_hints(&self) -> bool {
         (**self).supports_hints()
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
     }
 
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -534,6 +543,10 @@ impl<B: RemoteStoreBackend> AsyncStore for RemoteProllyStore<B> {
 
     fn supports_hints(&self) -> bool {
         self.backend.supports_hints()
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.backend.prefers_rightmost_path_hints()
     }
 
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {

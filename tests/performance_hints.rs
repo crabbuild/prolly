@@ -106,6 +106,10 @@ impl Store for CountingHintStore {
         true
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        true
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         self.get_hint_calls.fetch_add(1, Ordering::Relaxed);
         Ok(self

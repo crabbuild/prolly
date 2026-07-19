@@ -376,6 +376,15 @@ pub trait Store: Send + Sync {
         false
     }
 
+    /// Whether append-heavy writes should maintain the engine's rightmost-path hint.
+    ///
+    /// This is a measured performance preference, not a correctness capability.
+    /// Stores should opt in only when they also support hints and path hydration
+    /// saves more work than persisting one hint for each appended tree root.
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        false
+    }
+
     /// Retrieve an optional performance hint for a logical namespace and key.
     ///
     /// Hints are not part of the content-addressed tree semantics. Store
@@ -579,6 +588,15 @@ pub trait AsyncStore {
 
     /// Whether this store persists performance hints.
     fn supports_hints(&self) -> bool {
+        false
+    }
+
+    /// Whether append-heavy writes should maintain the engine's rightmost-path hint.
+    ///
+    /// This is a measured performance preference, not a correctness capability.
+    /// Stores should opt in only when they also support hints and path hydration
+    /// saves more work than persisting one hint for each appended tree root.
+    fn prefers_rightmost_path_hints(&self) -> bool {
         false
     }
 
@@ -791,6 +809,10 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
 
     fn supports_hints(&self) -> bool {
         self.inner.supports_hints()
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.inner.prefers_rightmost_path_hints()
     }
 
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -1053,6 +1075,10 @@ where
         self.inner.supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.inner.prefers_rightmost_path_hints()
+    }
+
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let namespace = namespace.to_vec();
         let key = key.to_vec();
@@ -1266,6 +1292,10 @@ impl<T: Store> Store for std::sync::Arc<T> {
         (**self).supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         (**self).get_hint(namespace, key)
     }
@@ -1355,6 +1385,10 @@ impl<T: Store + ?Sized> Store for &T {
         (**self).supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         (**self).get_hint(namespace, key)
     }
@@ -1440,6 +1474,10 @@ impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
 
     fn supports_hints(&self) -> bool {
         (**self).supports_hints()
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
     }
 
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {

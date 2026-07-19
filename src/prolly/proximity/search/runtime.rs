@@ -263,6 +263,10 @@ impl<S: Store + Clone> Store for SearchIo<S> {
         self.store.supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.store.prefers_rightmost_path_hints()
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         self.store.get_hint(namespace, key)
     }

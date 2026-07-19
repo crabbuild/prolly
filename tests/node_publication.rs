@@ -174,6 +174,10 @@ impl Store for RecordingSyncStore {
         self.supports_hints
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.supports_hints
+    }
+
     fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
         self.publications
             .lock()
@@ -302,6 +306,10 @@ impl AsyncStore for RecordingAsyncStore {
     }
 
     fn supports_hints(&self) -> bool {
+        self.supports_hints
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
         self.supports_hints
     }
 
@@ -543,6 +551,14 @@ impl Store for ControlledPublicationStore {
         controlled(self.inner.batch_put(entries))
     }
 
+    fn supports_hints(&self) -> bool {
+        true
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        true
+    }
+
     fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
         self.publication_calls.fetch_add(1, Ordering::AcqRel);
         self.reject_if_configured()?;
@@ -601,6 +617,14 @@ impl AsyncStore for ControlledPublicationStore {
 
     async fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
         controlled(Store::batch_put(&*self.inner, entries))
+    }
+
+    fn supports_hints(&self) -> bool {
+        true
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        true
     }
 
     async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
@@ -929,7 +953,7 @@ fn publication_failure_returns_no_tree_and_preserves_the_original() {
     sync.publish_named_root(b"main", &sync_base).unwrap();
     sync_store.set_failure(true);
 
-    let sync_error = sync.put(&sync_base, b"new".to_vec(), b"value".to_vec());
+    let sync_error = sync.put(&sync_base, b"zz-new".to_vec(), b"value".to_vec());
     assert!(matches!(sync_error, Err(prolly::Error::Store(_))));
     assert_eq!(
         sync.get(&sync_base, b"stable").unwrap(),
@@ -955,7 +979,7 @@ fn publication_failure_returns_no_tree_and_preserves_the_original() {
         async_store.set_failure(true);
 
         let async_error = async_prolly
-            .put(&async_base, b"new".to_vec(), b"value".to_vec())
+            .put(&async_base, b"zz-new".to_vec(), b"value".to_vec())
             .await;
         assert!(matches!(async_error, Err(prolly::Error::Store(_))));
         assert_eq!(
@@ -1197,17 +1221,21 @@ fn sync_hint_capable_point_upserts_publish_the_rightmost_path_atomically() {
     let first = prolly
         .put(&prolly.create(), b"a".to_vec(), b"one".to_vec())
         .unwrap();
-    let first_publication = store.take_publications().pop().unwrap();
+    let first_publications = store.take_publications();
+    assert_eq!(first_publications.len(), 1);
+    let first_publication = &first_publications[0];
     assert_eq!(first_publication.origin, PublicationOrigin::PointUpsert);
-    let (namespace, key, value) = first_publication.hint.unwrap();
+    let (namespace, key, value) = first_publication.hint.as_ref().unwrap();
     assert_eq!(namespace, b"prolly:rightmost-path:v1");
     assert_eq!(key.as_slice(), first.root.as_ref().unwrap().as_bytes());
     assert!(!value.is_empty());
 
     let second = prolly.put(&first, b"b".to_vec(), b"two".to_vec()).unwrap();
-    let second_publication = store.take_publications().pop().unwrap();
+    let second_publications = store.take_publications();
+    assert_eq!(second_publications.len(), 1);
+    let second_publication = &second_publications[0];
     assert_eq!(second_publication.origin, PublicationOrigin::PointUpsert);
-    let (namespace, key, value) = second_publication.hint.unwrap();
+    let (namespace, key, value) = second_publication.hint.as_ref().unwrap();
     assert_eq!(namespace, b"prolly:rightmost-path:v1");
     assert_eq!(key.as_slice(), second.root.as_ref().unwrap().as_bytes());
     assert!(!value.is_empty());

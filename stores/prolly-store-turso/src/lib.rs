@@ -261,6 +261,10 @@ impl RemoteStoreBackend for TursoBackend {
         true
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        true
+    }
+
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let connection = self.connect().await?;
         query_optional_blob(&connection, SELECT_HINT_SQL, (namespace, key)).await
