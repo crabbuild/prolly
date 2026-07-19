@@ -59,24 +59,6 @@ where
         }
     }
 
-    pub(super) fn with_state(
-        store: S,
-        config: Config,
-        execution: ExecutionConfig,
-        node_cache: Arc<RwLock<NodeCache>>,
-        metrics: Arc<ProllyMetrics>,
-    ) -> Self {
-        Self {
-            store,
-            config,
-            execution,
-            node_cache,
-            metrics,
-            recent_leaf: RwLock::new(None),
-            rightmost_path_cache: RwLock::new(None),
-        }
-    }
-
     /// Read one key using the input tree's persisted format.
     pub async fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         let Some(root) = &tree.root else {

@@ -109,10 +109,7 @@ fn block_on<F: Future>(future: F) -> F::Output {
 fn async_snapshot_and_node_gc_services_are_engine_native() {
     block_on(async {
         let source = Arc::new(MemStore::new());
-        let engine = AsyncProlly::new(
-            SyncStoreAsAsync::new(source.clone()),
-            Config::default(),
-        );
+        let engine = AsyncProlly::new(SyncStoreAsAsync::new(source.clone()), Config::default());
         let first = engine
             .put(&engine.create(), b"a".to_vec(), b"one".to_vec())
             .await
@@ -150,7 +147,10 @@ fn async_snapshot_and_node_gc_services_are_engine_native() {
             .await
             .unwrap();
         assert_eq!(swept.deleted_nodes, plan.reclaimable_nodes);
-        assert_eq!(engine.get(&current, b"a").await.unwrap(), Some(b"one".to_vec()));
+        assert_eq!(
+            engine.get(&current, b"a").await.unwrap(),
+            Some(b"one".to_vec())
+        );
     });
 }
 

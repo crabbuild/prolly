@@ -1851,9 +1851,9 @@ where
     if start.zip(end).is_some_and(|(start, end)| end <= start) {
         return Ok(ScanOutcome::complete(0));
     }
-    if base.config.format != other.config.format || base.config.format != prolly.config.format {
+    if base.config.format != other.config.format || base.config.format != prolly.config().format {
         return Err(Error::FormatMismatch {
-            expected: prolly.config.format.digest()?,
+            expected: prolly.config().format.digest()?,
             actual: other.config.format.digest()?,
         });
     }

@@ -181,7 +181,6 @@ use config::Config;
 use config::RuntimeConfig;
 #[cfg(test)]
 use encoding::INIT_LEVEL;
-use engine::execution::ExecutionConfig;
 use error::Conflict;
 use error::Diff;
 use error::Error;
@@ -899,15 +898,11 @@ where
 /// let tree = prolly.create();
 /// ```
 pub struct Prolly<S: Store> {
-    store: Arc<S>,
     engine: engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
-    config: Config,
-    node_cache: Arc<RwLock<NodeCache>>,
     #[cfg(test)]
     recent_leaf: RwLock<Option<RecentLeafRead>>,
     #[cfg(test)]
     recent_leaf_misses: AtomicUsize,
-    metrics: Arc<ProllyMetrics>,
 }
 
 #[cfg(test)]
@@ -1055,32 +1050,27 @@ impl<S: Store> Prolly<S> {
     /// * `store` - Storage backend implementing the `Store` trait
     /// * `config` - Tree configuration (chunking parameters, encoding, etc.)
     pub fn new(store: S, config: Config) -> Self {
-        let node_cache_max_nodes = config.runtime.node_cache_max_nodes;
-        let node_cache_max_bytes = config.runtime.node_cache_max_bytes;
         let store = Arc::new(store);
-        let node_cache = Arc::new(RwLock::new(NodeCache::new(
-            node_cache_max_nodes,
-            node_cache_max_bytes,
-        )));
-        let metrics = Arc::new(ProllyMetrics::default());
-        let engine = engine::ProllyEngine::with_state(
-            SyncStoreAsAsync::new(store.clone()),
-            config.clone(),
-            ExecutionConfig::default(),
-            node_cache.clone(),
-            metrics.clone(),
-        );
+        let engine = engine::ProllyEngine::new(SyncStoreAsAsync::new(store), config);
         Self {
-            store,
             engine,
-            config,
-            node_cache,
             #[cfg(test)]
             recent_leaf: RwLock::new(None),
             #[cfg(test)]
             recent_leaf_misses: AtomicUsize::new(0),
-            metrics,
         }
+    }
+
+    fn store_arc(&self) -> &Arc<S> {
+        self.engine.store.inner()
+    }
+
+    fn node_cache(&self) -> &RwLock<NodeCache> {
+        &self.engine.node_cache
+    }
+
+    fn raw_metrics(&self) -> &ProllyMetrics {
+        &self.engine.metrics
     }
 
     /// Create a new empty tree.
@@ -1089,7 +1079,7 @@ impl<S: Store> Prolly<S> {
     pub fn create(&self) -> Tree {
         Tree {
             root: None,
-            config: self.config.clone(),
+            config: self.config().clone(),
         }
     }
 
@@ -1112,7 +1102,8 @@ impl<S: Store> Prolly<S> {
         S: Clone + Send + Sync,
         S::Error: Send + Sync,
     {
-        let mut builder = builder::BatchBuilder::new(self.store.clone(), self.config.clone());
+        let mut builder =
+            builder::BatchBuilder::new(self.store_arc().clone(), self.config().clone());
         for (key, value) in entries {
             builder.add(key, value);
         }
@@ -1128,7 +1119,8 @@ impl<S: Store> Prolly<S> {
         S: Clone + Send + Sync,
         S::Error: Send + Sync,
     {
-        let mut builder = builder::SortedBatchBuilder::new(self.store.clone(), self.config.clone());
+        let mut builder =
+            builder::SortedBatchBuilder::new(self.store_arc().clone(), self.config().clone());
         for (key, value) in entries {
             builder.add(key, value)?;
         }
@@ -1159,7 +1151,7 @@ impl<S: Store> Prolly<S> {
     )]
     fn maybe_cache_recent_leaf(&self, root: &Cid, node: Arc<ReadNode>) {
         if self
-            .node_cache
+            .node_cache()
             .read()
             .map_or(true, |cache| cache.is_disabled())
             || node.is_empty()
@@ -2092,7 +2084,7 @@ impl<S: Store> Prolly<S> {
         reason = "retained only as a correctness oracle for async reachability"
     )]
     fn mark_reachable_legacy(&self, roots: &[Tree]) -> Result<GcReachability, Error> {
-        let parallelism = if self.store.prefers_batch_reads() {
+        let parallelism = if self.store_arc().prefers_batch_reads() {
             STATS_FRONTIER_PREFETCH_PARALLELISM
         } else {
             1
@@ -2405,7 +2397,7 @@ impl<S: Store> Prolly<S> {
         S: NodeStoreScan,
     {
         let candidates = self
-            .store
+            .store()
             .list_node_cids()
             .map_err(|err| Error::Store(Box::new(err)))?;
         self.plan_gc(roots, candidates)
@@ -2420,7 +2412,7 @@ impl<S: Store> Prolly<S> {
         S: NodeStoreScan,
     {
         let candidates = self
-            .store
+            .store()
             .list_node_cids()
             .map_err(|err| Error::Store(Box::new(err)))?;
         self.sweep_gc(roots, candidates)
@@ -2495,7 +2487,7 @@ impl<S: Store> Prolly<S> {
         root_cid: &Cid,
         stats: &mut TreeStats,
     ) -> Result<(), Error> {
-        let parallelism = if self.store.prefers_batch_reads() {
+        let parallelism = if self.store_arc().prefers_batch_reads() {
             STATS_FRONTIER_PREFETCH_PARALLELISM
         } else {
             1
@@ -2556,7 +2548,7 @@ impl<S: Store> Prolly<S> {
     /// assert_eq!(cursor.get_key(), Some(b"a".as_slice()));
     /// ```
     pub fn cursor(&self, tree: &Tree, key: &[u8]) -> Result<cursor::Cursor, Error> {
-        cursor::Cursor::at_item(&self.store, tree, key)
+        cursor::Cursor::at_item(self.store_arc(), tree, key)
     }
 
     /// Seek with the internal cursor and read a bounded forward window.
@@ -2656,16 +2648,16 @@ impl<S: Store> Prolly<S> {
         if end.is_some_and(|end| end <= start) {
             return Ok(cursor::CursorIterator::with_bounds(
                 cursor::Cursor::invalid(),
-                &self.store,
+                self.store_arc(),
                 Some(start.to_vec()),
                 end.map(|e| e.to_vec()),
             ));
         }
 
-        let cursor = cursor::Cursor::at_item(&self.store, tree, start)?;
+        let cursor = cursor::Cursor::at_item(self.store_arc(), tree, start)?;
         Ok(cursor::CursorIterator::with_bounds(
             cursor,
-            &self.store,
+            self.store_arc(),
             Some(start.to_vec()),
             end.map(|e| e.to_vec()),
         ))
@@ -2709,7 +2701,7 @@ impl<S: Store> Prolly<S> {
         base: &Tree,
         other: &Tree,
     ) -> Result<cursor::DiffCursor<'a, S>, Error> {
-        cursor::DiffCursor::new(&self.store, base, other)
+        cursor::DiffCursor::new(self.store_arc(), base, other)
     }
 
     /// Create a streaming diff iterator between two trees.
@@ -2817,7 +2809,7 @@ impl<S: Store> Prolly<S> {
 
     /// Load a node by its CID, reusing the in-process immutable node cache.
     pub(crate) fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
-        self.load_arc_with_format(cid, &self.config.format)
+        self.load_arc_with_format(cid, &self.config().format)
     }
 
     fn load_arc_with_format(
@@ -2825,11 +2817,11 @@ impl<S: Store> Prolly<S> {
         cid: &Cid,
         expected_format: &format::TreeFormat,
     ) -> Result<Arc<Node>, Error> {
-        let unbounded = if let Ok(cache) = self.node_cache.read() {
+        let unbounded = if let Ok(cache) = self.node_cache().read() {
             if cache.is_unbounded() {
                 if let Some(node) = cache.peek(cid) {
                     validate_owned_node_format(&node, expected_format)?;
-                    self.metrics.add_cache_hits(1);
+                    self.raw_metrics().add_cache_hits(1);
                     return Ok(node);
                 }
                 true
@@ -2840,31 +2832,31 @@ impl<S: Store> Prolly<S> {
             false
         };
         if !unbounded {
-            if let Ok(mut cache) = self.node_cache.write() {
+            if let Ok(mut cache) = self.node_cache().write() {
                 if let Some(node) = cache.get(cid) {
                     validate_owned_node_format(&node, expected_format)?;
-                    self.metrics.add_cache_hits(1);
+                    self.raw_metrics().add_cache_hits(1);
                     return Ok(node);
                 }
             }
         }
 
-        self.metrics.add_cache_misses(1);
+        self.raw_metrics().add_cache_misses(1);
         let bytes = self
-            .store
+            .store()
             .get(cid.as_bytes())
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        self.metrics.record_point_read(bytes.len());
+        self.raw_metrics().record_point_read(bytes.len());
         let node = Arc::new(engine::validation::decode_owned(
             cid,
             expected_format,
             &bytes,
         )?);
 
-        if let Ok(mut cache) = self.node_cache.write() {
+        if let Ok(mut cache) = self.node_cache().write() {
             let evictions = cache.insert(cid.clone(), node.clone(), bytes.len());
-            self.metrics.add_cache_evictions(evictions);
+            self.raw_metrics().add_cache_evictions(evictions);
         }
 
         Ok(node)
@@ -2872,10 +2864,10 @@ impl<S: Store> Prolly<S> {
 
     /// Load the immutable packed representation used by read-only traversals.
     pub(crate) fn load_read_arc(&self, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
-        let unbounded = if let Ok(cache) = self.node_cache.read() {
+        let unbounded = if let Ok(cache) = self.node_cache().read() {
             if cache.is_unbounded() {
                 if let Some(node) = cache.peek_read(cid) {
-                    self.metrics.add_cache_hits(1);
+                    self.raw_metrics().add_cache_hits(1);
                     return Ok(node);
                 }
                 true
@@ -2886,9 +2878,9 @@ impl<S: Store> Prolly<S> {
             false
         };
         if !unbounded {
-            if let Ok(mut cache) = self.node_cache.write() {
+            if let Ok(mut cache) = self.node_cache().write() {
                 if let Some(node) = cache.get_read(cid) {
-                    self.metrics.add_cache_hits(1);
+                    self.raw_metrics().add_cache_hits(1);
                     return Ok(node);
                 }
             }
@@ -2896,9 +2888,9 @@ impl<S: Store> Prolly<S> {
 
         // Nodes admitted by a write already have an owned representation. Turn
         // it into the packed form without issuing a redundant store read.
-        let owned = if self.store.has_native_shared_reads() {
+        let owned = if self.store_arc().has_native_shared_reads() {
             None
-        } else if let Ok(mut cache) = self.node_cache.write() {
+        } else if let Ok(mut cache) = self.node_cache().write() {
             cache.get(cid)
         } else {
             None
@@ -2906,32 +2898,32 @@ impl<S: Store> Prolly<S> {
         if let Some(owned) = owned {
             let packed = Arc::new(engine::validation::decode_read(
                 cid,
-                &self.config.format,
+                &self.config().format,
                 Arc::from(owned.to_bytes()),
             )?);
-            if let Ok(mut cache) = self.node_cache.write() {
+            if let Ok(mut cache) = self.node_cache().write() {
                 let evictions = cache.insert_read(cid.clone(), packed.clone());
-                self.metrics.add_cache_evictions(evictions);
+                self.raw_metrics().add_cache_evictions(evictions);
             }
-            self.metrics.add_cache_hits(1);
+            self.raw_metrics().add_cache_hits(1);
             return Ok(packed);
         }
 
-        self.metrics.add_cache_misses(1);
+        self.raw_metrics().add_cache_misses(1);
         let bytes = self
-            .store
+            .store()
             .get_shared(cid.as_bytes())
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        self.metrics.record_point_read(bytes.len());
+        self.raw_metrics().record_point_read(bytes.len());
         let node = Arc::new(engine::validation::decode_read(
             cid,
-            &self.config.format,
+            &self.config().format,
             bytes,
         )?);
-        if let Ok(mut cache) = self.node_cache.write() {
+        if let Ok(mut cache) = self.node_cache().write() {
             let evictions = cache.insert_read(cid.clone(), node.clone());
-            self.metrics.add_cache_evictions(evictions);
+            self.raw_metrics().add_cache_evictions(evictions);
         }
         Ok(node)
     }
@@ -2940,44 +2932,44 @@ impl<S: Store> Prolly<S> {
         if cids.is_empty() {
             return Ok(Vec::new());
         }
-        let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
+        let unbounded_plan = self.node_cache().read().ok().and_then(|cache| {
             cache
                 .is_unbounded()
                 .then(|| plan_cached_nodes(cids, |cid| cache.peek_read(cid)))
         });
         let (mut nodes, missing, hits) = if let Some(plan) = unbounded_plan {
             plan
-        } else if let Ok(mut cache) = self.node_cache.write() {
+        } else if let Ok(mut cache) = self.node_cache().write() {
             plan_cached_nodes(cids, |cid| cache.get_read(cid))
         } else {
             plan_cached_nodes(cids, |_| None)
         };
-        self.metrics.add_cache_hits(hits);
+        self.raw_metrics().add_cache_hits(hits);
         if let Some(MissingNodeBatch {
             cids: missing_cids,
             positions,
             ..
         }) = missing
         {
-            if missing_cids.len() == 1 && !self.store.prefers_batch_reads() {
+            if missing_cids.len() == 1 && !self.store_arc().prefers_batch_reads() {
                 let node = self.load_read_arc(&missing_cids[0])?;
                 for position in positions.into_iter().next().ok_or(Error::InvalidNode)? {
                     nodes[position] = Some(node.clone());
                 }
             } else {
-                self.metrics.add_cache_misses(missing_cids.len());
+                self.raw_metrics().add_cache_misses(missing_cids.len());
                 let loaded = if missing_cids.len() <= GET_MANY_PREFETCH_PARALLELISM {
                     let keys = missing_cids
                         .iter()
                         .map(|cid| cid.as_bytes() as &[u8])
                         .collect::<Vec<_>>();
                     let loaded = self
-                        .store
+                        .store()
                         .batch_get_shared_ordered_unique(&keys)
                         .map_err(|error| Error::Store(Box::new(error)))?;
                     let loaded_bytes = loaded.iter().flatten().map(|bytes| bytes.len()).sum();
                     let loaded_nodes = loaded.iter().flatten().count();
-                    self.metrics
+                    self.raw_metrics()
                         .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
                     loaded
                 } else {
@@ -2990,7 +2982,7 @@ impl<S: Store> Prolly<S> {
                                 .map(|cid| cid.as_bytes() as &[u8])
                                 .collect::<Vec<_>>();
                             let loaded = self
-                                .store
+                                .store()
                                 .batch_get_shared_ordered_unique(&keys)
                                 .map_err(|error| Error::Store(Box::new(error)))?;
                             if loaded.len() != chunk.len() {
@@ -2999,8 +2991,11 @@ impl<S: Store> Prolly<S> {
                             let loaded_bytes =
                                 loaded.iter().flatten().map(|bytes| bytes.len()).sum();
                             let loaded_nodes = loaded.iter().flatten().count();
-                            self.metrics
-                                .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
+                            self.raw_metrics().record_batch_read(
+                                keys.len(),
+                                loaded_bytes,
+                                loaded_nodes,
+                            );
                             Ok(loaded)
                         })
                         .collect::<Result<Vec<_>, Error>>()?
@@ -3018,13 +3013,13 @@ impl<S: Store> Prolly<S> {
                         let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
                         let node = Arc::new(engine::validation::decode_read(
                             &cid,
-                            &self.config.format,
+                            &self.config().format,
                             bytes,
                         )?);
                         Ok((node, cid))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
-                let mut cache = self.node_cache.write().ok();
+                let mut cache = self.node_cache().write().ok();
                 let mut evictions = 0usize;
                 for ((node, cid), positions) in decoded.into_iter().zip(positions) {
                     if let Some(cache) = cache.as_mut() {
@@ -3034,7 +3029,7 @@ impl<S: Store> Prolly<S> {
                         nodes[position] = Some(node.clone());
                     }
                 }
-                self.metrics.add_cache_evictions(evictions);
+                self.raw_metrics().add_cache_evictions(evictions);
             }
         }
         nodes
@@ -3049,33 +3044,33 @@ impl<S: Store> Prolly<S> {
         reason = "retained only as a correctness oracle for async cache pinning"
     )]
     fn load_arc_pinned(&self, cid: &Cid) -> Result<(Arc<Node>, bool), Error> {
-        if let Ok(mut cache) = self.node_cache.write() {
+        if let Ok(mut cache) = self.node_cache().write() {
             if let Some(node) = cache.get(cid) {
                 let newly_pinned = cache.pin_existing(cid);
-                self.metrics.add_cache_hits(1);
+                self.raw_metrics().add_cache_hits(1);
                 return Ok((node, newly_pinned));
             }
         }
 
-        self.metrics.add_cache_misses(1);
+        self.raw_metrics().add_cache_misses(1);
         let bytes = self
-            .store
+            .store()
             .get(cid.as_bytes())
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        self.metrics.record_point_read(bytes.len());
+        self.raw_metrics().record_point_read(bytes.len());
         let node = Arc::new(engine::validation::decode_owned(
             cid,
-            &self.config.format,
+            &self.config().format,
             &bytes,
         )?);
 
         let mut newly_pinned = false;
-        if let Ok(mut cache) = self.node_cache.write() {
+        if let Ok(mut cache) = self.node_cache().write() {
             let (inserted_pinned, evictions) =
                 cache.insert_pinned(cid.clone(), node.clone(), bytes.len());
             newly_pinned = inserted_pinned;
-            self.metrics.add_cache_evictions(evictions);
+            self.raw_metrics().add_cache_evictions(evictions);
         }
 
         Ok((node, newly_pinned))
@@ -3120,7 +3115,7 @@ impl<S: Store> Prolly<S> {
             cids,
             read_parallelism,
             decode_parallelism,
-            &self.config.format,
+            &self.config().format,
         )
     }
 
@@ -3135,19 +3130,19 @@ impl<S: Store> Prolly<S> {
             return Ok(OrderedLoadExecution::default());
         }
 
-        let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
+        let unbounded_plan = self.node_cache().read().ok().and_then(|cache| {
             cache
                 .is_unbounded()
                 .then(|| plan_cached_nodes(cids, |cid| cache.peek(cid)))
         });
         let (mut nodes, missing, cache_hits) = if let Some(plan) = unbounded_plan {
             plan
-        } else if let Ok(mut cache) = self.node_cache.write() {
+        } else if let Ok(mut cache) = self.node_cache().write() {
             plan_cached_nodes(cids, |cid| cache.get(cid))
         } else {
             plan_cached_nodes(cids, |_| None)
         };
-        self.metrics.add_cache_hits(cache_hits);
+        self.raw_metrics().add_cache_hits(cache_hits);
 
         if missing.is_none() {
             let nodes = nodes
@@ -3172,7 +3167,7 @@ impl<S: Store> Prolly<S> {
             ..
         }) = missing
         {
-            if missing_cids.len() == 1 && !self.store.prefers_batch_reads() {
+            if missing_cids.len() == 1 && !self.store_arc().prefers_batch_reads() {
                 let node = self.load_arc_with_format(&missing_cids[0], expected_format)?;
                 let positions = missing_positions
                     .into_iter()
@@ -3197,16 +3192,16 @@ impl<S: Store> Prolly<S> {
                     .iter()
                     .map(|cid| cid.as_bytes())
                     .collect::<Vec<_>>();
-                self.metrics.add_cache_misses(keys.len());
+                self.raw_metrics().add_cache_misses(keys.len());
                 let loaded = self
-                    .store
+                    .store()
                     .batch_get_ordered_unique(&keys)
                     .map_err(|e| Error::Store(Box::new(e)))?;
                 if loaded.len() != missing_cids.len() {
                     return Err(Error::InvalidNode);
                 }
                 let (loaded_nodes, loaded_bytes) = loaded_node_totals(&loaded);
-                self.metrics
+                self.raw_metrics()
                     .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
                 loaded
             } else {
@@ -3214,17 +3209,20 @@ impl<S: Store> Prolly<S> {
                     parallel::map_indexed_ranges(missing_cids.len(), read_parallelism, |range| {
                         let chunk = &missing_cids[range];
                         let keys = chunk.iter().map(|cid| cid.as_bytes()).collect::<Vec<_>>();
-                        self.metrics.add_cache_misses(keys.len());
+                        self.raw_metrics().add_cache_misses(keys.len());
                         let loaded = self
-                            .store
+                            .store()
                             .batch_get_ordered_unique(&keys)
                             .map_err(|e| Error::Store(Box::new(e)))?;
                         if loaded.len() != chunk.len() {
                             return Err(Error::InvalidNode);
                         }
                         let (loaded_nodes, loaded_bytes) = loaded_node_totals(&loaded);
-                        self.metrics
-                            .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
+                        self.raw_metrics().record_batch_read(
+                            keys.len(),
+                            loaded_bytes,
+                            loaded_nodes,
+                        );
                         Ok(loaded)
                     });
                 let mut loaded = Vec::with_capacity(missing_cids.len());
@@ -3283,7 +3281,7 @@ impl<S: Store> Prolly<S> {
                     .collect::<Result<Vec<_>, Error>>()?
             };
 
-            let mut cache = self.node_cache.write().ok();
+            let mut cache = self.node_cache().write().ok();
             let mut evictions = 0usize;
             for ((cid, node, encoded_len), positions) in decoded.into_iter().zip(missing_positions)
             {
@@ -3294,7 +3292,7 @@ impl<S: Store> Prolly<S> {
                     nodes[idx] = Some(node.clone());
                 }
             }
-            self.metrics.add_cache_evictions(evictions);
+            self.raw_metrics().add_cache_evictions(evictions);
         }
 
         let nodes = nodes
@@ -3316,22 +3314,22 @@ impl<S: Store> Prolly<S> {
     pub(crate) fn save(&self, node: &Node) -> Result<Cid, Error> {
         let bytes = node.to_bytes();
         let cid = Cid::from_bytes(&bytes);
-        self.store
+        self.store_arc()
             .put(cid.as_bytes(), &bytes)
             .map_err(|e| Error::Store(Box::new(e)))?;
-        self.metrics.record_point_write(bytes.len());
-        if let Ok(mut cache) = self.node_cache.write() {
+        self.raw_metrics().record_point_write(bytes.len());
+        if let Ok(mut cache) = self.node_cache().write() {
             let evictions = cache.insert(cid.clone(), Arc::new(node.clone()), bytes.len());
-            self.metrics.add_cache_evictions(evictions);
+            self.raw_metrics().add_cache_evictions(evictions);
         }
         Ok(cid)
     }
 
     pub(crate) fn cache_node(&self, cid: Cid, node: Node) {
-        if let Ok(mut cache) = self.node_cache.write() {
+        if let Ok(mut cache) = self.node_cache().write() {
             let bytes = node.encoded_len();
             let evictions = cache.insert(cid, Arc::new(node), bytes);
-            self.metrics.add_cache_evictions(evictions);
+            self.raw_metrics().add_cache_evictions(evictions);
         }
     }
 
@@ -3644,16 +3642,16 @@ impl<S: Store> Prolly<S> {
 
     /// Borrow the underlying store.
     pub fn store(&self) -> &S {
-        self.store.as_ref()
+        self.store_arc().as_ref()
     }
 
     /// Borrow this manager's tree configuration.
     pub fn config(&self) -> &Config {
-        &self.config
+        self.engine.config()
     }
 
     pub(crate) fn record_batch_write_metrics(&self, nodes: usize, bytes: usize) {
-        self.metrics.record_batch_write(nodes, bytes);
+        self.raw_metrics().record_batch_write(nodes, bytes);
     }
 
     /// Find the path from root to the key.
@@ -3732,11 +3730,11 @@ impl<S: Store> Prolly<S> {
         Node::builder()
             .leaf(true)
             .level(INIT_LEVEL)
-            .min_chunk_size(self.config.min_chunk_size())
-            .max_chunk_size(self.config.max_chunk_size())
-            .chunking_factor(self.config.chunking_factor())
-            .hash_seed(self.config.hash_seed())
-            .encoding(self.config.encoding().clone())
+            .min_chunk_size(self.config().min_chunk_size())
+            .max_chunk_size(self.config().max_chunk_size())
+            .chunking_factor(self.config().chunking_factor())
+            .hash_seed(self.config().hash_seed())
+            .encoding(self.config().encoding().clone())
             .build()
     }
 
@@ -3746,11 +3744,11 @@ impl<S: Store> Prolly<S> {
         Node::builder()
             .leaf(false)
             .level(level)
-            .min_chunk_size(self.config.min_chunk_size())
-            .max_chunk_size(self.config.max_chunk_size())
-            .chunking_factor(self.config.chunking_factor())
-            .hash_seed(self.config.hash_seed())
-            .encoding(self.config.encoding().clone())
+            .min_chunk_size(self.config().min_chunk_size())
+            .max_chunk_size(self.config().max_chunk_size())
+            .chunking_factor(self.config().chunking_factor())
+            .hash_seed(self.config().hash_seed())
+            .encoding(self.config().encoding().clone())
             .build()
     }
 
@@ -6073,13 +6071,10 @@ where
             .len()
             .div_ceil(parallelism)
             .min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
-        let partitions = stream::iter(
-            cids.chunks(chunk_size)
-                .map(|chunk| async move {
-                    self.load_many_ordered_for_format(chunk, expected_format)
-                        .await
-                }),
-        )
+        let partitions = stream::iter(cids.chunks(chunk_size).map(|chunk| async move {
+            self.load_many_ordered_for_format(chunk, expected_format)
+                .await
+        }))
         .buffered(parallelism)
         .collect::<Vec<_>>()
         .await;
@@ -8048,7 +8043,7 @@ mod tests {
             );
         }
         let reads_after_first = store.get_calls.load(Ordering::Relaxed);
-        prolly.node_cache.write().unwrap().clear();
+        prolly.node_cache().write().unwrap().clear();
 
         assert_eq!(
             prolly.get(&tree, b"key-0026").unwrap(),

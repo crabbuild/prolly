@@ -978,15 +978,15 @@ where
     S: Store + ManifestStore + TransactionalStore,
 {
     fn new(base: &'a Prolly<S>) -> Result<Self, Error> {
-        if !base.store.supports_transactions() {
+        if !base.store().supports_transactions() {
             return Err(Error::UnsupportedTransactions {
                 store: type_name::<S>(),
             });
         }
 
         let state = Arc::new(Mutex::new(TransactionState::default()));
-        let overlay = TransactionOverlayStore::new(base.store.as_ref(), state.clone());
-        let manager = Prolly::new(overlay, base.config.clone());
+        let overlay = TransactionOverlayStore::new(base.store(), state.clone());
+        let manager = Prolly::new(overlay, base.config().clone());
         Ok(Self {
             base,
             state,
@@ -1087,7 +1087,7 @@ where
 
         let update =
             self.base
-                .store
+                .store()
                 .commit_transaction(&node_writes, &root_conditions, &root_writes)?;
         self.completed = true;
         Ok(update)
@@ -1114,16 +1114,16 @@ where
     S: Store + ManifestStore + TransactionalStore + Clone,
 {
     fn new(base: &Prolly<S>) -> Result<Self, Error> {
-        if !base.store.supports_transactions() {
+        if !base.store().supports_transactions() {
             return Err(Error::UnsupportedTransactions {
                 store: type_name::<S>(),
             });
         }
 
-        let base_store = base.store.as_ref().clone();
+        let base_store = base.store().clone();
         let state = Arc::new(Mutex::new(TransactionState::default()));
         let overlay = OwnedTransactionOverlayStore::new(base_store.clone(), state.clone());
-        let manager = Prolly::new(overlay, base.config.clone());
+        let manager = Prolly::new(overlay, base.config().clone());
         Ok(Self {
             base_store,
             state,

@@ -398,9 +398,9 @@ impl<S: Store> Prolly<S> {
         &'manager self,
         tree: &'tree Tree,
     ) -> Result<LegacyReadSession<'manager, 'tree, S>, Error> {
-        if tree.config.format != self.config.format {
+        if tree.config.format != self.config().format {
             return Err(Error::FormatMismatch {
-                expected: self.config.format.digest()?,
+                expected: self.config().format.digest()?,
                 actual: tree.config.format.digest()?,
             });
         }
@@ -420,7 +420,7 @@ impl<S: Store> Prolly<S> {
         }
 
         let recent_leaf_enabled = self
-            .node_cache
+            .node_cache()
             .read()
             .is_ok_and(|cache| !cache.is_disabled());
         let recent_leaf = recent_leaf_enabled
