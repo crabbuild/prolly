@@ -7,6 +7,8 @@ MANIFEST="$REPO_ROOT/benchmarks/sqlite-turso-local/Cargo.toml"
 PROFILE="${BENCH_PROFILE:-full}"
 OUTPUT="${BENCH_OUT:-$REPO_ROOT/performance-results/sqlite-turso-local-$(date +%F)}"
 FORWARDED=()
+CLI_SIZES=""
+CLI_RUNS=""
 
 while (($#)); do
   case "$1" in
@@ -16,6 +18,14 @@ while (($#)); do
       ;;
     --output)
       OUTPUT="${2:?--output requires a value}"
+      shift 2
+      ;;
+    --sizes)
+      CLI_SIZES="${2:?--sizes requires a value}"
+      shift 2
+      ;;
+    --runs)
+      CLI_RUNS="${2:?--runs requires a value}"
       shift 2
       ;;
     *)
@@ -31,11 +41,11 @@ if [[ "$PROFILE" != "full" && "$PROFILE" != "smoke" ]]; then
   exit 2
 fi
 if [[ "$PROFILE" == "smoke" ]]; then
-  SIZES="${BENCH_SIZES:-100}"
-  RUNS="${BENCH_RUNS:-1}"
+  SIZES="${CLI_SIZES:-${BENCH_SIZES:-100}}"
+  RUNS="${CLI_RUNS:-${BENCH_RUNS:-1}}"
 else
-  SIZES="${BENCH_SIZES:-10000,50000,100000,500000,1000000,2000000}"
-  RUNS="${BENCH_RUNS:-3}"
+  SIZES="${CLI_SIZES:-${BENCH_SIZES:-10000,50000,100000,500000,1000000,2000000}}"
+  RUNS="${CLI_RUNS:-${BENCH_RUNS:-3}}"
 fi
 APIS="${BENCH_APIS:-put,batch,diff,merge}"
 PATTERNS="${BENCH_PATTERNS:-append,random,clustered}"
@@ -111,7 +121,14 @@ fi
 if [[ -n "${PROLLY_BENCH_EXECUTABLE:-}" ]]; then
   "$PROLLY_BENCH_EXECUTABLE" "${BENCH_ARGS[@]}"
 else
-  TARGET_DIR="${CARGO_TARGET_DIR:-$(cd "$REPO_ROOT/.." && pwd)/target}"
+  TARGET_DIR="$(
+    cargo metadata --manifest-path "$MANIFEST" --format-version 1 --no-deps |
+      sed -n 's/.*"target_directory"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+  )"
+  if [[ -z "$TARGET_DIR" ]]; then
+    printf 'failed to resolve benchmark target directory from cargo metadata\n' >&2
+    exit 2
+  fi
   "$TARGET_DIR/release/prolly-sqlite-turso-local-bench" "${BENCH_ARGS[@]}"
 fi
 

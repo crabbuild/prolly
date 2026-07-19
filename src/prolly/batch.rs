@@ -2275,6 +2275,7 @@ pub(crate) fn apply_with_stats_configured<M: super::write::CanonicalWriteManager
 }
 
 const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;
+const ASYNC_BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 100;
 
 pub(crate) fn should_try_batched_value_updates<M: super::write::CanonicalWriteManager>(
     manager: &M,
@@ -2282,9 +2283,15 @@ pub(crate) fn should_try_batched_value_updates<M: super::write::CanonicalWriteMa
     mutation_count: usize,
     policy: ExecutionPolicy,
 ) -> bool {
-    policy.enabled()
-        && policy.width() >= 4
-        && mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    let scheduling_allowed =
+        M::EAGER_BATCHED_VALUE_UPDATES || (policy.enabled() && policy.width() >= 4);
+    let minimum_mutations = if M::EAGER_BATCHED_VALUE_UPDATES {
+        ASYNC_BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    } else {
+        BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    };
+    scheduling_allowed
+        && mutation_count >= minimum_mutations
         && tree.root.is_some()
         && manager.write_store().prefers_batch_reads()
 }

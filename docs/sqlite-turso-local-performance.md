@@ -16,6 +16,13 @@ The completed async-first architecture result is in
 It contains all requested sizes through 2M records, all three mutation patterns,
 put/batch/diff/merge, three repetitions, and no failed or skipped cells.
 
+A later current-head regression slice found and removed sequential replay
+discovery in the 100-key random batch. Turso's 10K random-batch median improved
+from 46.34 ms to 7.42 ms with no 10K API/pattern cell exceeding the 5% median
+regression gate. The diagnosis, normalized comparison, and in-memory
+sync/async check are recorded in the
+[`async replay frontier follow-up`](superpowers/specs/2026-07-18-async-first-prolly-engine-design.md#2026-07-19-async-replay-frontier-follow-up).
+
 ## Run it
 
 Run the complete release matrix from the prolly repository:

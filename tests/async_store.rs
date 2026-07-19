@@ -1495,6 +1495,84 @@ fn async_batch_routes_multi_leaf_updates_with_batched_frontiers() {
 }
 
 #[test]
+fn async_scattered_value_batch_hydrates_routes_in_bounded_frontiers() {
+    const RECORDS: usize = 10_000;
+    const UPDATES: usize = 100;
+
+    let store = Arc::new(CountingBatchStore::default());
+    let config = Config::default();
+    let mut builder = BatchBuilder::new(store.clone(), config.clone());
+    for index in 0..RECORDS {
+        builder.add(
+            format!("key-{index:020}").into_bytes(),
+            format!("value-{index:020}-00").into_bytes(),
+        );
+    }
+    let base = builder.build().unwrap();
+    let tree_height = Prolly::new(store.clone(), config.clone())
+        .collect_stats(&base)
+        .unwrap()
+        .tree_height;
+    let changed = (0..UPDATES)
+        .map(|offset| (offset * 7_919) % RECORDS)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(changed.len(), UPDATES);
+    let mutations = changed
+        .iter()
+        .map(|index| Mutation::Upsert {
+            key: format!("key-{index:020}").into_bytes(),
+            val: format!("value-{index:020}-01").into_bytes(),
+        })
+        .collect::<Vec<_>>();
+
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    engine.clear_cache();
+    engine.reset_metrics();
+    store.reset_read_counts();
+    store.reset_write_counts();
+
+    let single_cpu = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let (updated, stats) = single_cpu
+        .install(|| block_on(engine.batch_with_write_stats(&base, mutations)))
+        .unwrap();
+    let metrics = engine.metrics();
+
+    let mut rebuilt = BatchBuilder::new(Arc::new(MemStore::new()), config);
+    for index in 0..RECORDS {
+        rebuilt.add(
+            format!("key-{index:020}").into_bytes(),
+            format!(
+                "value-{index:020}-{}",
+                if changed.contains(&index) { "01" } else { "00" }
+            )
+            .into_bytes(),
+        );
+    }
+    assert_eq!(updated.root, rebuilt.build().unwrap().root);
+    assert!(stats.used_key_stable_fast_path, "{stats:?}");
+    assert_eq!(store.batch_put_calls.load(Ordering::Relaxed), 1);
+    assert!(
+        store
+            .max_batch_get_ordered_unique_len
+            .load(Ordering::Relaxed)
+            > 1,
+        "scattered async routes must be hydrated as frontiers: metrics={metrics:?}, stats={stats:?}"
+    );
+    assert!(
+        store
+            .batch_get_ordered_unique_calls
+            .load(Ordering::Relaxed)
+            <= usize::from(tree_height).saturating_mul(2).saturating_add(2),
+        "a scattered batch must use bounded frontier rounds instead of discovering one missing node per replay: height={tree_height}, metrics={metrics:?}, stats={stats:?}"
+    );
+    assert_eq!(metrics.store_batch_put_calls, 1);
+    assert_eq!(metrics.nodes_read, stats.nodes_read);
+}
+
+#[test]
 fn async_append_batch_reuses_cached_rightmost_path_without_reads() {
     let store = Arc::new(CountingBatchStore::default());
     let config = Config::builder()

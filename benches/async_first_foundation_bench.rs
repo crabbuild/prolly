@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
-use prolly::{AsyncProlly, Config, MemStore, Prolly, SortedBatchBuilder, SyncStoreAsAsync};
+use prolly::{
+    AsyncProlly, Config, MemStore, Mutation, Prolly, SortedBatchBuilder, SyncStoreAsAsync,
+};
 
 fn main() {
     let records = env_usize("PROLLY_FOUNDATION_RECORDS", 100_000);
@@ -22,12 +24,30 @@ fn main() {
     let keys = (0..lookups)
         .map(|offset| key((offset * 104_729) % records))
         .collect::<Vec<_>>();
+    let batch_updates = env_usize("PROLLY_FOUNDATION_BATCH_UPDATES", 100).min(records);
+    let mutations = (0..batch_updates)
+        .map(|offset| {
+            let index = (offset * 104_729) % records;
+            Mutation::Upsert {
+                key: key(index),
+                val: format!("update-{index:015x}").into_bytes(),
+            }
+        })
+        .collect::<Vec<_>>();
     let sync = Prolly::new(store.clone(), config.clone());
     let asynchronous = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
 
     assert_eq!(
         sync.get_many(&tree, &keys).expect("sync warmup"),
         block_on(asynchronous.get_many(&tree, &keys)).expect("async warmup")
+    );
+    assert_eq!(
+        sync.batch(&tree, mutations.clone())
+            .expect("sync batch warmup")
+            .root,
+        block_on(asynchronous.batch(&tree, mutations.clone()))
+            .expect("async batch warmup")
+            .root
     );
 
     println!("facade,api,records,items_per_sample,samples,median_ns,p95_ns,throughput_items_per_sec,peak_rss_bytes");
@@ -73,6 +93,30 @@ fn main() {
         sample(samples, || {
             black_box(
                 block_on(asynchronous.get_many(&tree, black_box(&keys))).expect("async get_many"),
+            );
+        }),
+    );
+    emit(
+        "sync_ready",
+        "batch",
+        records,
+        batch_updates,
+        sample(samples, || {
+            black_box(
+                sync.batch(&tree, black_box(mutations.clone()))
+                    .expect("sync batch"),
+            );
+        }),
+    );
+    emit(
+        "async_adapted",
+        "batch",
+        records,
+        batch_updates,
+        sample(samples, || {
+            black_box(
+                block_on(asynchronous.batch(&tree, black_box(mutations.clone())))
+                    .expect("async batch"),
             );
         }),
     );

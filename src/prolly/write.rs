@@ -24,6 +24,7 @@ type NormalizedMutation = (Vec<u8>, Option<Vec<u8>>);
 
 pub(crate) trait CanonicalWriteManager: Sync {
     type Store: Store + Send + Sync;
+    const EAGER_BATCHED_VALUE_UPDATES: bool = false;
 
     fn write_store(&self) -> &Self::Store;
     fn write_config(&self) -> &Config;

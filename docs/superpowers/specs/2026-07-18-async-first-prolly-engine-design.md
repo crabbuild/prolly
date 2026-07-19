@@ -694,6 +694,55 @@ This inline screen confirms no material median regression in the exercised
 in-memory operations. It does not replace the release harness's recorded p95,
 bootstrap confidence interval, provenance, or SQLite/Turso matrix artifacts.
 
+### 2026-07-19 async replay frontier follow-up
+
+A current-head five-repetition reproduction isolated the remaining 10K Turso
+random-batch fixed cost. A 100-key scattered value batch performed one atomic
+publication, but replay discovered 33 stored nodes through 33 sequential
+one-key ordered reads. A deterministic 10K in-memory regression fixture made
+the same failure sharper: 59 nodes were fetched through 59 store calls even
+though the adapter advertised native batch reads. Roots and node work were
+already correct; I/O scheduling defeated the backend capability.
+
+Async replay now admits the existing canonical batched value-update route at
+100 mutations without changing the native sync threshold of 256. Native
+multi-get stores receive bounded frontiers of up to the existing prefetch cap;
+point-read parallelism no longer fragments a native batch into many tiny
+queries. The path remains active with a one-thread Rayon pool, proving that
+remote I/O coalescing does not depend on CPU parallelism. The regression test
+requires byte-identical clean-rebuild roots, one publication batch, manager
+metrics equal to write statistics, a multi-key frontier, and at most
+`2 * tree_height + 2` ordered-read calls. The measured fixture fell from 59
+one-key calls to 6 bounded calls.
+
+The normalized local database comparison used the pushed `97a3572` revision as
+baseline and the same frozen 10K/100-change workload on the same host. Three
+fresh repetitions of every API and pattern produced 72 validated rows per
+revision:
+
+| Turso async operation | Candidate change |
+| --- | ---: |
+| Batch append | +1.1% |
+| Batch clustered | -3.3% |
+| Batch random | -84.0% |
+| Diff append / clustered / random | -1.7% / +1.2% / -0.1% |
+| Merge append / clustered / random | -20.9% / -46.9% / -27.3% |
+| Put append / clustered / random | +2.3% / +1.5% / +0.2% |
+
+SQLite's worst observed candidate change in the same slice was +2.7%; no cell
+regressed by the 5% median gate. Turso random-batch latency fell from 46.34 ms
+to 7.42 ms and its Turso/SQLite ratio fell from 10.47x to 1.84x. An added
+foundation benchmark covers the same 100-key scattered batch over an adapted
+in-memory point-read store: async median latency fell from 59.64 ms to 4.68 ms
+(-92.2%), while ready-sync median changed from 0.985 ms to 0.990 ms (+0.5%) and
+p95 stayed inside the 10% gate.
+
+The benchmark driver also received black-box regression coverage after this
+run exposed two evidence-integrity defects. It now executes the binary from
+Cargo's manifest-specific target directory and forwards explicit CLI size and
+repetition overrides to the summarizer. A real filtered smoke run completes
+through the repaired driver.
+
 ### Sync facade overhead
 
 Capture pre-migration native sync baselines for in-memory and SQLite operations. Measure ready-runner entry, point reads, puts, batches, builders, iteration, diff, merge, proof construction, statistics, and representative service operations.

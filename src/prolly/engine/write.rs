@@ -539,6 +539,7 @@ pub(crate) struct ReplayWriteManager {
 
 impl crate::prolly::write::CanonicalWriteManager for ReplayWriteManager {
     type Store = Arc<ReplayStore>;
+    const EAGER_BATCHED_VALUE_UPDATES: bool = true;
 
     fn write_store(&self) -> &Self::Store {
         &self.store
@@ -830,15 +831,28 @@ where
                 backend.push(cid);
             }
         }
-        let parallelism = self
-            .execution
-            .read_parallelism()
-            .get()
-            .min(backend.len().max(1));
-        let chunk_size = backend
-            .len()
-            .div_ceil(parallelism)
-            .clamp(1, crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE);
+        let (parallelism, chunk_size) = if self.store.prefers_batch_reads() {
+            // A native multi-get already coalesces the frontier. Splitting it
+            // by point-read parallelism creates many tiny SQL/network calls
+            // and defeats the advertised capability.
+            (
+                1,
+                backend
+                    .len()
+                    .clamp(1, crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE),
+            )
+        } else {
+            let parallelism = self
+                .execution
+                .read_parallelism()
+                .get()
+                .min(backend.len().max(1));
+            let chunk_size = backend
+                .len()
+                .div_ceil(parallelism)
+                .clamp(1, crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE);
+            (parallelism, chunk_size)
+        };
         let batches = backend
             .chunks(chunk_size)
             .map(<[Cid]>::to_vec)
