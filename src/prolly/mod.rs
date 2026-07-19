@@ -4221,7 +4221,9 @@ where
             let Some(bytes) = bytes else {
                 return Ok(None);
             };
-            let Ok(node) = Node::from_bytes(&bytes) else {
+            let Ok(node) =
+                engine::validation::decode_owned(&entry.cid, &self.config.format, &bytes)
+            else {
                 return Ok(None);
             };
             path.push(AsyncRightmostPathEntry {

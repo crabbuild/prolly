@@ -18,8 +18,9 @@ use prolly::{
     AsyncBlobStore, AsyncProlly, AsyncSortedBatchBuilder, BatchBuilder, BatchOp, BlobRef,
     BlobStore, Cid, Config, CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, IndexControl,
     LargeValueConfig, MemBlobStore, MemBlobStoreError, MemStore, MemStoreError, MultiValueSet,
-    Mutation, NamedRootRetention, NamedRootUpdate, NodeLayoutSpec, Prolly, RangeCursor, Resolution,
-    ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue, ValueRef,
+    Mutation, NamedRootRetention, NamedRootUpdate, Node, NodeLayoutSpec, Prolly, RangeCursor,
+    Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue,
+    ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
@@ -1609,6 +1610,30 @@ fn async_append_batch_loads_persisted_rightmost_hint_in_new_manager() {
         Some(b"tail".to_vec())
     );
     assert_tree_invariants(&store, &tree, &config);
+}
+
+#[test]
+fn persisted_rightmost_hint_cannot_bypass_cid_validation() {
+    let store = Arc::new(CountingBatchStore::default());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(155)
+        .build();
+    let writer = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    let tree = block_on(writer.put(&writer.create(), b"a".to_vec(), b"original".to_vec())).unwrap();
+    let root = tree.root.clone().unwrap();
+    assert!(store.put_hint_calls.load(Ordering::Relaxed) > 0);
+
+    let bytes = store.inner.get(root.as_bytes()).unwrap().unwrap();
+    let mut wrong = Node::from_bytes(&bytes).unwrap();
+    wrong.vals[0] = b"tampered".to_vec();
+    store.inner.put(root.as_bytes(), &wrong.to_bytes()).unwrap();
+
+    let reader = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+    let error = block_on(reader.put(&tree, b"b".to_vec(), b"next".to_vec())).unwrap_err();
+    assert!(matches!(error, Error::CidMismatch { .. }));
 }
 
 #[test]
