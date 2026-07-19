@@ -1165,12 +1165,16 @@ impl<S: Store> Prolly<S> {
 
     /// Return the number of logical key/value entries in the tree.
     pub fn len(&self, tree: &Tree) -> Result<u64, Error> {
-        self.read(tree)?.len()
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.len(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Return the number of keys strictly less than `key`.
     pub fn rank(&self, tree: &Tree, key: &[u8]) -> Result<u64, Error> {
-        self.read(tree)?.rank(key)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.rank(tree, key);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     pub(crate) fn subtree_count(&self, cid: &Cid) -> Result<u64, Error> {
@@ -1192,27 +1196,37 @@ impl<S: Store> Prolly<S> {
 
     /// Return the zero-based entry at `ordinal`, or `None` when out of range.
     pub fn select(&self, tree: &Tree, ordinal: u64) -> Result<Option<KeyValue>, Error> {
-        self.select_with(tree, ordinal, |entry| entry.to_owned())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.select(tree, ordinal);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Return the first key-value entry in key order.
     pub fn first_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
-        self.first_entry_with(tree, |entry| entry.to_owned())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.first_entry(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Return the last key-value entry in key order.
     pub fn last_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
-        self.last_entry_with(tree, |entry| entry.to_owned())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.last_entry(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Return the first entry whose key is greater than or equal to `key`.
     pub fn lower_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
-        self.lower_bound_with(tree, key, |entry| entry.to_owned())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.lower_bound(tree, key);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Return the first entry whose key is strictly greater than `key`.
     pub fn upper_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
-        self.upper_bound_with(tree, key, |entry| entry.to_owned())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.upper_bound(tree, key);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Get a stored large-value reference by key.
@@ -1576,37 +1590,11 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         limit: usize,
     ) -> Result<range::ReversePage, Error> {
-        if limit == 0 {
-            return Ok(range::ReversePage {
-                entries: Vec::new(),
-                next_cursor: Some(cursor.clone()),
-            });
-        }
-
-        let scan_end = reverse_scan_end(cursor.before(), end);
-        if scan_end.is_some_and(|before| before <= start) {
-            return Ok(range::ReversePage::default());
-        }
-
-        let mut entries = self
-            .range(tree, start, scan_end)?
-            .collect::<Result<Vec<_>, _>>()?;
-        let has_more = entries.len() > limit;
-        let split_at = entries.len().saturating_sub(limit);
-        let mut page_entries = entries.split_off(split_at);
-        page_entries.reverse();
-        let next_cursor = if has_more {
-            page_entries
-                .last()
-                .map(|(key, _)| range::ReverseCursor::before_key(key.clone()))
-        } else {
-            None
-        };
-
-        Ok(range::ReversePage {
-            entries: page_entries,
-            next_cursor,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self
+            .engine
+            .reverse_range_page(tree, cursor, start, end, limit);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Compute the difference between two trees.
@@ -1978,23 +1966,9 @@ impl<S: Store> Prolly<S> {
     /// println!("{:?}", stats);
     /// ```
     pub fn collect_stats(&self, tree: &Tree) -> Result<TreeStats, Error> {
-        // Handle empty tree case
-        let Some(root_cid) = &tree.root else {
-            let mut stats = TreeStats::new();
-            stats.finalize();
-            return Ok(stats);
-        };
-
-        // Initialize TreeStats
-        let mut stats = TreeStats::new();
-
-        self.collect_stats_from_frontier(root_cid, &mut stats)?;
-
-        // Finalize statistics
-        stats.finalize();
-
-        // Return result
-        Ok(stats)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.collect_stats(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Return a deterministic debug view of the tree grouped by level.
@@ -2015,7 +1989,9 @@ impl<S: Store> Prolly<S> {
     /// assert!(view.to_text().contains("level 0"));
     /// ```
     pub fn debug_tree(&self, tree: &Tree) -> Result<debug::TreeDebugView, Error> {
-        debug::collect_tree_debug_view(self, tree)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.debug_tree(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Compare two trees by CID sharing and rewritten subtrees.
@@ -2040,7 +2016,9 @@ impl<S: Store> Prolly<S> {
         left: &Tree,
         right: &Tree,
     ) -> Result<debug::TreeDebugComparison, Error> {
-        debug::compare_tree_debug_views(self, left, right)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.debug_compare_trees(left, right);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Compare structural statistics between two trees.
@@ -2061,9 +2039,9 @@ impl<S: Store> Prolly<S> {
     /// assert_eq!(comparison.absolute.total_key_value_pairs_diff, 1);
     /// ```
     pub fn stats_diff(&self, before: &Tree, after: &Tree) -> Result<StatsComparison, Error> {
-        let before_stats = self.collect_stats(before)?;
-        let after_stats = self.collect_stats(after)?;
-        Ok(StatsComparison::new(before_stats, after_stats))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.stats_diff(before, after);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Mark all content-addressed nodes reachable from retained tree roots.
@@ -2084,6 +2062,17 @@ impl<S: Store> Prolly<S> {
     /// assert_eq!(reachable.live_nodes, reachable.cids().len());
     /// ```
     pub fn mark_reachable(&self, roots: &[Tree]) -> Result<GcReachability, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.mark_reachable(roots);
+        engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async reachability"
+    )]
+    fn mark_reachable_legacy(&self, roots: &[Tree]) -> Result<GcReachability, Error> {
         let parallelism = if self.store.prefers_batch_reads() {
             STATS_FRONTIER_PREFETCH_PARALLELISM
         } else {
@@ -2804,6 +2793,11 @@ impl<S: Store> Prolly<S> {
     /// # Returns
     /// * `Ok(())` - Statistics accumulated successfully
     /// * `Err(Error)` - On storage or deserialization errors
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async stats"
+    )]
     fn collect_stats_from_frontier(
         &self,
         root_cid: &Cid,

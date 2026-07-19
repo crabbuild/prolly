@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::key::debug_key;
 use super::store::AsyncStore;
 use super::AsyncProlly;
-use super::{child_cid_at, Cid, Error, Prolly, Store, Tree};
+use super::{child_cid_at, Cid, Error, Tree};
+#[cfg(test)]
+use super::{Prolly, Store};
 
 /// Inspectable node metadata for debug tooling.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -200,6 +202,11 @@ impl TreeDebugNodeStatus {
     }
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async diagnostics"
+)]
 pub(crate) fn collect_tree_debug_view<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
@@ -243,6 +250,11 @@ pub(crate) fn collect_tree_debug_view<S: Store>(
     Ok(view_from_grouped(grouped))
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async diagnostics"
+)]
 pub(crate) fn compare_tree_debug_views<S: Store>(
     prolly: &Prolly<S>,
     left: &Tree,

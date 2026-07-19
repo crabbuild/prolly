@@ -1735,6 +1735,56 @@ where
         })
     }
 
+    /// Return the number of logical key/value entries in a tree.
+    pub async fn len(&self, tree: &Tree) -> Result<u64, Error> {
+        self.read(tree).await?.len().await
+    }
+
+    /// Return the number of keys strictly less than `key`.
+    pub async fn rank(&self, tree: &Tree, key: &[u8]) -> Result<u64, Error> {
+        self.read(tree).await?.rank(key).await
+    }
+
+    /// Return the zero-based entry at `ordinal`, or `None` when out of range.
+    pub async fn select(&self, tree: &Tree, ordinal: u64) -> Result<Option<KeyValue>, Error> {
+        self.read(tree)
+            .await?
+            .select_with(ordinal, |entry| entry.to_owned())
+            .await
+    }
+
+    /// Return the first key/value entry in key order.
+    pub async fn first_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
+        self.read(tree)
+            .await?
+            .first_entry_with(|entry| entry.to_owned())
+            .await
+    }
+
+    /// Return the last key/value entry in key order.
+    pub async fn last_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
+        self.read(tree)
+            .await?
+            .last_entry_with(|entry| entry.to_owned())
+            .await
+    }
+
+    /// Return the first entry whose key is greater than or equal to `key`.
+    pub async fn lower_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
+        self.read(tree)
+            .await?
+            .lower_bound_with(key, |entry| entry.to_owned())
+            .await
+    }
+
+    /// Return the first entry whose key is strictly greater than `key`.
+    pub async fn upper_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
+        self.read(tree)
+            .await?
+            .upper_bound_with(key, |entry| entry.to_owned())
+            .await
+    }
+
     /// Read one async-store value without allocating an owned result.
     pub async fn get_with<R>(
         &self,
@@ -1868,6 +1918,150 @@ where
     /// Return the immutable tree bound to this session.
     pub fn tree(&self) -> &Tree {
         self.tree
+    }
+
+    /// Return the number of logical entries using the retained root.
+    pub async fn len(&self) -> Result<u64, Error> {
+        let Some(root) = self.root.as_ref() else {
+            return Ok(0);
+        };
+        if root.is_leaf() {
+            return Ok(root.len() as u64);
+        }
+        if (0..root.len()).all(|index| root.child_count(index).is_some_and(|count| count > 0)) {
+            return Ok((0..root.len())
+                .map(|index| root.child_count(index).expect("checked child count"))
+                .sum());
+        }
+        self.subtree_count(
+            self.tree
+                .root
+                .as_ref()
+                .expect("a retained root has a tree root CID")
+                .clone(),
+        )
+        .await
+    }
+
+    /// Return whether the bound tree contains no entries.
+    pub async fn is_empty(&self) -> Result<bool, Error> {
+        Ok(self.len().await? == 0)
+    }
+
+    /// Return the number of keys strictly less than `key`.
+    pub async fn rank(&mut self, key: &[u8]) -> Result<u64, Error> {
+        let Some(mut node) = self.root.clone() else {
+            return Ok(0);
+        };
+        let mut rank = 0u64;
+        loop {
+            if node.is_leaf() {
+                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                let insertion = packed_partition_point(&node, |candidate| candidate < key);
+                return Ok(rank.saturating_add(insertion as u64));
+            }
+            ReadSession::<super::store::MemStore>::validate_internal(&node)?;
+            let insertion = packed_partition_point(&node, |candidate| candidate <= key);
+            if insertion == 0 {
+                return Ok(rank);
+            }
+            let child_index = insertion - 1;
+            for index in 0..child_index {
+                rank = rank.saturating_add(self.child_count(&node, index).await?);
+            }
+            node = self
+                .manager
+                .load_read_arc(&node.child_cid(child_index)?)
+                .await?;
+        }
+    }
+
+    /// Visit the zero-based entry at `ordinal` without copying it.
+    pub async fn select_with<R>(
+        &mut self,
+        mut ordinal: u64,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let Some(mut node) = self.root.clone() else {
+            return Ok(None);
+        };
+        loop {
+            if node.is_leaf() {
+                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                let index = usize::try_from(ordinal).map_err(|_| Error::InvalidNode)?;
+                let Some(key) = node.key(index) else {
+                    return Ok(None);
+                };
+                let value = node.value(index).ok_or(Error::InvalidNode)?;
+                return Ok(Some(read(EntryRef::new(key, value))));
+            }
+            ReadSession::<super::store::MemStore>::validate_internal(&node)?;
+            let mut selected = None;
+            for index in 0..node.len() {
+                let count = self.child_count(&node, index).await?;
+                if ordinal < count {
+                    selected = Some(index);
+                    break;
+                }
+                ordinal -= count;
+            }
+            let Some(index) = selected else {
+                return Ok(None);
+            };
+            node = self.manager.load_read_arc(&node.child_cid(index)?).await?;
+        }
+    }
+
+    /// Visit the first entry in key order.
+    pub async fn first_entry_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.lower_bound_with(&[], read).await
+    }
+
+    /// Visit the last entry in key order.
+    pub async fn last_entry_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let mut read = Some(read);
+        let outcome = self
+            .scan_range_reverse_until(&[], None, |entry| {
+                ControlFlow::Break(read.take().expect("single-entry callback")(entry))
+            })
+            .await?;
+        Ok(outcome.break_value)
+    }
+
+    /// Visit the first entry whose key is at least `key`.
+    pub async fn lower_bound_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let mut read = Some(read);
+        let outcome = self
+            .scan_forward_until(key, None, false, |entry| {
+                ControlFlow::Break(read.take().expect("single-entry callback")(entry))
+            })
+            .await?;
+        Ok(outcome.break_value)
+    }
+
+    /// Visit the first entry whose key is strictly greater than `key`.
+    pub async fn upper_bound_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let mut read = Some(read);
+        let outcome = self
+            .scan_forward_until(key, None, true, |entry| {
+                ControlFlow::Break(read.take().expect("single-entry callback")(entry))
+            })
+            .await?;
+        Ok(outcome.break_value)
     }
 
     /// Read a value after all required I/O and before any subsequent await.
@@ -2074,12 +2268,22 @@ where
         &mut self,
         start: &[u8],
         end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_forward_until(start, end, false, visit).await
+    }
+
+    async fn scan_forward_until<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        strict_start: bool,
         mut visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
         if end.is_some_and(|end| end <= start) {
             return Ok(ScanOutcome::complete(0));
         }
-        let mut stack = self.seek_forward(start).await?;
+        let mut stack = self.seek_forward(start, strict_start).await?;
         let mut visited = 0u64;
         loop {
             let Some(frame) = stack.last_mut() else {
@@ -2200,6 +2404,39 @@ where
             .await
     }
 
+    async fn child_count(&self, node: &ReadNode, index: usize) -> Result<u64, Error> {
+        match node.child_count(index) {
+            Some(count) if count > 0 => Ok(count),
+            _ => self.subtree_count(node.child_cid(index)?).await,
+        }
+    }
+
+    async fn subtree_count(&self, root: Cid) -> Result<u64, Error> {
+        let mut total = 0u64;
+        let mut stack = vec![root];
+        while let Some(cid) = stack.pop() {
+            let node = self.manager.load_read_arc(&cid).await?;
+            if node.is_leaf() {
+                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                total = total.saturating_add(node.len() as u64);
+                continue;
+            }
+            ReadSession::<super::store::MemStore>::validate_internal(&node)?;
+            if (0..node.len()).all(|index| node.child_count(index).is_some_and(|count| count > 0)) {
+                total = total.saturating_add(
+                    (0..node.len())
+                        .map(|index| node.child_count(index).expect("checked child count"))
+                        .sum::<u64>(),
+                );
+            } else {
+                for index in (0..node.len()).rev() {
+                    stack.push(node.child_cid(index)?);
+                }
+            }
+        }
+        Ok(total)
+    }
+
     async fn seek_reverse(&self, end: Option<&[u8]>) -> Result<Vec<PathFrame>, Error> {
         let Some(mut node) = self.root.clone() else {
             return Ok(Vec::new());
@@ -2237,14 +2474,22 @@ where
         }
     }
 
-    async fn seek_forward(&self, start: &[u8]) -> Result<Vec<PathFrame>, Error> {
+    async fn seek_forward(
+        &self,
+        start: &[u8],
+        strict_start: bool,
+    ) -> Result<Vec<PathFrame>, Error> {
         let Some(mut node) = self.root.clone() else {
             return Ok(Vec::new());
         };
         let mut stack = Vec::new();
         loop {
             if node.is_leaf() {
-                let index = packed_partition_point(&node, |candidate| candidate < start);
+                let index = if strict_start {
+                    packed_partition_point(&node, |candidate| candidate <= start)
+                } else {
+                    packed_partition_point(&node, |candidate| candidate < start)
+                };
                 stack.push(PathFrame { node, index });
                 return Ok(stack);
             }
