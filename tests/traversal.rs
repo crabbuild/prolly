@@ -21,10 +21,14 @@ fn range_cursor_matches_range_iterator_across_leaf_boundaries() {
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    let cursor_entries = prolly
-        .range_cursor(&tree, b"k07", Some(b"k25"))
+    let mut session_entries = Vec::new();
+    prolly
+        .read(&tree)
         .unwrap()
-        .collect::<Vec<_>>();
+        .scan_range(b"k07", Some(b"k25"), |entry| {
+            session_entries.push(entry.to_owned());
+        })
+        .unwrap();
 
-    assert_eq!(cursor_entries, range_entries);
+    assert_eq!(session_entries, range_entries);
 }

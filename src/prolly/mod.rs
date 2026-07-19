@@ -130,7 +130,8 @@ pub mod chunking;
 pub mod cid;
 pub mod config;
 pub mod content_graph;
-pub mod cursor;
+#[cfg(test)]
+mod cursor;
 pub mod debug;
 pub mod encoding;
 pub(crate) mod engine;
@@ -168,7 +169,8 @@ pub mod range;
 pub(crate) mod range_delete;
 pub mod remote;
 pub mod secondary_index;
-pub mod streaming;
+#[cfg(test)]
+mod streaming;
 pub mod utils;
 
 // Internal traits for future extensibility (not exposed publicly)
@@ -2547,6 +2549,7 @@ impl<S: Store> Prolly<S> {
     /// assert!(cursor.is_valid());
     /// assert_eq!(cursor.get_key(), Some(b"a".as_slice()));
     /// ```
+    #[cfg(test)]
     pub fn cursor(&self, tree: &Tree, key: &[u8]) -> Result<cursor::Cursor, Error> {
         cursor::Cursor::at_item(self.store_arc(), tree, key)
     }
@@ -2565,47 +2568,9 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         limit: usize,
     ) -> Result<range::CursorWindow, Error> {
-        let cursor = self.cursor(tree, key)?;
-        let position_key = cursor.get_key().map(|key| key.to_vec());
-        let position_value = cursor.get_value().map(|value| value.to_vec());
-        let found = position_key.as_deref() == Some(key);
-
-        if limit == 0 {
-            return Ok(range::CursorWindow {
-                position_key,
-                position_value,
-                found,
-                entries: Vec::new(),
-                next_cursor: None,
-            });
-        }
-
-        let mut iter = self.range_cursor(tree, key, end)?;
-        let mut entries = Vec::with_capacity(limit);
-
-        for _ in 0..limit {
-            let Some(item) = iter.next() else {
-                return Ok(range::CursorWindow {
-                    position_key,
-                    position_value,
-                    found,
-                    entries,
-                    next_cursor: None,
-                });
-            };
-            entries.push(item);
-        }
-
-        let next_cursor = entries
-            .last()
-            .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
-        Ok(range::CursorWindow {
-            position_key,
-            position_value,
-            found,
-            entries,
-            next_cursor,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.cursor_window(tree, key, end, limit);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Create a cursor iterator for range queries.
@@ -2639,6 +2604,7 @@ impl<S: Store> Prolly<S> {
     /// let entries: Vec<_> = iter.collect();
     /// assert_eq!(entries.len(), 2); // "a" and "b"
     /// ```
+    #[cfg(test)]
     pub fn range_cursor<'a>(
         &'a self,
         tree: &Tree,
@@ -2696,6 +2662,7 @@ impl<S: Store> Prolly<S> {
     /// // Or collect into Vec (equivalent to diff())
     /// let diffs: Vec<Diff> = prolly.diff_cursor(&base, &other).unwrap().collect();
     /// ```
+    #[cfg(test)]
     pub fn diff_cursor<'a>(
         &'a self,
         base: &Tree,
@@ -4334,6 +4301,51 @@ where
             .last()
             .map(|(key, _)| range::RangeCursor::after_key(key.clone()));
         Ok(range::AsyncRangePage {
+            entries,
+            next_cursor,
+        })
+    }
+
+    /// Seek to `key` and return a bounded forward window using engine-native
+    /// order statistics and range traversal.
+    pub async fn cursor_window(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        end: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<range::CursorWindow, Error> {
+        let lower = self.lower_bound(tree, key).await?;
+        let found = lower.as_ref().is_some_and(|(found, _)| found == key);
+        let rank = self.rank(tree, key).await?;
+        let predecessor = if rank == 0 {
+            None
+        } else {
+            self.select(tree, rank - 1).await?
+        };
+        let position = if found {
+            lower.clone()
+        } else {
+            predecessor.clone().or_else(|| lower.clone())
+        };
+
+        let (entries, next_cursor) = if limit == 0 || end.is_some_and(|end| end <= key) {
+            (Vec::new(), None)
+        } else {
+            let cursor = predecessor
+                .map(|(key, _)| range::RangeCursor::after_key(key))
+                .unwrap_or_else(range::RangeCursor::start);
+            let page = self.range_page(tree, &cursor, end, limit).await?;
+            (page.entries, page.next_cursor)
+        };
+
+        let (position_key, position_value) = position
+            .map(|(key, value)| (Some(key), Some(value)))
+            .unwrap_or((None, None));
+        Ok(range::CursorWindow {
+            position_key,
+            position_value,
+            found,
             entries,
             next_cursor,
         })

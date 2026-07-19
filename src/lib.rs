@@ -201,11 +201,9 @@
 //!
 //! ## Advanced Extensibility
 //!
-//! The library provides extensible traits for advanced use cases:
-//!
 //! ### Streaming Diff
 //!
-//! Use [`StreamingDiffer`] for memory-efficient diff operations on large trees:
+//! Use [`Prolly::stream_diff`] for memory-efficient diff operations on large trees:
 //!
 //! ```rust
 //! use prolly::{Prolly, MemStore, Config, Diff};
@@ -281,7 +279,6 @@ pub use prolly::crdt::{
     ConflictFreeMerger, CrdtConfig, CrdtResolution, CustomMergeFn, DefaultConflictFreeMerger,
     DeletePolicy, MergeStrategy, MultiValueSet, TimestampExtractor, TimestampedValue,
 };
-pub use prolly::cursor::{Cursor, CursorIterator, DiffCursor};
 pub use prolly::debug::{
     TreeDebugComparedNode, TreeDebugComparison, TreeDebugComparisonLevel, TreeDebugLevel,
     TreeDebugNode, TreeDebugNodeStatus, TreeDebugView,
@@ -398,7 +395,6 @@ pub use prolly::store::{
 };
 #[cfg(feature = "tokio")]
 pub use prolly::store::{TokioBlockingStore, TokioBlockingStoreError};
-pub use prolly::streaming::{DefaultStreamingDiffer, StreamingDiffer};
 pub use prolly::sync::{
     MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode, SnapshotBundleSummary,
     SnapshotBundleVerification, SNAPSHOT_BUNDLE_FORMAT_VERSION,

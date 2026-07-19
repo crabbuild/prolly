@@ -155,6 +155,46 @@ fn async_snapshot_and_node_gc_services_are_engine_native() {
 }
 
 #[test]
+fn async_cursor_window_matches_ready_sync_seek_semantics() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let sync = Prolly::new(store.clone(), Config::default());
+        let tree = sync
+            .batch(
+                &sync.create(),
+                vec![
+                    Mutation::Upsert {
+                        key: b"a".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"c".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"e".to_vec(),
+                        val: b"5".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+        let engine = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+
+        assert_eq!(
+            engine.cursor_window(&tree, b"b", None, 2).await.unwrap(),
+            sync.cursor_window(&tree, b"b", None, 2).unwrap()
+        );
+        assert_eq!(
+            engine
+                .cursor_window(&tree, b"c", Some(b"e"), 4)
+                .await
+                .unwrap(),
+            sync.cursor_window(&tree, b"c", Some(b"e"), 4).unwrap()
+        );
+    });
+}
+
+#[test]
 fn async_versioned_map_supports_atomic_updates_pinned_reads_pages_and_proofs() {
     block_on(async {
         let store = Arc::new(MemStore::new());
