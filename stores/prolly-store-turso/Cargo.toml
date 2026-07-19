@@ -1,0 +1,38 @@
+[package]
+name = "prolly-store-turso"
+description = "Native Turso Database store adapter for prolly-map."
+edition = "2021"
+rust-version = "1.88"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/crabbuild/prolly"
+homepage = "https://github.com/crabbuild/prolly"
+documentation = "https://docs.rs/prolly-store-turso"
+readme = "README.md"
+keywords = ["prolly-tree", "storage", "database", "turso"]
+categories = ["database-implementations"]
+
+[lib]
+name = "prolly_store_turso"
+path = "src/lib.rs"
+
+[features]
+default = []
+sync = ["turso/sync"]
+
+[dependencies]
+prolly = { package = "prolly-map", path = "../..", version = "0.3.0", features = ["async-store"] }
+turso = { version = "0.7", default-features = false }
+
+[dev-dependencies]
+tempfile = "3.20"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[example]]
+name = "basic_usage"
+path = "examples/basic_usage.rs"
+
+

@@ -999,6 +999,9 @@ Optional adapter crates:
 
 - `prolly-store-sqlite`: persistent SQLite backend, including a
   [durable semantic RAG example](stores/prolly-store-sqlite/examples/semantic_rag.rs).
+- [`prolly-store-turso`](stores/prolly-store-turso/README.md): native local
+  asynchronous Turso Database backend, with explicit cloud push/pull behind
+  its optional `sync` feature.
 - `prolly-store-rocksdb`: embedded RocksDB backend.
 - `prolly-store-pglite`: PGlite/Node sidecar backend.
 - `prolly-store-slatedb`: object-store-backed SlateDB backend.
@@ -1015,6 +1018,7 @@ cargo test
 cargo test --features async-store
 cargo test --features tokio
 cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-turso/Cargo.toml
 cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
 cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
