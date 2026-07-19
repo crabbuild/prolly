@@ -6093,9 +6093,14 @@ where
             .len()
             .div_ceil(parallelism)
             .min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
+        let batches = cids
+            .chunks(chunk_size)
+            .map(<[Cid]>::to_vec)
+            .collect::<Vec<_>>();
         let partitions = stream::iter(
-            cids.chunks(chunk_size)
-                .map(|chunk| async move { self.load_many_read_ordered(chunk).await }),
+            batches
+                .into_iter()
+                .map(|chunk| async move { self.load_many_read_ordered(&chunk).await }),
         )
         .buffered(parallelism)
         .collect::<Vec<_>>()
@@ -6202,8 +6207,12 @@ where
             .len()
             .div_ceil(parallelism)
             .min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
-        let partitions = stream::iter(cids.chunks(chunk_size).map(|chunk| async move {
-            self.load_many_ordered_for_format(chunk, expected_format)
+        let batches = cids
+            .chunks(chunk_size)
+            .map(<[Cid]>::to_vec)
+            .collect::<Vec<_>>();
+        let partitions = stream::iter(batches.into_iter().map(|chunk| async move {
+            self.load_many_ordered_for_format(&chunk, expected_format)
                 .await
         }))
         .buffered(parallelism)

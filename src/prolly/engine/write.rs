@@ -688,23 +688,29 @@ where
             .len()
             .div_ceil(parallelism)
             .clamp(1, crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE);
-        let partitions = stream::iter(backend.chunks(chunk_size).map(|chunk| async move {
+        let batches = backend
+            .chunks(chunk_size)
+            .map(<[Cid]>::to_vec)
+            .collect::<Vec<_>>();
+        let partitions = stream::iter(batches.into_iter().map(|chunk| async move {
             let keys = chunk
                 .iter()
                 .map(|cid| cid.as_bytes() as &[u8])
                 .collect::<Vec<_>>();
-            self.store
+            let values = self
+                .store
                 .batch_get_ordered_unique(&keys)
                 .await
-                .map_err(|error| Error::Store(Box::new(error)))
+                .map_err(|error| Error::Store(Box::new(error)))?;
+            Ok::<_, Error>((chunk, values))
         }))
         .buffered(parallelism)
         .collect::<Vec<_>>()
         .await;
         let mut backend_nodes = 0usize;
         let mut backend_bytes = 0usize;
-        for (chunk, values) in backend.chunks(chunk_size).zip(partitions) {
-            let values = values?;
+        for partition in partitions {
+            let (chunk, values) = partition?;
             if values.len() != chunk.len() {
                 return Err(Error::InvalidNode);
             }
