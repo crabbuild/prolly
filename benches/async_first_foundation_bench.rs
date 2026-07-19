@@ -17,6 +17,8 @@ use prolly::{
 #[cfg(not(feature = "baseline-contract"))]
 use prolly::{NodePublication, PublicationOrigin};
 
+const FORWARD_ITEMS_PER_SAMPLE: usize = 1_024;
+
 struct ThreadCountingAllocator;
 
 thread_local! {
@@ -402,17 +404,23 @@ fn main() {
     let forward_entries = [(forward_key, forward_value)];
     run_case!(
         "forward",
-        1,
+        FORWARD_ITEMS_PER_SAMPLE,
         {
-            forward_sync(&sync_store, &forward_entries);
+            for _ in 0..FORWARD_ITEMS_PER_SAMPLE {
+                forward_sync(&sync_store, &forward_entries);
+            }
             sync_tree.clone()
         },
         {
-            forward_async(&adapted_store, &forward_entries);
+            for _ in 0..FORWARD_ITEMS_PER_SAMPLE {
+                forward_async(&adapted_store, &forward_entries);
+            }
             adapted_tree.clone()
         },
         {
-            forward_async(&native_store, &forward_entries);
+            for _ in 0..FORWARD_ITEMS_PER_SAMPLE {
+                forward_async(&native_store, &forward_entries);
+            }
             native_tree.clone()
         }
     );
