@@ -1,6 +1,7 @@
 //! SQLite storage backend implementation
 
 use std::collections::{hash_map::Entry, HashMap};
+use std::ffi::{c_int, c_void};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -121,6 +122,8 @@ pub struct SqliteStoreConfig {
     pub busy_timeout_ms: u64,
     /// Enable WAL journaling for file-backed databases.
     pub enable_wal: bool,
+    /// Keep the WAL/SHM generation stable when the last short-lived process exits.
+    pub persist_wal: bool,
     /// Set SQLite synchronous mode to NORMAL when applying default pragmas.
     pub synchronous_normal: bool,
 }
@@ -130,6 +133,7 @@ impl Default for SqliteStoreConfig {
         Self {
             busy_timeout_ms: 5_000,
             enable_wal: true,
+            persist_wal: false,
             synchronous_normal: true,
         }
     }
@@ -228,13 +232,36 @@ impl SqliteStore {
     /// execute schema DDL. Callers must validate the required schema before
     /// using this path.
     pub fn open_existing<P: AsRef<Path>>(path: P) -> Result<Self, SqliteStoreError> {
-        Self::open_existing_verified(path, |_| Ok(()))
+        Self::open_existing_with_config(path, SqliteStoreConfig::default())
+    }
+
+    /// Open an existing database with explicit runtime configuration.
+    pub fn open_existing_with_config<P: AsRef<Path>>(
+        path: P,
+        config: SqliteStoreConfig,
+    ) -> Result<Self, SqliteStoreError> {
+        Self::open_existing_verified_with_config(path, config, |_| Ok(()))
     }
 
     /// Open an existing database and verify SQLite's actual main-file handle
     /// before executing any pragma, schema statement, or other SQL.
     #[cfg(unix)]
     pub fn open_existing_verified<P, F>(path: P, verifier: F) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        Self::open_existing_verified_with_config(path, SqliteStoreConfig::default(), verifier)
+    }
+
+    /// Open an existing database with explicit runtime configuration and
+    /// verify SQLite's actual main-file handle before executing SQL.
+    #[cfg(unix)]
+    pub fn open_existing_verified_with_config<P, F>(
+        path: P,
+        config: SqliteStoreConfig,
+        verifier: F,
+    ) -> Result<Self, SqliteStoreError>
     where
         P: AsRef<Path>,
         F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
@@ -250,13 +277,30 @@ impl SqliteStore {
             )
         })?;
         verifier(sqlite_main_file_identity(&conn)?)?;
-        Self::from_existing_connection(conn, SqliteStoreConfig::default())
+        Self::from_existing_connection(conn, config)
     }
 
     /// Non-Unix platforms cannot currently prove the SQLite VFS handle's
     /// identity before SQL runs, so verified opens fail closed there.
     #[cfg(not(unix))]
     pub fn open_existing_verified<P, F>(_path: P, _verifier: F) -> Result<Self, SqliteStoreError>
+    where
+        P: AsRef<Path>,
+        F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
+    {
+        Err(SqliteStoreError::new(
+            "verified existing SQLite opens are unsupported on this platform",
+        ))
+    }
+
+    /// Non-Unix platforms cannot currently prove SQLite's opened main-file
+    /// identity before SQL runs, even with explicit runtime configuration.
+    #[cfg(not(unix))]
+    pub fn open_existing_verified_with_config<P, F>(
+        _path: P,
+        _config: SqliteStoreConfig,
+        _verifier: F,
+    ) -> Result<Self, SqliteStoreError>
     where
         P: AsRef<Path>,
         F: FnOnce(SqliteMainFileIdentity) -> Result<(), SqliteStoreError>,
@@ -310,6 +354,29 @@ impl SqliteStore {
         if config.enable_wal {
             conn.pragma_update(None, "journal_mode", "WAL")
                 .map_err(|e| SqliteStoreError::from_sqlite(e, "Failed to enable WAL mode"))?;
+        }
+        if config.persist_wal {
+            if !config.enable_wal {
+                return Err(SqliteStoreError::new(
+                    "persistent WAL requires WAL journaling to be enabled",
+                ));
+            }
+            let mut enabled: c_int = 1;
+            // SAFETY: `conn` remains alive for the call, `main` is NUL
+            // terminated, and SQLite reads/writes one `int` for this opcode.
+            let result = unsafe {
+                rusqlite::ffi::sqlite3_file_control(
+                    conn.handle(),
+                    c"main".as_ptr(),
+                    rusqlite::ffi::SQLITE_FCNTL_PERSIST_WAL,
+                    (&mut enabled as *mut c_int).cast::<c_void>(),
+                )
+            };
+            if result != rusqlite::ffi::SQLITE_OK {
+                return Err(SqliteStoreError::new(format!(
+                    "Failed to enable persistent WAL mode: SQLite result code {result}"
+                )));
+            }
         }
         if config.synchronous_normal {
             conn.pragma_update(None, "synchronous", "NORMAL")
@@ -873,6 +940,41 @@ mod tests {
 
         store.delete(b"key").unwrap();
         assert_eq!(store.get(b"key").unwrap(), None);
+    }
+
+    #[test]
+    fn persistent_wal_is_explicit_and_keeps_one_generation_after_close() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!(
+            "prolly-persistent-wal-{}-{nonce}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&temp).unwrap();
+        let database = temp.join("store.sqlite");
+        let wal = temp.join("store.sqlite-wal");
+
+        {
+            let store = SqliteStore::open(&database).unwrap();
+            store.put(b"default", b"value").unwrap();
+        }
+        assert!(!wal.exists());
+
+        {
+            let store = SqliteStore::open_with_config(
+                &database,
+                SqliteStoreConfig {
+                    persist_wal: true,
+                    ..SqliteStoreConfig::default()
+                },
+            )
+            .unwrap();
+            store.put(b"persistent", b"value").unwrap();
+        }
+        assert!(wal.is_file());
+        std::fs::remove_dir_all(temp).unwrap();
     }
 
     #[test]

@@ -268,6 +268,7 @@ fn durable_store(path: &Path) -> AppResult<Arc<SqliteStore>> {
         SqliteStoreConfig {
             busy_timeout_ms: 5_000,
             enable_wal: true,
+            persist_wal: false,
             synchronous_normal: false,
         },
     )?))
