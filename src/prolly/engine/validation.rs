@@ -25,7 +25,9 @@ pub(crate) fn decode_owned(
     bytes: &[u8],
 ) -> Result<Node, Error> {
     validate_cid(expected_cid, bytes)?;
-    Node::from_bytes_with_format(bytes, expected_format)
+    let node = Node::from_bytes_with_format(bytes, expected_format)?;
+    node.validate()?;
+    Ok(node)
 }
 
 /// Validate identity, persisted format, and structure while retaining shared bytes.

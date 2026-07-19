@@ -231,13 +231,13 @@ impl<S: AsyncStore> ProllyEngine<S> {
 - Modify: this plan (check completed boxes)
 - Create: `performance-results/async-first-foundation-2026-07-18/report.md`
 
-- [ ] Run `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features -- -D warnings`.
-- [ ] Run `cargo test --no-default-features`, `cargo test --all-features`, and all doctests.
-- [ ] Run the existing Miri-compatible node/cache validation subset and record the exact command. If nightly/Miri is unavailable, record that as an environmental limitation rather than claiming the gate passed.
-- [ ] Benchmark sync and async-adapted `get`/`get_many` on the same in-memory tree. Record release build, CPU, Rust version, sample count, median, p95, throughput, allocations if available, and peak RSS. This is a regression sentinel, not the final SQLite/Turso comparison.
-- [ ] Record preserved root vectors before/after for every built-in `TreeFormat` and confirm byte-for-byte equality.
-- [ ] Write `report.md` with commands, raw artifact paths, pass/fail gates, and any measured regression. Do not begin canonical writes while a correctness gate fails.
-- [ ] Commit with `git commit -m "test: verify async-first engine foundation"`.
+- [x] Run `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features -- -D warnings`.
+- [x] Run `cargo test --no-default-features`, `cargo test --all-features`, and all doctests.
+- [x] Run the existing Miri-compatible node/cache validation subset and record the exact command. If nightly/Miri is unavailable, record that as an environmental limitation rather than claiming the gate passed.
+- [x] Benchmark sync and async-adapted `get`/`get_many` on the same in-memory tree. Record release build, CPU, Rust version, sample count, median, p95, throughput, allocations if available, and peak RSS. This is a regression sentinel, not the final SQLite/Turso comparison.
+- [x] Record preserved root vectors before/after for every built-in `TreeFormat` and confirm byte-for-byte equality.
+- [x] Write `report.md` with commands, raw artifact paths, pass/fail gates, and any measured regression. Do not begin canonical writes while a correctness gate fails.
+- [x] Commit with `git commit -m "test: verify async-first engine foundation"`.
 
 ## Phase Exit Criteria
 

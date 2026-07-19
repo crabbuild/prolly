@@ -2223,7 +2223,7 @@ impl<S: Store> Prolly<S> {
         for tree in roots {
             if let Some(root_cid) = &tree.root {
                 if seen.insert(root_cid.clone()) {
-                    frontier.push(root_cid.clone());
+                    frontier.push((root_cid.clone(), tree.config.format.clone()));
                 }
             }
         }
@@ -2234,8 +2234,25 @@ impl<S: Store> Prolly<S> {
         let mut internal_nodes = 0usize;
 
         while !frontier.is_empty() {
-            let current = std::mem::take(&mut frontier);
-            let nodes = self.load_many_ordered_with_parallelism(&current, parallelism)?;
+            let expected_format = frontier[0].1.clone();
+            let mut current = Vec::new();
+            let mut deferred = Vec::new();
+            for (cid, format) in std::mem::take(&mut frontier) {
+                if format == expected_format {
+                    current.push(cid);
+                } else {
+                    deferred.push((cid, format));
+                }
+            }
+            frontier = deferred;
+            let nodes = self
+                .load_many_ordered_with_widths_and_stats_for_format(
+                    &current,
+                    parallelism,
+                    rayon::current_num_threads(),
+                    &expected_format,
+                )?
+                .nodes;
 
             for (cid, node) in current.into_iter().zip(nodes) {
                 if node.keys.len() != node.vals.len() {
@@ -2251,7 +2268,7 @@ impl<S: Store> Prolly<S> {
                     for idx in 0..node.len() {
                         let child_cid = child_cid_at(&node, idx)?;
                         if seen.insert(child_cid.clone()) {
-                            frontier.push(child_cid);
+                            frontier.push((child_cid, expected_format.clone()));
                         }
                     }
                 }
@@ -3242,9 +3259,18 @@ impl<S: Store> Prolly<S> {
 
     /// Load a node by its CID, reusing the in-process immutable node cache.
     pub(crate) fn load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
+        self.load_arc_with_format(cid, &self.config.format)
+    }
+
+    fn load_arc_with_format(
+        &self,
+        cid: &Cid,
+        expected_format: &format::TreeFormat,
+    ) -> Result<Arc<Node>, Error> {
         let unbounded = if let Ok(cache) = self.node_cache.read() {
             if cache.is_unbounded() {
                 if let Some(node) = cache.peek(cid) {
+                    validate_owned_node_format(&node, expected_format)?;
                     self.metrics.add_cache_hits(1);
                     return Ok(node);
                 }
@@ -3258,6 +3284,7 @@ impl<S: Store> Prolly<S> {
         if !unbounded {
             if let Ok(mut cache) = self.node_cache.write() {
                 if let Some(node) = cache.get(cid) {
+                    validate_owned_node_format(&node, expected_format)?;
                     self.metrics.add_cache_hits(1);
                     return Ok(node);
                 }
@@ -3273,7 +3300,7 @@ impl<S: Store> Prolly<S> {
         self.metrics.record_point_read(bytes.len());
         let node = Arc::new(engine::validation::decode_owned(
             cid,
-            &self.config.format,
+            expected_format,
             &bytes,
         )?);
 
@@ -3526,6 +3553,21 @@ impl<S: Store> Prolly<S> {
         read_parallelism: usize,
         decode_parallelism: usize,
     ) -> Result<OrderedLoadExecution, Error> {
+        self.load_many_ordered_with_widths_and_stats_for_format(
+            cids,
+            read_parallelism,
+            decode_parallelism,
+            &self.config.format,
+        )
+    }
+
+    fn load_many_ordered_with_widths_and_stats_for_format(
+        &self,
+        cids: &[Cid],
+        read_parallelism: usize,
+        decode_parallelism: usize,
+        expected_format: &format::TreeFormat,
+    ) -> Result<OrderedLoadExecution, Error> {
         if cids.is_empty() {
             return Ok(OrderedLoadExecution::default());
         }
@@ -3549,6 +3591,9 @@ impl<S: Store> Prolly<S> {
                 .into_iter()
                 .collect::<Option<Vec<_>>>()
                 .ok_or(Error::InvalidNode)?;
+            for node in &nodes {
+                validate_owned_node_format(node, expected_format)?;
+            }
             return Ok(OrderedLoadExecution {
                 nodes,
                 ..OrderedLoadExecution::default()
@@ -3565,7 +3610,7 @@ impl<S: Store> Prolly<S> {
         }) = missing
         {
             if missing_cids.len() == 1 && !self.store.prefers_batch_reads() {
-                let node = self.load_arc(&missing_cids[0])?;
+                let node = self.load_arc_with_format(&missing_cids[0], expected_format)?;
                 let positions = missing_positions
                     .into_iter()
                     .next()
@@ -3644,7 +3689,7 @@ impl<S: Store> Prolly<S> {
                                 let encoded_len = bytes.len();
                                 let node = Arc::new(engine::validation::decode_owned(
                                     cid,
-                                    &self.config.format,
+                                    expected_format,
                                     bytes,
                                 )?);
                                 Ok((cid.clone(), node, encoded_len))
@@ -3667,7 +3712,7 @@ impl<S: Store> Prolly<S> {
                         let encoded_len = bytes.len();
                         let node = Arc::new(engine::validation::decode_owned(
                             &cid,
-                            &self.config.format,
+                            expected_format,
                             &bytes,
                         )?);
                         Ok((cid, node, encoded_len))
@@ -3693,6 +3738,9 @@ impl<S: Store> Prolly<S> {
             .into_iter()
             .collect::<Option<Vec<_>>>()
             .ok_or(Error::InvalidNode)?;
+        for node in &nodes {
+            validate_owned_node_format(node, expected_format)?;
+        }
         Ok(OrderedLoadExecution {
             nodes,
             parallel_tasks,
@@ -8258,6 +8306,20 @@ fn child_cid_at(node: &Node, idx: usize) -> Result<Cid, Error> {
         .try_into()
         .map_err(|_| Error::InvalidNode)?))
 }
+
+fn validate_owned_node_format(
+    node: &Node,
+    expected_format: &format::TreeFormat,
+) -> Result<(), Error> {
+    node.validate()?;
+    if node.format != *expected_format {
+        return Err(Error::FormatMismatch {
+            expected: expected_format.digest()?,
+            actual: node.format.digest()?,
+        });
+    }
+    Ok(())
+}
 fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.keys.reserve(additional);
     node.vals.reserve(additional);
@@ -9127,6 +9189,7 @@ mod tests {
             .map(|idx| format!("k{idx:02}").into_bytes())
             .collect();
         root.vals = child_cids.iter().map(|cid| cid.0.to_vec()).collect();
+        root.child_counts = vec![1; child_cids.len()];
         let tree = Tree {
             root: Some(prolly.save(&root).unwrap()),
             config: Config::default(),

@@ -83,3 +83,7 @@ harness = false
 [[bench]]
 name = "scale_workloads"
 harness = false
+
+[[bench]]
+name = "async_first_foundation_bench"
+harness = false

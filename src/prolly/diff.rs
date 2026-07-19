@@ -6456,12 +6456,14 @@ mod tests {
             .into_iter()
             .map(|cid| cid.0.to_vec())
             .collect();
+        base_root.child_counts = vec![1; base_root.vals.len()];
         let mut other_root = prolly.new_internal_node(1);
         other_root.keys = keys;
         other_root.vals = other_child_cids
             .into_iter()
             .map(|cid| cid.0.to_vec())
             .collect();
+        other_root.child_counts = vec![1; other_root.vals.len()];
 
         let base = Tree {
             root: Some(prolly.save(&base_root).unwrap()),
@@ -6676,11 +6678,13 @@ mod tests {
         let mut base_root = prolly.new_internal_node(1);
         base_root.keys = vec![b"a".to_vec(), b"b".to_vec()];
         base_root.vals = vec![leaf_a_cid.0.to_vec(), leaf_b_cid.0.to_vec()];
+        base_root.child_counts = vec![1, 1];
         let base_root_cid = prolly.save(&base_root).unwrap();
 
         let mut other_root = prolly.new_internal_node(1);
         other_root.keys = vec![b"a".to_vec(), b"b".to_vec()];
         other_root.vals = vec![leaf_a_cid.0.to_vec(), leaf_bc_cid.0.to_vec()];
+        other_root.child_counts = vec![1, 2];
         let other_root_cid = prolly.save(&other_root).unwrap();
 
         let base = Tree {
@@ -7184,6 +7188,7 @@ mod tests {
         let save_internal = |level, keys: Vec<Vec<u8>>, child_cids: Vec<Cid>| {
             let mut node = prolly.new_internal_node(level);
             node.keys = keys;
+            node.child_counts = vec![if level == 1 { 1 } else { 2 }; child_cids.len()];
             node.vals = child_cids
                 .into_iter()
                 .map(|cid| cid.0.to_vec())
@@ -7310,6 +7315,7 @@ mod tests {
         let save_root = |child_cids: Vec<Cid>| {
             let mut root = prolly.new_internal_node(1);
             root.keys = keys.clone();
+            root.child_counts = vec![1; child_cids.len()];
             root.vals = child_cids.into_iter().map(|cid| cid.0.to_vec()).collect();
             prolly.save(&root).unwrap()
         };
