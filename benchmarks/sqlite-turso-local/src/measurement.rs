@@ -251,4 +251,3 @@ mod tests {
         assert_eq!(loaded, vec![row]);
     }
 }
-

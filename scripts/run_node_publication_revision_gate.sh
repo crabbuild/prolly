@@ -13,9 +13,11 @@ CHANGES=""
 APIS=""
 PATTERNS=""
 ADAPTERS=""
+ISOLATE_CELLS=false
+MEASUREMENT_SAMPLES=1
 
 usage() {
-  printf '%s\n' 'usage: run_node_publication_revision_gate.sh --suite foundation|sqlite-turso --baseline-repo PATH --candidate-repo PATH --output PATH --sizes CSV --runs N --changes N|auto --apis CSV --patterns CSV --adapters CSV'
+  printf '%s\n' 'usage: run_node_publication_revision_gate.sh --suite foundation|sqlite-turso --baseline-repo PATH --candidate-repo PATH --output PATH --sizes CSV --runs N --changes N|auto --apis CSV --patterns CSV --adapters CSV [--measurement-samples N] [--isolate-cells]'
 }
 
 while (($#)); do
@@ -30,6 +32,8 @@ while (($#)); do
     --apis) APIS="${2:?--apis requires a value}"; shift 2 ;;
     --patterns) PATTERNS="${2:?--patterns requires a value}"; shift 2 ;;
     --adapters) ADAPTERS="${2:?--adapters requires a value}"; shift 2 ;;
+    --measurement-samples) MEASUREMENT_SAMPLES="${2:?--measurement-samples requires a value}"; shift 2 ;;
+    --isolate-cells) ISOLATE_CELLS=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -52,6 +56,10 @@ if [[ ! "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 if [[ "$CHANGES" != "auto" && ! "$CHANGES" =~ ^[1-9][0-9]*$ ]]; then
   printf 'changes must be a positive integer or auto\n' >&2
+  exit 2
+fi
+if [[ ! "$MEASUREMENT_SAMPLES" =~ ^[1-9][0-9]*$ ]] || ((MEASUREMENT_SAMPLES > 254)); then
+  printf 'measurement samples must be between 1 and 254\n' >&2
   exit 2
 fi
 if [[ -n "$(git -C "$BASELINE_REPO" status --porcelain)" ]]; then
@@ -94,7 +102,8 @@ capture_machine() {
     printf 'candidate_revision=%s\n' "$CANDIDATE_REVISION"
     printf 'sizes=%s\nruns=%s\nchanges=%s\napis=%s\npatterns=%s\nadapters=%s\n' \
       "$SIZES" "$RUNS" "$CHANGES" "$APIS" "$PATTERNS" "$ADAPTERS"
-    printf 'execution=alternating-local-only\ncloud_sync=disabled\n'
+    printf 'execution=alternating-local-only\nisolate_cells=%s\nmeasurement_samples=%s\ncloud_sync=disabled\n' \
+      "$ISOLATE_CELLS" "$MEASUREMENT_SAMPLES"
   } > "$OUTPUT/provenance.txt"
 }
 
@@ -126,15 +135,31 @@ build_foundation() {
 build_sqlite_turso() {
   local role="$1"
   local repo="$2"
-  local manifest="$repo/benchmarks/sqlite-turso-local/Cargo.toml"
+  local stage="$WORK_ROOT/build/sqlite-turso-$role"
+  local manifest="$stage/Cargo.toml"
   local target="$TARGET_ROOT/sqlite-turso-$role"
-  if [[ ! -f "$manifest" ]]; then
-    printf 'revision %s lacks sqlite-turso benchmark manifest\n' "$repo" >&2
+  if [[ ! -f "$repo/stores/prolly-store-sqlite/Cargo.toml" \
+    || ! -f "$repo/stores/prolly-store-turso/Cargo.toml" ]]; then
+    printf 'revision %s lacks a required SQLite/Turso adapter\n' "$repo" >&2
     exit 2
   fi
-  mkdir -p "$target"
+  mkdir -p "$stage" "$target"
+  cp -R "$CANDIDATE_SOURCE/benchmarks/sqlite-turso-local/src" "$stage/src"
+  cp "$CANDIDATE_SOURCE/benchmarks/sqlite-turso-local/Cargo.lock" "$stage/Cargo.lock"
+  {
+    printf '[package]\nname = "prolly-sqlite-turso-local-bench"\nversion = "0.0.0"\nedition = "2021"\nrust-version = "1.88"\npublish = false\n\n'
+    printf '[dependencies]\n'
+    printf 'csv = "1.3"\nfs2 = "0.4"\n'
+    printf 'prolly = { package = "prolly-map", path = "%s", features = ["async-store"] }\n' "$repo"
+    printf 'prolly-store-sqlite = { path = "%s/stores/prolly-store-sqlite" }\n' "$repo"
+    printf 'prolly-store-turso = { path = "%s/stores/prolly-store-turso" }\n' "$repo"
+    printf 'serde = { version = "1.0", features = ["derive"] }\n'
+    printf 'tempfile = "3.20"\n'
+    printf 'tokio = { version = "1.45", features = ["macros", "rt-multi-thread"] }\n\n'
+    printf '[lints.rust]\nunsafe_code = "forbid"\n'
+  } > "$manifest"
   CARGO_TARGET_DIR="$target" CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_DEBUG=0 \
-    cargo build --release --manifest-path "$manifest" \
+    cargo build --release --locked --manifest-path "$manifest" \
       --bin prolly-sqlite-turso-local-bench
   CARGO_TARGET_DIR="$target" cargo tree --manifest-path "$manifest" -e features \
     > "$OUTPUT/dependency-features-$role.txt"
@@ -188,6 +213,52 @@ else
   CANDIDATE_BIN="$(build_sqlite_turso candidate "$CANDIDATE_REPO")"
 fi
 
+run_role() {
+  local role="$1"
+  local pair="$2"
+  local records="$3"
+  local cell_changes="$4"
+  local cell_apis="$5"
+  local cell_patterns="$6"
+  local cell_adapters="$7"
+  local cell_tag="$8"
+  local binary revision dirty_flag invocation
+
+  if [[ "$role" == "baseline" ]]; then
+    binary="$BASELINE_BIN"
+    revision="$BASELINE_REVISION"
+    dirty_flag="--clean"
+  else
+    binary="$CANDIDATE_BIN"
+    revision="$CANDIDATE_REVISION"
+    dirty_flag="$CANDIDATE_DIRTY"
+  fi
+  invocation="$WORK_ROOT/invocations/pair-$pair/records-$records/$cell_tag/$role"
+  mkdir -p "$invocation"
+  if [[ "$SUITE" == "foundation" ]]; then
+    BENCH_REVISION="$revision" \
+      PROLLY_FOUNDATION_RECORDS="$records" \
+      PROLLY_FOUNDATION_CHANGES="$cell_changes" \
+      PROLLY_FOUNDATION_APIS="$cell_apis" \
+      "$binary" > "$invocation/raw.csv"
+    append_csv foundation "$role" "$pair" "$invocation/raw.csv"
+  else
+    "$binary" \
+      --profile smoke \
+      --output "$invocation" \
+      --revision "$revision" \
+      "$dirty_flag" \
+      --sizes "$records" \
+      --runs 1 \
+      --changes "$cell_changes" \
+      --measurement-samples "$MEASUREMENT_SAMPLES" \
+      --apis "$cell_apis" \
+      --patterns "$cell_patterns" \
+      --adapters "$cell_adapters"
+    append_csv sqlite-turso "$role" "$pair" "$invocation/raw-results.csv"
+  fi
+}
+
 IFS=',' read -r -a SIZE_VALUES <<< "$SIZES"
 for pair in $(seq 1 "$RUNS"); do
   if ((pair % 2 == 1)); then
@@ -201,40 +272,27 @@ for pair in $(seq 1 "$RUNS"); do
       exit 2
     fi
     cell_changes="$(resolved_changes "$records")"
-    for role in "${ORDER[@]}"; do
-      if [[ "$role" == "baseline" ]]; then
-        binary="$BASELINE_BIN"
-        revision="$BASELINE_REVISION"
-        dirty_flag="--clean"
-      else
-        binary="$CANDIDATE_BIN"
-        revision="$CANDIDATE_REVISION"
-        dirty_flag="$CANDIDATE_DIRTY"
-      fi
-      invocation="$WORK_ROOT/invocations/pair-$pair/records-$records/$role"
-      mkdir -p "$invocation"
-      if [[ "$SUITE" == "foundation" ]]; then
-        BENCH_REVISION="$revision" \
-          PROLLY_FOUNDATION_RECORDS="$records" \
-          PROLLY_FOUNDATION_CHANGES="$cell_changes" \
-          PROLLY_FOUNDATION_APIS="$APIS" \
-          "$binary" > "$invocation/raw.csv"
-        append_csv foundation "$role" "$pair" "$invocation/raw.csv"
-      else
-        "$binary" \
-          --profile smoke \
-          --output "$invocation" \
-          --revision "$revision" \
-          "$dirty_flag" \
-          --sizes "$records" \
-          --runs 1 \
-          --changes "$cell_changes" \
-          --apis "$APIS" \
-          --patterns "$PATTERNS" \
-          --adapters "$ADAPTERS"
-        append_csv sqlite-turso "$role" "$pair" "$invocation/raw-results.csv"
-      fi
-    done
+    if [[ "$SUITE" == "sqlite-turso" && "$ISOLATE_CELLS" == true ]]; then
+      IFS=',' read -r -a API_VALUES <<< "$APIS"
+      IFS=',' read -r -a PATTERN_VALUES <<< "$PATTERNS"
+      IFS=',' read -r -a ADAPTER_VALUES <<< "$ADAPTERS"
+      for adapter in "${ADAPTER_VALUES[@]}"; do
+        for api in "${API_VALUES[@]}"; do
+          for pattern in "${PATTERN_VALUES[@]}"; do
+            cell_tag="$adapter/$api/$pattern"
+            for role in "${ORDER[@]}"; do
+              run_role "$role" "$pair" "$records" "$cell_changes" \
+                "$api" "$pattern" "$adapter" "$cell_tag"
+            done
+          done
+        done
+      done
+    else
+      for role in "${ORDER[@]}"; do
+        run_role "$role" "$pair" "$records" "$cell_changes" \
+          "$APIS" "$PATTERNS" "$ADAPTERS" all-cells
+      done
+    fi
   done
 done
 

@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::model::{Adapter, Api, Pattern, RunConfig};
 
-pub const USAGE: &str = "usage: prolly-sqlite-turso-local-bench [--profile smoke|full] [--output PATH] [--revision REV] [--dirty|--clean] [--adapters LIST] [--sizes LIST] [--runs N] [--apis LIST] [--patterns LIST] [--changes N|auto] [--max-seconds N] [--min-free-gb N] [--keep-fixtures] [--tokio-workers N] [--build-batch-size N]";
+pub const USAGE: &str = "usage: prolly-sqlite-turso-local-bench [--profile smoke|full] [--output PATH] [--revision REV] [--dirty|--clean] [--adapters LIST] [--sizes LIST] [--runs N] [--apis LIST] [--patterns LIST] [--changes N|auto] [--measurement-samples N] [--max-seconds N] [--min-free-gb N] [--keep-fixtures] [--tokio-workers N] [--build-batch-size N]";
 
 pub fn parse_args<I, S>(args: I) -> Result<RunConfig, String>
 where
@@ -31,6 +31,7 @@ where
     let mut keep_fixtures = false;
     let mut tokio_workers = None;
     let mut build_batch_size = None;
+    let mut measurement_samples = None;
 
     let mut index = 1;
     while index < values.len() {
@@ -65,6 +66,10 @@ where
                 } else {
                     Some(parse_number(&value, flag)?)
                 });
+            }
+            "--measurement-samples" => {
+                measurement_samples =
+                    Some(parse_number(&take_value(&values, &mut index, flag)?, flag)?)
             }
             "--max-seconds" => {
                 max_seconds = Some(parse_number(&take_value(&values, &mut index, flag)?, flag)?)
@@ -124,6 +129,9 @@ where
     }
     if let Some(value) = build_batch_size {
         config.build_batch_size = value;
+    }
+    if let Some(value) = measurement_samples {
+        config.measurement_samples = value;
     }
     config.validate()?;
     Ok(config)
@@ -188,6 +196,8 @@ mod tests {
             "random",
             "--tokio-workers",
             "2",
+            "--measurement-samples",
+            "7",
         ])
         .unwrap();
         assert_eq!(config.revision, "abc123");
@@ -196,6 +206,7 @@ mod tests {
         assert_eq!(config.apis, vec![Api::Put, Api::Diff]);
         assert_eq!(config.patterns, vec![Pattern::Random]);
         assert_eq!(config.tokio_workers, 2);
+        assert_eq!(config.measurement_samples, 7);
     }
 
     #[test]
@@ -204,4 +215,3 @@ mod tests {
         assert!(parse_args(["bench", "--mystery"]).is_err());
     }
 }
-

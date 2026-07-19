@@ -51,4 +51,3 @@ async fn local_smoke_runs_every_adapter_api_and_pattern_without_sync() {
     assert_eq!(resumed.measured, 0);
     assert_eq!(resumed.skipped, 24);
 }
-

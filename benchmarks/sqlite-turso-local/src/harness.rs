@@ -200,6 +200,7 @@ pub async fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
                 changes,
                 revision: config.revision.clone(),
                 dirty: config.dirty,
+                measurement_samples: config.measurement_samples,
             };
             if let Err(error) = remove_cell_dir(&layout, &cell_dir)
                 .and_then(|()| clone_fixture(&layout.source_dir(), &cell_dir))
@@ -264,13 +265,14 @@ fn manifest_contract(config: &RunConfig) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "schema={SCHEMA_VERSION}\nrevision={}\ndirty={}\nseed={RANDOM_SEED}\nadapters={adapters}\nsizes={sizes}\nruns={}\napis={apis}\npatterns={patterns}\nchanges={}\ntokio_workers={}\nbuild_batch_size={}\nexecution=sqlite-sync-vs-turso-async-serial-local-only\nsqlite_config=default-wal-synchronous-normal-busy-timeout-5000ms\nturso_config=native-0.7-local-defaults-no-cloud-sync\n",
+        "schema={SCHEMA_VERSION}\nrevision={}\ndirty={}\nseed={RANDOM_SEED}\nadapters={adapters}\nsizes={sizes}\nruns={}\napis={apis}\npatterns={patterns}\nchanges={}\nmeasurement_samples={}\ntokio_workers={}\nbuild_batch_size={}\nexecution=sqlite-sync-vs-turso-async-serial-local-only\nsqlite_config=default-wal-synchronous-normal-busy-timeout-5000ms\nturso_config=native-0.7-local-defaults-no-cloud-sync\n",
         config.revision,
         config.dirty,
         config.runs,
         config
             .explicit_changes
             .map_or_else(|| "automatic".to_string(), |value| value.to_string()),
+        config.measurement_samples,
         config.tokio_workers,
         config.build_batch_size,
     )
@@ -486,28 +488,16 @@ fn validate_raw_rows(config: &RunConfig, rows: &[RawRow]) -> Result<(), String> 
         if relative_error > 1e-9 {
             return Err(format!("measurement throughput is inconsistent: {key:?}"));
         }
-        match row.api {
-            crate::model::Api::Put => {
-                let percentiles = [row.p50_ns, row.p95_ns, row.p99_ns, row.max_ns];
-                if percentiles
-                    .iter()
-                    .any(|value| value.is_none_or(|value| value == 0))
-                {
-                    return Err(format!("put percentiles are missing: {key:?}"));
-                }
-                let values = percentiles.map(Option::unwrap);
-                if !values.windows(2).all(|window| window[0] <= window[1]) {
-                    return Err(format!("put percentiles are unordered: {key:?}"));
-                }
-            }
-            crate::model::Api::Batch | crate::model::Api::Diff | crate::model::Api::Merge => {
-                if [row.p50_ns, row.p95_ns, row.p99_ns, row.max_ns]
-                    .iter()
-                    .any(Option::is_some)
-                {
-                    return Err(format!("non-put cell contains percentiles: {key:?}"));
-                }
-            }
+        let percentiles = [row.p50_ns, row.p95_ns, row.p99_ns, row.max_ns];
+        if percentiles
+            .iter()
+            .any(|value| value.is_none_or(|value| value == 0))
+        {
+            return Err(format!("measurement percentiles are missing: {key:?}"));
+        }
+        let values = percentiles.map(Option::unwrap);
+        if !values.windows(2).all(|window| window[0] <= window[1]) {
+            return Err(format!("measurement percentiles are unordered: {key:?}"));
         }
     }
     Ok(())
@@ -711,4 +701,3 @@ mod tests {
             .contains("contract"));
     }
 }
-

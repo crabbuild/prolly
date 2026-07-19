@@ -112,7 +112,14 @@ pub async fn run_turso_cell(spec: &CellSpec, layout: &FixtureLayout) -> Result<R
                 .map_err(|error| format!("failed to prepare Turso diff tree: {error}"))?;
             drop(base_manager);
             let timed_manager = AsyncProlly::new(store.clone(), config.clone());
-            run_diff(&timed_manager, &base, &changed, ids).await?
+            run_diff(
+                &timed_manager,
+                &base,
+                &changed,
+                ids,
+                spec.measurement_samples,
+            )
+            .await?
         }
         Api::Merge => {
             let (left_ids, right_ids) = merge_ids(
@@ -131,7 +138,16 @@ pub async fn run_turso_cell(spec: &CellSpec, layout: &FixtureLayout) -> Result<R
                 .map_err(|error| format!("failed to prepare Turso right branch: {error}"))?;
             drop(base_manager);
             let timed_manager = AsyncProlly::new(store.clone(), config.clone());
-            run_merge(&timed_manager, &base, &left, &right, left_ids, right_ids).await?
+            run_merge(
+                &timed_manager,
+                &base,
+                &left,
+                &right,
+                left_ids,
+                right_ids,
+                spec.measurement_samples,
+            )
+            .await?
         }
     };
 
@@ -217,22 +233,30 @@ async fn run_put(
         crate::model::RANDOM_SEED,
     );
     let mut result = base.clone();
-    let mut latencies = Vec::with_capacity(ids.len());
-    let total_started = Instant::now();
-    for id in &ids {
-        let started = Instant::now();
-        result = prolly
-            .put(&result, key(*id), value(*id, 1))
-            .await
-            .map_err(|error| format!("Turso put failed: {error}"))?;
-        latencies.push(started.elapsed().as_nanos().max(1));
+    let mut latencies = Vec::with_capacity(ids.len().saturating_mul(spec.measurement_samples));
+    let mut totals = Vec::with_capacity(spec.measurement_samples);
+    for sample in 0..spec.measurement_samples {
+        prolly.clear_cache();
+        let generation = sample_generation(sample);
+        let mut sample_result = base.clone();
+        let total_started = Instant::now();
+        for id in &ids {
+            let started = Instant::now();
+            sample_result = prolly
+                .put(&sample_result, key(*id), value(*id, generation))
+                .await
+                .map_err(|error| format!("Turso put failed: {error}"))?;
+            latencies.push(started.elapsed().as_nanos().max(1));
+        }
+        totals.push(total_started.elapsed().as_nanos().max(1));
+        result = sample_result;
     }
-    let total_ns = total_started.elapsed().as_nanos().max(1);
+    let generation = sample_generation(spec.measurement_samples - 1);
     Ok(CellOutcome {
         result,
-        changed_values: expected_values(&ids, 1),
+        changed_values: expected_values(&ids, generation),
         observed_changes: ids.len(),
-        total_ns,
+        total_ns: nearest_rank(&totals, 0.50).unwrap_or(1),
         p50_ns: nearest_rank(&latencies, 0.50),
         p95_ns: nearest_rank(&latencies, 0.95),
         p99_ns: nearest_rank(&latencies, 0.99),
@@ -251,16 +275,23 @@ async fn run_batch(
         spec.changes,
         crate::model::RANDOM_SEED,
     );
-    let started = Instant::now();
-    let result = prolly
-        .batch(base, mutations_for_ids(&ids, 1))
-        .await
-        .map_err(|error| format!("Turso batch failed: {error}"))?;
-    Ok(single_call_outcome(
+    let mut totals = Vec::with_capacity(spec.measurement_samples);
+    let mut result = base.clone();
+    for sample in 0..spec.measurement_samples {
+        prolly.clear_cache();
+        let generation = sample_generation(sample);
+        let started = Instant::now();
+        result = prolly
+            .batch(base, mutations_for_ids(&ids, generation))
+            .await
+            .map_err(|error| format!("Turso batch failed: {error}"))?;
+        totals.push(started.elapsed().as_nanos().max(1));
+    }
+    Ok(sampled_call_outcome(
         result,
-        expected_values(&ids, 1),
+        expected_values(&ids, sample_generation(spec.measurement_samples - 1)),
         ids.len(),
-        started.elapsed().as_nanos().max(1),
+        &totals,
     ))
 }
 
@@ -269,30 +300,35 @@ async fn run_diff(
     base: &Tree,
     changed: &Tree,
     ids: Vec<usize>,
+    measurement_samples: usize,
 ) -> Result<CellOutcome, String> {
     let expected_keys = ids.iter().map(|id| key(*id)).collect::<BTreeSet<_>>();
-    let started = Instant::now();
-    let diffs = prolly
-        .diff(base, changed)
-        .await
-        .map_err(|error| format!("Turso diff failed: {error}"))?;
-    let total_ns = started.elapsed().as_nanos().max(1);
-    let observed_keys = diffs
-        .iter()
-        .map(|diff| diff.key().to_vec())
-        .collect::<BTreeSet<_>>();
-    if observed_keys != expected_keys || diffs.len() != ids.len() {
-        return Err(format!(
-            "Turso diff returned {} changes, expected {}",
-            diffs.len(),
-            ids.len()
-        ));
+    let mut totals = Vec::with_capacity(measurement_samples);
+    for _ in 0..measurement_samples {
+        prolly.clear_cache();
+        let started = Instant::now();
+        let diffs = prolly
+            .diff(base, changed)
+            .await
+            .map_err(|error| format!("Turso diff failed: {error}"))?;
+        totals.push(started.elapsed().as_nanos().max(1));
+        let observed_keys = diffs
+            .iter()
+            .map(|diff| diff.key().to_vec())
+            .collect::<BTreeSet<_>>();
+        if observed_keys != expected_keys || diffs.len() != ids.len() {
+            return Err(format!(
+                "Turso diff returned {} changes, expected {}",
+                diffs.len(),
+                ids.len()
+            ));
+        }
     }
-    Ok(single_call_outcome(
+    Ok(sampled_call_outcome(
         changed.clone(),
         expected_values(&ids, 1),
-        diffs.len(),
-        total_ns,
+        ids.len(),
+        &totals,
     ))
 }
 
@@ -303,39 +339,49 @@ async fn run_merge(
     right: &Tree,
     left_ids: Vec<usize>,
     right_ids: Vec<usize>,
+    measurement_samples: usize,
 ) -> Result<CellOutcome, String> {
-    let started = Instant::now();
-    let result = prolly
-        .merge(base, left, right, None)
-        .await
-        .map_err(|error| format!("Turso merge failed: {error}"))?;
-    let total_ns = started.elapsed().as_nanos().max(1);
+    let mut totals = Vec::with_capacity(measurement_samples);
+    let mut result = base.clone();
+    for _ in 0..measurement_samples {
+        prolly.clear_cache();
+        let started = Instant::now();
+        result = prolly
+            .merge(base, left, right, None)
+            .await
+            .map_err(|error| format!("Turso merge failed: {error}"))?;
+        totals.push(started.elapsed().as_nanos().max(1));
+    }
     let mut changed_values = expected_values(&left_ids, 1);
     changed_values.extend(expected_values(&right_ids, 2));
-    Ok(single_call_outcome(
+    Ok(sampled_call_outcome(
         result,
         changed_values,
         left_ids.len().saturating_add(right_ids.len()),
-        total_ns,
+        &totals,
     ))
 }
 
-fn single_call_outcome(
+fn sampled_call_outcome(
     result: Tree,
     changed_values: BTreeMap<usize, u8>,
     observed_changes: usize,
-    total_ns: u128,
+    totals: &[u128],
 ) -> CellOutcome {
     CellOutcome {
         result,
         changed_values,
         observed_changes,
-        total_ns,
-        p50_ns: None,
-        p95_ns: None,
-        p99_ns: None,
-        max_ns: None,
+        total_ns: nearest_rank(totals, 0.50).unwrap_or(1),
+        p50_ns: nearest_rank(totals, 0.50),
+        p95_ns: nearest_rank(totals, 0.95),
+        p99_ns: nearest_rank(totals, 0.99),
+        max_ns: totals.iter().max().copied(),
     }
+}
+
+fn sample_generation(sample: usize) -> u8 {
+    u8::try_from(sample + 1).expect("validated measurement sample count")
 }
 
 async fn validate_async_tree(
@@ -487,6 +533,7 @@ mod tests {
             changes: 10,
             revision: "test".to_string(),
             dirty: false,
+            measurement_samples: 3,
         }
     }
 
@@ -517,20 +564,12 @@ mod tests {
                 assert!(row.validated, "{api:?}/{pattern:?}: {}", row.error);
                 assert_eq!(row.observed_changes, spec.expected_operations());
                 assert_eq!(row.observed_records, spec.expected_records());
-                if api == Api::Put {
-                    assert!(row.p50_ns.is_some());
-                    assert!(row.p95_ns.is_some());
-                    assert!(row.p99_ns.is_some());
-                    assert!(row.max_ns.is_some());
-                } else {
-                    assert_eq!(row.p50_ns, None);
-                    assert_eq!(row.p95_ns, None);
-                    assert_eq!(row.p99_ns, None);
-                    assert_eq!(row.max_ns, None);
-                }
+                assert!(row.p50_ns.is_some());
+                assert!(row.p95_ns.is_some());
+                assert!(row.p99_ns.is_some());
+                assert!(row.max_ns.is_some());
                 remove_cell_dir(&layout, &cell_dir).unwrap();
             }
         }
     }
 }
-

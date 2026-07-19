@@ -331,4 +331,3 @@ mod tests {
         assert_eq!(fs::read(outside.join("keep")).unwrap(), b"keep");
     }
 }
-

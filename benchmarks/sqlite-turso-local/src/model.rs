@@ -124,6 +124,7 @@ pub struct RunConfig {
     pub keep_fixtures: bool,
     pub tokio_workers: usize,
     pub build_batch_size: usize,
+    pub measurement_samples: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,6 +147,7 @@ pub struct CellSpec {
     pub changes: usize,
     pub revision: String,
     pub dirty: bool,
+    pub measurement_samples: usize,
 }
 
 impl CellSpec {
@@ -186,6 +188,7 @@ impl RunConfig {
                 .map(usize::from)
                 .unwrap_or(1),
             build_batch_size: 50_000,
+            measurement_samples: 1,
         }
     }
 
@@ -207,6 +210,7 @@ impl RunConfig {
                 .map(usize::from)
                 .unwrap_or(1),
             build_batch_size: 50_000,
+            measurement_samples: 1,
         }
     }
 
@@ -250,6 +254,9 @@ impl RunConfig {
         }
         if self.build_batch_size == 0 {
             return Err("fixture build batch size must be positive".to_string());
+        }
+        if !(1..=254).contains(&self.measurement_samples) {
+            return Err("measurement samples must be between 1 and 254".to_string());
         }
         Ok(())
     }
@@ -401,4 +408,3 @@ mod tests {
         assert!(config.validate().unwrap_err().contains("sizes"));
     }
 }
-
