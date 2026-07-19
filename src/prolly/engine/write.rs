@@ -47,6 +47,14 @@ impl<S> ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>
 where
     S: Store,
 {
+    fn should_use_hint_replay(&self, mutations: &[Mutation]) -> bool {
+        self.store.inner().supports_hints()
+            && !mutations.is_empty()
+            && mutations
+                .iter()
+                .all(|mutation| matches!(mutation, Mutation::Upsert { .. }))
+    }
+
     pub(crate) fn structural_merge_ready(
         &self,
         base: &Tree,
@@ -64,6 +72,10 @@ where
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
+        if self.should_use_hint_replay(&mutations) {
+            let future = self.canonical_batch(tree, mutations, origin);
+            return super::ready::run_ready(self.store.ready(future));
+        }
         let manager = ReadyWriteManager::new(self, &tree.config, origin);
         crate::prolly::write::apply(&manager, tree, mutations)
     }
@@ -74,6 +86,10 @@ where
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
+        if self.should_use_hint_replay(&mutations) {
+            let future = self.canonical_batch(tree, mutations, origin);
+            return super::ready::run_ready(self.store.ready(future)).map(|(tree, _)| tree);
+        }
         let manager = ReadyWriteManager::new(self, &tree.config, origin);
         crate::prolly::write::apply_tree(&manager, tree, mutations)
     }

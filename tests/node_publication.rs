@@ -42,9 +42,17 @@ impl RecordedPublication {
 struct RecordingSyncStore {
     inner: Arc<MemStore>,
     publications: Arc<Mutex<Vec<RecordedPublication>>>,
+    supports_hints: bool,
 }
 
 impl RecordingSyncStore {
+    fn with_hints() -> Self {
+        Self {
+            supports_hints: true,
+            ..Self::default()
+        }
+    }
+
     fn take_publications(&self) -> Vec<RecordedPublication> {
         std::mem::take(&mut *self.publications.lock().unwrap())
     }
@@ -101,6 +109,10 @@ impl Store for RecordingSyncStore {
 
     fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
         self.inner.batch_put(entries)
+    }
+
+    fn supports_hints(&self) -> bool {
+        self.supports_hints
     }
 
     fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
@@ -519,6 +531,30 @@ fn publication_hint_recording_remains_borrowed_and_lossless() {
         recorded.hint,
         Some((b"namespace".to_vec(), b"key".to_vec(), b"value".to_vec()))
     );
+}
+
+#[test]
+fn sync_hint_capable_point_upserts_publish_the_rightmost_path_atomically() {
+    let store = RecordingSyncStore::with_hints();
+    let prolly = Prolly::new(store.clone(), Config::default());
+
+    let first = prolly
+        .put(&prolly.create(), b"a".to_vec(), b"one".to_vec())
+        .unwrap();
+    let first_publication = store.take_publications().pop().unwrap();
+    assert_eq!(first_publication.origin, PublicationOrigin::PointUpsert);
+    let (namespace, key, value) = first_publication.hint.unwrap();
+    assert_eq!(namespace, b"prolly:rightmost-path:v1");
+    assert_eq!(key.as_slice(), first.root.as_ref().unwrap().as_bytes());
+    assert!(!value.is_empty());
+
+    let second = prolly.put(&first, b"b".to_vec(), b"two".to_vec()).unwrap();
+    let second_publication = store.take_publications().pop().unwrap();
+    assert_eq!(second_publication.origin, PublicationOrigin::PointUpsert);
+    let (namespace, key, value) = second_publication.hint.unwrap();
+    assert_eq!(namespace, b"prolly:rightmost-path:v1");
+    assert_eq!(key.as_slice(), second.root.as_ref().unwrap().as_bytes());
+    assert!(!value.is_empty());
 }
 
 #[test]
