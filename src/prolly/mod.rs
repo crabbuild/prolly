@@ -4466,7 +4466,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
-        batch::apply_with_stats(self, tree, mutations)
+        batch::apply_with_stats(&self.engine, tree, mutations)
     }
 
     /// Apply append-heavy mutations using the optimized append path when safe.
@@ -4487,7 +4487,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
-        batch::apply_with_stats(self, tree, mutations)
+        batch::apply_with_stats(&self.engine, tree, mutations)
     }
 
     /// Merge two trees using CRDT semantics for automatic conflict resolution.
@@ -4617,7 +4617,7 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<batch::BatchApplyResult, Error> {
-        parallel::parallel_batch_with_stats(self, tree, mutations, config)
+        parallel::parallel_batch_with_stats(&self.engine, tree, mutations, config)
     }
 }
 #[allow(dead_code)]

@@ -11,8 +11,7 @@ use rayon::prelude::*;
 
 use super::batch::{self, BatchApplyResult};
 use super::error::{Error, Mutation};
-use super::store::Store;
-use super::{Prolly, Tree};
+use super::Tree;
 
 static ACTIVE_CANONICAL_WRITES: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
@@ -214,8 +213,8 @@ where
         .collect()
 }
 
-pub(crate) fn parallel_batch_with_stats<S: Store>(
-    prolly: &Prolly<S>,
+pub(crate) fn parallel_batch_with_stats<M: super::write::CanonicalWriteManager>(
+    prolly: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     config: &ParallelConfig,

@@ -2227,8 +2227,8 @@ fn build_parent_nodes<S: Store>(
     Ok(parents)
 }
 
-pub(crate) fn apply_with_stats<S: Store>(
-    prolly: &Prolly<S>,
+pub(crate) fn apply_with_stats<M: super::write::CanonicalWriteManager>(
+    prolly: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<BatchApplyResult, Error> {
@@ -2243,8 +2243,8 @@ pub(crate) fn apply_with_stats<S: Store>(
     ))
 }
 
-pub(crate) fn apply_with_stats_configured<S: Store>(
-    prolly: &Prolly<S>,
+pub(crate) fn apply_with_stats_configured<M: super::write::CanonicalWriteManager>(
+    prolly: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     config: &ParallelConfig,
