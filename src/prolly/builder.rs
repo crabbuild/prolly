@@ -7,9 +7,10 @@ use super::boundary::BoundaryDetector;
 use super::cid::Cid;
 use super::config::Config;
 use super::encoding::INIT_LEVEL;
+use super::engine::ProllyEngine;
 use super::error::Error;
 use super::node::Node;
-use super::store::Store;
+use super::store::{AsyncStore, Store, SyncStoreAsAsync};
 use super::tree::Tree;
 
 use rayon::prelude::*;
@@ -19,7 +20,7 @@ pub(crate) use size::EncodedNodeSizer;
 mod streaming;
 pub(crate) use streaming::{EmittedNode, HierarchicalEmitter, LevelEmitter};
 
-const SORTED_BUILDER_NODE_BATCH: usize = 256;
+pub(crate) const SORTED_BUILDER_NODE_BATCH: usize = 256;
 const PARALLEL_BOUNDARY_HASH_MIN_ENTRIES: usize = 1_024;
 
 #[derive(Debug)]
@@ -83,6 +84,133 @@ pub struct SortedBatchBuilder<S: Store> {
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     pending_nodes: Vec<BuiltNode>,
     hierarchy: HierarchicalEmitter,
+}
+
+/// Async-first bulk builder for unsorted entries.
+///
+/// Entries are retained until [`AsyncBatchBuilder::build`], then the engine's
+/// canonical mutation planner sorts, deduplicates, builds, validates, and
+/// publishes the resulting tree.
+pub struct AsyncBatchBuilder<S: AsyncStore> {
+    engine: ProllyEngine<S>,
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+}
+
+/// Memory-bounded async builder for entries already sorted by key.
+///
+/// Finalized node batches are published as they are emitted. Those nodes remain
+/// unreachable until [`AsyncSortedBatchBuilder::build`] returns the root.
+pub struct AsyncSortedBatchBuilder<S: AsyncStore> {
+    engine: ProllyEngine<S>,
+    pending_entry: Option<(Vec<u8>, Vec<u8>)>,
+    pending_nodes: Vec<DeferredNode>,
+    hierarchy: HierarchicalEmitter,
+}
+
+impl<S> AsyncBatchBuilder<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    /// Create an async bulk builder.
+    pub fn new(store: S, config: Config) -> Self {
+        Self {
+            engine: ProllyEngine::new(store, config),
+            entries: Vec::new(),
+        }
+    }
+
+    /// Add an entry. Input order is unrestricted.
+    pub fn add(&mut self, key: Vec<u8>, val: Vec<u8>) {
+        self.entries.push((key, val));
+    }
+
+    /// Build and publish the canonical tree.
+    pub async fn build(self) -> Result<Tree, Error> {
+        self.engine.build_from_entries(self.entries).await
+    }
+}
+
+impl<S> AsyncSortedBatchBuilder<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    /// Create a memory-bounded async sorted builder.
+    pub fn new(store: S, config: Config) -> Self {
+        let hierarchy = HierarchicalEmitter::new(config.clone())
+            .expect("configuration contains a registered persisted tree format");
+        Self {
+            engine: ProllyEngine::new(store, config),
+            pending_entry: None,
+            pending_nodes: Vec::new(),
+            hierarchy,
+        }
+    }
+
+    /// Add the next nondecreasing key/value pair.
+    ///
+    /// Duplicate keys replace the pending value. A decreasing key is rejected
+    /// before it can publish any node derived from that key.
+    pub async fn add(&mut self, key: Vec<u8>, val: Vec<u8>) -> Result<(), Error> {
+        if let Some((previous, previous_value)) = &mut self.pending_entry {
+            if key < *previous {
+                return Err(Error::UnsortedInput {
+                    previous: previous.clone(),
+                    next: key,
+                });
+            }
+            if key == *previous {
+                *previous_value = val;
+                return Ok(());
+            }
+        }
+
+        self.flush_pending_entry().await?;
+        self.pending_entry = Some((key, val));
+        Ok(())
+    }
+
+    async fn flush_pending_entry(&mut self) -> Result<(), Error> {
+        let Some((key, val)) = self.pending_entry.take() else {
+            return Ok(());
+        };
+        let emitted = self.hierarchy.push_leaf(key, val)?;
+        self.collect_emitted(emitted).await
+    }
+
+    async fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
+        self.pending_nodes
+            .extend(emitted.into_iter().map(|emitted| DeferredNode {
+                cid: emitted.summary.cid,
+                bytes: emitted.bytes,
+                node: emitted.node,
+            }));
+        if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
+            self.flush_pending_nodes().await?;
+        }
+        Ok(())
+    }
+
+    async fn flush_pending_nodes(&mut self) -> Result<(), Error> {
+        self.engine
+            .publish_builder_nodes(&self.pending_nodes)
+            .await?;
+        self.pending_nodes.clear();
+        Ok(())
+    }
+
+    /// Finish and publish the remaining nodes, then return the visible root.
+    pub async fn build(mut self) -> Result<Tree, Error> {
+        self.flush_pending_entry().await?;
+        let (root, emitted) = self.hierarchy.finish()?;
+        self.collect_emitted(emitted).await?;
+        self.flush_pending_nodes().await?;
+        Ok(Tree {
+            root: root.map(|summary| summary.cid),
+            config: self.engine.config().clone(),
+        })
+    }
 }
 
 impl<S: Store + Clone + Send + Sync> BatchBuilder<S>
@@ -434,7 +562,7 @@ where
     }
 
     fn persist_nodes(&self, nodes: &[BuiltNode]) -> Result<(), Error> {
-        persist_nodes(&self.store, nodes)
+        persist_nodes(&self.store, &self.config, nodes)
     }
 }
 
@@ -515,7 +643,7 @@ where
     }
 
     fn flush_pending_nodes(&mut self) -> Result<(), Error> {
-        persist_nodes(&self.store, &self.pending_nodes)?;
+        persist_nodes(&self.store, &self.config, &self.pending_nodes)?;
         self.pending_nodes.clear();
         Ok(())
     }
@@ -701,7 +829,11 @@ fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.vals.reserve_exact(additional);
 }
 
-fn persist_nodes<S: Store>(store: &S, nodes: &[BuiltNode]) -> Result<(), Error>
+fn persist_nodes<S: Store + Clone>(
+    store: &S,
+    config: &Config,
+    nodes: &[BuiltNode],
+) -> Result<(), Error>
 where
     S::Error: Send + Sync,
 {
@@ -711,11 +843,12 @@ where
 
     let entries = nodes
         .iter()
-        .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
+        .map(|node| (&node.cid, node.bytes.as_slice()))
         .collect::<Vec<_>>();
-    store
-        .batch_put(&entries)
-        .map_err(|e| Error::Store(Box::new(e)))
+    let engine = ProllyEngine::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    let ready_store = engine.store.clone();
+    let future = engine.publish_builder_node_refs(&entries);
+    super::engine::ready::run_ready(ready_store.ready(future))
 }
 
 #[cfg(test)]

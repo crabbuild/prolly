@@ -1088,39 +1088,26 @@ impl<S: Store> Prolly<S> {
         write_session::WriteSession::new(self, base, max_bytes)
     }
 
-    /// Build a tree from key/value entries using [`builder::BatchBuilder`].
+    /// Build a tree from key/value entries through the canonical async engine.
     ///
-    /// The builder sorts entries by byte-lexicographic key order before
-    /// chunking, so callers may provide unsorted input. Duplicate keys are
-    /// preserved with the same semantics as [`builder::BatchBuilder`].
-    pub fn build_from_entries(&self, entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Tree, Error>
-    where
-        S: Clone + Send + Sync,
-        S::Error: Send + Sync,
-    {
-        let mut builder =
-            builder::BatchBuilder::new(self.store_arc().clone(), self.config().clone());
-        for (key, value) in entries {
-            builder.add(key, value);
-        }
-        builder.build()
+    /// Input may be unsorted. Duplicate keys use last-write-wins semantics.
+    pub fn build_from_entries(&self, entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Tree, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.build_from_entries(entries);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build a tree from entries that are already sorted by key.
     ///
-    /// This delegates to [`builder::SortedBatchBuilder`] and returns
-    /// [`Error::UnsortedInput`] if any key is lower than the previous key.
-    pub fn build_from_sorted_entries(&self, entries: Vec<(Vec<u8>, Vec<u8>)>) -> Result<Tree, Error>
-    where
-        S: Clone + Send + Sync,
-        S::Error: Send + Sync,
-    {
-        let mut builder =
-            builder::SortedBatchBuilder::new(self.store_arc().clone(), self.config().clone());
-        for (key, value) in entries {
-            builder.add(key, value)?;
-        }
-        builder.build()
+    /// Returns [`Error::UnsortedInput`] if any key is lower than the previous
+    /// key. Duplicate keys use last-write-wins semantics.
+    pub fn build_from_sorted_entries(
+        &self,
+        entries: Vec<(Vec<u8>, Vec<u8>)>,
+    ) -> Result<Tree, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.build_from_sorted_entries(entries);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Get value by key from the tree.
@@ -3972,6 +3959,83 @@ where
             root: None,
             config: self.config.clone(),
         }
+    }
+
+    /// Build a tree from an owned collection of key/value entries.
+    ///
+    /// Input may be unsorted. The canonical mutation planner sorts it and
+    /// applies duplicate keys with last-write-wins semantics.
+    pub async fn build_from_entries(
+        &self,
+        entries: Vec<(Vec<u8>, Vec<u8>)>,
+    ) -> Result<Tree, Error> {
+        let mutations = entries
+            .into_iter()
+            .map(|(key, val)| Mutation::Upsert { key, val })
+            .collect();
+        self.batch(&self.create(), mutations).await
+    }
+
+    /// Build a tree from entries that are already sorted by key.
+    ///
+    /// Duplicate keys are allowed and retain the last value. Decreasing input
+    /// is rejected before any storage write occurs.
+    pub async fn build_from_sorted_entries(
+        &self,
+        entries: Vec<(Vec<u8>, Vec<u8>)>,
+    ) -> Result<Tree, Error> {
+        if let Some(pair) = entries.windows(2).find(|pair| pair[1].0 < pair[0].0) {
+            return Err(Error::UnsortedInput {
+                previous: pair[0].0.clone(),
+                next: pair[1].0.clone(),
+            });
+        }
+        self.build_from_entries(entries).await
+    }
+
+    pub(crate) async fn publish_builder_nodes(
+        &self,
+        nodes: &[builder::DeferredNode],
+    ) -> Result<(), Error> {
+        let nodes = nodes
+            .iter()
+            .map(|entry| (&entry.cid, entry.bytes.as_slice()))
+            .collect::<Vec<_>>();
+        self.publish_builder_node_refs(&nodes).await
+    }
+
+    pub(crate) async fn publish_builder_node_refs(
+        &self,
+        nodes: &[(&Cid, &[u8])],
+    ) -> Result<(), Error> {
+        for chunk in nodes.chunks(builder::SORTED_BUILDER_NODE_BATCH) {
+            let mut decoded = Vec::with_capacity(chunk.len());
+            for (cid, bytes) in chunk {
+                decoded.push((
+                    (*cid).clone(),
+                    engine::validation::decode_owned(cid, &self.config.format, bytes)?,
+                    bytes.len(),
+                ));
+            }
+            let entries = chunk
+                .iter()
+                .map(|(cid, bytes)| (cid.as_bytes(), *bytes))
+                .collect::<Vec<_>>();
+            self.store
+                .batch_put(&entries)
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+            let bytes_written = chunk.iter().map(|(_, bytes)| bytes.len()).sum();
+            self.metrics.record_batch_write(chunk.len(), bytes_written);
+            if let Ok(mut cache) = self.node_cache.write() {
+                let mut evictions = 0usize;
+                for (cid, node, encoded_len) in decoded {
+                    evictions += cache.insert(cid, Arc::new(node), encoded_len);
+                }
+                self.metrics.add_cache_evictions(evictions);
+            }
+        }
+        Ok(())
     }
 
     /// Borrow the underlying async store.

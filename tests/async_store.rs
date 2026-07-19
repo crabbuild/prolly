@@ -14,12 +14,12 @@ use common::{
 };
 use futures_util::StreamExt as _;
 use prolly::{
-    catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, AsyncBlobStore,
-    AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config, CrdtConfig,
-    CrdtResolution, DeletePolicy, Diff, Error, IndexControl, LargeValueConfig, MemBlobStore,
-    MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, NamedRootRetention,
-    NamedRootUpdate, NodeLayoutSpec, Prolly, RangeCursor, Resolution, ReverseCursor, Store,
-    SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue, ValueRef,
+    catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, AsyncBatchBuilder,
+    AsyncBlobStore, AsyncProlly, AsyncSortedBatchBuilder, BatchBuilder, BatchOp, BlobRef,
+    BlobStore, Cid, Config, CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, IndexControl,
+    LargeValueConfig, MemBlobStore, MemBlobStoreError, MemStore, MemStoreError, MultiValueSet,
+    Mutation, NamedRootRetention, NamedRootUpdate, NodeLayoutSpec, Prolly, RangeCursor, Resolution,
+    ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue, ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
@@ -601,6 +601,89 @@ fn build_wide_tree(
 fn sync_store_as_async_satisfies_async_store_contract() {
     let store = SyncStoreAsAsync::new(MemStore::new());
     block_on(assert_async_store_contract(&store));
+}
+
+#[test]
+fn async_engine_bulk_builds_match_canonical_builder_roots() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(211)
+        .build();
+    let entries = vec![
+        (b"c".to_vec(), b"3".to_vec()),
+        (b"a".to_vec(), b"old".to_vec()),
+        (b"b".to_vec(), b"2".to_vec()),
+        (b"a".to_vec(), b"new".to_vec()),
+    ];
+
+    let mut oracle = BatchBuilder::new(Arc::new(MemStore::new()), config.clone());
+    for (key, value) in &entries {
+        oracle.add(key.clone(), value.clone());
+    }
+    let oracle = oracle.build().unwrap();
+
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(MemStore::new()), config.clone());
+    let built = block_on(engine.build_from_entries(entries)).unwrap();
+    assert_eq!(built.root, oracle.root);
+
+    let sorted = vec![
+        (b"a".to_vec(), b"old".to_vec()),
+        (b"a".to_vec(), b"new".to_vec()),
+        (b"b".to_vec(), b"2".to_vec()),
+        (b"c".to_vec(), b"3".to_vec()),
+    ];
+    let sorted_built = block_on(engine.build_from_sorted_entries(sorted)).unwrap();
+    assert_eq!(sorted_built.root, oracle.root);
+
+    let error = block_on(engine.build_from_sorted_entries(vec![
+        (b"b".to_vec(), b"2".to_vec()),
+        (b"a".to_vec(), b"1".to_vec()),
+    ]))
+    .unwrap_err();
+    assert!(matches!(error, Error::UnsortedInput { .. }));
+}
+
+#[test]
+fn async_builders_share_canonical_roots_and_sorted_validation() {
+    block_on(async {
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(2)
+            .hash_seed(223)
+            .build();
+        let entries = (0..300)
+            .map(|index| {
+                (
+                    format!("k{index:04}").into_bytes(),
+                    format!("v{index:04}").into_bytes(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let mut unsorted =
+            AsyncBatchBuilder::new(SyncStoreAsAsync::new(MemStore::new()), config.clone());
+        for (key, value) in entries.iter().rev() {
+            unsorted.add(key.clone(), value.clone());
+        }
+        let unsorted = unsorted.build().await.unwrap();
+
+        let mut sorted =
+            AsyncSortedBatchBuilder::new(SyncStoreAsAsync::new(MemStore::new()), config);
+        for (key, value) in &entries {
+            sorted.add(key.clone(), value.clone()).await.unwrap();
+        }
+        let sorted = sorted.build().await.unwrap();
+        assert_eq!(sorted.root, unsorted.root);
+
+        let mut invalid =
+            AsyncSortedBatchBuilder::new(SyncStoreAsAsync::new(MemStore::new()), Config::default());
+        invalid.add(b"b".to_vec(), b"2".to_vec()).await.unwrap();
+        let error = invalid.add(b"a".to_vec(), b"1".to_vec()).await.unwrap_err();
+        assert!(matches!(error, Error::UnsortedInput { .. }));
+    });
 }
 
 #[test]

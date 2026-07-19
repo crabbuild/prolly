@@ -261,7 +261,9 @@ pub use prolly::blob::{
 #[cfg(feature = "tokio")]
 pub use prolly::blob::{TokioBlockingBlobStore, TokioBlockingBlobStoreError};
 pub use prolly::boundary::BoundaryDetector;
-pub use prolly::builder::{BatchBuilder, SortedBatchBuilder};
+pub use prolly::builder::{
+    AsyncBatchBuilder, AsyncSortedBatchBuilder, BatchBuilder, SortedBatchBuilder,
+};
 pub use prolly::chunking;
 pub use prolly::cid::Cid;
 pub use prolly::config::{Config, ConfigBuilder, RuntimeConfig};
