@@ -143,6 +143,7 @@ pub struct NodePublicationHint<'a> {
 
 impl<'a> NodePublicationHint<'a> {
     /// Construct a borrowed performance hint.
+    #[inline]
     pub const fn new(namespace: &'a [u8], key: &'a [u8], value: &'a [u8]) -> Self {
         Self {
             namespace,
@@ -152,16 +153,19 @@ impl<'a> NodePublicationHint<'a> {
     }
 
     /// Return the logical hint namespace.
+    #[inline]
     pub const fn namespace(self) -> &'a [u8] {
         self.namespace
     }
 
     /// Return the hint key.
+    #[inline]
     pub const fn key(self) -> &'a [u8] {
         self.key
     }
 
     /// Return the hint value.
+    #[inline]
     pub const fn value(self) -> &'a [u8] {
         self.value
     }
@@ -182,6 +186,7 @@ pub struct NodePublication<'a> {
 
 impl<'a> NodePublication<'a> {
     /// Construct a node publication without a performance hint.
+    #[inline]
     pub const fn new(entries: &'a [(&'a [u8], &'a [u8])], origin: PublicationOrigin) -> Self {
         Self {
             entries,
@@ -191,6 +196,7 @@ impl<'a> NodePublication<'a> {
     }
 
     /// Construct a node publication with a performance hint.
+    #[inline]
     pub const fn with_hint(
         entries: &'a [(&'a [u8], &'a [u8])],
         hint: NodePublicationHint<'a>,
@@ -204,16 +210,19 @@ impl<'a> NodePublication<'a> {
     }
 
     /// Return the content-addressed node entries.
+    #[inline]
     pub const fn entries(self) -> &'a [(&'a [u8], &'a [u8])] {
         self.entries
     }
 
     /// Return the optional non-canonical performance hint.
+    #[inline]
     pub const fn hint(self) -> Option<NodePublicationHint<'a>> {
         self.hint
     }
 
     /// Return the advisory logical publication origin.
+    #[inline]
     pub const fn origin(self) -> PublicationOrigin {
         self.origin
     }
@@ -420,6 +429,7 @@ pub trait Store: Send + Sync {
     /// The default preserves existing batch and optional-hint behavior. Store
     /// overrides may optimize by origin only when all general-path guarantees
     /// remain unchanged.
+    #[inline]
     fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
         match publication.hint() {
             Some(hint) => self.batch_put_with_hint(
@@ -634,6 +644,7 @@ pub trait AsyncStore {
     /// The default preserves existing async batch and optional-hint behavior.
     /// Store overrides may optimize by origin only when all general-path
     /// guarantees remain unchanged.
+    #[inline]
     async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
         match publication.hint() {
             Some(hint) => {
@@ -839,6 +850,7 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
             .batch_put_with_hint(entries, namespace, key, value)
     }
 
+    #[inline]
     async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
         self.inner.publish_nodes(publication)
     }
