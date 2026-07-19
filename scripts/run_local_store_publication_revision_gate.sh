@@ -59,7 +59,13 @@ if [[ -e "$OUTPUT/raw-results.csv" ]]; then
   exit 2
 fi
 
-mkdir -p "$OUTPUT/build" "$OUTPUT/targets" "$OUTPUT/invocations"
+WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/prolly-local-publication-gate.XXXXXX")"
+cleanup() {
+  rm -rf -- "$WORK_ROOT"
+}
+trap cleanup EXIT
+TARGET_ROOT="${PROLLY_NODE_GATE_TARGET_ROOT:-$WORK_ROOT/targets}"
+mkdir -p "$OUTPUT" "$WORK_ROOT/build" "$TARGET_ROOT" "$WORK_ROOT/invocations"
 LIMITATIONS="$OUTPUT/environment-limitations.csv"
 printf 'adapter,reason\n' > "$LIMITATIONS"
 BASELINE_REVISION="$(git -C "$BASELINE_REPO" rev-parse HEAD)"
@@ -96,8 +102,8 @@ fi
 build_harness() {
   local role="$1"
   local repo="$2"
-  local stage="$OUTPUT/build/local-$role"
-  local target="$OUTPUT/targets/local-$role"
+  local stage="$WORK_ROOT/build/local-$role"
+  local target="$TARGET_ROOT/local-$role"
   mkdir -p "$stage/src" "$target"
   cp "$CANDIDATE_SOURCE/benchmarks/local-store-publication/src/"*.rs "$stage/src/"
   {
@@ -175,7 +181,7 @@ for pair in $(seq 1 "$RUNS"); do
       binary="$CANDIDATE_BIN"
       revision="$CANDIDATE_REVISION"
     fi
-    invocation="$OUTPUT/invocations/pair-$pair/$role"
+    invocation="$WORK_ROOT/invocations/pair-$pair/$role"
     mkdir -p "$invocation"
     "$binary" \
       --output "$invocation/raw.csv" \

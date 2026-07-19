@@ -63,7 +63,13 @@ if [[ -e "$OUTPUT/raw-results.csv" ]]; then
   exit 2
 fi
 
-mkdir -p "$OUTPUT/build" "$OUTPUT/targets" "$OUTPUT/invocations"
+WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/prolly-node-publication-gate.XXXXXX")"
+cleanup() {
+  rm -rf -- "$WORK_ROOT"
+}
+trap cleanup EXIT
+TARGET_ROOT="${PROLLY_NODE_GATE_TARGET_ROOT:-$WORK_ROOT/targets}"
+mkdir -p "$OUTPUT" "$WORK_ROOT/build" "$TARGET_ROOT" "$WORK_ROOT/invocations"
 BASELINE_REVISION="$(git -C "$BASELINE_REPO" rev-parse HEAD)"
 CANDIDATE_REVISION="$(git -C "$CANDIDATE_REPO" rev-parse HEAD)"
 if [[ -n "$(git -C "$CANDIDATE_REPO" status --porcelain)" ]]; then
@@ -95,8 +101,8 @@ capture_machine() {
 build_foundation() {
   local role="$1"
   local repo="$2"
-  local stage="$OUTPUT/build/foundation-$role"
-  local target="$OUTPUT/targets/foundation-$role"
+  local stage="$WORK_ROOT/build/foundation-$role"
+  local target="$TARGET_ROOT/foundation-$role"
   mkdir -p "$stage/src" "$target"
   cp "$CANDIDATE_SOURCE/benches/async_first_foundation_bench.rs" "$stage/src/main.rs"
   {
@@ -121,7 +127,7 @@ build_sqlite_turso() {
   local role="$1"
   local repo="$2"
   local manifest="$repo/benchmarks/sqlite-turso-local/Cargo.toml"
-  local target="$OUTPUT/targets/sqlite-turso-$role"
+  local target="$TARGET_ROOT/sqlite-turso-$role"
   if [[ ! -f "$manifest" ]]; then
     printf 'revision %s lacks sqlite-turso benchmark manifest\n' "$repo" >&2
     exit 2
@@ -205,7 +211,7 @@ for pair in $(seq 1 "$RUNS"); do
         revision="$CANDIDATE_REVISION"
         dirty_flag="$CANDIDATE_DIRTY"
       fi
-      invocation="$OUTPUT/invocations/pair-$pair/records-$records/$role"
+      invocation="$WORK_ROOT/invocations/pair-$pair/records-$records/$role"
       mkdir -p "$invocation"
       if [[ "$SUITE" == "foundation" ]]; then
         BENCH_REVISION="$revision" \
