@@ -12,9 +12,10 @@ RUNS=""
 APIS=""
 PATTERNS=""
 ADAPTERS=""
+MEASUREMENT_SAMPLES="1"
 
 usage() {
-  printf '%s\n' 'usage: run_local_store_publication_revision_gate.sh --baseline-repo PATH --candidate-repo PATH --output PATH --records N --changes N --runs N --apis CSV --patterns CSV --adapters CSV'
+  printf '%s\n' 'usage: run_local_store_publication_revision_gate.sh --baseline-repo PATH --candidate-repo PATH --output PATH --records N --changes N --runs N --apis CSV --patterns CSV --adapters CSV [--measurement-samples N]'
 }
 
 while (($#)); do
@@ -28,6 +29,7 @@ while (($#)); do
     --apis) APIS="${2:?--apis requires a value}"; shift 2 ;;
     --patterns) PATTERNS="${2:?--patterns requires a value}"; shift 2 ;;
     --adapters) ADAPTERS="${2:?--adapters requires a value}"; shift 2 ;;
+    --measurement-samples) MEASUREMENT_SAMPLES="${2:?--measurement-samples requires a value}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -40,7 +42,7 @@ for required in BASELINE_REPO CANDIDATE_REPO OUTPUT RECORDS CHANGES RUNS APIS PA
     exit 2
   fi
 done
-for integer in RECORDS CHANGES RUNS; do
+for integer in RECORDS CHANGES RUNS MEASUREMENT_SAMPLES; do
   if [[ ! "${!integer}" =~ ^[1-9][0-9]*$ ]]; then
     printf '%s must be a positive integer\n' "$integer" >&2
     exit 2
@@ -159,8 +161,8 @@ append_csv() {
 } > "$OUTPUT/machine.txt"
 {
   printf 'baseline_revision=%s\ncandidate_revision=%s\n' "$BASELINE_REVISION" "$CANDIDATE_REVISION"
-  printf 'records=%s\nchanges=%s\nruns=%s\napis=%s\npatterns=%s\nadapters=%s\n' \
-    "$RECORDS" "$CHANGES" "$RUNS" "$APIS" "$PATTERNS" "$ADAPTERS"
+  printf 'records=%s\nchanges=%s\nruns=%s\nmeasurement_samples=%s\napis=%s\npatterns=%s\nadapters=%s\n' \
+    "$RECORDS" "$CHANGES" "$RUNS" "$MEASUREMENT_SAMPLES" "$APIS" "$PATTERNS" "$ADAPTERS"
   printf 'execution=alternating-fresh-local-store-cells\ncloud_sync=disabled\n'
 } > "$OUTPUT/provenance.txt"
 
@@ -187,7 +189,7 @@ for pair in $(seq 1 "$RUNS"); do
       --output "$invocation/raw.csv" \
       --records "$RECORDS" \
       --changes "$CHANGES" \
-      --runs 1 \
+      --runs "$MEASUREMENT_SAMPLES" \
       --adapters "$ADAPTERS" \
       --apis "$APIS" \
       --patterns "$PATTERNS" \

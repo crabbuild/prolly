@@ -42,9 +42,9 @@ class RevisionGateTest(unittest.TestCase):
     def rows(
         self,
         *,
-        candidate_latency=96,
+        candidate_latency=96_000,
         candidate_throughput=104,
-        candidate_p95=105,
+        candidate_p95=105_000,
         pairs=5,
     ):
         rows = []
@@ -63,10 +63,10 @@ class RevisionGateTest(unittest.TestCase):
                         "api": "put",
                         "pattern": "random",
                         "run": 1,
-                        "total_ns": candidate_latency if candidate else 100,
+                        "total_ns": candidate_latency if candidate else 100_000,
                         "operations_per_sec": candidate_throughput if candidate else 100,
-                        "p50_ns": candidate_latency if candidate else 100,
-                        "p95_ns": candidate_p95 if candidate else 100,
+                        "p50_ns": candidate_latency if candidate else 100_000,
+                        "p95_ns": candidate_p95 if candidate else 100_000,
                         "root": "canonical-root",
                         "node_count": 10,
                         "byte_count": 1000,
@@ -84,7 +84,7 @@ class RevisionGateTest(unittest.TestCase):
 
     def test_applies_directional_gates_at_explicit_three_pair_minimum(self):
         result, _ = self.run_gate(
-            self.rows(candidate_latency=106, pairs=3), minimum_pairs=3
+            self.rows(candidate_latency=106_000, pairs=3), minimum_pairs=3
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("median_latency_regression", result.stderr)
@@ -110,18 +110,65 @@ class RevisionGateTest(unittest.TestCase):
         self.assertGreater(float(summary["median_latency_change_pct"]), 5.0)
         self.assertEqual(float(summary["paired_median_latency_change_pct"]), 0.0)
 
+    def test_collapses_repeated_samples_inside_each_revision_pair(self):
+        rows = []
+        for row in self.rows(candidate_latency=100):
+            for sample, latency in enumerate((100, 100, 10_000), start=1):
+                repeated = row.copy()
+                repeated["run"] = sample
+                repeated["total_ns"] = latency
+                repeated["p50_ns"] = latency
+                repeated["p95_ns"] = latency
+                repeated["operations_per_sec"] = 100
+                if repeated["revision_role"] == "candidate":
+                    repeated["total_ns"] = latency * 1.04
+                    repeated["p50_ns"] = latency * 1.04
+                    repeated["p95_ns"] = latency * 1.04
+                rows.append(repeated)
+        result, root = self.run_gate(rows)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with (root / "report" / "summary.csv").open(newline="", encoding="utf-8") as handle:
+            summary = next(csv.DictReader(handle))
+        self.assertEqual(summary["samples_per_revision_pair"], "3")
+        self.assertAlmostEqual(
+            float(summary["paired_median_latency_change_pct"]), 4.0
+        )
+
+    def test_rejects_mismatched_sample_counts(self):
+        rows = self.rows()
+        extra = rows[0].copy()
+        extra["run"] = 2
+        rows.append(extra)
+        result, _ = self.run_gate(rows)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("sample_count_mismatch", result.stderr)
+
+    def test_rejects_mismatched_sample_identifiers(self):
+        rows = self.rows()
+        candidate = next(
+            row
+            for row in rows
+            if row["pair"] == 1 and row["revision_role"] == "candidate"
+        )
+        candidate["run"] = 2
+        result, _ = self.run_gate(rows)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("sample_id_mismatch", result.stderr)
+
     def test_rejects_latency_regression(self):
-        result, _ = self.run_gate(self.rows(candidate_latency=106))
+        result, _ = self.run_gate(self.rows(candidate_latency=106_000))
         self.assertEqual(result.returncode, 2)
         self.assertIn("median_latency_regression", result.stderr)
 
     def test_rejects_throughput_regression(self):
-        result, _ = self.run_gate(self.rows(candidate_throughput=94))
+        result, _ = self.run_gate(
+            self.rows(candidate_latency=106_000, candidate_throughput=94)
+        )
         self.assertEqual(result.returncode, 2)
         self.assertIn("median_throughput_regression", result.stderr)
 
     def test_rejects_p95_regression(self):
-        result, _ = self.run_gate(self.rows(candidate_p95=111))
+        result, _ = self.run_gate(self.rows(candidate_p95=111_000))
         self.assertEqual(result.returncode, 2)
         self.assertIn("p95_latency_regression", result.stderr)
 
@@ -150,7 +197,11 @@ class RevisionGateTest(unittest.TestCase):
         self.assertIn("Node package unavailable", report)
 
     def test_rejects_turso_point_target_miss(self):
-        rows = self.rows(candidate_latency=70, candidate_throughput=140, candidate_p95=70)
+        rows = self.rows(
+            candidate_latency=70_000,
+            candidate_throughput=140,
+            candidate_p95=70_000,
+        )
         for row in rows:
             row["suite"] = "sqlite-turso"
             row["adapter"] = "turso-async"
@@ -160,17 +211,30 @@ class RevisionGateTest(unittest.TestCase):
         self.assertIn("turso_point_target_miss", result.stderr)
 
     def test_rejects_turso_point_percentile_regression(self):
-        rows = self.rows(candidate_latency=50, candidate_throughput=200, candidate_p95=101)
+        rows = self.rows(
+            candidate_latency=50_000,
+            candidate_throughput=200,
+            candidate_p95=101_000,
+        )
         for row in rows:
             row["suite"] = "sqlite-turso"
             row["adapter"] = "turso-async"
             row["validated"] = "true"
             if row["revision_role"] == "candidate":
-                row["p50_ns"] = 101
+                row["p50_ns"] = 101_000
         result, _ = self.run_gate(rows)
         self.assertEqual(result.returncode, 2)
         self.assertIn("turso_point_p50_regression", result.stderr)
         self.assertIn("turso_point_p95_regression", result.stderr)
+
+    def test_local_adapter_noise_floor_ignores_sub_microsecond_change(self):
+        rows = self.rows(candidate_latency=100_500, candidate_throughput=94)
+        result, root = self.run_gate(rows)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with (root / "report" / "gate.csv").open(newline="", encoding="utf-8") as handle:
+            gate = next(csv.DictReader(handle))
+        self.assertEqual(gate["status"], "pass")
+        self.assertEqual(float(gate["paired_median_latency_change_ns"]), 500.0)
 
 
 if __name__ == "__main__":

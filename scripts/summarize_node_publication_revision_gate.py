@@ -13,11 +13,16 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 
+LOCAL_ADAPTER_MEDIAN_NOISE_FLOOR_NS = 5_000.0
+LOCAL_ADAPTER_P95_NOISE_FLOOR_NS = 10_000.0
+
+
 @dataclass(frozen=True)
 class Observation:
     suite: str
     role: str
     pair: int
+    sample: int
     target: str
     records: int
     api: str
@@ -67,6 +72,7 @@ def normalize(row: dict[str, str]) -> Observation:
     if role not in {"baseline", "candidate"}:
         raise ValueError(f"unknown revision role {role!r}")
     pair = int(row["pair"])
+    sample = int(row.get("run") or row.get("repetition") or 1)
     records = int(row["records"])
     api = row["api"]
     revision = row.get("revision", "unknown")
@@ -99,12 +105,20 @@ def normalize(row: dict[str, str]) -> Observation:
                     "reopen_valid",
                 )
             )
-    if pair <= 0 or records <= 0 or latency <= 0 or throughput <= 0 or p95 <= 0:
-        raise ValueError("pair, records, and measurements must be positive")
+    if (
+        pair <= 0
+        or sample <= 0
+        or records <= 0
+        or latency <= 0
+        or throughput <= 0
+        or p95 <= 0
+    ):
+        raise ValueError("pair, sample, records, and measurements must be positive")
     return Observation(
         suite=suite,
         role=role,
         pair=pair,
+        sample=sample,
         target=target,
         records=records,
         api=api,
@@ -130,16 +144,55 @@ def load_limitations(path: pathlib.Path | None) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def aggregate_samples(samples: list[Observation]) -> Observation:
+    first = samples[0]
+    roots = {sample.root for sample in samples if sample.root}
+    revisions = {sample.revision for sample in samples}
+    if len(roots) > 1:
+        raise ValueError(
+            f"sample roots differ for {first.group}:{first.role}:{first.pair}"
+        )
+    if len(revisions) != 1:
+        raise ValueError(
+            f"sample revisions differ for {first.group}:{first.role}:{first.pair}"
+        )
+    return Observation(
+        suite=first.suite,
+        role=first.role,
+        pair=first.pair,
+        sample=0,
+        target=first.target,
+        records=first.records,
+        api=first.api,
+        pattern=first.pattern,
+        latency=statistics.median(sample.latency for sample in samples),
+        throughput=statistics.median(sample.throughput for sample in samples),
+        p50=statistics.median(sample.p50 for sample in samples),
+        p95=statistics.median(sample.p95 for sample in samples),
+        root=next(iter(roots), ""),
+        valid=all(sample.valid for sample in samples),
+        revision=first.revision,
+    )
+
+
 def summarize(
     observations: list[Observation], minimum_pairs: int
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str]]:
     grouped: dict[tuple[str, str, int, str, str], list[Observation]] = defaultdict(list)
     failures: list[str] = []
-    seen: set[tuple[tuple[str, str, int, str, str], str, int]] = set()
+    seen: set[tuple[tuple[str, str, int, str, str], str, int, int]] = set()
     for observation in observations:
-        identity = (observation.group, observation.role, observation.pair)
+        identity = (
+            observation.group,
+            observation.role,
+            observation.pair,
+            observation.sample,
+        )
         if identity in seen:
-            failures.append(f"duplicate_row:{observation.group}:{observation.role}:{observation.pair}")
+            failures.append(
+                f"duplicate_row:{observation.group}:{observation.role}:"
+                f"{observation.pair}:{observation.sample}"
+            )
         seen.add(identity)
         if not observation.valid:
             failures.append(
@@ -151,23 +204,48 @@ def summarize(
     gate_rows: list[dict[str, object]] = []
     for group in sorted(grouped):
         rows = grouped[group]
-        pairs: dict[int, dict[str, Observation]] = defaultdict(dict)
+        pairs: dict[int, dict[str, list[Observation]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
         for row in rows:
-            pairs[row.pair][row.role] = row
+            pairs[row.pair][row.role].append(row)
+        complete_pairs: list[dict[str, Observation]] = []
+        sample_counts: set[int] = set()
         for pair, roles in sorted(pairs.items()):
             if set(roles) != {"baseline", "candidate"}:
                 failures.append(f"missing_pair:{group}:{pair}")
                 continue
-            baseline_root = roles["baseline"].root
-            candidate_root = roles["candidate"].root
+            baseline_samples = roles["baseline"]
+            candidate_samples = roles["candidate"]
+            if len(baseline_samples) != len(candidate_samples):
+                failures.append(
+                    f"sample_count_mismatch:{group}:{pair}:"
+                    f"{len(baseline_samples)}:{len(candidate_samples)}"
+                )
+                continue
+            baseline_sample_ids = {sample.sample for sample in baseline_samples}
+            candidate_sample_ids = {sample.sample for sample in candidate_samples}
+            if baseline_sample_ids != candidate_sample_ids:
+                failures.append(
+                    f"sample_id_mismatch:{group}:{pair}:"
+                    f"{sorted(baseline_sample_ids)}:{sorted(candidate_sample_ids)}"
+                )
+                continue
+            sample_counts.add(len(baseline_sample_ids))
+            baseline = aggregate_samples(baseline_samples)
+            candidate = aggregate_samples(candidate_samples)
+            baseline_root = baseline.root
+            candidate_root = candidate.root
             if baseline_root and candidate_root and baseline_root != candidate_root:
                 failures.append(f"fixture_validation_failure:root_mismatch:{group}:{pair}")
+            complete_pairs.append({"baseline": baseline, "candidate": candidate})
 
-        baseline = [row for row in rows if row.role == "baseline"]
-        candidate = [row for row in rows if row.role == "candidate"]
+        if len(sample_counts) > 1:
+            failures.append(f"inconsistent_sample_count:{group}:{sorted(sample_counts)}")
+        baseline = [roles["baseline"] for roles in complete_pairs]
+        candidate = [roles["candidate"] for roles in complete_pairs]
         if not baseline or not candidate:
             continue
-        complete_pairs = [roles for roles in pairs.values() if set(roles) == {"baseline", "candidate"}]
         baseline_latency = statistics.median(row.latency for row in baseline)
         candidate_latency = statistics.median(row.latency for row in candidate)
         baseline_throughput = statistics.median(row.throughput for row in baseline)
@@ -196,17 +274,37 @@ def summarize(
             percent_change(roles["baseline"].p95, roles["candidate"].p95)
             for roles in complete_pairs
         )
+        paired_latency_change_ns = statistics.median(
+            roles["candidate"].latency - roles["baseline"].latency
+            for roles in complete_pairs
+        )
+        paired_p50_change_ns = statistics.median(
+            roles["candidate"].p50 - roles["baseline"].p50
+            for roles in complete_pairs
+        )
+        paired_p95_change_ns = statistics.median(
+            roles["candidate"].p95 - roles["baseline"].p95
+            for roles in complete_pairs
+        )
         pair_count = len(complete_pairs)
         suite, target, records, api, pattern = group
         reasons: list[str] = []
         if pair_count < minimum_pairs:
             reasons.append("statistically_insufficient")
         else:
-            if paired_latency_change > 5.0:
+            latency_above_resolution = (
+                suite != "local-adapters"
+                or paired_latency_change_ns > LOCAL_ADAPTER_MEDIAN_NOISE_FLOOR_NS
+            )
+            p95_above_resolution = (
+                suite != "local-adapters"
+                or paired_p95_change_ns > LOCAL_ADAPTER_P95_NOISE_FLOOR_NS
+            )
+            if paired_latency_change > 5.0 and latency_above_resolution:
                 reasons.append("median_latency_regression")
-            if paired_throughput_change < -5.0:
+            if paired_throughput_change < -5.0 and latency_above_resolution:
                 reasons.append("median_throughput_regression")
-            if paired_p95_change > 10.0:
+            if paired_p95_change > 10.0 and p95_above_resolution:
                 reasons.append("p95_latency_regression")
             if (
                 suite == "sqlite-turso"
@@ -239,6 +337,7 @@ def summarize(
             "api": api,
             "pattern": pattern,
             "pairs": pair_count,
+            "samples_per_revision_pair": min(sample_counts, default=0),
         }
         summary_rows.append(
             {
@@ -256,18 +355,24 @@ def summarize(
                 "candidate_p95_ns": candidate_p95,
                 "p95_change_pct": p95_change,
                 "paired_median_latency_change_pct": paired_latency_change,
+                "paired_median_latency_change_ns": paired_latency_change_ns,
                 "paired_median_throughput_change_pct": paired_throughput_change,
                 "paired_median_p50_change_pct": paired_p50_change,
+                "paired_median_p50_change_ns": paired_p50_change_ns,
                 "paired_median_p95_change_pct": paired_p95_change,
+                "paired_median_p95_change_ns": paired_p95_change_ns,
             }
         )
         gate_rows.append(
             {
                 **base,
                 "paired_median_latency_change_pct": paired_latency_change,
+                "paired_median_latency_change_ns": paired_latency_change_ns,
                 "paired_median_throughput_change_pct": paired_throughput_change,
                 "paired_median_p50_change_pct": paired_p50_change,
+                "paired_median_p50_change_ns": paired_p50_change_ns,
                 "paired_median_p95_change_pct": paired_p95_change,
+                "paired_median_p95_change_ns": paired_p95_change_ns,
                 "status": "insufficient"
                 if reasons == ["statistically_insufficient"]
                 else ("fail" if reasons else "pass"),
@@ -310,6 +415,8 @@ def write_report(
         f"Revisions: {', '.join(revisions) if revisions else 'unknown'}",
         "",
         "All measurements are local-only; Turso Cloud synchronization is disabled.",
+        "Repeated samples within a revision pair are collapsed by median before paired changes are evaluated.",
+        "The broad local-adapter screen applies 5 us median and 10 us p95 absolute noise floors in addition to percentage limits; focused and foundation suites do not.",
         "",
         f"Evaluated groups: {len(summary_rows)}",
         f"Gate failures: {len(failures)}",
