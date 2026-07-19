@@ -485,7 +485,7 @@ Async foundations compile unconditionally:
 - The root package retains Rust 1.81 MSRV. Adapters with a higher existing MSRV retain their own declaration.
 - Default and `--no-default-features` builds both include the async engine and do not pull Tokio.
 
-`prolly-store-turso` keeps its existing adapter policy. The default is the native local async store. Its optional `sync` feature continues to mean explicit Turso Cloud `push()` and `pull()`, not a synchronous Prolly facade. Local correctness and performance tests do not enable that feature or contact the network. The release matrix compiles and locally tests both adapter feature configurations, while credentialed cloud synchronization remains a separate explicit integration result.
+`prolly-store-turso` keeps its existing adapter policy. The default is the native local async store. Its optional `turso-cloud-sync` feature enables explicit Turso Cloud `push()` and `pull()`, not a synchronous Prolly facade. Local correctness and performance tests do not enable that feature or contact the network. The release matrix compiles and locally tests both adapter feature configurations, while credentialed cloud synchronization remains a separate explicit integration result.
 
 Public names and signatures remain compatible unless Rust makes the change impossible. Availability of async names without a feature is additive. Public struct fields and layout are not promised. Any changed bound, lifetime, iterator timing, error, callback rule, or feature behavior must appear in the compatibility inventory and receive approval before implementation.
 

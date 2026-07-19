@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a native async Turso Database store adapter with local persistence by default and explicit cloud push/pull behind an optional `sync` feature.
+**Goal:** Add a native async Turso Database store adapter with local persistence by default and explicit cloud push/pull behind an optional `turso-cloud-sync` feature.
 
 **Architecture:** Add a standalone `prolly-store-turso` crate whose `TursoBackend` implements `RemoteStoreBackend`; expose `TursoStore` as `RemoteProllyStore<TursoBackend>`. The backend retains local or synced Turso database handles, opens an independent connection per operation, and maps batch/CAS/coordinated writes to native SQL transactions.
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - The default feature set supports only native local Turso database files.
-- Cargo feature `sync` enables `turso/sync` and explicit `push()`/`pull()`; no store operation synchronizes implicitly.
+- Cargo feature `turso-cloud-sync` enables `turso/sync` and explicit `push()`/`pull()`; no store operation synchronizes implicitly.
 - Do not add a synchronous `Store` implementation or hide an async runtime.
 - Reuse `RemoteProllyStore` for manifest codecs and CID verification.
 - Use a fresh Turso connection per backend operation and an immediate SQL transaction for root CAS and coordinated commits.
@@ -21,9 +21,9 @@
 
 - `stores/prolly-store-turso/Cargo.toml`: standalone package metadata, feature wiring, runtime/test dependencies.
 - `stores/prolly-store-turso/src/lib.rs`: public backend API, database-handle abstraction, SQL helpers, schema, and `RemoteStoreBackend` implementation.
-- `stores/prolly-store-turso/tests/turso_backend.rs`: local conformance, transaction, reopen, and feature-gated sync behavior tests.
+- `stores/prolly-store-turso/tests/turso_backend.rs`: local conformance, transaction, reopen, and feature-gated cloud-sync behavior tests.
 - `stores/prolly-store-turso/examples/basic_usage.rs`: executable local async example with a named root.
-- `stores/prolly-store-turso/README.md`: local/sync setup, explicit sync semantics, schema, beta warning, and verification commands.
+- `stores/prolly-store-turso/README.md`: local/cloud-sync setup, explicit cloud-sync semantics, schema, beta warning, and verification commands.
 - `README.md`: link the new adapter from the repository overview.
 - `../Cargo.toml`: register the adapter in the enclosing CrabDB workspace used by this checkout.
 
@@ -45,7 +45,7 @@
 
 - [ ] **Step 1: Create the package manifest and failing public-surface test**
 
-Use `prolly = { package = "prolly-map", path = "../..", version = "0.3.0", features = ["async-store"] }`, `turso = { version = "0.7", default-features = false }`, feature `sync = ["turso/sync"]`, and Tokio/tempfile development dependencies. Add a test that imports `TursoBackend` and `TursoStore`, opens a temporary database, asserts `!backend.is_synced()`, and type-checks `TursoStore::new(backend)`.
+Use `prolly = { package = "prolly-map", path = "../..", version = "0.3.0", features = ["async-store"] }`, `turso = { version = "0.7", default-features = false }`, feature `turso-cloud-sync = ["turso/sync"]`, and Tokio/tempfile development dependencies. Add a test that imports `TursoBackend` and `TursoStore`, opens a temporary database, asserts `!backend.is_synced()`, and type-checks `TursoStore::new(backend)`.
 
 - [ ] **Step 2: Run the test and verify RED**
 
@@ -55,7 +55,7 @@ Expected: compilation fails because `TursoBackend` and `TursoStore` do not exist
 
 - [ ] **Step 3: Implement the minimal local constructor**
 
-Define a cloneable internal database enum with a local `turso::Database` variant, a debug-safe `TursoBackend`, and `TursoStoreError` variants `InvalidPath(PathBuf)`, `Turso(turso::Error)`, and, under `sync`, `NotSynced`. `open` rejects paths Turso's string-based builder cannot represent, calls `turso::Builder::new_local(...).build().await`, and delegates to `from_local_database`. Both constructors call an idempotent `initialize_schema` using `SCHEMA_SQL` before returning.
+Define a cloneable internal database enum with a local `turso::Database` variant, a debug-safe `TursoBackend`, and `TursoStoreError` variants `InvalidPath(PathBuf)`, `Turso(turso::Error)`, and, under `turso-cloud-sync`, `NotSynced`. `open` rejects paths Turso's string-based builder cannot represent, calls `turso::Builder::new_local(...).build().await`, and delegates to `from_local_database`. Both constructors call an idempotent `initialize_schema` using `SCHEMA_SQL` before returning.
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
@@ -132,15 +132,15 @@ Expected: all adapter tests and documentation tests pass.
 - Modify: `stores/prolly-store-turso/tests/turso_backend.rs`
 
 **Interfaces:**
-- Produces under `sync`: `open_synced(path, remote_url, auth_token)`, `from_synced_database`, `push() -> Result<(), TursoStoreError>`, and `pull() -> Result<bool, TursoStoreError>`.
+- Produces under `turso-cloud-sync`: `open_synced(path, remote_url, auth_token)`, `from_synced_database`, `push() -> Result<(), TursoStoreError>`, and `pull() -> Result<bool, TursoStoreError>`.
 
-- [ ] **Step 1: Add failing sync-feature API tests**
+- [ ] **Step 1: Add failing cloud-sync feature API tests**
 
-Under `#[cfg(feature = "sync")]`, assert a local backend returns `TursoStoreError::NotSynced` from both `push` and `pull`. Add an environment-gated test that reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, creates a unique temp replica, builds a synced backend, publishes a named root, calls `push`, calls `pull`, and reloads the named root.
+Under `#[cfg(feature = "turso-cloud-sync")]`, assert a local backend returns `TursoStoreError::NotSynced` from both `push` and `pull`. Add an environment-gated test that reads `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, creates a unique temp replica, builds a synced backend, publishes a named root, calls `push`, calls `pull`, and reloads the named root.
 
-- [ ] **Step 2: Run the local sync misuse test and verify RED**
+- [ ] **Step 2: Run the local cloud-sync misuse test and verify RED**
 
-Run: `cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features sync --test turso_backend local_backend_rejects_sync_operations`
+Run: `cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features turso-cloud-sync --test turso_backend local_backend_rejects_cloud_sync_operations`
 
 Expected: compilation fails because the sync APIs do not exist.
 
@@ -148,9 +148,9 @@ Expected: compilation fails because the sync APIs do not exist.
 
 Add a feature-gated synced database variant. `open_synced` calls `turso::sync::Builder::new_remote(path).with_remote_url(remote_url).with_auth_token(auth_token).build().await`; `from_synced_database` initializes schema through an awaited synced connection. `push` and `pull` delegate only for the synced variant and otherwise return `NotSynced`.
 
-- [ ] **Step 4: Run the full sync feature test suite and verify GREEN**
+- [ ] **Step 4: Run the full cloud-sync feature test suite and verify GREEN**
 
-Run: `cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features sync`
+Run: `cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features turso-cloud-sync`
 
 Expected: all offline tests pass; the cloud integration test returns early when credentials are absent.
 
@@ -164,7 +164,7 @@ Expected: all offline tests pass; the cloud integration test returns early when 
 
 **Interfaces:**
 - Consumes: final `TursoBackend` and `TursoStore` APIs.
-- Produces: copyable local usage and sync-feature instructions.
+- Produces: copyable local usage and cloud-sync feature instructions.
 
 - [ ] **Step 1: Add a runnable local example**
 
@@ -172,7 +172,7 @@ Build an async local store, insert `user/1 = Ada`, publish `main`, reload it, an
 
 - [ ] **Step 2: Write adapter and root documentation**
 
-Document dependency syntax, local usage, `--features sync`, explicit push/pull usage, advanced pre-built database constructors, schema, concurrency/transaction behavior, environment-gated sync verification, and Turso's beta/backup caveat. Link the adapter from the root README's adapter section.
+Document dependency syntax, local usage, `--features turso-cloud-sync`, explicit push/pull usage, advanced pre-built database constructors, schema, concurrency/transaction behavior, environment-gated cloud-sync verification, and Turso's beta/backup caveat. Link the adapter from the root README's adapter section.
 
 - [ ] **Step 3: Format and inspect the complete diff**
 
@@ -190,11 +190,11 @@ Run: `cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml --all-ta
 
 Expected: both commands exit successfully with zero failed tests and zero warnings.
 
-- [ ] **Step 5: Run sync-feature verification**
+- [ ] **Step 5: Run cloud-sync feature verification**
 
-Run: `cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features sync`
+Run: `cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features turso-cloud-sync`
 
-Run: `cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml --all-targets --features sync -- -D warnings`
+Run: `cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml --all-targets --features turso-cloud-sync -- -D warnings`
 
 Expected: both commands exit successfully with zero failed tests and zero warnings.
 
@@ -206,5 +206,4 @@ Expected: the core suite exits successfully with zero failed tests.
 
 - [ ] **Step 7: Audit requirements and worktree scope**
 
-Confirm the adapter has local native storage, opt-in sync, explicit-only network calls, native transactions, conformance and persistence coverage, a runnable example, and complete documentation. Inspect `git status --short` and ensure no unrelated file was modified or resolved.
-
+Confirm the adapter has local native storage, opt-in cloud synchronization, explicit-only network calls, native transactions, conformance and persistence coverage, a runnable example, and complete documentation. Inspect `git status --short` and ensure no unrelated file was modified or resolved.

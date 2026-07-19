@@ -1,7 +1,7 @@
 use prolly::{
     AsyncProlly, Config, RemoteBatchOp, RemoteManifestUpdate, RemoteRootWrite, RemoteStoreBackend,
 };
-#[cfg(feature = "sync")]
+#[cfg(feature = "turso-cloud-sync")]
 use prolly_store_turso::TursoStoreError;
 use prolly_store_turso::{TursoBackend, TursoStore};
 
@@ -288,9 +288,9 @@ async fn local_store_persists_named_root_across_reopen() {
     );
 }
 
-#[cfg(feature = "sync")]
+#[cfg(feature = "turso-cloud-sync")]
 #[tokio::test(flavor = "multi_thread")]
-async fn local_backend_rejects_sync_operations() {
+async fn local_backend_rejects_cloud_sync_operations() {
     let temp = tempfile::tempdir().unwrap();
     let backend = TursoBackend::open(temp.path().join("local-only.db"))
         .await
@@ -306,7 +306,7 @@ async fn local_backend_rejects_sync_operations() {
     ));
 }
 
-#[cfg(feature = "sync")]
+#[cfg(feature = "turso-cloud-sync")]
 #[tokio::test(flavor = "multi_thread")]
 async fn synced_backend_pushes_and_pulls_when_credentials_are_set() {
     use std::time::{SystemTime, UNIX_EPOCH};

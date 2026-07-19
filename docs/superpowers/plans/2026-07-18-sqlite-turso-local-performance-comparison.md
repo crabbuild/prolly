@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Compare local files only; never enable Turso's `sync` feature or call `push()`/`pull()`.
+- Compare local files only; never enable Turso's `turso-cloud-sync` feature or call `push()`/`pull()`.
 - SQLite must use synchronous `Prolly<SqliteStore>` with `SqliteStoreConfig::default()`.
 - Turso must use native `AsyncProlly<TursoStore>` with `TursoBackend::open()`.
 - Full sizes are exactly `10_000,50_000,100_000,500_000,1_000_000,2_000_000` with three independent repetitions.
@@ -93,7 +93,7 @@ Add `"prolly/benchmarks/sqlite-turso-local"` to the parent workspace members. Ru
 cargo metadata --manifest-path benchmarks/sqlite-turso-local/Cargo.toml --no-deps
 ```
 
-Expected: the package is named `prolly-sqlite-turso-local-bench`, reports Rust 1.88, and does not enable `prolly-store-turso/sync`.
+Expected: the package is named `prolly-sqlite-turso-local-bench`, reports Rust 1.88, and does not enable `prolly-store-turso/turso-cloud-sync`.
 
 - [ ] **Step 2: Write failing model tests**
 
@@ -490,7 +490,7 @@ Attempt a scoped commit named `bench: summarize SQLite Turso comparison`; retain
 
 - [ ] **Step 1: Write a failing driver black-box test**
 
-Use a temporary fake `cargo` executable that records arguments and writes valid 24-row smoke CSV fixtures. Assert the driver builds release once, never passes `--features sync`, records machine/manifest files, calls the benchmark with the requested output, invokes the summarizer, resumes an existing output, and propagates benchmark/summarizer failures.
+Use a temporary fake `cargo` executable that records arguments and writes valid 24-row smoke CSV fixtures. Assert the driver builds release once, never passes `--features turso-cloud-sync`, records machine/manifest files, calls the benchmark with the requested output, invokes the summarizer, resumes an existing output, and propagates benchmark/summarizer failures.
 
 - [ ] **Step 2: Implement the shell driver**
 
@@ -606,4 +606,3 @@ Expected: no whitespace errors in scoped files. A broad repository diff may stil
 - [ ] **Step 7: Checkpoint the completed work when Git permits**
 
 After the user resolves the unrelated cherry-pick, commit benchmark code and generated evidence in intentional commits. Until then, do not run cherry-pick continuation, conflict resolution, reset, checkout, or cleanup commands on the user's behalf.
-

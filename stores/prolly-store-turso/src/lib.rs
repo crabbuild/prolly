@@ -25,7 +25,7 @@ pub struct TursoBackend {
 #[derive(Clone)]
 enum DatabaseHandle {
     Local(Database),
-    #[cfg(feature = "sync")]
+    #[cfg(feature = "turso-cloud-sync")]
     Synced(turso::sync::Database),
 }
 
@@ -50,7 +50,7 @@ impl TursoBackend {
     ///
     /// Store reads and writes remain local. Call [`TursoBackend::push`] and
     /// [`TursoBackend::pull`] explicitly to synchronize with the remote.
-    #[cfg(feature = "sync")]
+    #[cfg(feature = "turso-cloud-sync")]
     pub async fn open_synced(
         path: impl AsRef<Path>,
         remote_url: impl Into<String>,
@@ -66,7 +66,7 @@ impl TursoBackend {
     }
 
     /// Create a backend from a caller-configured synced Turso database.
-    #[cfg(feature = "sync")]
+    #[cfg(feature = "turso-cloud-sync")]
     pub async fn from_synced_database(
         database: turso::sync::Database,
     ) -> Result<Self, TursoStoreError> {
@@ -81,13 +81,13 @@ impl TursoBackend {
     pub fn is_synced(&self) -> bool {
         match &self.database {
             DatabaseHandle::Local(_) => false,
-            #[cfg(feature = "sync")]
+            #[cfg(feature = "turso-cloud-sync")]
             DatabaseHandle::Synced(_) => true,
         }
     }
 
     /// Push locally committed changes to Turso Cloud.
-    #[cfg(feature = "sync")]
+    #[cfg(feature = "turso-cloud-sync")]
     pub async fn push(&self) -> Result<(), TursoStoreError> {
         match &self.database {
             DatabaseHandle::Synced(database) => Ok(database.push().await?),
@@ -96,7 +96,7 @@ impl TursoBackend {
     }
 
     /// Pull and apply remote changes, returning whether any changes were applied.
-    #[cfg(feature = "sync")]
+    #[cfg(feature = "turso-cloud-sync")]
     pub async fn pull(&self) -> Result<bool, TursoStoreError> {
         match &self.database {
             DatabaseHandle::Synced(database) => Ok(database.pull().await?),
@@ -107,7 +107,7 @@ impl TursoBackend {
     async fn connect(&self) -> Result<Connection, TursoStoreError> {
         match &self.database {
             DatabaseHandle::Local(database) => Ok(database.connect()?),
-            #[cfg(feature = "sync")]
+            #[cfg(feature = "turso-cloud-sync")]
             DatabaseHandle::Synced(database) => Ok(database.connect().await?),
         }
     }
@@ -135,7 +135,7 @@ pub enum TursoStoreError {
     /// The native Turso engine rejected an operation.
     Turso(turso::Error),
     /// A cloud sync operation was requested on a local-only backend.
-    #[cfg(feature = "sync")]
+    #[cfg(feature = "turso-cloud-sync")]
     NotSynced,
 }
 
@@ -148,7 +148,7 @@ impl fmt::Display for TursoStoreError {
                 path.display()
             ),
             Self::Turso(error) => write!(formatter, "Turso Database error: {error}"),
-            #[cfg(feature = "sync")]
+            #[cfg(feature = "turso-cloud-sync")]
             Self::NotSynced => formatter.write_str("Turso Cloud sync is not configured"),
         }
     }
@@ -159,7 +159,7 @@ impl std::error::Error for TursoStoreError {
         match self {
             Self::InvalidPath(_) => None,
             Self::Turso(error) => Some(error),
-            #[cfg(feature = "sync")]
+            #[cfg(feature = "turso-cloud-sync")]
             Self::NotSynced => None,
         }
     }

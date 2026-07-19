@@ -14,10 +14,10 @@ does not hide an async runtime, implement a synchronous `Store`, automatically
 synchronize, or provide direct stateless access to a remote libSQL database.
 
 The initial adapter uses Turso `0.7` with default features disabled. Its own
-`sync` feature enables `turso/sync`. Turso 0.7's required dependency graph has
-a Rust 1.88 floor, so the adapter declares Rust 1.88 even though the core
-`prolly-map` crate retains Rust 1.81. The adapter must compile in both default
-and sync-enabled configurations.
+`turso-cloud-sync` feature enables `turso/sync`. Turso 0.7's required dependency
+graph has a Rust 1.88 floor, so the adapter declares Rust 1.88 even though the
+core `prolly-map` crate retains Rust 1.81. The adapter must compile in both
+default and cloud-sync-enabled configurations.
 
 ## Architecture
 
@@ -35,10 +35,10 @@ The backend exposes:
 
 - `open(path)` for a local native Turso database;
 - `from_local_database(database)` for caller-configured local builders;
-- `open_synced(path, remote_url, auth_token)` behind `sync`;
-- `from_synced_database(database)` behind `sync` for advanced Turso sync
+- `open_synced(path, remote_url, auth_token)` behind `turso-cloud-sync`;
+- `from_synced_database(database)` behind `turso-cloud-sync` for advanced Turso sync
   configuration such as dynamic authentication or encryption;
-- `is_synced()`, plus explicit `push()` and `pull()` behind `sync`.
+- `is_synced()`, plus explicit `push()` and `pull()` behind `turso-cloud-sync`.
 
 `pull()` returns Turso's `bool` indicating whether remote changes were applied.
 Calling `push()` or `pull()` on a local backend returns a typed `NotSynced`
@@ -111,21 +111,21 @@ Default-feature tests use temporary local database files and cover:
 - the shared transactional backend contract;
 - persistence after dropping and reopening a database;
 - idempotent schema creation;
-- local sync misuse when the `sync` feature is compiled.
+- local cloud-sync misuse when the `turso-cloud-sync` feature is compiled.
 
-The sync feature has an environment-gated integration test using
+The `turso-cloud-sync` feature has an environment-gated integration test using
 `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. When credentials are absent it
 exits without network access; when present it creates a unique local replica,
 writes through one adapter, explicitly pushes, pulls into a second replica, and
 verifies the named root and value crossed the replica boundary.
 
 Verification includes formatting, tests and Clippy for both the default and
-`sync` feature sets, plus documentation tests through the full crate tests.
+`turso-cloud-sync` feature sets, plus documentation tests through the full crate
+tests.
 
 ## Documentation
 
 The adapter README includes local and synced usage, advanced-builder usage,
-feature flags, explicit sync semantics, schema details, verification commands,
-and Turso's current beta warning with a recommendation to keep backups for
-production data.
-
+feature flags, explicit cloud-sync semantics, schema details, verification
+commands, and Turso's current beta warning with a recommendation to keep backups
+for production data.

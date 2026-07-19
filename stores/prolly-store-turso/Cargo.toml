@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
-sync = ["turso/sync"]
+turso-cloud-sync = ["turso/sync"]
 
 [dependencies]
 prolly = { package = "prolly-map", path = "../..", version = "0.3.0", features = ["async-store"] }
@@ -34,5 +34,4 @@ unsafe_code = "forbid"
 [[example]]
 name = "basic_usage"
 path = "examples/basic_usage.rs"
-
 

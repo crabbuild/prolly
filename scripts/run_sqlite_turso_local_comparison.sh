@@ -65,9 +65,11 @@ fi
 if [[ "${PROLLY_BENCH_SKIP_BUILD:-0}" != "1" ]]; then
   cargo build --release --manifest-path "$MANIFEST" --bin prolly-sqlite-turso-local-bench
   cargo tree --manifest-path "$MANIFEST" > "$OUTPUT/dependencies.txt"
-  if cargo tree --manifest-path "$MANIFEST" -e features \
-    -p prolly-sqlite-turso-local-bench | grep -q 'prolly-store-turso feature "sync"'; then
-    printf 'refusing to run: prolly-store-turso/sync is enabled\n' >&2
+  cargo tree --manifest-path "$MANIFEST" -e features \
+    -p prolly-sqlite-turso-local-bench > "$OUTPUT/dependency-features.txt"
+  if grep -q 'prolly-store-turso feature "turso-cloud-sync"' \
+    "$OUTPUT/dependency-features.txt"; then
+    printf 'refusing to run: prolly-store-turso/turso-cloud-sync is enabled\n' >&2
     exit 2
   fi
 fi
@@ -122,4 +124,3 @@ fi
 printf 'ended_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUTPUT/driver-provenance.txt"
 
 printf 'comparison complete: %s\n' "$OUTPUT"
-

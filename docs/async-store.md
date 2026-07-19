@@ -123,8 +123,8 @@ their own CID and format validators.
 
 - Native SQLite's synchronous adapter is the preferred embedded SQLite path.
 - Native Turso async is the preferred Turso path. Local tests do not use Turso
-  Cloud. The Turso adapter's optional `sync` feature means explicit cloud
-  `push()` and `pull()`, not a synchronous Prolly engine.
+  Cloud. The Turso adapter's optional `turso-cloud-sync` feature enables
+  explicit cloud `push()` and `pull()`, not a synchronous Prolly engine.
 - A blocking store inside an async application should use an explicit runtime
   adapter rather than block an executor worker accidentally.
 - Object stores should keep immutable nodes, mutable manifests, hints, and

@@ -15,8 +15,8 @@ The comparison is end to end rather than a raw SQL-engine microbenchmark:
 
 The difference between prolly's synchronous and asynchronous execution paths is
 therefore part of the measured production behavior and must be stated in every
-report. The benchmark does not use Turso Cloud, the adapter's `sync` feature,
-credentials, `push()`, or `pull()`.
+report. The benchmark does not use Turso Cloud, the adapter's
+`turso-cloud-sync` feature, credentials, `push()`, or `pull()`.
 
 ## Benchmark Matrix
 
@@ -248,4 +248,3 @@ The final report must state that:
 - results describe the recorded machine, filesystem, code revision, and Turso
   beta version;
 - local results do not predict Turso Cloud push/pull latency or throughput.
-

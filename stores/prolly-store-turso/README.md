@@ -12,7 +12,7 @@ your application decides when to call `push()` or `pull()`.
 - Rust 1.88 or newer. Turso 0.7's required dependency graph sets this floor;
   the core `prolly-map` crate itself continues to support Rust 1.81.
 - Tokio or another executor capable of polling Turso and prolly's async APIs.
-- The `sync` feature only when Turso Cloud push/pull is needed.
+- The `turso-cloud-sync` feature only when Turso Cloud push/pull is needed.
 
 Turso Database currently describes its native engine as beta. Keep tested
 backups for production data and follow Turso's release notes when upgrading.
@@ -56,7 +56,7 @@ cargo run --manifest-path stores/prolly-store-turso/Cargo.toml \
 Enable the adapter feature, which enables `turso/sync`:
 
 ```toml
-prolly-store-turso = { version = "0.1", features = ["sync"] }
+prolly-store-turso = { version = "0.1", features = ["turso-cloud-sync"] }
 ```
 
 ```rust
@@ -70,7 +70,7 @@ let backend = TursoBackend::open_synced(
     std::env::var("TURSO_AUTH_TOKEN")?,
 )
 .await?;
-let sync = backend.clone();
+let cloud_sync = backend.clone();
 let prolly = AsyncProlly::new(TursoStore::new(backend), Config::default());
 
 let tree = prolly
@@ -79,8 +79,8 @@ let tree = prolly
 prolly.publish_named_root(b"main", &tree).await?;
 
 // Network synchronization happens only at these explicit calls.
-sync.push().await?;
-let remote_changes_applied = sync.pull().await?;
+cloud_sync.push().await?;
+let remote_changes_applied = cloud_sync.pull().await?;
 println!("remote changes applied: {remote_changes_applied}");
 # Ok(())
 # }
@@ -141,14 +141,15 @@ cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml \
   --all-targets -- -D warnings
 ```
 
-Compile and test the optional sync surface:
+Compile and test the optional Turso Cloud synchronization surface:
 
 ```sh
-cargo test --manifest-path stores/prolly-store-turso/Cargo.toml --features sync
+cargo test --manifest-path stores/prolly-store-turso/Cargo.toml \
+  --features turso-cloud-sync
 cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml \
-  --all-targets --features sync -- -D warnings
+  --all-targets --features turso-cloud-sync -- -D warnings
 ```
 
-The sync integration test makes network calls only when both
+The cloud-sync integration test makes network calls only when both
 `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set. Otherwise it exits without
 contacting Turso Cloud.

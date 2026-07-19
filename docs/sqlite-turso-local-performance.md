@@ -106,6 +106,8 @@ and source databases.
 - `report.md`: compact ratio table and limitations.
 - `machine.txt`: OS, CPU/memory where available, filesystem, Rust, and Cargo.
 - `dependencies.txt`: exact resolved Rust dependency tree.
+- `dependency-features.txt`: resolved feature tree used to reject accidental
+  `turso-cloud-sync` enablement.
 - `run-manifest.txt` and `run-status.txt`: resume contract and current state.
 
 The raw CSV schema is: `schema`, `revision`, `dirty`, `adapter`, `records`,

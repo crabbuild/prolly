@@ -1007,7 +1007,7 @@ Optional adapter crates:
   [durable semantic RAG example](stores/prolly-store-sqlite/examples/semantic_rag.rs).
 - [`prolly-store-turso`](stores/prolly-store-turso/README.md): native local
   asynchronous Turso Database backend, with explicit cloud push/pull behind
-  its optional `sync` feature.
+  its optional `turso-cloud-sync` feature.
 - `prolly-store-rocksdb`: embedded RocksDB backend.
 - `prolly-store-pglite`: PGlite/Node sidecar backend.
 - `prolly-store-slatedb`: object-store-backed SlateDB backend.
