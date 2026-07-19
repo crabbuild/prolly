@@ -1,0 +1,27 @@
+[package]
+name = "prolly-postgres-scale-bench"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[workspace]
+
+[dependencies]
+csv = "1.3"
+fs2 = "0.4"
+prolly = { package = "prolly-map", path = "../..", features = ["async-store"] }
+prolly-store-postgres = { path = "../../stores/prolly-store-postgres" }
+serde = { version = "1.0", features = ["derive"] }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
+
+[dev-dependencies]
+tempfile = "3.20"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "prolly-postgres-scale-bench"
+path = "src/main.rs"
