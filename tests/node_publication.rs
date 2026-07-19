@@ -1,0 +1,473 @@
+use std::future::Future;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+
+use prolly::{
+    AsyncProlly, AsyncStore, BatchOp, Cid, Config, MemStore, MemStoreError, Mutation,
+    NodePublication, NodePublicationHint, Prolly, PublicationOrigin, Store, SyncStoreAsAsync, Tree,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RecordedPublication {
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+    hint: Option<(Vec<u8>, Vec<u8>, Vec<u8>)>,
+    origin: PublicationOrigin,
+}
+
+impl RecordedPublication {
+    fn from_request(publication: NodePublication<'_>) -> Self {
+        Self {
+            entries: publication
+                .entries()
+                .iter()
+                .map(|(key, value)| (key.to_vec(), value.to_vec()))
+                .collect(),
+            hint: publication.hint().map(|hint| {
+                (
+                    hint.namespace().to_vec(),
+                    hint.key().to_vec(),
+                    hint.value().to_vec(),
+                )
+            }),
+            origin: publication.origin(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingSyncStore {
+    inner: Arc<MemStore>,
+    publications: Arc<Mutex<Vec<RecordedPublication>>>,
+}
+
+impl RecordingSyncStore {
+    fn take_publications(&self) -> Vec<RecordedPublication> {
+        std::mem::take(&mut *self.publications.lock().unwrap())
+    }
+}
+
+impl Store for RecordingSyncStore {
+    type Error = MemStoreError;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key)
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.inner.get_shared(key)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        self.inner.has_native_shared_reads()
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put(key, value)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key)
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner.batch(ops)
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered(keys)
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered_unique(keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.inner.prefers_batch_reads()
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        self.inner.batch_put(entries)
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.publications
+            .lock()
+            .unwrap()
+            .push(RecordedPublication::from_request(publication));
+        self.inner.publish_nodes(publication)
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingAsyncStore {
+    inner: Arc<MemStore>,
+    publications: Arc<Mutex<Vec<RecordedPublication>>>,
+}
+
+impl RecordingAsyncStore {
+    fn take_publications(&self) -> Vec<RecordedPublication> {
+        std::mem::take(&mut *self.publications.lock().unwrap())
+    }
+}
+
+impl AsyncStore for RecordingAsyncStore {
+    type Error = MemStoreError;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key)
+    }
+
+    async fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.inner.get_shared(key)
+    }
+
+    async fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        self.inner.has_native_shared_reads()
+    }
+
+    async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put(key, value)
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key)
+    }
+
+    async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner.batch(ops)
+    }
+
+    async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered(keys)
+    }
+
+    async fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered_unique(keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.inner.prefers_batch_reads()
+    }
+
+    async fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        self.inner.batch_put(entries)
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.publications
+            .lock()
+            .unwrap()
+            .push(RecordedPublication::from_request(publication));
+        self.inner.publish_nodes(publication)
+    }
+}
+
+fn block_on<F: Future>(future: F) -> F::Output {
+    let waker = futures_util::task::noop_waker();
+    let mut context = Context::from_waker(&waker);
+    let mut future = Box::pin(future);
+
+    loop {
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(output) => return output,
+            Poll::Pending => std::thread::yield_now(),
+        }
+    }
+}
+
+fn mutations(entries: &[(Vec<u8>, Vec<u8>)]) -> Vec<Mutation> {
+    entries
+        .iter()
+        .map(|(key, val)| Mutation::Upsert {
+            key: key.clone(),
+            val: val.clone(),
+        })
+        .collect()
+}
+
+fn sync_pair(
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+) -> (
+    RecordingSyncStore,
+    Prolly<RecordingSyncStore>,
+    Tree,
+    Prolly<MemStore>,
+    Tree,
+) {
+    let config = Config::default();
+    let store = RecordingSyncStore::default();
+    let recorded = Prolly::new(store.clone(), config.clone());
+    let control = Prolly::new(MemStore::new(), config);
+    let recorded_tree = if entries.is_empty() {
+        recorded.create()
+    } else {
+        recorded
+            .batch(&recorded.create(), mutations(&entries))
+            .unwrap()
+    };
+    let control_tree = if entries.is_empty() {
+        control.create()
+    } else {
+        control
+            .batch(&control.create(), mutations(&entries))
+            .unwrap()
+    };
+    store.take_publications();
+    assert_sync_equivalent(&recorded, &recorded_tree, &control, &control_tree);
+
+    (store, recorded, recorded_tree, control, control_tree)
+}
+
+fn assert_sync_equivalent(
+    recorded: &Prolly<RecordingSyncStore>,
+    recorded_tree: &Tree,
+    control: &Prolly<MemStore>,
+    control_tree: &Tree,
+) {
+    assert_eq!(recorded_tree, control_tree);
+    assert_eq!(
+        recorded.export_snapshot(recorded_tree).unwrap(),
+        control.export_snapshot(control_tree).unwrap()
+    );
+}
+
+type AsyncControlStore = SyncStoreAsAsync<Arc<MemStore>>;
+
+async fn async_pair(
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+) -> (
+    RecordingAsyncStore,
+    AsyncProlly<RecordingAsyncStore>,
+    Tree,
+    AsyncProlly<AsyncControlStore>,
+    Tree,
+) {
+    let config = Config::default();
+    let store = RecordingAsyncStore::default();
+    let recorded = AsyncProlly::new(store.clone(), config.clone());
+    let control = AsyncProlly::new(SyncStoreAsAsync::new(Arc::new(MemStore::new())), config);
+    let recorded_tree = if entries.is_empty() {
+        recorded.create()
+    } else {
+        recorded
+            .batch(&recorded.create(), mutations(&entries))
+            .await
+            .unwrap()
+    };
+    let control_tree = if entries.is_empty() {
+        control.create()
+    } else {
+        control
+            .batch(&control.create(), mutations(&entries))
+            .await
+            .unwrap()
+    };
+    store.take_publications();
+    assert_async_equivalent(&recorded, &recorded_tree, &control, &control_tree).await;
+
+    (store, recorded, recorded_tree, control, control_tree)
+}
+
+async fn assert_async_equivalent(
+    recorded: &AsyncProlly<RecordingAsyncStore>,
+    recorded_tree: &Tree,
+    control: &AsyncProlly<AsyncControlStore>,
+    control_tree: &Tree,
+) {
+    assert_eq!(recorded_tree, control_tree);
+    assert_eq!(
+        recorded.export_snapshot(recorded_tree).await.unwrap(),
+        control.export_snapshot(control_tree).await.unwrap()
+    );
+}
+
+fn assert_publications(publications: Vec<RecordedPublication>, expected: &[PublicationOrigin]) {
+    assert_eq!(
+        publications
+            .iter()
+            .map(|publication| publication.origin)
+            .collect::<Vec<_>>(),
+        expected
+    );
+    for publication in publications {
+        assert!(!publication.entries.is_empty());
+        for (key, value) in publication.entries {
+            assert_eq!(key.as_slice(), Cid::from_bytes(&value).as_bytes());
+        }
+    }
+}
+
+#[test]
+fn sync_core_routes_origins_without_changing_canonical_content() {
+    let (store, recorded, tree, control, control_tree) = sync_pair(Vec::new());
+    let tree = recorded
+        .put(&tree, b"point".to_vec(), b"value".to_vec())
+        .unwrap();
+    let control_tree = control
+        .put(&control_tree, b"point".to_vec(), b"value".to_vec())
+        .unwrap();
+    assert_publications(store.take_publications(), &[PublicationOrigin::PointUpsert]);
+    assert_sync_equivalent(&recorded, &tree, &control, &control_tree);
+
+    let initial = vec![
+        (b"keep".to_vec(), b"stable".to_vec()),
+        (b"point".to_vec(), b"value".to_vec()),
+    ];
+    let (store, recorded, tree, control, control_tree) = sync_pair(initial.clone());
+    let tree = recorded.delete(&tree, b"point").unwrap();
+    let control_tree = control.delete(&control_tree, b"point").unwrap();
+    assert_publications(store.take_publications(), &[PublicationOrigin::PointDelete]);
+    assert_sync_equivalent(&recorded, &tree, &control, &control_tree);
+
+    let (store, recorded, tree, control, control_tree) = sync_pair(Vec::new());
+    let batch = vec![
+        Mutation::Upsert {
+            key: b"a".to_vec(),
+            val: b"one".to_vec(),
+        },
+        Mutation::Upsert {
+            key: b"b".to_vec(),
+            val: b"two".to_vec(),
+        },
+    ];
+    let tree = recorded.batch(&tree, batch.clone()).unwrap();
+    let control_tree = control.batch(&control_tree, batch).unwrap();
+    assert_publications(
+        store.take_publications(),
+        &[PublicationOrigin::BatchMutation],
+    );
+    assert_sync_equivalent(&recorded, &tree, &control, &control_tree);
+
+    let initial = vec![
+        (b"a".to_vec(), b"one".to_vec()),
+        (b"b".to_vec(), b"two".to_vec()),
+        (b"c".to_vec(), b"three".to_vec()),
+        (b"d".to_vec(), b"four".to_vec()),
+    ];
+    let (store, recorded, tree, control, control_tree) = sync_pair(initial.clone());
+    let tree = recorded.delete_range(&tree, b"b", b"d").unwrap();
+    let control_tree = control.delete_range(&control_tree, b"b", b"d").unwrap();
+    assert_publications(store.take_publications(), &[PublicationOrigin::RangeDelete]);
+    assert_sync_equivalent(&recorded, &tree, &control, &control_tree);
+
+    let (store, recorded, tree, control, control_tree) =
+        sync_pair(vec![(b"point".to_vec(), b"value".to_vec())]);
+    let unchanged = recorded
+        .put(&tree, b"point".to_vec(), b"value".to_vec())
+        .unwrap();
+    let control_unchanged = control
+        .put(&control_tree, b"point".to_vec(), b"value".to_vec())
+        .unwrap();
+    assert!(store.take_publications().is_empty());
+    assert_sync_equivalent(&recorded, &unchanged, &control, &control_unchanged);
+}
+
+#[test]
+fn async_core_routes_origins_without_changing_canonical_content() {
+    block_on(async {
+        let (store, recorded, tree, control, control_tree) = async_pair(Vec::new()).await;
+        let tree = recorded
+            .put(&tree, b"point".to_vec(), b"value".to_vec())
+            .await
+            .unwrap();
+        let control_tree = control
+            .put(&control_tree, b"point".to_vec(), b"value".to_vec())
+            .await
+            .unwrap();
+        assert_publications(store.take_publications(), &[PublicationOrigin::PointUpsert]);
+        assert_async_equivalent(&recorded, &tree, &control, &control_tree).await;
+
+        let initial = vec![
+            (b"keep".to_vec(), b"stable".to_vec()),
+            (b"point".to_vec(), b"value".to_vec()),
+        ];
+        let (store, recorded, tree, control, control_tree) = async_pair(initial.clone()).await;
+        let tree = recorded.delete(&tree, b"point").await.unwrap();
+        let control_tree = control.delete(&control_tree, b"point").await.unwrap();
+        assert_publications(store.take_publications(), &[PublicationOrigin::PointDelete]);
+        assert_async_equivalent(&recorded, &tree, &control, &control_tree).await;
+
+        let (store, recorded, tree, control, control_tree) = async_pair(Vec::new()).await;
+        let batch = vec![
+            Mutation::Upsert {
+                key: b"a".to_vec(),
+                val: b"one".to_vec(),
+            },
+            Mutation::Upsert {
+                key: b"b".to_vec(),
+                val: b"two".to_vec(),
+            },
+        ];
+        let tree = recorded.batch(&tree, batch.clone()).await.unwrap();
+        let control_tree = control.batch(&control_tree, batch).await.unwrap();
+        assert_publications(
+            store.take_publications(),
+            &[PublicationOrigin::BatchMutation],
+        );
+        assert_async_equivalent(&recorded, &tree, &control, &control_tree).await;
+
+        let initial = vec![
+            (b"a".to_vec(), b"one".to_vec()),
+            (b"b".to_vec(), b"two".to_vec()),
+            (b"c".to_vec(), b"three".to_vec()),
+            (b"d".to_vec(), b"four".to_vec()),
+        ];
+        let (store, recorded, tree, control, control_tree) = async_pair(initial.clone()).await;
+        let tree = recorded.delete_range(&tree, b"b", b"d").await.unwrap();
+        let control_tree = control
+            .delete_range(&control_tree, b"b", b"d")
+            .await
+            .unwrap();
+        assert_publications(store.take_publications(), &[PublicationOrigin::RangeDelete]);
+        assert_async_equivalent(&recorded, &tree, &control, &control_tree).await;
+
+        let (store, recorded, tree, control, control_tree) =
+            async_pair(vec![(b"point".to_vec(), b"value".to_vec())]).await;
+        let unchanged = recorded
+            .put(&tree, b"point".to_vec(), b"value".to_vec())
+            .await
+            .unwrap();
+        let control_unchanged = control
+            .put(&control_tree, b"point".to_vec(), b"value".to_vec())
+            .await
+            .unwrap();
+        assert!(store.take_publications().is_empty());
+        assert_async_equivalent(&recorded, &unchanged, &control, &control_unchanged).await;
+    });
+}
+
+#[test]
+fn publication_hint_recording_remains_borrowed_and_lossless() {
+    let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+    let hint = NodePublicationHint::new(b"namespace", b"key", b"value");
+    let recorded = RecordedPublication::from_request(NodePublication::with_hint(
+        &entries,
+        hint,
+        PublicationOrigin::General,
+    ));
+
+    assert_eq!(
+        recorded.hint,
+        Some((b"namespace".to_vec(), b"key".to_vec(), b"value".to_vec()))
+    );
+}

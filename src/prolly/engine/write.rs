@@ -9,7 +9,10 @@ use super::validation;
 use super::ProllyEngine;
 use crate::prolly::error::{Error, Mutation};
 use crate::prolly::node::Node;
-use crate::prolly::store::{AsyncStore, BatchOp, Store};
+use crate::prolly::store::{
+    AsyncStore, BatchOp, NodePublication, NodePublicationHint, PublicationOrigin, SharedReadBatch,
+    Store,
+};
 use crate::prolly::tree::Tree;
 use crate::prolly::write::CanonicalWriteManager;
 use crate::prolly::{Cid, ProllyMetricsSnapshot};
@@ -51,10 +54,7 @@ where
         right: &Tree,
         resolver: Option<&(dyn Fn(&Conflict) -> Resolution + Send + Sync)>,
     ) -> Result<Option<Tree>, Error> {
-        let manager = ReadyWriteManager {
-            engine: self,
-            config: &base.config,
-        };
+        let manager = ReadyWriteManager::new(self, &base.config, PublicationOrigin::Merge);
         crate::prolly::diff::try_structural_merge(&manager, base, left, right, resolver)
     }
 
@@ -62,11 +62,9 @@ where
         &self,
         tree: &Tree,
         mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
-        let manager = ReadyWriteManager {
-            engine: self,
-            config: &tree.config,
-        };
+        let manager = ReadyWriteManager::new(self, &tree.config, origin);
         crate::prolly::write::apply(&manager, tree, mutations)
     }
 
@@ -74,11 +72,9 @@ where
         &self,
         tree: &Tree,
         mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        let manager = ReadyWriteManager {
-            engine: self,
-            config: &tree.config,
-        };
+        let manager = ReadyWriteManager::new(self, &tree.config, origin);
         crate::prolly::write::apply_tree(&manager, tree, mutations)
     }
 
@@ -87,11 +83,9 @@ where
         tree: &Tree,
         mutations: Vec<Mutation>,
         config: &crate::prolly::parallel::ParallelConfig,
+        origin: PublicationOrigin,
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
-        let manager = ReadyWriteManager {
-            engine: self,
-            config: &tree.config,
-        };
+        let manager = ReadyWriteManager::new(self, &tree.config, origin);
         crate::prolly::write::apply_configured(&manager, tree, mutations, config)
     }
 
@@ -100,11 +94,9 @@ where
         tree: &Tree,
         mutations: Vec<Mutation>,
         config: &crate::prolly::parallel::ParallelConfig,
+        origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        let manager = ReadyWriteManager {
-            engine: self,
-            config: &tree.config,
-        };
+        let manager = ReadyWriteManager::new(self, &tree.config, origin);
         crate::prolly::write::apply_tree_configured(&manager, tree, mutations, config)
     }
 
@@ -114,27 +106,148 @@ where
         start: &[u8],
         end: &[u8],
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
-        let manager = ReadyWriteManager {
-            engine: self,
-            config: &tree.config,
-        };
+        let manager = ReadyWriteManager::new(self, &tree.config, PublicationOrigin::RangeDelete);
         crate::prolly::range_delete::apply(&manager, tree, start, end)
+    }
+}
+
+struct PublicationStore<'a, S: Store> {
+    inner: &'a S,
+    origin: PublicationOrigin,
+}
+
+impl<'a, S: Store> PublicationStore<'a, S> {
+    const fn new(inner: &'a S, origin: PublicationOrigin) -> Self {
+        Self { inner, origin }
+    }
+
+    fn publication<'b>(&self, publication: NodePublication<'b>) -> NodePublication<'b> {
+        match publication.hint() {
+            Some(hint) => NodePublication::with_hint(publication.entries(), hint, self.origin),
+            None => NodePublication::new(publication.entries(), self.origin),
+        }
+    }
+}
+
+impl<S: Store> Store for PublicationStore<'_, S> {
+    type Error = S::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get(key)
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.inner.get_shared(key)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<SharedReadBatch, Self::Error> {
+        self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        self.inner.has_native_shared_reads()
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        let entries = [(key, value)];
+        self.inner
+            .publish_nodes(NodePublication::new(&entries, self.origin))
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key)
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner.batch(ops)
+    }
+
+    fn batch_get(&self, keys: &[&[u8]]) -> Result<HashMap<Vec<u8>, Vec<u8>>, Self::Error> {
+        self.inner.batch_get(keys)
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered(keys)
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.inner.batch_get_ordered_unique(keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        self.inner.prefers_batch_reads()
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        self.inner
+            .publish_nodes(NodePublication::new(entries, self.origin))
+    }
+
+    fn supports_hints(&self) -> bool {
+        self.inner.supports_hints()
+    }
+
+    fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.inner.get_hint(namespace, key)
+    }
+
+    fn put_hint(&self, namespace: &[u8], key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put_hint(namespace, key, value)
+    }
+
+    fn batch_put_with_hint(
+        &self,
+        entries: &[(&[u8], &[u8])],
+        namespace: &[u8],
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), Self::Error> {
+        self.inner.publish_nodes(NodePublication::with_hint(
+            entries,
+            NodePublicationHint::new(namespace, key, value),
+            self.origin,
+        ))
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.inner.publish_nodes(self.publication(publication))
     }
 }
 
 struct ReadyWriteManager<'a, S: Store> {
     engine: &'a ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>,
+    store: PublicationStore<'a, S>,
     config: &'a crate::prolly::Config,
 }
 
-impl<S> CanonicalWriteManager for ReadyWriteManager<'_, S>
+impl<'a, S: Store> ReadyWriteManager<'a, S> {
+    fn new(
+        engine: &'a ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>,
+        config: &'a crate::prolly::Config,
+        origin: PublicationOrigin,
+    ) -> Self {
+        Self {
+            engine,
+            store: PublicationStore::new(engine.store.inner().as_ref(), origin),
+            config,
+        }
+    }
+}
+
+impl<'a, S> CanonicalWriteManager for ReadyWriteManager<'a, S>
 where
     S: Store,
 {
-    type Store = Arc<S>;
+    type Store = PublicationStore<'a, S>;
 
     fn write_store(&self) -> &Self::Store {
-        self.engine.store.inner()
+        &self.store
     }
 
     fn write_config(&self) -> &crate::prolly::Config {
@@ -638,6 +751,7 @@ where
         &self,
         tree: &Tree,
         mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
         let all_upserts = !mutations.is_empty()
             && mutations
@@ -674,6 +788,7 @@ where
         self.execute_replay(
             tree,
             publish_rightmost_hint,
+            origin,
             |manager| crate::prolly::write::apply(manager, tree, mutations.clone()),
             update_write_stats,
         )
@@ -689,6 +804,7 @@ where
         self.execute_replay(
             tree,
             false,
+            PublicationOrigin::RangeDelete,
             |manager| crate::prolly::range_delete::apply(manager, tree, start, end),
             update_write_stats,
         )
@@ -699,6 +815,7 @@ where
         &self,
         tree: &Tree,
         publish_rightmost_hint: bool,
+        origin: PublicationOrigin,
         mut operation: F,
         update_io: U,
     ) -> Result<(Tree, T), Error>
@@ -761,12 +878,15 @@ where
                 let path = replay_rightmost_path(&manager, root)?;
                 let hint = crate::prolly::encode_rightmost_path_hint(&path)?;
                 self.store
-                    .batch_put_with_hint(
+                    .publish_nodes(NodePublication::with_hint(
                         &entries,
-                        crate::prolly::RIGHTMOST_PATH_HINT_NAMESPACE,
-                        root.as_bytes(),
-                        &hint,
-                    )
+                        NodePublicationHint::new(
+                            crate::prolly::RIGHTMOST_PATH_HINT_NAMESPACE,
+                            root.as_bytes(),
+                            &hint,
+                        ),
+                        origin,
+                    ))
                     .await
                     .map_err(|error| Error::Store(Box::new(error)))?;
                 self.cache_rightmost_path(
@@ -775,7 +895,7 @@ where
                 );
             } else {
                 self.store
-                    .batch_put(&entries)
+                    .publish_nodes(NodePublication::new(&entries, origin))
                     .await
                     .map_err(|error| Error::Store(Box::new(error)))?;
             }

@@ -264,7 +264,7 @@ cargo check -p prolly-map --no-default-features
 
 Expected: all commands exit `0`, ready tests return `Poll::Ready`, and the no-default-features build adds no Tokio dependency.
 
-- [ ] **Step 7: Commit the contract**
+- [x] **Step 7: Commit the contract**
 
 ```sh
 git add src/lib.rs src/prolly/store/mod.rs
@@ -286,7 +286,7 @@ This task attaches semantic origin while preserving one canonical mutation imple
 - Consumes: `NodePublication` and `PublicationOrigin` from Task 1.
 - Produces: `PublicationStore<'a, S>`, origin-aware ready manager construction, origin-aware `execute_replay`, and private sync/async `put_with_origin` and `batch_with_origin` helpers for higher-level operations.
 
-- [ ] **Step 1: Implement `PublicationStore`**
+- [x] **Step 1: Implement `PublicationStore`**
 
 Add an internal facade before `ReadyWriteManager`:
 
@@ -334,7 +334,7 @@ fn batch_put_with_hint(
 
 Do not classify generic `batch` or `delete` as node publication.
 
-- [ ] **Step 2: Make `ReadyWriteManager` own the facade**
+- [x] **Step 2: Make `ReadyWriteManager` own the facade**
 
 Change its store type and construction:
 
@@ -362,7 +362,7 @@ impl<'a, S: Store> ReadyWriteManager<'a, S> {
 
 Set `CanonicalWriteManager::Store = PublicationStore<'a, S>` and return `&self.store`. Replace every literal manager construction with `ReadyWriteManager::new`.
 
-- [ ] **Step 3: Add origin to async final publication**
+- [x] **Step 3: Add origin to async final publication**
 
 Change the signature to:
 
@@ -406,7 +406,7 @@ if publish_rightmost_hint && self.store.supports_hints() {
 
 Keep replay discovery, validation, cache insertion, metrics, and empty-write behavior unchanged. Keep the hint bytes alive through the awaited call by placing publication and the call in the hint branch when necessary.
 
-- [ ] **Step 4: Assign public point, batch, and range origins**
+- [x] **Step 4: Assign public point, batch, and range origins**
 
 Add `origin: PublicationOrigin` to the internal canonical batch entry points. Define private helpers on both sync and async managers:
 
@@ -459,7 +459,7 @@ pub fn batch(...) -> Result<Tree, Error> {
 
 Implement the same routing for async methods. Keep one-item public batch as `BatchMutation`. Hardcode `RangeDelete` in sync and async range-delete engine entries. Pass `BatchMutation` from configured and stats-producing public batch APIs.
 
-- [ ] **Step 5: Add post-implementation sync/async routing tests**
+- [x] **Step 5: Add post-implementation sync/async routing tests**
 
 In `tests/node_publication.rs`, implement `RecordingSyncStore` and `RecordingAsyncStore` over `MemStore`. Record owned entries, hint, and origin in each `publish_nodes` override before delegating.
 
@@ -479,7 +479,7 @@ assert_eq!(async_origins(&async_range_store), vec![PublicationOrigin::RangeDelet
 
 For every operation, compare the returned root and a recursively collected reachable-node map with an uninstrumented `MemStore` execution. Add an unchanged point operation assertion that emits no publication.
 
-- [ ] **Step 6: Run focused verification**
+- [x] **Step 6: Run focused verification**
 
 ```sh
 cargo fmt --all -- --check
@@ -491,7 +491,7 @@ cargo test -p prolly-map --test canonical_roots --all-features
 
 Expected: every command exits `0`; roots and reachable bytes are identical; sync publication remains runtime-free.
 
-- [ ] **Step 7: Commit core routing**
+- [x] **Step 7: Commit core routing**
 
 ```sh
 git add src/prolly/engine/write.rs src/prolly/mod.rs tests/node_publication.rs

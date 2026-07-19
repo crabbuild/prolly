@@ -122,7 +122,7 @@ use super::node::{Node, ReadNode};
 use super::range::RangeCursor;
 use super::read::{BorrowedMergeResolver, ConflictRef, DiffRef, MergeDecision, ScanOutcome};
 use super::store::Store;
-use super::store::{AsyncStore, SyncStoreAsAsync};
+use super::store::{AsyncStore, PublicationOrigin, SyncStoreAsAsync};
 use super::tree::Tree;
 use super::write::CanonicalWriteManager;
 use super::AsyncProlly;
@@ -3472,6 +3472,7 @@ where
         .execute_replay(
             base,
             false,
+            PublicationOrigin::Merge,
             |manager| {
                 let mut trace = MergeTrace::default();
                 match try_structural_merge_owned(manager, base, left, right, resolver, &mut trace) {

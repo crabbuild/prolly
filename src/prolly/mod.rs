@@ -204,6 +204,7 @@ use node::ReadNode;
 use stats::{StatsComparison, TreeStats};
 use store::AsyncStore;
 use store::NodeStoreScan;
+use store::PublicationOrigin;
 use store::Store;
 use store::SyncStoreAsAsync;
 use tree::Tree;
@@ -1302,8 +1303,30 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key already exists with the same value, returns the original tree unchanged.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, val: Vec<u8>) -> Result<Tree, Error> {
+        self.put_with_origin(tree, key, val, PublicationOrigin::PointUpsert)
+    }
+
+    /// Apply one upsert with an internal publication classification.
+    pub(crate) fn put_with_origin(
+        &self,
+        tree: &Tree,
+        key: Vec<u8>,
+        val: Vec<u8>,
+        origin: PublicationOrigin,
+    ) -> Result<Tree, Error> {
         self.engine
-            .canonical_batch_tree_ready(tree, vec![Mutation::Upsert { key, val }])
+            .canonical_batch_tree_ready(tree, vec![Mutation::Upsert { key, val }], origin)
+    }
+
+    /// Apply canonical mutations with an internal publication classification.
+    pub(crate) fn batch_with_origin(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
+    ) -> Result<Tree, Error> {
+        self.engine
+            .canonical_batch_tree_ready(tree, mutations, origin)
     }
 
     /// Insert or update a value, offloading large payloads to a blob store.
@@ -1344,8 +1367,11 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        self.engine
-            .canonical_batch_tree_ready(tree, vec![Mutation::Delete { key: key.to_vec() }])
+        self.batch_with_origin(
+            tree,
+            vec![Mutation::Delete { key: key.to_vec() }],
+            PublicationOrigin::PointDelete,
+        )
     }
 
     /// Delete all keys in the half-open range `[start, end)`.
@@ -3754,7 +3780,7 @@ impl<S: Store> Prolly<S> {
     /// # Behavior
     /// - Mutations are sorted by key for efficient processing
     /// - Duplicate keys use last-write-wins semantics
-    /// - All new nodes are written atomically via Store::batch
+    /// - All new nodes are published through one [`Store::publish_nodes`] request
     /// - The input tree is not modified (immutable operation)
     ///
     /// # Example
@@ -3774,7 +3800,7 @@ impl<S: Store> Prolly<S> {
     /// let new_tree = prolly.batch(&tree, mutations).unwrap();
     /// ```
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        self.engine.canonical_batch_tree_ready(tree, mutations)
+        self.batch_with_origin(tree, mutations, PublicationOrigin::BatchMutation)
     }
 
     /// Apply mutations and return tree-write work counters.
@@ -3783,7 +3809,8 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<(Tree, write::WriteStats), Error> {
-        self.engine.canonical_batch_ready(tree, mutations)
+        self.engine
+            .canonical_batch_ready(tree, mutations, PublicationOrigin::BatchMutation)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -3798,7 +3825,9 @@ impl<S: Store> Prolly<S> {
         let input_sorted = mutations
             .windows(2)
             .all(|pair| pair[0].key() <= pair[1].key());
-        let (tree, stats) = self.engine.canonical_batch_ready(tree, mutations)?;
+        let (tree, stats) =
+            self.engine
+                .canonical_batch_ready(tree, mutations, PublicationOrigin::BatchMutation)?;
         Ok(batch::BatchApplyResult::from_write_stats(
             tree,
             stats,
@@ -3914,7 +3943,7 @@ impl<S: Store> Prolly<S> {
     /// # Behavior
     /// - Uses append and coalesced-rebuild fast paths from the standard batch writer
     /// - Bounds batched route hydration with `max_threads` when configured
-    /// - Uses batch_put for efficient I/O
+    /// - Uses [`Store::publish_nodes`] for efficient contextual I/O
     /// - Maintains all tree invariants
     ///
     /// # Example
@@ -3940,8 +3969,12 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        self.engine
-            .canonical_batch_tree_ready_configured(tree, mutations, config)
+        self.engine.canonical_batch_tree_ready_configured(
+            tree,
+            mutations,
+            config,
+            PublicationOrigin::BatchMutation,
+        )
     }
 
     /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.
@@ -3958,9 +3991,12 @@ impl<S: Store> Prolly<S> {
         let input_sorted = mutations
             .windows(2)
             .all(|pair| pair[0].key() <= pair[1].key());
-        let (tree, stats) = self
-            .engine
-            .canonical_batch_ready_configured(tree, mutations, config)?;
+        let (tree, stats) = self.engine.canonical_batch_ready_configured(
+            tree,
+            mutations,
+            config,
+            PublicationOrigin::BatchMutation,
+        )?;
         Ok(batch::BatchApplyResult::from_write_stats(
             tree,
             stats,
@@ -4107,10 +4143,33 @@ where
     /// Insert or update a key-value pair in the tree.
     ///
     /// This is the async counterpart to [`Prolly::put`]. It rewrites only the
-    /// affected path, persists rewritten nodes through [`AsyncStore::batch_put`],
-    /// and returns a new immutable tree handle.
+    /// affected path, publishes rewritten nodes through
+    /// [`AsyncStore::publish_nodes`], and returns a new immutable tree handle.
     pub async fn put(&self, tree: &Tree, key: Vec<u8>, val: Vec<u8>) -> Result<Tree, Error> {
-        self.batch(tree, vec![Mutation::Upsert { key, val }]).await
+        self.put_with_origin(tree, key, val, PublicationOrigin::PointUpsert)
+            .await
+    }
+
+    /// Apply one async upsert with an internal publication classification.
+    pub(crate) async fn put_with_origin(
+        &self,
+        tree: &Tree,
+        key: Vec<u8>,
+        val: Vec<u8>,
+        origin: PublicationOrigin,
+    ) -> Result<Tree, Error> {
+        self.batch_with_origin(tree, vec![Mutation::Upsert { key, val }], origin)
+            .await
+    }
+
+    /// Apply canonical async mutations with an internal publication classification.
+    pub(crate) async fn batch_with_origin(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
+    ) -> Result<Tree, Error> {
+        Ok(self.canonical_batch(tree, mutations, origin).await?.0)
     }
 
     /// Insert or update a value, offloading large payloads to an async blob
@@ -4138,8 +4197,12 @@ where
     ///
     /// Missing keys are idempotent and return the original tree unchanged.
     pub async fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        self.batch(tree, vec![Mutation::Delete { key: key.to_vec() }])
-            .await
+        self.batch_with_origin(
+            tree,
+            vec![Mutation::Delete { key: key.to_vec() }],
+            PublicationOrigin::PointDelete,
+        )
+        .await
     }
 
     /// Delete all existing keys in the half-open range `[start, end)`.
@@ -4166,9 +4229,10 @@ where
     /// The async batch planner routes those mutations to affected leaves using
     /// ordered async node loads, applies each touched leaf once, rebuilds only
     /// touched ancestors, and flushes all rewritten nodes through a single
-    /// [`AsyncStore::batch_put`] call.
+    /// [`AsyncStore::publish_nodes`] call.
     pub async fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        Ok(self.canonical_batch(tree, mutations).await?.0)
+        self.batch_with_origin(tree, mutations, PublicationOrigin::BatchMutation)
+            .await
     }
 
     /// Apply multiple mutations through the canonical writer and return its
@@ -4178,7 +4242,8 @@ where
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<(Tree, write::WriteStats), Error> {
-        self.canonical_batch(tree, mutations).await
+        self.canonical_batch(tree, mutations, PublicationOrigin::BatchMutation)
+            .await
     }
 
     fn cached_rightmost_path(&self, root: &Cid) -> Option<Vec<CachedRightmostPathEntry>> {
