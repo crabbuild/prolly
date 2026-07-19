@@ -91,7 +91,9 @@ use std::borrow::Borrow;
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
 use std::ops::Range;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(test)]
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, OnceLock, RwLock};
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -100,6 +102,7 @@ const PARALLEL_NODE_DECODE_THRESHOLD: usize = 16;
 const GET_MANY_PREFETCH_PARALLELISM: usize = 16;
 const GET_MANY_BOUNDARY_ROUTE_MIN_POSITIONS: usize = 32;
 const STATS_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
+#[cfg(test)]
 const RECENT_LEAF_MISS_SAMPLE_INTERVAL: usize = 16;
 const ASYNC_NODE_PREFETCH_BATCH_SIZE: usize = 64;
 
@@ -899,11 +902,14 @@ pub struct Prolly<S: Store> {
     engine: engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
     config: Config,
     node_cache: Arc<RwLock<NodeCache>>,
+    #[cfg(test)]
     recent_leaf: RwLock<Option<RecentLeafRead>>,
+    #[cfg(test)]
     recent_leaf_misses: AtomicUsize,
     metrics: Arc<ProllyMetrics>,
 }
 
+#[cfg(test)]
 struct RecentLeafRead {
     root: Cid,
     node: Arc<ReadNode>,
@@ -1068,7 +1074,9 @@ impl<S: Store> Prolly<S> {
             engine,
             config,
             node_cache,
+            #[cfg(test)]
             recent_leaf: RwLock::new(None),
+            #[cfg(test)]
             recent_leaf_misses: AtomicUsize::new(0),
             metrics,
         }
@@ -1143,6 +1151,11 @@ impl<S: Store> Prolly<S> {
         engine::ready::run_ready(self.engine.store.ready(future))
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async sessions"
+    )]
     fn maybe_cache_recent_leaf(&self, root: &Cid, node: Arc<ReadNode>) {
         if self
             .node_cache
@@ -1177,6 +1190,11 @@ impl<S: Store> Prolly<S> {
         engine::ready::run_ready(ready_store.ready(future))
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async sessions"
+    )]
     pub(crate) fn subtree_count(&self, cid: &Cid) -> Result<u64, Error> {
         let node = self.load_read_arc(cid)?;
         if node.is_leaf() {
@@ -3643,17 +3661,7 @@ impl<S: Store> Prolly<S> {
     /// This is mostly useful after external store maintenance or tests that
     /// intentionally mutate the backing store outside the Prolly API.
     pub fn clear_cache(&self) {
-        if let Ok(mut cache) = self.node_cache.write() {
-            let evictions = cache.clear();
-            self.metrics.add_cache_evictions(evictions);
-        }
-        if let Ok(mut recent) = self.recent_leaf.write() {
-            *recent = None;
-        }
-        self.recent_leaf_misses.store(0, Ordering::Relaxed);
-        if let Ok(mut recent) = self.engine.recent_leaf.write() {
-            *recent = None;
-        }
+        self.engine.clear_cache();
     }
 
     /// Return the number of cached nodes in this Prolly manager.
@@ -5535,6 +5543,9 @@ where
         }
         if let Ok(mut cache) = self.rightmost_path_cache.write() {
             *cache = None;
+        }
+        if let Ok(mut recent) = self.recent_leaf.write() {
+            *recent = None;
         }
     }
 

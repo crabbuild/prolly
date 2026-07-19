@@ -13,8 +13,7 @@ use super::cid::Cid;
 use super::error::{Conflict, Diff, Error};
 use super::key;
 use super::node::ReadNode;
-use super::store::AsyncStore;
-use super::store::Store;
+use super::store::{AsyncStore, Store, SyncStoreAsAsync};
 use super::tree::Tree;
 use super::AsyncProlly;
 use super::{sorted_key_positions, InlinePositions, KeyLookupFrame, KeyValue, Prolly};
@@ -316,7 +315,12 @@ impl SessionNodeTable {
 /// The session retains the decoded root and a session-local recent leaf. It is
 /// intended to be reused by one worker; methods that update traversal state
 /// require `&mut self`.
-pub struct ReadSession<'manager, 'tree, S: Store> {
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async sessions"
+)]
+struct LegacyReadSession<'manager, 'tree, S: Store> {
     manager: &'manager Prolly<S>,
     tree: &'tree Tree,
     root: Option<Arc<ReadNode>>,
@@ -335,7 +339,7 @@ struct OwnedReadSessionState {
 }
 
 /// An owned, root-bound read context suitable for long-lived native binding
-/// handles. Unlike [`ReadSession`], this type owns both manager and tree state,
+/// handles. Unlike [`LegacyReadSession`], this type owns both manager and tree state,
 /// so foreign-language adapters can reuse retained routing state across calls.
 ///
 /// Stateful point reads are synchronized. High-concurrency callers should use
@@ -368,12 +372,32 @@ pub struct AsyncReadSession<'manager, 'tree, S: AsyncStore> {
     local_nodes: SessionNodeTable,
 }
 
+/// Synchronous ready-only facade over the canonical async read session.
+pub struct ReadSession<'manager, 'tree, S: Store> {
+    inner: AsyncReadSession<'manager, 'tree, SyncStoreAsAsync<Arc<S>>>,
+}
+
 impl<S: Store> Prolly<S> {
     /// Open a reusable borrowed read session over an immutable tree.
     pub fn read<'manager, 'tree>(
         &'manager self,
         tree: &'tree Tree,
     ) -> Result<ReadSession<'manager, 'tree, S>, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.read(tree);
+        let inner = super::engine::ready::run_ready(ready_store.ready(future))?;
+        Ok(ReadSession { inner })
+    }
+
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async sessions"
+    )]
+    fn read_legacy<'manager, 'tree>(
+        &'manager self,
+        tree: &'tree Tree,
+    ) -> Result<LegacyReadSession<'manager, 'tree, S>, Error> {
         if tree.config.format != self.config.format {
             return Err(Error::FormatMismatch {
                 expected: self.config.format.digest()?,
@@ -411,7 +435,7 @@ impl<S: Store> Prolly<S> {
                 })
             });
 
-        Ok(ReadSession {
+        Ok(LegacyReadSession {
             manager: self,
             tree,
             root,
@@ -426,11 +450,11 @@ impl<S: Store> Prolly<S> {
     pub fn read_owned(self: &Arc<Self>, tree: Tree) -> Result<OwnedReadSession<S>, Error> {
         let session = self.read(&tree)?;
         let state = OwnedReadSessionState {
-            root: session.root,
-            recent_leaf: session.recent_leaf,
-            recent_leaf_misses: session.recent_leaf_misses,
-            recent_leaf_disabled: session.recent_leaf_disabled,
-            local_nodes: session.local_nodes,
+            root: session.inner.root,
+            recent_leaf: session.inner.recent_leaf,
+            recent_leaf_misses: session.inner.recent_leaf_misses,
+            recent_leaf_disabled: session.inner.recent_leaf_disabled,
+            local_nodes: session.inner.local_nodes,
         };
         Ok(OwnedReadSession {
             manager: self.clone(),
@@ -446,50 +470,9 @@ impl<S: Store> Prolly<S> {
         key: &[u8],
         read: impl FnOnce(&[u8]) -> R,
     ) -> Result<Option<R>, Error> {
-        if tree.config.format != self.config.format {
-            return Err(Error::FormatMismatch {
-                expected: self.config.format.digest()?,
-                actual: tree.config.format.digest()?,
-            });
-        }
-        let Some(root) = tree.root.as_ref() else {
-            return Ok(None);
-        };
-        let recent_leaf_enabled = self
-            .node_cache
-            .read()
-            .is_ok_and(|cache| !cache.is_disabled());
-        let recent_leaf = recent_leaf_enabled
-            .then(|| self.recent_leaf.read().ok())
-            .flatten()
-            .and_then(|recent| {
-                recent
-                    .as_ref()
-                    .filter(|entry| &entry.root == root)
-                    .map(|entry| entry.node.clone())
-            });
-        if let Some(leaf) = recent_leaf {
-            ReadSession::<S>::validate_leaf(&leaf)?;
-            if leaf
-                .key(0)
-                .zip(leaf.key(leaf.len().saturating_sub(1)))
-                .is_some_and(|(first, last)| key >= first && key <= last)
-            {
-                self.metrics.add_cache_hits(1);
-                return match leaf.search(key) {
-                    Ok(index) => Ok(Some(read(leaf.value(index).ok_or(Error::InvalidNode)?))),
-                    Err(_) => Ok(None),
-                };
-            }
-        }
-        let mut session = self.read(tree)?;
-        let result = session.get_with(key, read);
-        if result.is_ok() {
-            if let (Some(root), Some(leaf)) = (tree.root.as_ref(), session.recent_leaf) {
-                self.maybe_cache_recent_leaf(root, leaf);
-            }
-        }
-        result
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.get_with(tree, key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Check key membership without copying its value.
@@ -663,7 +646,7 @@ impl<S: Store> OwnedReadSession<S> {
             .as_ref()
             .filter(|_| !state.recent_leaf_disabled)
         {
-            ReadSession::<S>::validate_leaf(leaf)?;
+            validate_leaf(leaf)?;
             if leaf
                 .key(0)
                 .zip(leaf.key(leaf.len().saturating_sub(1)))
@@ -688,7 +671,7 @@ impl<S: Store> OwnedReadSession<S> {
         };
         loop {
             if node.is_leaf() {
-                ReadSession::<S>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 if !state.recent_leaf_disabled {
                     state.recent_leaf = Some(node.clone());
                 }
@@ -697,7 +680,7 @@ impl<S: Store> OwnedReadSession<S> {
                     .ok()
                     .map(|index| ReadValueHandle { node, index }));
             }
-            let index = ReadSession::<S>::route_index(&node, key)?;
+            let index = route_index(&node, key)?;
             let cid = node.child_cid(index)?;
             node = match state.local_nodes.get(&cid) {
                 Some(node) => node,
@@ -904,12 +887,12 @@ impl<S: Store> OwnedRangeScanSession<S> {
         let mut stack = Vec::new();
         loop {
             if node.is_leaf() {
-                ReadSession::<S>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 let index = packed_partition_point(&node, |candidate| candidate < key);
                 stack.push(PathFrame { node, index });
                 return Ok(stack);
             }
-            ReadSession::<S>::validate_internal(&node)?;
+            validate_internal(&node)?;
             let index =
                 packed_partition_point(&node, |candidate| candidate <= key).saturating_sub(1);
             let cid = node.child_cid(index)?;
@@ -935,9 +918,9 @@ impl<S: Store> OwnedRangeScanSession<S> {
             if !frame.node.is_leaf() {
                 return Err(Error::InvalidNode);
             }
-            ReadSession::<S>::validate_leaf(&frame.node)?;
+            validate_leaf(&frame.node)?;
             if frame.index >= frame.node.len() {
-                if !ReadSession::<S>::advance_forward(self.manager.as_ref(), &mut self.stack)? {
+                if !advance_forward_sync(self.manager.as_ref(), &mut self.stack)? {
                     self.done = true;
                     return Ok(ScanOutcome::complete(visited));
                 }
@@ -963,6 +946,212 @@ impl<S: Store> OwnedRangeScanSession<S> {
 }
 
 impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
+    pub fn tree(&self) -> &Tree {
+        self.inner.tree()
+    }
+
+    pub fn len(&self) -> Result<u64, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.len();
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn is_empty(&self) -> Result<bool, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.is_empty();
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn rank(&mut self, key: &[u8]) -> Result<u64, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.rank(key);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn get_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.get_with(key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn get_lease(&mut self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
+        self.get_handle(key)
+            .map(|handle| handle.map(|handle| OwnedValueLease { handle }))
+    }
+
+    pub(crate) fn get_handle(&mut self, key: &[u8]) -> Result<Option<ReadValueHandle>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.get_handle(key);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn get_value_ref_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'value> FnOnce(ValueRefView<'value>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.get_value_ref_with(key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn contains_key(&mut self, key: &[u8]) -> Result<bool, Error> {
+        Ok(self.get_with(key, |_| ())?.is_some())
+    }
+
+    pub fn get_many_with<K, F>(&mut self, keys: &[K], visit: F) -> Result<(), Error>
+    where
+        K: AsRef<[u8]>,
+        F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>),
+    {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.get_many_with(keys, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn select_with<R>(
+        &mut self,
+        ordinal: u64,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.select_with(ordinal, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn first_entry_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.first_entry_with(read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn last_entry_with<R>(
+        &mut self,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.last_entry_with(read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn lower_bound_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.lower_bound_with(key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn upper_bound_with<R>(
+        &mut self,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.upper_bound_with(key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_range(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_range(start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_range_until<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_range_until(start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_prefix(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_prefix(prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_prefix_until<B>(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_prefix_until(prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_range_reverse(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_range_reverse(start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_range_reverse_until<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_range_reverse_until(start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_prefix_reverse(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+    ) -> Result<u64, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_prefix_reverse(prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    pub fn scan_prefix_reverse_until<B>(
+        &mut self,
+        prefix: &[u8],
+        visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let ready_store = self.inner.manager.store.clone();
+        let future = self.inner.scan_prefix_reverse_until(prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
+    }
+}
+
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async sessions"
+)]
+impl<'manager, 'tree, S: Store> LegacyReadSession<'manager, 'tree, S> {
     /// The immutable tree bound to this session.
     pub fn tree(&self) -> &Tree {
         self.tree
@@ -1956,11 +2145,11 @@ where
         let mut rank = 0u64;
         loop {
             if node.is_leaf() {
-                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 let insertion = packed_partition_point(&node, |candidate| candidate < key);
                 return Ok(rank.saturating_add(insertion as u64));
             }
-            ReadSession::<super::store::MemStore>::validate_internal(&node)?;
+            validate_internal(&node)?;
             let insertion = packed_partition_point(&node, |candidate| candidate <= key);
             if insertion == 0 {
                 return Ok(rank);
@@ -1987,7 +2176,7 @@ where
         };
         loop {
             if node.is_leaf() {
-                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 let index = usize::try_from(ordinal).map_err(|_| Error::InvalidNode)?;
                 let Some(key) = node.key(index) else {
                     return Ok(None);
@@ -1995,7 +2184,7 @@ where
                 let value = node.value(index).ok_or(Error::InvalidNode)?;
                 return Ok(Some(read(EntryRef::new(key, value))));
             }
-            ReadSession::<super::store::MemStore>::validate_internal(&node)?;
+            validate_internal(&node)?;
             let mut selected = None;
             for index in 0..node.len() {
                 let count = self.child_count(&node, index).await?;
@@ -2075,7 +2264,7 @@ where
             .as_ref()
             .filter(|_| !self.recent_leaf_disabled)
         {
-            ReadSession::<super::store::MemStore>::validate_leaf(leaf)?;
+            validate_leaf(leaf)?;
             if leaf
                 .key(0)
                 .zip(leaf.key(leaf.len().saturating_sub(1)))
@@ -2100,7 +2289,7 @@ where
         };
         loop {
             if node.is_leaf() {
-                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 if !self.recent_leaf_disabled {
                     self.recent_leaf = Some(node.clone());
                 }
@@ -2134,7 +2323,7 @@ where
             .as_ref()
             .filter(|_| !self.recent_leaf_disabled)
         {
-            ReadSession::<super::store::MemStore>::validate_leaf(leaf)?;
+            validate_leaf(leaf)?;
             if leaf
                 .key(0)
                 .zip(leaf.key(leaf.len().saturating_sub(1)))
@@ -2159,7 +2348,7 @@ where
         };
         loop {
             if node.is_leaf() {
-                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 if !self.recent_leaf_disabled {
                     self.recent_leaf = Some(node.clone());
                 }
@@ -2417,11 +2606,11 @@ where
         while let Some(cid) = stack.pop() {
             let node = self.manager.load_read_arc(&cid).await?;
             if node.is_leaf() {
-                ReadSession::<super::store::MemStore>::validate_leaf(&node)?;
+                validate_leaf(&node)?;
                 total = total.saturating_add(node.len() as u64);
                 continue;
             }
-            ReadSession::<super::store::MemStore>::validate_internal(&node)?;
+            validate_internal(&node)?;
             if (0..node.len()).all(|index| node.child_count(index).is_some_and(|count| count > 0)) {
                 total = total.saturating_add(
                     (0..node.len())
@@ -2564,6 +2753,61 @@ where
         Ok(false)
     }
 }
+fn validate_leaf(node: &ReadNode) -> Result<(), Error> {
+    if !node.is_leaf() {
+        return Err(Error::InvalidNode);
+    }
+    Ok(())
+}
+
+fn validate_internal(node: &ReadNode) -> Result<(), Error> {
+    if node.is_leaf() || node.is_empty() {
+        return Err(Error::InvalidNode);
+    }
+    Ok(())
+}
+
+fn route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
+    if node.is_leaf() {
+        validate_leaf(node)?;
+    } else {
+        validate_internal(node)?;
+    }
+    Ok(match node.search(key) {
+        Ok(index) => index,
+        Err(index) => index.saturating_sub(1),
+    })
+}
+
+fn advance_forward_sync<S: Store>(
+    manager: &Prolly<S>,
+    stack: &mut Vec<PathFrame>,
+) -> Result<bool, Error> {
+    stack.pop();
+    while let Some(parent) = stack.last_mut() {
+        validate_internal(&parent.node)?;
+        parent.index += 1;
+        if parent.index >= parent.node.len() {
+            stack.pop();
+            continue;
+        }
+        let cid = parent.node.child_cid(parent.index)?;
+        let mut node = manager.load_read_arc(&cid)?;
+        loop {
+            if node.is_leaf() {
+                validate_leaf(&node)?;
+                stack.push(PathFrame { node, index: 0 });
+                return Ok(true);
+            }
+            validate_internal(&node)?;
+            let cid = node.child_cid(0)?;
+            stack.push(PathFrame { node, index: 0 });
+            node = manager.load_read_arc(&cid)?;
+        }
+    }
+    Ok(false)
+}
+
 fn async_route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
     if !node.is_leaf() && node.is_empty() {
         return Err(Error::InvalidNode);
