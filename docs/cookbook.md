@@ -1358,7 +1358,7 @@ Enable async support:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.2", features = ["async-store"] }
+prolly-map = "0.3"
 ```
 
 Implement `AsyncStore` over your object client. Override `read_parallelism` or `batch_get_ordered` so tree traversal can overlap network reads.

@@ -1370,11 +1370,12 @@ calculating a different change set.
 
 ## Async Versioned Maps
 
-Enable the `async-store` feature for remote, browser, and async-native stores:
+Async storage is available without a Cargo feature for remote, browser, and
+async-native stores:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.2", features = ["async-store"] }
+prolly-map = "0.3"
 ```
 
 The Rust import name remains `prolly`.

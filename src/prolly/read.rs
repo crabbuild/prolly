@@ -339,7 +339,7 @@ struct OwnedReadSessionState {
 }
 
 /// An owned, root-bound read context suitable for long-lived native binding
-/// handles. Unlike [`LegacyReadSession`], this type owns both manager and tree state,
+/// handles. Unlike [`ReadSession`], this type owns both manager and tree state,
 /// so foreign-language adapters can reuse retained routing state across calls.
 ///
 /// Stateful point reads are synchronized. High-concurrency callers should use

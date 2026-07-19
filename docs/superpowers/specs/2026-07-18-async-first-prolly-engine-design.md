@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-18
 
-**Status:** Approved
+**Status:** Implemented; final repository verification in progress
 
 **Audience:** Prolly maintainers, storage-adapter authors, binding maintainers, and performance reviewers
 

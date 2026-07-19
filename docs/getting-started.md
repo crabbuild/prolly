@@ -17,7 +17,7 @@ From crates.io, once published:
 
 ```toml
 [dependencies]
-prolly-map = "0.2"
+prolly-map = "0.3"
 ```
 
 From a project that vendors this repository under `crates/prolly`:
@@ -33,18 +33,18 @@ Then in Rust:
 use prolly::{Config, MemStore, Prolly};
 ```
 
-Optional async runtime features and storage adapters:
+Optional runtime integration and storage adapters:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.2", features = ["async-store", "tokio"] }
+prolly-map = { version = "0.3", features = ["tokio"] }
 prolly-store-sqlite = "0.1"
 ```
 
 Feature guide:
 
-- `async-store`: enables `AsyncStore`, `AsyncProlly`, async range and diff
-  iterators, and sync-to-async store adapters.
+- `async-store`: empty compatibility spelling; the async-first core is always
+  available.
 - `tokio`: enables Tokio blocking adapters for sync stores and blob stores.
 - Storage engines are separate `prolly-store-*` crates; add only the adapters
   the application uses.
@@ -280,12 +280,11 @@ root name.
 
 ## Async Start
 
-The async API is enabled with the `async-store` feature. It does not require
-Tokio by itself.
+The async API is always enabled and does not require Tokio.
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.2", features = ["async-store"] }
+prolly-map = "0.3"
 ```
 
 Use `SyncStoreAsAsync` for simple migration from an existing sync store:

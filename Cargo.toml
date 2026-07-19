@@ -37,6 +37,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
+# Compatibility spelling. Async traits and the async-first engine are unconditional.
 async-store = []
 tokio = ["dep:tokio"]
 

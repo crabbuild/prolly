@@ -85,9 +85,10 @@ Status: **Shipped**
 Status: **Shipped**
 
 - `Store` trait for synchronous byte stores
-- `AsyncStore` trait behind the `async-store` feature
-- `AsyncProlly` manager for async reads, writes, range scans, diff, merge, stats, and batch mutation
-- Sync-store-as-async adapter
+- Always-available `AsyncStore` trait and runtime-neutral async-first engine
+- `AsyncProlly` for native async reads, writes, range scans, diff, merge,
+  proofs, stats, builders, snapshots, GC, and batch mutation
+- Runtime-free sync `Prolly` facade over the same engine through a ready adapter
 - Tokio blocking adapter behind the `tokio` feature
 - `Arc<T>` store support
 - In-memory store

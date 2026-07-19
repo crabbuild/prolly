@@ -21,7 +21,7 @@ backups for production data and follow Turso's release notes when upgrading.
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.3", features = ["async-store"] }
+prolly-map = "0.3"
 prolly-store-turso = "0.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -152,4 +152,3 @@ cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml \
 The sync integration test makes network calls only when both
 `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set. Otherwise it exits without
 contacting Turso Cloud.
-
