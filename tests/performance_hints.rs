@@ -90,6 +90,10 @@ impl Store for CountingHintStore {
         Ok(keys.iter().map(|key| nodes.get(*key).cloned()).collect())
     }
 
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
     fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
         let mut nodes = self.nodes.lock().unwrap();
         for (key, value) in entries {

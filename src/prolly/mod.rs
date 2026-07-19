@@ -91,9 +91,9 @@ use std::borrow::Borrow;
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
 use std::ops::Range;
-use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
 use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -3369,6 +3369,11 @@ impl<S: Store> Prolly<S> {
             .ok_or(Error::InvalidNode)
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async cache pinning"
+    )]
     fn load_arc_pinned(&self, cid: &Cid) -> Result<(Arc<Node>, bool), Error> {
         if let Ok(mut cache) = self.node_cache.write() {
             if let Some(node) = cache.get(cid) {
@@ -3666,15 +3671,12 @@ impl<S: Store> Prolly<S> {
 
     /// Return the number of cached nodes in this Prolly manager.
     pub fn cache_len(&self) -> usize {
-        self.node_cache.read().map(|cache| cache.len()).unwrap_or(0)
+        self.engine.cache_len()
     }
 
     /// Return the serialized-node byte weight retained by this manager cache.
     pub fn cache_bytes_len(&self) -> usize {
-        self.node_cache
-            .read()
-            .map(|cache| cache.bytes_len())
-            .unwrap_or(0)
+        self.engine.cache_bytes_len()
     }
 
     /// Return the number of pinned nodes currently retained by this manager.
@@ -3683,18 +3685,12 @@ impl<S: Store> Prolly<S> {
     /// above configured node or byte limits, and cache misses still fall back to
     /// the backing store.
     pub fn cache_pinned_len(&self) -> usize {
-        self.node_cache
-            .read()
-            .map(|cache| cache.pinned_len())
-            .unwrap_or(0)
+        self.engine.cache_pinned_len()
     }
 
     /// Return the serialized-node byte weight of pinned cache entries.
     pub fn cache_pinned_bytes_len(&self) -> usize {
-        self.node_cache
-            .read()
-            .map(|cache| cache.pinned_bytes_len())
-            .unwrap_or(0)
+        self.engine.cache_pinned_bytes_len()
     }
 
     /// Pin the root node of a tree in this manager's node cache.
@@ -3703,12 +3699,9 @@ impl<S: Store> Prolly<S> {
     /// start from the same root. Empty trees pin nothing. The return value is
     /// the number of nodes that became newly pinned.
     pub fn pin_tree_root(&self, tree: &Tree) -> Result<usize, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(0);
-        };
-
-        let (_, newly_pinned) = self.load_arc_pinned(root_cid)?;
-        Ok(usize::from(newly_pinned))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.pin_tree_root(tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Pin the root-to-leaf lookup path for `key` in this manager's node cache.
@@ -3718,29 +3711,9 @@ impl<S: Store> Prolly<S> {
     /// pin nothing. The return value is the number of nodes that became newly
     /// pinned.
     pub fn pin_tree_path(&self, tree: &Tree, key: &[u8]) -> Result<usize, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(0);
-        };
-
-        let mut cid = root_cid.clone();
-        let mut newly_pinned = 0usize;
-
-        loop {
-            let (node, was_newly_pinned) = self.load_arc_pinned(&cid)?;
-            newly_pinned += usize::from(was_newly_pinned);
-
-            if node.leaf {
-                break;
-            }
-
-            let idx = match node.search(key) {
-                Ok(i) => i,
-                Err(i) => i.saturating_sub(1),
-            };
-            cid = child_cid_at(&node, idx)?;
-        }
-
-        Ok(newly_pinned)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.pin_tree_path(tree, key);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Persist a correctness-optional root-to-leaf path hint for a hot prefix.
@@ -3755,28 +3728,9 @@ impl<S: Store> Prolly<S> {
     /// is ignored by [`Prolly::hydrate_prefix_path_hint`], and all tree
     /// operations retain their normal traversal fallback.
     pub fn publish_prefix_path_hint(&self, tree: &Tree, prefix: &[u8]) -> Result<bool, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(false);
-        };
-
-        if !self.store.supports_hints() {
-            return Ok(false);
-        }
-
-        let path = self.find_path_hint_entries(tree, prefix)?;
-        if path.is_empty() {
-            return Ok(false);
-        }
-
-        let bytes = encode_prefix_path_hint(root_cid, prefix, &path)?;
-        self.store
-            .put_hint(
-                PREFIX_PATH_HINT_NAMESPACE,
-                &prefix_path_hint_key(root_cid, prefix),
-                &bytes,
-            )
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        Ok(true)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.publish_prefix_path_hint(tree, prefix);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Hydrate this manager's node cache from a persisted prefix path hint.
@@ -3786,15 +3740,9 @@ impl<S: Store> Prolly<S> {
     /// hint exists, or the hint cannot be validated for this exact root and
     /// prefix. Store I/O errors are still returned.
     pub fn hydrate_prefix_path_hint(&self, tree: &Tree, prefix: &[u8]) -> Result<bool, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(false);
-        };
-
-        if !self.store.supports_hints() {
-            return Ok(false);
-        }
-
-        load_prefix_path_hint(self, root_cid, prefix)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.hydrate_prefix_path_hint(tree, prefix);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Persist recently changed key spans for a root transition.
@@ -3816,29 +3764,9 @@ impl<S: Store> Prolly<S> {
     where
         I: IntoIterator<Item = ChangedSpan>,
     {
-        if base.root == changed.root || !self.store.supports_hints() {
-            return Ok(false);
-        }
-
-        let spans = normalize_changed_spans(spans);
-        if spans.is_empty() {
-            return Ok(false);
-        }
-
-        let hint = ChangedSpanHint {
-            base_root: base.root.clone(),
-            changed_root: changed.root.clone(),
-            spans,
-        };
-        let bytes = encode_changed_span_hint(&hint)?;
-        self.store
-            .put_hint(
-                CHANGED_SPANS_HINT_NAMESPACE,
-                &changed_span_hint_key(base.root.as_ref(), changed.root.as_ref()),
-                &bytes,
-            )
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        Ok(true)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.publish_changed_spans_hint(base, changed, spans);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Load recently changed key spans for a root transition.
@@ -3851,11 +3779,9 @@ impl<S: Store> Prolly<S> {
         base: &Tree,
         changed: &Tree,
     ) -> Result<Option<ChangedSpanHint>, Error> {
-        if !self.store.supports_hints() {
-            return Ok(None);
-        }
-
-        load_changed_span_hint(self, base.root.as_ref(), changed.root.as_ref())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.load_changed_spans_hint(base, changed);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Unpin all pinned node-cache entries for this manager.
@@ -3863,18 +3789,12 @@ impl<S: Store> Prolly<S> {
     /// After unpinning, normal cache eviction runs immediately. Returns the
     /// number of entries that were pinned before this call.
     pub fn unpin_all_cache_nodes(&self) -> usize {
-        if let Ok(mut cache) = self.node_cache.write() {
-            let (unpinned, evictions) = cache.unpin_all();
-            self.metrics.add_cache_evictions(evictions);
-            unpinned
-        } else {
-            0
-        }
+        self.engine.unpin_all_cache_nodes()
     }
 
     /// Return cumulative cache and node I/O metrics for this manager.
     pub fn metrics(&self) -> ProllyMetricsSnapshot {
-        self.metrics.snapshot()
+        self.engine.metrics()
     }
 
     /// Reset cumulative manager metrics to zero.
@@ -3882,7 +3802,7 @@ impl<S: Store> Prolly<S> {
     /// This does not clear the node cache; call [`Prolly::clear_cache`] when
     /// you want the next operation to run from a cold manager cache.
     pub fn reset_metrics(&self) {
-        self.metrics.reset();
+        self.engine.reset_metrics();
     }
 
     /// Load a named root as a [`Tree`] through the underlying manifest store.
@@ -3893,10 +3813,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStore,
     {
-        self.store
-            .get_root(name)
-            .map(|manifest| manifest.map(RootManifest::into_tree))
-            .map_err(|err| Error::Store(Box::new(err)))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.load_named_root(name);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Load explicit named roots and report names that were absent.
@@ -3910,23 +3829,9 @@ impl<S: Store> Prolly<S> {
         I: IntoIterator<Item = N>,
         N: AsRef<[u8]>,
     {
-        let mut seen = HashSet::new();
-        let mut roots = Vec::new();
-        let mut missing_names = Vec::new();
-
-        for name in names {
-            let name = name.as_ref().to_vec();
-            if !seen.insert(name.clone()) {
-                continue;
-            }
-
-            match self.load_named_root(&name)? {
-                Some(tree) => roots.push(NamedRoot::new(name, tree)),
-                None => missing_names.push(name),
-            }
-        }
-
-        Ok(NamedRootSelection::new(roots, missing_names))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.load_named_roots(names);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// List every named root in the manifest store.
@@ -3937,9 +3842,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStoreScan,
     {
-        self.store
-            .list_roots()
-            .map_err(|err| Error::Store(Box::new(err)))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.list_named_root_manifests();
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// List every named root in the manifest store.
@@ -3950,11 +3855,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStoreScan,
     {
-        Ok(self
-            .list_named_root_manifests()?
-            .into_iter()
-            .map(|root| root.into_named_root())
-            .collect())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.list_named_roots();
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Select named roots according to a retention policy.
@@ -3968,54 +3871,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStoreScan,
     {
-        match retention {
-            NamedRootRetention::All => Ok(NamedRootSelection::new(
-                self.list_named_roots()?,
-                Vec::new(),
-            )),
-            NamedRootRetention::Exact { names } => self.load_named_roots(names.iter()),
-            NamedRootRetention::Prefix { prefix } => {
-                let roots = self
-                    .list_named_roots()?
-                    .into_iter()
-                    .filter(|root| root.name.starts_with(prefix))
-                    .collect();
-                Ok(NamedRootSelection::new(roots, Vec::new()))
-            }
-            NamedRootRetention::NewestByName { prefix, count } => {
-                if *count == 0 {
-                    return Ok(NamedRootSelection::default());
-                }
-
-                let mut roots = self
-                    .list_named_roots()?
-                    .into_iter()
-                    .filter(|root| root.name.starts_with(prefix))
-                    .collect::<Vec<_>>();
-                if roots.len() > *count {
-                    roots = roots.split_off(roots.len() - *count);
-                }
-                Ok(NamedRootSelection::new(roots, Vec::new()))
-            }
-            NamedRootRetention::UpdatedSince {
-                prefix,
-                min_updated_at_millis,
-            } => {
-                let roots = self
-                    .list_named_root_manifests()?
-                    .into_iter()
-                    .filter(|root| root.name.starts_with(prefix))
-                    .filter(|root| {
-                        root.manifest
-                            .updated_at_millis
-                            .map(|updated_at| updated_at >= *min_updated_at_millis)
-                            .unwrap_or(false)
-                    })
-                    .map(|root| root.into_named_root())
-                    .collect();
-                Ok(NamedRootSelection::new(roots, Vec::new()))
-            }
-        }
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.load_retained_named_roots(retention);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Publish a tree handle under a durable name.
@@ -4027,7 +3885,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStore,
     {
-        self.publish_named_root_at_millis(name, tree, current_unix_time_millis())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.publish_named_root(name, tree);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Publish a tree handle under a durable name with explicit timestamp
@@ -4045,20 +3905,11 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStore,
     {
-        let created_at_millis = self
-            .store
-            .get_root(name)
-            .map_err(|err| Error::Store(Box::new(err)))?
-            .and_then(|manifest| manifest.created_at_millis)
-            .unwrap_or(timestamp_millis);
-        let manifest = RootManifest::from_tree_with_timestamps_millis(
-            tree,
-            Some(created_at_millis),
-            Some(timestamp_millis),
-        );
-        self.store
-            .put_root(name, &manifest)
-            .map_err(|err| Error::Store(Box::new(err)))
+        let ready_store = self.engine.store.clone();
+        let future = self
+            .engine
+            .publish_named_root_at_millis(name, tree, timestamp_millis);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Delete a durable named root.
@@ -4069,9 +3920,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStore,
     {
-        self.store
-            .delete_root(name)
-            .map_err(|err| Error::Store(Box::new(err)))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.delete_named_root(name);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Atomically update a named root when the current tree matches `expected`.
@@ -4087,7 +3938,9 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStore,
     {
-        self.compare_and_swap_named_root_at_millis(name, expected, new, current_unix_time_millis())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.compare_and_swap_named_root(name, expected, new);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Atomically update a named root with explicit timestamp metadata.
@@ -4105,42 +3958,14 @@ impl<S: Store> Prolly<S> {
     where
         S: ManifestStore,
     {
-        let current = self
-            .store
-            .get_root(name)
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        let expected_manifest = match (expected, current) {
-            (None, None) => None,
-            (None, Some(current)) => {
-                return Ok(NamedRootUpdate::Conflict {
-                    current: Some(current.into_tree()),
-                });
-            }
-            (Some(expected_tree), Some(current)) if current.to_tree() == *expected_tree => {
-                Some(current)
-            }
-            (Some(_), current) => {
-                return Ok(NamedRootUpdate::Conflict {
-                    current: current.map(RootManifest::into_tree),
-                });
-            }
-        };
-
-        let new_manifest = new.map(|tree| {
-            let created_at_millis = expected_manifest
-                .as_ref()
-                .and_then(|manifest| manifest.created_at_millis)
-                .unwrap_or(timestamp_millis);
-            RootManifest::from_tree_with_timestamps_millis(
-                tree,
-                Some(created_at_millis),
-                Some(timestamp_millis),
-            )
-        });
-        self.store
-            .compare_and_swap_root(name, expected_manifest.as_ref(), new_manifest.as_ref())
-            .map(NamedRootUpdate::from)
-            .map_err(|err| Error::Store(Box::new(err)))
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.compare_and_swap_named_root_at_millis(
+            name,
+            expected,
+            new,
+            timestamp_millis,
+        );
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Borrow the underlying store.
@@ -4190,6 +4015,11 @@ impl<S: Store> Prolly<S> {
         Ok(path)
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async hints"
+    )]
     fn find_path_hint_entries(
         &self,
         tree: &Tree,
@@ -5628,6 +5458,177 @@ where
         Ok(newly_pinned)
     }
 
+    /// Persist a correctness-optional root-to-leaf path hint for a hot prefix.
+    pub async fn publish_prefix_path_hint(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+    ) -> Result<bool, Error> {
+        let Some(root_cid) = &tree.root else {
+            return Ok(false);
+        };
+        if !self.store.supports_hints() {
+            return Ok(false);
+        }
+
+        let mut path = Vec::new();
+        let mut cid = root_cid.clone();
+        loop {
+            let node = self.load_arc(&cid).await?;
+            let child_index = path_index_for_key(&node, prefix);
+            path.push(PrefixPathHintEntryWithNode {
+                cid: cid.clone(),
+                node: node.clone(),
+                child_index,
+            });
+            if node.leaf {
+                break;
+            }
+            cid = child_cid_at(&node, child_index)?;
+        }
+
+        let bytes = encode_prefix_path_hint(root_cid, prefix, &path)?;
+        self.store
+            .put_hint(
+                PREFIX_PATH_HINT_NAMESPACE,
+                &prefix_path_hint_key(root_cid, prefix),
+                &bytes,
+            )
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        Ok(true)
+    }
+
+    /// Hydrate the validated node cache from a correctness-optional prefix hint.
+    pub async fn hydrate_prefix_path_hint(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+    ) -> Result<bool, Error> {
+        let Some(root) = &tree.root else {
+            return Ok(false);
+        };
+        if !self.store.supports_hints() {
+            return Ok(false);
+        }
+        let Some(bytes) = self
+            .store
+            .get_hint(
+                PREFIX_PATH_HINT_NAMESPACE,
+                &prefix_path_hint_key(root, prefix),
+            )
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+        else {
+            return Ok(false);
+        };
+        let Ok(hint) = serde_cbor::from_slice::<PrefixPathHint>(&bytes) else {
+            return Ok(false);
+        };
+        if hint.version != PREFIX_PATH_HINT_VERSION
+            || hint.root != *root
+            || hint.prefix != prefix
+            || hint.entries.is_empty()
+            || hint.entries.first().map(|entry| &entry.cid) != Some(root)
+        {
+            return Ok(false);
+        }
+
+        let cids = hint
+            .entries
+            .iter()
+            .map(|entry| entry.cid.clone())
+            .collect::<Vec<_>>();
+        let nodes = match self.load_many_ordered(&cids).await {
+            Ok(nodes) => nodes,
+            Err(error @ Error::Store(_)) => return Err(error),
+            Err(_) => return Ok(false),
+        };
+        let mut path = Vec::with_capacity(hint.entries.len());
+        for (entry, node) in hint.entries.into_iter().zip(nodes) {
+            path.push(PrefixPathHintEntryWithNode {
+                cid: entry.cid,
+                node,
+                child_index: entry.child_index,
+            });
+        }
+        Ok(prefix_path_hint_is_valid(root, prefix, &path))
+    }
+
+    /// Persist normalized changed spans for a root transition.
+    pub async fn publish_changed_spans_hint<I>(
+        &self,
+        base: &Tree,
+        changed: &Tree,
+        spans: I,
+    ) -> Result<bool, Error>
+    where
+        I: IntoIterator<Item = ChangedSpan>,
+    {
+        if base.root == changed.root || !self.store.supports_hints() {
+            return Ok(false);
+        }
+        let spans = normalize_changed_spans(spans);
+        if spans.is_empty() {
+            return Ok(false);
+        }
+        let hint = ChangedSpanHint {
+            base_root: base.root.clone(),
+            changed_root: changed.root.clone(),
+            spans,
+        };
+        let bytes = encode_changed_span_hint(&hint)?;
+        self.store
+            .put_hint(
+                CHANGED_SPANS_HINT_NAMESPACE,
+                &changed_span_hint_key(base.root.as_ref(), changed.root.as_ref()),
+                &bytes,
+            )
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        Ok(true)
+    }
+
+    /// Load normalized changed spans for an exact root transition.
+    pub async fn load_changed_spans_hint(
+        &self,
+        base: &Tree,
+        changed: &Tree,
+    ) -> Result<Option<ChangedSpanHint>, Error> {
+        if !self.store.supports_hints() {
+            return Ok(None);
+        }
+        let Some(bytes) = self
+            .store
+            .get_hint(
+                CHANGED_SPANS_HINT_NAMESPACE,
+                &changed_span_hint_key(base.root.as_ref(), changed.root.as_ref()),
+            )
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+        else {
+            return Ok(None);
+        };
+        let Ok(wire) = serde_cbor::from_slice::<ChangedSpanHintWire>(&bytes) else {
+            return Ok(None);
+        };
+        if wire.version != CHANGED_SPANS_HINT_VERSION
+            || wire.base_root != base.root
+            || wire.changed_root != changed.root
+        {
+            return Ok(None);
+        }
+        let spans = normalize_changed_spans(wire.spans);
+        if spans.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(ChangedSpanHint {
+            base_root: wire.base_root,
+            changed_root: wire.changed_root,
+            spans,
+        }))
+    }
+
     /// Unpin all pinned node-cache entries for this async manager.
     ///
     /// After unpinning, normal cache eviction runs immediately. Returns the
@@ -6464,6 +6465,11 @@ fn encode_changed_span_hint(hint: &ChangedSpanHint) -> Result<Vec<u8>, Error> {
     serde_cbor::ser::to_vec_packed(&wire).map_err(|err| Error::Deserialize(err.to_string()))
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async hints"
+)]
 fn load_prefix_path_hint<S: Store>(
     prolly: &Prolly<S>,
     root: &Cid,
@@ -6536,6 +6542,11 @@ fn load_prefix_path_hint<S: Store>(
     Ok(true)
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async hints"
+)]
 fn load_changed_span_hint<S: Store>(
     prolly: &Prolly<S>,
     base_root: Option<&Cid>,
