@@ -2,7 +2,9 @@
 
 **Date:** 2026-07-19
 
-**Status:** Conversation-approved; written-spec review pending before planning
+**Status:** Implemented and locally verified; the requester stopped the latest
+10K-through-2M follow-up before completion, so that partial run is excluded
+from acceptance evidence
 
 **Content type:** Conceptual design specification
 

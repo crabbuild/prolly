@@ -1,0 +1,3 @@
+suite,target,records,api,pattern,pairs,samples_per_revision_pair,paired_median_latency_change_pct,paired_median_latency_change_ns,paired_median_throughput_change_pct,paired_median_p50_change_pct,paired_median_p50_change_ns,paired_median_p95_change_pct,paired_median_p95_change_ns,status,reasons
+local-adapters,sqlite-sync,10000,diff,append,20,3,5.522981366459627,437.5,-5.2289834088677765,5.522981366459627,437.5,5.522981366459627,437.5,pass,
+local-adapters,sqlite-sync,10000,diff,clustered,20,3,4.920137444684446,562.5,-4.689187633555568,4.920137444684446,562.5,4.920137444684446,562.5,pass,

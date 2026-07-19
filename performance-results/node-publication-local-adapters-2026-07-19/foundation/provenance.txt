@@ -1,0 +1,15 @@
+suite=foundation
+baseline_revision=a2f4e7a3066d2259783c8d815b45c0461c77b06b
+candidate_revision=81357948363fdb51dbc201ae5ba1a7377bb297e0
+sizes=10000
+runs=20
+changes=100
+apis=put,delete,batch,build,merge,range-delete,forward
+patterns=random
+adapters=memory-sync,memory-async-adapted
+execution=alternating-local-only
+isolate_cells=false
+measurement_samples=1
+minimum_pairs=5
+cloud_sync=disabled
+foundation_samples=300

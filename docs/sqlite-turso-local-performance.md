@@ -16,6 +16,23 @@ The completed async-first architecture result is in
 It contains all requested sizes through 2M records, all three mutation patterns,
 put/batch/diff/merge, three repetitions, and no failed or skipped cells.
 
+The later universal node-publication work was checked independently against
+baseline `a2f4e7a3` at engine candidate `81357948`. The in-memory foundation
+gate passed 21/21 groups, the focused SQLite/Turso gate passed 24/24 groups,
+and the composed all-local-store gate passed 108/108 groups across 5,490 raw
+rows. In the focused gate, Turso point-publication latency improved by 57.13%
+to 69.93% across append, random, and clustered keys; its p95 improved by 49.29%
+to 65.46%. The method, fixed confirmation policy, limitations, and exact
+artifacts are in the
+[`universal node-publication findings`](../performance-results/node-publication-local-adapters-2026-07-19/findings.md).
+
+A new 10K-through-2M follow-up run was stopped after 504 data rows at the
+requester's direction. Its partial output is deliberately excluded from the
+repository and from all completed-result claims. The 2026-07-18 matrix above
+remains the completed scale result; the 2026-07-19 evidence is the exact
+foundation, focused 10K, and all-local-adapter regression evidence for the
+universal publication candidate.
+
 A later current-head regression slice found and removed sequential replay
 discovery in the 100-key random batch. Turso's 10K random-batch median improved
 from 46.34 ms to 7.42 ms with no 10K API/pattern cell exceeding the 5% median

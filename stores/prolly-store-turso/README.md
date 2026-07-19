@@ -132,6 +132,11 @@ committed. Unknown publication origins automatically receive this general
 fallback. The generic `TursoStore` layer validates node bytes against content
 IDs and decodes named-root manifests before the backend fast path runs.
 
+The local-only paired evidence for this override and the universal fallback is
+recorded in the repository's
+[`node-publication findings`](../../performance-results/node-publication-local-adapters-2026-07-19/findings.md).
+Turso Cloud synchronization was disabled for every reported measurement.
+
 These transaction and compare-and-swap guarantees are scoped to one local
 database or synced replica. Turso Cloud synchronization does not turn them into
 a distributed compare-and-swap across replicas: two offline writers can each

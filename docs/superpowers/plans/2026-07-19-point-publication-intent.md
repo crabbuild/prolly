@@ -1337,6 +1337,13 @@ git commit -m "perf: add universal publication regression gates"
 
 This task collects release evidence only after correctness and tooling pass.
 
+Execution note (2026-07-19): the clean-baseline, focused, foundation, and
+all-local-adapter gates completed. The requester stopped the new full 10K-to-2M
+follow-up after 504 data rows; its partial output was moved outside the worktree
+and is not acceptance evidence. The previously completed full scale matrix is
+retained as earlier scale evidence, while this candidate's exact evidence is
+the 21/21 foundation gate, 24/24 focused gate, and 108/108 all-store gate.
+
 **Files:**
 
 - Create: `performance-results/node-publication-focused-2026-07-19/`
@@ -1352,7 +1359,7 @@ This task collects release evidence only after correctness and tooling pass.
 - Consumes: verified implementation and Task 9 tooling.
 - Produces: focused and full local evidence, adapter screens, final documentation, pushed commits, and an updated pull request.
 
-- [ ] **Step 1: Verify the clean baseline created by Task 9**
+- [x] **Step 1: Verify the clean baseline created by Task 9**
 
 Verify:
 
@@ -1363,7 +1370,7 @@ git -C /private/tmp/prolly-node-publication-baseline status --porcelain
 
 Expected: HEAD is `a2f4e7a3066d2259783c8d815b45c0461c77b06b` and status is empty. Stop rather than reusing the directory if either check differs. Build baseline and candidate into different target directories.
 
-- [ ] **Step 2: Run five alternating focused pairs**
+- [x] **Step 2: Run five alternating focused pairs**
 
 ```sh
 scripts/run_node_publication_revision_gate.sh \
@@ -1379,7 +1386,7 @@ scripts/run_node_publication_revision_gate.sh \
 
 Require at least 40% lower Turso point-put median latency for every pattern and all universal 5%/10% no-regression gates. If a protected cell crosses a gate, run five additional alternating pairs and evaluate the combined ten.
 
-- [ ] **Step 3: Run in-memory and all-local-adapter screens**
+- [x] **Step 3: Run in-memory and all-local-adapter screens**
 
 Run five alternating baseline/candidate executions at 10,000 records:
 
@@ -1407,6 +1414,10 @@ Record unavailable optional prerequisites in `environment-limitations.csv`. Defa
 
 - [ ] **Step 4: Run the full 432-row candidate matrix**
 
+Stopped by requester after 504 baseline/candidate data rows from the expanded
+three-sample run. The incomplete output is not committed or summarized as a
+result.
+
 The requested record sizes are 10K, 50K, 100K, 500K, 1M, and 2M.
 
 ```sh
@@ -1424,7 +1435,7 @@ scripts/run_node_publication_revision_gate.sh \
 
 Expected: all 432 candidate rows validate with no skip. Turso point put improves at every size/pattern, point work remains bounded by tree height, and no protected median or p95 gate fails.
 
-- [ ] **Step 5: Update documentation with measured facts**
+- [x] **Step 5: Update documentation with measured facts**
 
 Document:
 
@@ -1450,6 +1461,15 @@ git status --short
 ```
 
 Expected: all checks pass and status contains only the intended reports and documentation before the final commit.
+
+Verification outcome: formatting, root all-feature tests and doctests, strict
+Clippy, no-feature/default/all-feature/WASM checks, rustdoc warnings, SQLite and
+Turso adapter tests and Clippy, both benchmark crates, benchmark-tool tests,
+artifact recomposition, and the normal binding inventory completeness check
+pass. Strict binding `check --release` remains nonzero because the repository
+contract still contains 2,589 planned mappings; the refreshed inventory has no
+missing or stale Rust symbols, but this draft must not describe the broader
+binding release backlog as complete.
 
 - [ ] **Step 7: Commit final evidence**
 
