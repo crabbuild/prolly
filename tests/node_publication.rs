@@ -3,9 +3,12 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use prolly::{
-    AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp, Cid, Config, MemStore,
-    MemStoreError, Mutation, NodePublication, NodePublicationHint, Prolly, PublicationOrigin,
-    SearchIo, SearchRuntime, Store, SyncStoreAsAsync, Tree,
+    AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp, Cid, Config,
+    DistanceMetric, ManifestStore, ManifestUpdate, MemStore, MemStoreError, MergeTraceEvent,
+    Mutation, NodePublication, NodePublicationHint, Prolly, ProximityConfig, ProximityMap,
+    ProximityMutation, ProximityRecord, PublicationOrigin, Resolution, RootCondition, RootManifest,
+    RootWrite, SearchIo, SearchRuntime, SecondaryIndex, SecondaryIndexRegistry, Store,
+    SyncStoreAsAsync, TransactionNodeWrite, TransactionUpdate, TransactionalStore, Tree,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -106,6 +109,51 @@ impl Store for RecordingSyncStore {
             .unwrap()
             .push(RecordedPublication::from_request(publication));
         self.inner.publish_nodes(publication)
+    }
+}
+
+impl ManifestStore for RecordingSyncStore {
+    type Error = MemStoreError;
+
+    fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        ManifestStore::get_root(&self.inner, name)
+    }
+
+    fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        ManifestStore::put_root(&self.inner, name, manifest)
+    }
+
+    fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        ManifestStore::delete_root(&self.inner, name)
+    }
+
+    fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        ManifestStore::compare_and_swap_root(&self.inner, name, expected, new)
+    }
+}
+
+impl TransactionalStore for RecordingSyncStore {
+    fn supports_transactions(&self) -> bool {
+        TransactionalStore::supports_transactions(&self.inner)
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, prolly::Error> {
+        TransactionalStore::commit_transaction(
+            &self.inner,
+            node_writes,
+            root_conditions,
+            root_writes,
+        )
     }
 }
 
@@ -650,4 +698,300 @@ fn standalone_sync_and_async_builders_publish_only_tree_builds() {
             Some(b"two".to_vec())
         );
     });
+}
+
+fn merge_config() -> Config {
+    Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .build()
+}
+
+#[test]
+fn sync_structural_and_fallback_merge_publish_only_merge_nodes() {
+    let config = merge_config();
+    let store = RecordingSyncStore::default();
+    let recorded = Prolly::new(store.clone(), config.clone());
+    let control = Prolly::new(MemStore::new(), config.clone());
+
+    let entries = vec![
+        (b"a".to_vec(), b"1".to_vec()),
+        (b"b".to_vec(), b"1".to_vec()),
+        (b"c".to_vec(), b"1".to_vec()),
+    ];
+    let base = recorded.build_from_entries(entries.clone()).unwrap();
+    let left = recorded
+        .put(&base, b"a".to_vec(), b"left".to_vec())
+        .unwrap();
+    let right = recorded
+        .put(&base, b"b".to_vec(), b"right".to_vec())
+        .unwrap();
+    let control_base = control.build_from_entries(entries).unwrap();
+    let control_left = control
+        .put(&control_base, b"a".to_vec(), b"left".to_vec())
+        .unwrap();
+    let control_right = control
+        .put(&control_base, b"b".to_vec(), b"right".to_vec())
+        .unwrap();
+    store.take_publications();
+
+    let control_explanation =
+        control.merge_explain(&control_base, &control_left, &control_right, None);
+    assert!(control_explanation
+        .trace
+        .events
+        .iter()
+        .any(|event| matches!(event, MergeTraceEvent::RewrittenNode { .. })));
+    let control_merged = control_explanation.result.unwrap();
+    let merged = recorded.merge(&base, &left, &right, None).unwrap();
+    let publications = store.take_publications();
+    assert!(!publications.is_empty());
+    let expected = vec![PublicationOrigin::Merge; publications.len()];
+    assert_publications(publications, &expected);
+    assert_sync_equivalent(&recorded, &merged, &control, &control_merged);
+
+    let fallback_store = RecordingSyncStore::default();
+    let recorded = Prolly::new(fallback_store.clone(), config.clone());
+    let control = Prolly::new(MemStore::new(), config);
+    let base = recorded
+        .put(&recorded.create(), b"k".to_vec(), b"base".to_vec())
+        .unwrap();
+    let left = recorded
+        .put(&base, b"k".to_vec(), b"left".to_vec())
+        .unwrap();
+    let left = recorded
+        .put(&left, b"z".to_vec(), b"keep".to_vec())
+        .unwrap();
+    let right = recorded
+        .put(&base, b"k".to_vec(), b"right".to_vec())
+        .unwrap();
+    let control_base = control
+        .put(&control.create(), b"k".to_vec(), b"base".to_vec())
+        .unwrap();
+    let control_left = control
+        .put(&control_base, b"k".to_vec(), b"left".to_vec())
+        .unwrap();
+    let control_left = control
+        .put(&control_left, b"z".to_vec(), b"keep".to_vec())
+        .unwrap();
+    let control_right = control
+        .put(&control_base, b"k".to_vec(), b"right".to_vec())
+        .unwrap();
+    fallback_store.take_publications();
+
+    let control_explanation = control.merge_explain(
+        &control_base,
+        &control_left,
+        &control_right,
+        Some(Box::new(|_| Resolution::delete())),
+    );
+    assert!(control_explanation
+        .trace
+        .events
+        .iter()
+        .any(|event| matches!(event, MergeTraceEvent::Fallback { .. })));
+    let control_merged = control_explanation.result.unwrap();
+    let merged = recorded
+        .merge(
+            &base,
+            &left,
+            &right,
+            Some(Box::new(|_| Resolution::delete())),
+        )
+        .unwrap();
+    let publications = fallback_store.take_publications();
+    assert!(!publications.is_empty());
+    let expected = vec![PublicationOrigin::Merge; publications.len()];
+    assert_publications(publications, &expected);
+    assert_sync_equivalent(&recorded, &merged, &control, &control_merged);
+}
+
+#[test]
+fn async_structural_and_fallback_merge_publish_only_merge_nodes() {
+    block_on(async {
+        let config = merge_config();
+        let store = RecordingAsyncStore::default();
+        let recorded = AsyncProlly::new(store.clone(), config.clone());
+        let control = AsyncProlly::new(
+            SyncStoreAsAsync::new(Arc::new(MemStore::new())),
+            config.clone(),
+        );
+        let entries = vec![
+            (b"a".to_vec(), b"1".to_vec()),
+            (b"b".to_vec(), b"1".to_vec()),
+            (b"c".to_vec(), b"1".to_vec()),
+        ];
+        let base = recorded.build_from_entries(entries.clone()).await.unwrap();
+        let left = recorded
+            .put(&base, b"a".to_vec(), b"left".to_vec())
+            .await
+            .unwrap();
+        let right = recorded
+            .put(&base, b"b".to_vec(), b"right".to_vec())
+            .await
+            .unwrap();
+        let control_base = control.build_from_entries(entries).await.unwrap();
+        let control_left = control
+            .put(&control_base, b"a".to_vec(), b"left".to_vec())
+            .await
+            .unwrap();
+        let control_right = control
+            .put(&control_base, b"b".to_vec(), b"right".to_vec())
+            .await
+            .unwrap();
+        store.take_publications();
+
+        let merged = recorded.merge(&base, &left, &right, None).await.unwrap();
+        let control_merged = control
+            .merge(&control_base, &control_left, &control_right, None)
+            .await
+            .unwrap();
+        let publications = store.take_publications();
+        assert!(!publications.is_empty());
+        let expected = vec![PublicationOrigin::Merge; publications.len()];
+        assert_publications(publications, &expected);
+        assert_async_equivalent(&recorded, &merged, &control, &control_merged).await;
+
+        let fallback_store = RecordingAsyncStore::default();
+        let recorded = AsyncProlly::new(fallback_store.clone(), config.clone());
+        let control = AsyncProlly::new(SyncStoreAsAsync::new(Arc::new(MemStore::new())), config);
+        let base = recorded
+            .put(&recorded.create(), b"k".to_vec(), b"base".to_vec())
+            .await
+            .unwrap();
+        let left = recorded
+            .put(&base, b"k".to_vec(), b"left".to_vec())
+            .await
+            .unwrap();
+        let left = recorded
+            .put(&left, b"z".to_vec(), b"keep".to_vec())
+            .await
+            .unwrap();
+        let right = recorded
+            .put(&base, b"k".to_vec(), b"right".to_vec())
+            .await
+            .unwrap();
+        let control_base = control
+            .put(&control.create(), b"k".to_vec(), b"base".to_vec())
+            .await
+            .unwrap();
+        let control_left = control
+            .put(&control_base, b"k".to_vec(), b"left".to_vec())
+            .await
+            .unwrap();
+        let control_left = control
+            .put(&control_left, b"z".to_vec(), b"keep".to_vec())
+            .await
+            .unwrap();
+        let control_right = control
+            .put(&control_base, b"k".to_vec(), b"right".to_vec())
+            .await
+            .unwrap();
+        fallback_store.take_publications();
+
+        let merged = recorded
+            .merge(
+                &base,
+                &left,
+                &right,
+                Some(Box::new(|_| Resolution::delete())),
+            )
+            .await
+            .unwrap();
+        let control_merged = control
+            .merge(
+                &control_base,
+                &control_left,
+                &control_right,
+                Some(Box::new(|_| Resolution::delete())),
+            )
+            .await
+            .unwrap();
+        let publications = fallback_store.take_publications();
+        assert!(!publications.is_empty());
+        let expected = vec![PublicationOrigin::Merge; publications.len()];
+        assert_publications(publications, &expected);
+        assert_async_equivalent(&recorded, &merged, &control, &control_merged).await;
+    });
+}
+
+fn proximity_config() -> ProximityConfig {
+    let mut config = ProximityConfig::new(2);
+    config.metric = DistanceMetric::L2Squared;
+    config.hierarchy.log_chunk_size = 1;
+    config.hierarchy.level_hash_seed = 7;
+    config
+}
+
+fn proximity_records() -> Vec<ProximityRecord> {
+    (0..32)
+        .map(|index| ProximityRecord {
+            key: format!("key-{index:03}").into_bytes(),
+            vector: vec![index as f32, (index % 7) as f32],
+            value: format!("value-{index}").into_bytes(),
+        })
+        .collect()
+}
+
+#[test]
+fn proximity_build_and_mutation_publish_only_maintenance_nodes() {
+    let store = RecordingSyncStore::default();
+    let records = proximity_records();
+    let map = ProximityMap::build(store.clone(), proximity_config(), records.clone()).unwrap();
+    let control =
+        ProximityMap::build(Arc::new(MemStore::new()), proximity_config(), records).unwrap();
+    assert_eq!(map.tree(), control.tree());
+    let publications = store.take_publications();
+    assert!(!publications.is_empty());
+    let expected = vec![PublicationOrigin::Maintenance; publications.len()];
+    assert_publications(publications, &expected);
+
+    let mutation = ProximityMutation {
+        key: b"key-010".to_vec(),
+        value: Some((vec![10.25, 3.0], b"moved".to_vec())),
+    };
+    let (mutated, _) = map.mutate_batch([mutation.clone()]).unwrap();
+    let (control_mutated, _) = control.mutate_batch([mutation]).unwrap();
+    assert_eq!(mutated.tree(), control_mutated.tree());
+    let publications = store.take_publications();
+    assert!(!publications.is_empty());
+    let expected = vec![PublicationOrigin::Maintenance; publications.len()];
+    assert_publications(publications, &expected);
+}
+
+#[test]
+fn secondary_index_build_and_edit_publish_only_maintenance_nodes() {
+    let store = RecordingSyncStore::default();
+    let prolly = Prolly::new(store.clone(), Config::default());
+    let source = prolly.versioned_map(b"users");
+    source.put(b"user-1", b"active").unwrap();
+    store.take_publications();
+
+    let by_status =
+        SecondaryIndex::non_unique("by-status", 1, "tests.users.by-status/v1", |_, value| {
+            Ok(vec![value.to_vec()])
+        })
+        .unwrap();
+    let registry = SecondaryIndexRegistry::new().register(by_status).unwrap();
+    let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.ensure_index(b"by-status").unwrap();
+    let publications = store.take_publications();
+    assert!(!publications.is_empty());
+    let expected = vec![PublicationOrigin::Maintenance; publications.len()];
+    assert_publications(publications, &expected);
+
+    indexed
+        .edit(|edit| {
+            edit.put(b"user-2", b"inactive");
+        })
+        .unwrap();
+    let publications = store.take_publications();
+    assert!(!publications.is_empty());
+    let expected = vec![PublicationOrigin::Maintenance; publications.len()];
+    assert_publications(publications, &expected);
+
+    let snapshot = indexed.snapshot().unwrap();
+    let verification = indexed.verify_all(&snapshot.id().source_version).unwrap();
+    assert!(verification.iter().all(|result| result.is_valid()));
 }

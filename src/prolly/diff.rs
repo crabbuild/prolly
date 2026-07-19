@@ -3435,7 +3435,9 @@ where
     if mutations.is_empty() {
         Ok(left.clone())
     } else {
-        prolly.batch(left, mutations).await
+        prolly
+            .batch_with_origin(left, mutations, PublicationOrigin::Merge)
+            .await
     }
 }
 
@@ -3642,7 +3644,9 @@ where
     if mutations.is_empty() {
         Ok(left.clone())
     } else {
-        prolly.batch(left, mutations).await
+        prolly
+            .batch_with_origin(left, mutations, PublicationOrigin::Merge)
+            .await
     }
 }
 #[derive(Clone)]
@@ -6165,7 +6169,7 @@ fn merge_trees_with_right_diff_traced<S: Store>(
             mutations: mutations.len(),
             append_only: true,
         });
-        return prolly.batch(left, mutations);
+        return prolly.batch_with_origin(left, mutations, PublicationOrigin::Merge);
     }
 
     let mut mutations = Vec::with_capacity(right_changes.len());
@@ -6227,7 +6231,7 @@ fn merge_trees_with_right_diff_traced<S: Store>(
     if mutations.is_empty() {
         Ok(left.clone())
     } else {
-        prolly.batch(left, mutations)
+        prolly.batch_with_origin(left, mutations, PublicationOrigin::Merge)
     }
 }
 

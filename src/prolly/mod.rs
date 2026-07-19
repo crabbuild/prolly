@@ -3823,12 +3823,19 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
+        self.batch_with_stats_and_origin(tree, mutations, PublicationOrigin::BatchMutation)
+    }
+
+    pub(crate) fn batch_with_stats_and_origin(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
+    ) -> Result<batch::BatchApplyResult, Error> {
         let input_sorted = mutations
             .windows(2)
             .all(|pair| pair[0].key() <= pair[1].key());
-        let (tree, stats) =
-            self.engine
-                .canonical_batch_ready(tree, mutations, PublicationOrigin::BatchMutation)?;
+        let (tree, stats) = self.engine.canonical_batch_ready(tree, mutations, origin)?;
         Ok(batch::BatchApplyResult::from_write_stats(
             tree,
             stats,
@@ -4026,11 +4033,20 @@ where
         &self,
         entries: Vec<(Vec<u8>, Vec<u8>)>,
     ) -> Result<Tree, Error> {
+        self.build_from_entries_with_origin(entries, PublicationOrigin::TreeBuild)
+            .await
+    }
+
+    pub(crate) async fn build_from_entries_with_origin(
+        &self,
+        entries: Vec<(Vec<u8>, Vec<u8>)>,
+        origin: PublicationOrigin,
+    ) -> Result<Tree, Error> {
         let mutations = entries
             .into_iter()
             .map(|(key, val)| Mutation::Upsert { key, val })
             .collect();
-        self.batch_with_origin(&self.create(), mutations, PublicationOrigin::TreeBuild)
+        self.batch_with_origin(&self.create(), mutations, origin)
             .await
     }
 

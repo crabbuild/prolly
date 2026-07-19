@@ -643,7 +643,7 @@ This task gives structural/fallback merge and content-addressed derived data the
 - Consumes: private sync/async `batch_with_origin` and `put_with_origin` helpers from Task 2.
 - Produces: complete `Merge` and `Maintenance` coverage.
 
-- [ ] **Step 1: Route every merge writer as `Merge`**
+- [x] **Step 1: Route every merge writer as `Merge`**
 
 Pass `PublicationOrigin::Merge` to structural `execute_replay`. Replace every sync and async merge fallback call to public `batch` with the private origin-aware helper:
 
@@ -655,7 +655,7 @@ prolly
 
 Use the synchronous form without `.await` in sync merge code. Cover chunked fallback flushes, traced merges, borrowed resolver merges, range-limited merges, and CRDT merge fallbacks. Read-only diff emits no request.
 
-- [ ] **Step 2: Route direct content-addressed maintenance writes**
+- [x] **Step 2: Route direct content-addressed maintenance writes**
 
 Replace direct CID-keyed `put` and `batch_put` in proximity modules with one-entry or batched publication:
 
@@ -671,13 +671,13 @@ store
 
 Use the awaited async form where the store is asynchronous. Retain CID derivation and existing validation before publication.
 
-- [ ] **Step 3: Route derived index and catalog tree writes**
+- [x] **Step 3: Route derived index and catalog tree writes**
 
 Change coordinator-internal source candidates, hidden index trees, catalog trees, and control trees to call `put_with_origin` or `batch_with_origin` with `Maintenance`. Keep public standalone `Prolly::put` and `Prolly::batch` classifications unchanged.
 
 Do not classify temporary in-memory bundle verification as maintenance; it remains a low-level `General` store call because it is not adapter-visible production publication.
 
-- [ ] **Step 4: Add post-implementation tests**
+- [x] **Step 4: Add post-implementation tests**
 
 Add tests that force structural merge and fallback merge, then assert every emitted request is `Merge` and both routes have byte-identical reachable maps. Add one indexed-map mutation and one proximity mutation over a recorder, then assert all derived tree/descriptor requests are `Maintenance`.
 
@@ -691,7 +691,7 @@ assert!(maintenance_origins
 assert_eq!(reachable_bytes(&recorded_store, &tree), reachable_bytes(&control_store, &control_tree));
 ```
 
-- [ ] **Step 5: Audit direct source writes**
+- [x] **Step 5: Audit direct source writes**
 
 Run:
 
@@ -701,7 +701,7 @@ rg -n "\.(put|batch_put|batch_put_with_hint)\(" src/prolly -g '*.rs'
 
 Classify every production content-addressed write as `PublicationStore` interception, explicit `publish_nodes`, transaction staging, replay staging, or documented low-level `General` behavior. Any unclassified production write blocks the commit.
 
-- [ ] **Step 6: Run focused verification**
+- [x] **Step 6: Run focused verification**
 
 ```sh
 cargo fmt --all -- --check
@@ -714,7 +714,7 @@ cargo test -p prolly-map --test proximity_mutation --all-features
 
 Expected: every command exits `0` and every changed publication has the reviewed origin.
 
-- [ ] **Step 7: Commit merge and maintenance routing**
+- [x] **Step 7: Commit merge and maintenance routing**
 
 ```sh
 git add src/prolly/diff.rs src/prolly/proximity src/prolly/secondary_index \

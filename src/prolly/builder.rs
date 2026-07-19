@@ -68,6 +68,7 @@ pub(crate) struct NodeSummary {
 pub struct BatchBuilder<S: Store> {
     store: S,
     config: Config,
+    origin: PublicationOrigin,
     /// Key-value pairs to insert (will be sorted before build)
     entries: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -81,6 +82,7 @@ pub struct BatchBuilder<S: Store> {
 pub struct SortedBatchBuilder<S: Store> {
     store: S,
     config: Config,
+    origin: PublicationOrigin,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     pending_nodes: Vec<BuiltNode>,
     hierarchy: HierarchicalEmitter,
@@ -93,6 +95,7 @@ pub struct SortedBatchBuilder<S: Store> {
 /// publishes the resulting tree.
 pub struct AsyncBatchBuilder<S: AsyncStore> {
     engine: ProllyEngine<S>,
+    origin: PublicationOrigin,
     entries: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
@@ -102,6 +105,7 @@ pub struct AsyncBatchBuilder<S: AsyncStore> {
 /// unreachable until [`AsyncSortedBatchBuilder::build`] returns the root.
 pub struct AsyncSortedBatchBuilder<S: AsyncStore> {
     engine: ProllyEngine<S>,
+    origin: PublicationOrigin,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     pending_nodes: Vec<DeferredNode>,
     hierarchy: HierarchicalEmitter,
@@ -114,8 +118,13 @@ where
 {
     /// Create an async bulk builder.
     pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
         Self {
             engine: ProllyEngine::new(store, config),
+            origin,
             entries: Vec::new(),
         }
     }
@@ -127,7 +136,9 @@ where
 
     /// Build and publish the canonical tree.
     pub async fn build(self) -> Result<Tree, Error> {
-        self.engine.build_from_entries(self.entries).await
+        self.engine
+            .build_from_entries_with_origin(self.entries, self.origin)
+            .await
     }
 }
 
@@ -138,10 +149,15 @@ where
 {
     /// Create a memory-bounded async sorted builder.
     pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
         let hierarchy = HierarchicalEmitter::new(config.clone())
             .expect("configuration contains a registered persisted tree format");
         Self {
             engine: ProllyEngine::new(store, config),
+            origin,
             pending_entry: None,
             pending_nodes: Vec::new(),
             hierarchy,
@@ -194,7 +210,7 @@ where
 
     async fn flush_pending_nodes(&mut self) -> Result<(), Error> {
         self.engine
-            .publish_builder_nodes(&self.pending_nodes, PublicationOrigin::TreeBuild)
+            .publish_builder_nodes(&self.pending_nodes, self.origin)
             .await?;
         self.pending_nodes.clear();
         Ok(())
@@ -224,9 +240,14 @@ where
     /// * `config` - Tree configuration (chunking parameters, encoding, etc.)
     ///
     pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
         Self {
             store,
             config,
+            origin,
             entries: Vec::new(),
         }
     }
@@ -406,7 +427,7 @@ where
             .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
             .collect::<Vec<_>>();
         self.store
-            .publish_nodes(NodePublication::new(&entries, PublicationOrigin::TreeBuild))
+            .publish_nodes(NodePublication::new(&entries, self.origin))
             .map_err(|error| Error::Store(Box::new(error)))?;
         Ok((tree, written_nodes, written_bytes))
     }
@@ -562,7 +583,7 @@ where
     }
 
     fn persist_nodes(&self, nodes: &[BuiltNode]) -> Result<(), Error> {
-        persist_nodes(&self.store, nodes)
+        persist_nodes(&self.store, nodes, self.origin)
     }
 }
 
@@ -572,11 +593,16 @@ where
 {
     /// Create a sorted streaming builder.
     pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
         let hierarchy = HierarchicalEmitter::new(config.clone())
             .expect("configuration contains a registered persisted tree format");
         Self {
             store,
             config,
+            origin,
             pending_entry: None,
             pending_nodes: Vec::new(),
             hierarchy,
@@ -643,7 +669,7 @@ where
     }
 
     fn flush_pending_nodes(&mut self) -> Result<(), Error> {
-        persist_nodes(&self.store, &self.pending_nodes)?;
+        persist_nodes(&self.store, &self.pending_nodes, self.origin)?;
         self.pending_nodes.clear();
         Ok(())
     }
@@ -829,7 +855,11 @@ fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.vals.reserve_exact(additional);
 }
 
-fn persist_nodes<S: Store + Clone>(store: &S, nodes: &[BuiltNode]) -> Result<(), Error>
+fn persist_nodes<S: Store + Clone>(
+    store: &S,
+    nodes: &[BuiltNode],
+    origin: PublicationOrigin,
+) -> Result<(), Error>
 where
     S::Error: Send + Sync,
 {
@@ -845,7 +875,7 @@ where
         .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
         .collect::<Vec<_>>();
     store
-        .publish_nodes(NodePublication::new(&entries, PublicationOrigin::TreeBuild))
+        .publish_nodes(NodePublication::new(&entries, origin))
         .map_err(|error| Error::Store(Box::new(error)))
 }
 

@@ -1,7 +1,7 @@
 //! Public surface for localized tree mutation.
 
 use super::error::{Error, Mutation};
-use super::store::Store;
+use super::store::{PublicationOrigin, Store};
 use super::tree::Tree;
 use super::Prolly;
 
@@ -28,8 +28,21 @@ where
     S: Store,
     S::Error: Send + Sync,
 {
+    splice_with_origin(prolly, tree, mutations, PublicationOrigin::BatchMutation)
+}
+
+pub(crate) fn splice_with_origin<S>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    origin: PublicationOrigin,
+) -> Result<(Tree, SpliceStats), Error>
+where
+    S: Store,
+    S::Error: Send + Sync,
+{
     let old_root = tree.root.clone();
-    let result = prolly.batch_with_stats(tree, mutations)?;
+    let result = prolly.batch_with_stats_and_origin(tree, mutations, origin)?;
     let tree = result.tree;
     let stats = result.stats;
     let nodes_written = stats.written_nodes;

@@ -3,7 +3,7 @@ use super::super::cid::Cid;
 use super::super::error::{Error, Mutation};
 use super::super::gc::GcPlan;
 use super::super::manifest::{ManifestStore, ManifestStoreScan, NamedRootRetention};
-use super::super::store::{NodeStoreScan, Store};
+use super::super::store::{NodeStoreScan, PublicationOrigin, Store};
 use super::super::transaction::{TransactionConflict, TransactionalStore};
 use super::super::tree::Tree;
 use super::super::versioned_map::{
@@ -664,7 +664,7 @@ where
                 source_version: source_version.clone(),
                 indexes: current_indexes.clone(),
             };
-            let catalog_candidate = self.prolly.batch(
+            let catalog_candidate = self.prolly.batch_with_origin(
                 &catalog_tree,
                 vec![
                     Mutation::Upsert {
@@ -684,6 +684,7 @@ where
                         val: current.to_bytes()?,
                     },
                 ],
+                PublicationOrigin::Maintenance,
             )?;
             let catalog_version = MapVersionId::for_tree(&catalog_candidate)?;
             let next_control = IndexControl {
@@ -697,10 +698,11 @@ where
                     })
                     .collect(),
             };
-            let control_tree = self.prolly.put(
+            let control_tree = self.prolly.put_with_origin(
                 &self.prolly.create(),
                 control_record_key(),
                 next_control.to_bytes()?,
+                PublicationOrigin::Maintenance,
             )?;
             let permit_fingerprint = self
                 .load_control()?
@@ -930,7 +932,11 @@ where
                 val: current.to_bytes()?,
             });
         }
-        let catalog_candidate = self.prolly.batch(catalog.tree(), mutations)?;
+        let catalog_candidate = self.prolly.batch_with_origin(
+            catalog.tree(),
+            mutations,
+            PublicationOrigin::Maintenance,
+        )?;
         let control_fingerprint = self
             .load_control()?
             .ok_or_else(|| {
@@ -1068,7 +1074,7 @@ where
             index_version: index_version.clone(),
         };
         current.indexes[position] = checkpoint.clone();
-        let catalog_candidate = self.prolly.batch(
+        let catalog_candidate = self.prolly.batch_with_origin(
             catalog.tree(),
             vec![
                 Mutation::Upsert {
@@ -1088,6 +1094,7 @@ where
                     val: current.to_bytes()?,
                 },
             ],
+            PublicationOrigin::Maintenance,
         )?;
         let next_control = IndexControl {
             source_map_id: self.source_map_id.clone(),
@@ -1101,10 +1108,11 @@ where
                 })
                 .collect(),
         };
-        let control_tree = self.prolly.put(
+        let control_tree = self.prolly.put_with_origin(
             &self.prolly.create(),
             control_record_key(),
             next_control.to_bytes()?,
+            PublicationOrigin::Maintenance,
         )?;
         let control_fingerprint = self
             .load_control()?
@@ -1200,12 +1208,13 @@ where
                 source_version: source.id.clone(),
             });
         }
-        let catalog_candidate = self.prolly.batch(
+        let catalog_candidate = self.prolly.batch_with_origin(
             catalog.tree(),
             vec![Mutation::Upsert {
                 key: catalog_current_key(),
                 val: current.to_bytes()?,
             }],
+            PublicationOrigin::Maintenance,
         )?;
         let control = self.load_control()?.ok_or_else(|| {
             Error::InvalidVersionedMap("deactivation requires active control".to_string())
@@ -1226,10 +1235,11 @@ where
                     })
                     .collect(),
             };
-            Some(self.prolly.put(
+            Some(self.prolly.put_with_origin(
                 &self.prolly.create(),
                 control_record_key(),
                 next.to_bytes()?,
+                PublicationOrigin::Maintenance,
             )?)
         };
         let (published_source, published_catalog) =
@@ -1439,7 +1449,11 @@ where
                 None => Mutation::Delete { key: key.clone() },
             })
             .collect::<Vec<_>>();
-        let source_candidate = self.prolly.batch(&current.source.tree, source_mutations)?;
+        let source_candidate = self.prolly.batch_with_origin(
+            &current.source.tree,
+            source_mutations,
+            PublicationOrigin::Maintenance,
+        )?;
         if source_candidate == current.source.tree {
             return Ok(IndexedMapUpdate::Unchanged {
                 current: Some(current),
@@ -1531,8 +1545,11 @@ where
                 index_version.tree.clone()
             } else {
                 operation.changed_indexes = operation.changed_indexes.saturating_add(1);
-                self.prolly
-                    .batch(&index_version.tree, delta.into_values().collect())?
+                self.prolly.batch_with_origin(
+                    &index_version.tree,
+                    delta.into_values().collect(),
+                    PublicationOrigin::Maintenance,
+                )?
             };
             let next_version = MapVersionId::for_tree(&next_tree)?;
             let next_checkpoint = IndexCheckpoint {
@@ -1572,7 +1589,11 @@ where
             }
             .to_bytes()?,
         });
-        let catalog_candidate = self.prolly.batch(&catalog.tree, catalog_mutations)?;
+        let catalog_candidate = self.prolly.batch_with_origin(
+            &catalog.tree,
+            catalog_mutations,
+            PublicationOrigin::Maintenance,
+        )?;
         let permit_fingerprint = self
             .load_control()?
             .ok_or_else(|| {
@@ -1748,8 +1769,11 @@ where
             }
         }
         let entry_count = entries.len();
-        let mut builder =
-            SortedBatchBuilder::new(self.prolly.store().clone(), self.prolly.config().clone());
+        let mut builder = SortedBatchBuilder::new_with_origin(
+            self.prolly.store().clone(),
+            self.prolly.config().clone(),
+            PublicationOrigin::Maintenance,
+        );
         for (key, value) in entries {
             builder.add(key, value)?;
         }
@@ -1897,7 +1921,11 @@ where
         let catalog_candidate = if catalog_mutations.is_empty() {
             catalog.tree().clone()
         } else {
-            self.prolly.batch(catalog.tree(), catalog_mutations)?
+            self.prolly.batch_with_origin(
+                catalog.tree(),
+                catalog_mutations,
+                PublicationOrigin::Maintenance,
+            )?
         };
         let catalog_candidate_id = MapVersionId::for_tree(&catalog_candidate)?;
 
