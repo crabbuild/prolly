@@ -393,7 +393,8 @@ pub use prolly::splice::{splice, SpliceStats};
 pub use prolly::stats::{StatsComparison, StatsDiff, StatsPercentageChange, TreeStats};
 pub use prolly::store::{AsyncStore, SyncStoreAsAsync};
 pub use prolly::store::{
-    BatchOp, FileNodeStore, FileNodeStoreError, MemStore, MemStoreError, NodeStoreScan, Store,
+    BatchOp, FileNodeStore, FileNodeStoreError, MemStore, MemStoreError, NodePublication,
+    NodePublicationHint, NodeStoreScan, PublicationOrigin, Store,
 };
 #[cfg(feature = "tokio")]
 pub use prolly::store::{TokioBlockingStore, TokioBlockingStoreError};

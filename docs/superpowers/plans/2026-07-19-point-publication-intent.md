@@ -75,7 +75,7 @@ This task introduces the public types and safe defaults without changing adapter
 - Consumes: existing `Store::batch_put`, `Store::batch_put_with_hint`, `AsyncStore::batch_put`, and `AsyncStore::batch_put_with_hint`.
 - Produces: `PublicationOrigin`, `NodePublicationHint<'a>`, `NodePublication<'a>`, `Store::publish_nodes`, and `AsyncStore::publish_nodes`.
 
-- [ ] **Step 1: Implement the publication types**
+- [x] **Step 1: Implement the publication types**
 
 Add these definitions immediately after `BatchOp`:
 
@@ -143,7 +143,7 @@ impl<'a> NodePublication<'a> {
 
 Add rustdoc stating that origin is advisory, unknown variants use the general path, and the request cannot alter correctness or durability.
 
-- [ ] **Step 2: Implement the sync and async defaults**
+- [x] **Step 2: Implement the sync and async defaults**
 
 Add this method after each trait's existing hinted batch method:
 
@@ -163,7 +163,7 @@ fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Er
 
 Use the same body with `async fn` and `.await` in `AsyncStore`. Do not make `batch_put` call `publish_nodes`.
 
-- [ ] **Step 3: Forward through core reference and runtime adapters**
+- [x] **Step 3: Forward through core reference and runtime adapters**
 
 Add exact forwarding overrides to `Store for Arc<T>`, `Store for &T`, and `AsyncStore for Arc<T>`:
 
@@ -214,11 +214,11 @@ async fn publish_nodes(
 }
 ```
 
-- [ ] **Step 4: Re-export the contract**
+- [x] **Step 4: Re-export the contract**
 
 Add `NodePublication`, `NodePublicationHint`, and `PublicationOrigin` to the existing `pub use prolly::store::{...}` list in `src/lib.rs`.
 
-- [ ] **Step 5: Add post-implementation contract tests**
+- [x] **Step 5: Add post-implementation contract tests**
 
 Extend the store test module with a recording store and assert:
 
@@ -251,7 +251,7 @@ fn publication_defaults_dispatch_once_and_preserve_hint() {
 
 Add first-poll tests for `SyncStoreAsAsync::publish_nodes` and forwarding tests for `Arc<T>` and `&T`. Use `std::mem::size_of::<NodePublication<'static>>()` only as a structural assertion; allocation behavior is verified later with the existing allocation-counting harness.
 
-- [ ] **Step 6: Run focused verification**
+- [x] **Step 6: Run focused verification**
 
 Run:
 
