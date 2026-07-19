@@ -27,6 +27,7 @@ pub struct ProllyEngine<S: AsyncStore> {
     pub(super) node_cache: Arc<RwLock<NodeCache>>,
     pub(super) metrics: Arc<ProllyMetrics>,
     pub(super) recent_leaf: RwLock<Option<(Cid, Arc<ReadNode>)>>,
+    pub(super) rightmost_path_cache: RwLock<Option<(Cid, Vec<super::CachedRightmostPathEntry>)>>,
 }
 
 impl<S> ProllyEngine<S>
@@ -34,8 +35,13 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
+    /// Create an async-first engine with bounded default execution limits.
+    pub fn new(store: S, config: Config) -> Self {
+        Self::with_execution_config(store, config, ExecutionConfig::default())
+    }
+
     /// Create an async-first engine with explicit execution limits.
-    pub fn new(store: S, config: Config, execution: ExecutionConfig) -> Self {
+    pub fn with_execution_config(store: S, config: Config, execution: ExecutionConfig) -> Self {
         let node_cache_max_nodes = config.runtime.node_cache_max_nodes;
         let node_cache_max_bytes = config.runtime.node_cache_max_bytes;
         Self {
@@ -48,6 +54,7 @@ where
             ))),
             metrics: Arc::new(ProllyMetrics::default()),
             recent_leaf: RwLock::new(None),
+            rightmost_path_cache: RwLock::new(None),
         }
     }
 
@@ -65,6 +72,7 @@ where
             node_cache,
             metrics,
             recent_leaf: RwLock::new(None),
+            rightmost_path_cache: RwLock::new(None),
         }
     }
 
@@ -163,7 +171,7 @@ where
             };
             for chunk in cids.chunks(chunk_size.max(1)) {
                 nodes.extend(
-                    self.load_many_read_ordered(tree, chunk, &mut operation)
+                    self.load_many_engine_read_ordered(tree, chunk, &mut operation)
                         .await?,
                 );
             }
@@ -242,7 +250,7 @@ where
         Ok(node)
     }
 
-    async fn load_many_read_ordered(
+    async fn load_many_engine_read_ordered(
         &self,
         tree: &Tree,
         cids: &[Cid],

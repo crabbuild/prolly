@@ -70,7 +70,7 @@ fn public_engine_is_the_direct_async_core() {
     let tree = writer
         .put(&writer.create(), b"key".to_vec(), b"value".to_vec())
         .unwrap();
-    let engine = ProllyEngine::new(
+    let engine = ProllyEngine::with_execution_config(
         DefaultAsyncStore(store),
         Config::default(),
         ExecutionConfig::default(),

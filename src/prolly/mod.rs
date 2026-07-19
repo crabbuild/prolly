@@ -89,7 +89,6 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::{hash_map::Entry, HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hasher};
-use std::ops::Deref;
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -903,18 +902,7 @@ struct RecentLeafRead {
 /// The async surface covers reads, writes, range scans, diff, merge, CRDT merge,
 /// stats, cache pinning, large-value helpers, and route-planned batch mutation
 /// without requiring a Tokio dependency.
-pub struct AsyncProlly<S: AsyncStore> {
-    engine: engine::ProllyEngine<S>,
-    rightmost_path_cache: RwLock<Option<(Cid, Vec<CachedRightmostPathEntry>)>>,
-}
-
-impl<S: AsyncStore> Deref for AsyncProlly<S> {
-    type Target = engine::ProllyEngine<S>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.engine
-    }
-}
+pub type AsyncProlly<S> = engine::ProllyEngine<S>;
 struct AsyncWriteCollector {
     nodes: Vec<(Cid, Vec<u8>)>,
     seen_cids: HashSet<Cid>,
@@ -4629,19 +4617,11 @@ impl<S: Store> Prolly<S> {
     }
 }
 #[allow(dead_code)]
-impl<S> AsyncProlly<S>
+impl<S> engine::ProllyEngine<S>
 where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
-    /// Create a new async Prolly tree manager.
-    pub fn new(store: S, config: Config) -> Self {
-        Self {
-            engine: engine::ProllyEngine::new(store, config, ExecutionConfig::default()),
-            rightmost_path_cache: RwLock::new(None),
-        }
-    }
-
     /// Create a new empty tree.
     pub fn create(&self) -> Tree {
         Tree {
@@ -4658,11 +4638,6 @@ where
     /// Borrow this manager's tree configuration.
     pub fn config(&self) -> &Config {
         &self.config
-    }
-
-    /// Get value by key from the tree.
-    pub async fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        self.engine.get(tree, key).await
     }
 
     /// Get a stored large-value reference by key.
@@ -4699,19 +4674,6 @@ where
             )),
             None => Ok(None),
         }
-    }
-
-    /// Get multiple values while preserving caller order.
-    ///
-    /// This mirrors [`Prolly::get_many`] but loads frontier nodes through
-    /// [`AsyncStore::batch_get_ordered_unique`], allowing async stores to
-    /// overlap remote reads according to their `read_parallelism()`.
-    pub async fn get_many<K: AsRef<[u8]>>(
-        &self,
-        tree: &Tree,
-        keys: &[K],
-    ) -> Result<Vec<Option<Vec<u8>>>, Error> {
-        self.engine.get_many(tree, keys).await
     }
 
     /// Insert or update a key-value pair in the tree.
