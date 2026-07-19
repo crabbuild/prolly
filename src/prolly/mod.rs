@@ -5601,6 +5601,20 @@ where
             .map_err(|err| Error::Store(Box::new(err)))
     }
 
+    pub(crate) async fn load_named_root_manifest(
+        &self,
+        name: &[u8],
+    ) -> Result<Option<RootManifest>, Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.store
+            .get_root(name)
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
     /// Load explicit named roots and report names that were absent.
     ///
     /// Duplicate names are ignored after their first occurrence. Missing names
