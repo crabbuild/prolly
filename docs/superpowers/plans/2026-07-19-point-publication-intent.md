@@ -1,587 +1,1077 @@
-# Point publication intent implementation plan
-
-> **Superseded:** Do not execute this Turso-scoped plan. The approved [universal node-publication design](../specs/2026-07-19-point-publication-intent-design.md) now covers every synchronous and asynchronous store. A replacement plan will follow written-spec approval.
+# Universal Node Publication Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reduce native local Turso point-put latency by carrying explicit point-publication intent from `AsyncProlly::put` to the backend without changing canonical results or generic write behavior.
+**Goal:** Give every synchronous and asynchronous Prolly store the same immutable-node publication context, preserve canonical correctness, and land only performance fast paths supported by local evidence.
 
-**Architecture:** Add a runtime-only `NodeWriteIntent` to the async node-publication contract. `ProllyEngine` marks only public point upserts, transparent wrappers preserve the intent, transaction overlays absorb it, and `TursoBackend` selects deferred transactions only for `PointUpsert`. All canonical planning, validation, publication atomicity, ready-sync execution, and general transaction paths remain unchanged.
+**Architecture:** Add a borrowed `NodePublication` request with explicit `PublicationOrigin` to `Store`, `AsyncStore`, and `RemoteStoreBackend`. The ready-sync writer publishes through an origin-aware `PublicationStore` facade, the native async engine attaches origin after canonical replay, direct builders and utilities classify their own publications, transparent wrappers forward, semantic overlays absorb, and Turso initially uses the only measured override.
 
-**Tech stack:** Rust 2021, async functions in traits, the runtime-neutral Prolly async engine, native Turso 0.7, Tokio integration tests, and the existing local SQLite/Turso benchmark harness.
+**Tech Stack:** Rust 2021, runtime-neutral async functions in traits, native synchronous stores, native Turso 0.7 async storage, UniFFI and checked-in language bindings, Tokio integration tests, shell/Python benchmark orchestration, and the existing SQLite/Turso local comparison harness.
 
-**Content type:** How-to implementation plan
+## Global Constraints
 
-**Audience:** Prolly maintainers implementing and reviewing pull request 24
-
-**Content plan:** Define the contract, route intent, optimize Turso, verify correctness, measure local performance, and publish the evidence
-
-**Open questions:** None
-
-## Global constraints
-
-- Follow the approved design in `docs/superpowers/specs/2026-07-19-point-publication-intent-design.md`
-- Do not use test-driven development: implement each reviewed slice first, then add and run its regression tests before committing
-- Treat correctness as release-blocking: canonical roots, node bytes, CIDs, values, counts, atomicity, and reopen checks admit no exception
-- Use `NodeWriteIntent::{General, PointUpsert}` and keep the enum runtime-only and non-exhaustive
-- Mark only `AsyncProlly::put` and its `put_large_value` tree publication as `PointUpsert`
-- Keep one-item `AsyncProlly::batch`, delete, range delete, builders, diff preparation, merge preparation, root operations, and strict commits on `General`
-- Preserve node-plus-hint atomicity and remote CID verification
-- Preserve ready-sync and Tokio-blocking synchronous store selection
-- Keep Turso Cloud synchronization disabled during every performance run
-- Block release on any protected median latency regression above 5% or any p95 regression above 10%
-- Make commits only in `/Users/haipingfu/CrabDB-worktrees/prolly-async-first`
+- Follow the approved design in `docs/superpowers/specs/2026-07-19-point-publication-intent-design.md`.
+- Execute inline in this session; the user already selected Inline Execution.
+- Do not use test-driven development. Implement each production slice first, then add and run its regression tests before committing.
+- Treat correctness as release-blocking. Canonical roots, reachable node bytes, CIDs, values, counts, atomicity, durability, visibility, reopen behavior, and error semantics admit no exception.
+- Keep one canonical mutation algorithm. Do not fork sync and async tree planning.
+- Keep `PublicationOrigin` advisory and runtime-only. Never hash, persist, synchronize, or include it in canonical wire formats.
+- Preserve the current publication entries and optional hint byte-for-byte.
+- Preserve ready-sync first-poll completion and keep the base async contract free of Tokio.
+- Give every adapter a safe default. Add a custom adapter override only after it passes the evidence gate.
+- Keep Turso Cloud synchronization disabled during all performance runs. Do not read credentials or call `push` or `pull`.
+- Allow no protected median-latency increase above 5%, median-throughput decrease above 5%, or p95-latency increase above 10%.
+- Make all implementation commits only in `/Users/haipingfu/CrabDB-worktrees/prolly-async-first`.
+- Do not modify the dirty primary worktree at `/Users/haipingfu/CrabDB/prolly`.
 
 ---
 
-## File map
+## File Map
 
-This plan keeps the existing large modules because each change extends an established trait or engine boundary:
-
-| File | Responsibility in this change |
+| File or directory | Responsibility |
 | --- | --- |
-| `src/prolly/store/mod.rs` | Define `NodeWriteIntent`, default delegation, and transparent async wrapper behavior |
-| `src/lib.rs` | Re-export `NodeWriteIntent` for adapter crates |
-| `src/prolly/proximity/search/runtime.rs` | Preserve intent through the transparent `SearchIo` write facade |
-| `src/prolly/remote.rs` | Extend remote backend publication and retain CID validation |
-| `src/prolly/engine/write.rs` | Carry intent only through final replay publication |
-| `src/prolly/mod.rs` | Route `AsyncProlly::put` through a dedicated point-upsert engine entry |
-| `src/prolly/transaction.rs` | Prove overlays absorb intent and keep hints disabled until general commit |
-| `stores/prolly-store-turso/src/lib.rs` | Select and execute deferred point-publication transactions |
-| `tests/async_store.rs` | Verify public API routing, canonical identity, hints, and sync stability |
-| `stores/prolly-store-turso/tests/turso_backend.rs` | Verify local persistence, atomic rollback, and concurrency |
-| `stores/prolly-store-turso/README.md` | Document the local transaction policy |
-| `docs/sqlite-turso-local-performance.md` | Record focused and full comparison evidence |
+| `src/prolly/store/mod.rs` | Public publication types, sync/async defaults, and core wrapper forwarding |
+| `src/lib.rs` | Re-export the universal adapter contract |
+| `src/prolly/engine/write.rs` | Ready-sync publication facade and final async replay publication |
+| `src/prolly/mod.rs` | Public API origin assignment, builder publication, snapshot import, and node copy |
+| `src/prolly/builder.rs` | Standalone tree-build publication |
+| `src/prolly/diff.rs` | Structural and fallback merge origin |
+| `src/prolly/range_delete.rs` | Range-delete instrumentation forwarding |
+| `src/prolly/transaction.rs` | Sync and async overlay absorption |
+| `src/prolly/proximity/search/runtime.rs` | Transparent sync/async search-store forwarding |
+| `src/prolly/proximity/**/*.rs` | Content-addressed proximity maintenance publication |
+| `src/prolly/secondary_index/**/*.rs` | Derived-index and catalog maintenance publication |
+| `src/prolly/remote.rs` | Remote backend contract, unconditional publication CID verification, and conformance |
+| `stores/prolly-store-test/src/lib.rs` | Shared synchronous adapter conformance |
+| `stores/prolly-store-*/src/lib.rs` | Default compilation for every adapter and the Turso measured override |
+| `bindings/uniffi/src/publication.rs` | FFI-safe publication records and stable origin codes |
+| `bindings/uniffi/src/lib.rs` | Synchronous host-store publication callback |
+| `bindings/uniffi/src/async_store.rs` | Asynchronous foreign-store publication callback and protocol version |
+| `bindings/{python,go,node,kotlin,java,ruby,swift,wasm}/` | Generated or native callback forwarding and unknown-code fallback |
+| `tests/node_publication.rs` | Cross-path origin, identity, wrapper, and direct-publication tests |
+| `stores/prolly-store-turso/tests/turso_backend.rs` | Turso policy, rollback, persistence, and concurrency tests |
+| `benches/async_first_foundation_bench.rs` | Universal dispatch overhead screen |
+| `benchmarks/local-store-publication/` | Identical native-path workload screen for every local adapter |
+| `scripts/run_node_publication_revision_gate.sh` | Alternating baseline/candidate orchestration |
+| `scripts/run_local_store_publication_revision_gate.sh` | Alternating all-local-adapter orchestration |
+| `scripts/summarize_node_publication_revision_gate.py` | Directional regression and improvement gates |
+| `scripts/tests/test_summarize_node_publication_revision_gate.py` | Deterministic gate validation |
+| `performance-results/node-publication-*/` | Compact local-only evidence |
+| `docs/sqlite-turso-local-performance.md` | Native SQLite-sync versus Turso-async results |
+| `stores/prolly-store-turso/README.md` | Turso local transaction policy |
 
-## Task 1: Add the async node-write intent contract
+## Task 1: Add the Universal Store Contract
 
-This task introduces the adapter contract and preserves existing behavior for stores without an override.
+This task introduces the public types and safe defaults without changing adapter behavior.
 
 **Files:**
 
-- Modify: `src/prolly/store/mod.rs:343-480`
-- Modify: `src/prolly/store/mod.rs:579-670`
-- Modify: `src/prolly/store/mod.rs:791-955`
-- Modify: `src/prolly/store/mod.rs:1179-1270`
-- Modify: `src/prolly/proximity/search/runtime.rs:274-350`
-- Modify: `src/lib.rs:394`
-- Test: `src/prolly/store/mod.rs:1370-end`
+- Modify: `src/prolly/store/mod.rs`
+- Modify: `src/lib.rs`
+- Test: `src/prolly/store/mod.rs`
 
 **Interfaces:**
 
-- Consumes: existing `AsyncStore::batch_put` and `AsyncStore::batch_put_with_hint`
-- Produces: `NodeWriteIntent`, `AsyncStore::batch_put_with_intent`, and `AsyncStore::batch_put_with_hint_and_intent`
+- Consumes: existing `Store::batch_put`, `Store::batch_put_with_hint`, `AsyncStore::batch_put`, and `AsyncStore::batch_put_with_hint`.
+- Produces: `PublicationOrigin`, `NodePublicationHint<'a>`, `NodePublication<'a>`, `Store::publish_nodes`, and `AsyncStore::publish_nodes`.
 
-- [ ] **Step 1: Define and export `NodeWriteIntent`**
+- [ ] **Step 1: Implement the publication types**
 
-Add the runtime-only enum immediately before `AsyncStore`:
+Add these definitions immediately after `BatchOp`:
 
 ```rust,ignore
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
-pub enum NodeWriteIntent {
+pub enum PublicationOrigin {
     #[default]
     General,
     PointUpsert,
+    PointDelete,
+    BatchMutation,
+    TreeBuild,
+    Merge,
+    RangeDelete,
+    Replication,
+    Maintenance,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NodePublicationHint<'a> {
+    namespace: &'a [u8],
+    key: &'a [u8],
+    value: &'a [u8],
+}
+
+impl<'a> NodePublicationHint<'a> {
+    pub const fn new(namespace: &'a [u8], key: &'a [u8], value: &'a [u8]) -> Self {
+        Self { namespace, key, value }
+    }
+
+    pub const fn namespace(self) -> &'a [u8] { self.namespace }
+    pub const fn key(self) -> &'a [u8] { self.key }
+    pub const fn value(self) -> &'a [u8] { self.value }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NodePublication<'a> {
+    entries: &'a [(&'a [u8], &'a [u8])],
+    hint: Option<NodePublicationHint<'a>>,
+    origin: PublicationOrigin,
+}
+
+impl<'a> NodePublication<'a> {
+    pub const fn new(
+        entries: &'a [(&'a [u8], &'a [u8])],
+        origin: PublicationOrigin,
+    ) -> Self {
+        Self { entries, hint: None, origin }
+    }
+
+    pub const fn with_hint(
+        entries: &'a [(&'a [u8], &'a [u8])],
+        hint: NodePublicationHint<'a>,
+        origin: PublicationOrigin,
+    ) -> Self {
+        Self { entries, hint: Some(hint), origin }
+    }
+
+    pub const fn entries(self) -> &'a [(&'a [u8], &'a [u8])] { self.entries }
+    pub const fn hint(self) -> Option<NodePublicationHint<'a>> { self.hint }
+    pub const fn origin(self) -> PublicationOrigin { self.origin }
 }
 ```
 
-Change the root re-export to:
+Add rustdoc stating that origin is advisory, unknown variants use the general path, and the request cannot alter correctness or durability.
+
+- [ ] **Step 2: Implement the sync and async defaults**
+
+Add this method after each trait's existing hinted batch method:
 
 ```rust,ignore
-pub use prolly::store::{
-    AsyncStore, NodeWriteIntent, SyncStoreAsAsync,
-};
+fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+    match publication.hint() {
+        Some(hint) => self.batch_put_with_hint(
+            publication.entries(),
+            hint.namespace(),
+            hint.key(),
+            hint.value(),
+        ),
+        None => self.batch_put(publication.entries()),
+    }
+}
 ```
 
-- [ ] **Step 2: Add default intent-aware publication methods**
+Use the same body with `async fn` and `.await` in `AsyncStore`. Do not make `batch_put` call `publish_nodes`.
 
-Place the first method after `batch_put`. It must delegate to the existing virtual method so adapter overrides retain their behavior:
+- [ ] **Step 3: Forward through core reference and runtime adapters**
+
+Add exact forwarding overrides to `Store for Arc<T>`, `Store for &T`, and `AsyncStore for Arc<T>`:
 
 ```rust,ignore
-async fn batch_put_with_intent(
+fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+    (**self).publish_nodes(publication)
+}
+```
+
+The async `Arc<T>` override awaits the forwarded call. `SyncStoreAsAsync<S>` calls `self.inner.publish_nodes(publication)` inline.
+
+For `TokioBlockingStore<S>`, own the borrowed data before entering the worker and rebuild the borrowed request inside the closure:
+
+```rust,ignore
+async fn publish_nodes(
     &self,
-    entries: &[(&[u8], &[u8])],
-    intent: NodeWriteIntent,
+    publication: NodePublication<'_>,
 ) -> Result<(), Self::Error> {
-    let _ = intent;
-    self.batch_put(entries).await
+    let entries = publication
+        .entries()
+        .iter()
+        .map(|(key, value)| (key.to_vec(), value.to_vec()))
+        .collect::<Vec<_>>();
+    let hint = publication.hint().map(|hint| {
+        (
+            hint.namespace().to_vec(),
+            hint.key().to_vec(),
+            hint.value().to_vec(),
+        )
+    });
+    let origin = publication.origin();
+    spawn_store_blocking(self.inner.clone(), move |store| {
+        let entries = entries
+            .iter()
+            .map(|(key, value)| (key.as_slice(), value.as_slice()))
+            .collect::<Vec<_>>();
+        let publication = match hint.as_ref() {
+            Some((namespace, key, value)) => NodePublication::with_hint(
+                &entries,
+                NodePublicationHint::new(namespace, key, value),
+                origin,
+            ),
+            None => NodePublication::new(&entries, origin),
+        };
+        store.publish_nodes(publication)
+    })
+    .await
 }
 ```
 
-Place the hinted method after `batch_put_with_hint`:
+- [ ] **Step 4: Re-export the contract**
 
-```rust,ignore
-async fn batch_put_with_hint_and_intent(
-    &self,
-    entries: &[(&[u8], &[u8])],
-    namespace: &[u8],
-    key: &[u8],
-    value: &[u8],
-    intent: NodeWriteIntent,
-) -> Result<(), Self::Error> {
-    let _ = intent;
-    self.batch_put_with_hint(entries, namespace, key, value).await
-}
-```
+Add `NodePublication`, `NodePublicationHint`, and `PublicationOrigin` to the existing `pub use prolly::store::{...}` list in `src/lib.rs`.
 
-- [ ] **Step 3: Preserve or absorb intent in every core wrapper**
+- [ ] **Step 5: Add post-implementation contract tests**
 
-Import `NodeWriteIntent` beside `AsyncStore` in `SearchIo`. Add exact forwarding overrides to `Arc<T>` and `SearchIo<S>`:
-
-```rust,ignore
-async fn batch_put_with_intent(
-    &self,
-    entries: &[(&[u8], &[u8])],
-    intent: NodeWriteIntent,
-) -> Result<(), Self::Error> {
-    self.store.batch_put_with_intent(entries, intent).await
-}
-```
-
-Use `(**self)` instead of `self.store` in the `Arc<T>` implementation. Add the corresponding hinted override with all existing hint arguments followed by `intent`.
-
-In `SyncStoreAsAsync<S>`, ignore the intent and call the synchronous store inline:
-
-```rust,ignore
-async fn batch_put_with_intent(
-    &self,
-    entries: &[(&[u8], &[u8])],
-    _intent: NodeWriteIntent,
-) -> Result<(), Self::Error> {
-    self.inner.batch_put(entries)
-}
-```
-
-The hinted override calls `self.inner.batch_put_with_hint` with `entries`, `namespace`, `key`, and `value`. `TokioBlockingStore<S>` copies owned arguments and invokes the same existing synchronous methods through `spawn_store_blocking`; it does not forward intent into `Store`.
-
-- [ ] **Step 4: Add post-implementation contract tests**
-
-Extend the store test module with an `IntentAwareAsyncStore` whose override records `(hinted, intent)` before delegating. Add these tests:
+Extend the store test module with a recording store and assert:
 
 ```rust,ignore
 #[test]
-fn async_store_intent_defaults_preserve_existing_batches() {
-    block_on(async {
-        let store = DefaultAsyncReadStore::with_entries(1, &[]);
-        store.batch_put_with_intent(
-            &[(b"a", b"1")],
-            NodeWriteIntent::PointUpsert,
-        ).await.unwrap();
-        assert_eq!(store.get(b"a").await.unwrap(), Some(b"1".to_vec()));
-    });
+fn publication_defaults_dispatch_once_and_preserve_hint() {
+    let store = RecordingStore::default();
+    let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+    let hint = NodePublicationHint::new(b"rightmost", b"root", b"path");
+
+    store
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::PointUpsert,
+        ))
+        .unwrap();
+    store
+        .publish_nodes(NodePublication::with_hint(
+            &entries,
+            hint,
+            PublicationOrigin::TreeBuild,
+        ))
+        .unwrap();
+
+    assert_eq!(store.batch_calls(), 1);
+    assert_eq!(store.hinted_batch_calls(), 1);
+    assert_eq!(store.last_hint(), Some((b"rightmost".to_vec(), b"root".to_vec(), b"path".to_vec())));
 }
 ```
 
-Add an `Arc<IntentAwareAsyncStore>` test that calls both new methods and asserts exactly one preserved `PointUpsert` record per call. Add ready-runner coverage that polls both new `SyncStoreAsAsync` methods once and requires `Poll::Ready`.
+Add first-poll tests for `SyncStoreAsAsync::publish_nodes` and forwarding tests for `Arc<T>` and `&T`. Use `std::mem::size_of::<NodePublication<'static>>()` only as a structural assertion; allocation behavior is verified later with the existing allocation-counting harness.
 
-- [ ] **Step 5: Run the focused core tests**
+- [ ] **Step 6: Run focused verification**
 
 Run:
 
 ```sh
+cargo fmt --all -- --check
 cargo test -p prolly-map prolly::store::tests --all-features
 cargo test -p prolly-map --test async_foundation_default
 cargo check -p prolly-map --no-default-features
 ```
 
-Expected: every command exits `0`; the no-default-features graph contains no new Tokio requirement.
+Expected: all commands exit `0`, ready tests return `Poll::Ready`, and the no-default-features build adds no Tokio dependency.
 
-- [ ] **Step 6: Commit the contract slice**
+- [ ] **Step 7: Commit the contract**
 
 ```sh
-git add src/lib.rs src/prolly/store/mod.rs \
-  src/prolly/proximity/search/runtime.rs
-git commit -m "feat: classify async node publications"
+git add src/lib.rs src/prolly/store/mod.rs
+git commit -m "feat: add universal node publication contract"
 ```
 
-## Task 2: Carry intent through the verified remote adapter
+## Task 2: Route Origin Through Ready-Sync and Native-Async Writers
 
-This task extends the provider boundary without letting intent bypass node validation.
+This task attaches semantic origin while preserving one canonical mutation implementation.
 
 **Files:**
 
-- Modify: `src/prolly/remote.rs:19-25`
-- Modify: `src/prolly/remote.rs:137-240`
-- Modify: `src/prolly/remote.rs:274-355`
-- Modify: `src/prolly/remote.rs:432-555`
-- Test: `src/prolly/remote.rs:1080-end`
+- Modify: `src/prolly/engine/write.rs`
+- Modify: `src/prolly/mod.rs`
+- Create: `tests/node_publication.rs`
 
 **Interfaces:**
 
-- Consumes: `NodeWriteIntent` and both intent-aware `AsyncStore` methods from Task 1
-- Produces: `RemoteStoreBackend::batch_put_nodes_with_intent` and `RemoteStoreBackend::batch_put_nodes_with_hint_and_intent`
+- Consumes: `NodePublication` and `PublicationOrigin` from Task 1.
+- Produces: `PublicationStore<'a, S>`, origin-aware ready manager construction, origin-aware `execute_replay`, and private sync/async `put_with_origin` and `batch_with_origin` helpers for higher-level operations.
 
-- [ ] **Step 1: Add remote backend defaults**
+- [ ] **Step 1: Implement `PublicationStore`**
 
-Import `NodeWriteIntent` beside `AsyncStore` and add this method after `batch_put_nodes`:
+Add an internal facade before `ReadyWriteManager`:
 
 ```rust,ignore
-async fn batch_put_nodes_with_intent(
-    &self,
-    entries: &[(&[u8], &[u8])],
-    intent: NodeWriteIntent,
-) -> Result<(), Self::Error> {
-    let _ = intent;
-    self.batch_put_nodes(entries).await
+struct PublicationStore<'a, S: Store> {
+    inner: &'a S,
+    origin: PublicationOrigin,
+}
+
+impl<'a, S: Store> PublicationStore<'a, S> {
+    const fn new(inner: &'a S, origin: PublicationOrigin) -> Self {
+        Self { inner, origin }
+    }
 }
 ```
 
-Add the hinted counterpart after `batch_put_nodes_with_hint`. Its default calls the existing combined hinted method, not separate node and hint methods.
-
-- [ ] **Step 2: Forward backend intent through `Arc<T>`**
-
-Implement both methods with direct forwarding:
+Implement every `Store` method explicitly. Forward reads, capabilities, `delete`, generic `batch`, and hint access to `inner`. Intercept only immutable publication methods:
 
 ```rust,ignore
-async fn batch_put_nodes_with_intent(
+fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+    let entries = [(key, value)];
+    self.inner
+        .publish_nodes(NodePublication::new(&entries, self.origin))
+}
+
+fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+    self.inner
+        .publish_nodes(NodePublication::new(entries, self.origin))
+}
+
+fn batch_put_with_hint(
     &self,
     entries: &[(&[u8], &[u8])],
-    intent: NodeWriteIntent,
+    namespace: &[u8],
+    key: &[u8],
+    value: &[u8],
 ) -> Result<(), Self::Error> {
-    (**self).batch_put_nodes_with_intent(entries, intent).await
+    self.inner.publish_nodes(NodePublication::with_hint(
+        entries,
+        NodePublicationHint::new(namespace, key, value),
+        self.origin,
+    ))
 }
 ```
 
-The hinted forwarding method passes `entries`, `namespace`, `key`, `value`, and `intent` unchanged.
+Do not classify generic `batch` or `delete` as node publication.
 
-- [ ] **Step 3: Validate before forwarding from `RemoteProllyStore`**
+- [ ] **Step 2: Make `ReadyWriteManager` own the facade**
 
-Override both new `AsyncStore` methods. Validate every `(key, value)` with `self.verify_node` before the backend call:
+Change its store type and construction:
 
 ```rust,ignore
-async fn batch_put_with_intent(
+struct ReadyWriteManager<'a, S: Store> {
+    engine: &'a ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
+    store: PublicationStore<'a, S>,
+    config: &'a Config,
+}
+
+impl<'a, S: Store> ReadyWriteManager<'a, S> {
+    fn new(
+        engine: &'a ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
+        config: &'a Config,
+        origin: PublicationOrigin,
+    ) -> Self {
+        Self {
+            engine,
+            store: PublicationStore::new(engine.store.inner().as_ref(), origin),
+            config,
+        }
+    }
+}
+```
+
+Set `CanonicalWriteManager::Store = PublicationStore<'a, S>` and return `&self.store`. Replace every literal manager construction with `ReadyWriteManager::new`.
+
+- [ ] **Step 3: Add origin to async final publication**
+
+Change the signature to:
+
+```rust,ignore
+pub(crate) async fn execute_replay<T, F, U>(
     &self,
-    entries: &[(&[u8], &[u8])],
-    intent: NodeWriteIntent,
+    tree: &Tree,
+    publish_rightmost_hint: bool,
+    origin: PublicationOrigin,
+    operation: F,
+    update_io: U,
+) -> Result<(Tree, T), Error>
+```
+
+Replace final `batch_put` and `batch_put_with_hint` calls with one request per branch. Keep the encoded hint and its borrowed request in the same scope as the awaited call:
+
+```rust,ignore
+if publish_rightmost_hint && self.store.supports_hints() {
+    let root = result.0.root.as_ref().ok_or(Error::InvalidNode)?;
+    let path = replay_rightmost_path(&manager, root)?;
+    let hint = encode_rightmost_path_hint(&path)?;
+    self.store
+        .publish_nodes(NodePublication::with_hint(
+            &entries,
+            NodePublicationHint::new(
+                RIGHTMOST_PATH_HINT_NAMESPACE,
+                root.as_bytes(),
+                &hint,
+            ),
+            origin,
+        ))
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?;
+} else {
+    self.store
+        .publish_nodes(NodePublication::new(&entries, origin))
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?;
+}
+```
+
+Keep replay discovery, validation, cache insertion, metrics, and empty-write behavior unchanged. Keep the hint bytes alive through the awaited call by placing publication and the call in the hint branch when necessary.
+
+- [ ] **Step 4: Assign public point, batch, and range origins**
+
+Add `origin: PublicationOrigin` to the internal canonical batch entry points. Define private helpers on both sync and async managers:
+
+```rust,ignore
+pub(crate) fn put_with_origin(
+    &self,
+    tree: &Tree,
+    key: Vec<u8>,
+    val: Vec<u8>,
+    origin: PublicationOrigin,
+) -> Result<Tree, Error> {
+    self.batch_with_origin(tree, vec![Mutation::Upsert { key, val }], origin)
+}
+
+pub(crate) fn batch_with_origin(
+    &self,
+    tree: &Tree,
+    mutations: Vec<Mutation>,
+    origin: PublicationOrigin,
+) -> Result<Tree, Error> {
+    self.engine
+        .canonical_batch_tree_ready(tree, mutations, origin)
+}
+```
+
+Implement the async forms with `async fn`, `.await`, and the native async canonical entry. Route public APIs:
+
+```rust,ignore
+pub fn put(...) -> Result<Tree, Error> {
+    self.put_with_origin(
+        tree,
+        key,
+        val,
+        PublicationOrigin::PointUpsert,
+    )
+}
+
+pub fn delete(...) -> Result<Tree, Error> {
+    self.batch_with_origin(
+        tree,
+        vec![Mutation::Delete { key: key.to_vec() }],
+        PublicationOrigin::PointDelete,
+    )
+}
+
+pub fn batch(...) -> Result<Tree, Error> {
+    self.batch_with_origin(tree, mutations, PublicationOrigin::BatchMutation)
+}
+```
+
+Implement the same routing for async methods. Keep one-item public batch as `BatchMutation`. Hardcode `RangeDelete` in sync and async range-delete engine entries. Pass `BatchMutation` from configured and stats-producing public batch APIs.
+
+- [ ] **Step 5: Add post-implementation sync/async routing tests**
+
+In `tests/node_publication.rs`, implement `RecordingSyncStore` and `RecordingAsyncStore` over `MemStore`. Record owned entries, hint, and origin in each `publish_nodes` override before delegating.
+
+Exercise changed operations and assert exact origins:
+
+```rust,ignore
+assert_eq!(sync_origins(&sync_put_store), vec![PublicationOrigin::PointUpsert]);
+assert_eq!(sync_origins(&sync_delete_store), vec![PublicationOrigin::PointDelete]);
+assert_eq!(sync_origins(&sync_batch_store), vec![PublicationOrigin::BatchMutation]);
+assert_eq!(sync_origins(&sync_range_store), vec![PublicationOrigin::RangeDelete]);
+
+assert_eq!(async_origins(&async_put_store), vec![PublicationOrigin::PointUpsert]);
+assert_eq!(async_origins(&async_delete_store), vec![PublicationOrigin::PointDelete]);
+assert_eq!(async_origins(&async_batch_store), vec![PublicationOrigin::BatchMutation]);
+assert_eq!(async_origins(&async_range_store), vec![PublicationOrigin::RangeDelete]);
+```
+
+For every operation, compare the returned root and a recursively collected reachable-node map with an uninstrumented `MemStore` execution. Add an unchanged point operation assertion that emits no publication.
+
+- [ ] **Step 6: Run focused verification**
+
+```sh
+cargo fmt --all -- --check
+cargo test -p prolly-map --test node_publication --all-features
+cargo test -p prolly-map --test ready_sync --all-features
+cargo test -p prolly-map --test canonical_range_delete --all-features
+cargo test -p prolly-map --test canonical_roots --all-features
+```
+
+Expected: every command exits `0`; roots and reachable bytes are identical; sync publication remains runtime-free.
+
+- [ ] **Step 7: Commit core routing**
+
+```sh
+git add src/prolly/engine/write.rs src/prolly/mod.rs tests/node_publication.rs
+git commit -m "feat: route publication origin through core writers"
+```
+
+## Task 3: Classify Builders, Replication, Transactions, and Transparent Wrappers
+
+This task closes publication paths that do not originate in the main point/batch writer.
+
+**Files:**
+
+- Modify: `src/prolly/builder.rs`
+- Modify: `src/prolly/mod.rs`
+- Modify: `src/prolly/transaction.rs`
+- Modify: `src/prolly/proximity/search/runtime.rs`
+- Modify: `src/prolly/range_delete.rs`
+- Modify: `stores/prolly-store-slatedb/benches/slatedb_ops_bench.rs`
+- Modify: `stores/prolly-store-slatedb/benches/slatedb_workload_bench.rs`
+- Modify: `tests/node_publication.rs`
+- Modify: `tests/transactions.rs`
+- Modify: `tests/snapshot_manager.rs`
+
+**Interfaces:**
+
+- Consumes: origin-aware core paths from Task 2.
+- Produces: `TreeBuild` and `Replication` routing, explicit wrapper forwarding, and overlay absorption.
+
+- [ ] **Step 1: Publish standalone builder output as `TreeBuild`**
+
+Change `builder::persist_nodes` and test-only serial builder publication from `batch_put` to:
+
+```rust,ignore
+store
+    .publish_nodes(NodePublication::new(
+        &entries,
+        PublicationOrigin::TreeBuild,
+    ))
+    .map_err(|error| Error::Store(Box::new(error)))
+```
+
+Change async builder helpers to accept an origin:
+
+```rust,ignore
+pub(crate) async fn publish_builder_nodes(
+    &self,
+    nodes: &[builder::DeferredNode],
+    origin: PublicationOrigin,
+) -> Result<(), Error>
+```
+
+Pass `TreeBuild` from public sorted and unsorted build APIs. Pass the parent origin from any nested builder caller. When a sync builder receives `PublicationStore`, its outer facade origin intentionally replaces `TreeBuild`.
+
+- [ ] **Step 2: Classify snapshot import and missing-node copy as `Replication`**
+
+Replace both async destination batches in `copy_missing_nodes` and `import_snapshot` with:
+
+```rust,ignore
+destination
+    .publish_nodes(NodePublication::new(
+        &entries,
+        PublicationOrigin::Replication,
+    ))
+    .await
+    .map_err(|error| Error::Store(Box::new(error)))?;
+```
+
+The synchronous APIs already enter through `SyncStoreAsAsync` and therefore forward the same request inline.
+
+- [ ] **Step 3: Forward through transparent wrappers**
+
+Add sync and async `publish_nodes` overrides to `SearchIo<S>` that call `self.store.publish_nodes(publication)`. Add an override to the production range-delete counting store and the two SlateDB benchmark counting stores that records the same write count as `batch_put` and then forwards `publication` unchanged.
+
+- [ ] **Step 4: Absorb origin in transaction overlays**
+
+Add `publish_nodes` to all four overlay stores:
+
+```rust,ignore
+fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+    self.batch_put(publication.entries())
+}
+```
+
+Use the awaited form for async overlays. Do not forward origin or hints to the base store. Keep `supports_hints() == false`. Keep final strict `commit_transaction` unchanged and general.
+
+- [ ] **Step 5: Add post-implementation tests**
+
+Extend `tests/node_publication.rs` with `TreeBuild` and `Replication` assertions for sync and async build, copy, and import. Extend `tests/transactions.rs` so borrowed and owned sync/async overlays receive a point publication, can read staged nodes, and leave the base recorder at zero publication calls before commit.
+
+Add this wrapper assertion:
+
+```rust,ignore
+assert_eq!(
+    recorder.take_publications(),
+    vec![RecordedPublication {
+        origin: PublicationOrigin::TreeBuild,
+        hinted: true,
+        entries: expected_entries,
+    }]
+);
+```
+
+- [ ] **Step 6: Run focused verification**
+
+```sh
+cargo fmt --all -- --check
+cargo test -p prolly-map --test node_publication --all-features
+cargo test -p prolly-map --test transactions --all-features
+cargo test -p prolly-map --test snapshot_manager --all-features
+cargo test -p prolly-map builder --all-features
+cargo check --manifest-path stores/prolly-store-slatedb/Cargo.toml --benches
+```
+
+Expected: all commands exit `0`; overlays stage but do not leak origin; copy/import validate exact bytes.
+
+- [ ] **Step 7: Commit direct-path routing**
+
+```sh
+git add src/prolly/builder.rs src/prolly/mod.rs src/prolly/transaction.rs \
+  src/prolly/proximity/search/runtime.rs src/prolly/range_delete.rs \
+  stores/prolly-store-slatedb/benches/slatedb_ops_bench.rs \
+  stores/prolly-store-slatedb/benches/slatedb_workload_bench.rs \
+  tests/node_publication.rs tests/transactions.rs tests/snapshot_manager.rs
+git commit -m "feat: classify direct node publications"
+```
+
+## Task 4: Classify Merge and Maintenance Publications
+
+This task gives structural/fallback merge and content-addressed derived data their reviewed origins.
+
+**Files:**
+
+- Modify: `src/prolly/diff.rs`
+- Modify: `src/prolly/proximity/map.rs`
+- Modify: `src/prolly/proximity/search/engine.rs`
+- Modify: `src/prolly/proximity/search/async.rs`
+- Modify: `src/prolly/proximity/accelerator/catalog.rs`
+- Modify: `src/prolly/proximity/accelerator/composite.rs`
+- Modify: `src/prolly/proximity/accelerator/hnsw/storage.rs`
+- Modify: `src/prolly/proximity/accelerator/pq.rs`
+- Modify: `src/prolly/secondary_index/coordinator.rs`
+- Modify: `tests/node_publication.rs`
+- Modify: `tests/diff_merge.rs`
+- Modify: `tests/secondary_index.rs`
+- Modify: `tests/proximity_mutation.rs`
+
+**Interfaces:**
+
+- Consumes: private sync/async `batch_with_origin` and `put_with_origin` helpers from Task 2.
+- Produces: complete `Merge` and `Maintenance` coverage.
+
+- [ ] **Step 1: Route every merge writer as `Merge`**
+
+Pass `PublicationOrigin::Merge` to structural `execute_replay`. Replace every sync and async merge fallback call to public `batch` with the private origin-aware helper:
+
+```rust,ignore
+prolly
+    .batch_with_origin(left, mutations, PublicationOrigin::Merge)
+    .await
+```
+
+Use the synchronous form without `.await` in sync merge code. Cover chunked fallback flushes, traced merges, borrowed resolver merges, range-limited merges, and CRDT merge fallbacks. Read-only diff emits no request.
+
+- [ ] **Step 2: Route direct content-addressed maintenance writes**
+
+Replace direct CID-keyed `put` and `batch_put` in proximity modules with one-entry or batched publication:
+
+```rust,ignore
+let entries = [(cid.as_bytes(), bytes)];
+store
+    .publish_nodes(NodePublication::new(
+        &entries,
+        PublicationOrigin::Maintenance,
+    ))
+    .map_err(|error| Error::Store(Box::new(error)))?;
+```
+
+Use the awaited async form where the store is asynchronous. Retain CID derivation and existing validation before publication.
+
+- [ ] **Step 3: Route derived index and catalog tree writes**
+
+Change coordinator-internal source candidates, hidden index trees, catalog trees, and control trees to call `put_with_origin` or `batch_with_origin` with `Maintenance`. Keep public standalone `Prolly::put` and `Prolly::batch` classifications unchanged.
+
+Do not classify temporary in-memory bundle verification as maintenance; it remains a low-level `General` store call because it is not adapter-visible production publication.
+
+- [ ] **Step 4: Add post-implementation tests**
+
+Add tests that force structural merge and fallback merge, then assert every emitted request is `Merge` and both routes have byte-identical reachable maps. Add one indexed-map mutation and one proximity mutation over a recorder, then assert all derived tree/descriptor requests are `Maintenance`.
+
+Use these assertions:
+
+```rust,ignore
+assert!(merge_origins.iter().all(|origin| *origin == PublicationOrigin::Merge));
+assert!(maintenance_origins
+    .iter()
+    .all(|origin| *origin == PublicationOrigin::Maintenance));
+assert_eq!(reachable_bytes(&recorded_store, &tree), reachable_bytes(&control_store, &control_tree));
+```
+
+- [ ] **Step 5: Audit direct source writes**
+
+Run:
+
+```sh
+rg -n "\.(put|batch_put|batch_put_with_hint)\(" src/prolly -g '*.rs'
+```
+
+Classify every production content-addressed write as `PublicationStore` interception, explicit `publish_nodes`, transaction staging, replay staging, or documented low-level `General` behavior. Any unclassified production write blocks the commit.
+
+- [ ] **Step 6: Run focused verification**
+
+```sh
+cargo fmt --all -- --check
+cargo test -p prolly-map --test node_publication --all-features
+cargo test -p prolly-map --test diff_merge --all-features
+cargo test -p prolly-map --test range_limited_merge --all-features
+cargo test -p prolly-map --test secondary_index --all-features
+cargo test -p prolly-map --test proximity_mutation --all-features
+```
+
+Expected: every command exits `0` and every changed publication has the reviewed origin.
+
+- [ ] **Step 7: Commit merge and maintenance routing**
+
+```sh
+git add src/prolly/diff.rs src/prolly/proximity src/prolly/secondary_index \
+  tests/node_publication.rs tests/diff_merge.rs tests/secondary_index.rs \
+  tests/proximity_mutation.rs
+git commit -m "feat: classify merge and maintenance publications"
+```
+
+## Task 5: Extend Remote and Adapter Conformance
+
+This task carries the same request through remote backends and proves every first-party adapter retains safe defaults.
+
+**Files:**
+
+- Modify: `src/prolly/remote.rs`
+- Modify: `stores/prolly-store-test/src/lib.rs`
+- Modify: `tests/store_conformance.rs`
+- Modify: `tests/node_publication.rs`
+- Test: `stores/prolly-store-{postgres,mysql,redis,dynamodb,cosmosdb,spanner,turso}/tests/*.rs`
+
+**Interfaces:**
+
+- Consumes: `NodePublication` from Task 1.
+- Produces: `RemoteStoreBackend::publish_nodes`, unconditional remote publication CID verification, and reusable adapter conformance.
+
+- [ ] **Step 1: Add the remote backend default and `Arc` forwarding**
+
+Add:
+
+```rust,ignore
+async fn publish_nodes(
+    &self,
+    publication: NodePublication<'_>,
 ) -> Result<(), Self::Error> {
-    for (key, value) in entries {
-        self.verify_node(key, value)?;
+    match publication.hint() {
+        Some(hint) => self
+            .batch_put_nodes_with_hint(
+                publication.entries(),
+                hint.namespace(),
+                hint.key(),
+                hint.value(),
+            )
+            .await,
+        None => self.batch_put_nodes(publication.entries()).await,
+    }
+}
+```
+
+The `Arc<T>` implementation forwards `(**self).publish_nodes(publication).await`.
+
+- [ ] **Step 2: Verify before forwarding from `RemoteProllyStore`**
+
+Override `AsyncStore::publish_nodes`:
+
+```rust,ignore
+async fn publish_nodes(
+    &self,
+    publication: NodePublication<'_>,
+) -> Result<(), Self::Error> {
+    for (key, value) in publication.entries() {
+        verify_node_cid::<B::Error>(key, value)?;
     }
     self.backend
-        .batch_put_nodes_with_intent(entries, intent)
+        .publish_nodes(publication)
         .await
         .map_err(backend_error)
 }
 ```
 
-Use the same validation loop before `batch_put_nodes_with_hint_and_intent`.
+Call `verify_node_cid` directly so the legacy `verify_node_cids` toggle cannot bypass publication validation. Keep existing direct read/write configuration behavior unchanged.
 
-- [ ] **Step 4: Add post-implementation remote routing tests**
+- [ ] **Step 3: Extend reusable conformance**
 
-Extend the test `MemoryBackend` with `write_intents: Mutex<Vec<(bool, NodeWriteIntent)>>`. Override both backend intent methods, record once, then delegate to the existing publication methods.
+In remote conformance, publish valid CID/value pairs with every current origin and one hinted request. Assert the backend returns the exact bytes and hint. Add a recording backend test that asserts `RemoteProllyStore` preserves origin exactly once and rejects a mismatched CID before its backend counter increments. Repeat the mismatch assertion with `RemoteStoreConfig { verify_node_cids: false }` to prove the legacy toggle cannot disable publication validation.
 
-Construct valid bytes for direct adapter tests:
+In `prolly-store-test`, extend `assert_store_contract` with:
 
 ```rust,ignore
-let node = Node::builder()
-    .keys(vec![b"a".to_vec()])
-    .vals(vec![b"1".to_vec()])
-    .leaf(true)
-    .level(0)
-    .build();
-let bytes = node.to_bytes();
-let cid = node.cid();
+let bytes = b"published-node";
+let cid = Cid::from_bytes(bytes);
+store
+    .publish_nodes(NodePublication::new(
+        &[(cid.as_bytes(), bytes)],
+        PublicationOrigin::PointUpsert,
+    ))
+    .unwrap();
+assert_eq!(store.get(cid.as_bytes()).unwrap(), Some(bytes.to_vec()));
 ```
 
-Call both intent-aware adapter methods through `Arc<MemoryBackend>` and assert exact `PointUpsert` records. Then pair `cid.as_bytes()` with different valid node bytes, assert `RemoteAdapterError::CidMismatch`, and assert that the backend record count did not change.
-
-- [ ] **Step 5: Run remote conformance tests**
+- [ ] **Step 4: Compile every adapter on its default path**
 
 Run:
 
 ```sh
-cargo test -p prolly-map prolly::remote::tests --all-features
-cargo test -p prolly-map --test transactions --all-features
+cargo test -p prolly-store-test
+cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
+cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
+cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-turso/Cargo.toml
+cargo check --manifest-path stores/prolly-store-postgres/Cargo.toml --all-features
+cargo check --manifest-path stores/prolly-store-mysql/Cargo.toml --all-features
+cargo check --manifest-path stores/prolly-store-redis/Cargo.toml --all-features
+cargo check --manifest-path stores/prolly-store-dynamodb/Cargo.toml --all-features
+cargo check --manifest-path stores/prolly-store-cosmosdb/Cargo.toml --all-features
+cargo check --manifest-path stores/prolly-store-spanner/Cargo.toml --all-features
 ```
 
-Expected: remote intent tests and all existing backend and transaction conformance tests pass.
+Expected: locally available tests pass and credentialed providers compile without requiring credentials. No adapter except Turso has a custom publication branch.
 
-- [ ] **Step 6: Commit the verified remote slice**
+- [ ] **Step 5: Commit remote and conformance changes**
 
 ```sh
-git add src/prolly/remote.rs
-git commit -m "feat: forward verified node write intent"
+git add src/prolly/remote.rs stores/prolly-store-test/src/lib.rs \
+  tests/store_conformance.rs tests/node_publication.rs
+git commit -m "feat: forward node publication through remote stores"
 ```
 
-## Task 3: Mark only async point upserts in the engine
+## Task 6: Carry Publication Context Through Language Bindings
 
-This task changes call intent without changing canonical mutation work.
+This task prevents foreign store adapters from silently losing origin.
 
 **Files:**
 
-- Modify: `src/prolly/engine/write.rs:637-790`
-- Modify: `src/prolly/mod.rs:4110-4185`
-- Modify: `src/prolly/remote.rs:1360-end`
-- Modify: `tests/async_store.rs:1-40`
-- Test: `tests/async_store.rs`
-- Test: `src/prolly/transaction.rs:1520-end`
+- Create: `bindings/uniffi/src/publication.rs`
+- Modify: `bindings/uniffi/src/lib.rs`
+- Modify: `bindings/uniffi/src/async_store.rs`
+- Modify: inline test modules in `bindings/uniffi/src/lib.rs` and `bindings/uniffi/src/async_store.rs`
+- Regenerate: `bindings/python/prolly/uniffi/prolly.py`
+- Regenerate: `bindings/kotlin/src/main/kotlin/build/crab/prolly/generated/prolly.kt`
+- Regenerate: `bindings/ruby/lib/prolly/generated/prolly.rb`
+- Regenerate: `bindings/swift/Sources/Prolly/prolly.swift`
+- Regenerate: `bindings/swift/Sources/prollyFFI/include/prollyFFI.h`
+- Modify native wrappers under: `bindings/go`, `bindings/node`, `bindings/java`, and `bindings/wasm` where store callbacks are exposed
+- Modify provider implementations returned by:
+  `rg -l "batch_put_nodes_with_hint|HostStoreCallback|ForeignRemoteStore" bindings --glob '!**/target/**'`
+- Modify: `bindings/api/parity.json`
+- Modify: `bindings/api/classification-audit.json`
+- Modify: `bindings/api/application-gap-report.json`
 
 **Interfaces:**
 
-- Consumes: intent-aware async publication methods from Tasks 1 and 2
-- Produces: `ProllyEngine::canonical_point_upsert` and intent-aware final replay publication
+- Consumes: `PublicationOrigin` and `NodePublication`.
+- Produces: stable FFI codes, `NodePublicationRecord`, `HostStoreCallback::publish_nodes`, `ForeignRemoteStore::publish_nodes`, protocol major `2`, and unknown-code general fallback.
 
-- [ ] **Step 1: Share canonical batch logic behind an intent parameter**
+- [ ] **Step 1: Implement focused FFI records**
 
-Import `NodeWriteIntent` beside `AsyncStore` in `engine/write.rs`. Keep `canonical_batch` as the general entry point:
+Create `publication.rs`:
 
 ```rust,ignore
-pub(crate) async fn canonical_batch(
-    &self,
-    tree: &Tree,
-    mutations: Vec<Mutation>,
-) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
-    self.canonical_batch_with_publication_intent(
-        tree,
-        mutations,
-        NodeWriteIntent::General,
-    ).await
+use prolly::{NodePublication, PublicationOrigin};
+
+pub const GENERAL: u32 = 0;
+pub const POINT_UPSERT: u32 = 1;
+pub const POINT_DELETE: u32 = 2;
+pub const BATCH_MUTATION: u32 = 3;
+pub const TREE_BUILD: u32 = 4;
+pub const MERGE: u32 = 5;
+pub const RANGE_DELETE: u32 = 6;
+pub const REPLICATION: u32 = 7;
+pub const MAINTENANCE: u32 = 8;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct PublicationOriginRecord {
+    pub code: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct NodeEntryRecord {
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct NodePublicationHintRecord {
+    pub namespace: Vec<u8>,
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct NodePublicationRecord {
+    pub nodes: Vec<NodeEntryRecord>,
+    pub hint: Option<NodePublicationHintRecord>,
+    pub origin: PublicationOriginRecord,
 }
 ```
 
-Move the current body without algorithm changes into `canonical_batch_with_publication_intent`. Add the dedicated point entry:
+Remove `NodeEntryRecord` from `async_store.rs`, define it once in `publication.rs` as shown, and import it into both callback modules. Implement `From<PublicationOrigin>` with a wildcard mapping to `GENERAL`, and implement an owned conversion from `NodePublication<'_>`.
+
+- [ ] **Step 2: Add both callback methods**
+
+Add:
 
 ```rust,ignore
-pub(crate) async fn canonical_point_upsert(
+fn publish_nodes(
     &self,
-    tree: &Tree,
-    key: Vec<u8>,
-    val: Vec<u8>,
-) -> Result<Tree, Error> {
-    let mutations = vec![Mutation::Upsert { key, val }];
-    Ok(self.canonical_batch_with_publication_intent(
-        tree,
-        mutations,
-        NodeWriteIntent::PointUpsert,
-    ).await?.0)
-}
+    publication: NodePublicationRecord,
+) -> HostStoreUnitResultRecord;
 ```
 
-- [ ] **Step 2: Carry intent only to final replay publication**
+to `HostStoreCallback`, and add the awaited counterpart returning `UnitResultRecord` to `ForeignRemoteStore`. Override `Store::publish_nodes` for `HostStore` and `RemoteStoreBackend::publish_nodes` for `ForeignRemoteBackend`, preserving size/count checks before callback invocation.
 
-Add `publication_intent: NodeWriteIntent` to `execute_replay`. Pass `General` from range delete and the explicit value from canonical batch.
+Change `STORE_PROTOCOL_MAJOR` from `1` to `2`.
 
-Replace only the two final store calls:
+- [ ] **Step 3: Implement language fallback behavior**
 
-```rust,ignore
-self.store
-    .batch_put_with_intent(&entries, publication_intent)
-    .await
-    .map_err(|error| Error::Store(Box::new(error)))?;
+For every checked-in store callback implementation:
+
+- Preserve the received code for application-defined backends.
+- Make every first-party default implementation execute its existing general batch or combined node-plus-hint method for codes `0` through `8` and every unknown code.
+- Expose an idiomatically named `normalize_publication_origin_code` helper that returns codes `0` through `8` unchanged and maps every other `u32` value to `GENERAL`.
+- Preserve one callback invocation and existing error records.
+- Keep origin out of persisted rows, manifests, fixtures, and provider synchronization payloads.
+
+Do not add a language-native fast path in this slice; none has adapter-specific measurements yet.
+
+Update every first-party `StoreDescriptorRecord.protocol_major` producer and the compatibility matrices to `2`. A descriptor that still reports `1` must fail construction with the existing invalid-descriptor error instead of running without publication context.
+
+Add named constants with the exact numeric values above to each hand-written package facade.
+
+- [ ] **Step 4: Add post-implementation binding tests**
+
+Rust facade tests must pass `PointUpsert` with a hint through both callbacks, assert exact owned bytes, then pass `PublicationOriginRecord { code: 4_294_967_295 }` to a language/default dispatcher and assert it takes the general path.
+
+Construct one remote descriptor with protocol major `1` and assert `ForeignRemoteBackend::new` rejects it. Construct the same descriptor with major `2` and assert publication reaches its callback.
+
+Add one callback test in Python and one JVM or Swift generated-binding test:
+
+```python
+publication = captured_publications.pop()
+assert publication.origin.code == POINT_UPSERT
+assert publication.nodes[0].value == expected_bytes
+assert publication.hint.namespace == b"rightmost"
+assert normalize_publication_origin_code(0xFFFFFFFF) == GENERAL
 ```
 
-Use `batch_put_with_hint_and_intent` in the hint branch. Do not change replay discovery, decoding, metrics, caching, or empty-write handling.
+- [ ] **Step 5: Regenerate and verify binding surfaces**
 
-- [ ] **Step 3: Route `AsyncProlly::put` directly to the point entry**
+Run the provenance commands from `bindings/VERIFICATION.md`, then:
 
-Replace the delegation to `self.batch`:
-
-```rust,ignore
-pub async fn put(
-    &self,
-    tree: &Tree,
-    key: Vec<u8>,
-    val: Vec<u8>,
-) -> Result<Tree, Error> {
-    self.canonical_point_upsert(tree, key, val).await
-}
+```sh
+cargo test --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+python3 scripts/binding_api_inventory.py generate
+python3 scripts/binding_api_inventory.py check
+mvn -f bindings/pom.xml test
+(cd bindings/go && go test ./...)
+npm --prefix bindings/node test
+cargo check --manifest-path bindings/wasm/Cargo.toml \
+  --target wasm32-unknown-unknown --target-dir target
+DYLD_LIBRARY_PATH="$PWD/target/debug" \
+  swift run --package-path bindings/swift prolly-fixture-check
 ```
 
-Keep delete and public batch unchanged. Update the rustdoc to reference intent-aware publication instead of only `AsyncStore::batch_put`.
+Run the Ruby and Python callback suites with the library path commands documented in `bindings/README.md`. Expected: all installed local binding prerequisites pass; unavailable optional prerequisites are recorded, never reported as passing.
 
-- [ ] **Step 4: Add post-implementation public routing and identity tests**
-
-In `tests/async_store.rs`, import `AsyncStore` and `NodeWriteIntent` without the Tokio feature gate. Add a native `IntentRecordingStore` that stores nodes in `MemStore`, stores hints in its existing mutex map, reports `supports_hints() == true`, and records `(hinted, intent)` in both new methods.
-
-Add one test with these exact assertions. Record and clear calls between operations:
-
-```rust,ignore
-assert_eq!(after_create, vec![(true, NodeWriteIntent::PointUpsert)]);
-assert_eq!(after_update, vec![(false, NodeWriteIntent::PointUpsert)]);
-assert_eq!(after_batch, vec![(false, NodeWriteIntent::General)]);
-assert_eq!(after_delete, vec![(false, NodeWriteIntent::General)]);
-assert_eq!(point_tree.root, batch_tree.root);
-```
-
-Build equivalent base trees in separate recording stores. Apply the same logical upsert through point put and one-item batch. Walk each result's reachable CIDs into separate `BTreeMap<Cid, Vec<u8>>` values and assert both maps match. Build a clean canonical tree in a third store and assert the same root. Call `put_large_value` with an inline value and assert its tree publication also records `PointUpsert`.
-
-- [ ] **Step 5: Prove transaction overlays absorb point intent**
-
-Extend the async transaction tests with a base async store whose intent methods increment an atomic counter. Exercise both borrowed and owned overlays through `batch_put_with_intent`, then assert the counter remains zero and the staged node is readable from each overlay.
-
-Also assert both overlays report `supports_hints() == false`. In the existing remote transaction test, inspect `MemoryBackend::write_intents` after commit and require it to remain empty because `commit_transaction`, not node-batch publication, writes staged nodes. Do not add hint fields to `TransactionState`.
-
-- [ ] **Step 6: Run engine, canonical, and transaction tests**
+- [ ] **Step 6: Audit generated artifacts**
 
 Run:
 
 ```sh
-cargo test -p prolly-map --test async_store --all-features
-cargo test -p prolly-map --test canonical_roots --all-features
-cargo test -p prolly-map prolly::transaction::tests --all-features
-cargo test -p prolly-map --test basic_ops --all-features
+find bindings -type d \( -name node_modules -o -name target -o -name .build -o -name __pycache__ -o -name pkg \) -prune -print
+git status --short
 ```
 
-Expected: all tests pass, point and batch roots match, and transaction tests observe no premature backend publication.
+Remove only newly generated untracked build artifacts, preserving checked-in generated source. Do not commit native binaries, dependency directories, or local lockfiles.
 
-- [ ] **Step 7: Commit the engine routing slice**
+- [ ] **Step 7: Commit binding propagation**
 
 ```sh
-git add src/prolly/engine/write.rs src/prolly/mod.rs \
-  src/prolly/remote.rs src/prolly/transaction.rs tests/async_store.rs
-git commit -m "perf: identify async point publications"
+git add bindings scripts/binding_api_inventory.py
+git commit -m "feat: expose node publication to store bindings"
 ```
 
-## Task 4: Select deferred transactions only in Turso point publication
+## Task 7: Add the Evidence-Backed Turso Fast Path
 
-This task applies the measured optimization at the final provider boundary.
+This task changes only local transaction lock-acquisition timing for explicit point upserts.
 
 **Files:**
 
-- Modify: `stores/prolly-store-turso/src/lib.rs:5-15`
-- Modify: `stores/prolly-store-turso/src/lib.rs:168-285`
-- Test: `stores/prolly-store-turso/src/lib.rs`
-- Test: `stores/prolly-store-turso/tests/turso_backend.rs`
+- Modify: `stores/prolly-store-turso/src/lib.rs`
+- Modify: `stores/prolly-store-turso/tests/turso_backend.rs`
+- Modify: `stores/prolly-store-turso/README.md`
 
 **Interfaces:**
 
-- Consumes: `NodeWriteIntent` and both remote backend methods from Tasks 1 and 2
-- Produces: point-only `TransactionBehavior::Deferred` selection with shared transaction execution
+- Consumes: `RemoteStoreBackend::publish_nodes` and `PublicationOrigin`.
+- Produces: `publication_transaction_behavior` and a shared Turso publication transaction helper.
 
-- [ ] **Step 1: Add a private transaction behavior selector**
+- [ ] **Step 1: Implement an exhaustive-safe selector**
 
-Import `NodeWriteIntent` from `prolly` and add:
+Add:
 
 ```rust,ignore
-fn node_write_behavior(intent: NodeWriteIntent) -> TransactionBehavior {
-    match intent {
-        NodeWriteIntent::PointUpsert => TransactionBehavior::Deferred,
+fn publication_transaction_behavior(origin: PublicationOrigin) -> TransactionBehavior {
+    match origin {
+        PublicationOrigin::PointUpsert => TransactionBehavior::Deferred,
         _ => TransactionBehavior::Immediate,
     }
 }
 ```
 
-The wildcard is mandatory because `NodeWriteIntent` is non-exhaustive outside the core crate.
+The wildcard is mandatory because the enum is non-exhaustive and future origins must remain immediate.
 
-- [ ] **Step 2: Share node-entry transaction execution**
+- [ ] **Step 2: Consolidate publication transaction code**
 
-Add one private helper on `TursoBackend`:
+Add:
 
 ```rust,ignore
-async fn write_node_entries(
+async fn publish_node_entries(
     &self,
-    entries: &[(&[u8], &[u8])],
-    hint: Option<(&[u8], &[u8], &[u8])>,
+    publication: NodePublication<'_>,
     behavior: TransactionBehavior,
 ) -> Result<(), TursoStoreError> {
+    if publication.entries().is_empty() {
+        return Ok(());
+    }
     let mut connection = self.connect().await?;
     let transaction = connection.transaction_with_behavior(behavior).await?;
-    apply_node_entries(&transaction, entries).await?;
-    if let Some((namespace, key, value)) = hint {
-        transaction.execute(UPSERT_HINT_SQL, (namespace, key, value)).await?;
+    apply_node_entries(&transaction, publication.entries()).await?;
+    if let Some(hint) = publication.hint() {
+        transaction
+            .execute(
+                UPSERT_HINT_SQL,
+                (hint.namespace(), hint.key(), hint.value()),
+            )
+            .await?;
     }
     transaction.commit().await?;
     Ok(())
 }
 ```
 
-Use this helper from existing general node-entry methods with `Immediate`. Do not change `batch_nodes`, root compare-and-swap, or `commit_transaction`.
+Override backend `publish_nodes` and pass the selector result. Keep existing `batch_put_nodes`, `batch_put_nodes_with_hint`, `batch_nodes`, root CAS, and strict commit on `Immediate` by routing them through the helper with `General` or retaining their current transaction code.
 
-- [ ] **Step 3: Override the two remote intent methods**
+- [ ] **Step 3: Add post-implementation Turso tests**
 
-Add:
+Add selector assertions for every current origin. Exercise hinted and unhinted `PointUpsert` publication through `TursoStore` with valid CID/value pairs. Reuse the existing rejecting hint trigger to prove the deferred node-plus-hint transaction rolls back both.
 
-```rust,ignore
-async fn batch_put_nodes_with_intent(
-    &self,
-    entries: &[(&[u8], &[u8])],
-    intent: NodeWriteIntent,
-) -> Result<(), Self::Error> {
-    self.write_node_entries(entries, None, node_write_behavior(intent))
-        .await
-}
-```
-
-The hinted override passes `Some((namespace, key, value))`. Existing methods pass `Immediate` directly so one-entry general batches cannot acquire deferred behavior.
-
-- [ ] **Step 4: Add post-implementation selector and rollback tests**
-
-Add unit assertions with `matches!`:
+Add close/reopen verification:
 
 ```rust,ignore
-assert!(matches!(
-    node_write_behavior(NodeWriteIntent::PointUpsert),
-    TransactionBehavior::Deferred
-));
-assert!(matches!(
-    node_write_behavior(NodeWriteIntent::General),
-    TransactionBehavior::Immediate
-));
+drop(prolly);
+drop(store);
+drop(backend);
+
+let reopened = TursoStore::new(TursoBackend::open(&path).await.unwrap());
+let reopened = AsyncProlly::new(reopened, tree.config.clone());
+assert_eq!(reopened.get(&tree, b"key").await.unwrap(), Some(b"value".to_vec()));
 ```
 
-Duplicate the existing hint-trigger rollback fixture but invoke the complete call below. Assert both the first node and hint remain absent after the forced hint statement failure:
+Add two concurrent point upserts. Accept success or the existing documented busy error, then reopen and verify every successful tree without retrying inside the adapter.
 
-```rust,ignore
-backend.batch_put_nodes_with_hint_and_intent(
-    &[(b"node".as_slice(), b"value".as_slice())],
-    b"ns",
-    b"key",
-    b"hint",
-    NodeWriteIntent::PointUpsert,
-).await
-```
-
-- [ ] **Step 5: Add persistence and concurrency tests**
-
-For persistence, publish two nodes with `PointUpsert`, drop the backend, and reopen the same local path:
-
-```rust,ignore
-#[tokio::test(flavor = "multi_thread")]
-async fn point_intent_persists_after_reopen() {
-    let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("point-persistence.db");
-    {
-        let backend = TursoBackend::open(&path).await.unwrap();
-        backend.batch_put_nodes_with_intent(
-            &[(b"a", b"1"), (b"b", b"2")],
-            NodeWriteIntent::PointUpsert,
-        ).await.unwrap();
-    }
-    let reopened = TursoBackend::open(&path).await.unwrap();
-    assert_eq!(reopened.get_node(b"a").await.unwrap(), Some(b"1".to_vec()));
-    assert_eq!(reopened.get_node(b"b").await.unwrap(), Some(b"2".to_vec()));
-}
-```
-
-For concurrency, launch two cloned backends with `tokio::join!`. Record which calls succeeded, accept only busy errors for the others, drop every handle, reopen the database, and verify each acknowledged value:
-
-```rust,ignore
-let point = NodeWriteIntent::PointUpsert;
-let left = backend.clone();
-let right = backend.clone();
-let (left_result, right_result) = tokio::join!(
-    left.batch_put_nodes_with_intent(&[(b"left", b"1")], point),
-    right.batch_put_nodes_with_intent(&[(b"right", b"2")], point),
-);
-for result in [&left_result, &right_result] {
-    assert!(matches!(
-        result,
-        Ok(()) | Err(TursoStoreError::Turso(
-            turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
-        ))
-    ));
-}
-assert!(left_result.is_ok() || right_result.is_ok());
-```
-
-After reopening, assert `left` exists when `left_result.is_ok()` and `right` exists when `right_result.is_ok()`.
-
-- [ ] **Step 6: Run both Turso feature sets**
-
-Run:
+- [ ] **Step 4: Run Turso correctness gates**
 
 ```sh
+cargo fmt --all -- --check
 cargo test --manifest-path stores/prolly-store-turso/Cargo.toml
 cargo test --manifest-path stores/prolly-store-turso/Cargo.toml \
   --features turso-cloud-sync
@@ -589,228 +1079,379 @@ cargo clippy --manifest-path stores/prolly-store-turso/Cargo.toml \
   --all-targets --all-features -- -D warnings
 ```
 
-Expected: local tests run without credentials, cloud integration remains skipped by its existing environment gate, and Clippy exits `0`.
+Expected: local tests pass without credentials; the cloud integration remains guarded; no test invokes synchronization.
 
-- [ ] **Step 7: Commit the Turso policy slice**
+- [ ] **Step 5: Commit the isolated override**
 
 ```sh
 git add stores/prolly-store-turso/src/lib.rs \
-  stores/prolly-store-turso/tests/turso_backend.rs
+  stores/prolly-store-turso/tests/turso_backend.rs \
+  stores/prolly-store-turso/README.md
 git commit -m "perf: defer Turso point publication locks"
 ```
 
-## Task 5: Complete correctness and platform verification
+## Task 8: Complete Correctness and Coverage Verification
 
-This task validates the complete architecture before measuring performance.
+This task runs the universal contract against all core paths before any performance claim.
 
 **Files:**
 
-- Modify only if a verification failure identifies a defect in a file changed by Tasks 1 through 4
-- Record command output in the implementation handoff
+- Modify: `tests/node_publication.rs`
+- Modify: `tests/invariants.rs`
+- Modify: `tests/performance_hints.rs`
+- Modify: `tests/store_conformance.rs`
+- Modify: `src/prolly/remote.rs` test module
 
 **Interfaces:**
 
-- Consumes: the complete point-publication slice
-- Produces: a clean, platform-checked candidate eligible for performance measurement
+- Consumes: Tasks 1 through 7.
+- Produces: final cross-origin identity, allocation, failure, and coverage evidence.
 
-- [ ] **Step 1: Run formatting and compile checks**
+- [ ] **Step 1: Add the cross-origin identity matrix**
 
-Run:
+For each current origin, execute a representative changed operation through sync and async recording stores. Collect the returned root and every reachable `(Cid, bytes)` pair. Assert:
+
+```rust,ignore
+assert_eq!(sync_tree.root, async_tree.root);
+assert_eq!(sync_reachable, async_reachable);
+assert!(recorded
+    .iter()
+    .all(|publication| publication.origin == expected_origin));
+assert!(recorded
+    .iter()
+    .all(|publication| publication.entries.iter().all(cid_matches_bytes)));
+```
+
+Cover hinted append publication and unhinted random/clustered publication. Assert node work stays bounded by tree height and point operations issue at most one final async publication batch.
+
+Run every canonical sync writer over an inner store whose generic `batch` and `delete` methods panic while its `publish_nodes` override succeeds. This is the regression guard that canonical immutable publication never escapes through the facade's unclassified generic mutation methods.
+
+- [ ] **Step 2: Add failure and allocation checks**
+
+Use existing failing stores to make publication fail after canonical generation. Assert no usable tree is returned and the original tree remains readable. Use the repository allocation-counting helper around construction/default dispatch and assert the request itself adds zero allocations; exclude existing `batch_put` fallback allocation from that assertion.
+
+Add an async acknowledgment store whose publication future remains pending until a test flag is released. Assert the engine future cannot return a tree before acknowledgment. Drop one pending publication future and assert no named root changes; unreachable immutable nodes are allowed. Resume a fresh operation and assert normal success, proving cancellation adds no hidden retry or poisoned adapter state.
+
+- [ ] **Step 3: Run the complete local correctness gate**
 
 ```sh
 cargo fmt --all -- --check
-cargo check --workspace --all-features
-cargo check --manifest-path bindings/wasm/Cargo.toml \
-  --target wasm32-unknown-unknown
-```
-
-Expected: every command exits `0`; the WASM build adds no Tokio dependency through the base async contract.
-
-- [ ] **Step 2: Run the full correctness suite**
-
-Run:
-
-```sh
 cargo test --workspace --all-features
 cargo test --doc --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo check -p prolly-map --no-default-features
+cargo check --manifest-path bindings/wasm/Cargo.toml \
+  --target wasm32-unknown-unknown
+git diff --check
 ```
 
-Expected: every non-ignored test and documentation test passes; Clippy reports no warning.
+Expected: every non-environment-gated test passes; Clippy has no warning; WASM and no-default core remain runtime-neutral.
 
-- [ ] **Step 3: Audit implementation coverage**
+- [ ] **Step 4: Audit every implementation and publication call site**
 
 Run:
 
 ```sh
-rg -n '^impl.*AsyncStore|^impl.*RemoteStoreBackend' \
+rg -n '^impl.*\b(Store|AsyncStore|RemoteStoreBackend)\b.*\bfor\b' \
   src stores bindings -g '*.rs'
-rg -n 'batch_put_with_(hint_and_)?intent|NodeWriteIntent' \
-  src stores bindings tests -g '*.rs'
+rg -n 'publish_nodes|batch_put|batch_put_with_hint' \
+  src/prolly stores bindings/uniffi/src -g '*.rs'
 ```
 
-Classify every implementation as transparent forwarding, semantic absorption, optimized handling, or default general handling. Confirm `ForeignRemoteBackend` uses the default general path and strict transaction commits contain no `PointUpsert` branch.
+Record each implementation in the task notes as default, transparent forwarding, semantic absorption, validation boundary, foreign boundary, or measured override. No unclassified production implementation may proceed to benchmarks.
 
-- [ ] **Step 4: Commit any verification-only corrections**
+- [ ] **Step 5: Commit the final correctness matrix**
 
-If Tasks 1 through 3 required a correction, stage only the affected production and test files. Use `git commit -m "fix: preserve point publication invariants"`. Skip this commit when verification required no changes.
+```sh
+git add tests src/prolly/remote.rs
+git commit -m "test: verify universal publication invariants"
+```
 
-## Task 6: Run focused performance acceptance
+## Task 9: Build Reproducible Performance Gates
 
-This task proves the optimization works and protects unrelated APIs before the full scale run.
+This task adds deterministic paired tooling before collecting acceptance results.
 
 **Files:**
 
-- Create: `performance-results/turso-point-intent-focused-2026-07-19/`
-- Compare: detached baseline revision `a2f4e7a3`
-- Use: `scripts/run_sqlite_turso_local_comparison.sh`
+- Modify: `benches/async_first_foundation_bench.rs`
+- Create: `scripts/run_node_publication_revision_gate.sh`
+- Create: `scripts/summarize_node_publication_revision_gate.py`
+- Create: `scripts/tests/test_summarize_node_publication_revision_gate.py`
+- Create: `benchmarks/local-store-publication/Cargo.toml`
+- Create: `benchmarks/local-store-publication/src/main.rs`
+- Create: `benchmarks/local-store-publication/src/model.rs`
+- Create: `benchmarks/local-store-publication/src/sync_runner.rs`
+- Create: `benchmarks/local-store-publication/src/turso_runner.rs`
+- Create: `scripts/run_local_store_publication_revision_gate.sh`
 
 **Interfaces:**
 
-- Consumes: verified candidate and existing benchmark schema
-- Produces: paired 10K latency and throughput evidence for every API and pattern
+- Consumes: baseline revision `a2f4e7a3066d2259783c8d815b45c0461c77b06b` and the verified candidate.
+- Produces: alternating process pairs, merged revision-labelled rows, directional gate summaries, and local-only provenance.
 
-- [ ] **Step 1: Build isolated baseline and candidate binaries**
+- [ ] **Step 1: Extend the in-memory overhead screen**
 
-Reuse the clean detached baseline at `/private/tmp/prolly-turso-put-baseline.9PVDvG/repo` after verifying `git rev-parse HEAD` equals `a2f4e7a3066d2259783c8d815b45c0461c77b06b`. Build baseline and candidate into separate target directories with `CARGO_INCREMENTAL=0`.
+Add point upsert, point delete, one-item batch, build, merge, range delete, and direct request forwarding to `async_first_foundation_bench`. Emit:
 
-- [ ] **Step 2: Run five alternating focused pairs**
-
-Run the frozen 10K workload with 100 changes, five repetitions, both adapters, all APIs, and all patterns. Alternate which revision runs first for each repetition. Store raw rows, summaries, manifests, dependency features, and machine metadata in separate baseline and candidate subdirectories.
-
-Use these workload arguments for both revisions:
-
-```sh
---sizes 10000 --changes 100 --runs 5 \
---adapters sqlite-sync,turso-async \
---apis put,batch,diff,merge \
---patterns append,random,clustered
+```text
+revision,facade,api,records,items_per_sample,samples,median_ns,p95_ns,throughput_items_per_sec,publication_calls,request_allocations,root
 ```
 
-- [ ] **Step 3: Apply the focused gates**
+Run sync-ready, async-over-sync, and native async recorder paths with identical seeds and assert equal roots before timing.
 
-Require at least 40% lower Turso point-put median total latency for append, random, and clustered patterns. Require no Turso point p50 or p95 regression. Reject any SQLite/Turso batch, diff, merge, or SQLite put median regression above 5%.
+- [ ] **Step 2: Implement the all-local-adapter workload harness**
 
-If a protected cell crosses 5%, run five more alternating pairs and evaluate the combined ten. Correct or revert every confirmed regression before proceeding.
+Create a standalone benchmark package with path dependencies on `prolly-map`, SQLite, RocksDB, SlateDB, PGlite, and Turso. The core crate supplies memory and file stores. Use native synchronous `Store` paths for memory, file, SQLite, RocksDB, SlateDB, and PGlite; use native `AsyncProlly<TursoStore>` for Turso.
 
-- [ ] **Step 4: Re-run in-memory performance verification**
+The CLI accepts:
 
-Run the same `prolly_bench` core-operation screen and `async_first_foundation_bench` comparison recorded in the async-first design. Use alternating baseline/candidate runs and the same 10,000-record fixtures. Require at most 5% median and 10% p95 regression for every protected operation.
-
-- [ ] **Step 5: Commit focused evidence**
-
-Add only durable summaries, manifests, and compact findings. Do not commit database fixtures, target directories, or per-command terminal logs:
-
-```sh
-git add performance-results/turso-point-intent-focused-2026-07-19
-git commit -m "perf: verify Turso point publication intent"
+```text
+--output PATH --records N --changes N --runs N
+--adapters CSV --apis CSV --patterns CSV --revision TEXT
 ```
 
-## Task 7: Run the full local matrix and update documentation
+Run `put,batch,build,diff,merge,reopen` for `append,random,clustered` with identical keys, values, seeds, tree configuration, cold-manager policy, and local durability settings. Emit one row per adapter/API/pattern/run:
 
-This task verifies scale behavior through 2 million records and prepares the pull request evidence.
+```text
+revision,adapter,records,changes,api,pattern,run,total_ns,operations_per_sec,p50_ns,p95_ns,root,node_count,byte_count,value_valid,count_valid,root_valid,reopen_valid
+```
+
+Each runner must verify values, record count, root stability, reachable CIDs, and reopen behavior before writing `true` validation fields. The harness must skip no requested adapter silently: a missing PGlite sidecar or other prerequisite produces an explicit nonzero exit and a named environment-limitation record from the orchestration script.
+
+- [ ] **Step 3: Implement alternating SQLite/Turso revision orchestration**
+
+The shell script accepts:
+
+```text
+--suite foundation|sqlite-turso
+--baseline-repo PATH
+--candidate-repo PATH
+--output PATH
+--sizes CSV
+--runs N
+--changes N|auto
+--apis CSV
+--patterns CSV
+--adapters CSV
+```
+
+Build each revision once with separate `CARGO_TARGET_DIR` values and `CARGO_INCREMENTAL=0`. The `foundation` suite runs `async_first_foundation_bench`; the `sqlite-turso` suite runs the existing local comparison binary. For repetition `1..N`, run baseline then candidate on odd repetitions and candidate then baseline on even repetitions. Each invocation uses a fresh output directory and one internal repetition. Concatenate validated raw rows with added `revision_role` and `pair` columns. Refuse a dirty baseline and refuse any dependency graph containing `turso-cloud-sync`.
+
+- [ ] **Step 4: Implement alternating all-local-adapter orchestration**
+
+`run_local_store_publication_revision_gate.sh` accepts the same baseline, candidate, output, and run arguments plus the local-adapter list. Build the harness once per revision in separate target directories. Alternate revision order per repetition, give every cell a fresh database directory on the same volume, concatenate revision-labelled rows, and write `environment-limitations.csv` for prerequisites that are genuinely unavailable.
+
+Use this required adapter list unless a recorded prerequisite prevents execution:
+
+```text
+memory-sync,file-sync,sqlite-sync,rocksdb-sync,slatedb-sync,pglite-sync,turso-async
+```
+
+- [ ] **Step 5: Implement directional summarization**
+
+The Python summarizer groups by suite, adapter or facade, records, API, pattern, and revision role. It calculates median total latency, throughput, p50, p95, and percent change. Exit nonzero when:
+
+- candidate median latency rises more than 5%;
+- candidate median throughput falls more than 5%;
+- candidate p95 rises more than 10%;
+- focused Turso point-put latency improves less than 40% for any pattern;
+- any row fails value, count, root, reopen, or fixture validation.
+
+Write `summary.csv`, `gate.csv`, and `report.md` with machine and revision provenance.
+
+- [ ] **Step 6: Add post-implementation script tests**
+
+Create synthetic CSV fixtures covering pass, latency regression, throughput regression, p95 regression, missing pair, validation failure, environment limitation, and Turso target miss. Assert exact exit codes and gate reasons:
+
+```python
+self.assertEqual(result.returncode, 2)
+self.assertIn("median_latency_regression", result.stderr)
+self.assertIn("turso_point_target_miss", result.stderr)
+```
+
+- [ ] **Step 7: Verify the tooling with smoke runs**
+
+```sh
+if [[ ! -d /private/tmp/prolly-node-publication-baseline ]]; then
+  git worktree add --detach /private/tmp/prolly-node-publication-baseline \
+    a2f4e7a3066d2259783c8d815b45c0461c77b06b
+fi
+python3 -m unittest scripts.tests.test_summarize_node_publication_revision_gate -v
+bash -n scripts/run_node_publication_revision_gate.sh
+bash -n scripts/run_local_store_publication_revision_gate.sh
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck scripts/run_node_publication_revision_gate.sh \
+    scripts/run_local_store_publication_revision_gate.sh
+fi
+scripts/run_node_publication_revision_gate.sh \
+  --suite sqlite-turso \
+  --baseline-repo /private/tmp/prolly-node-publication-baseline \
+  --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
+  --output /tmp/node-publication-smoke \
+  --sizes 10000 --runs 1 --changes 100 \
+  --apis put,batch,diff,merge \
+  --patterns append,random,clustered \
+  --adapters sqlite-sync,turso-async
+scripts/run_local_store_publication_revision_gate.sh \
+  --baseline-repo /private/tmp/prolly-node-publication-baseline \
+  --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
+  --output /tmp/node-publication-local-adapters-smoke \
+  --records 10000 --changes 100 --runs 1 \
+  --apis put,batch,build,diff,merge,reopen \
+  --patterns append,random,clustered \
+  --adapters memory-sync,file-sync,sqlite-sync,rocksdb-sync,slatedb-sync,pglite-sync,turso-async
+```
+
+Expected: script tests pass, smoke rows validate, and the smoke report is explicitly marked statistically insufficient.
+
+- [ ] **Step 8: Commit reproducible tooling**
+
+```sh
+git add benches/async_first_foundation_bench.rs \
+  benchmarks/local-store-publication scripts
+git commit -m "perf: add universal publication regression gates"
+```
+
+## Task 10: Run Local Acceptance, Document Results, and Update PR 24
+
+This task collects release evidence only after correctness and tooling pass.
 
 **Files:**
 
-- Create: `performance-results/turso-point-intent-full-2026-07-19/`
+- Create: `performance-results/node-publication-focused-2026-07-19/`
+- Create: `performance-results/node-publication-full-2026-07-19/`
+- Create: `performance-results/node-publication-local-adapters-2026-07-19/`
 - Modify: `docs/sqlite-turso-local-performance.md`
 - Modify: `stores/prolly-store-turso/README.md`
 - Modify: `docs/superpowers/specs/2026-07-19-point-publication-intent-design.md`
+- Modify: pull request `crabbuild/prolly#24`
 
 **Interfaces:**
 
-- Consumes: focused acceptance from Task 6
-- Produces: 432 validated candidate rows, scale comparison, documented transaction policy, and final PR evidence
+- Consumes: verified implementation and Task 9 tooling.
+- Produces: focused and full local evidence, adapter screens, final documentation, pushed commits, and an updated pull request.
 
-- [ ] **Step 1: Run three alternating full-matrix pairs**
+- [ ] **Step 1: Verify the clean baseline created by Task 9**
 
-Run baseline and candidate at 10K, 50K, 100K, 500K, 1M, and 2M records. Use three repetitions, both adapters, all three patterns, and put, batch, diff, and merge. Keep the existing fixed keys, values, seeds, durability settings, cold-manager policy, and 1% change count clamped to 100 through 10,000.
+Verify:
 
-Expected: all 432 candidate rows validate with no skip, timeout, incorrect value, incorrect count, or reopen failure.
-
-- [ ] **Step 2: Apply full scale gates**
-
-Reject any protected API/pattern/size median latency regression above 5%. Require Turso point puts to improve at every size and pattern. Confirm engine metrics show one publication batch and node work bounded by tree height.
-
-- [ ] **Step 3: Update adapter and comparison documentation**
-
-Add this policy statement to the Turso README, adjusted only for surrounding prose:
-
-```markdown
-`AsyncProlly::put` publishes immutable nodes in a deferred local transaction.
-Generic batches, node deletes, root compare-and-swap, and strict transaction
-commits retain immediate transactions. Both point publication paths commit
-nodes and the optional rightmost-path hint atomically.
+```sh
+git -C /private/tmp/prolly-node-publication-baseline rev-parse HEAD
+git -C /private/tmp/prolly-node-publication-baseline status --porcelain
 ```
 
-Update the comparison report with before/after throughput, total latency, p50, p95, p99, the transaction selector, full gate outcome, machine provenance, and local-only limitation. Append the final measured result and implementation status to the approved design.
+Expected: HEAD is `a2f4e7a3066d2259783c8d815b45c0461c77b06b` and status is empty. Stop rather than reusing the directory if either check differs. Build baseline and candidate into different target directories.
 
-- [ ] **Step 4: Run final documentation and repository checks**
+- [ ] **Step 2: Run five alternating focused pairs**
 
-Run:
+```sh
+scripts/run_node_publication_revision_gate.sh \
+  --suite sqlite-turso \
+  --baseline-repo /private/tmp/prolly-node-publication-baseline \
+  --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
+  --output performance-results/node-publication-focused-2026-07-19 \
+  --sizes 10000 --runs 5 --changes 100 \
+  --apis put,batch,diff,merge \
+  --patterns append,random,clustered \
+  --adapters sqlite-sync,turso-async
+```
+
+Require at least 40% lower Turso point-put median latency for every pattern and all universal 5%/10% no-regression gates. If a protected cell crosses a gate, run five additional alternating pairs and evaluate the combined ten.
+
+- [ ] **Step 3: Run in-memory and all-local-adapter screens**
+
+Run five alternating baseline/candidate executions at 10,000 records:
+
+```sh
+scripts/run_node_publication_revision_gate.sh \
+  --suite foundation \
+  --baseline-repo /private/tmp/prolly-node-publication-baseline \
+  --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
+  --output performance-results/node-publication-local-adapters-2026-07-19/foundation \
+  --sizes 10000 --runs 5 --changes 100 \
+  --apis put,delete,batch,build,merge,range-delete,forward \
+  --patterns random \
+  --adapters memory-sync,memory-async-adapted
+scripts/run_local_store_publication_revision_gate.sh \
+  --baseline-repo /private/tmp/prolly-node-publication-baseline \
+  --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
+  --output performance-results/node-publication-local-adapters-2026-07-19/stores \
+  --records 10000 --changes 100 --runs 5 \
+  --apis put,batch,build,diff,merge,reopen \
+  --patterns append,random,clustered \
+  --adapters memory-sync,file-sync,sqlite-sync,rocksdb-sync,slatedb-sync,pglite-sync,turso-async
+```
+
+Record unavailable optional prerequisites in `environment-limitations.csv`. Default adapters must pass the universal no-regression gate; do not add a custom override based on noise.
+
+- [ ] **Step 4: Run the full 432-row candidate matrix**
+
+The requested record sizes are 10K, 50K, 100K, 500K, 1M, and 2M.
+
+```sh
+scripts/run_node_publication_revision_gate.sh \
+  --suite sqlite-turso \
+  --baseline-repo /private/tmp/prolly-node-publication-baseline \
+  --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
+  --output performance-results/node-publication-full-2026-07-19 \
+  --sizes 10000,50000,100000,500000,1000000,2000000 \
+  --runs 3 --changes auto \
+  --apis put,batch,diff,merge \
+  --patterns append,random,clustered \
+  --adapters sqlite-sync,turso-async
+```
+
+Expected: all 432 candidate rows validate with no skip. Turso point put improves at every size/pattern, point work remains bounded by tree height, and no protected median or p95 gate fails.
+
+- [ ] **Step 5: Update documentation with measured facts**
+
+Document:
+
+- native `Prolly<SqliteStore>` versus native `AsyncProlly<RemoteProllyStore<TursoBackend>>`;
+- before/after throughput, total latency, p50, p95, p99, and percent change;
+- `PointUpsert -> Deferred` and every other Turso path `-> Immediate`;
+- exact revisions, compiler, machine, filesystem, features, cache policy, durability settings, and seeds;
+- all unavailable adapter prerequisites;
+- the local-only limitation and explicit absence of cloud synchronization.
+
+Change the design status to implemented only after all correctness and performance gates pass.
+
+- [ ] **Step 6: Run final repository verification**
 
 ```sh
 cargo fmt --all -- --check
 cargo test --workspace --all-features
+cargo test --doc --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+python3 scripts/binding_api_inventory.py check --release
 git diff --check
+git status --short
 ```
 
-Expected: all commands exit `0`, all result links resolve, and the worktree contains no fixture database or target output.
+Expected: all checks pass and status contains only the intended reports and documentation before the final commit.
 
-- [ ] **Step 5: Commit final evidence and documentation**
+- [ ] **Step 7: Commit final evidence**
 
 ```sh
 git add docs/sqlite-turso-local-performance.md \
   docs/superpowers/specs/2026-07-19-point-publication-intent-design.md \
   stores/prolly-store-turso/README.md \
-  performance-results/turso-point-intent-full-2026-07-19
-git commit -m "docs: record Turso point publication results"
+  performance-results/node-publication-focused-2026-07-19 \
+  performance-results/node-publication-full-2026-07-19 \
+  performance-results/node-publication-local-adapters-2026-07-19
+git commit -m "docs: record universal publication performance"
 ```
 
-## Task 8: Publish and update pull request 24
+- [ ] **Step 8: Push and update pull request 24**
 
-This task publishes only the verified branch and records the review focus.
+Before publishing, invoke `github:yeet` and `superpowers:verification-before-completion`. Push `codex/async-first-prolly-engine` to `origin`. Update `crabbuild/prolly#24` so its summary leads with the universal `NodePublication` architecture, lists correctness gates, identifies Turso as the first measured override, links the local result reports, and states that every performance claim is local-only.
 
-**Files:**
-
-- No source changes expected
-- Update: `https://github.com/crabbuild/prolly/pull/24`
-
-**Interfaces:**
-
-- Consumes: clean commits and passing correctness and performance gates
-- Produces: updated remote branch and pull request description
-
-- [ ] **Step 1: Verify publish scope**
-
-Run:
+Verify:
 
 ```sh
 git status --short --branch
 git log --oneline origin/codex/async-first-prolly-engine..HEAD
-git diff --stat origin/codex/async-first-prolly-engine...HEAD
+gh pr view 24 --repo crabbuild/prolly --json url,headRefName,statusCheckRollup
 ```
 
-Expected: the worktree is clean and every unpublished commit belongs to this design, implementation, verification, or documentation slice.
-
-- [ ] **Step 2: Push the branch**
-
-```sh
-git push origin codex/async-first-prolly-engine
-```
-
-Expected: the remote branch advances without force push.
-
-- [ ] **Step 3: Update pull request 24**
-
-Add a concise section that states:
-
-- `AsyncProlly::put` now carries explicit point-publication intent
-- Canonical algorithms, bytes, roots, validation, and sync behavior remain unchanged
-- Turso uses deferred transactions only for explicit point publication
-- Generic batches, diff and merge preparation, roots, and strict commits retain immediate transactions
-- Correctness suite and exact local-only performance gates passed
-- Links point to the approved design and committed focused and full findings
-
-Keep the pull request in draft until every full-matrix gate passes. Mark it ready only after remote checks also succeed.
+Expected: the worktree is clean, the local branch is not ahead of origin, PR 24 points at the pushed head, and checks are visible.
