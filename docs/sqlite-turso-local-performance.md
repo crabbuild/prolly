@@ -11,6 +11,11 @@ It is an end-to-end adapter comparison, not a raw SQL-engine microbenchmark.
 It never enables Turso Cloud sync, reads credentials, or calls `push()` or
 `pull()`.
 
+The completed async-first architecture result is in
+[`../performance-results/sqlite-turso-local-async-first-final-r2-2026-07-18/findings.md`](../performance-results/sqlite-turso-local-async-first-final-r2-2026-07-18/findings.md).
+It contains all requested sizes through 2M records, all three mutation patterns,
+put/batch/diff/merge, three repetitions, and no failed or skipped cells.
+
 ## Run it
 
 Run the complete release matrix from the prolly repository:
@@ -115,4 +120,3 @@ adapter/records/repetition key followed by `build_ns`, `records_per_sec`,
 `turso_over_sqlite_throughput_ratio` above 1 favors Turso. The durability
 defaults are not asserted to have identical fsync semantics, and results from
 local files do not predict Turso Cloud synchronization behavior.
-

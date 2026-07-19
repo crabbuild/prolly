@@ -66,10 +66,10 @@ fallback and facade-local mutation algorithms are deleted after equivalence.
 
 ## Task 5: Completion Gate
 
-- [ ] Run formatting, strict Clippy, no-feature/all-feature workspace tests,
+- [x] Run formatting, strict Clippy, no-feature/all-feature workspace tests,
   doctests, and wasm check.
-- [ ] Re-run built-in-layout root vectors and a release mutation sentinel.
-- [ ] Record results in
+- [x] Re-run built-in-layout root vectors and a release mutation sentinel.
+- [x] Record results in
   `performance-results/async-first-canonical-writes-2026-07-18/report.md`.
-- [ ] Commit only with no unexplained correctness or critical performance
+- [x] Commit only with no unexplained correctness or critical performance
   regression.
