@@ -11,7 +11,7 @@ use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, ProximityNode};
 use crate::prolly::store::{AsyncStore, SyncStoreAsAsync};
-use crate::prolly::store::{BatchOp, Store};
+use crate::prolly::store::{BatchOp, NodePublication, Store};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -270,6 +270,10 @@ impl<S: Store + Clone> Store for SearchIo<S> {
     fn put_hint(&self, namespace: &[u8], key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         self.store.put_hint(namespace, key, value)
     }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.store.publish_nodes(publication)
+    }
 }
 impl<S: AsyncStore + Clone> AsyncStore for SearchIo<S>
 where
@@ -352,6 +356,10 @@ where
 
     fn read_parallelism(&self) -> usize {
         self.store.read_parallelism()
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.store.publish_nodes(publication).await
     }
 }
 

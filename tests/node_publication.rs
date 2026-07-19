@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use prolly::{
-    AsyncProlly, AsyncStore, BatchOp, Cid, Config, MemStore, MemStoreError, Mutation,
-    NodePublication, NodePublicationHint, Prolly, PublicationOrigin, Store, SyncStoreAsAsync, Tree,
+    AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp, Cid, Config, MemStore,
+    MemStoreError, Mutation, NodePublication, NodePublicationHint, Prolly, PublicationOrigin,
+    SearchIo, SearchRuntime, Store, SyncStoreAsAsync, Tree,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -470,4 +471,183 @@ fn publication_hint_recording_remains_borrowed_and_lossless() {
         recorded.hint,
         Some((b"namespace".to_vec(), b"key".to_vec(), b"value".to_vec()))
     );
+}
+
+#[test]
+fn sync_build_copy_and_import_have_reviewed_origins() {
+    let entries = vec![
+        (b"a".to_vec(), b"one".to_vec()),
+        (b"b".to_vec(), b"two".to_vec()),
+        (b"c".to_vec(), b"three".to_vec()),
+    ];
+    let config = Config::default();
+    let build_store = RecordingSyncStore::default();
+    let recorded = Prolly::new(build_store.clone(), config.clone());
+    let control = Prolly::new(MemStore::new(), config.clone());
+
+    let recorded_tree = recorded.build_from_entries(entries.clone()).unwrap();
+    let control_tree = control.build_from_entries(entries).unwrap();
+    assert_publications(
+        build_store.take_publications(),
+        &[PublicationOrigin::TreeBuild],
+    );
+    assert_sync_equivalent(&recorded, &recorded_tree, &control, &control_tree);
+
+    let copy_store = RecordingSyncStore::default();
+    let copy = control
+        .copy_missing_nodes(&control_tree, &copy_store)
+        .unwrap();
+    assert!(copy.copied_nodes > 0);
+    assert_publications(
+        copy_store.take_publications(),
+        &[PublicationOrigin::Replication],
+    );
+    let copied = Prolly::new(copy_store, config.clone());
+    assert_eq!(
+        copied.export_snapshot(&control_tree).unwrap(),
+        control.export_snapshot(&control_tree).unwrap()
+    );
+
+    let bundle = control.export_snapshot(&control_tree).unwrap();
+    let import_store = RecordingSyncStore::default();
+    let imported = Prolly::new(import_store.clone(), config);
+    let imported_tree = imported.import_snapshot(&bundle).unwrap();
+    assert_publications(
+        import_store.take_publications(),
+        &[PublicationOrigin::Replication],
+    );
+    assert_eq!(imported.export_snapshot(&imported_tree).unwrap(), bundle);
+}
+
+#[test]
+fn async_build_copy_and_import_have_reviewed_origins() {
+    block_on(async {
+        let entries = vec![
+            (b"a".to_vec(), b"one".to_vec()),
+            (b"b".to_vec(), b"two".to_vec()),
+            (b"c".to_vec(), b"three".to_vec()),
+        ];
+        let config = Config::default();
+        let build_store = RecordingAsyncStore::default();
+        let recorded = AsyncProlly::new(build_store.clone(), config.clone());
+        let control = AsyncProlly::new(
+            SyncStoreAsAsync::new(Arc::new(MemStore::new())),
+            config.clone(),
+        );
+
+        let recorded_tree = recorded.build_from_entries(entries.clone()).await.unwrap();
+        let control_tree = control.build_from_entries(entries).await.unwrap();
+        assert_publications(
+            build_store.take_publications(),
+            &[PublicationOrigin::TreeBuild],
+        );
+        assert_async_equivalent(&recorded, &recorded_tree, &control, &control_tree).await;
+
+        let copy_store = RecordingAsyncStore::default();
+        let copy = control
+            .copy_missing_nodes(&control_tree, &copy_store)
+            .await
+            .unwrap();
+        assert!(copy.copied_nodes > 0);
+        assert_publications(
+            copy_store.take_publications(),
+            &[PublicationOrigin::Replication],
+        );
+        let copied = AsyncProlly::new(copy_store, config.clone());
+        assert_eq!(
+            copied.export_snapshot(&control_tree).await.unwrap(),
+            control.export_snapshot(&control_tree).await.unwrap()
+        );
+
+        let bundle = control.export_snapshot(&control_tree).await.unwrap();
+        let import_store = RecordingAsyncStore::default();
+        let imported = AsyncProlly::new(import_store.clone(), config);
+        let imported_tree = imported.import_snapshot(&bundle).await.unwrap();
+        assert_publications(
+            import_store.take_publications(),
+            &[PublicationOrigin::Replication],
+        );
+        assert_eq!(
+            imported.export_snapshot(&imported_tree).await.unwrap(),
+            bundle
+        );
+    });
+}
+
+#[test]
+fn transparent_search_wrappers_preserve_publication_exactly() {
+    let bytes = b"published-node";
+    let cid = Cid::from_bytes(bytes);
+    let entries = [(cid.as_bytes(), bytes.as_slice())];
+    let hint = NodePublicationHint::new(b"namespace", b"key", b"value");
+    let expected = RecordedPublication::from_request(NodePublication::with_hint(
+        &entries,
+        hint,
+        PublicationOrigin::TreeBuild,
+    ));
+
+    let sync_store = RecordingSyncStore::default();
+    let sync_io = SearchIo::new(sync_store.clone(), Arc::new(SearchRuntime::default()));
+    Store::publish_nodes(
+        &sync_io,
+        NodePublication::with_hint(&entries, hint, PublicationOrigin::TreeBuild),
+    )
+    .unwrap();
+    assert_eq!(sync_store.take_publications(), vec![expected.clone()]);
+
+    let async_store = RecordingAsyncStore::default();
+    let async_io = SearchIo::new(async_store.clone(), Arc::new(SearchRuntime::default()));
+    block_on(AsyncStore::publish_nodes(
+        &async_io,
+        NodePublication::with_hint(&entries, hint, PublicationOrigin::TreeBuild),
+    ))
+    .unwrap();
+    assert_eq!(async_store.take_publications(), vec![expected]);
+}
+
+#[test]
+fn standalone_sync_and_async_builders_publish_only_tree_builds() {
+    let config = Config::default();
+    let sync_store = RecordingSyncStore::default();
+    let mut sync_builder = BatchBuilder::new(sync_store.clone(), config.clone());
+    sync_builder.add(b"a".to_vec(), b"one".to_vec());
+    sync_builder.add(b"b".to_vec(), b"two".to_vec());
+    sync_builder.add(b"c".to_vec(), b"three".to_vec());
+    let sync_tree = sync_builder.build().unwrap();
+    let sync_publications = sync_store.take_publications();
+    let expected = vec![PublicationOrigin::TreeBuild; sync_publications.len()];
+    assert!(!expected.is_empty());
+    assert_publications(sync_publications, &expected);
+    let sync_reader = Prolly::new(sync_store, config.clone());
+    assert_eq!(
+        sync_reader.get(&sync_tree, b"b").unwrap(),
+        Some(b"two".to_vec())
+    );
+
+    block_on(async {
+        let async_store = RecordingAsyncStore::default();
+        let mut async_builder = AsyncSortedBatchBuilder::new(async_store.clone(), config);
+        async_builder
+            .add(b"a".to_vec(), b"one".to_vec())
+            .await
+            .unwrap();
+        async_builder
+            .add(b"b".to_vec(), b"two".to_vec())
+            .await
+            .unwrap();
+        async_builder
+            .add(b"c".to_vec(), b"three".to_vec())
+            .await
+            .unwrap();
+        let async_tree = async_builder.build().await.unwrap();
+        let async_publications = async_store.take_publications();
+        let expected = vec![PublicationOrigin::TreeBuild; async_publications.len()];
+        assert!(!expected.is_empty());
+        assert_publications(async_publications, &expected);
+        let async_reader = AsyncProlly::new(async_store, async_tree.config.clone());
+        assert_eq!(
+            async_reader.get(&async_tree, b"b").await.unwrap(),
+            Some(b"two".to_vec())
+        );
+    });
 }

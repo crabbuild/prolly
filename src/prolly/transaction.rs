@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::error::{Error, Mutation};
 use super::manifest::{ManifestStore, ManifestUpdate, NamedRootUpdate, RootManifest};
-use super::store::{BatchOp, OrderedBatchReadPlan, Store};
+use super::store::{BatchOp, NodePublication, OrderedBatchReadPlan, Store};
 use super::tree::Tree;
 use super::Prolly;
 use {
@@ -400,6 +400,10 @@ where
         Ok(())
     }
 
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.batch_put(publication.entries())
+    }
+
     fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
         overlay_batch_get_ordered(self.base, &self.state, keys)
     }
@@ -534,6 +538,10 @@ where
             }
         }
         Ok(())
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.batch_put(publication.entries())
     }
 
     fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
@@ -710,6 +718,10 @@ where
             }
         }
         Ok(())
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.batch_put(publication.entries()).await
     }
 
     async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
@@ -892,6 +904,10 @@ where
             }
         }
         Ok(())
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.batch_put(publication.entries()).await
     }
 
     async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
@@ -1568,7 +1584,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prolly::store::{MemStore, MemStoreError};
+    use crate::prolly::store::{MemStore, MemStoreError, NodePublicationHint, PublicationOrigin};
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::{
@@ -1582,6 +1598,7 @@ mod tests {
         point_reads: Arc<AtomicUsize>,
         batch_reads: Arc<AtomicUsize>,
         batch_keys: Arc<AtomicUsize>,
+        publication_calls: Arc<AtomicUsize>,
     }
 
     impl Store for CountingBatchStore {
@@ -1617,6 +1634,11 @@ mod tests {
         fn prefers_batch_reads(&self) -> bool {
             true
         }
+
+        fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+            self.publication_calls.fetch_add(1, Ordering::Relaxed);
+            self.inner.publish_nodes(publication)
+        }
     }
 
     fn seed(store: &CountingBatchStore) {
@@ -1641,6 +1663,85 @@ mod tests {
                 None,
             ]
         );
+    }
+
+    fn assert_overlay_absorbs_publication<S: Store<Error = TransactionOverlayError>>(overlay: &S) {
+        let entries = [(b"staged-node".as_slice(), b"node-bytes".as_slice())];
+        overlay
+            .publish_nodes(NodePublication::with_hint(
+                &entries,
+                NodePublicationHint::new(b"namespace", b"key", b"hint"),
+                PublicationOrigin::PointUpsert,
+            ))
+            .unwrap();
+        assert_eq!(
+            overlay.get(b"staged-node").unwrap(),
+            Some(b"node-bytes".to_vec())
+        );
+        assert!(!overlay.supports_hints());
+    }
+
+    async fn assert_async_overlay_absorbs_publication<
+        S: AsyncStore<Error = TransactionOverlayError>,
+    >(
+        overlay: &S,
+    ) {
+        let entries = [(b"staged-node".as_slice(), b"node-bytes".as_slice())];
+        overlay
+            .publish_nodes(NodePublication::with_hint(
+                &entries,
+                NodePublicationHint::new(b"namespace", b"key", b"hint"),
+                PublicationOrigin::PointUpsert,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            overlay.get(b"staged-node").await.unwrap(),
+            Some(b"node-bytes".to_vec())
+        );
+        assert!(!overlay.supports_hints());
+    }
+
+    #[test]
+    fn sync_transaction_overlays_absorb_publication_context() {
+        let base = CountingBatchStore::default();
+        let overlay =
+            TransactionOverlayStore::new(&base, Arc::new(Mutex::new(TransactionState::default())));
+        assert_overlay_absorbs_publication(&overlay);
+        assert_eq!(base.publication_calls.load(Ordering::Relaxed), 0);
+
+        let base = CountingBatchStore::default();
+        let counters = base.clone();
+        let overlay = OwnedTransactionOverlayStore::new(
+            base,
+            Arc::new(Mutex::new(TransactionState::default())),
+        );
+        assert_overlay_absorbs_publication(&overlay);
+        assert_eq!(counters.publication_calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn async_transaction_overlays_absorb_publication_context() {
+        block_on(async {
+            let base = CountingBatchStore::default();
+            let counters = base.clone();
+            let base = SyncStoreAsAsync::new(base);
+            let overlay = AsyncTransactionOverlayStore::new(
+                &base,
+                Arc::new(Mutex::new(TransactionState::default())),
+            );
+            assert_async_overlay_absorbs_publication(&overlay).await;
+            assert_eq!(counters.publication_calls.load(Ordering::Relaxed), 0);
+
+            let base = CountingBatchStore::default();
+            let counters = base.clone();
+            let overlay = OwnedAsyncTransactionOverlayStore::new(
+                SyncStoreAsAsync::new(base),
+                Arc::new(Mutex::new(TransactionState::default())),
+            );
+            assert_async_overlay_absorbs_publication(&overlay).await;
+            assert_eq!(counters.publication_calls.load(Ordering::Relaxed), 0);
+        });
     }
 
     #[test]

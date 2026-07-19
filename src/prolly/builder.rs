@@ -10,7 +10,7 @@ use super::encoding::INIT_LEVEL;
 use super::engine::ProllyEngine;
 use super::error::Error;
 use super::node::Node;
-use super::store::{AsyncStore, Store};
+use super::store::{AsyncStore, NodePublication, PublicationOrigin, Store};
 use super::tree::Tree;
 
 use rayon::prelude::*;
@@ -194,7 +194,7 @@ where
 
     async fn flush_pending_nodes(&mut self) -> Result<(), Error> {
         self.engine
-            .publish_builder_nodes(&self.pending_nodes)
+            .publish_builder_nodes(&self.pending_nodes, PublicationOrigin::TreeBuild)
             .await?;
         self.pending_nodes.clear();
         Ok(())
@@ -406,7 +406,7 @@ where
             .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
             .collect::<Vec<_>>();
         self.store
-            .batch_put(&entries)
+            .publish_nodes(NodePublication::new(&entries, PublicationOrigin::TreeBuild))
             .map_err(|error| Error::Store(Box::new(error)))?;
         Ok((tree, written_nodes, written_bytes))
     }
@@ -845,7 +845,7 @@ where
         .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
         .collect::<Vec<_>>();
     store
-        .batch_put(&entries)
+        .publish_nodes(NodePublication::new(&entries, PublicationOrigin::TreeBuild))
         .map_err(|error| Error::Store(Box::new(error)))
 }
 

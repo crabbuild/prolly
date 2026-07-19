@@ -203,6 +203,7 @@ use node::Node;
 use node::ReadNode;
 use stats::{StatsComparison, TreeStats};
 use store::AsyncStore;
+use store::NodePublication;
 use store::NodeStoreScan;
 use store::PublicationOrigin;
 use store::Store;
@@ -4029,7 +4030,8 @@ where
             .into_iter()
             .map(|(key, val)| Mutation::Upsert { key, val })
             .collect();
-        self.batch(&self.create(), mutations).await
+        self.batch_with_origin(&self.create(), mutations, PublicationOrigin::TreeBuild)
+            .await
     }
 
     /// Build a tree from entries that are already sorted by key.
@@ -4052,17 +4054,19 @@ where
     pub(crate) async fn publish_builder_nodes(
         &self,
         nodes: &[builder::DeferredNode],
+        origin: PublicationOrigin,
     ) -> Result<(), Error> {
         let nodes = nodes
             .iter()
             .map(|entry| (&entry.cid, entry.bytes.as_slice()))
             .collect::<Vec<_>>();
-        self.publish_builder_node_refs(&nodes).await
+        self.publish_builder_node_refs(&nodes, origin).await
     }
 
     pub(crate) async fn publish_builder_node_refs(
         &self,
         nodes: &[(&Cid, &[u8])],
+        origin: PublicationOrigin,
     ) -> Result<(), Error> {
         for chunk in nodes.chunks(builder::SORTED_BUILDER_NODE_BATCH) {
             let mut decoded = Vec::with_capacity(chunk.len());
@@ -4078,7 +4082,7 @@ where
                 .map(|(cid, bytes)| (cid.as_bytes(), *bytes))
                 .collect::<Vec<_>>();
             self.store
-                .batch_put(&entries)
+                .publish_nodes(NodePublication::new(&entries, origin))
                 .await
                 .map_err(|error| Error::Store(Box::new(error)))?;
             let bytes_written = chunk.iter().map(|(_, bytes)| bytes.len()).sum();
@@ -4955,7 +4959,10 @@ where
                 .map(|(cid, bytes)| (cid.as_bytes(), bytes.as_slice()))
                 .collect::<Vec<_>>();
             destination
-                .batch_put(&entries)
+                .publish_nodes(NodePublication::new(
+                    &entries,
+                    PublicationOrigin::Replication,
+                ))
                 .await
                 .map_err(|err| Error::Store(Box::new(err)))?;
         }
@@ -5018,7 +5025,10 @@ where
                 .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
                 .collect::<Vec<_>>();
             self.store
-                .batch_put(&entries)
+                .publish_nodes(NodePublication::new(
+                    &entries,
+                    PublicationOrigin::Replication,
+                ))
                 .await
                 .map_err(|err| Error::Store(Box::new(err)))?;
         }

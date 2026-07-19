@@ -520,7 +520,7 @@ This task closes publication paths that do not originate in the main point/batch
 - Consumes: origin-aware core paths from Task 2.
 - Produces: `TreeBuild` and `Replication` routing, explicit wrapper forwarding, and overlay absorption.
 
-- [ ] **Step 1: Publish standalone builder output as `TreeBuild`**
+- [x] **Step 1: Publish standalone builder output as `TreeBuild`**
 
 Change `builder::persist_nodes` and test-only serial builder publication from `batch_put` to:
 
@@ -545,7 +545,7 @@ pub(crate) async fn publish_builder_nodes(
 
 Pass `TreeBuild` from public sorted and unsorted build APIs. Pass the parent origin from any nested builder caller. When a sync builder receives `PublicationStore`, its outer facade origin intentionally replaces `TreeBuild`.
 
-- [ ] **Step 2: Classify snapshot import and missing-node copy as `Replication`**
+- [x] **Step 2: Classify snapshot import and missing-node copy as `Replication`**
 
 Replace both async destination batches in `copy_missing_nodes` and `import_snapshot` with:
 
@@ -561,11 +561,11 @@ destination
 
 The synchronous APIs already enter through `SyncStoreAsAsync` and therefore forward the same request inline.
 
-- [ ] **Step 3: Forward through transparent wrappers**
+- [x] **Step 3: Forward through transparent wrappers**
 
 Add sync and async `publish_nodes` overrides to `SearchIo<S>` that call `self.store.publish_nodes(publication)`. Add an override to the production range-delete counting store and the two SlateDB benchmark counting stores that records the same write count as `batch_put` and then forwards `publication` unchanged.
 
-- [ ] **Step 4: Absorb origin in transaction overlays**
+- [x] **Step 4: Absorb origin in transaction overlays**
 
 Add `publish_nodes` to all four overlay stores:
 
@@ -577,7 +577,7 @@ fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Er
 
 Use the awaited form for async overlays. Do not forward origin or hints to the base store. Keep `supports_hints() == false`. Keep final strict `commit_transaction` unchanged and general.
 
-- [ ] **Step 5: Add post-implementation tests**
+- [x] **Step 5: Add post-implementation tests**
 
 Extend `tests/node_publication.rs` with `TreeBuild` and `Replication` assertions for sync and async build, copy, and import. Extend `tests/transactions.rs` so borrowed and owned sync/async overlays receive a point publication, can read staged nodes, and leave the base recorder at zero publication calls before commit.
 
@@ -594,7 +594,7 @@ assert_eq!(
 );
 ```
 
-- [ ] **Step 6: Run focused verification**
+- [x] **Step 6: Run focused verification**
 
 ```sh
 cargo fmt --all -- --check
@@ -607,7 +607,7 @@ cargo check --manifest-path stores/prolly-store-slatedb/Cargo.toml --benches
 
 Expected: all commands exit `0`; overlays stage but do not leak origin; copy/import validate exact bytes.
 
-- [ ] **Step 7: Commit direct-path routing**
+- [x] **Step 7: Commit direct-path routing**
 
 ```sh
 git add src/prolly/builder.rs src/prolly/mod.rs src/prolly/transaction.rs \

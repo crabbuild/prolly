@@ -11,7 +11,7 @@ use super::cid::Cid;
 use super::error::Error;
 use super::format::NodeLayoutSpec;
 use super::node::Node;
-use super::store::{BatchOp, Store};
+use super::store::{BatchOp, NodePublication, Store};
 use super::write::CanonicalWriteManager;
 use super::write::{LeafEmitter, WriteStats};
 use super::Tree;
@@ -78,6 +78,12 @@ impl<S: Store> Store for CountingStore<'_, S> {
     fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
         self.inner.batch_put(entries)?;
         self.writes.record(entries);
+        Ok(())
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.inner.publish_nodes(publication)?;
+        self.writes.record(publication.entries());
         Ok(())
     }
 }
