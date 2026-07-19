@@ -1433,7 +1433,7 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key already exists with the same value, returns the original tree unchanged.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, val: Vec<u8>) -> Result<Tree, Error> {
-        write::apply_tree(self, tree, vec![Mutation::Upsert { key, val }])
+        write::apply_tree(&self.engine, tree, vec![Mutation::Upsert { key, val }])
     }
 
     /// Insert or update a value, offloading large payloads to a blob store.
@@ -1474,7 +1474,11 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        write::apply_tree(self, tree, vec![Mutation::Delete { key: key.to_vec() }])
+        write::apply_tree(
+            &self.engine,
+            tree,
+            vec![Mutation::Delete { key: key.to_vec() }],
+        )
     }
 
     /// Delete all keys in the half-open range `[start, end)`.
@@ -4441,7 +4445,7 @@ impl<S: Store> Prolly<S> {
     /// let new_tree = prolly.batch(&tree, mutations).unwrap();
     /// ```
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        write::apply_tree(self, tree, mutations)
+        write::apply_tree(&self.engine, tree, mutations)
     }
 
     /// Apply mutations and return tree-write work counters.
@@ -4450,7 +4454,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<(Tree, write::WriteStats), Error> {
-        write::apply(self, tree, mutations)
+        write::apply(&self.engine, tree, mutations)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -4471,7 +4475,7 @@ impl<S: Store> Prolly<S> {
     /// append, this falls back to the regular batch implementation for
     /// correctness.
     pub fn append_batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        write::apply_tree(self, tree, mutations)
+        write::apply_tree(&self.engine, tree, mutations)
     }
 
     /// Apply append-heavy mutations and return store-neutral execution stats.
@@ -4599,7 +4603,7 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        write::apply_tree_configured(self, tree, mutations, config)
+        write::apply_tree_configured(&self.engine, tree, mutations, config)
     }
 
     /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.

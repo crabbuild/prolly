@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 use std::ops::Range;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, RwLock};
 
 use rayon::prelude::*;
 
@@ -14,9 +16,199 @@ use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
 use super::node::Node;
 use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
+use super::store::SyncStoreAsAsync;
 use super::{Prolly, Tree};
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
+
+pub(crate) trait CanonicalWriteManager: Sync {
+    type Store: Store + Send + Sync;
+
+    fn write_store(&self) -> &Self::Store;
+    fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error>;
+    fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error>;
+    fn write_cache_node(&self, cid: Cid, node: Node);
+    fn write_metrics(&self) -> super::ProllyMetricsSnapshot;
+    fn write_record_batch_metrics(&self, nodes: usize, bytes: usize);
+
+    fn write_should_try_batched_value_updates(
+        &self,
+        _tree: &Tree,
+        _mutation_count: usize,
+        _policy: ExecutionPolicy,
+    ) -> bool {
+        false
+    }
+
+    fn write_sampled_value_updates_are_key_stable(
+        &self,
+        _tree: &Tree,
+        _mutations: Vec<Mutation>,
+        _policy: ExecutionPolicy,
+    ) -> Result<bool, Error> {
+        Ok(false)
+    }
+
+    fn write_try_apply_batched_value_updates(
+        &self,
+        _tree: &Tree,
+        mutations: Vec<Mutation>,
+        _policy: ExecutionPolicy,
+    ) -> Result<super::batch::KeyStableBatchAttempt, Error> {
+        Ok(super::batch::KeyStableBatchAttempt::Fallback {
+            mutations,
+            parallel_width: 1,
+            parallel_tasks: 0,
+        })
+    }
+}
+
+impl<S> CanonicalWriteManager for Prolly<S>
+where
+    S: Store,
+{
+    type Store = S;
+
+    fn write_store(&self) -> &Self::Store {
+        self.store()
+    }
+
+    fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
+        self.load_arc(cid)
+    }
+
+    fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
+        self.load_many_ordered(cids)
+    }
+
+    fn write_cache_node(&self, cid: Cid, node: Node) {
+        self.cache_node(cid, node);
+    }
+
+    fn write_metrics(&self) -> super::ProllyMetricsSnapshot {
+        self.metrics()
+    }
+
+    fn write_record_batch_metrics(&self, nodes: usize, bytes: usize) {
+        self.record_batch_write_metrics(nodes, bytes);
+    }
+
+    fn write_should_try_batched_value_updates(
+        &self,
+        tree: &Tree,
+        mutation_count: usize,
+        policy: ExecutionPolicy,
+    ) -> bool {
+        super::batch::should_try_batched_value_updates(self, tree, mutation_count, policy)
+    }
+
+    fn write_sampled_value_updates_are_key_stable(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        policy: ExecutionPolicy,
+    ) -> Result<bool, Error> {
+        super::batch::sampled_value_updates_are_likely_key_stable(self, tree, mutations, policy)
+    }
+
+    fn write_try_apply_batched_value_updates(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        policy: ExecutionPolicy,
+    ) -> Result<super::batch::KeyStableBatchAttempt, Error> {
+        super::batch::try_apply_batched_value_updates(self, tree, mutations, policy)
+    }
+}
+
+impl<S> CanonicalWriteManager for super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>
+where
+    S: Store,
+{
+    type Store = Arc<S>;
+
+    fn write_store(&self) -> &Self::Store {
+        self.store.inner()
+    }
+
+    fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
+        let future = self.load_arc(cid);
+        super::engine::ready::run_ready(self.store.ready(future))
+    }
+
+    fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
+        let future = self.load_many_ordered(cids);
+        super::engine::ready::run_ready(self.store.ready(future))
+    }
+
+    fn write_cache_node(&self, cid: Cid, node: Node) {
+        if let Ok(mut cache) = self.node_cache.write() {
+            let bytes = node.encoded_len();
+            let evictions = cache.insert(cid, Arc::new(node), bytes);
+            self.metrics.add_cache_evictions(evictions);
+        }
+    }
+
+    fn write_metrics(&self) -> super::ProllyMetricsSnapshot {
+        self.metrics.snapshot()
+    }
+
+    fn write_record_batch_metrics(&self, nodes: usize, bytes: usize) {
+        self.metrics.record_batch_write(nodes, bytes);
+    }
+
+    fn write_should_try_batched_value_updates(
+        &self,
+        tree: &Tree,
+        mutation_count: usize,
+        policy: ExecutionPolicy,
+    ) -> bool {
+        let manager = sync_engine_write_facade(self);
+        super::batch::should_try_batched_value_updates(&manager, tree, mutation_count, policy)
+    }
+
+    fn write_sampled_value_updates_are_key_stable(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        policy: ExecutionPolicy,
+    ) -> Result<bool, Error> {
+        let manager = sync_engine_write_facade(self);
+        super::batch::sampled_value_updates_are_likely_key_stable(&manager, tree, mutations, policy)
+    }
+
+    fn write_try_apply_batched_value_updates(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        policy: ExecutionPolicy,
+    ) -> Result<super::batch::KeyStableBatchAttempt, Error> {
+        let manager = sync_engine_write_facade(self);
+        super::batch::try_apply_batched_value_updates(&manager, tree, mutations, policy)
+    }
+}
+
+fn sync_engine_write_facade<S: Store>(
+    engine: &super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
+) -> Prolly<Arc<S>> {
+    let store = Arc::new(engine.store.inner().clone());
+    let nested_engine = super::engine::ProllyEngine::with_state(
+        SyncStoreAsAsync::new(store.clone()),
+        engine.config.clone(),
+        engine.execution.clone(),
+        engine.node_cache.clone(),
+        engine.metrics.clone(),
+    );
+    Prolly {
+        store,
+        engine: nested_engine,
+        config: engine.config.clone(),
+        node_cache: engine.node_cache.clone(),
+        recent_leaf: RwLock::new(None),
+        recent_leaf_misses: AtomicUsize::new(0),
+        metrics: engine.metrics.clone(),
+    }
+}
 
 /// Store-neutral work performed by a tree write.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -141,16 +333,16 @@ impl LeafEmitter {
 }
 
 /// Apply last-write-wins mutations and emit the unique deterministic tree.
-pub(crate) fn apply<S: Store>(
-    manager: &Prolly<S>,
+pub(crate) fn apply<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<(Tree, WriteStats), Error> {
     apply_impl(manager, tree, mutations, true, None)
 }
 
-pub(crate) fn apply_configured<S: Store>(
-    manager: &Prolly<S>,
+pub(crate) fn apply_configured<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     config: &ParallelConfig,
@@ -158,16 +350,16 @@ pub(crate) fn apply_configured<S: Store>(
     apply_impl(manager, tree, mutations, true, Some(config))
 }
 
-pub(crate) fn apply_tree<S: Store>(
-    manager: &Prolly<S>,
+pub(crate) fn apply_tree<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
     Ok(apply_impl(manager, tree, mutations, false, None)?.0)
 }
 
-pub(crate) fn apply_tree_configured<S: Store>(
-    manager: &Prolly<S>,
+pub(crate) fn apply_tree_configured<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     config: &ParallelConfig,
@@ -175,8 +367,8 @@ pub(crate) fn apply_tree_configured<S: Store>(
     Ok(apply_impl(manager, tree, mutations, false, Some(config))?.0)
 }
 
-fn apply_impl<S: Store>(
-    manager: &Prolly<S>,
+fn apply_impl<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     measure_read_bytes: bool,
@@ -193,7 +385,7 @@ fn apply_impl<S: Store>(
         return Ok((tree.clone(), stats));
     }
     if let Some(root) = &tree.root {
-        let node = manager.load_arc(root)?;
+        let node = manager.write_load_arc(root)?;
         if node.format != tree.config.format {
             return Err(Error::FormatMismatch {
                 expected: tree.config.format.digest()?,
@@ -287,7 +479,7 @@ fn apply_impl<S: Store>(
             let mut resynced_at = None;
             let first_pending_mutation = mutation_index;
             for leaf_index in start..old_leaves.len() {
-                let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
+                let leaf = manager.write_load_arc(&old_leaves[leaf_index].cid)?;
                 stats.nodes_read += 1;
                 if measure_read_bytes {
                     stats.bytes_read += leaf.encoded_len() as u64;
@@ -412,27 +604,27 @@ fn apply_impl<S: Store>(
             )
             .collect::<Vec<_>>();
         manager
-            .store()
+            .write_store()
             .batch_put(&writes)
             .map_err(|error| Error::Store(Box::new(error)))?;
         let bytes_written = writes.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-        manager.record_batch_write_metrics(writes.len(), bytes_written);
+        manager.write_record_batch_metrics(writes.len(), bytes_written);
         stats.nodes_written += writes.len() as u64;
         stats.bytes_written += bytes_written as u64;
         if writes.len() <= LOCAL_WRITE_CACHE_LIMIT {
             for leaf in &changed_leaves {
-                manager.cache_node(leaf.summary.cid.clone(), leaf.node.clone());
+                manager.write_cache_node(leaf.summary.cid.clone(), leaf.node.clone());
             }
             for node in internal_nodes
                 .iter()
                 .filter(|node| !old_internal_cids.contains(&node.cid))
             {
-                manager.cache_node(node.cid.clone(), node.node.clone());
+                manager.write_cache_node(node.cid.clone(), node.node.clone());
             }
         }
         return Ok((written, stats));
     }
-    let builder = BatchBuilder::new(manager.store(), tree.config.clone());
+    let builder = BatchBuilder::new(manager.write_store(), tree.config.clone());
     let (written, internal_nodes) = builder.build_from_chunks_serial_deferred(summaries)?;
     let writes = changed_leaves
         .iter()
@@ -446,27 +638,27 @@ fn apply_impl<S: Store>(
         .collect::<Vec<_>>();
     if !writes.is_empty() {
         manager
-            .store()
+            .write_store()
             .batch_put(&writes)
             .map_err(|error| Error::Store(Box::new(error)))?;
         let bytes_written = writes.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
         stats.nodes_written += writes.len() as u64;
         stats.bytes_written += bytes_written as u64;
-        manager.record_batch_write_metrics(writes.len(), bytes_written);
+        manager.write_record_batch_metrics(writes.len(), bytes_written);
         if writes.len() <= LOCAL_WRITE_CACHE_LIMIT {
             for leaf in &changed_leaves {
-                manager.cache_node(leaf.summary.cid.clone(), leaf.node.clone());
+                manager.write_cache_node(leaf.summary.cid.clone(), leaf.node.clone());
             }
             for node in internal_nodes
                 .iter()
                 .filter(|node| !old_internal_cids.contains(&node.cid))
             {
-                manager.cache_node(node.cid.clone(), node.node.clone());
+                manager.write_cache_node(node.cid.clone(), node.node.clone());
             }
         }
     }
     if let Some(root) = &written.root {
-        let _ = manager.load_arc(root)?;
+        let _ = manager.write_load_arc(root)?;
     }
     Ok((written, stats))
 }
@@ -539,8 +731,8 @@ fn mutation_island_candidates(
 
 /// Replay one candidate into a private emitter. No bytes are persisted and no
 /// cache entries are published until the caller validates CID resynchronizing.
-fn replay_mutation_island<S: Store>(
-    manager: &Prolly<S>,
+fn replay_mutation_island<M: CanonicalWriteManager>(
+    manager: &M,
     old_leaves: &[NodeSummary],
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     mut island: MutationIsland,
@@ -567,7 +759,7 @@ fn replay_mutation_island<S: Store>(
     let mut processed_end = island.leaf_range.start;
 
     for leaf_index in island.leaf_range.start..island.protected_end {
-        let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
+        let leaf = manager.write_load_arc(&old_leaves[leaf_index].cid)?;
         nodes_read += 1;
         if measure_read_bytes {
             bytes_read += leaf.encoded_len() as u64;
@@ -639,8 +831,8 @@ fn replay_mutation_island<S: Store>(
     })
 }
 
-fn execute_mutation_islands<S: Store>(
-    manager: &Prolly<S>,
+fn execute_mutation_islands<M: CanonicalWriteManager>(
+    manager: &M,
     old_leaves: &[NodeSummary],
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     config: &Config,
@@ -752,8 +944,8 @@ fn merge_proved_island_replays(
     Ok(StructuralIslandReplay { summaries, emitted })
 }
 
-fn try_parallel_structural_islands<S: Store>(
-    manager: &Prolly<S>,
+fn try_parallel_structural_islands<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     old_leaves: &[NodeSummary],
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
@@ -865,8 +1057,8 @@ fn structural_islands_worth_speculating(
     guarded_leaves.saturating_mul(4) <= leaf_count
 }
 
-fn try_localized_height_two_deletes<S: Store>(
-    manager: &Prolly<S>,
+fn try_localized_height_two_deletes<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     stats: &mut WriteStats,
@@ -884,7 +1076,7 @@ fn try_localized_height_two_deletes<S: Store>(
     let Some(root_cid) = &tree.root else {
         return Ok(None);
     };
-    let root = manager.load_arc(root_cid)?;
+    let root = manager.write_load_arc(root_cid)?;
     stats.nodes_read += 1;
     if measure_read_bytes {
         stats.bytes_read += root.encoded_len() as u64;
@@ -919,11 +1111,11 @@ fn try_localized_height_two_deletes<S: Store>(
         .map(|value| child_cid(value))
         .collect::<Result<Vec<_>, _>>()?;
     let window_nodes = if window_cids.len() > 1 {
-        manager.load_many_ordered(&window_cids)?
+        manager.write_load_many_ordered(&window_cids)?
     } else {
         window_cids
             .iter()
-            .map(|cid| manager.load_arc(cid))
+            .map(|cid| manager.write_load_arc(cid))
             .collect::<Result<Vec<_>, _>>()?
     };
     let mut old_leaves = Vec::new();
@@ -966,14 +1158,14 @@ fn try_localized_height_two_deletes<S: Store>(
                 .iter()
                 .map(|leaf| leaf.cid.clone())
                 .collect::<Vec<_>>();
-            let _ = manager.load_many_ordered(&leaf_cids)?;
+            let _ = manager.write_load_many_ordered(&leaf_cids)?;
         }
     }
     let mut mutation_index = 0usize;
     let mut emitter = LeafEmitter::new(&tree.config)?;
     let mut resynced_at = None;
     for leaf_index in replay_start..old_leaves.len() {
-        let leaf = manager.load_arc(&old_leaves[leaf_index].cid)?;
+        let leaf = manager.write_load_arc(&old_leaves[leaf_index].cid)?;
         stats.nodes_read += 1;
         if measure_read_bytes {
             stats.bytes_read += leaf.encoded_len() as u64;
@@ -1025,7 +1217,7 @@ fn try_localized_height_two_deletes<S: Store>(
     stats.nodes_reused += replay_start.saturating_add(old_leaves.len() - old_cursor) as u64;
     stats.resync_distance_entries = stats.entries_streamed;
 
-    let builder = BatchBuilder::new(manager.store(), tree.config.clone());
+    let builder = BatchBuilder::new(manager.write_store(), tree.config.clone());
     let (replacement_summaries, internal_nodes) =
         builder.build_level_serial_deferred(leaf_summaries, 1)?;
     if window_end < root.len()
@@ -1122,17 +1314,17 @@ fn try_localized_height_two_deletes<S: Store>(
             .map(|(cid, bytes, _)| (cid.as_bytes(), bytes.as_slice()))
             .collect::<Vec<_>>();
         manager
-            .store()
+            .write_store()
             .batch_put(&entries)
             .map_err(|error| Error::Store(Box::new(error)))?;
         let bytes_written = entries.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-        manager.record_batch_write_metrics(entries.len(), bytes_written);
+        manager.write_record_batch_metrics(entries.len(), bytes_written);
         stats.nodes_written += entries.len() as u64;
         stats.bytes_written += bytes_written as u64;
         if entries.len() <= LOCAL_WRITE_CACHE_LIMIT {
             drop(entries);
             for (cid, _, node) in writes {
-                manager.cache_node(cid, node);
+                manager.write_cache_node(cid, node);
             }
         }
     }
@@ -1146,8 +1338,8 @@ fn try_localized_height_two_deletes<S: Store>(
     )))
 }
 
-fn try_append<S: Store>(
-    manager: &Prolly<S>,
+fn try_append<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: &mut Vec<(Vec<u8>, Option<Vec<u8>>)>,
     stats: &mut WriteStats,
@@ -1161,7 +1353,7 @@ fn try_append<S: Store>(
         Some((_, node)) => child_cid(node.vals.last().ok_or(Error::InvalidNode)?)?,
         None => tree.root.clone().ok_or(Error::InvalidNode)?,
     };
-    let last_leaf = manager.load_arc(&last_cid)?;
+    let last_leaf = manager.write_load_arc(&last_cid)?;
     stats.nodes_read += 1;
     if measure_read_bytes {
         stats.bytes_read += last_leaf.encoded_len() as u64;
@@ -1198,7 +1390,7 @@ fn try_append<S: Store>(
     }
     emitter.flush()?;
 
-    let builder = BatchBuilder::new(manager.store(), tree.config.clone());
+    let builder = BatchBuilder::new(manager.write_store(), tree.config.clone());
     let mut current = emitter
         .emitted
         .iter()
@@ -1245,22 +1437,22 @@ fn try_append<S: Store>(
         .collect::<Vec<_>>();
     if !writes.is_empty() {
         manager
-            .store()
+            .write_store()
             .batch_put(&writes)
             .map_err(|error| Error::Store(Box::new(error)))?;
         let bytes_written = writes.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-        manager.record_batch_write_metrics(writes.len(), bytes_written);
+        manager.write_record_batch_metrics(writes.len(), bytes_written);
         stats.nodes_written += writes.len() as u64;
         stats.bytes_written += bytes_written as u64;
         if writes.len() <= LOCAL_WRITE_CACHE_LIMIT {
             for leaf in changed_leaves {
-                manager.cache_node(leaf.summary.cid.clone(), leaf.node.clone());
+                manager.write_cache_node(leaf.summary.cid.clone(), leaf.node.clone());
             }
             for node in internal_nodes
                 .iter()
                 .filter(|node| !old_internal_cids.contains(&node.cid))
             {
-                manager.cache_node(node.cid.clone(), node.node.clone());
+                manager.write_cache_node(node.cid.clone(), node.node.clone());
             }
         }
     }
@@ -1275,8 +1467,8 @@ fn try_append<S: Store>(
     )))
 }
 
-fn rightmost_internal_path<S: Store>(
-    manager: &Prolly<S>,
+fn rightmost_internal_path<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
 ) -> Result<Vec<(Cid, std::sync::Arc<Node>)>, Error> {
     let Some(mut cid) = tree.root.clone() else {
@@ -1284,7 +1476,7 @@ fn rightmost_internal_path<S: Store>(
     };
     let mut path = Vec::new();
     loop {
-        let node = manager.load_arc(&cid)?;
+        let node = manager.write_load_arc(&cid)?;
         if node.leaf {
             return Ok(path);
         }
@@ -1318,8 +1510,8 @@ enum DirectValueUpdateAttempt {
     Fallback(Vec<(Vec<u8>, Option<Vec<u8>>)>),
 }
 
-fn sampled_value_updates_are_likely_key_stable<S: Store>(
-    manager: &Prolly<S>,
+fn sampled_value_updates_are_likely_key_stable<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     policy: ExecutionPolicy,
@@ -1352,7 +1544,7 @@ fn sampled_value_updates_are_likely_key_stable<S: Store>(
                 .expect("direct value path rejects deletes before routing"),
         })
         .collect::<Vec<_>>();
-    super::batch::sampled_value_updates_are_likely_key_stable(manager, tree, samples, policy)
+    manager.write_sampled_value_updates_are_key_stable(tree, samples, policy)
 }
 
 fn add_write_read_metric_delta(
@@ -1367,8 +1559,8 @@ fn add_write_read_metric_delta(
     }
 }
 
-fn try_direct_value_updates<S: Store>(
-    manager: &Prolly<S>,
+fn try_direct_value_updates<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     stats: &mut WriteStats,
@@ -1390,70 +1582,66 @@ fn try_direct_value_updates<S: Store>(
         return Ok(DirectValueUpdateAttempt::Fallback(mutations));
     };
 
-    let mutations =
-        if super::batch::should_try_batched_value_updates(manager, tree, mutations.len(), policy) {
-            let metrics_before = manager.metrics();
-            if sampled_value_updates_are_likely_key_stable(manager, tree, &mutations, policy)? {
-                let batched_mutations = mutations
-                    .into_iter()
-                    .map(|(key, value)| Mutation::Upsert {
-                        key,
-                        val: value.expect("direct value path rejects deletes before routing"),
-                    })
-                    .collect::<Vec<_>>();
-                let attempt = super::batch::try_apply_batched_value_updates(
-                    manager,
-                    tree,
-                    batched_mutations,
-                    policy,
-                )?;
-                add_write_read_metric_delta(
-                    stats,
-                    metrics_before,
-                    manager.metrics(),
-                    measure_read_bytes,
-                );
-                match attempt {
-                    super::batch::KeyStableBatchAttempt::Applied(result) => {
-                        stats.nodes_written += result.written_nodes as u64;
-                        stats.bytes_written += result.written_bytes as u64;
-                        stats.entries_streamed += result.entries_streamed as u64;
-                        stats.resync_distance_entries = result.entries_streamed as u64;
-                        stats.resync_distance_nodes = result.affected_leaves as u64;
-                        stats.used_key_stable_fast_path = true;
-                        stats.used_batched_value_update_path = true;
-                        stats.parallel_width = result.parallel_width as u64;
-                        stats.parallel_tasks += result.parallel_tasks as u64;
-                        return Ok(DirectValueUpdateAttempt::Applied(Box::new((
-                            result.tree,
-                            *stats,
-                        ))));
-                    }
-                    super::batch::KeyStableBatchAttempt::Fallback {
-                        mutations,
-                        parallel_width,
-                        parallel_tasks,
-                    } => {
-                        stats.parallel_width = stats.parallel_width.max(parallel_width as u64);
-                        stats.parallel_tasks += parallel_tasks as u64;
-                        mutations
-                            .into_iter()
-                            .map(mutation_parts)
-                            .collect::<Vec<_>>()
-                    }
+    let mutations = if manager.write_should_try_batched_value_updates(tree, mutations.len(), policy)
+    {
+        let metrics_before = manager.write_metrics();
+        if sampled_value_updates_are_likely_key_stable(manager, tree, &mutations, policy)? {
+            let batched_mutations = mutations
+                .into_iter()
+                .map(|(key, value)| Mutation::Upsert {
+                    key,
+                    val: value.expect("direct value path rejects deletes before routing"),
+                })
+                .collect::<Vec<_>>();
+            let attempt =
+                manager.write_try_apply_batched_value_updates(tree, batched_mutations, policy)?;
+            add_write_read_metric_delta(
+                stats,
+                metrics_before,
+                manager.write_metrics(),
+                measure_read_bytes,
+            );
+            match attempt {
+                super::batch::KeyStableBatchAttempt::Applied(result) => {
+                    stats.nodes_written += result.written_nodes as u64;
+                    stats.bytes_written += result.written_bytes as u64;
+                    stats.entries_streamed += result.entries_streamed as u64;
+                    stats.resync_distance_entries = result.entries_streamed as u64;
+                    stats.resync_distance_nodes = result.affected_leaves as u64;
+                    stats.used_key_stable_fast_path = true;
+                    stats.used_batched_value_update_path = true;
+                    stats.parallel_width = result.parallel_width as u64;
+                    stats.parallel_tasks += result.parallel_tasks as u64;
+                    return Ok(DirectValueUpdateAttempt::Applied(Box::new((
+                        result.tree,
+                        *stats,
+                    ))));
                 }
-            } else {
-                add_write_read_metric_delta(
-                    stats,
-                    metrics_before,
-                    manager.metrics(),
-                    measure_read_bytes,
-                );
-                mutations
+                super::batch::KeyStableBatchAttempt::Fallback {
+                    mutations,
+                    parallel_width,
+                    parallel_tasks,
+                } => {
+                    stats.parallel_width = stats.parallel_width.max(parallel_width as u64);
+                    stats.parallel_tasks += parallel_tasks as u64;
+                    mutations
+                        .into_iter()
+                        .map(mutation_parts)
+                        .collect::<Vec<_>>()
+                }
             }
         } else {
+            add_write_read_metric_delta(
+                stats,
+                metrics_before,
+                manager.write_metrics(),
+                measure_read_bytes,
+            );
             mutations
-        };
+        }
+    } else {
+        mutations
+    };
 
     let mut leaves = Vec::new();
     let mut internals = Vec::new();
@@ -1482,20 +1670,20 @@ fn try_direct_value_updates<S: Store>(
     let changed_leaf_count = leaves.len();
     if !writes.is_empty() {
         manager
-            .store()
+            .write_store()
             .batch_put(&writes)
             .map_err(|error| Error::Store(Box::new(error)))?;
         let bytes_written = writes.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-        manager.record_batch_write_metrics(writes.len(), bytes_written);
+        manager.write_record_batch_metrics(writes.len(), bytes_written);
         stats.nodes_written += writes.len() as u64;
         stats.bytes_written += bytes_written as u64;
         if writes.len() <= LOCAL_WRITE_CACHE_LIMIT {
             drop(writes);
             for leaf in leaves {
-                manager.cache_node(leaf.summary.cid, leaf.node);
+                manager.write_cache_node(leaf.summary.cid, leaf.node);
             }
             for node in internals {
-                manager.cache_node(node.cid, node.node);
+                manager.write_cache_node(node.cid, node.node);
             }
         }
     }
@@ -1517,8 +1705,8 @@ enum DirectDelete {
     Fallback,
 }
 
-fn try_direct_single_delete<S: Store>(
-    manager: &Prolly<S>,
+fn try_direct_single_delete<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     stats: &mut WriteStats,
@@ -1571,21 +1759,21 @@ fn try_direct_single_delete<S: Store>(
         )
         .collect::<Vec<_>>();
     manager
-        .store()
+        .write_store()
         .batch_put(&writes)
         .map_err(|error| Error::Store(Box::new(error)))?;
     let bytes_written = writes.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-    manager.record_batch_write_metrics(writes.len(), bytes_written);
+    manager.write_record_batch_metrics(writes.len(), bytes_written);
     stats.nodes_written += writes.len() as u64;
     stats.bytes_written += bytes_written as u64;
     stats.resync_distance_nodes = 1;
     stats.resync_distance_entries = stats.entries_streamed;
     drop(writes);
     for leaf in leaves {
-        manager.cache_node(leaf.summary.cid, leaf.node);
+        manager.write_cache_node(leaf.summary.cid, leaf.node);
     }
     for node in internals {
-        manager.cache_node(node.cid, node.node);
+        manager.write_cache_node(node.cid, node.node);
     }
     Ok(Some((
         Tree {
@@ -1597,8 +1785,8 @@ fn try_direct_single_delete<S: Store>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rewrite_single_delete_subtree<S: Store>(
-    manager: &Prolly<S>,
+fn rewrite_single_delete_subtree<M: CanonicalWriteManager>(
+    manager: &M,
     cid: &Cid,
     key: &[u8],
     config: &super::config::Config,
@@ -1607,7 +1795,7 @@ fn rewrite_single_delete_subtree<S: Store>(
     stats: &mut WriteStats,
     measure_read_bytes: bool,
 ) -> Result<DirectDelete, Error> {
-    let node = manager.load_arc(cid)?;
+    let node = manager.write_load_arc(cid)?;
     stats.nodes_read += 1;
     if measure_read_bytes {
         stats.bytes_read += node.encoded_len() as u64;
@@ -1717,14 +1905,14 @@ struct DirectRewriteContext<'a> {
     measure_read_bytes: bool,
 }
 
-fn rewrite_value_update_subtree<S: Store>(
-    manager: &Prolly<S>,
+fn rewrite_value_update_subtree<M: CanonicalWriteManager>(
+    manager: &M,
     cid: &Cid,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     rightmost: bool,
     context: &mut DirectRewriteContext<'_>,
 ) -> Result<Option<NodeSummary>, Error> {
-    let node = manager.load_arc(cid)?;
+    let node = manager.write_load_arc(cid)?;
     context.stats.nodes_read += 1;
     if context.measure_read_bytes {
         context.stats.bytes_read += node.encoded_len() as u64;
@@ -1838,15 +2026,15 @@ fn rewrite_value_update_subtree<S: Store>(
     }))
 }
 
-fn rewrite_fixed_separator_paths<S: Store>(
-    manager: &Prolly<S>,
+fn rewrite_fixed_separator_paths<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     changes: &[NodeSummary],
 ) -> Result<(Tree, Vec<EmittedInternal>), Error> {
     let Some(root) = &tree.root else {
         return Err(Error::InvalidNode);
     };
-    let root_node = manager.load_arc(root)?;
+    let root_node = manager.write_load_arc(root)?;
     if root_node.leaf {
         let replacement = changes.first().ok_or(Error::InvalidNode)?;
         return Ok((
@@ -1869,13 +2057,13 @@ fn rewrite_fixed_separator_paths<S: Store>(
     ))
 }
 
-fn rewrite_internal_node<S: Store>(
-    manager: &Prolly<S>,
+fn rewrite_internal_node<M: CanonicalWriteManager>(
+    manager: &M,
     cid: &Cid,
     changes: &[NodeSummary],
     pending: &mut Vec<EmittedInternal>,
 ) -> Result<NodeSummary, Error> {
-    let node = manager.load_arc(cid)?;
+    let node = manager.write_load_arc(cid)?;
     if node.leaf
         || node.keys.is_empty()
         || node.keys.len() != node.vals.len()
@@ -1983,13 +2171,14 @@ fn take_mutation(mutation: &mut (Vec<u8>, Option<Vec<u8>>)) -> (Vec<u8>, Option<
     (std::mem::take(&mut mutation.0), mutation.1.take())
 }
 
-fn build_empty_base<S: Store>(
-    manager: &Prolly<S>,
+fn build_empty_base<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
     mut stats: WriteStats,
 ) -> Result<(Tree, WriteStats), Error> {
-    let mut writer = super::builder::SortedBatchBuilder::new(manager.store(), tree.config.clone());
+    let mut writer =
+        super::builder::SortedBatchBuilder::new(manager.write_store(), tree.config.clone());
     for (key, value) in mutations {
         if let Some(value) = value {
             writer.add(key, value)?;
@@ -1998,8 +2187,8 @@ fn build_empty_base<S: Store>(
     }
     let tree = writer.build()?;
     if let Some(root) = &tree.root {
-        let node = manager.load_arc(root)?;
-        manager.record_batch_write_metrics(1, node.encoded_len());
+        let node = manager.write_load_arc(root)?;
+        manager.write_record_batch_metrics(1, node.encoded_len());
         stats.nodes_written = 1;
         stats.bytes_written = node.encoded_len() as u64;
         stats.resync_distance_nodes = 1;
@@ -2007,8 +2196,8 @@ fn build_empty_base<S: Store>(
     Ok((tree, stats))
 }
 
-fn collect_leaf_summaries<S: Store>(
-    manager: &Prolly<S>,
+fn collect_leaf_summaries<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     stats: &mut WriteStats,
     measure_read_bytes: bool,
@@ -2030,8 +2219,8 @@ fn collect_leaf_summaries<S: Store>(
     Ok((leaves, internals))
 }
 
-fn collect_from_node<S: Store>(
-    manager: &Prolly<S>,
+fn collect_from_node<M: CanonicalWriteManager>(
+    manager: &M,
     cid: &Cid,
     expected_format: &super::format::TreeFormat,
     stats: &mut WriteStats,
@@ -2039,7 +2228,7 @@ fn collect_from_node<S: Store>(
     internals: &mut HashSet<Cid>,
     measure_read_bytes: bool,
 ) -> Result<(), Error> {
-    let node = manager.load_arc(cid)?;
+    let node = manager.write_load_arc(cid)?;
     stats.nodes_read += 1;
     if measure_read_bytes {
         stats.bytes_read += node.encoded_len() as u64;
@@ -2068,7 +2257,7 @@ fn collect_from_node<S: Store>(
             let child = child_cid(&node.vals[index])?;
             let count = node.child_counts.get(index).copied().unwrap_or(0);
             let count = if count == 0 {
-                let leaf = manager.load_arc(&child)?;
+                let leaf = manager.write_load_arc(&child)?;
                 stats.nodes_read += 1;
                 if measure_read_bytes {
                     stats.bytes_read += leaf.encoded_len() as u64;
