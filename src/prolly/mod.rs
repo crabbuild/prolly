@@ -139,7 +139,6 @@ pub mod patch;
 pub mod policy;
 pub mod proof;
 pub mod proximity;
-pub(crate) mod range_delete;
 pub mod read;
 pub mod snapshot;
 pub mod splice;
@@ -161,6 +160,7 @@ pub mod crdt;
 pub mod diff;
 pub mod parallel;
 pub mod range;
+pub(crate) mod range_delete;
 pub mod remote;
 pub mod secondary_index;
 pub mod streaming;
@@ -174,6 +174,7 @@ use blob::{BlobStore, BlobStoreScan, LargeValueConfig};
 use cid::Cid;
 use config::Config;
 use config::RuntimeConfig;
+#[cfg(test)]
 use encoding::INIT_LEVEL;
 use engine::execution::ExecutionConfig;
 use error::Conflict;
@@ -211,7 +212,21 @@ struct MissingNodeBatch {
 #[derive(Default)]
 pub(crate) struct OrderedLoadExecution {
     pub(crate) nodes: Vec<Arc<Node>>,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "retained until ordered read scheduling moves behind ProllyEngine"
+        )
+    )]
     pub(crate) parallel_tasks: usize,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "retained until ordered read scheduling moves behind ProllyEngine"
+        )
+    )]
     pub(crate) parallel_width: usize,
 }
 
@@ -903,182 +918,27 @@ struct RecentLeafRead {
 /// stats, cache pinning, large-value helpers, and route-planned batch mutation
 /// without requiring a Tokio dependency.
 pub type AsyncProlly<S> = engine::ProllyEngine<S>;
-struct AsyncWriteCollector {
-    nodes: Vec<(Cid, Vec<u8>)>,
-    seen_cids: HashSet<Cid>,
-    cache_nodes: Vec<(Cid, Node)>,
-}
-struct AsyncBuildNodeSummary {
-    cid: Cid,
-    first_key: Vec<u8>,
-    count: u64,
-}
-#[allow(dead_code)]
-struct AsyncBatchLeafGroup {
-    leaf: Node,
-    route_path: Option<Arc<AsyncBatchRoutePath>>,
-    mutations: Arc<Vec<Mutation>>,
-    range: Range<usize>,
-}
-#[allow(dead_code)]
-struct AsyncBatchRouteFrame {
-    cid: Cid,
-    path: Option<Arc<AsyncBatchRoutePath>>,
-    mutations: Arc<Vec<Mutation>>,
-    range: Range<usize>,
-}
-#[allow(dead_code)]
-struct AsyncBatchRoutePath {
-    parent: Option<Arc<AsyncBatchRoutePath>>,
-    node: Arc<Node>,
-    cid: Cid,
-    child_index: usize,
-}
-#[allow(dead_code)]
-#[derive(Clone)]
-struct AsyncBatchChildRef {
-    cid: Cid,
-    first_key: Vec<u8>,
-    level: u8,
-    count: u64,
-}
-#[allow(dead_code)]
-type AsyncBatchChildReplacements = Vec<(usize, Vec<AsyncBatchChildRef>)>;
-#[allow(dead_code)]
-#[derive(Clone)]
-struct AsyncBatchParentLink {
-    parent_cid: Cid,
-    child_index: usize,
-}
-#[allow(dead_code)]
-#[derive(Clone)]
-struct AsyncBatchAncestorContext {
-    node: Node,
-    parent: Option<AsyncBatchParentLink>,
-}
-#[allow(dead_code)]
-struct AsyncBatchApplyResult {
-    root: Option<Cid>,
-    changed_leaves: usize,
-}
-#[allow(dead_code)]
 #[derive(Clone)]
 struct AsyncRightmostPathEntry {
     cid: Cid,
     node: Node,
     child_index: usize,
 }
-#[allow(dead_code)]
-struct AsyncAppendTreeUpdate {
-    root: Cid,
-    rightmost_path: Vec<AsyncRightmostPathEntry>,
-}
-#[allow(dead_code)]
 const RIGHTMOST_PATH_HINT_NAMESPACE: &[u8] = b"prolly:rightmost-path:v1";
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct AsyncRightmostPathHint {
     version: u8,
     entries: Vec<AsyncRightmostPathHintEntry>,
 }
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct AsyncRightmostPathHintEntry {
     cid: Cid,
     child_index: usize,
 }
-#[allow(dead_code)]
-impl AsyncWriteCollector {
-    fn new_cached() -> Self {
-        Self {
-            nodes: Vec::new(),
-            seen_cids: HashSet::new(),
-            cache_nodes: Vec::new(),
-        }
-    }
-
-    fn add(&mut self, node: &Node) -> Cid {
-        let bytes = node.to_bytes();
-        let cid = Cid::from_bytes(&bytes);
-        if !self.seen_cids.insert(cid.clone()) {
-            return cid;
-        }
-
-        self.cache_nodes.push((cid.clone(), node.clone()));
-        self.nodes.push((cid.clone(), bytes));
-        cid
-    }
-
-    fn add_many(&mut self, nodes: Vec<Node>) -> Vec<Cid> {
-        nodes.iter().map(|node| self.add(node)).collect()
-    }
-
-    async fn flush<S>(&self, store: &S) -> Result<(), Error>
-    where
-        S: AsyncStore,
-        S::Error: Send + Sync,
-    {
-        if self.nodes.is_empty() {
-            return Ok(());
-        }
-
-        let entries = self
-            .nodes
-            .iter()
-            .map(|(cid, bytes)| (cid.as_bytes(), bytes.as_slice()))
-            .collect::<Vec<_>>();
-        store
-            .batch_put(&entries)
-            .await
-            .map_err(|e| Error::Store(Box::new(e)))
-    }
-
-    async fn flush_with_hint<S>(
-        &self,
-        store: &S,
-        namespace: &[u8],
-        key: &[u8],
-        value: &[u8],
-    ) -> Result<(), Error>
-    where
-        S: AsyncStore,
-        S::Error: Send + Sync,
-    {
-        let entries = self
-            .nodes
-            .iter()
-            .map(|(cid, bytes)| (cid.as_bytes(), bytes.as_slice()))
-            .collect::<Vec<_>>();
-        store
-            .batch_put_with_hint(&entries, namespace, key, value)
-            .await
-            .map_err(|e| Error::Store(Box::new(e)))
-    }
-
-    fn len(&self) -> usize {
-        self.nodes.len()
-    }
-
-    fn bytes_len(&self) -> usize {
-        self.nodes.iter().map(|(_, bytes)| bytes.len()).sum()
-    }
-
-    fn cache_nodes<S: AsyncStore>(&self, prolly: &AsyncProlly<S>) {
-        let mut evictions = 0;
-        if let Ok(mut cache) = prolly.node_cache.write() {
-            for (cid, node) in &self.cache_nodes {
-                evictions += cache.insert(cid.clone(), Arc::new(node.clone()), node.encoded_len());
-            }
-        }
-        prolly.metrics.add_cache_evictions(evictions);
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct CachedRightmostPathEntry {
-    pub cid: Cid,
     pub node: Node,
-    pub child_index: usize,
 }
 
 /// Half-open key range that was recently changed.
@@ -1433,7 +1293,10 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key already exists with the same value, returns the original tree unchanged.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, val: Vec<u8>) -> Result<Tree, Error> {
-        write::apply_tree(&self.engine, tree, vec![Mutation::Upsert { key, val }])
+        Ok(self
+            .engine
+            .canonical_batch_ready(tree, vec![Mutation::Upsert { key, val }])?
+            .0)
     }
 
     /// Insert or update a value, offloading large payloads to a blob store.
@@ -1474,16 +1337,18 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        write::apply_tree(
-            &self.engine,
-            tree,
-            vec![Mutation::Delete { key: key.to_vec() }],
-        )
+        Ok(self
+            .engine
+            .canonical_batch_ready(tree, vec![Mutation::Delete { key: key.to_vec() }])?
+            .0)
     }
 
     /// Delete all keys in the half-open range `[start, end)`.
     pub fn delete_range(&self, tree: &Tree, start: &[u8], end: &[u8]) -> Result<Tree, Error> {
-        range_delete::apply_tree(self, tree, start, end)
+        Ok(self
+            .engine
+            .canonical_delete_range_ready(tree, start, end)?
+            .0)
     }
 
     /// Delete all keys in the half-open range `[start, end)` and return write statistics.
@@ -1493,7 +1358,7 @@ impl<S: Store> Prolly<S> {
         start: &[u8],
         end: &[u8],
     ) -> Result<(Tree, write::WriteStats), Error> {
-        range_delete::apply(self, tree, start, end)
+        self.engine.canonical_delete_range_ready(tree, start, end)
     }
 
     /// Iterate over a range of key-value pairs.
@@ -4373,6 +4238,7 @@ impl<S: Store> Prolly<S> {
     }
 
     /// Create a new leaf node with config settings.
+    #[cfg(test)]
     pub(crate) fn new_leaf_node(&self) -> Node {
         Node::builder()
             .leaf(true)
@@ -4445,7 +4311,7 @@ impl<S: Store> Prolly<S> {
     /// let new_tree = prolly.batch(&tree, mutations).unwrap();
     /// ```
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        write::apply_tree(&self.engine, tree, mutations)
+        Ok(self.engine.canonical_batch_ready(tree, mutations)?.0)
     }
 
     /// Apply mutations and return tree-write work counters.
@@ -4454,7 +4320,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<(Tree, write::WriteStats), Error> {
-        write::apply(&self.engine, tree, mutations)
+        self.engine.canonical_batch_ready(tree, mutations)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -4466,7 +4332,15 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
-        batch::apply_with_stats(&self.engine, tree, mutations)
+        let input_sorted = mutations
+            .windows(2)
+            .all(|pair| pair[0].key() <= pair[1].key());
+        let (tree, stats) = self.engine.canonical_batch_ready(tree, mutations)?;
+        Ok(batch::BatchApplyResult::from_write_stats(
+            tree,
+            stats,
+            input_sorted,
+        ))
     }
 
     /// Apply append-heavy mutations using the optimized append path when safe.
@@ -4475,7 +4349,7 @@ impl<S: Store> Prolly<S> {
     /// append, this falls back to the regular batch implementation for
     /// correctness.
     pub fn append_batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        write::apply_tree(&self.engine, tree, mutations)
+        self.batch(tree, mutations)
     }
 
     /// Apply append-heavy mutations and return store-neutral execution stats.
@@ -4487,7 +4361,7 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<batch::BatchApplyResult, Error> {
-        batch::apply_with_stats(&self.engine, tree, mutations)
+        self.batch_with_stats(tree, mutations)
     }
 
     /// Merge two trees using CRDT semantics for automatic conflict resolution.
@@ -4603,7 +4477,10 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        write::apply_tree_configured(&self.engine, tree, mutations, config)
+        Ok(self
+            .engine
+            .canonical_batch_ready_configured(tree, mutations, config)?
+            .0)
     }
 
     /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.
@@ -4617,10 +4494,19 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<batch::BatchApplyResult, Error> {
-        parallel::parallel_batch_with_stats(&self.engine, tree, mutations, config)
+        let input_sorted = mutations
+            .windows(2)
+            .all(|pair| pair[0].key() <= pair[1].key());
+        let (tree, stats) = self
+            .engine
+            .canonical_batch_ready_configured(tree, mutations, config)?;
+        Ok(batch::BatchApplyResult::from_write_stats(
+            tree,
+            stats,
+            input_sorted,
+        ))
     }
 }
-#[allow(dead_code)]
 impl<S> engine::ProllyEngine<S>
 where
     S: AsyncStore,
@@ -4733,43 +4619,7 @@ where
         start: &[u8],
         end: &[u8],
     ) -> Result<(Tree, write::WriteStats), Error> {
-        if start >= end || tree.root.is_none() {
-            return Ok((tree.clone(), write::WriteStats::default()));
-        }
-
-        let metrics_before = self.metrics();
-        let mutations = self
-            .range(tree, start, Some(end))
-            .await?
-            .collect()
-            .await?
-            .into_iter()
-            .map(|(key, _)| Mutation::Delete { key })
-            .collect::<Vec<_>>();
-        let mutation_count = mutations.len() as u64;
-        let updated = self.batch(tree, mutations).await?;
-        let metrics_after = self.metrics();
-
-        Ok((
-            updated,
-            write::WriteStats {
-                input_mutations: mutation_count,
-                effective_mutations: mutation_count,
-                nodes_read: metrics_after
-                    .nodes_read
-                    .saturating_sub(metrics_before.nodes_read),
-                nodes_written: metrics_after
-                    .nodes_written
-                    .saturating_sub(metrics_before.nodes_written),
-                bytes_read: metrics_after
-                    .bytes_read
-                    .saturating_sub(metrics_before.bytes_read),
-                bytes_written: metrics_after
-                    .bytes_written
-                    .saturating_sub(metrics_before.bytes_written),
-                ..write::WriteStats::default()
-            },
-        ))
+        self.canonical_delete_range(tree, start, end).await
     }
 
     /// Apply multiple mutations using one async batch write.
@@ -4780,273 +4630,17 @@ where
     /// touched ancestors, and flushes all rewritten nodes through a single
     /// [`AsyncStore::batch_put`] call.
     pub async fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        let mutations = batch::preprocess_mutations(mutations);
-        if mutations.is_empty() {
-            return Ok(tree.clone());
-        }
-        self.validate_tree_format(tree).await?;
-        if let Some(appended) = self.try_append_batch(tree, &mutations).await? {
-            return Ok(appended);
-        }
-        self.rebuild_tree(tree, mutations).await
+        Ok(self.canonical_batch(tree, mutations).await?.0)
     }
 
-    async fn validate_tree_format(&self, tree: &Tree) -> Result<(), Error> {
-        if tree.config.format != self.config.format {
-            return Err(Error::FormatMismatch {
-                expected: self.config.format.digest()?,
-                actual: tree.config.format.digest()?,
-            });
-        }
-        Ok(())
-    }
-
-    async fn rebuild_tree(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        let can_localize = tree.config.format.chunking.measure == format::ChunkMeasure::EntryCount
-            && tree.config.format.chunking.input == format::BoundaryInput::Key;
-        if !can_localize {
-            return self.rebuild_tree_full(tree, mutations).await;
-        }
-        let groups = self.group_batch_mutations_by_leaf(tree, mutations).await?;
-        if !batch_groups_are_value_updates_or_noops(&groups) {
-            return self
-                .rebuild_tree_full(tree, flatten_async_batch_groups(groups))
-                .await;
-        }
-        let mut collector = AsyncWriteCollector::new_cached();
-        let result = self.apply_batch_groups_coalesced(tree, groups, &mut collector)?;
-        if result.root == tree.root {
-            return Ok(tree.clone());
-        }
-        self.flush_append_collector(&collector, None).await?;
-        Ok(Tree {
-            root: result.root,
-            config: tree.config.clone(),
-        })
-    }
-
-    async fn rebuild_tree_full(
+    /// Apply multiple mutations through the canonical writer and return its
+    /// store-neutral work counters.
+    pub async fn batch_with_write_stats(
         &self,
         tree: &Tree,
         mutations: Vec<Mutation>,
-    ) -> Result<Tree, Error> {
-        let mut entries = std::collections::BTreeMap::new();
-        if tree.root.is_some() {
-            for (key, value) in self.range(tree, &[], None).await?.collect().await? {
-                entries.insert(key, value);
-            }
-        }
-        for mutation in mutations {
-            match mutation {
-                Mutation::Upsert { key, val } => {
-                    entries.insert(key, val);
-                }
-                Mutation::Delete { key } => {
-                    entries.remove(&key);
-                }
-            }
-        }
-        if entries.is_empty() {
-            return Ok(Tree {
-                root: None,
-                config: tree.config.clone(),
-            });
-        }
-
-        let entries = entries.into_iter().collect::<Vec<_>>();
-        let mut collector = AsyncWriteCollector::new_cached();
-        let mut summaries = Vec::new();
-        for range in builder::chunk_ranges_for_entries(&self.config, 0, &entries, None)? {
-            let start = *range.start();
-            let end = *range.end();
-            let mut leaf = self.new_leaf_node();
-            reserve_node_entries(&mut leaf, end - start + 1);
-            for (key, value) in entries.iter().take(end + 1).skip(start) {
-                leaf.keys.push(key.clone());
-                leaf.vals.push(value.clone());
-            }
-            summaries.push(self.collect_build_node(leaf, &mut collector)?);
-        }
-
-        let mut level = 1u8;
-        while summaries.len() > 1 {
-            summaries =
-                self.build_internal_level_from_summaries(summaries, level, &mut collector)?;
-            level = level.saturating_add(1);
-        }
-        let root = summaries.first().map(|summary| summary.cid.clone());
-        if root == tree.root {
-            return Ok(tree.clone());
-        }
-        let root = root.ok_or(Error::InvalidNode)?;
-        let rightmost_path = rightmost_path_from_collector(&root, &collector)?;
-        self.flush_append_collector(&collector, Some((&root, &rightmost_path)))
-            .await?;
-        Ok(Tree {
-            root: Some(root),
-            config: tree.config.clone(),
-        })
-    }
-
-    async fn try_append_batch(
-        &self,
-        tree: &Tree,
-        mutations: &[Mutation],
-    ) -> Result<Option<Tree>, Error> {
-        if mutations.is_empty() {
-            return Ok(Some(tree.clone()));
-        }
-        if tree.root.is_none()
-            || mutations
-                .iter()
-                .any(|mutation| !matches!(mutation, Mutation::Upsert { .. }))
-        {
-            return Ok(None);
-        }
-
-        let rightmost_path = self.find_rightmost_path(tree).await?;
-        for entry in &rightmost_path {
-            if entry.node.format != tree.config.format {
-                return Err(Error::FormatMismatch {
-                    expected: tree.config.format.digest()?,
-                    actual: entry.node.format.digest()?,
-                });
-            }
-        }
-
-        if let Some(max_key) = rightmost_path
-            .last()
-            .and_then(|entry| entry.node.keys.last())
-        {
-            if mutations[0].key() <= max_key.as_slice() {
-                return Ok(None);
-            }
-        }
-
-        let mut collector = AsyncWriteCollector::new_cached();
-        let existing_tail = rightmost_path.last().ok_or(Error::InvalidNode)?;
-        let mut leaf_entries = existing_tail
-            .node
-            .keys
-            .iter()
-            .cloned()
-            .zip(existing_tail.node.vals.iter().cloned())
-            .collect::<Vec<_>>();
-        leaf_entries.extend(mutations.iter().filter_map(|mutation| match mutation {
-            Mutation::Upsert { key, val } => Some((key.clone(), val.clone())),
-            Mutation::Delete { .. } => None,
-        }));
-
-        let mut current = Vec::new();
-        for range in builder::chunk_ranges_for_entries(&self.config, 0, &leaf_entries, None)? {
-            let mut leaf = self.new_leaf_node();
-            for (key, value) in leaf_entries
-                .iter()
-                .take(*range.end() + 1)
-                .skip(*range.start())
-            {
-                leaf.keys.push(key.clone());
-                leaf.vals.push(value.clone());
-            }
-            current.push(collect_async_node_with_reuse(
-                leaf,
-                &existing_tail.cid,
-                &mut collector,
-            )?);
-        }
-
-        for ancestor in rightmost_path.iter().rev().skip(1) {
-            let child_index = ancestor.child_index;
-            if child_index + 1 != ancestor.node.len() {
-                return Err(Error::InvalidNode);
-            }
-            let mut children = (0..child_index)
-                .map(|index| {
-                    Ok(AsyncBuildNodeSummary {
-                        cid: child_cid_at(&ancestor.node, index)?,
-                        first_key: ancestor.node.keys[index].clone(),
-                        count: ancestor.node.child_counts[index],
-                    })
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-            children.append(&mut current);
-            current = self.build_internal_level_from_summaries_reusing(
-                children,
-                ancestor.node.level,
-                &ancestor.cid,
-                &mut collector,
-            )?;
-        }
-
-        let mut level = rightmost_path
-            .first()
-            .map(|entry| entry.node.level.saturating_add(1))
-            .ok_or(Error::InvalidNode)?;
-        while current.len() > 1 {
-            current = self.build_internal_level_from_summaries(current, level, &mut collector)?;
-            level = level.saturating_add(1);
-        }
-        let root = current.first().ok_or(Error::InvalidNode)?.cid.clone();
-        let new_rightmost_path = rightmost_path_from_collector(&root, &collector)?;
-        self.flush_append_collector(&collector, Some((&root, &new_rightmost_path)))
-            .await?;
-
-        Ok(Some(Tree {
-            root: Some(root),
-            config: tree.config.clone(),
-        }))
-    }
-
-    async fn find_rightmost_path(
-        &self,
-        tree: &Tree,
-    ) -> Result<Vec<AsyncRightmostPathEntry>, Error> {
-        let Some(root_cid) = &tree.root else {
-            return Ok(Vec::new());
-        };
-
-        if let Some(cached) = self.cached_rightmost_path(root_cid) {
-            return Ok(async_rightmost_entries_from_cache(cached));
-        }
-
-        if let Some(path) = self.load_rightmost_path_hint(root_cid).await? {
-            self.cache_rightmost_path(root_cid.clone(), cached_rightmost_entries(&path));
-            return Ok(path);
-        }
-
-        let mut path = Vec::new();
-        let mut cid = root_cid.clone();
-
-        loop {
-            let node = self.load_arc(&cid).await?;
-            if node.keys.len() != node.vals.len() || node.is_empty() {
-                return Err(Error::InvalidNode);
-            }
-
-            let child_index = node.len().saturating_sub(1);
-            let node_cid = cid.clone();
-            let next_cid = if node.leaf {
-                None
-            } else {
-                Some(child_cid_at(&node, child_index)?)
-            };
-
-            path.push(AsyncRightmostPathEntry {
-                cid: node_cid,
-                node: node.as_ref().clone(),
-                child_index,
-            });
-
-            let Some(next_cid) = next_cid else {
-                break;
-            };
-            cid = next_cid;
-        }
-
-        self.publish_rightmost_path_hint(root_cid, &path).await;
-        self.cache_rightmost_path(root_cid.clone(), cached_rightmost_entries(&path));
-
-        Ok(path)
+    ) -> Result<(Tree, write::WriteStats), Error> {
+        self.canonical_batch(tree, mutations).await
     }
 
     fn cached_rightmost_path(&self, root: &Cid) -> Option<Vec<CachedRightmostPathEntry>> {
@@ -5128,622 +4722,6 @@ where
         }
 
         Ok(Some(path))
-    }
-
-    async fn publish_rightmost_path_hint(&self, root: &Cid, path: &[AsyncRightmostPathEntry]) {
-        if !self.store.supports_hints() {
-            return;
-        }
-        let Ok(bytes) = encode_rightmost_path_hint(path) else {
-            return;
-        };
-        let _ = self
-            .store
-            .put_hint(RIGHTMOST_PATH_HINT_NAMESPACE, root.as_bytes(), &bytes)
-            .await;
-    }
-
-    async fn flush_append_collector(
-        &self,
-        collector: &AsyncWriteCollector,
-        rightmost_hint: Option<(&Cid, &[AsyncRightmostPathEntry])>,
-    ) -> Result<(), Error> {
-        if let Some((root, path)) = rightmost_hint {
-            if self.store.supports_hints() {
-                match encode_rightmost_path_hint(path) {
-                    Ok(bytes) => {
-                        collector
-                            .flush_with_hint(
-                                &self.store,
-                                RIGHTMOST_PATH_HINT_NAMESPACE,
-                                root.as_bytes(),
-                                &bytes,
-                            )
-                            .await?;
-                    }
-                    Err(_) => collector.flush(&self.store).await?,
-                }
-            } else {
-                collector.flush(&self.store).await?;
-            }
-
-            self.cache_rightmost_path(root.clone(), cached_rightmost_entries(path));
-        } else {
-            collector.flush(&self.store).await?;
-        }
-
-        self.metrics
-            .record_batch_write(collector.len(), collector.bytes_len());
-        collector.cache_nodes(self);
-
-        Ok(())
-    }
-
-    fn build_append_leaf_chunks(
-        &self,
-        existing_tail_leaf: Option<Node>,
-        mutations: &[Mutation],
-    ) -> Result<Vec<Node>, Error> {
-        let mut emitter = builder::LevelEmitter::new(self.config.clone(), true, 0)?;
-        let mut leaves = Vec::new();
-        if let Some(existing) = existing_tail_leaf {
-            for (key, value) in existing.keys.into_iter().zip(existing.vals) {
-                leaves.extend(
-                    emitter
-                        .push_leaf(key, value)?
-                        .into_iter()
-                        .map(|emitted| emitted.node),
-                );
-            }
-        }
-        for mutation in mutations {
-            let Mutation::Upsert { key, val } = mutation else {
-                continue;
-            };
-            leaves.extend(
-                emitter
-                    .push_leaf(key.clone(), val.clone())?
-                    .into_iter()
-                    .map(|emitted| emitted.node),
-            );
-        }
-        if let Some(emitted) = emitter.finish()? {
-            leaves.push(emitted.node);
-        }
-        Ok(leaves)
-    }
-
-    fn collect_append_leaf_cids(
-        &self,
-        existing_tail_cid: &Cid,
-        existing_tail_leaf: &Node,
-        new_leaves: &[Node],
-        collector: &mut AsyncWriteCollector,
-    ) -> Vec<Cid> {
-        let mut cids = Vec::with_capacity(new_leaves.len());
-        let start_idx = if new_leaves.first() == Some(existing_tail_leaf) {
-            cids.push(existing_tail_cid.clone());
-            1
-        } else {
-            0
-        };
-
-        for leaf in &new_leaves[start_idx..] {
-            cids.push(collector.add(leaf));
-        }
-
-        cids
-    }
-
-    fn build_tree_from_append_leaves(
-        &self,
-        leaf_cids: &[Cid],
-        leaves: &[Node],
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<AsyncAppendTreeUpdate, Error> {
-        if leaf_cids.len() != leaves.len() || leaf_cids.is_empty() {
-            return Err(Error::InvalidNode);
-        }
-
-        let mut current_level = leaf_cids
-            .iter()
-            .cloned()
-            .zip(leaves.iter().cloned())
-            .collect::<Vec<_>>();
-        let mut rightmost_path = vec![async_rightmost_entry_from_node_ref(
-            current_level.last().ok_or(Error::InvalidNode)?,
-        )];
-
-        if current_level.len() == 1 {
-            return Ok(AsyncAppendTreeUpdate {
-                root: current_level[0].0.clone(),
-                rightmost_path,
-            });
-        }
-
-        let mut level = 1;
-        loop {
-            current_level = self.build_append_parent_level(&current_level, level, collector)?;
-            rightmost_path.insert(
-                0,
-                async_rightmost_entry_from_node_ref(
-                    current_level.last().ok_or(Error::InvalidNode)?,
-                ),
-            );
-
-            if current_level.len() == 1 {
-                return Ok(AsyncAppendTreeUpdate {
-                    root: current_level[0].0.clone(),
-                    rightmost_path,
-                });
-            }
-
-            level += 1;
-        }
-    }
-
-    fn append_leaves_to_rightmost_path(
-        &self,
-        rightmost_path: &[AsyncRightmostPathEntry],
-        new_leaf_cids: &[Cid],
-        new_leaves: &[Node],
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<AsyncAppendTreeUpdate, Error> {
-        if rightmost_path.is_empty() || new_leaf_cids.is_empty() {
-            return Err(Error::InvalidNode);
-        }
-
-        let mut current_level = new_leaf_cids
-            .iter()
-            .cloned()
-            .zip(new_leaves.iter().cloned())
-            .collect::<Vec<_>>();
-        let mut new_rightmost_path = vec![async_rightmost_entry_from_node_ref(
-            current_level.last().ok_or(Error::InvalidNode)?,
-        )];
-
-        if rightmost_path.len() == 1 && rightmost_path[0].node.leaf {
-            return self.build_tree_from_append_leaves(new_leaf_cids, new_leaves, collector);
-        }
-
-        for entry in rightmost_path.iter().rev() {
-            let node = &entry.node;
-            if node.leaf {
-                continue;
-            }
-
-            let idx = entry.child_index;
-            let mut updated_node = node.clone();
-            updated_node.keys.remove(idx);
-            updated_node.vals.remove(idx);
-            updated_node.child_counts.remove(idx);
-
-            for (offset, (cid, child)) in current_level.iter().enumerate() {
-                updated_node.keys.insert(
-                    idx + offset,
-                    child.keys.first().cloned().unwrap_or_default(),
-                );
-                updated_node.vals.insert(idx + offset, cid.0.to_vec());
-                updated_node
-                    .child_counts
-                    .insert(idx + offset, stored_logical_count(child));
-            }
-
-            current_level = if updated_node.len() > updated_node.max_chunk_size() {
-                self.split_append_internal_node(&updated_node, collector)?
-            } else {
-                let cid = collector.add(&updated_node);
-                vec![(cid, updated_node)]
-            };
-
-            new_rightmost_path.insert(
-                0,
-                async_rightmost_entry_from_node_ref(
-                    current_level.last().ok_or(Error::InvalidNode)?,
-                ),
-            );
-        }
-
-        if current_level.len() == 1 {
-            return Ok(AsyncAppendTreeUpdate {
-                root: current_level[0].0.clone(),
-                rightmost_path: new_rightmost_path,
-            });
-        }
-
-        let root_level = rightmost_path
-            .first()
-            .map(|entry| entry.node.level + 1)
-            .unwrap_or(1);
-        let mut root = self.new_internal_node(root_level);
-        reserve_node_entries(&mut root, current_level.len());
-        for (cid, node) in &current_level {
-            root.keys
-                .push(node.keys.first().cloned().unwrap_or_default());
-            root.vals.push(cid.0.to_vec());
-            root.child_counts.push(stored_logical_count(node));
-        }
-
-        let root_cid = collector.add(&root);
-        new_rightmost_path.insert(
-            0,
-            AsyncRightmostPathEntry {
-                cid: root_cid.clone(),
-                node: root,
-                child_index: current_level.len() - 1,
-            },
-        );
-
-        Ok(AsyncAppendTreeUpdate {
-            root: root_cid,
-            rightmost_path: new_rightmost_path,
-        })
-    }
-
-    fn build_append_parent_level(
-        &self,
-        children: &[(Cid, Node)],
-        level: u8,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Vec<(Cid, Node)>, Error> {
-        let mut emitter = builder::LevelEmitter::new(self.config.clone(), false, level)?;
-        let mut parents = Vec::new();
-        for (cid, child) in children {
-            parents.extend(emitter.push_child(builder::NodeSummary {
-                cid: cid.clone(),
-                first_key: child.keys.first().cloned().ok_or(Error::InvalidNode)?,
-                count: stored_logical_count(child),
-            })?);
-        }
-        if let Some(parent) = emitter.finish()? {
-            parents.push(parent);
-        }
-        Ok(parents
-            .into_iter()
-            .map(|parent| {
-                let cid = collector.add(&parent.node);
-                (cid, parent.node)
-            })
-            .collect())
-    }
-
-    fn split_append_internal_node(
-        &self,
-        node: &Node,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Vec<(Cid, Node)>, Error> {
-        Ok(self
-            .split_node_chunks(node)?
-            .into_iter()
-            .map(|chunk| {
-                let cid = collector.add(&chunk);
-                (cid, chunk)
-            })
-            .collect())
-    }
-
-    async fn group_batch_mutations_by_leaf(
-        &self,
-        tree: &Tree,
-        mutations: Vec<Mutation>,
-    ) -> Result<Vec<AsyncBatchLeafGroup>, Error> {
-        if mutations.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mutations = Arc::new(mutations);
-        let Some(root_cid) = &tree.root else {
-            return Ok(vec![AsyncBatchLeafGroup {
-                leaf: self.new_leaf_node(),
-                route_path: None,
-                range: 0..mutations.len(),
-                mutations,
-            }]);
-        };
-
-        let mut frames = vec![AsyncBatchRouteFrame {
-            cid: root_cid.clone(),
-            path: None,
-            range: 0..mutations.len(),
-            mutations,
-        }];
-        let mut groups = Vec::new();
-
-        while !frames.is_empty() {
-            let cids = frames
-                .iter()
-                .map(|frame| frame.cid.clone())
-                .collect::<Vec<_>>();
-            let nodes = self.load_child_frontier_ordered(&cids).await?;
-            let mut next_frames = Vec::new();
-
-            for (frame, node) in frames.into_iter().zip(nodes) {
-                if node.leaf {
-                    groups.push(AsyncBatchLeafGroup {
-                        leaf: node.as_ref().clone(),
-                        route_path: frame.path,
-                        mutations: frame.mutations,
-                        range: frame.range,
-                    });
-                    continue;
-                }
-
-                let parent_path = frame.path.clone();
-                let parent_node = node.clone();
-                let parent_cid = frame.cid.clone();
-                let mutations = frame.mutations.clone();
-
-                batch::route_sorted_mutation_ranges_to_children_each(
-                    &node,
-                    &mutations,
-                    frame.range,
-                    |child_index, child_range| {
-                        let child_cid = child_cid_at(&node, child_index)?;
-                        let path = Arc::new(AsyncBatchRoutePath {
-                            parent: parent_path.clone(),
-                            node: parent_node.clone(),
-                            cid: parent_cid.clone(),
-                            child_index,
-                        });
-                        next_frames.push(AsyncBatchRouteFrame {
-                            cid: child_cid,
-                            path: Some(path),
-                            mutations: mutations.clone(),
-                            range: child_range,
-                        });
-                        Ok(())
-                    },
-                )?;
-            }
-
-            frames = next_frames;
-        }
-
-        Ok(groups)
-    }
-
-    fn apply_batch_groups_coalesced(
-        &self,
-        tree: &Tree,
-        groups: Vec<AsyncBatchLeafGroup>,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<AsyncBatchApplyResult, Error> {
-        let group_count = groups.len();
-        let mut contexts =
-            HashMap::<Cid, AsyncBatchAncestorContext>::with_capacity(group_count.saturating_mul(2));
-        let mut pending = HashMap::<Cid, AsyncBatchChildReplacements>::with_capacity(group_count);
-        let mut root_replacement: Option<Vec<AsyncBatchChildRef>> = None;
-        let mut changed_leaves = 0usize;
-
-        for group in groups {
-            let mutation_slice = &group.mutations[group.range.clone()];
-            let (modified_leaf, leaf_changed, _) =
-                batch::apply_leaf_mutations_with_change(group.leaf, mutation_slice, true);
-
-            if !leaf_changed {
-                continue;
-            }
-
-            changed_leaves += 1;
-            let child_refs =
-                self.async_batch_child_refs_from_modified_node(modified_leaf, collector)?;
-
-            if let Some(path) = group.route_path {
-                collect_async_batch_route_contexts(&path, &mut contexts);
-                pending
-                    .entry(path.cid.clone())
-                    .or_default()
-                    .push((path.child_index, child_refs));
-            } else {
-                if root_replacement.is_some() || !pending.is_empty() {
-                    return Err(Error::InvalidNode);
-                }
-                root_replacement = Some(child_refs);
-            }
-        }
-
-        if changed_leaves == 0 {
-            return Ok(AsyncBatchApplyResult {
-                root: tree.root.clone(),
-                changed_leaves,
-            });
-        }
-
-        if let Some(replacement) = root_replacement {
-            return Ok(AsyncBatchApplyResult {
-                root: self.build_root_from_async_child_refs(replacement, collector)?,
-                changed_leaves,
-            });
-        }
-
-        let mut root_refs: Option<Vec<AsyncBatchChildRef>> = None;
-        while !pending.is_empty() {
-            let current = std::mem::take(&mut pending);
-
-            for (node_cid, replacements) in current {
-                let context = contexts.get(&node_cid).ok_or(Error::InvalidNode)?;
-                let replacement_refs = self.apply_async_batch_child_replacements(
-                    &context.node,
-                    replacements,
-                    collector,
-                )?;
-
-                if let Some(parent) = &context.parent {
-                    pending
-                        .entry(parent.parent_cid.clone())
-                        .or_default()
-                        .push((parent.child_index, replacement_refs));
-                } else {
-                    if root_refs.is_some() {
-                        return Err(Error::InvalidNode);
-                    }
-                    root_refs = Some(replacement_refs);
-                }
-            }
-        }
-
-        let root_refs = root_refs.ok_or(Error::InvalidNode)?;
-        Ok(AsyncBatchApplyResult {
-            root: self.build_root_from_async_child_refs(root_refs, collector)?,
-            changed_leaves,
-        })
-    }
-
-    fn async_batch_child_refs_from_modified_node(
-        &self,
-        node: Node,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Vec<AsyncBatchChildRef>, Error> {
-        if node.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        if node.len() <= node.max_chunk_size() || node.len() == 1 {
-            let first_key = node.keys.first().cloned().unwrap_or_default();
-            let level = node.level;
-            let count = stored_logical_count(&node);
-            let cid = collector.add(&node);
-            return Ok(vec![AsyncBatchChildRef {
-                cid,
-                first_key,
-                level,
-                count,
-            }]);
-        }
-
-        let chunks = self.split_node_chunks(&node)?;
-        let metadata = chunks
-            .iter()
-            .map(|chunk| {
-                (
-                    chunk.keys.first().cloned().unwrap_or_default(),
-                    chunk.level,
-                    stored_logical_count(chunk),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        Ok(metadata
-            .into_iter()
-            .zip(collector.add_many(chunks))
-            .map(|((first_key, level, count), cid)| AsyncBatchChildRef {
-                cid,
-                first_key,
-                level,
-                count,
-            })
-            .collect())
-    }
-
-    fn apply_async_batch_child_replacements(
-        &self,
-        node: &Node,
-        mut replacements: AsyncBatchChildReplacements,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Vec<AsyncBatchChildRef>, Error> {
-        if node.keys.len() != node.vals.len() {
-            return Err(Error::InvalidNode);
-        }
-
-        replacements.sort_by_key(|(idx, _)| *idx);
-        let mut previous_idx = None;
-        for (idx, _) in &replacements {
-            if *idx >= node.len() || previous_idx == Some(*idx) {
-                return Err(Error::InvalidNode);
-            }
-            previous_idx = Some(*idx);
-        }
-
-        if replacements.iter().all(|(_, children)| children.len() == 1) {
-            let mut updated = node.clone();
-            for (idx, children) in replacements {
-                let child = &children[0];
-                updated.keys[idx] = child.first_key.clone();
-                updated.vals[idx] = child.cid.0.to_vec();
-                updated.child_counts[idx] = child.count;
-            }
-
-            debug_assert!(
-                updated.keys.windows(2).all(|pair| pair[0] < pair[1]),
-                "async coalesced batch rebuild must preserve parent key order"
-            );
-
-            return self.async_batch_child_refs_from_modified_node(updated, collector);
-        }
-
-        let replacement_len = node.len() - replacements.len()
-            + replacements
-                .iter()
-                .map(|(_, children)| children.len())
-                .sum::<usize>();
-        let mut updated = self.new_node_like(node);
-        reserve_node_entries(&mut updated, replacement_len);
-        let mut replacements = replacements.into_iter().peekable();
-
-        for idx in 0..node.len() {
-            if replacements
-                .peek()
-                .map(|(replacement_idx, _)| *replacement_idx == idx)
-                .unwrap_or(false)
-            {
-                let (_, children) = replacements.next().ok_or(Error::InvalidNode)?;
-                for child in children {
-                    updated.keys.push(child.first_key);
-                    updated.vals.push(child.cid.0.to_vec());
-                    updated.child_counts.push(child.count);
-                }
-            } else {
-                updated.keys.push(node.keys[idx].clone());
-                updated.vals.push(node.vals[idx].clone());
-                updated.child_counts.push(node.child_counts[idx]);
-            }
-        }
-
-        debug_assert!(
-            updated.keys.windows(2).all(|pair| pair[0] < pair[1]),
-            "async coalesced batch rebuild must preserve parent key order"
-        );
-
-        self.async_batch_child_refs_from_modified_node(updated, collector)
-    }
-
-    fn build_root_from_async_child_refs(
-        &self,
-        child_refs: Vec<AsyncBatchChildRef>,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Option<Cid>, Error> {
-        if child_refs.is_empty() {
-            return Ok(None);
-        }
-
-        if child_refs.len() == 1 {
-            return Ok(Some(child_refs[0].cid.clone()));
-        }
-
-        let first_level = child_refs[0].level;
-        if child_refs.iter().any(|child| child.level != first_level) {
-            return Err(Error::InvalidNode);
-        }
-
-        let mut level = first_level.saturating_add(1);
-        let mut summaries = child_refs
-            .into_iter()
-            .map(|child| AsyncBuildNodeSummary {
-                cid: child.cid,
-                first_key: child.first_key,
-                count: child.count,
-            })
-            .collect::<Vec<_>>();
-
-        loop {
-            summaries = self.build_internal_level_from_summaries(summaries, level, collector)?;
-
-            if summaries.len() == 1 {
-                return Ok(Some(summaries[0].cid.clone()));
-            }
-
-            level = level.saturating_add(1);
-        }
     }
 
     /// Create an async range iterator over key-value pairs.
@@ -7350,33 +6328,6 @@ where
         }
     }
 
-    async fn find_path(&self, tree: &Tree, key: &[u8]) -> Result<Vec<(Node, usize)>, Error> {
-        let mut path = Vec::new();
-
-        let Some(root_cid) = &tree.root else {
-            return Ok(path);
-        };
-
-        let mut cid = root_cid.clone();
-        loop {
-            let node = self.load_arc(&cid).await?;
-            let idx = match node.search(key) {
-                Ok(idx) => idx,
-                Err(idx) => idx.saturating_sub(1),
-            };
-
-            path.push((node.as_ref().clone(), idx));
-
-            if node.leaf {
-                break;
-            }
-
-            cid = child_cid_at(&node, idx)?;
-        }
-
-        Ok(path)
-    }
-
     pub(crate) async fn find_read_path_arcs(
         &self,
         tree: &Tree,
@@ -7407,436 +6358,14 @@ where
             cid = node.child_cid(index)?;
         }
     }
-
-    fn build_internal_level_from_summaries(
-        &self,
-        children: Vec<AsyncBuildNodeSummary>,
-        level: u8,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Vec<AsyncBuildNodeSummary>, Error> {
-        if children.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let entries = children
-            .iter()
-            .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
-            .collect::<Vec<_>>();
-        let child_counts = children.iter().map(|child| child.count).collect::<Vec<_>>();
-        let chunk_ranges =
-            builder::chunk_ranges_for_entries(&self.config, level, &entries, Some(&child_counts))?;
-        let mut summaries = Vec::with_capacity(chunk_ranges.len());
-
-        for range in chunk_ranges {
-            let start = *range.start();
-            let end = *range.end();
-            let mut node = self.new_internal_node(level);
-            reserve_node_entries(&mut node, end - start + 1);
-
-            for child in children.iter().take(end + 1).skip(start) {
-                node.keys.push(child.first_key.clone());
-                node.vals.push(child.cid.0.to_vec());
-                node.child_counts.push(child.count);
-            }
-
-            summaries.push(self.collect_build_node(node, collector)?);
-        }
-
-        Ok(summaries)
-    }
-
-    fn build_internal_level_from_summaries_reusing(
-        &self,
-        children: Vec<AsyncBuildNodeSummary>,
-        level: u8,
-        reusable: &Cid,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Vec<AsyncBuildNodeSummary>, Error> {
-        let entries = children
-            .iter()
-            .map(|child| (child.first_key.clone(), child.cid.as_bytes().to_vec()))
-            .collect::<Vec<_>>();
-        let child_counts = children.iter().map(|child| child.count).collect::<Vec<_>>();
-        let ranges =
-            builder::chunk_ranges_for_entries(&self.config, level, &entries, Some(&child_counts))?;
-        let mut summaries = Vec::with_capacity(ranges.len());
-
-        for range in ranges {
-            let start = *range.start();
-            let end = *range.end();
-            let mut node = self.new_internal_node(level);
-            reserve_node_entries(&mut node, end - start + 1);
-            for child in children.iter().take(end + 1).skip(start) {
-                node.keys.push(child.first_key.clone());
-                node.vals.push(child.cid.0.to_vec());
-                node.child_counts.push(child.count);
-            }
-            summaries.push(collect_async_node_with_reuse(node, reusable, collector)?);
-        }
-
-        Ok(summaries)
-    }
-
-    fn collect_build_node(
-        &self,
-        node: Node,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<AsyncBuildNodeSummary, Error> {
-        let first_key = node.keys.first().cloned().ok_or(Error::InvalidNode)?;
-        let count = stored_logical_count(&node);
-        let cid = collector.add(&node);
-        Ok(AsyncBuildNodeSummary {
-            cid,
-            first_key,
-            count,
-        })
-    }
-
-    fn new_leaf_node(&self) -> Node {
-        Node::builder()
-            .leaf(true)
-            .level(INIT_LEVEL)
-            .tree_format(self.config.format.clone())
-            .build()
-    }
-
-    fn new_internal_node(&self, level: u8) -> Node {
-        Node::builder()
-            .leaf(false)
-            .level(level)
-            .tree_format(self.config.format.clone())
-            .build()
-    }
-
-    fn new_node_like(&self, template: &Node) -> Node {
-        Node::builder()
-            .leaf(template.leaf)
-            .level(template.level)
-            .tree_format(template.format.clone())
-            .build()
-    }
-
-    async fn rebalance_with_collector(
-        &self,
-        mut node: Node,
-        mut ancestors: Vec<(Node, usize)>,
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Option<Cid>, Error> {
-        loop {
-            if node.is_empty() {
-                let Some((mut parent, idx)) = ancestors.pop() else {
-                    return Ok(None);
-                };
-
-                parent.keys.remove(idx);
-                parent.vals.remove(idx);
-                parent.child_counts.remove(idx);
-
-                if parent.is_empty() && ancestors.is_empty() {
-                    return Ok(None);
-                }
-
-                node = parent;
-                continue;
-            }
-
-            if node.len() > node.max_chunk_size() && node.len() > 1 {
-                let chunks = self.split_node_chunks(&node)?;
-
-                if chunks.len() == 1 {
-                    node = chunks.into_iter().next().ok_or(Error::InvalidNode)?;
-                } else {
-                    let first_keys = chunks
-                        .iter()
-                        .map(|chunk| chunk.keys.first().cloned().unwrap_or_default())
-                        .collect::<Vec<_>>();
-                    let chunk_counts = chunks_logical_counts(&chunks);
-                    let chunk_info = collector
-                        .add_many(chunks)
-                        .into_iter()
-                        .zip(first_keys)
-                        .collect::<Vec<_>>();
-
-                    if ancestors.is_empty() {
-                        let mut parent = self.new_internal_node(node.level + 1);
-                        reserve_node_entries(&mut parent, chunk_info.len());
-                        for (cid, first_key) in &chunk_info {
-                            parent.keys.push(first_key.clone());
-                            parent.vals.push(cid.0.to_vec());
-                        }
-                        parent.child_counts.extend(chunk_counts.iter().copied());
-                        node = parent;
-                        continue;
-                    }
-
-                    let (mut parent, idx) = ancestors.pop().ok_or(Error::InvalidNode)?;
-                    parent.keys.remove(idx);
-                    parent.vals.remove(idx);
-                    parent.child_counts.remove(idx);
-                    reserve_node_entries(&mut parent, chunk_info.len().saturating_sub(1));
-                    for (offset, ((cid, first_key), count)) in
-                        chunk_info.iter().zip(chunk_counts).enumerate()
-                    {
-                        parent.keys.insert(idx + offset, first_key.clone());
-                        parent.vals.insert(idx + offset, cid.0.to_vec());
-                        parent.child_counts.insert(idx + offset, count);
-                    }
-                    node = parent;
-                    continue;
-                }
-            }
-
-            if !ancestors.is_empty() && node.len() < node.min_chunk_size() {
-                if let Some((merged_node, merged_ancestors)) = self
-                    .try_merge_with_sibling(&node, &ancestors, collector)
-                    .await?
-                {
-                    node = merged_node;
-                    ancestors = merged_ancestors;
-                    continue;
-                }
-            }
-
-            let cid = collector.add(&node);
-
-            let Some((mut parent, idx)) = ancestors.pop() else {
-                return Ok(Some(cid));
-            };
-
-            if !node.keys.is_empty() {
-                parent.keys[idx] = node.keys[0].clone();
-            }
-            parent.vals[idx] = cid.0.to_vec();
-            parent.child_counts[idx] = stored_logical_count(&node);
-            node = parent;
-        }
-    }
-
-    async fn try_merge_with_sibling(
-        &self,
-        node: &Node,
-        ancestors: &[(Node, usize)],
-        collector: &mut AsyncWriteCollector,
-    ) -> Result<Option<(Node, Vec<(Node, usize)>)>, Error> {
-        let (parent, idx) = ancestors.last().ok_or(Error::InvalidNode)?;
-        let idx = *idx;
-
-        if idx > 0 {
-            let left_cid = child_cid_at(parent, idx - 1)?;
-            let left_sibling = self.load_arc(&left_cid).await?;
-
-            if !is_valid_boundary_between(&left_sibling, node)? {
-                let merged = self.merge_nodes(&left_sibling, node);
-                let mut new_parent = parent.clone();
-                new_parent.keys.remove(idx - 1);
-                new_parent.vals.remove(idx - 1);
-                new_parent.child_counts.remove(idx - 1);
-                let new_idx = idx - 1;
-
-                if merged.len() > merged.max_chunk_size() && merged.len() > 1 {
-                    let mut new_ancestors = ancestors[..ancestors.len() - 1].to_vec();
-                    new_ancestors.push((new_parent, new_idx));
-                    return Ok(Some((merged, new_ancestors)));
-                }
-
-                let merged_cid = collector.add(&merged);
-                new_parent.keys[new_idx] = merged.keys[0].clone();
-                new_parent.vals[new_idx] = merged_cid.0.to_vec();
-                new_parent.child_counts[new_idx] = stored_logical_count(&merged);
-                return Ok(Some((
-                    new_parent,
-                    ancestors[..ancestors.len() - 1].to_vec(),
-                )));
-            }
-        }
-
-        if idx + 1 < parent.vals.len() {
-            let right_cid = child_cid_at(parent, idx + 1)?;
-            let right_sibling = self.load_arc(&right_cid).await?;
-
-            if !is_valid_boundary_between(node, &right_sibling)? {
-                let merged = self.merge_nodes(node, &right_sibling);
-                let mut new_parent = parent.clone();
-                new_parent.keys.remove(idx + 1);
-                new_parent.vals.remove(idx + 1);
-                new_parent.child_counts.remove(idx + 1);
-
-                if merged.len() > merged.max_chunk_size() && merged.len() > 1 {
-                    let mut new_ancestors = ancestors[..ancestors.len() - 1].to_vec();
-                    new_ancestors.push((new_parent, idx));
-                    return Ok(Some((merged, new_ancestors)));
-                }
-
-                let merged_cid = collector.add(&merged);
-                new_parent.keys[idx] = merged.keys[0].clone();
-                new_parent.vals[idx] = merged_cid.0.to_vec();
-                new_parent.child_counts[idx] = stored_logical_count(&merged);
-                return Ok(Some((
-                    new_parent,
-                    ancestors[..ancestors.len() - 1].to_vec(),
-                )));
-            }
-        }
-
-        Ok(None)
-    }
-
-    fn split_node_chunks(&self, node: &Node) -> Result<Vec<Node>, Error> {
-        let mut emitter = builder::LevelEmitter::new(self.config.clone(), node.leaf, node.level)?;
-        let mut chunks = Vec::new();
-        for index in 0..node.len() {
-            let emitted = if node.leaf {
-                emitter.push_leaf(node.keys[index].clone(), node.vals[index].clone())?
-            } else {
-                emitter.push_child(builder::NodeSummary {
-                    cid: child_cid_at(node, index)?,
-                    first_key: node.keys[index].clone(),
-                    count: *node.child_counts.get(index).ok_or(Error::InvalidNode)?,
-                })?
-            };
-            chunks.extend(emitted.into_iter().map(|emitted| emitted.node));
-        }
-        if let Some(emitted) = emitter.finish()? {
-            chunks.push(emitted.node);
-        }
-        Ok(chunks)
-    }
-
-    fn merge_nodes(&self, left: &Node, right: &Node) -> Node {
-        let mut merged = self.new_node_like(left);
-        let merged_len = left.len() + right.len();
-        merged.keys = Vec::with_capacity(merged_len);
-        merged.keys.extend(left.keys.iter().cloned());
-        merged.keys.extend(right.keys.iter().cloned());
-        merged.vals = Vec::with_capacity(merged_len);
-        merged.vals.extend(left.vals.iter().cloned());
-        merged.vals.extend(right.vals.iter().cloned());
-        if !left.leaf {
-            merged
-                .child_counts
-                .extend(left.child_counts.iter().copied());
-            merged
-                .child_counts
-                .extend(right.child_counts.iter().copied());
-        }
-        merged
-    }
 }
-#[allow(dead_code)]
-fn collect_async_batch_route_contexts(
-    path: &Arc<AsyncBatchRoutePath>,
-    contexts: &mut HashMap<Cid, AsyncBatchAncestorContext>,
-) {
-    let mut current = Some(path.clone());
-
-    while let Some(path) = current {
-        let parent = path.parent.as_ref().map(|parent| AsyncBatchParentLink {
-            parent_cid: parent.cid.clone(),
-            child_index: parent.child_index,
-        });
-
-        contexts
-            .entry(path.cid.clone())
-            .or_insert_with(|| AsyncBatchAncestorContext {
-                node: path.node.as_ref().clone(),
-                parent,
-            });
-
-        current = path.parent.clone();
-    }
-}
-
-fn batch_groups_are_value_updates_or_noops(groups: &[AsyncBatchLeafGroup]) -> bool {
-    groups.iter().all(|group| {
-        group.mutations[group.range.clone()]
-            .iter()
-            .all(|mutation| match mutation {
-                Mutation::Upsert { key, .. } => group.leaf.search(key).is_ok(),
-                Mutation::Delete { key } => group.leaf.search(key).is_err(),
-            })
-    })
-}
-
-fn flatten_async_batch_groups(groups: Vec<AsyncBatchLeafGroup>) -> Vec<Mutation> {
-    let mut mutations = groups
-        .into_iter()
-        .flat_map(|group| group.mutations[group.range].to_vec())
-        .collect::<Vec<_>>();
-    mutations.sort_by(|left, right| left.key().cmp(right.key()));
-    mutations
-}
-#[allow(dead_code)]
-fn async_rightmost_entry_from_node_ref((cid, node): &(Cid, Node)) -> AsyncRightmostPathEntry {
-    AsyncRightmostPathEntry {
-        cid: cid.clone(),
-        node: node.clone(),
-        child_index: node.len().saturating_sub(1),
-    }
-}
-fn collect_async_node_with_reuse(
-    node: Node,
-    reusable: &Cid,
-    collector: &mut AsyncWriteCollector,
-) -> Result<AsyncBuildNodeSummary, Error> {
-    let first_key = node.keys.first().cloned().ok_or(Error::InvalidNode)?;
-    let count = stored_logical_count(&node);
-    let cid = node.cid();
-    if cid != *reusable {
-        collector.add(&node);
-    }
-    Ok(AsyncBuildNodeSummary {
-        cid,
-        first_key,
-        count,
-    })
-}
-fn rightmost_path_from_collector(
-    root: &Cid,
-    collector: &AsyncWriteCollector,
-) -> Result<Vec<AsyncRightmostPathEntry>, Error> {
-    let mut path = Vec::new();
-    let mut cid = root.clone();
-    loop {
-        let node = collector
-            .cache_nodes
-            .iter()
-            .find_map(|(candidate, node)| (candidate == &cid).then_some(node))
-            .ok_or(Error::InvalidNode)?;
-        let child_index = node.len().checked_sub(1).ok_or(Error::InvalidNode)?;
-        path.push(AsyncRightmostPathEntry {
-            cid: cid.clone(),
-            node: node.clone(),
-            child_index,
-        });
-        if node.leaf {
-            return Ok(path);
-        }
-        cid = child_cid_at(node, child_index)?;
-    }
-}
-#[allow(dead_code)]
 fn cached_rightmost_entries(path: &[AsyncRightmostPathEntry]) -> Vec<CachedRightmostPathEntry> {
     path.iter()
         .map(|entry| CachedRightmostPathEntry {
-            cid: entry.cid.clone(),
             node: entry.node.clone(),
-            child_index: entry.child_index,
         })
         .collect()
 }
-#[allow(dead_code)]
-fn async_rightmost_entries_from_cache(
-    path: Vec<CachedRightmostPathEntry>,
-) -> Vec<AsyncRightmostPathEntry> {
-    path.into_iter()
-        .map(|entry| AsyncRightmostPathEntry {
-            cid: entry.cid,
-            node: entry.node,
-            child_index: entry.child_index,
-        })
-        .collect()
-}
-#[allow(dead_code)]
 fn encode_rightmost_path_hint(path: &[AsyncRightmostPathEntry]) -> Result<Vec<u8>, Error> {
     let hint = AsyncRightmostPathHint {
         version: 2,
@@ -7850,7 +6379,6 @@ fn encode_rightmost_path_hint(path: &[AsyncRightmostPathEntry]) -> Result<Vec<u8
     };
     serde_cbor::ser::to_vec_packed(&hint).map_err(|err| Error::Deserialize(err.to_string()))
 }
-#[allow(dead_code)]
 fn rightmost_path_hint_is_valid(root: &Cid, path: &[AsyncRightmostPathEntry]) -> bool {
     if path.first().map(|entry| &entry.cid) != Some(root) {
         return false;
@@ -8324,13 +6852,6 @@ fn validate_owned_node_format(
         });
     }
     Ok(())
-}
-fn reserve_node_entries(node: &mut Node, additional: usize) {
-    node.keys.reserve(additional);
-    node.vals.reserve(additional);
-    if !node.leaf {
-        node.child_counts.reserve(additional);
-    }
 }
 fn stored_logical_count(node: &Node) -> u64 {
     if node.leaf {

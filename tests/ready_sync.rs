@@ -36,6 +36,68 @@ fn input_tree_format_is_authoritative_for_sync_and_async_reads() {
 }
 
 #[test]
+fn input_tree_format_is_authoritative_for_sync_and_async_writes() {
+    let store = Arc::new(MemStore::new());
+    let tree_config = Config::builder().node_layout(NodeLayoutSpec::Plain).build();
+    let writer = Prolly::new(store.clone(), tree_config.clone());
+    let base = writer
+        .put(&writer.create(), b"a".to_vec(), b"1".to_vec())
+        .unwrap();
+    let expected = writer
+        .batch(
+            &writer.create(),
+            vec![
+                prolly::Mutation::Upsert {
+                    key: b"a".to_vec(),
+                    val: b"2".to_vec(),
+                },
+                prolly::Mutation::Upsert {
+                    key: b"b".to_vec(),
+                    val: b"3".to_vec(),
+                },
+            ],
+        )
+        .unwrap();
+
+    let sync = Prolly::new(store.clone(), Config::default());
+    let asynchronous = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+    let sync_tree = sync
+        .batch(
+            &base,
+            vec![
+                prolly::Mutation::Upsert {
+                    key: b"a".to_vec(),
+                    val: b"2".to_vec(),
+                },
+                prolly::Mutation::Upsert {
+                    key: b"b".to_vec(),
+                    val: b"3".to_vec(),
+                },
+            ],
+        )
+        .unwrap();
+    let async_tree = block_on(asynchronous.batch(
+        &base,
+        vec![
+            prolly::Mutation::Upsert {
+                key: b"a".to_vec(),
+                val: b"2".to_vec(),
+            },
+            prolly::Mutation::Upsert {
+                key: b"b".to_vec(),
+                val: b"3".to_vec(),
+            },
+        ],
+    ))
+    .unwrap();
+
+    assert_eq!(sync_tree.root, expected.root);
+    assert_eq!(async_tree.root, expected.root);
+    assert_eq!(sync_tree.config.format, tree_config.format);
+    assert_eq!(async_tree.config.format, tree_config.format);
+}
+
+#[test]
 fn sync_and_async_reads_preserve_order_duplicates_and_missing_values() {
     let store = Arc::new(MemStore::new());
     let writer = Prolly::new(store.clone(), Config::default());

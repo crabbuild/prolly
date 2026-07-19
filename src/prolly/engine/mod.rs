@@ -5,6 +5,7 @@ pub(crate) mod execution;
 )]
 pub(crate) mod ready;
 pub(crate) mod validation;
+pub(crate) mod write;
 
 use std::sync::{Arc, RwLock};
 

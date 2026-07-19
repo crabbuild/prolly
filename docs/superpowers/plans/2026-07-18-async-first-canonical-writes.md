@@ -29,21 +29,21 @@ fallback and facade-local mutation algorithms are deleted after equivalence.
   append, random, and clustered workloads across all built-in layouts.
 - [x] Add a counting async store test proving a one-key update on a multi-level
   tree does not scan every leaf and uses one atomic `batch_put` publication.
-- [ ] Add injected read/write failure tests proving the old root remains readable
+- [x] Add injected read/write failure tests proving the old root remains readable
   and no collector-only node is cache-visible.
 - [x] Run focused tests and capture the full-rebuild I/O assertion RED.
 
 ## Task 2: Install the Engine Write Boundary
 
-- [ ] Create `src/prolly/engine/write.rs` with operation-local collector,
+- [x] Create `src/prolly/engine/write.rs` with operation-local collector,
   validated owned loaders, mutation routing frames, child replacements, and
   canonical parent/root construction.
 - [x] Expose `ProllyEngine::{put, delete, batch}` and keep format/execution state
   on the engine. Reuse the shared cache and cumulative metrics only after a
   successful store batch.
-- [ ] Wire the existing localized coalesced planner; delete the full-tree
+- [x] Wire the existing localized coalesced planner; delete the full-tree
   `BTreeMap` rebuild.
-- [ ] Run Task 1 plus canonical root, invariant, and write-stat suites.
+- [x] Run Task 1 plus canonical root, invariant, and write-stat suites.
 
 ## Task 3: Canonical Append
 
@@ -57,11 +57,11 @@ fallback and facade-local mutation algorithms are deleted after equivalence.
 ## Task 4: Facade Cutover and Legacy Deletion
 
 - [x] Make `AsyncProlly` delegate put/delete/batch to the engine.
-- [ ] Make `Prolly` delegate the same APIs through `SyncStoreAsAsync::ready` and
+- [x] Make `Prolly` delegate the same APIs through the ready-only engine bridge and
   `run_ready`; route range deletion through engine batch.
-- [ ] Delete facade-local collectors, route frames, rebuild helpers, and duplicate
+- [x] Delete facade-local collectors, route frames, rebuild helpers, and duplicate
   point mutation implementations once no caller remains.
-- [ ] Remove broad `allow(dead_code)` from the async facade and require strict
+- [x] Remove broad `allow(dead_code)` from the async facade and require strict
   Clippy to identify residue.
 
 ## Task 5: Completion Gate

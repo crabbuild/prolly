@@ -2,8 +2,7 @@
 
 use std::collections::HashSet;
 use std::ops::Range;
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use rayon::prelude::*;
 
@@ -16,15 +15,16 @@ use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
 use super::node::Node;
 use super::parallel::{ExecutionPolicy, ParallelConfig};
 use super::store::Store;
-use super::store::SyncStoreAsAsync;
 use super::{Prolly, Tree};
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
+type NormalizedMutation = (Vec<u8>, Option<Vec<u8>>);
 
 pub(crate) trait CanonicalWriteManager: Sync {
     type Store: Store + Send + Sync;
 
     fn write_store(&self) -> &Self::Store;
+    fn write_config(&self) -> &Config;
     fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error>;
     fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error>;
     fn write_cache_node(&self, cid: Cid, node: Node);
@@ -73,6 +73,10 @@ where
         self.store()
     }
 
+    fn write_config(&self) -> &Config {
+        self.config()
+    }
+
     fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
         self.load_arc(cid)
     }
@@ -118,95 +122,6 @@ where
         policy: ExecutionPolicy,
     ) -> Result<super::batch::KeyStableBatchAttempt, Error> {
         super::batch::try_apply_batched_value_updates(self, tree, mutations, policy)
-    }
-}
-
-impl<S> CanonicalWriteManager for super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>
-where
-    S: Store,
-{
-    type Store = Arc<S>;
-
-    fn write_store(&self) -> &Self::Store {
-        self.store.inner()
-    }
-
-    fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
-        let future = self.load_arc(cid);
-        super::engine::ready::run_ready(self.store.ready(future))
-    }
-
-    fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
-        let future = self.load_many_ordered(cids);
-        super::engine::ready::run_ready(self.store.ready(future))
-    }
-
-    fn write_cache_node(&self, cid: Cid, node: Node) {
-        if let Ok(mut cache) = self.node_cache.write() {
-            let bytes = node.encoded_len();
-            let evictions = cache.insert(cid, Arc::new(node), bytes);
-            self.metrics.add_cache_evictions(evictions);
-        }
-    }
-
-    fn write_metrics(&self) -> super::ProllyMetricsSnapshot {
-        self.metrics.snapshot()
-    }
-
-    fn write_record_batch_metrics(&self, nodes: usize, bytes: usize) {
-        self.metrics.record_batch_write(nodes, bytes);
-    }
-
-    fn write_should_try_batched_value_updates(
-        &self,
-        tree: &Tree,
-        mutation_count: usize,
-        policy: ExecutionPolicy,
-    ) -> bool {
-        let manager = sync_engine_write_facade(self);
-        super::batch::should_try_batched_value_updates(&manager, tree, mutation_count, policy)
-    }
-
-    fn write_sampled_value_updates_are_key_stable(
-        &self,
-        tree: &Tree,
-        mutations: Vec<Mutation>,
-        policy: ExecutionPolicy,
-    ) -> Result<bool, Error> {
-        let manager = sync_engine_write_facade(self);
-        super::batch::sampled_value_updates_are_likely_key_stable(&manager, tree, mutations, policy)
-    }
-
-    fn write_try_apply_batched_value_updates(
-        &self,
-        tree: &Tree,
-        mutations: Vec<Mutation>,
-        policy: ExecutionPolicy,
-    ) -> Result<super::batch::KeyStableBatchAttempt, Error> {
-        let manager = sync_engine_write_facade(self);
-        super::batch::try_apply_batched_value_updates(&manager, tree, mutations, policy)
-    }
-}
-
-fn sync_engine_write_facade<S: Store>(
-    engine: &super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
-) -> Prolly<Arc<S>> {
-    let store = Arc::new(engine.store.inner().clone());
-    let nested_engine = super::engine::ProllyEngine::with_state(
-        SyncStoreAsAsync::new(store.clone()),
-        engine.config.clone(),
-        engine.execution.clone(),
-        engine.node_cache.clone(),
-        engine.metrics.clone(),
-    );
-    Prolly {
-        store,
-        engine: nested_engine,
-        config: engine.config.clone(),
-        node_cache: engine.node_cache.clone(),
-        recent_leaf: RwLock::new(None),
-        recent_leaf_misses: AtomicUsize::new(0),
-        metrics: engine.metrics.clone(),
     }
 }
 
@@ -419,6 +334,17 @@ fn apply_impl<M: CanonicalWriteManager>(
     )? {
         return Ok(result);
     }
+    let normalized_batch_had_deletes = mutations.iter().any(|(_, value)| value.is_none());
+    mutations = discard_small_mixed_batch_missing_deletes(
+        manager,
+        tree,
+        mutations,
+        &mut stats,
+        measure_read_bytes,
+    )?;
+    if mutations.is_empty() {
+        return Ok((tree.clone(), stats));
+    }
     mutations = match try_direct_value_updates(
         manager,
         tree,
@@ -426,6 +352,7 @@ fn apply_impl<M: CanonicalWriteManager>(
         &mut stats,
         measure_read_bytes,
         policy,
+        !normalized_batch_had_deletes,
     )? {
         DirectValueUpdateAttempt::Applied(result) => return Ok(*result),
         DirectValueUpdateAttempt::Fallback(mutations) => mutations,
@@ -661,6 +588,72 @@ fn apply_impl<M: CanonicalWriteManager>(
         let _ = manager.write_load_arc(root)?;
     }
     Ok((written, stats))
+}
+
+fn discard_small_mixed_batch_missing_deletes<M: CanonicalWriteManager>(
+    manager: &M,
+    tree: &Tree,
+    mutations: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+    stats: &mut WriteStats,
+    measure_read_bytes: bool,
+) -> Result<Vec<NormalizedMutation>, Error> {
+    const MAX_PROBED_DELETES: usize = 64;
+
+    let delete_count = mutations
+        .iter()
+        .filter(|(_, value)| value.is_none())
+        .count();
+    if delete_count == 0
+        || delete_count > MAX_PROBED_DELETES
+        || delete_count == mutations.len()
+        || tree.config.format.chunking.measure != ChunkMeasure::EntryCount
+        || tree.config.format.chunking.input != BoundaryInput::Key
+        || matches!(
+            tree.config.format.node_layout,
+            NodeLayoutSpec::Custom { .. }
+        )
+    {
+        return Ok(mutations);
+    }
+    let Some(root) = &tree.root else {
+        return Ok(mutations
+            .into_iter()
+            .filter(|(_, value)| value.is_some())
+            .collect());
+    };
+
+    let mut retained = Vec::with_capacity(mutations.len());
+    for mutation in mutations {
+        if mutation.1.is_some() {
+            retained.push(mutation);
+            continue;
+        }
+
+        let mut cid = root.clone();
+        let exists = loop {
+            let node = manager.write_load_arc(&cid)?;
+            stats.nodes_read = stats.nodes_read.saturating_add(1);
+            if measure_read_bytes {
+                stats.bytes_read = stats.bytes_read.saturating_add(node.encoded_len() as u64);
+            }
+            if node.is_empty() {
+                break false;
+            }
+            let index = match node.search(&mutation.0) {
+                Ok(index) => index,
+                Err(0) => break false,
+                Err(index) => index - 1,
+            };
+            if node.leaf {
+                break node.keys.get(index).map(Vec::as_slice) == Some(mutation.0.as_slice());
+            }
+            cid = super::child_cid_at(&node, index)?;
+        };
+        if exists {
+            retained.push(mutation);
+        }
+    }
+    Ok(retained)
 }
 
 /// Plan conservative, non-overlapping mutation regions at canonical leaf
@@ -1566,6 +1559,7 @@ fn try_direct_value_updates<M: CanonicalWriteManager>(
     stats: &mut WriteStats,
     measure_read_bytes: bool,
     policy: ExecutionPolicy,
+    allow_batched_route: bool,
 ) -> Result<DirectValueUpdateAttempt, Error> {
     let chunking = &tree.config.format.chunking;
     if chunking.measure != ChunkMeasure::EntryCount
@@ -1582,7 +1576,8 @@ fn try_direct_value_updates<M: CanonicalWriteManager>(
         return Ok(DirectValueUpdateAttempt::Fallback(mutations));
     };
 
-    let mutations = if manager.write_should_try_batched_value_updates(tree, mutations.len(), policy)
+    let mutations = if allow_batched_route
+        && manager.write_should_try_batched_value_updates(tree, mutations.len(), policy)
     {
         let metrics_before = manager.write_metrics();
         if sampled_value_updates_are_likely_key_stable(manager, tree, &mutations, policy)? {

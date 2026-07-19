@@ -528,15 +528,6 @@ fn new_builder_node(config: &Config, leaf: bool, level: u8) -> Node {
         .tree_format(config.format.clone())
         .build()
 }
-pub(crate) fn chunk_ranges_for_entries(
-    config: &Config,
-    level: u8,
-    entries: &[(Vec<u8>, Vec<u8>)],
-    child_counts: Option<&[u64]>,
-) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
-    chunk_ranges_for_entries_impl(config, level, entries, child_counts, false)
-}
-
 fn chunk_ranges_for_entries_parallel(
     config: &Config,
     level: u8,

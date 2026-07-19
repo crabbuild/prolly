@@ -5,7 +5,7 @@ mod common;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
@@ -410,6 +410,86 @@ impl Store for CountingBatchStore {
             .fetch_add(1, Ordering::Relaxed);
         self.batch_put(entries)?;
         self.put_hint(namespace, key, value)
+    }
+}
+
+#[derive(Default)]
+struct InjectedFailureStore {
+    inner: MemStore,
+    fail_next_get: AtomicBool,
+    fail_next_batch_put: AtomicBool,
+    failed_batch_entries: Mutex<Vec<(Vec<u8>, Vec<u8>)>>,
+}
+
+impl InjectedFailureStore {
+    fn fail_next_get(&self) {
+        self.fail_next_get.store(true, Ordering::SeqCst);
+    }
+
+    fn fail_next_batch_put(&self) {
+        self.fail_next_batch_put.store(true, Ordering::SeqCst);
+    }
+
+    fn failed_batch_root(&self) -> Cid {
+        self.failed_batch_entries
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(cid, bytes)| {
+                let node = prolly::Node::from_bytes(bytes).unwrap();
+                let mut cid_bytes = [0u8; 32];
+                cid_bytes.copy_from_slice(cid);
+                (node.level, Cid(cid_bytes))
+            })
+            .max_by_key(|(level, _)| *level)
+            .expect("failed batch must contain a rewritten root")
+            .1
+    }
+}
+
+impl Store for InjectedFailureStore {
+    type Error = std::io::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        if self.fail_next_get.swap(false, Ordering::SeqCst) {
+            return Err(std::io::Error::other("injected async engine read failure"));
+        }
+        self.inner
+            .get(key)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner
+            .put(key, value)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner
+            .delete(key)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner
+            .batch(ops)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        if self.fail_next_batch_put.swap(false, Ordering::SeqCst) {
+            *self.failed_batch_entries.lock().unwrap() = entries
+                .iter()
+                .map(|(key, value)| (key.to_vec(), value.to_vec()))
+                .collect();
+            return Err(std::io::Error::other(
+                "injected async engine batch publication failure",
+            ));
+        }
+        self.inner
+            .batch_put(entries)
+            .map_err(|error| std::io::Error::other(error.to_string()))
     }
 }
 
@@ -897,6 +977,88 @@ fn async_batch_flushes_rebuilt_tree_once_and_matches_batch_semantics() {
     let metrics = async_prolly.metrics();
     assert_eq!(metrics.store_batch_put_calls, 1);
     assert!(metrics.nodes_written > 1);
+}
+
+#[test]
+fn async_engine_read_failure_keeps_the_base_tree_readable() {
+    let store = Arc::new(InjectedFailureStore::default());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(211)
+        .build();
+    let sync = Prolly::new(store.clone(), config.clone());
+    let mut base = sync.create();
+    for index in 0..64 {
+        base = sync
+            .put(
+                &base,
+                format!("key-{index:03}").into_bytes(),
+                format!("value-{index:03}").into_bytes(),
+            )
+            .unwrap();
+    }
+
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config);
+    engine.clear_cache();
+    store.fail_next_get();
+    let result = block_on(engine.put(&base, b"key-031".to_vec(), b"failed-value".to_vec()));
+
+    assert!(result.is_err());
+    assert_eq!(
+        sync.get(&base, b"key-031").unwrap(),
+        Some(b"value-031".to_vec())
+    );
+}
+
+#[test]
+fn async_engine_write_failure_never_admits_collector_only_nodes() {
+    let store = Arc::new(InjectedFailureStore::default());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(223)
+        .build();
+    let sync = Prolly::new(store.clone(), config.clone());
+    let mut base = sync.create();
+    for index in 0..64 {
+        base = sync
+            .put(
+                &base,
+                format!("key-{index:03}").into_bytes(),
+                format!("value-{index:03}").into_bytes(),
+            )
+            .unwrap();
+    }
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    engine.clear_cache();
+    store.fail_next_batch_put();
+    let result = block_on(engine.put(&base, b"key-031".to_vec(), b"failed-value".to_vec()));
+
+    assert!(result.is_err());
+    let mut unpublished = base.clone();
+    unpublished.root = Some(store.failed_batch_root());
+    assert!(matches!(
+        block_on(engine.get(&unpublished, b"key-031")),
+        Err(Error::NotFound(_))
+    ));
+    assert_eq!(
+        sync.get(&base, b"key-031").unwrap(),
+        Some(b"value-031".to_vec())
+    );
+
+    let updated =
+        block_on(engine.put(&base, b"key-031".to_vec(), b"committed-value".to_vec())).unwrap();
+    assert_eq!(
+        block_on(engine.get(&updated, b"key-031")).unwrap(),
+        Some(b"committed-value".to_vec())
+    );
+    assert_eq!(
+        sync.get(&base, b"key-031").unwrap(),
+        Some(b"value-031".to_vec())
+    );
 }
 
 #[test]
