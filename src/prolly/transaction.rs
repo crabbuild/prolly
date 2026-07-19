@@ -338,12 +338,14 @@ impl TransactionState {
 }
 
 /// Store overlay used internally by [`ProllyTransaction`].
+#[cfg(test)]
 #[derive(Clone)]
 pub struct TransactionOverlayStore<'a, S> {
     base: &'a S,
     state: Arc<Mutex<TransactionState>>,
 }
 
+#[cfg(test)]
 impl<'a, S> TransactionOverlayStore<'a, S> {
     fn new(base: &'a S, state: Arc<Mutex<TransactionState>>) -> Self {
         Self { base, state }
@@ -354,6 +356,7 @@ impl<'a, S> TransactionOverlayStore<'a, S> {
     }
 }
 
+#[cfg(test)]
 impl<S> Store for TransactionOverlayStore<'_, S>
 where
     S: Store,
@@ -406,6 +409,7 @@ where
     }
 }
 
+#[cfg(test)]
 impl<S> ManifestStore for TransactionOverlayStore<'_, S>
 where
     S: Store + ManifestStore,
@@ -470,12 +474,14 @@ where
 }
 
 /// Owned store overlay used by [`OwnedProllyTransaction`].
+#[cfg(test)]
 #[derive(Clone)]
 pub struct OwnedTransactionOverlayStore<S> {
     base: S,
     state: Arc<Mutex<TransactionState>>,
 }
 
+#[cfg(test)]
 impl<S> OwnedTransactionOverlayStore<S> {
     fn new(base: S, state: Arc<Mutex<TransactionState>>) -> Self {
         Self { base, state }
@@ -486,6 +492,7 @@ impl<S> OwnedTransactionOverlayStore<S> {
     }
 }
 
+#[cfg(test)]
 impl<S> Store for OwnedTransactionOverlayStore<S>
 where
     S: Store,
@@ -538,6 +545,7 @@ where
     }
 }
 
+#[cfg(test)]
 fn overlay_batch_get_ordered<S: Store>(
     base: &S,
     state: &Arc<Mutex<TransactionState>>,
@@ -577,6 +585,7 @@ fn overlay_batch_get_ordered<S: Store>(
     Ok(results)
 }
 
+#[cfg(test)]
 impl<S> ManifestStore for OwnedTransactionOverlayStore<S>
 where
     S: Store + ManifestStore,
@@ -967,10 +976,8 @@ pub struct ProllyTransaction<'a, S>
 where
     S: Store + ManifestStore + TransactionalStore,
 {
-    base: &'a Prolly<S>,
-    state: Arc<Mutex<TransactionState>>,
-    manager: Prolly<TransactionOverlayStore<'a, S>>,
-    completed: bool,
+    inner: Option<AsyncProllyTransaction<'a, SyncStoreAsAsync<Arc<S>>>>,
+    ready_store: SyncStoreAsAsync<Arc<S>>,
 }
 
 impl<'a, S> ProllyTransaction<'a, S>
@@ -978,64 +985,63 @@ where
     S: Store + ManifestStore + TransactionalStore,
 {
     fn new(base: &'a Prolly<S>) -> Result<Self, Error> {
-        if !base.store().supports_transactions() {
-            return Err(Error::UnsupportedTransactions {
-                store: type_name::<S>(),
-            });
-        }
-
-        let state = Arc::new(Mutex::new(TransactionState::default()));
-        let overlay = TransactionOverlayStore::new(base.store(), state.clone());
-        let manager = Prolly::new(overlay, base.config().clone());
+        let ready_store = base.engine.store.clone();
+        let inner = AsyncProllyTransaction::new(&base.engine)?;
         Ok(Self {
-            base,
-            state,
-            manager,
-            completed: false,
+            inner: Some(inner),
+            ready_store,
         })
+    }
+
+    fn inner(&self) -> &AsyncProllyTransaction<'a, SyncStoreAsAsync<Arc<S>>> {
+        self.inner.as_ref().expect("active transaction")
     }
 
     /// Create an empty tree using the base manager's config.
     pub fn create(&self) -> Tree {
-        self.manager.create()
+        self.inner().create()
     }
 
     /// Get a value from a tree, including nodes staged in this transaction.
     pub fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        self.manager.get(tree, key)
+        let future = self.inner().get(tree, key);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Insert or update a key/value pair, staging rewritten nodes.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, value: Vec<u8>) -> Result<Tree, Error> {
-        self.manager.put(tree, key, value)
+        let future = self.inner().put(tree, key, value);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Delete a key, staging rewritten nodes.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        self.manager.delete(tree, key)
+        let future = self.inner().delete(tree, key);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Apply a batch of logical map mutations inside the transaction.
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        self.manager.batch(tree, mutations)
+        let future = self.inner().batch(tree, mutations);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage verified content-addressed node bytes for an atomic coordinator import.
     pub(crate) fn stage_node_bytes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
-        self.manager
-            .store()
-            .batch_put(entries)
-            .map_err(|error| Error::Store(Box::new(error)))
+        let future = self.inner().stage_node_bytes(entries);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Load a named root and add it to the transaction read set.
     pub fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
-        self.manager.load_named_root(name)
+        let future = self.inner().load_named_root(name);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage an unconditional named-root publish.
     pub fn publish_named_root(&self, name: &[u8], tree: &Tree) -> Result<(), Error> {
-        self.manager.publish_named_root(name, tree)
+        let future = self.inner().publish_named_root(name, tree);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage an unconditional named-root publish with an explicit timestamp.
@@ -1045,13 +1051,16 @@ where
         tree: &Tree,
         timestamp_millis: u64,
     ) -> Result<(), Error> {
-        self.manager
-            .publish_named_root_at_millis(name, tree, timestamp_millis)
+        let future = self
+            .inner()
+            .publish_named_root_at_millis(name, tree, timestamp_millis);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage an unconditional named-root delete.
     pub fn delete_named_root(&self, name: &[u8]) -> Result<(), Error> {
-        self.manager.delete_named_root(name)
+        let future = self.inner().delete_named_root(name);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage a named-root CAS update.
@@ -1061,36 +1070,25 @@ where
         expected: Option<&Tree>,
         new: Option<&Tree>,
     ) -> Result<NamedRootUpdate, Error> {
-        self.manager
-            .compare_and_swap_named_root(name, expected, new)
+        let future = self
+            .inner()
+            .compare_and_swap_named_root(name, expected, new);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Discard all staged writes. Dropping an uncommitted transaction has the
     /// same effect; this method is useful when callers want to be explicit.
     pub fn rollback(mut self) {
-        self.completed = true;
+        if let Some(inner) = self.inner.take() {
+            inner.rollback();
+        }
     }
 
     /// Commit staged node and named-root writes atomically.
     pub fn commit(mut self) -> Result<TransactionUpdate, Error> {
-        let (node_writes, root_conditions, root_writes) = {
-            let state = self
-                .state
-                .lock()
-                .map_err(|err| Error::Store(Box::new(TransactionOverlayError::poisoned(err))))?;
-            (
-                state.node_writes(),
-                state.root_conditions(),
-                state.root_writes(),
-            )
-        };
-
-        let update =
-            self.base
-                .store()
-                .commit_transaction(&node_writes, &root_conditions, &root_writes)?;
-        self.completed = true;
-        Ok(update)
+        let inner = self.inner.take().expect("active transaction");
+        let future = inner.commit();
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 }
 
@@ -1103,73 +1101,72 @@ pub struct OwnedProllyTransaction<S>
 where
     S: Store + ManifestStore + TransactionalStore,
 {
-    base_store: S,
-    state: Arc<Mutex<TransactionState>>,
-    manager: Prolly<OwnedTransactionOverlayStore<S>>,
-    completed: bool,
+    inner: Option<OwnedAsyncProllyTransaction<SyncStoreAsAsync<Arc<S>>>>,
+    ready_store: SyncStoreAsAsync<Arc<S>>,
 }
 
 impl<S> OwnedProllyTransaction<S>
 where
-    S: Store + ManifestStore + TransactionalStore + Clone,
+    S: Store + ManifestStore + TransactionalStore,
 {
     fn new(base: &Prolly<S>) -> Result<Self, Error> {
-        if !base.store().supports_transactions() {
-            return Err(Error::UnsupportedTransactions {
-                store: type_name::<S>(),
-            });
-        }
-
-        let base_store = base.store().clone();
-        let state = Arc::new(Mutex::new(TransactionState::default()));
-        let overlay = OwnedTransactionOverlayStore::new(base_store.clone(), state.clone());
-        let manager = Prolly::new(overlay, base.config().clone());
+        let ready_store = base.engine.store.clone();
+        let inner = OwnedAsyncProllyTransaction::new(&base.engine)?;
         Ok(Self {
-            base_store,
-            state,
-            manager,
-            completed: false,
+            inner: Some(inner),
+            ready_store,
         })
+    }
+
+    fn inner(&self) -> &OwnedAsyncProllyTransaction<SyncStoreAsAsync<Arc<S>>> {
+        self.inner.as_ref().expect("active transaction")
     }
 
     /// Create an empty tree using the base manager's config.
     pub fn create(&self) -> Tree {
-        self.manager.create()
+        self.inner().create()
     }
 
     /// Get a value from a tree, including nodes staged in this transaction.
     pub fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
-        self.manager.get(tree, key)
+        let future = self.inner().get(tree, key);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Insert or update a key/value pair, staging rewritten nodes.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, value: Vec<u8>) -> Result<Tree, Error> {
-        self.manager.put(tree, key, value)
+        let future = self.inner().put(tree, key, value);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Delete a key, staging rewritten nodes.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        self.manager.delete(tree, key)
+        let future = self.inner().delete(tree, key);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Apply a batch of logical map mutations inside the transaction.
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        self.manager.batch(tree, mutations)
+        let future = self.inner().batch(tree, mutations);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Load a named root and add it to the transaction read set.
     pub fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
-        self.manager.load_named_root(name)
+        let future = self.inner().load_named_root(name);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage an unconditional named-root publish.
     pub fn publish_named_root(&self, name: &[u8], tree: &Tree) -> Result<(), Error> {
-        self.manager.publish_named_root(name, tree)
+        let future = self.inner().publish_named_root(name, tree);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage an unconditional named-root delete.
     pub fn delete_named_root(&self, name: &[u8]) -> Result<(), Error> {
-        self.manager.delete_named_root(name)
+        let future = self.inner().delete_named_root(name);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Stage a named-root CAS update.
@@ -1179,35 +1176,25 @@ where
         expected: Option<&Tree>,
         new: Option<&Tree>,
     ) -> Result<NamedRootUpdate, Error> {
-        self.manager
-            .compare_and_swap_named_root(name, expected, new)
+        let future = self
+            .inner()
+            .compare_and_swap_named_root(name, expected, new);
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
     /// Discard all staged writes. Dropping an uncommitted transaction has the
     /// same effect; this method is useful when callers want to be explicit.
     pub fn rollback(mut self) {
-        self.completed = true;
+        if let Some(inner) = self.inner.take() {
+            inner.rollback();
+        }
     }
 
     /// Commit staged node and named-root writes atomically.
     pub fn commit(mut self) -> Result<TransactionUpdate, Error> {
-        let (node_writes, root_conditions, root_writes) = {
-            let state = self
-                .state
-                .lock()
-                .map_err(|err| Error::Store(Box::new(TransactionOverlayError::poisoned(err))))?;
-            (
-                state.node_writes(),
-                state.root_conditions(),
-                state.root_writes(),
-            )
-        };
-
-        let update =
-            self.base_store
-                .commit_transaction(&node_writes, &root_conditions, &root_writes)?;
-        self.completed = true;
-        Ok(update)
+        let inner = self.inner.take().expect("active transaction");
+        let future = inner.commit();
+        super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 }
 
@@ -1404,6 +1391,14 @@ where
         self.manager.batch(tree, mutations).await
     }
 
+    pub(crate) async fn stage_node_bytes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
+        self.manager
+            .store
+            .batch_put(entries)
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))
+    }
+
     /// Load a named root and add it to the transaction read set.
     pub async fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
         self.manager.load_named_root(name).await
@@ -1486,29 +1481,6 @@ where
     }
 }
 
-impl<S> Drop for ProllyTransaction<'_, S>
-where
-    S: Store + ManifestStore + TransactionalStore,
-{
-    fn drop(&mut self) {
-        if !self.completed {
-            // Staged writes live only in the overlay, so rollback is just drop.
-            self.completed = true;
-        }
-    }
-}
-
-impl<S> Drop for OwnedProllyTransaction<S>
-where
-    S: Store + ManifestStore + TransactionalStore,
-{
-    fn drop(&mut self) {
-        if !self.completed {
-            // Staged writes live only in the overlay, so rollback is just drop.
-            self.completed = true;
-        }
-    }
-}
 impl<S> Drop for OwnedAsyncProllyTransaction<S>
 where
     S: AsyncStore + AsyncManifestStore + AsyncTransactionalStore,
@@ -1536,10 +1508,7 @@ where
     ///
     /// This variant is intended for FFI bindings and other APIs that cannot
     /// hold Rust borrows across calls.
-    pub fn begin_owned_transaction(&self) -> Result<OwnedProllyTransaction<S>, Error>
-    where
-        S: Clone,
-    {
+    pub fn begin_owned_transaction(&self) -> Result<OwnedProllyTransaction<S>, Error> {
         OwnedProllyTransaction::new(self)
     }
 

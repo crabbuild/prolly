@@ -411,9 +411,8 @@ pub use prolly::transaction::{
     OwnedAsyncProllyTransaction, OwnedAsyncTransactionOverlayStore,
 };
 pub use prolly::transaction::{
-    OwnedProllyTransaction, OwnedTransactionOverlayStore, ProllyTransaction, RootCondition,
-    RootWrite, TransactionConflict, TransactionNodeWrite, TransactionOverlayError,
-    TransactionUpdate, TransactionalStore,
+    OwnedProllyTransaction, ProllyTransaction, RootCondition, RootWrite, TransactionConflict,
+    TransactionNodeWrite, TransactionOverlayError, TransactionUpdate, TransactionalStore,
 };
 pub use prolly::tree::Tree;
 pub use prolly::value::{
