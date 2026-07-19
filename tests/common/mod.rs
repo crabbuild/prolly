@@ -4,7 +4,7 @@
 use prolly::{AsyncManifestStore, AsyncManifestStoreScan, AsyncStore};
 use prolly::{
     BatchOp, Cid, Config, Diff, ManifestStore, ManifestStoreScan, ManifestUpdate, MemStore, Node,
-    NodeStoreScan, Prolly, RootManifest, Store, Tree,
+    NodePublication, NodeStoreScan, Prolly, PublicationOrigin, RootManifest, Store, Tree,
 };
 
 pub fn configured_prolly() -> Prolly<MemStore> {
@@ -53,6 +53,17 @@ where
     store.batch(&[]).unwrap();
     store.batch_put(&[]).unwrap();
     store.delete(b"missing").unwrap();
+
+    let bytes = b"published-node";
+    let cid = Cid::from_bytes(bytes);
+    let entries = [(cid.as_bytes(), bytes.as_slice())];
+    store
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::PointUpsert,
+        ))
+        .unwrap();
+    assert_eq!(store.get(cid.as_bytes()).unwrap(), Some(bytes.to_vec()));
 
     store.put(b"alpha", b"1").unwrap();
     store.put(b"beta", b"2").unwrap();

@@ -731,8 +731,7 @@ This task carries the same request through remote backends and proves every firs
 
 - Modify: `src/prolly/remote.rs`
 - Modify: `stores/prolly-store-test/src/lib.rs`
-- Modify: `tests/store_conformance.rs`
-- Modify: `tests/node_publication.rs`
+- Modify: `tests/common/mod.rs` (shared by `tests/store_conformance.rs`)
 - Test: `stores/prolly-store-{postgres,mysql,redis,dynamodb,cosmosdb,spanner,turso}/tests/*.rs`
 
 **Interfaces:**
@@ -740,7 +739,7 @@ This task carries the same request through remote backends and proves every firs
 - Consumes: `NodePublication` from Task 1.
 - Produces: `RemoteStoreBackend::publish_nodes`, unconditional remote publication CID verification, and reusable adapter conformance.
 
-- [ ] **Step 1: Add the remote backend default and `Arc` forwarding**
+- [x] **Step 1: Add the remote backend default and `Arc` forwarding**
 
 Add:
 
@@ -765,7 +764,7 @@ async fn publish_nodes(
 
 The `Arc<T>` implementation forwards `(**self).publish_nodes(publication).await`.
 
-- [ ] **Step 2: Verify before forwarding from `RemoteProllyStore`**
+- [x] **Step 2: Verify before forwarding from `RemoteProllyStore`**
 
 Override `AsyncStore::publish_nodes`:
 
@@ -786,7 +785,7 @@ async fn publish_nodes(
 
 Call `verify_node_cid` directly so the legacy `verify_node_cids` toggle cannot bypass publication validation. Keep existing direct read/write configuration behavior unchanged.
 
-- [ ] **Step 3: Extend reusable conformance**
+- [x] **Step 3: Extend reusable conformance**
 
 In remote conformance, publish valid CID/value pairs with every current origin and one hinted request. Assert the backend returns the exact bytes and hint. Add a recording backend test that asserts `RemoteProllyStore` preserves origin exactly once and rejects a mismatched CID before its backend counter increments. Repeat the mismatch assertion with `RemoteStoreConfig { verify_node_cids: false }` to prove the legacy toggle cannot disable publication validation.
 
@@ -804,7 +803,7 @@ store
 assert_eq!(store.get(cid.as_bytes()).unwrap(), Some(bytes.to_vec()));
 ```
 
-- [ ] **Step 4: Compile every adapter on its default path**
+- [x] **Step 4: Compile every adapter on its default path**
 
 Run:
 
@@ -825,11 +824,11 @@ cargo check --manifest-path stores/prolly-store-spanner/Cargo.toml --all-feature
 
 Expected: locally available tests pass and credentialed providers compile without requiring credentials. No adapter except Turso has a custom publication branch.
 
-- [ ] **Step 5: Commit remote and conformance changes**
+- [x] **Step 5: Commit remote and conformance changes**
 
 ```sh
 git add src/prolly/remote.rs stores/prolly-store-test/src/lib.rs \
-  tests/store_conformance.rs tests/node_publication.rs
+  tests/common/mod.rs
 git commit -m "feat: forward node publication through remote stores"
 ```
 

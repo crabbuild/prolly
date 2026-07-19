@@ -16,7 +16,7 @@ use super::error::Error;
 use super::manifest::{
     AsyncManifestStore, AsyncManifestStoreScan, ManifestUpdate, NamedRootManifest, RootManifest,
 };
-use super::store::{AsyncStore, BatchOp};
+use super::store::{AsyncStore, BatchOp, NodePublication, NodePublicationHint, PublicationOrigin};
 use super::transaction::{
     AsyncTransactionalStore, RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite,
     TransactionUpdate,
@@ -231,6 +231,22 @@ pub trait RemoteStoreBackend: Send + Sync {
         self.put_hint(namespace, key, value).await
     }
 
+    /// Publish canonical immutable nodes with advisory logical context.
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        match publication.hint() {
+            Some(hint) => {
+                self.batch_put_nodes_with_hint(
+                    publication.entries(),
+                    hint.namespace(),
+                    hint.key(),
+                    hint.value(),
+                )
+                .await
+            }
+            None => self.batch_put_nodes(publication.entries()).await,
+        }
+    }
+
     /// Read a serialized root manifest.
     async fn get_root_manifest(&self, name: &[u8]) -> Result<Option<Vec<u8>>, Self::Error>;
 
@@ -340,6 +356,10 @@ impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
         (**self)
             .batch_put_nodes_with_hint(entries, namespace, key, value)
             .await
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        (**self).publish_nodes(publication).await
     }
 
     async fn get_root_manifest(&self, name: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -547,6 +567,16 @@ impl<B: RemoteStoreBackend> AsyncStore for RemoteProllyStore<B> {
         }
         self.backend
             .batch_put_nodes_with_hint(entries, namespace, key, value)
+            .await
+            .map_err(backend_error)
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        for (key, value) in publication.entries() {
+            verify_node_cid::<B::Error>(key, value)?;
+        }
+        self.backend
+            .publish_nodes(publication)
             .await
             .map_err(backend_error)
     }
@@ -908,6 +938,52 @@ pub mod conformance {
             Some(gamma.to_vec())
         );
 
+        for origin in [
+            PublicationOrigin::General,
+            PublicationOrigin::PointUpsert,
+            PublicationOrigin::PointDelete,
+            PublicationOrigin::BatchMutation,
+            PublicationOrigin::TreeBuild,
+            PublicationOrigin::Merge,
+            PublicationOrigin::RangeDelete,
+            PublicationOrigin::Replication,
+            PublicationOrigin::Maintenance,
+        ] {
+            let entries = [(alpha_cid.as_bytes(), alpha.as_slice())];
+            backend
+                .publish_nodes(NodePublication::new(&entries, origin))
+                .await
+                .unwrap();
+            assert_eq!(
+                backend.get_node(alpha_cid.as_bytes()).await.unwrap(),
+                Some(alpha.to_vec())
+            );
+        }
+
+        let entries = [(gamma_cid.as_bytes(), gamma.as_slice())];
+        let hint = NodePublicationHint::new(b"publication", b"rightmost", gamma_cid.as_bytes());
+        backend
+            .publish_nodes(NodePublication::with_hint(
+                &entries,
+                hint,
+                PublicationOrigin::Maintenance,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            backend.get_node(gamma_cid.as_bytes()).await.unwrap(),
+            Some(gamma.to_vec())
+        );
+        if backend.supports_hints() {
+            assert_eq!(
+                backend
+                    .get_hint(b"publication", b"rightmost")
+                    .await
+                    .unwrap(),
+                Some(gamma_cid.as_bytes().to_vec())
+            );
+        }
+
         backend
             .put_hint(b"scan", b"rightmost", b"hint")
             .await
@@ -1084,6 +1160,7 @@ mod tests {
         nodes: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
         hints: Mutex<BTreeMap<HintKey, Vec<u8>>>,
         roots: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
+        publications: Mutex<Vec<PublicationOrigin>>,
     }
 
     type HintKey = (Vec<u8>, Vec<u8>);
@@ -1179,6 +1256,22 @@ mod tests {
                 }
             }
             self.put_hint(namespace, key, value).await
+        }
+
+        async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+            self.publications.lock().unwrap().push(publication.origin());
+            match publication.hint() {
+                Some(hint) => {
+                    self.batch_put_nodes_with_hint(
+                        publication.entries(),
+                        hint.namespace(),
+                        hint.key(),
+                        hint.value(),
+                    )
+                    .await
+                }
+                None => self.batch_put_nodes(publication.entries()).await,
+            }
         }
 
         async fn list_node_cids(&self) -> Result<Vec<Vec<u8>>, Self::Error> {
@@ -1293,6 +1386,67 @@ mod tests {
             let cid = Cid::from_bytes(b"expected bytes");
             let err = store.put(cid.as_bytes(), b"wrong bytes").await.unwrap_err();
             assert!(matches!(err, RemoteAdapterError::CidMismatch { .. }));
+        });
+    }
+
+    #[test]
+    fn remote_publication_preserves_origin_and_always_verifies_cids() {
+        block_on(async {
+            let backend = Arc::new(MemoryBackend::default());
+            let store = RemoteProllyStore::new(backend.clone());
+            let bytes = b"published-node";
+            let cid = Cid::from_bytes(bytes);
+            let entries = [(cid.as_bytes(), bytes.as_slice())];
+            let hint = NodePublicationHint::new(b"namespace", b"rightmost", cid.as_bytes());
+            store
+                .publish_nodes(NodePublication::with_hint(
+                    &entries,
+                    hint,
+                    PublicationOrigin::Maintenance,
+                ))
+                .await
+                .unwrap();
+
+            assert_eq!(
+                *backend.publications.lock().unwrap(),
+                vec![PublicationOrigin::Maintenance]
+            );
+            assert_eq!(
+                backend.get_node(cid.as_bytes()).await.unwrap(),
+                Some(bytes.to_vec())
+            );
+            assert_eq!(
+                backend.get_hint(b"namespace", b"rightmost").await.unwrap(),
+                Some(cid.as_bytes().to_vec())
+            );
+
+            let invalid_entries = [(cid.as_bytes(), b"wrong-bytes".as_slice())];
+            let error = store
+                .publish_nodes(NodePublication::new(
+                    &invalid_entries,
+                    PublicationOrigin::PointUpsert,
+                ))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, RemoteAdapterError::CidMismatch { .. }));
+            assert_eq!(backend.publications.lock().unwrap().len(), 1);
+
+            let unchecked_backend = Arc::new(MemoryBackend::default());
+            let unchecked = RemoteProllyStore::with_config(
+                unchecked_backend.clone(),
+                RemoteStoreConfig {
+                    verify_node_cids: false,
+                },
+            );
+            let error = unchecked
+                .publish_nodes(NodePublication::new(
+                    &invalid_entries,
+                    PublicationOrigin::PointUpsert,
+                ))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, RemoteAdapterError::CidMismatch { .. }));
+            assert!(unchecked_backend.publications.lock().unwrap().is_empty());
         });
     }
 
