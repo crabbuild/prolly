@@ -119,10 +119,18 @@ The adapter creates three binary tables:
 
 Each operation uses an independent native Turso connection. Node batches,
 node-plus-hint writes, named-root compare-and-swap, and coordinated prolly
-transactions use native SQL transactions. Root compare-and-swap and coordinated
-commits begin an immediate transaction so the checked root cannot change before
-its update is committed. The generic `TursoStore` layer also validates node
-bytes against content IDs and decodes named-root manifests.
+transactions use native SQL transactions. A measured local fast path begins
+explicit point-upsert publications as deferred transactions, so Turso acquires
+the write lock with the first node statement instead of at transaction start.
+The SQL statements, atomic node-plus-hint boundary, commit acknowledgement,
+durability, and error behavior are unchanged.
+
+Every other current or future publication origin uses the conservative
+immediate transaction path. Root compare-and-swap and coordinated commits also
+remain immediate so the checked root cannot change before its update is
+committed. Unknown publication origins automatically receive this general
+fallback. The generic `TursoStore` layer validates node bytes against content
+IDs and decodes named-root manifests before the backend fast path runs.
 
 These transaction and compare-and-swap guarantees are scoped to one local
 database or synced replica. Turso Cloud synchronization does not turn them into

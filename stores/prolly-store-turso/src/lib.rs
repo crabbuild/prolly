@@ -5,8 +5,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
-    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    NodePublication, NodePublicationHint, PublicationOrigin, RemoteBatchOp, RemoteManifestUpdate,
+    RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
+    RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 use turso::transaction::TransactionBehavior;
 use turso::{Connection, Database, IntoParams};
@@ -116,6 +117,30 @@ impl TursoBackend {
         self.connect().await?.execute_batch(SCHEMA_SQL).await?;
         Ok(())
     }
+
+    async fn publish_node_entries(
+        &self,
+        publication: NodePublication<'_>,
+        behavior: TransactionBehavior,
+    ) -> Result<(), TursoStoreError> {
+        if publication.entries().is_empty() {
+            return Ok(());
+        }
+
+        let mut connection = self.connect().await?;
+        let transaction = connection.transaction_with_behavior(behavior).await?;
+        apply_node_entries(&transaction, publication.entries()).await?;
+        if let Some(hint) = publication.hint() {
+            transaction
+                .execute(
+                    UPSERT_HINT_SQL,
+                    (hint.namespace(), hint.key(), hint.value()),
+                )
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
 }
 
 impl fmt::Debug for TursoBackend {
@@ -220,13 +245,11 @@ impl RemoteStoreBackend for TursoBackend {
     }
 
     async fn batch_put_nodes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
-        let mut connection = self.connect().await?;
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .await?;
-        apply_node_entries(&transaction, entries).await?;
-        transaction.commit().await?;
-        Ok(())
+        self.publish_node_entries(
+            NodePublication::new(entries, PublicationOrigin::General),
+            TransactionBehavior::Immediate,
+        )
+        .await
     }
 
     async fn list_node_cids(&self) -> Result<Vec<Vec<u8>>, Self::Error> {
@@ -263,16 +286,23 @@ impl RemoteStoreBackend for TursoBackend {
         key: &[u8],
         value: &[u8],
     ) -> Result<(), Self::Error> {
-        let mut connection = self.connect().await?;
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .await?;
-        apply_node_entries(&transaction, entries).await?;
-        transaction
-            .execute(UPSERT_HINT_SQL, (namespace, key, value))
-            .await?;
-        transaction.commit().await?;
-        Ok(())
+        self.publish_node_entries(
+            NodePublication::with_hint(
+                entries,
+                NodePublicationHint::new(namespace, key, value),
+                PublicationOrigin::General,
+            ),
+            TransactionBehavior::Immediate,
+        )
+        .await
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.publish_node_entries(
+            publication,
+            publication_transaction_behavior(publication.origin()),
+        )
+        .await
     }
 
     async fn get_root_manifest(&self, name: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -371,6 +401,13 @@ impl RemoteStoreBackend for TursoBackend {
 
         transaction.commit().await?;
         Ok(RemoteTransactionUpdate::Applied)
+    }
+}
+
+fn publication_transaction_behavior(origin: PublicationOrigin) -> TransactionBehavior {
+    match origin {
+        PublicationOrigin::PointUpsert => TransactionBehavior::Deferred,
+        _ => TransactionBehavior::Immediate,
     }
 }
 
@@ -514,3 +551,32 @@ INSERT INTO prolly_roots (name, manifest) VALUES (?1, ?2)
 ON CONFLICT(name) DO UPDATE SET manifest = excluded.manifest";
 const DELETE_ROOT_SQL: &str = "DELETE FROM prolly_roots WHERE name = ?1";
 const SELECT_ROOTS_SQL: &str = "SELECT name, manifest FROM prolly_roots ORDER BY name";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_point_upserts_use_deferred_publication_transactions() {
+        assert!(matches!(
+            publication_transaction_behavior(PublicationOrigin::PointUpsert),
+            TransactionBehavior::Deferred
+        ));
+
+        for origin in [
+            PublicationOrigin::General,
+            PublicationOrigin::PointDelete,
+            PublicationOrigin::BatchMutation,
+            PublicationOrigin::TreeBuild,
+            PublicationOrigin::Merge,
+            PublicationOrigin::RangeDelete,
+            PublicationOrigin::Replication,
+            PublicationOrigin::Maintenance,
+        ] {
+            assert!(matches!(
+                publication_transaction_behavior(origin),
+                TransactionBehavior::Immediate
+            ));
+        }
+    }
+}

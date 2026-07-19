@@ -1,5 +1,6 @@
 use prolly::{
-    AsyncProlly, Config, RemoteBatchOp, RemoteManifestUpdate, RemoteRootWrite, RemoteStoreBackend,
+    AsyncProlly, AsyncStore, Cid, Config, NodePublication, NodePublicationHint, PublicationOrigin,
+    RemoteAdapterError, RemoteBatchOp, RemoteManifestUpdate, RemoteRootWrite, RemoteStoreBackend,
 };
 #[cfg(feature = "turso-cloud-sync")]
 use prolly_store_turso::TursoStoreError;
@@ -177,6 +178,55 @@ async fn hint_round_trip_and_root_cas_delete_work() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn point_publications_preserve_nodes_and_optional_hints() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = TursoBackend::open(temp.path().join("point-publication.db"))
+        .await
+        .unwrap();
+    let store = TursoStore::new(backend.clone());
+
+    let plain_bytes = b"unhinted-point-node";
+    let plain_cid = Cid::from_bytes(plain_bytes);
+    let plain_entries = [(plain_cid.as_bytes(), plain_bytes.as_slice())];
+    store
+        .publish_nodes(NodePublication::new(
+            &plain_entries,
+            PublicationOrigin::PointUpsert,
+        ))
+        .await
+        .unwrap();
+
+    let hinted_bytes = b"hinted-point-node";
+    let hinted_cid = Cid::from_bytes(hinted_bytes);
+    let hinted_entries = [(hinted_cid.as_bytes(), hinted_bytes.as_slice())];
+    let hint = NodePublicationHint::new(b"point", b"rightmost", hinted_cid.as_bytes());
+    store
+        .publish_nodes(NodePublication::with_hint(
+            &hinted_entries,
+            hint,
+            PublicationOrigin::PointUpsert,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        backend.get_node(plain_cid.as_bytes()).await.unwrap(),
+        Some(plain_bytes.to_vec())
+    );
+    assert_eq!(
+        backend.get_node(hinted_cid.as_bytes()).await.unwrap(),
+        Some(hinted_bytes.to_vec())
+    );
+    assert_eq!(
+        backend
+            .get_hint(b"point", b"rightmost")
+            .await
+            .unwrap(),
+        Some(hinted_cid.as_bytes().to_vec())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn failed_node_plus_hint_batch_rolls_back_node_writes() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("node-hint-rollback.db");
@@ -200,17 +250,20 @@ async fn failed_node_plus_hint_batch_rolls_back_node_writes() {
         .await
         .unwrap();
 
-    let result = backend
-        .batch_put_nodes_with_hint(
-            &[(b"node".as_slice(), b"value".as_slice())],
-            b"ns",
-            b"key",
-            b"hint",
-        )
+    let store = TursoStore::new(backend.clone());
+    let bytes = b"point-node-must-roll-back";
+    let cid = Cid::from_bytes(bytes);
+    let entries = [(cid.as_bytes(), bytes.as_slice())];
+    let result = store
+        .publish_nodes(NodePublication::with_hint(
+            &entries,
+            NodePublicationHint::new(b"ns", b"key", b"hint"),
+            PublicationOrigin::PointUpsert,
+        ))
         .await;
 
     assert!(result.is_err());
-    assert_eq!(backend.get_node(b"node").await.unwrap(), None);
+    assert_eq!(backend.get_node(cid.as_bytes()).await.unwrap(), None);
     assert_eq!(backend.get_hint(b"ns", b"key").await.unwrap(), None);
 }
 
@@ -286,6 +339,63 @@ async fn local_store_persists_named_root_across_reopen() {
         prolly.get(&loaded, b"user/1").await.unwrap(),
         Some(b"Ada".to_vec())
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_point_upserts_remain_readable_after_reopen() {
+    fn successful_or_busy(
+        result: Result<prolly::Tree, prolly::Error>,
+    ) -> Option<prolly::Tree> {
+        match result {
+            Ok(tree) => Some(tree),
+            Err(prolly::Error::Store(error)) => {
+                let adapter = error
+                    .downcast_ref::<RemoteAdapterError<prolly_store_turso::TursoStoreError>>()
+                    .expect("point publication returned an unexpected store error type");
+                assert!(matches!(
+                    adapter,
+                    RemoteAdapterError::Backend(prolly_store_turso::TursoStoreError::Turso(
+                        turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
+                    ))
+                ));
+                None
+            }
+            Err(error) => panic!("point publication returned an unexpected error: {error}"),
+        }
+    }
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("concurrent-point-upserts.db");
+    let backend = TursoBackend::open(&path).await.unwrap();
+    let left = AsyncProlly::new(TursoStore::new(backend.clone()), Config::default());
+    let right = AsyncProlly::new(TursoStore::new(backend.clone()), Config::default());
+    let base = left.create();
+
+    let (left_result, right_result) = tokio::join!(
+        left.put(&base, b"left".to_vec(), b"one".to_vec()),
+        right.put(&base, b"right".to_vec(), b"two".to_vec()),
+    );
+    let successful = [
+        successful_or_busy(left_result).map(|tree| (tree, b"left".as_slice(), b"one".as_slice())),
+        successful_or_busy(right_result)
+            .map(|tree| (tree, b"right".as_slice(), b"two".as_slice())),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    assert!(!successful.is_empty());
+
+    drop(left);
+    drop(right);
+    drop(backend);
+
+    let reopened = AsyncProlly::new(
+        TursoStore::new(TursoBackend::open(&path).await.unwrap()),
+        Config::default(),
+    );
+    for (tree, key, value) in successful {
+        assert_eq!(reopened.get(&tree, key).await.unwrap(), Some(value.to_vec()));
+    }
 }
 
 #[cfg(feature = "turso-cloud-sync")]
