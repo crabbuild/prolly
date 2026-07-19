@@ -3,6 +3,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex, RwLock};
 
 use futures_util::stream::{self, StreamExt};
+use rayon::prelude::*;
 
 use super::validation;
 use super::ProllyEngine;
@@ -12,9 +13,24 @@ use crate::prolly::store::{AsyncStore, BatchOp, Store};
 use crate::prolly::tree::Tree;
 use crate::prolly::write::CanonicalWriteManager;
 use crate::prolly::{Cid, ProllyMetricsSnapshot};
+use crate::{Conflict, Resolution};
 
 const MAX_REPLAY_ROUNDS: usize = 256;
 type PublicationWrites = Vec<(Cid, Vec<u8>)>;
+
+enum ReadyNodeBytes {
+    Owned(Vec<u8>),
+    Shared(Arc<[u8]>),
+}
+
+impl AsRef<[u8]> for ReadyNodeBytes {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Owned(bytes) => bytes,
+            Self::Shared(bytes) => bytes,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ReplayIo {
@@ -28,6 +44,20 @@ impl<S> ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>
 where
     S: Store,
 {
+    pub(crate) fn structural_merge_ready(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+        resolver: Option<&(dyn Fn(&Conflict) -> Resolution + Send + Sync)>,
+    ) -> Result<Option<Tree>, Error> {
+        let manager = ReadyWriteManager {
+            engine: self,
+            config: &base.config,
+        };
+        crate::prolly::diff::try_structural_merge(&manager, base, left, right, resolver)
+    }
+
     pub(crate) fn canonical_batch_ready(
         &self,
         tree: &Tree,
@@ -35,9 +65,21 @@ where
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
         let manager = ReadyWriteManager {
             engine: self,
-            config: tree.config.clone(),
+            config: &tree.config,
         };
         crate::prolly::write::apply(&manager, tree, mutations)
+    }
+
+    pub(crate) fn canonical_batch_tree_ready(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+    ) -> Result<Tree, Error> {
+        let manager = ReadyWriteManager {
+            engine: self,
+            config: &tree.config,
+        };
+        crate::prolly::write::apply_tree(&manager, tree, mutations)
     }
 
     pub(crate) fn canonical_batch_ready_configured(
@@ -48,9 +90,22 @@ where
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
         let manager = ReadyWriteManager {
             engine: self,
-            config: tree.config.clone(),
+            config: &tree.config,
         };
         crate::prolly::write::apply_configured(&manager, tree, mutations, config)
+    }
+
+    pub(crate) fn canonical_batch_tree_ready_configured(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        config: &crate::prolly::parallel::ParallelConfig,
+    ) -> Result<Tree, Error> {
+        let manager = ReadyWriteManager {
+            engine: self,
+            config: &tree.config,
+        };
+        crate::prolly::write::apply_tree_configured(&manager, tree, mutations, config)
     }
 
     pub(crate) fn canonical_delete_range_ready(
@@ -61,7 +116,7 @@ where
     ) -> Result<(Tree, crate::prolly::write::WriteStats), Error> {
         let manager = ReadyWriteManager {
             engine: self,
-            config: tree.config.clone(),
+            config: &tree.config,
         };
         crate::prolly::range_delete::apply(&manager, tree, start, end)
     }
@@ -69,7 +124,7 @@ where
 
 struct ReadyWriteManager<'a, S: Store> {
     engine: &'a ProllyEngine<crate::prolly::store::SyncStoreAsAsync<Arc<S>>>,
-    config: crate::prolly::Config,
+    config: &'a crate::prolly::Config,
 }
 
 impl<S> CanonicalWriteManager for ReadyWriteManager<'_, S>
@@ -83,23 +138,45 @@ where
     }
 
     fn write_config(&self) -> &crate::prolly::Config {
-        &self.config
+        self.config
     }
 
     fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
-        if let Ok(mut cache) = self.engine.node_cache.write() {
-            if let Some(node) = cache.get(cid) {
+        // Reads do not mutate bounded-cache recency. Avoiding an exclusive lock
+        // keeps the synchronous facade's hot path comparable to the async core;
+        // insertion and eviction still enforce the configured bounds.
+        let unbounded = if let Ok(cache) = self.engine.node_cache.read() {
+            if let Some(node) = cache.peek(cid) {
                 super::validate_cached_node(&node, &self.config.format)?;
                 self.engine.metrics.add_cache_hits(1);
                 return Ok(node);
             }
+            cache.is_unbounded()
+        } else {
+            false
+        };
+        if !unbounded {
+            if let Ok(mut cache) = self.engine.node_cache.write() {
+                if let Some(node) = cache.get(cid) {
+                    super::validate_cached_node(&node, &self.config.format)?;
+                    self.engine.metrics.add_cache_hits(1);
+                    return Ok(node);
+                }
+            }
         }
         self.engine.metrics.add_cache_misses(1);
-        let bytes = self
-            .write_store()
-            .get(cid.as_bytes())
-            .map_err(|error| Error::Store(Box::new(error)))?
-            .ok_or_else(|| Error::NotFound(cid.clone()))?;
+        let bytes: Arc<[u8]> = if self.write_store().has_native_shared_reads() {
+            self.write_store()
+                .get_shared(cid.as_bytes())
+                .map_err(|error| Error::Store(Box::new(error)))?
+                .ok_or_else(|| Error::NotFound(cid.clone()))?
+        } else {
+            self.write_store()
+                .get(cid.as_bytes())
+                .map_err(|error| Error::Store(Box::new(error)))?
+                .map(|bytes| Arc::from(bytes.into_boxed_slice()))
+                .ok_or_else(|| Error::NotFound(cid.clone()))?
+        };
         let node = Arc::new(validation::decode_owned(cid, &self.config.format, &bytes)?);
         self.engine.metrics.record_point_read(bytes.len());
         if let Ok(mut cache) = self.engine.node_cache.write() {
@@ -110,10 +187,42 @@ where
     }
 
     fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
+        if let Ok(cache) = self.engine.node_cache.read() {
+            let cached = cids
+                .iter()
+                .map(|cid| cache.peek(cid))
+                .collect::<Option<Vec<_>>>();
+            if let Some(nodes) = cached {
+                for node in &nodes {
+                    super::validate_cached_node(node, &self.config.format)?;
+                }
+                self.engine.metrics.add_cache_hits(nodes.len());
+                return Ok(nodes);
+            }
+        }
         let mut nodes = vec![None; cids.len()];
         let mut missing_cids = Vec::new();
         let mut missing_positions = Vec::new();
-        if let Ok(mut cache) = self.engine.node_cache.write() {
+        let unbounded = self
+            .engine
+            .node_cache
+            .read()
+            .is_ok_and(|cache| cache.is_unbounded());
+        if unbounded {
+            if let Ok(cache) = self.engine.node_cache.read() {
+                for (position, cid) in cids.iter().enumerate() {
+                    if let Some(node) = cache.peek(cid) {
+                        super::validate_cached_node(&node, &self.config.format)?;
+                        self.engine.metrics.add_cache_hits(1);
+                        nodes[position] = Some(node);
+                    } else {
+                        self.engine.metrics.add_cache_misses(1);
+                        missing_cids.push(cid.clone());
+                        missing_positions.push(position);
+                    }
+                }
+            }
+        } else if let Ok(mut cache) = self.engine.node_cache.write() {
             for (position, cid) in cids.iter().enumerate() {
                 if let Some(node) = cache.get(cid) {
                     super::validate_cached_node(&node, &self.config.format)?;
@@ -135,10 +244,21 @@ where
                 .map(|cid| cid.as_bytes())
                 .collect::<Vec<_>>();
             let batch_len = keys.len();
-            let values = self
-                .write_store()
-                .batch_get_ordered_unique(&keys)
-                .map_err(|error| Error::Store(Box::new(error)))?;
+            let values = if self.write_store().has_native_shared_reads() {
+                self.write_store()
+                    .batch_get_shared_ordered_unique(&keys)
+                    .map_err(|error| Error::Store(Box::new(error)))?
+                    .into_iter()
+                    .map(|value| value.map(ReadyNodeBytes::Shared))
+                    .collect::<Vec<_>>()
+            } else {
+                self.write_store()
+                    .batch_get_ordered_unique(&keys)
+                    .map_err(|error| Error::Store(Box::new(error)))?
+                    .into_iter()
+                    .map(|value| value.map(ReadyNodeBytes::Owned))
+                    .collect::<Vec<_>>()
+            };
             drop(keys);
             if values.len() != missing_cids.len() {
                 return Err(Error::InvalidNode);
@@ -148,7 +268,8 @@ where
                 missing_cids.into_iter().zip(missing_positions).zip(values)
             {
                 let bytes = value.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                let node = Arc::new(validation::decode_owned(&cid, &self.config.format, &bytes)?);
+                let bytes = bytes.as_ref();
+                let node = Arc::new(validation::decode_owned(&cid, &self.config.format, bytes)?);
                 read_bytes = read_bytes.saturating_add(bytes.len());
                 if let Ok(mut cache) = self.engine.node_cache.write() {
                     let evictions = cache.insert(cid, node.clone(), bytes.len());
@@ -164,6 +285,36 @@ where
             .into_iter()
             .map(|node| node.ok_or(Error::InvalidNode))
             .collect()
+    }
+
+    fn write_load_many_ordered_with_parallelism(
+        &self,
+        cids: &[Cid],
+        parallelism: usize,
+    ) -> Result<Vec<Arc<Node>>, Error> {
+        // Check the whole frontier before partitioning. Structural merge
+        // prefetches are commonly already hot; scheduling Rayon work for those
+        // hits dominated small in-memory merges.
+        let all_cached = self
+            .engine
+            .node_cache
+            .read()
+            .is_ok_and(|cache| cids.iter().all(|cid| cache.nodes.contains_key(cid)));
+        if all_cached || parallelism <= 1 || cids.len() <= parallelism {
+            return self.write_load_many_ordered(cids);
+        }
+
+        let width = parallelism.min(cids.len());
+        let chunk_size = cids.len().div_ceil(width);
+        let partitions = cids
+            .par_chunks(chunk_size)
+            .map(|chunk| self.write_load_many_ordered(chunk))
+            .collect::<Vec<_>>();
+        let mut nodes = Vec::with_capacity(cids.len());
+        for partition in partitions {
+            nodes.extend(partition?);
+        }
+        Ok(nodes)
     }
 
     fn write_cache_node(&self, cid: Cid, node: Node) {

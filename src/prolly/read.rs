@@ -1022,6 +1022,25 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         key: &[u8],
         read: impl FnOnce(&[u8]) -> R,
     ) -> Result<Option<R>, Error> {
+        if let Some(leaf) = self
+            .inner
+            .recent_leaf
+            .as_ref()
+            .filter(|_| !self.inner.recent_leaf_disabled)
+        {
+            validate_leaf(leaf)?;
+            if leaf
+                .key(0)
+                .zip(leaf.key(leaf.len().saturating_sub(1)))
+                .is_some_and(|(first, last)| key >= first && key <= last)
+            {
+                self.inner.recent_leaf_misses = 0;
+                return match leaf.search(key) {
+                    Ok(index) => Ok(Some(read(leaf.value(index).ok_or(Error::InvalidNode)?))),
+                    Err(_) => Ok(None),
+                };
+            }
+        }
         let ready_store = self.inner.manager.store.clone();
         let future = self.inner.get_with(key, read);
         super::engine::ready::run_ready(ready_store.ready(future))

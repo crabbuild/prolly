@@ -1,4 +1,5 @@
 use std::ops::ControlFlow;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 #[cfg(feature = "async-store")]
 use std::{
@@ -7,11 +8,82 @@ use std::{
 };
 
 #[cfg(feature = "async-store")]
-use prolly::{AsyncProlly, Store, SyncStoreAsAsync};
+use prolly::{AsyncProlly, SyncStoreAsAsync};
 use prolly::{
-    BlobRef, BorrowedMergeResolver, Config, ConflictRef, Error, MemStore, MergeDecision, Mutation,
-    NodeLayoutSpec, Prolly, ValueRef, ValueRefView,
+    BatchOp, BlobRef, BorrowedMergeResolver, Config, ConflictRef, Error, MemStore, MergeDecision,
+    Mutation, NodeLayoutSpec, Prolly, Store, ValueRef, ValueRefView,
 };
+
+#[derive(Clone)]
+struct NativeSharedCountingStore {
+    inner: Arc<MemStore>,
+    owned_reads: Arc<AtomicUsize>,
+    shared_reads: Arc<AtomicUsize>,
+    owned_batch_reads: Arc<AtomicUsize>,
+    shared_batch_reads: Arc<AtomicUsize>,
+}
+
+impl NativeSharedCountingStore {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(MemStore::new()),
+            owned_reads: Arc::new(AtomicUsize::new(0)),
+            shared_reads: Arc::new(AtomicUsize::new(0)),
+            owned_batch_reads: Arc::new(AtomicUsize::new(0)),
+            shared_batch_reads: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl Store for NativeSharedCountingStore {
+    type Error = <MemStore as Store>::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.owned_reads.fetch_add(1, Ordering::Relaxed);
+        self.inner.get(key)
+    }
+
+    fn get_shared(&self, key: &[u8]) -> Result<Option<Arc<[u8]>>, Self::Error> {
+        self.shared_reads.fetch_add(1, Ordering::Relaxed);
+        self.inner.get_shared(key)
+    }
+
+    fn has_native_shared_reads(&self) -> bool {
+        true
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.owned_batch_reads.fetch_add(1, Ordering::Relaxed);
+        self.inner.batch_get_ordered_unique(keys)
+    }
+
+    fn batch_get_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
+        self.shared_batch_reads.fetch_add(1, Ordering::Relaxed);
+        self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner.put(key, value)
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner.delete(key)
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner.batch(ops)
+    }
+}
 
 struct Select(MergeDecision);
 
@@ -55,6 +127,65 @@ fn layouts() -> [NodeLayoutSpec; 3] {
         NodeLayoutSpec::PrefixCompressed,
         NodeLayoutSpec::OffsetTable,
     ]
+}
+
+#[test]
+fn cold_sync_mutation_uses_native_shared_node_reads() {
+    let store = NativeSharedCountingStore::new();
+    let owned_reads = store.owned_reads.clone();
+    let shared_reads = store.shared_reads.clone();
+    let prolly = Prolly::new(store, Config::default());
+    let entries = (0..1_024)
+        .map(|index| {
+            (
+                format!("key/{index:06}").into_bytes(),
+                format!("value/{index:06}").into_bytes(),
+            )
+        })
+        .collect();
+    let tree = prolly.build_from_sorted_entries(entries).unwrap();
+    prolly.clear_cache();
+    owned_reads.store(0, Ordering::Relaxed);
+    shared_reads.store(0, Ordering::Relaxed);
+
+    prolly
+        .put(&tree, b"key/999999".to_vec(), b"new-value".to_vec())
+        .unwrap();
+
+    assert_eq!(owned_reads.load(Ordering::Relaxed), 0);
+    assert!(shared_reads.load(Ordering::Relaxed) > 0);
+}
+
+#[test]
+fn cold_sync_batch_mutation_uses_native_shared_node_reads() {
+    let store = NativeSharedCountingStore::new();
+    let owned_batch_reads = store.owned_batch_reads.clone();
+    let shared_batch_reads = store.shared_batch_reads.clone();
+    let prolly = Prolly::new(store, Config::default());
+    let entries = (0..4_096)
+        .map(|index| {
+            (
+                format!("key/{index:06}").into_bytes(),
+                format!("value/{index:06}").into_bytes(),
+            )
+        })
+        .collect();
+    let tree = prolly.build_from_sorted_entries(entries).unwrap();
+    prolly.clear_cache();
+    owned_batch_reads.store(0, Ordering::Relaxed);
+    shared_batch_reads.store(0, Ordering::Relaxed);
+    let mutations = (0..4_096)
+        .step_by(8)
+        .map(|index| Mutation::Upsert {
+            key: format!("key/{index:06}").into_bytes(),
+            val: format!("changed/{index:06}").into_bytes(),
+        })
+        .collect();
+
+    prolly.batch(&tree, mutations).unwrap();
+
+    assert_eq!(owned_batch_reads.load(Ordering::Relaxed), 0);
+    assert!(shared_batch_reads.load(Ordering::Relaxed) > 0);
 }
 
 #[test]

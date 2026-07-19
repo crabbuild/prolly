@@ -1302,10 +1302,8 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key already exists with the same value, returns the original tree unchanged.
     pub fn put(&self, tree: &Tree, key: Vec<u8>, val: Vec<u8>) -> Result<Tree, Error> {
-        Ok(self
-            .engine
-            .canonical_batch_ready(tree, vec![Mutation::Upsert { key, val }])?
-            .0)
+        self.engine
+            .canonical_batch_tree_ready(tree, vec![Mutation::Upsert { key, val }])
     }
 
     /// Insert or update a value, offloading large payloads to a blob store.
@@ -1346,10 +1344,8 @@ impl<S: Store> Prolly<S> {
     /// # Idempotence
     /// If the key doesn't exist, returns the original tree unchanged.
     pub fn delete(&self, tree: &Tree, key: &[u8]) -> Result<Tree, Error> {
-        Ok(self
-            .engine
-            .canonical_batch_ready(tree, vec![Mutation::Delete { key: key.to_vec() }])?
-            .0)
+        self.engine
+            .canonical_batch_tree_ready(tree, vec![Mutation::Delete { key: key.to_vec() }])
     }
 
     /// Delete all keys in the half-open range `[start, end)`.
@@ -1624,6 +1620,9 @@ impl<S: Store> Prolly<S> {
     /// // diffs contains Added { key: b"b", val: b"2" }
     /// ```
     pub fn diff(&self, base: &Tree, other: &Tree) -> Result<Vec<Diff>, Error> {
+        if base.root == other.root {
+            return Ok(Vec::new());
+        }
         let ready_store = self.engine.store.clone();
         let future = self.engine.diff(base, other);
         engine::ready::run_ready(ready_store.ready(future))
@@ -1642,7 +1641,7 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
     ) -> Result<Vec<Diff>, Error> {
         let ready_store = self.engine.store.clone();
-        let future = self.engine.range_diff(base, other, start, end);
+        let future = diff::compute_async_range_diff(&self.engine, base, other, start, end);
         engine::ready::run_ready(ready_store.ready(future))
     }
 
@@ -1780,9 +1779,27 @@ impl<S: Store> Prolly<S> {
         right: &Tree,
         resolver: Option<Resolver>,
     ) -> Result<Tree, Error> {
+        if left.root == right.root {
+            return Ok(left.clone());
+        }
+        if left.root == base.root {
+            return Ok(right.clone());
+        }
+        if right.root == base.root {
+            return Ok(left.clone());
+        }
+
+        if let Some(merged) =
+            self.engine
+                .structural_merge_ready(base, left, right, resolver.as_deref())?
+        {
+            return Ok(merged);
+        }
+
         let ready_store = self.engine.store.clone();
-        let future = self.engine.merge(base, left, right, resolver);
-        engine::ready::run_ready(ready_store.ready(future))
+        let future = self.engine.diff(base, right);
+        let right_diff = engine::ready::run_ready(ready_store.ready(future))?;
+        diff::merge_trees_with_right_diff(self, base, left, &right_diff, resolver)
     }
 
     /// Merge two trees with a callback-scoped zero-copy conflict resolver.
@@ -2706,6 +2723,11 @@ impl<S: Store> Prolly<S> {
         base: &Tree,
         other: &Tree,
     ) -> Result<Box<dyn Iterator<Item = Result<Diff, Error>> + 'a>, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = diff::try_append_only_diff_async(&self.engine, base, other);
+        if let Some(diffs) = engine::ready::run_ready(ready_store.ready(future))? {
+            return Ok(Box::new(diffs.into_iter().map(Ok)));
+        }
         Ok(Box::new(diff::stream_diff(self, base, other)))
     }
 
@@ -3752,7 +3774,7 @@ impl<S: Store> Prolly<S> {
     /// let new_tree = prolly.batch(&tree, mutations).unwrap();
     /// ```
     pub fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
-        Ok(self.engine.canonical_batch_ready(tree, mutations)?.0)
+        self.engine.canonical_batch_tree_ready(tree, mutations)
     }
 
     /// Apply mutations and return tree-write work counters.
@@ -3918,10 +3940,8 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         config: &parallel::ParallelConfig,
     ) -> Result<Tree, Error> {
-        Ok(self
-            .engine
-            .canonical_batch_ready_configured(tree, mutations, config)?
-            .0)
+        self.engine
+            .canonical_batch_tree_ready_configured(tree, mutations, config)
     }
 
     /// Apply batch mutations with [`parallel::ParallelConfig`] and return execution stats.
@@ -5941,25 +5961,10 @@ where
     }
 
     pub(crate) async fn load_read_arc(&self, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
-        let unbounded = if let Ok(cache) = self.node_cache.read() {
-            if cache.is_unbounded() {
-                if let Some(node) = cache.peek_read(cid) {
-                    self.metrics.add_cache_hits(1);
-                    return Ok(node);
-                }
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if !unbounded {
-            if let Ok(mut cache) = self.node_cache.write() {
-                if let Some(node) = cache.get_read(cid) {
-                    self.metrics.add_cache_hits(1);
-                    return Ok(node);
-                }
+        if let Ok(cache) = self.node_cache.read() {
+            if let Some(node) = cache.peek_read(cid) {
+                self.metrics.add_cache_hits(1);
+                return Ok(node);
             }
         }
         let owned = if self.store.has_native_shared_reads() {
@@ -6009,6 +6014,16 @@ where
     ) -> Result<Vec<Arc<ReadNode>>, Error> {
         if cids.is_empty() {
             return Ok(Vec::new());
+        }
+        if let Ok(cache) = self.node_cache.read() {
+            let cached = cids
+                .iter()
+                .map(|cid| cache.peek_read(cid))
+                .collect::<Option<Vec<_>>>();
+            if let Some(nodes) = cached {
+                self.metrics.add_cache_hits(nodes.len());
+                return Ok(nodes);
+            }
         }
         let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
             cache
@@ -6083,6 +6098,13 @@ where
     ) -> Result<Vec<Arc<ReadNode>>, Error> {
         if cids.is_empty() {
             return Ok(Vec::new());
+        }
+        let all_cached = self
+            .node_cache
+            .read()
+            .is_ok_and(|cache| cids.iter().all(|cid| cache.nodes.contains_key(cid)));
+        if all_cached {
+            return self.load_many_read_ordered(cids).await;
         }
         let parallelism = self.execution.read_parallelism().get().min(cids.len());
         if parallelism == 1 || cids.len() <= parallelism {
@@ -6196,6 +6218,15 @@ where
         if cids.is_empty() {
             return Ok(Vec::new());
         }
+        let all_cached = self
+            .node_cache
+            .read()
+            .is_ok_and(|cache| cids.iter().all(|cid| cache.nodes.contains_key(cid)));
+        if all_cached {
+            return self
+                .load_many_ordered_for_format(cids, expected_format)
+                .await;
+        }
         let parallelism = self.execution.read_parallelism().get().min(cids.len());
         if parallelism == 1 || cids.len() <= parallelism {
             return self
@@ -6237,6 +6268,20 @@ where
     ) -> Result<Vec<Arc<Node>>, Error> {
         if cids.is_empty() {
             return Ok(Vec::new());
+        }
+
+        if let Ok(cache) = self.node_cache.read() {
+            let cached = cids
+                .iter()
+                .map(|cid| cache.peek(cid))
+                .collect::<Option<Vec<_>>>();
+            if let Some(nodes) = cached {
+                for node in &nodes {
+                    validate_owned_node_format(node, expected_format)?;
+                }
+                self.metrics.add_cache_hits(nodes.len());
+                return Ok(nodes);
+            }
         }
 
         let unbounded_plan = self.node_cache.read().ok().and_then(|cache| {
@@ -6876,7 +6921,9 @@ fn validate_owned_node_format(
     node: &Node,
     expected_format: &format::TreeFormat,
 ) -> Result<(), Error> {
-    node.validate()?;
+    // Immutable cached nodes were fully validated when decoded or were built
+    // by canonical writers. Cache hits only need to enforce the caller's
+    // persisted tree format; repeating structural validation is pure overhead.
     if node.format != *expected_format {
         return Err(Error::FormatMismatch {
             expected: expected_format.digest()?,
@@ -8805,6 +8852,7 @@ mod tests {
             second_cid.0.to_vec(),
             third_cid.0.to_vec(),
         ];
+        root.child_counts = vec![2, 2, 2];
         let tree = Tree {
             root: Some(prolly.save(&root).unwrap()),
             config: Config::default(),
@@ -8865,6 +8913,7 @@ mod tests {
             .map(|leaf_idx| format!("k{:02}", leaf_idx * 2).into_bytes())
             .collect();
         root.vals = child_cids.iter().map(|cid| cid.0.to_vec()).collect();
+        root.child_counts = vec![2; root.vals.len()];
         let tree = Tree {
             root: Some(prolly.save(&root).unwrap()),
             config: Config::default(),
@@ -8919,6 +8968,7 @@ mod tests {
         let mut root = prolly.new_internal_node(1);
         root.keys = vec![b"a".to_vec(), b"c".to_vec()];
         root.vals = vec![first_cid.0.to_vec(), second_cid.0.to_vec()];
+        root.child_counts = vec![2, 2];
         let tree = Tree {
             root: Some(prolly.save(&root).unwrap()),
             config: Config::default(),
@@ -8972,6 +9022,7 @@ mod tests {
             second_cid.0.to_vec(),
             third_cid.0.to_vec(),
         ];
+        root.child_counts = vec![2, 2, 2];
         let tree = Tree {
             root: Some(prolly.save(&root).unwrap()),
             config: Config::default(),

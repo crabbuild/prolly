@@ -651,6 +651,49 @@ Downstream compile fixtures cover existing constructors, trait implementations, 
 
 Correctness validation runs before measurements. Any root, value, count, or behavior divergence invalidates the performance result.
 
+### 2026-07-19 in-memory re-verification
+
+The post-cutover in-memory screen ran on an Apple M2 Max with Rust 1.97.0 in
+the Cargo bench profile. The detached pre-migration revision and candidate both
+used the same target-specific ARM64 SHA-256 backend for the normalized
+architecture comparison. Each value below is the median of alternating run
+medians at 10,000 records; positive percentages are candidate regressions.
+
+| Operation | Baseline ns/item | Candidate ns/item | Change |
+| --- | ---: | ---: | ---: |
+| Incremental insert | 14,899 | 15,012 | +0.8% |
+| Point get | 1,043 | 95 | -90.9% |
+| Point update | 18,231 | 18,520 | +1.6% |
+| Point delete | 37,728 | 38,262 | +1.4% |
+| Owned full range | 68 | 71 | +4.4% |
+| Owned range window | 67 | 69 | +3.0% |
+| Generic batch | 1,129 | 1,106 | -2.0% |
+| Mixed batch | 1,456 | 1,427 | -2.0% |
+| Parallel batch | 1,452 | 1,421 | -2.1% |
+| Direct append | 137 | 136 | -0.7% |
+| Hot append chain | 330 | 333 | +0.9% |
+| Cold append chain | 398 | 410 | +3.0% |
+| Append diff | 99 | 61 | -38.4% |
+| Range diff | 189 | 170 | -10.1% |
+| Conflict-resolved merge | 1,967 | 1,788 | -9.1% |
+
+The cold-load diagnosis found mandatory CID verification accounted for about
+61% of validated decode time on a representative 64-entry node. Enabling the
+ARMv8 SHA-256 backend on supported non-Windows ARM64 targets reduced the CID
+check from 7.46 microseconds to 1.21 microseconds and full validated decode from
+12.21 microseconds to 6.46 microseconds. WASM, ARM64 Windows, and ARM64 Linux
+compile checks passed; unsupported targets keep the portable implementation.
+
+Ready-sync versus adapted-async foundation samples at 100,000 records showed a
+paired median ratio of -5.6% for point get and -1.8% for get-many in favor of
+async. Full correctness ran before the final measurements: 490 unit tests, all
+integration suites, and 74 doctests passed, with one intentional extended stress
+test ignored. Strict all-target, all-feature Clippy and formatting also passed.
+
+This inline screen confirms no material median regression in the exercised
+in-memory operations. It does not replace the release harness's recorded p95,
+bootstrap confidence interval, provenance, or SQLite/Turso matrix artifacts.
+
 ### Sync facade overhead
 
 Capture pre-migration native sync baselines for in-memory and SQLite operations. Measure ready-runner entry, point reads, puts, batches, builders, iteration, diff, merge, proof construction, statistics, and representative service operations.

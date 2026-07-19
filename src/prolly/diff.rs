@@ -115,8 +115,6 @@ use std::collections::{HashSet, VecDeque};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
-#[cfg(test)]
-use super::batch::get_max_key;
 use super::batch::BatchWriteCollector;
 use super::cid::Cid;
 use super::error::{Conflict, Diff, Error, Mutation, Resolution, Resolver};
@@ -987,6 +985,13 @@ impl<S: Store> Iterator for SyncDiffIter<'_, S> {
     type Item = Result<Diff, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.inner.failed {
+            return None;
+        }
+        if let Some(diff) = self.inner.pending.pop_front() {
+            self.inner.stats.emitted_diffs += 1;
+            return Some(Ok(diff));
+        }
         let ready_store = self.inner.prolly.store.clone();
         let future = self.inner.next();
         super::engine::ready::run_ready(ready_store.ready(future))
@@ -3085,11 +3090,69 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
+    let mut stack = initial_diff_stack(base, other);
     let mut diffs = Vec::new();
-    prolly
-        .scan_diff(base, other, |diff| diffs.push(diff.to_owned()))
-        .await?;
+    while let Some(frame) = stack.pop() {
+        match frame {
+            DiffFrame::Compare {
+                base_cid,
+                other_cid,
+                span_end,
+            } => {
+                process_async_diff_compare(
+                    prolly,
+                    base_cid,
+                    other_cid,
+                    span_end.as_deref(),
+                    &mut stack,
+                    &mut diffs,
+                    None,
+                )
+                .await?;
+            }
+            DiffFrame::Added { cid } => {
+                process_async_added(prolly, cid, &mut stack, &mut diffs, None).await?;
+            }
+            DiffFrame::Removed { cid } => {
+                process_async_removed(prolly, cid, &mut stack, &mut diffs, None).await?;
+            }
+        }
+    }
     Ok(diffs)
+}
+
+pub(crate) async fn try_append_only_diff_async<S>(
+    prolly: &AsyncProlly<S>,
+    base: &Tree,
+    other: &Tree,
+) -> Result<Option<Vec<Diff>>, Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    if base.root == other.root {
+        return Ok(Some(Vec::new()));
+    }
+
+    let mut diffs = Vec::new();
+    match (&base.root, &other.root) {
+        (None, Some(other_cid)) => {
+            collect_added_cids_async(prolly, vec![other_cid.clone()], &mut diffs).await?;
+            Ok(Some(diffs))
+        }
+        (Some(_), None) => Ok(None),
+        (Some(base_cid), Some(other_cid)) => {
+            let nodes = prolly
+                .load_many_ordered(&[base_cid.clone(), other_cid.clone()])
+                .await?;
+            if append_only_diff_nodes_async(prolly, &nodes[0], &nodes[1], &mut diffs).await? {
+                Ok(Some(diffs))
+            } else {
+                Ok(None)
+            }
+        }
+        (None, None) => Ok(Some(Vec::new())),
+    }
 }
 async fn compute_async_diff_with_stats<S>(
     prolly: &AsyncProlly<S>,
@@ -3166,10 +3229,78 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
+    if end.is_some_and(|end| end <= start) {
+        return Ok(Vec::new());
+    }
+
     let mut diffs = Vec::new();
-    prolly
-        .scan_range_diff(base, other, start, end, |diff| diffs.push(diff.to_owned()))
-        .await?;
+    let mut stack = match (&base.root, &other.root) {
+        (Some(base_cid), Some(other_cid)) if base_cid != other_cid => {
+            vec![RangeDiffFrame::Compare {
+                base_cid: base_cid.clone(),
+                other_cid: other_cid.clone(),
+                span_end: None,
+            }]
+        }
+        (Some(base_cid), None) => vec![RangeDiffFrame::Removed {
+            cid: base_cid.clone(),
+            span_end: None,
+        }],
+        (None, Some(other_cid)) => vec![RangeDiffFrame::Added {
+            cid: other_cid.clone(),
+            span_end: None,
+        }],
+        _ => Vec::new(),
+    };
+
+    while let Some(frame) = stack.pop() {
+        match frame {
+            RangeDiffFrame::Compare {
+                base_cid,
+                other_cid,
+                span_end,
+            } => {
+                process_async_range_compare(
+                    prolly,
+                    base_cid,
+                    other_cid,
+                    span_end.as_deref(),
+                    start,
+                    end,
+                    &mut stack,
+                    &mut diffs,
+                )
+                .await?;
+            }
+            RangeDiffFrame::Added { cid, span_end } => {
+                process_async_range_subtree(
+                    prolly,
+                    cid,
+                    span_end.as_deref(),
+                    start,
+                    end,
+                    &mut stack,
+                    &mut diffs,
+                    DiffFrameKind::Added,
+                )
+                .await?;
+            }
+            RangeDiffFrame::Removed { cid, span_end } => {
+                process_async_range_subtree(
+                    prolly,
+                    cid,
+                    span_end.as_deref(),
+                    start,
+                    end,
+                    &mut stack,
+                    &mut diffs,
+                    DiffFrameKind::Removed,
+                )
+                .await?;
+            }
+        }
+    }
+
     Ok(diffs)
 }
 pub async fn merge_trees_async<S>(
@@ -3514,7 +3645,6 @@ where
     }
 }
 #[derive(Clone)]
-#[allow(dead_code)]
 enum RangeDiffFrame {
     Compare {
         base_cid: Cid,
@@ -3566,6 +3696,9 @@ where
                 .await?;
         }
         _ => {
+            if append_only_diff_nodes_async(prolly, &base, &other, diffs).await? {
+                return Ok(());
+            }
             if let Some(stats) = &mut stats {
                 stats.collected_fallbacks += 1;
             }
@@ -3625,6 +3758,9 @@ where
             });
             other_idx += 1;
         } else {
+            if append_only_diff_nodes_async(prolly, base, other, diffs).await? {
+                return Ok(());
+            }
             if let Some(stats) = &mut stats {
                 stats.collected_fallbacks += 1;
             }
@@ -3649,6 +3785,129 @@ where
 
     prefetch_async_diff_frame_roots(prolly, &frames).await?;
     stack.extend(frames.into_iter().rev());
+    Ok(())
+}
+
+async fn append_only_diff_nodes_async<S>(
+    prolly: &AsyncProlly<S>,
+    base: &Node,
+    other: &Node,
+    diffs: &mut Vec<Diff>,
+) -> Result<bool, Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    let mut base = Arc::new(base.clone());
+    let mut other = Arc::new(other.clone());
+    let mut pending_added = Vec::<Vec<Cid>>::new();
+
+    loop {
+        if other.level > base.level {
+            if other.leaf || other.is_empty() {
+                return Ok(false);
+            }
+            ensure_node_value_count(&other)?;
+            let first_child = child_cid_validated(&other, 0)?;
+            pending_added.push(
+                (1..other.len())
+                    .map(|index| child_cid_validated(&other, index))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
+            other = prolly.load_arc(&first_child).await?;
+            continue;
+        }
+
+        if base.level != other.level || base.leaf != other.leaf || other.len() < base.len() {
+            return Ok(false);
+        }
+
+        if base.leaf {
+            ensure_node_value_count(&base)?;
+            ensure_node_value_count(&other)?;
+            for index in 0..base.len() {
+                if base.keys[index] != other.keys[index]
+                    || node_value(&base, index)? != node_value(&other, index)?
+                {
+                    return Ok(false);
+                }
+            }
+            for index in base.len()..other.len() {
+                diffs.push(Diff::Added {
+                    key: other.keys[index].clone(),
+                    val: node_value(&other, index)?.clone(),
+                });
+            }
+            break;
+        }
+
+        if base.is_empty() {
+            ensure_node_value_count(&other)?;
+            pending_added.push(child_cids(&other)?);
+            break;
+        }
+
+        ensure_node_value_count(&base)?;
+        ensure_node_value_count(&other)?;
+        let right_edge = base.len() - 1;
+        for index in 0..right_edge {
+            if base.keys[index] != other.keys[index]
+                || child_cid_validated(&base, index)? != child_cid_validated(&other, index)?
+            {
+                return Ok(false);
+            }
+        }
+        if base.keys[right_edge] != other.keys[right_edge] {
+            return Ok(false);
+        }
+
+        pending_added.push(
+            (base.len()..other.len())
+                .map(|index| child_cid_validated(&other, index))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+        let base_child = child_cid_validated(&base, right_edge)?;
+        let other_child = child_cid_validated(&other, right_edge)?;
+        if base_child == other_child {
+            break;
+        }
+        let nodes = prolly.load_many_ordered(&[base_child, other_child]).await?;
+        base = nodes[0].clone();
+        other = nodes[1].clone();
+    }
+
+    for cids in pending_added.into_iter().rev() {
+        collect_added_cids_async(prolly, cids, diffs).await?;
+    }
+    Ok(true)
+}
+
+async fn collect_added_cids_async<S>(
+    prolly: &AsyncProlly<S>,
+    mut cids: Vec<Cid>,
+    diffs: &mut Vec<Diff>,
+) -> Result<(), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    cids.reverse();
+    while let Some(cid) = cids.pop() {
+        let node = prolly.load_arc(&cid).await?;
+        if node.leaf {
+            ensure_node_value_count(&node)?;
+            for index in 0..node.len() {
+                diffs.push(Diff::Added {
+                    key: node.keys[index].clone(),
+                    val: node_value(&node, index)?.clone(),
+                });
+            }
+            continue;
+        }
+        let mut children = child_cids(&node)?;
+        children.reverse();
+        cids.extend(children);
+    }
     Ok(())
 }
 async fn process_async_added<S>(
@@ -3716,7 +3975,6 @@ where
     Ok(())
 }
 #[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
 async fn process_async_range_compare<S>(
     prolly: &AsyncProlly<S>,
     base_cid: Cid,
@@ -3772,8 +4030,58 @@ where
 
     Ok(())
 }
+
 #[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
+async fn process_async_range_subtree<S>(
+    prolly: &AsyncProlly<S>,
+    cid: Cid,
+    span_end: Option<&[u8]>,
+    range_start: &[u8],
+    range_end: Option<&[u8]>,
+    stack: &mut Vec<RangeDiffFrame>,
+    diffs: &mut Vec<Diff>,
+    kind: DiffFrameKind,
+) -> Result<(), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    let node = prolly.load_arc(&cid).await?;
+    if node.leaf {
+        ensure_node_value_count(&node)?;
+        let mut index = lower_bound(&node.keys, range_start);
+        while index < node.len() && key_in_range(&node.keys[index], range_start, range_end) {
+            let key = node.keys[index].clone();
+            let val = node_value(&node, index)?.clone();
+            diffs.push(match kind {
+                DiffFrameKind::Added => Diff::Added { key, val },
+                DiffFrameKind::Removed => Diff::Removed { key, val },
+            });
+            index += 1;
+        }
+        return Ok(());
+    }
+
+    let child_spans = overlapping_child_cids(&node, span_end, range_start, range_end)?;
+    let mut frames = Vec::with_capacity(child_spans.len());
+    for (child_end, child_cid) in child_spans {
+        let span_end = child_end.map(<[u8]>::to_vec);
+        frames.push(match kind {
+            DiffFrameKind::Added => RangeDiffFrame::Added {
+                cid: child_cid,
+                span_end,
+            },
+            DiffFrameKind::Removed => RangeDiffFrame::Removed {
+                cid: child_cid,
+                span_end,
+            },
+        });
+    }
+    prefetch_async_range_frame_roots(prolly, &frames).await?;
+    stack.extend(frames.into_iter().rev());
+    Ok(())
+}
+#[allow(clippy::too_many_arguments)]
 async fn enqueue_async_internal_range_diff<S>(
     prolly: &AsyncProlly<S>,
     base: &Node,
@@ -3931,7 +4239,6 @@ where
 
     Ok(())
 }
-#[allow(dead_code)]
 async fn prefetch_async_range_frame_roots<S>(
     prolly: &AsyncProlly<S>,
     frames: &[RangeDiffFrame],
@@ -4667,7 +4974,6 @@ where
     diff_entry_slices(&base_entries, &other_entries, diffs);
     Ok(())
 }
-#[allow(dead_code)]
 async fn diff_collected_nodes_range_async<S>(
     prolly: &AsyncProlly<S>,
     base: &Node,
@@ -4732,7 +5038,6 @@ where
 
     Ok(())
 }
-#[allow(dead_code)]
 async fn collect_entries_range_from_node_async<S>(
     prolly: &AsyncProlly<S>,
     node: &Node,
@@ -5266,8 +5571,7 @@ pub fn merge_trees_range<S: Store>(
     merge_trees_with_right_diff(prolly, base, left, &right_diff, resolver)
 }
 
-#[cfg(test)]
-fn try_structural_merge<M: CanonicalWriteManager>(
+pub(crate) fn try_structural_merge<M: CanonicalWriteManager>(
     manager: &M,
     base: &Tree,
     left: &Tree,
@@ -5824,8 +6128,7 @@ fn append_only_diff_nodes<S: Store>(
     Ok(true)
 }
 
-#[cfg(test)]
-fn merge_trees_with_right_diff<S: Store>(
+pub(crate) fn merge_trees_with_right_diff<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,
     left: &Tree,
@@ -5836,7 +6139,6 @@ fn merge_trees_with_right_diff<S: Store>(
     merge_trees_with_right_diff_traced(prolly, base, left, right_diff, resolver, &mut recorder)
 }
 
-#[cfg(test)]
 fn merge_trees_with_right_diff_traced<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,
@@ -5942,7 +6244,6 @@ fn option_bytes_eq(left: &Option<Vec<u8>>, right: Option<&[u8]>) -> bool {
     left.as_deref() == right
 }
 
-#[cfg(test)]
 fn right_changes_are_append_only_after<S: Store>(
     prolly: &Prolly<S>,
     base: &Tree,
@@ -5960,15 +6261,11 @@ fn right_changes_are_append_only_after<S: Store>(
     Ok(key_is_after_tree(prolly, first_key, base)? && key_is_after_tree(prolly, first_key, left)?)
 }
 
-#[cfg(test)]
 fn key_is_after_tree<S: Store>(prolly: &Prolly<S>, key: &[u8], tree: &Tree) -> Result<bool, Error> {
-    let Some(root_cid) = &tree.root else {
-        return Ok(true);
-    };
-
-    Ok(get_max_key(prolly, root_cid)?
-        .as_deref()
-        .map_or(true, |max_key| key > max_key))
+    Ok(prolly
+        .last_entry(tree)?
+        .as_ref()
+        .map_or(true, |(max_key, _)| key > max_key))
 }
 
 /// Build a change map from a list of diffs.
@@ -6605,6 +6902,7 @@ mod tests {
             .map(|idx| format!("k{idx:03}").into_bytes())
             .collect();
         root.vals = child_cids.into_iter().map(|cid| cid.0.to_vec()).collect();
+        root.child_counts = vec![1; root.vals.len()];
         let tree = Tree {
             root: Some(prolly.save(&root).unwrap()),
             config: Config::default(),
@@ -7326,6 +7624,15 @@ mod tests {
         assert!(
             store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 4,
             "append streaming should not hydrate the unchanged tree in one fallback batch"
+        );
+
+        let page = prolly
+            .structural_diff_page(&base, &other, None, 1_001)
+            .unwrap();
+        assert_eq!(page.diffs.len(), 1_000);
+        assert_eq!(
+            page.stats.collected_fallbacks, 0,
+            "append streaming should not collect and compare boundary-misaligned subtrees"
         );
     }
 

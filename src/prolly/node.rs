@@ -105,7 +105,7 @@ impl ReadNode {
                         let value_len = cursor.read_usize("value length")?;
                         let value_start = cursor.position();
                         cursor.read_bytes(value_len)?;
-                        let child_count = if leaf { 0 } else { cursor.read_varint()? };
+                        let child_count = read_compact_child_count(&mut cursor, leaf)?;
                         entries.push(ReadEntryMeta {
                             key_start: compact_u32(key_start, "key offset")?,
                             key_len: compact_u32(key_len, "key length")?,
@@ -127,7 +127,7 @@ impl ReadNode {
                         let value_len = cursor.read_usize("value length")?;
                         let value_start = cursor.position();
                         cursor.read_bytes(value_len)?;
-                        let child_count = if leaf { 0 } else { cursor.read_varint()? };
+                        let child_count = read_compact_child_count(&mut cursor, leaf)?;
                         entries.push(ReadEntryMeta {
                             key_start: compact_u32(key_start, "key offset")?,
                             key_len: compact_u32(key_len, "key length")?,
@@ -145,7 +145,7 @@ impl ReadNode {
                         let key_len = cursor.read_usize("key length")?;
                         let value_offset = cursor.read_usize("value offset")?;
                         let value_len = cursor.read_usize("value length")?;
-                        let child_count = if leaf { 0 } else { cursor.read_varint()? };
+                        let child_count = read_compact_child_count(&mut cursor, leaf)?;
                         offsets.push((key_offset, key_len, value_offset, value_len, child_count));
                     }
                     let payload_len = cursor.read_usize("payload length")?;
@@ -387,6 +387,18 @@ fn compact_u32(value: usize, field: &str) -> Result<u32, Error> {
 }
 
 #[inline]
+fn read_compact_child_count(cursor: &mut CompactCursor<'_>, leaf: bool) -> Result<u64, Error> {
+    if leaf {
+        return Ok(0);
+    }
+    let child_count = cursor.read_varint()?;
+    if child_count == 0 {
+        return Err(Error::InvalidNode);
+    }
+    Ok(child_count)
+}
+
+#[inline]
 fn read_slice(bytes: &[u8], start: u32, len: u32) -> Option<&[u8]> {
     let start = start as usize;
     let end = start.checked_add(len as usize)?;
@@ -481,7 +493,10 @@ impl Node {
             if !self.child_counts.is_empty() {
                 return Err(Error::InvalidNode);
             }
-        } else if self.child_counts.len() != self.keys.len() || self.child_counts.contains(&0) {
+        } else if self.keys.is_empty()
+            || self.child_counts.len() != self.keys.len()
+            || self.child_counts.contains(&0)
+        {
             return Err(Error::InvalidNode);
         }
         Ok(())
@@ -690,6 +705,7 @@ impl Node {
         } else {
             TreeFormat::from_canonical_bytes(cursor.read_bytes(format_len)?)?
         };
+        format.validate()?;
         let leaf = match cursor.read_varint()? {
             0 => false,
             1 => true,
@@ -697,14 +713,17 @@ impl Node {
         };
         let level = cursor.read_u8_varint("level")?;
         let entry_count = cursor.read_usize("entry_count")?;
+        if !leaf && entry_count == 0 {
+            return Err(Error::InvalidNode);
+        }
         let mut keys = Vec::with_capacity(entry_count);
         let mut vals = Vec::with_capacity(entry_count);
         let mut child_counts = Vec::with_capacity(if leaf { 0 } else { entry_count });
 
         match &format.node_layout {
             NodeLayoutSpec::PrefixCompressed => {
-                let mut previous_key = Vec::new();
                 for _ in 0..entry_count {
+                    let previous_key = keys.last().map(Vec::as_slice).unwrap_or_default();
                     let shared = cursor.read_usize("shared key prefix length")?;
                     if shared > previous_key.len() {
                         return Err(compact_error("shared key prefix exceeds previous key"));
@@ -713,13 +732,14 @@ impl Node {
                     let mut key = Vec::with_capacity(shared.saturating_add(suffix_len));
                     key.extend_from_slice(&previous_key[..shared]);
                     key.extend_from_slice(cursor.read_bytes(suffix_len)?);
+                    if previous_key >= key.as_slice() && !keys.is_empty() {
+                        return Err(Error::InvalidNode);
+                    }
                     let value_len = cursor.read_usize("value length")?;
                     let val = cursor.read_bytes(value_len)?.to_vec();
                     if !leaf {
-                        child_counts.push(cursor.read_varint()?);
+                        child_counts.push(read_compact_child_count(&mut cursor, false)?);
                     }
-                    previous_key.clear();
-                    previous_key.extend_from_slice(&key);
                     keys.push(key);
                     vals.push(val);
                 }
@@ -727,12 +747,20 @@ impl Node {
             NodeLayoutSpec::Plain => {
                 for _ in 0..entry_count {
                     let key_len = cursor.read_usize("key length")?;
-                    keys.push(cursor.read_bytes(key_len)?.to_vec());
-                    let value_len = cursor.read_usize("value length")?;
-                    vals.push(cursor.read_bytes(value_len)?.to_vec());
-                    if !leaf {
-                        child_counts.push(cursor.read_varint()?);
+                    let key = cursor.read_bytes(key_len)?.to_vec();
+                    if keys
+                        .last()
+                        .is_some_and(|previous: &Vec<u8>| previous.as_slice() >= key.as_slice())
+                    {
+                        return Err(Error::InvalidNode);
                     }
+                    let value_len = cursor.read_usize("value length")?;
+                    let val = cursor.read_bytes(value_len)?.to_vec();
+                    if !leaf {
+                        child_counts.push(read_compact_child_count(&mut cursor, false)?);
+                    }
+                    keys.push(key);
+                    vals.push(val);
                 }
             }
             NodeLayoutSpec::OffsetTable => {
@@ -744,13 +772,20 @@ impl Node {
                     let value_len = cursor.read_usize("value length")?;
                     offsets.push((key_offset, key_len, value_offset, value_len));
                     if !leaf {
-                        child_counts.push(cursor.read_varint()?);
+                        child_counts.push(read_compact_child_count(&mut cursor, false)?);
                     }
                 }
                 let payload_len = cursor.read_usize("payload length")?;
                 let payload = cursor.read_bytes(payload_len)?;
                 for (key_offset, key_len, value_offset, value_len) in offsets {
-                    keys.push(slice_payload(payload, key_offset, key_len, "key")?.to_vec());
+                    let key = slice_payload(payload, key_offset, key_len, "key")?.to_vec();
+                    if keys
+                        .last()
+                        .is_some_and(|previous: &Vec<u8>| previous.as_slice() >= key.as_slice())
+                    {
+                        return Err(Error::InvalidNode);
+                    }
+                    keys.push(key);
                     vals.push(slice_payload(payload, value_offset, value_len, "value")?.to_vec());
                 }
             }
@@ -900,7 +935,6 @@ impl<'a> CompactCursor<'a> {
 }
 
 /// Builder pattern for Node construction
-#[derive(Default)]
 pub struct NodeBuilder {
     keys: Vec<Vec<u8>>,
     vals: Vec<Vec<u8>>,
@@ -908,6 +942,12 @@ pub struct NodeBuilder {
     leaf: bool,
     level: u8,
     format: TreeFormat,
+}
+
+impl Default for NodeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NodeBuilder {
@@ -1021,6 +1061,12 @@ mod tests {
         assert!(node.leaf);
         assert_eq!(node.level, INIT_LEVEL);
         assert!(node.is_empty());
+    }
+
+    #[test]
+    fn default_builder_matches_default_node() {
+        assert_eq!(Node::builder().build(), Node::default());
+        assert_eq!(NodeBuilder::new().build(), Node::default());
     }
 
     #[test]
@@ -1182,6 +1228,7 @@ mod tests {
         let unsorted = Node::builder()
             .keys(vec![b"b".to_vec(), b"a".to_vec()])
             .vals(vec![b"1".to_vec(), b"2".to_vec()])
+            .leaf(true)
             .build();
         assert!(ReadNode::from_shared(Arc::from(unsorted.to_bytes())).is_err());
 
@@ -1193,6 +1240,46 @@ mod tests {
             .level(1)
             .build();
         assert!(ReadNode::from_shared(Arc::from(invalid_internal.to_bytes())).is_err());
+
+        let zero_child_count = Node::builder()
+            .keys(vec![b"a".to_vec()])
+            .vals(vec![vec![0; 32]])
+            .child_counts(vec![0])
+            .leaf(false)
+            .level(1)
+            .build();
+        assert!(ReadNode::from_shared(Arc::from(zero_child_count.to_bytes())).is_err());
+    }
+
+    #[test]
+    fn owned_node_decoder_rejects_structural_corruption() {
+        for layout in [
+            NodeLayoutSpec::PrefixCompressed,
+            NodeLayoutSpec::Plain,
+            NodeLayoutSpec::OffsetTable,
+        ] {
+            let format = TreeFormat {
+                node_layout: layout,
+                ..TreeFormat::default()
+            };
+            let unsorted = Node::builder()
+                .keys(vec![b"b".to_vec(), b"a".to_vec()])
+                .vals(vec![b"1".to_vec(), b"2".to_vec()])
+                .leaf(true)
+                .tree_format(format.clone())
+                .build();
+            assert!(Node::from_bytes(&unsorted.to_bytes()).is_err());
+
+            let zero_child_count = Node::builder()
+                .keys(vec![b"a".to_vec()])
+                .vals(vec![vec![0; 32]])
+                .child_counts(vec![0])
+                .leaf(false)
+                .level(1)
+                .tree_format(format)
+                .build();
+            assert!(Node::from_bytes(&zero_child_count.to_bytes()).is_err());
+        }
     }
 
     #[test]

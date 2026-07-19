@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use prolly::{
     append_batch, chunking, BatchApplyStats, BatchBuilder, BoundaryDetector, BoundaryRule,
-    ChunkingSpec, Config, MemStore, Mutation, NodeLayoutSpec, ParallelConfig, Prolly,
+    ChunkingSpec, Cid, Config, MemStore, Mutation, Node, NodeLayoutSpec, ParallelConfig, Prolly,
     ProllyMetricsSnapshot, Resolution, Resolver, SortedBatchBuilder, Store, Tree,
 };
 
@@ -110,6 +110,7 @@ fn main() {
             return;
         }
         Ok("append-chain") => {
+            bench_append_batch_direct(scale);
             bench_append_batch_chain(scale);
             bench_append_batch_chain_cold(scale);
             return;
@@ -123,6 +124,7 @@ fn main() {
             return;
         }
         Ok("batch-regressions") => {
+            bench_batch_mutations(scale);
             bench_batch_mutations_mixed(scale);
             bench_parallel_batch_mutations(scale);
             return;
@@ -144,6 +146,10 @@ fn main() {
         }
         Ok("boundary-hot-path") => {
             bench_boundary_hot_path();
+            return;
+        }
+        Ok("validated-node-decode") => {
+            bench_validated_node_decode();
             return;
         }
         Ok(_) | Err(_) => {}
@@ -1143,6 +1149,44 @@ fn bench_append_batch_chain_cold(items: usize) {
             black_box(tree.root);
         },
     );
+}
+
+fn bench_validated_node_decode() {
+    let entries = std::env::var("PROLLY_DECODE_ENTRIES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(64)
+        .max(1);
+    let node = Node::builder()
+        .keys(
+            (0..entries)
+                .map(|index| format!("key/{index:016}").into_bytes())
+                .collect(),
+        )
+        .vals(
+            (0..entries)
+                .map(|index| format!("value/{index:032}").into_bytes())
+                .collect(),
+        )
+        .leaf(true)
+        .build();
+    node.validate().expect("decode benchmark fixture is valid");
+    let format = node.format.clone();
+    let bytes = node.to_bytes();
+    let expected = Cid::from_bytes(&bytes);
+    let iterations = 20_000;
+
+    measure("node_cid_sha256", iterations, 1, || {
+        black_box(Cid::from_bytes(black_box(&bytes)));
+    });
+    measure("node_decode_structural", iterations, 1, || {
+        black_box(Node::from_bytes_with_format(black_box(&bytes), &format).unwrap());
+    });
+    measure("node_validate_and_decode", iterations, 1, || {
+        let actual = Cid::from_bytes(black_box(&bytes));
+        assert_eq!(actual, expected);
+        black_box(Node::from_bytes_with_format(black_box(&bytes), &format).unwrap());
+    });
 }
 
 fn bench_parallel_batch_mutations(items: usize) {

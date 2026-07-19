@@ -292,11 +292,6 @@ pub(crate) fn apply_configured<M: CanonicalWriteManager>(
     apply_impl(manager, tree, mutations, true, Some(config))
 }
 
-#[cfg(test)]
-#[expect(
-    dead_code,
-    reason = "legacy facade oracle retained for root comparison"
-)]
 pub(crate) fn apply_tree<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,
@@ -305,11 +300,6 @@ pub(crate) fn apply_tree<M: CanonicalWriteManager>(
     Ok(apply_impl(manager, tree, mutations, false, None)?.0)
 }
 
-#[cfg(test)]
-#[expect(
-    dead_code,
-    reason = "legacy facade oracle retained for root comparison"
-)]
 pub(crate) fn apply_tree_configured<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,

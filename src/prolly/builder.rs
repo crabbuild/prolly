@@ -10,7 +10,7 @@ use super::encoding::INIT_LEVEL;
 use super::engine::ProllyEngine;
 use super::error::Error;
 use super::node::Node;
-use super::store::{AsyncStore, Store, SyncStoreAsAsync};
+use super::store::{AsyncStore, Store};
 use super::tree::Tree;
 
 use rayon::prelude::*;
@@ -562,7 +562,7 @@ where
     }
 
     fn persist_nodes(&self, nodes: &[BuiltNode]) -> Result<(), Error> {
-        persist_nodes(&self.store, &self.config, nodes)
+        persist_nodes(&self.store, nodes)
     }
 }
 
@@ -643,7 +643,7 @@ where
     }
 
     fn flush_pending_nodes(&mut self) -> Result<(), Error> {
-        persist_nodes(&self.store, &self.config, &self.pending_nodes)?;
+        persist_nodes(&self.store, &self.pending_nodes)?;
         self.pending_nodes.clear();
         Ok(())
     }
@@ -829,11 +829,7 @@ fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.vals.reserve_exact(additional);
 }
 
-fn persist_nodes<S: Store + Clone>(
-    store: &S,
-    config: &Config,
-    nodes: &[BuiltNode],
-) -> Result<(), Error>
+fn persist_nodes<S: Store + Clone>(store: &S, nodes: &[BuiltNode]) -> Result<(), Error>
 where
     S::Error: Send + Sync,
 {
@@ -841,14 +837,16 @@ where
         return Ok(());
     }
 
+    // BuiltNode is private to the canonical builder. Its CID and encoded bytes
+    // are produced together, so publication need not decode and validate them
+    // again; every later cache admission still validates persisted bytes.
     let entries = nodes
         .iter()
-        .map(|node| (&node.cid, node.bytes.as_slice()))
+        .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
         .collect::<Vec<_>>();
-    let engine = ProllyEngine::new(SyncStoreAsAsync::new(store.clone()), config.clone());
-    let ready_store = engine.store.clone();
-    let future = engine.publish_builder_node_refs(&entries);
-    super::engine::ready::run_ready(ready_store.ready(future))
+    store
+        .batch_put(&entries)
+        .map_err(|error| Error::Store(Box::new(error)))
 }
 
 #[cfg(test)]

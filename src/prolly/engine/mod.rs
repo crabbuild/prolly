@@ -439,7 +439,9 @@ fn validate_cached_node(
     node: &Node,
     expected_format: &super::format::TreeFormat,
 ) -> Result<(), Error> {
-    node.validate()?;
+    // Cache admission decodes and fully validates immutable nodes. Repeating
+    // structural validation on every hit is redundant; callers still need the
+    // format check because a tree carries its own persisted format.
     if node.format != *expected_format {
         return Err(Error::FormatMismatch {
             expected: expected_format.digest()?,

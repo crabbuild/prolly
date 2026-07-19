@@ -58,6 +58,12 @@ libc = "0.2"
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3.103"
 
+[target.'cfg(all(target_arch = "aarch64", not(target_os = "windows")))'.dependencies]
+# sha2 0.10 gates its ARMv8 SHA-256 implementation behind this feature.
+# Keep it target-specific; sha2-asm does not support Windows, and WASM plus
+# unsupported architectures must retain the portable implementation.
+sha2 = { version = "0.10", features = ["asm-aarch64"] }
+
 [lints.rust]
 unsafe_code = "allow"
 
