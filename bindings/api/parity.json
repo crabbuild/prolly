@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-19T18:34:17+00:00",
+  "generated_at": "2026-07-19T23:22:21+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -3080,6 +3080,17 @@
         "bindings/api/idiomatic-equivalents.json#store-trait"
       ],
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::AsyncStore::prefers_rightmost_path_hints",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncStore::publish_nodes",
@@ -28154,6 +28165,17 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::RemoteStoreBackend::prefers_rightmost_path_hints",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::RemoteStoreBackend::publish_nodes",
       "classification": "portable",
       "status": "planned",
@@ -33952,6 +33974,17 @@
         "bindings/api/idiomatic-equivalents.json#store-trait"
       ],
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::Store::prefers_rightmost_path_hints",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::Store::publish_nodes",

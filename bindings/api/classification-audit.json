@@ -9,10 +9,10 @@
     "reviewed_incomplete": 402,
     "unreviewed_runtime_candidate": 706,
     "unreviewed_data_model": 1481,
-    "unreviewed_rust_abstraction": 4
+    "unreviewed_rust_abstraction": 7
   },
   "family_counts": {
-    "core": 1579,
+    "core": 1582,
     "indexed-map": 249,
     "maintenance": 298,
     "proof": 171,
@@ -32,14 +32,14 @@
     "prolly::Node": 25,
     "prolly::StatsDiff": 25,
     "prolly::StatsPercentageChange": 25,
+    "prolly::RemoteStoreBackend": 24,
     "prolly::ReadSession": 23,
-    "prolly::RemoteStoreBackend": 23,
     "prolly::AsyncReadSession": 21,
+    "prolly::AsyncStore": 21,
     "prolly::ProximityMap": 21,
-    "prolly::AsyncStore": 20,
+    "prolly::Store": 20,
     "prolly::IndexedSnapshotBundle": 19,
     "prolly::MergePolicyRegistry": 19,
-    "prolly::Store": 19,
     "prolly::BatchApplyStats": 18,
     "prolly::WriteStats": 17,
     "prolly::AsyncVersionedMap": 16,
@@ -2388,6 +2388,16 @@
       "classification": "idiomatic",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::AsyncStore::prefers_rightmost_path_hints",
+      "kind": "function",
+      "owner": "prolly::AsyncStore",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
     },
     {
       "rust": "prolly::AsyncStore::publish_nodes",
@@ -21130,6 +21140,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::RemoteStoreBackend::prefers_rightmost_path_hints",
+      "kind": "function",
+      "owner": "prolly::RemoteStoreBackend",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
+    },
+    {
       "rust": "prolly::RemoteStoreBackend::publish_nodes",
       "kind": "function",
       "owner": "prolly::RemoteStoreBackend",
@@ -25268,6 +25288,16 @@
       "classification": "idiomatic",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::Store::prefers_rightmost_path_hints",
+      "kind": "function",
+      "owner": "prolly::Store",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
     },
     {
       "rust": "prolly::Store::publish_nodes",

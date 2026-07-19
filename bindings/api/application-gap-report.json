@@ -13,7 +13,7 @@
     "unmapped_application_operations": 402,
     "mapped_missing_evidence": 0,
     "platform_review_required": 0,
-    "application_review_required": 709,
+    "application_review_required": 712,
     "non_application_runtime": 0,
     "data_model_or_abstraction_debt": 1482
   },
@@ -18880,6 +18880,32 @@
       "reconciliation_evidence": []
     },
     {
+      "rust": "prolly::AsyncStore::prefers_rightmost_path_hints",
+      "kind": "function",
+      "owner": "prolly::AsyncStore",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "missing_languages": [
+        "go",
+        "java",
+        "kotlin",
+        "node",
+        "python",
+        "ruby",
+        "swift",
+        "wasm"
+      ],
+      "tests": [],
+      "performance": "owned",
+      "rationale": null,
+      "audience": null,
+      "audience_rationale": null,
+      "reconciliation": null,
+      "reconciliation_evidence": []
+    },
+    {
       "rust": "prolly::AsyncStore::publish_nodes",
       "kind": "function",
       "owner": "prolly::AsyncStore",
@@ -32296,6 +32322,32 @@
       "reconciliation_evidence": []
     },
     {
+      "rust": "prolly::RemoteStoreBackend::prefers_rightmost_path_hints",
+      "kind": "function",
+      "owner": "prolly::RemoteStoreBackend",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "missing_languages": [
+        "go",
+        "java",
+        "kotlin",
+        "node",
+        "python",
+        "ruby",
+        "swift",
+        "wasm"
+      ],
+      "tests": [],
+      "performance": "owned",
+      "rationale": null,
+      "audience": null,
+      "audience_rationale": null,
+      "reconciliation": null,
+      "reconciliation_evidence": []
+    },
+    {
       "rust": "prolly::RemoteStoreBackend::publish_nodes",
       "kind": "function",
       "owner": "prolly::RemoteStoreBackend",
@@ -33158,6 +33210,32 @@
       "kind": "function",
       "owner": "prolly::StatsComparison",
       "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "missing_languages": [
+        "go",
+        "java",
+        "kotlin",
+        "node",
+        "python",
+        "ruby",
+        "swift",
+        "wasm"
+      ],
+      "tests": [],
+      "performance": "owned",
+      "rationale": null,
+      "audience": null,
+      "audience_rationale": null,
+      "reconciliation": null,
+      "reconciliation_evidence": []
+    },
+    {
+      "rust": "prolly::Store::prefers_rightmost_path_hints",
+      "kind": "function",
+      "owner": "prolly::Store",
+      "member_kind": "trait-item",
       "family": "core",
       "classification": "portable",
       "status": "planned",
