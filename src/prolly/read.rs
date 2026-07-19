@@ -499,7 +499,9 @@ impl<S: Store> Prolly<S> {
         K: AsRef<[u8]>,
         F: for<'value> FnMut(usize, &[u8], Option<&'value [u8]>),
     {
-        self.read(tree)?.get_many_with(keys, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.get_many_with(tree, keys, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit the entry at a zero-based ordinal without copying it.
@@ -509,7 +511,9 @@ impl<S: Store> Prolly<S> {
         ordinal: u64,
         read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
     ) -> Result<Option<R>, Error> {
-        self.read(tree)?.select_with(ordinal, read)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.select_with(tree, ordinal, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit the first entry without copying it.
@@ -518,7 +522,9 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
     ) -> Result<Option<R>, Error> {
-        self.read(tree)?.first_entry_with(read)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.first_entry_with(tree, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit the last entry without copying it.
@@ -527,7 +533,9 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
     ) -> Result<Option<R>, Error> {
-        self.read(tree)?.last_entry_with(read)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.last_entry_with(tree, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit the first entry with key greater than or equal to `key`.
@@ -537,7 +545,9 @@ impl<S: Store> Prolly<S> {
         key: &[u8],
         read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
     ) -> Result<Option<R>, Error> {
-        self.read(tree)?.lower_bound_with(key, read)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.lower_bound_with(tree, key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit the first entry with key strictly greater than `key`.
@@ -547,7 +557,9 @@ impl<S: Store> Prolly<S> {
         key: &[u8],
         read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
     ) -> Result<Option<R>, Error> {
-        self.read(tree)?.upper_bound_with(key, read)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.upper_bound_with(tree, key, read);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a half-open range in ascending key order.
@@ -558,7 +570,9 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         visit: impl for<'entry> FnMut(EntryRef<'entry>),
     ) -> Result<u64, Error> {
-        self.read(tree)?.scan_range(start, end, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_range(tree, start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a half-open range in ascending order with early termination.
@@ -569,7 +583,9 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        self.read(tree)?.scan_range_until(start, end, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_range_until(tree, start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit every entry under `prefix` in ascending key order.
@@ -579,7 +595,9 @@ impl<S: Store> Prolly<S> {
         prefix: &[u8],
         visit: impl for<'entry> FnMut(EntryRef<'entry>),
     ) -> Result<u64, Error> {
-        self.read(tree)?.scan_prefix(prefix, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_prefix(tree, prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit every entry under `prefix` with early termination.
@@ -589,7 +607,9 @@ impl<S: Store> Prolly<S> {
         prefix: &[u8],
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        self.read(tree)?.scan_prefix_until(prefix, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_prefix_until(tree, prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a half-open range in descending key order.
@@ -600,7 +620,9 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         visit: impl for<'entry> FnMut(EntryRef<'entry>),
     ) -> Result<u64, Error> {
-        self.read(tree)?.scan_range_reverse(start, end, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_range_reverse(tree, start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a half-open descending range with early termination.
@@ -611,7 +633,11 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        self.read(tree)?.scan_range_reverse_until(start, end, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self
+            .engine
+            .scan_range_reverse_until(tree, start, end, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a prefix in descending key order.
@@ -621,7 +647,9 @@ impl<S: Store> Prolly<S> {
         prefix: &[u8],
         visit: impl for<'entry> FnMut(EntryRef<'entry>),
     ) -> Result<u64, Error> {
-        self.read(tree)?.scan_prefix_reverse(prefix, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_prefix_reverse(tree, prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Visit a descending prefix with early termination.
@@ -631,7 +659,9 @@ impl<S: Store> Prolly<S> {
         prefix: &[u8],
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        self.read(tree)?.scan_prefix_reverse_until(prefix, visit)
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.scan_prefix_reverse_until(tree, prefix, visit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 }
 
@@ -1961,12 +1991,29 @@ where
             .await
     }
 
+    pub async fn select_with<R>(
+        &self,
+        tree: &Tree,
+        ordinal: u64,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.read(tree).await?.select_with(ordinal, read).await
+    }
+
     /// Return the first key/value entry in key order.
     pub async fn first_entry(&self, tree: &Tree) -> Result<Option<KeyValue>, Error> {
         self.read(tree)
             .await?
             .first_entry_with(|entry| entry.to_owned())
             .await
+    }
+
+    pub async fn first_entry_with<R>(
+        &self,
+        tree: &Tree,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.read(tree).await?.first_entry_with(read).await
     }
 
     /// Return the last key/value entry in key order.
@@ -1977,6 +2024,14 @@ where
             .await
     }
 
+    pub async fn last_entry_with<R>(
+        &self,
+        tree: &Tree,
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.read(tree).await?.last_entry_with(read).await
+    }
+
     /// Return the first entry whose key is greater than or equal to `key`.
     pub async fn lower_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         self.read(tree)
@@ -1985,12 +2040,30 @@ where
             .await
     }
 
+    pub async fn lower_bound_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.read(tree).await?.lower_bound_with(key, read).await
+    }
+
     /// Return the first entry whose key is strictly greater than `key`.
     pub async fn upper_bound(&self, tree: &Tree, key: &[u8]) -> Result<Option<KeyValue>, Error> {
         self.read(tree)
             .await?
             .upper_bound_with(key, |entry| entry.to_owned())
             .await
+    }
+
+    pub async fn upper_bound_with<R>(
+        &self,
+        tree: &Tree,
+        key: &[u8],
+        read: impl for<'entry> FnOnce(EntryRef<'entry>) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.read(tree).await?.upper_bound_with(key, read).await
     }
 
     /// Read one async-store value without allocating an owned result.
