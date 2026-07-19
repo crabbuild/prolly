@@ -1416,7 +1416,7 @@ scripts/run_node_publication_revision_gate.sh \
   --candidate-repo /Users/haipingfu/CrabDB-worktrees/prolly-async-first \
   --output performance-results/node-publication-full-2026-07-19 \
   --sizes 10000,50000,100000,500000,1000000,2000000 \
-  --runs 3 --changes auto \
+  --runs 3 --minimum-pairs 3 --changes auto \
   --apis put,batch,diff,merge \
   --patterns append,random,clustered \
   --adapters sqlite-sync,turso-async

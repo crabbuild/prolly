@@ -15,9 +15,10 @@ PATTERNS=""
 ADAPTERS=""
 ISOLATE_CELLS=false
 MEASUREMENT_SAMPLES=1
+MINIMUM_PAIRS=5
 
 usage() {
-  printf '%s\n' 'usage: run_node_publication_revision_gate.sh --suite foundation|sqlite-turso --baseline-repo PATH --candidate-repo PATH --output PATH --sizes CSV --runs N --changes N|auto --apis CSV --patterns CSV --adapters CSV [--measurement-samples N] [--isolate-cells]'
+  printf '%s\n' 'usage: run_node_publication_revision_gate.sh --suite foundation|sqlite-turso --baseline-repo PATH --candidate-repo PATH --output PATH --sizes CSV --runs N --changes N|auto --apis CSV --patterns CSV --adapters CSV [--measurement-samples N] [--minimum-pairs N] [--isolate-cells]'
 }
 
 while (($#)); do
@@ -33,6 +34,7 @@ while (($#)); do
     --patterns) PATTERNS="${2:?--patterns requires a value}"; shift 2 ;;
     --adapters) ADAPTERS="${2:?--adapters requires a value}"; shift 2 ;;
     --measurement-samples) MEASUREMENT_SAMPLES="${2:?--measurement-samples requires a value}"; shift 2 ;;
+    --minimum-pairs) MINIMUM_PAIRS="${2:?--minimum-pairs requires a value}"; shift 2 ;;
     --isolate-cells) ISOLATE_CELLS=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -60,6 +62,10 @@ if [[ "$CHANGES" != "auto" && ! "$CHANGES" =~ ^[1-9][0-9]*$ ]]; then
 fi
 if [[ ! "$MEASUREMENT_SAMPLES" =~ ^[1-9][0-9]*$ ]] || ((MEASUREMENT_SAMPLES > 254)); then
   printf 'measurement samples must be between 1 and 254\n' >&2
+  exit 2
+fi
+if [[ ! "$MINIMUM_PAIRS" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'minimum pairs must be a positive integer\n' >&2
   exit 2
 fi
 if [[ -n "$(git -C "$BASELINE_REPO" status --porcelain)" ]]; then
@@ -102,8 +108,8 @@ capture_machine() {
     printf 'candidate_revision=%s\n' "$CANDIDATE_REVISION"
     printf 'sizes=%s\nruns=%s\nchanges=%s\napis=%s\npatterns=%s\nadapters=%s\n' \
       "$SIZES" "$RUNS" "$CHANGES" "$APIS" "$PATTERNS" "$ADAPTERS"
-    printf 'execution=alternating-local-only\nisolate_cells=%s\nmeasurement_samples=%s\ncloud_sync=disabled\n' \
-      "$ISOLATE_CELLS" "$MEASUREMENT_SAMPLES"
+    printf 'execution=alternating-local-only\nisolate_cells=%s\nmeasurement_samples=%s\nminimum_pairs=%s\ncloud_sync=disabled\n' \
+      "$ISOLATE_CELLS" "$MEASUREMENT_SAMPLES" "$MINIMUM_PAIRS"
   } > "$OUTPUT/provenance.txt"
 }
 
@@ -299,6 +305,6 @@ done
 python3 "$SCRIPT_DIR/summarize_node_publication_revision_gate.py" \
   --input "$OUTPUT/raw-results.csv" \
   --output-dir "$OUTPUT" \
-  --minimum-pairs 5
+  --minimum-pairs "$MINIMUM_PAIRS"
 
 printf 'node-publication revision gate complete: %s\n' "$OUTPUT"
