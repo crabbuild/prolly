@@ -212,12 +212,15 @@ order. The first logical error is selected by frame order, not completion
 order. Resolver callbacks are synchronous and receive callback-scoped values;
 their borrows end before the next await.
 
-## Testing strategy
+## Verification strategy
 
-Implementation follows red-green-refactor slices.
+Implementation follows measurement-driven engineering slices. Each slice
+captures a profile, changes one cost center, verifies correctness, and then
+runs its focused performance gate. Tests may be written alongside or after the
+implementation; failing-first test order is not required.
 
-1. Add diagnostic tests that expose replay attempt counts and prove the current
-   merge performs repeated work. The tests must fail before production changes.
+1. Add diagnostics that expose replay attempt counts and quantify the current
+   merge's repeated work before production changes.
 2. Add state-machine equivalence tests against the test-only merge oracle for
    equal branches, disjoint sparse edits, dense conflicts, deletes, shape
    mismatch, custom formats, malformed nodes, and resolver failures.

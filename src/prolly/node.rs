@@ -256,6 +256,21 @@ impl ReadNode {
     }
 
     #[inline]
+    pub(crate) fn entry(&self, index: usize) -> Option<(&[u8], &[u8])> {
+        let entry = self.entries.get(index)?;
+        let key_source = self.prefix_keys.as_deref().unwrap_or(&self.bytes);
+        let key = read_slice(key_source, entry.key_start, entry.key_len)?;
+        let value = read_slice(&self.bytes, entry.value_start, entry.value_len)?;
+        Some((key, value))
+    }
+
+    #[inline]
+    pub(crate) fn entry_owned(&self, index: usize) -> Option<(Vec<u8>, Vec<u8>)> {
+        self.entry(index)
+            .map(|(key, value)| (key.to_vec(), value.to_vec()))
+    }
+
+    #[inline]
     pub(crate) fn child_count(&self, index: usize) -> Option<u64> {
         (!self.leaf)
             .then(|| self.entries.get(index).map(|entry| entry.child_count))

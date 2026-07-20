@@ -309,17 +309,26 @@ impl<S: Store> Iterator for RangeIter<'_, S> {
     type Item = RangeItem;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let (Some((node, index)), Some(leaf_end)) =
+            (self.inner.stack.last_mut(), self.inner.leaf_end)
+        {
+            if node.is_leaf() && *index < leaf_end {
+                let entry_index = *index;
+                *index += 1;
+                if let Some((_, last_index)) = self.inner.last_location.as_mut() {
+                    *last_index = entry_index;
+                }
+                return Some(node.entry_owned(entry_index).ok_or(Error::InvalidNode));
+            }
+        }
+
         loop {
             match self.inner.ready_step() {
                 RangeStep::Entry => {
                     let Some((node, index)) = self.inner.last_location.as_ref() else {
                         return Some(Err(Error::InvalidNode));
                     };
-                    let key = node.key(*index).ok_or(Error::InvalidNode);
-                    let value = node.value(*index).ok_or(Error::InvalidNode);
-                    return Some(
-                        key.and_then(|key| value.map(|value| (key.to_vec(), value.to_vec()))),
-                    );
+                    return Some(node.entry_owned(*index).ok_or(Error::InvalidNode));
                 }
                 RangeStep::NeedsChild => {
                     let ready_store = self.inner.prolly.store.clone();
@@ -354,6 +363,7 @@ pub struct AsyncRangeIter<'a, S: AsyncStore> {
     start_key: Vec<u8>,
     skip_start_key: bool,
     last_location: Option<(Arc<ReadNode>, usize)>,
+    leaf_end: Option<usize>,
 }
 impl<'a, S> AsyncRangeIter<'a, S>
 where
@@ -374,6 +384,7 @@ where
             start_key: start.to_vec(),
             skip_start_key: false,
             last_location: None,
+            leaf_end: None,
         }
     }
 
@@ -391,12 +402,40 @@ where
             start_key: after_key.to_vec(),
             skip_start_key: true,
             last_location: None,
+            leaf_end: None,
         }
     }
 
     /// Return the next key-value pair in lexicographic order.
     pub async fn next(&mut self) -> Option<RangeItem> {
-        self.next_with(|entry| entry.to_owned()).await
+        if let (Some((node, index)), Some(leaf_end)) = (self.stack.last_mut(), self.leaf_end) {
+            if node.is_leaf() && *index < leaf_end {
+                let entry_index = *index;
+                *index += 1;
+                if let Some((_, last_index)) = self.last_location.as_mut() {
+                    *last_index = entry_index;
+                }
+                return Some(node.entry_owned(entry_index).ok_or(Error::InvalidNode));
+            }
+        }
+
+        loop {
+            match self.ready_step() {
+                RangeStep::Entry => {
+                    let Some((node, index)) = self.last_location.as_ref() else {
+                        return Some(Err(Error::InvalidNode));
+                    };
+                    return Some(node.entry_owned(*index).ok_or(Error::InvalidNode));
+                }
+                RangeStep::NeedsChild => {
+                    if let Err(error) = self.descend_next_child().await {
+                        return Some(Err(error));
+                    }
+                }
+                RangeStep::Finished => return None,
+                RangeStep::Error(error) => return Some(Err(error)),
+            }
+        }
     }
 
     /// Visit the next entry without copying its key or value.
@@ -409,19 +448,32 @@ where
     ) -> Option<Result<R, Error>> {
         let mut read = Some(read);
 
+        if let (Some((node, index)), Some(leaf_end)) = (self.stack.last_mut(), self.leaf_end) {
+            if node.is_leaf() && *index < leaf_end {
+                let entry_index = *index;
+                *index += 1;
+                if let Some((_, last_index)) = self.last_location.as_mut() {
+                    *last_index = entry_index;
+                }
+                let Some((key, value)) = node.entry(entry_index) else {
+                    return Some(Err(Error::InvalidNode));
+                };
+                return Some(Ok(read
+                    .take()
+                    .expect("async range callback is invoked at most once")(
+                    EntryRef::new(key, value),
+                )));
+            }
+        }
+
         loop {
             match self.ready_step() {
                 RangeStep::Entry => {
                     let Some((node, index)) = self.last_location.as_ref() else {
                         return Some(Err(Error::InvalidNode));
                     };
-                    let key = match node.key(*index) {
-                        Some(key) => key,
-                        None => return Some(Err(Error::InvalidNode)),
-                    };
-                    let value = match node.value(*index) {
-                        Some(value) => value,
-                        None => return Some(Err(Error::InvalidNode)),
+                    let Some((key, value)) = node.entry(*index) else {
+                        return Some(Err(Error::InvalidNode));
                     };
                     return Some(Ok(read
                         .take()
@@ -484,6 +536,9 @@ where
                 Ok(i) if self.skip_start_key => i.saturating_add(1),
                 Ok(i) | Err(i) => i,
             };
+            self.leaf_end = Some(self.end.as_deref().map_or(node.len(), |end| {
+                node.search(end).unwrap_or_else(|index| index)
+            }));
         }
     }
 
@@ -504,25 +559,25 @@ where
             }
 
             if node.is_leaf() {
-                let index = *idx;
-                let Some(key) = node.key(index) else {
-                    return RangeStep::Error(Error::InvalidNode);
+                let entering_leaf = self.leaf_end.is_none();
+                let leaf_end = match self.leaf_end {
+                    Some(leaf_end) => leaf_end,
+                    None => {
+                        let leaf_end = self.end.as_deref().map_or(node.len(), |end| {
+                            node.search(end).unwrap_or_else(|index| index)
+                        });
+                        self.leaf_end = Some(leaf_end);
+                        leaf_end
+                    }
                 };
-                if self.end.as_deref().is_some_and(|end| key >= end) {
+                if *idx >= leaf_end {
                     return RangeStep::Finished;
                 }
+                let index = *idx;
                 *idx += 1;
-                if self
-                    .last_location
-                    .as_ref()
-                    .is_some_and(|(last_node, _)| Arc::ptr_eq(last_node, node))
-                {
-                    self.last_location
-                        .as_mut()
-                        .expect("same-leaf location exists")
-                        .1 = index;
-                } else {
-                    self.last_location = Some((node.clone(), index));
+                match self.last_location.as_mut() {
+                    Some((_, last_index)) if !entering_leaf => *last_index = index,
+                    _ => self.last_location = Some((node.clone(), index)),
                 }
                 return RangeStep::Entry;
             }
@@ -543,12 +598,14 @@ where
             .ok_or(Error::InvalidNode)?;
         let child = self.load_child_for_descent(&node, index).await?;
         self.stack.push((child, 0));
+        self.leaf_end = None;
         Ok(())
     }
 
     fn advance_to_next_sibling(&mut self) -> Result<bool, Error> {
         loop {
             self.stack.pop();
+            self.leaf_end = None;
             let Some((parent, parent_idx)) = self.stack.last_mut() else {
                 return Ok(false);
             };

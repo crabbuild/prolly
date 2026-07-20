@@ -926,9 +926,29 @@ pub struct Prolly<S: Store> {
 }
 
 struct BranchLineageCache {
-    records: HashMap<(Option<Cid>, Cid), BranchLineage>,
-    insertion_order: VecDeque<(Option<Cid>, Cid)>,
+    records: VecDeque<(Cid, CachedBranchLineage)>,
+    ancestry_index: Option<HashMap<Cid, usize>>,
+    accelerations: VecDeque<BranchLineageAcceleration>,
+    acceleration_bytes: usize,
     max_records: usize,
+    max_bytes: usize,
+    retained_bytes: usize,
+}
+
+struct CachedBranchLineage {
+    parent: Option<Cid>,
+    lineage: BranchLineage,
+    retained_bytes: usize,
+}
+
+pub(crate) type BranchChanges = Arc<Vec<Mutation>>;
+pub(crate) type BranchChangePair = (BranchChanges, BranchChanges);
+
+struct BranchLineageAcceleration {
+    base: Option<Cid>,
+    branch: Cid,
+    changes: BranchChanges,
+    retained_bytes: usize,
 }
 
 pub(crate) struct BranchLineage {
@@ -946,27 +966,51 @@ pub(crate) struct BranchLineage {
 impl Default for BranchLineageCache {
     fn default() -> Self {
         Self {
-            records: HashMap::new(),
-            insertion_order: VecDeque::new(),
-            max_records: 4,
+            records: VecDeque::new(),
+            ancestry_index: None,
+            accelerations: VecDeque::new(),
+            acceleration_bytes: 0,
+            max_records: 8_192,
+            max_bytes: 8 * 1024 * 1024,
+            retained_bytes: 0,
         }
     }
 }
 
 impl BranchLineageCache {
     fn insert(&mut self, parent: Option<Cid>, root: Cid, lineage: BranchLineage) {
-        let key = (parent, root);
-        if self.records.insert(key.clone(), lineage).is_none() {
-            self.insertion_order.push_back(key);
+        let retained_bytes = lineage
+            .mutations
+            .iter()
+            .map(|mutation| match mutation {
+                Mutation::Upsert { key, val } => key.len().saturating_add(val.len()),
+                Mutation::Delete { key } => key.len(),
+            })
+            .sum::<usize>()
+            .saturating_add(std::mem::size_of::<CachedBranchLineage>());
+        if retained_bytes > self.max_bytes {
+            return;
         }
-        while self.records.len() > self.max_records {
-            let Some(oldest) = self.insertion_order.pop_front() else {
+        self.records.push_back((
+            root,
+            CachedBranchLineage {
+                parent,
+                lineage,
+                retained_bytes,
+            },
+        ));
+        self.ancestry_index = None;
+        self.retained_bytes = self.retained_bytes.saturating_add(retained_bytes);
+        while self.records.len() > self.max_records || self.retained_bytes > self.max_bytes {
+            if let Some((_, removed)) = self.records.pop_front() {
+                self.retained_bytes = self.retained_bytes.saturating_sub(removed.retained_bytes);
+            } else {
                 break;
-            };
-            self.records.remove(&oldest);
+            }
         }
     }
 
+    #[cfg(test)]
     fn direct_changes(
         &self,
         parent: &Option<Cid>,
@@ -974,8 +1018,138 @@ impl BranchLineageCache {
     ) -> Option<Arc<Vec<Mutation>>> {
         let child = child.as_ref()?;
         self.records
-            .get(&(parent.clone(), child.clone()))
-            .map(|lineage| Arc::clone(&lineage.mutations))
+            .iter()
+            .rev()
+            .find(|(root, record)| root == child && &record.parent == parent)
+            .map(|(_, record)| record)
+            .map(|record| Arc::clone(&record.lineage.mutations))
+    }
+
+    fn changes_since(
+        &mut self,
+        base: &Option<Cid>,
+        branch: &Option<Cid>,
+    ) -> Option<Arc<Vec<Mutation>>> {
+        if base == branch {
+            return Some(Arc::new(Vec::new()));
+        }
+        let branch_root = branch.as_ref()?;
+        if let Some(acceleration) =
+            self.accelerations.iter().rev().find(|acceleration| {
+                &acceleration.base == base && &acceleration.branch == branch_root
+            })
+        {
+            return Some(Arc::clone(&acceleration.changes));
+        }
+        self.ensure_ancestry_index();
+        let index = self.ancestry_index.as_ref()?;
+        let changes = Self::changes_since_indexed(&self.records, index, base, branch)?;
+        let bytes = changes
+            .iter()
+            .map(|mutation| match mutation {
+                Mutation::Upsert { key, val } => key.len().saturating_add(val.len()),
+                Mutation::Delete { key } => key.len(),
+            })
+            .sum::<usize>();
+        if bytes <= 2 * 1024 * 1024 {
+            self.accelerations.push_back(BranchLineageAcceleration {
+                base: base.clone(),
+                branch: branch_root.clone(),
+                changes: Arc::clone(&changes),
+                retained_bytes: bytes,
+            });
+            self.acceleration_bytes = self.acceleration_bytes.saturating_add(bytes);
+            while self.accelerations.len() > 8 || self.acceleration_bytes > 2 * 1024 * 1024 {
+                if let Some(removed) = self.accelerations.pop_front() {
+                    self.acceleration_bytes = self
+                        .acceleration_bytes
+                        .saturating_sub(removed.retained_bytes);
+                } else {
+                    break;
+                }
+            }
+        }
+        Some(changes)
+    }
+
+    fn change_pair(
+        &mut self,
+        base: &Option<Cid>,
+        left: &Option<Cid>,
+        right: &Option<Cid>,
+    ) -> Option<BranchChangePair> {
+        Some((
+            self.changes_since(base, left)?,
+            self.changes_since(base, right)?,
+        ))
+    }
+
+    fn ensure_ancestry_index(&mut self) {
+        if self.ancestry_index.is_some() {
+            return;
+        }
+        self.ancestry_index = Some(
+            self.records
+                .iter()
+                .enumerate()
+                .map(|(position, (root, _))| (root.clone(), position))
+                .collect(),
+        );
+    }
+
+    fn changes_since_indexed(
+        records: &VecDeque<(Cid, CachedBranchLineage)>,
+        index: &HashMap<Cid, usize>,
+        base: &Option<Cid>,
+        branch: &Option<Cid>,
+    ) -> Option<Arc<Vec<Mutation>>> {
+        const MAX_HOPS: usize = 8_192;
+        const MAX_MUTATIONS: usize = 65_536;
+
+        if base == branch {
+            return Some(Arc::new(Vec::new()));
+        }
+
+        let mut current = branch.clone();
+        let mut chain = Vec::new();
+        let mut mutation_count = 0usize;
+        for _ in 0..MAX_HOPS {
+            if &current == base {
+                break;
+            }
+            let cid = current.as_ref()?;
+            let position = *index.get(cid)?;
+            let record = &records.get(position)?.1;
+            mutation_count = mutation_count.checked_add(record.lineage.mutations.len())?;
+            if mutation_count > MAX_MUTATIONS {
+                return None;
+            }
+            chain.push(Arc::clone(&record.lineage.mutations));
+            current = record.parent.clone();
+        }
+        if &current != base {
+            return None;
+        }
+        if chain.len() == 1 {
+            return chain.pop();
+        }
+
+        let mut mutations = Vec::with_capacity(mutation_count);
+        for changes in chain.into_iter().rev() {
+            mutations.extend(changes.iter().cloned());
+        }
+        mutations.sort_by(|left, right| left.key().cmp(right.key()));
+        let mut normalized = Vec::with_capacity(mutations.len());
+        for mutation in mutations {
+            if normalized
+                .last()
+                .is_some_and(|previous: &Mutation| previous.key() == mutation.key())
+            {
+                normalized.pop();
+            }
+            normalized.push(mutation);
+        }
+        Some(Arc::new(normalized))
     }
 
     #[cfg(test)]
@@ -986,8 +1160,11 @@ impl BranchLineageCache {
     ) -> Option<Arc<Vec<builder::NodeSummary>>> {
         let child = child.as_ref()?;
         self.records
-            .get(&(parent.clone(), child.clone()))
-            .map(|lineage| Arc::clone(&lineage.leaves))
+            .iter()
+            .rev()
+            .find(|(root, record)| root == child && &record.parent == parent)
+            .map(|(_, record)| record)
+            .map(|record| Arc::clone(&record.lineage.leaves))
     }
 
     #[cfg(test)]
@@ -998,8 +1175,11 @@ impl BranchLineageCache {
     ) -> Option<Arc<HashSet<Cid>>> {
         let child = child.as_ref()?;
         self.records
-            .get(&(parent.clone(), child.clone()))
-            .map(|lineage| Arc::clone(&lineage.internals))
+            .iter()
+            .rev()
+            .find(|(root, record)| root == child && &record.parent == parent)
+            .map(|(_, record)| record)
+            .map(|record| Arc::clone(&record.lineage.internals))
     }
 
     #[cfg(test)]
@@ -1010,17 +1190,56 @@ impl BranchLineageCache {
     ) -> Option<Arc<Vec<Vec<builder::NodeSummary>>>> {
         let child = child.as_ref()?;
         self.records
-            .get(&(parent.clone(), child.clone()))
-            .map(|lineage| Arc::clone(&lineage.levels))
+            .iter()
+            .rev()
+            .find(|(root, record)| root == child && &record.parent == parent)
+            .map(|(_, record)| record)
+            .map(|record| Arc::clone(&record.lineage.levels))
     }
 
     #[cfg(test)]
     fn direct_all_upserts(&self, parent: &Option<Cid>, child: &Option<Cid>) -> Option<bool> {
         let child = child.as_ref()?;
         self.records
-            .get(&(parent.clone(), child.clone()))
-            .map(|lineage| lineage.all_upserts)
+            .iter()
+            .rev()
+            .find(|(root, record)| root == child && &record.parent == parent)
+            .map(|(_, record)| record)
+            .map(|record| record.lineage.all_upserts)
     }
+}
+
+fn branch_lineage_from_mutations(mutations: &[Mutation]) -> Option<BranchLineage> {
+    const MAX_RETAINED_MUTATIONS: usize = 256;
+
+    if mutations.is_empty() || mutations.len() > MAX_RETAINED_MUTATIONS {
+        return None;
+    }
+    let mut normalized = mutations.to_vec();
+    normalized.sort_by(|left, right| left.key().cmp(right.key()));
+    let mut deduped = Vec::with_capacity(normalized.len());
+    for mutation in normalized {
+        if deduped
+            .last()
+            .is_some_and(|previous: &Mutation| previous.key() == mutation.key())
+        {
+            deduped.pop();
+        }
+        deduped.push(mutation);
+    }
+    #[cfg(test)]
+    let all_upserts = deduped.iter().all(|mutation| !mutation.is_delete());
+    Some(BranchLineage {
+        mutations: Arc::new(deduped),
+        #[cfg(test)]
+        leaves: Arc::new(Vec::new()),
+        #[cfg(test)]
+        internals: Arc::new(HashSet::new()),
+        #[cfg(test)]
+        levels: Arc::new(Vec::new()),
+        #[cfg(test)]
+        all_upserts,
+    })
 }
 
 #[cfg(test)]
@@ -1203,12 +1422,22 @@ impl<S: Store> Prolly<S> {
         self.engine.format_digest()
     }
 
+    #[cfg(test)]
     pub(crate) fn direct_branch_changes(
         &self,
         base: &Tree,
         branch: &Tree,
     ) -> Option<Arc<Vec<Mutation>>> {
         self.engine.direct_branch_changes(base, branch)
+    }
+
+    pub(crate) fn branch_change_pair(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+    ) -> Option<BranchChangePair> {
+        self.engine.branch_change_pair(base, left, right)
     }
 
     #[cfg(test)]
@@ -1487,8 +1716,7 @@ impl<S: Store> Prolly<S> {
         val: Vec<u8>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        self.engine
-            .canonical_batch_tree_ready(tree, vec![Mutation::Upsert { key, val }], origin)
+        self.batch_with_origin(tree, vec![Mutation::Upsert { key, val }], origin)
     }
 
     /// Apply canonical mutations with an internal publication classification.
@@ -1498,8 +1726,14 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        self.engine
-            .canonical_batch_tree_ready(tree, mutations, origin)
+        let lineage = branch_lineage_from_mutations(&mutations);
+        let branch = self
+            .engine
+            .canonical_batch_tree_ready(tree, mutations, origin)?;
+        if let Some(lineage) = lineage {
+            self.engine.record_branch_lineage(tree, &branch, lineage);
+        }
+        Ok(branch)
     }
 
     /// Insert or update a value, offloading large payloads to a blob store.
@@ -4397,7 +4631,12 @@ where
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        Ok(self.canonical_batch(tree, mutations, origin).await?.0)
+        let lineage = branch_lineage_from_mutations(&mutations);
+        let branch = self.canonical_batch(tree, mutations, origin).await?.0;
+        if let Some(lineage) = lineage {
+            self.record_branch_lineage(tree, &branch, lineage);
+        }
+        Ok(branch)
     }
 
     /// Insert or update a value, offloading large payloads to an async blob
@@ -7674,6 +7913,50 @@ mod tests {
 
         async_prolly.clear_cache();
         assert_eq!(async_prolly.cache_len(), 0);
+    }
+
+    #[test]
+    fn async_engine_merges_multi_hop_branch_lineage() {
+        block_on(async {
+            let store = Arc::new(MemStore::new());
+            let prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+            let base = prolly.create();
+            let mut left = base.clone();
+            let mut right = base.clone();
+
+            for index in 0..32 {
+                left = prolly
+                    .put(
+                        &left,
+                        format!("left-{index:04}").into_bytes(),
+                        format!("left-value-{index:04}").into_bytes(),
+                    )
+                    .await
+                    .unwrap();
+                right = prolly
+                    .put(
+                        &right,
+                        format!("right-{index:04}").into_bytes(),
+                        format!("right-value-{index:04}").into_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            }
+
+            let merged = prolly.merge(&base, &left, &right, None).await.unwrap();
+            for index in 0..32 {
+                assert!(prolly
+                    .get(&merged, format!("left-{index:04}").as_bytes())
+                    .await
+                    .unwrap()
+                    .is_some());
+                assert!(prolly
+                    .get(&merged, format!("right-{index:04}").as_bytes())
+                    .await
+                    .unwrap()
+                    .is_some());
+            }
+        });
     }
     #[test]
     fn async_prolly_get_many_preserves_order_duplicates_and_missing_keys() {
