@@ -1765,12 +1765,17 @@ fn point_delete_keys(items: usize, count: usize) -> Vec<Vec<u8>> {
 }
 
 fn mutation_count(items: usize) -> usize {
-    std::env::var("PROLLY_BENCH_MUTATIONS")
+    const DEFAULT_MAX_MUTATIONS: usize = 10_000;
+
+    if let Some(configured) = std::env::var("PROLLY_BENCH_MUTATIONS")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0)
-        .unwrap_or_else(|| (items / 10).max(100))
-        .min(items)
+    {
+        return configured.min(items);
+    }
+
+    (items / 10).clamp(100, DEFAULT_MAX_MUTATIONS).min(items)
 }
 
 fn window_bounds(items: usize) -> (usize, usize) {

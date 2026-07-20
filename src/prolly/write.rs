@@ -1,8 +1,8 @@
 //! Deterministic mutation stream and resynchronizing tree writer.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 
@@ -16,7 +16,7 @@ use super::error::{Error, Mutation};
 use super::format::{BoundaryInput, ChunkMeasure, NodeLayoutSpec};
 use super::node::Node;
 use super::parallel::{ExecutionPolicy, ParallelConfig};
-use super::store::Store;
+use super::store::{BatchOp, Store};
 use super::Prolly;
 use super::Tree;
 
@@ -232,6 +232,155 @@ struct StructuralIslandReplay {
     emitted: Vec<EmittedLeaf>,
 }
 
+struct BufferedCanonicalStore<'a, S: Store> {
+    inner: &'a S,
+    generated: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
+}
+
+impl<'a, S: Store> BufferedCanonicalStore<'a, S> {
+    fn new(inner: &'a S) -> Self {
+        Self {
+            inner,
+            generated: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn generated(&self, cid: &Cid) -> Option<Vec<u8>> {
+        self.generated.lock().ok()?.get(cid.as_bytes()).cloned()
+    }
+
+    fn take_generated(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut generated = self.generated.lock().unwrap();
+        let mut entries = std::mem::take(&mut *generated)
+            .into_iter()
+            .collect::<Vec<_>>();
+        entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+        entries
+    }
+}
+
+impl<S: Store> Store for BufferedCanonicalStore<'_, S> {
+    type Error = S::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        if let Some(value) = self.generated.lock().unwrap().get(key) {
+            return Ok(Some(value.clone()));
+        }
+        self.inner.get(key)
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.generated
+            .lock()
+            .unwrap()
+            .insert(key.to_vec(), value.to_vec());
+        Ok(())
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.generated.lock().unwrap().remove(key);
+        Ok(())
+    }
+
+    fn batch(&self, operations: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        for operation in operations {
+            match operation {
+                BatchOp::Upsert { key, value } => self.put(key, value)?,
+                BatchOp::Delete { key } => self.delete(key)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        for (key, value) in entries {
+            self.put(key, value)?;
+        }
+        Ok(())
+    }
+}
+
+struct BufferedCanonicalManager<'a, M: CanonicalWriteManager> {
+    inner: &'a M,
+    store: BufferedCanonicalStore<'a, M::Store>,
+    cached: Mutex<HashMap<Cid, Arc<Node>>>,
+}
+
+impl<'a, M: CanonicalWriteManager> BufferedCanonicalManager<'a, M> {
+    fn new(inner: &'a M) -> Self {
+        Self {
+            inner,
+            store: BufferedCanonicalStore::new(inner.write_store()),
+            cached: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn stage_node(&self, cid: Cid, node: Node) -> Result<(), Error> {
+        let bytes = node.to_bytes();
+        if Cid::from_bytes(&bytes) != cid {
+            return Err(Error::InvalidNode);
+        }
+        self.store
+            .put(cid.as_bytes(), &bytes)
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        self.cached.lock().unwrap().insert(cid, Arc::new(node));
+        Ok(())
+    }
+
+    fn take_cached(&self) -> Vec<(Cid, Arc<Node>)> {
+        std::mem::take(&mut *self.cached.lock().unwrap())
+            .into_iter()
+            .collect()
+    }
+}
+
+impl<'a, M: CanonicalWriteManager> CanonicalWriteManager for BufferedCanonicalManager<'a, M> {
+    type Store = BufferedCanonicalStore<'a, M::Store>;
+
+    fn write_store(&self) -> &Self::Store {
+        &self.store
+    }
+
+    fn write_config(&self) -> &Config {
+        self.inner.write_config()
+    }
+
+    fn write_load_arc(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
+        if let Some(node) = self.cached.lock().unwrap().get(cid).cloned() {
+            return Ok(node);
+        }
+        if let Some(bytes) = self.store.generated(cid) {
+            if Cid::from_bytes(&bytes) != *cid {
+                return Err(Error::InvalidNode);
+            }
+            let node = Arc::new(Node::from_bytes_with_format(
+                &bytes,
+                &self.write_config().format,
+            )?);
+            self.cached
+                .lock()
+                .unwrap()
+                .insert(cid.clone(), node.clone());
+            return Ok(node);
+        }
+        self.inner.write_load_arc(cid)
+    }
+
+    fn write_load_many_ordered(&self, cids: &[Cid]) -> Result<Vec<Arc<Node>>, Error> {
+        cids.iter().map(|cid| self.write_load_arc(cid)).collect()
+    }
+
+    fn write_cache_node(&self, cid: Cid, node: Node) {
+        self.cached.lock().unwrap().insert(cid, Arc::new(node));
+    }
+
+    fn write_metrics(&self) -> super::ProllyMetricsSnapshot {
+        self.inner.write_metrics()
+    }
+
+    fn write_record_batch_metrics(&self, _nodes: usize, _bytes: usize) {}
+}
+
 pub(crate) struct LeafEmitter {
     emitter: LevelEmitter,
     pub(crate) emitted: Vec<EmittedLeaf>,
@@ -393,8 +542,18 @@ fn apply_impl<M: CanonicalWriteManager>(
         return Ok(result);
     }
     if let Some(result) =
-        try_localized_height_two_deletes(manager, tree, &mutations, &mut stats, measure_read_bytes)?
+        try_localized_deep_single_delete(manager, tree, &mutations, &mut stats, measure_read_bytes)?
     {
+        return Ok(result);
+    }
+    if let Some(result) = try_localized_height_two_deletes(
+        manager,
+        tree,
+        &mutations,
+        &mut stats,
+        measure_read_bytes,
+        true,
+    )? {
         return Ok(result);
     }
     let (old_leaves, old_internal_cids) =
@@ -1080,14 +1239,211 @@ fn structural_islands_worth_speculating(
     guarded_leaves.saturating_mul(4) <= leaf_count
 }
 
-fn try_localized_height_two_deletes<M: CanonicalWriteManager>(
+fn try_localized_deep_single_delete<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,
     mutations: &[(Vec<u8>, Option<Vec<u8>>)],
     stats: &mut WriteStats,
     measure_read_bytes: bool,
 ) -> Result<Option<(Tree, WriteStats)>, Error> {
-    if mutations.len() < 2
+    if mutations.len() != 1
+        || mutations[0].1.is_some()
+        || tree.config.format.chunking.measure != ChunkMeasure::EntryCount
+        || tree.config.format.chunking.input != BoundaryInput::Key
+        || !matches!(
+            tree.config.format.chunking.rule,
+            super::format::BoundaryRule::HashThreshold { .. }
+        )
+        || matches!(
+            tree.config.format.node_layout,
+            NodeLayoutSpec::Custom { .. }
+        )
+    {
+        return Ok(None);
+    }
+    let Some(root_cid) = &tree.root else {
+        return Ok(None);
+    };
+
+    let key = &mutations[0].0;
+    let mut cid = root_cid.clone();
+    let mut node_rightmost = true;
+    let mut ancestors = Vec::<(Arc<Node>, usize, bool)>::new();
+    let subtree_node = loop {
+        let node = manager.write_load_arc(&cid)?;
+        stats.nodes_read += 1;
+        if measure_read_bytes {
+            stats.bytes_read += node.encoded_len() as u64;
+        }
+        if node.leaf || node.level < 2 {
+            return Ok(None);
+        }
+        if node.keys.is_empty()
+            || node.keys.len() != node.vals.len()
+            || node.child_counts.len() != node.len()
+        {
+            return Err(Error::InvalidNode);
+        }
+        if node.level == 2 {
+            break node;
+        }
+
+        let child_index = node
+            .keys
+            .partition_point(|separator| separator.as_slice() <= key.as_slice())
+            .saturating_sub(1);
+        let child = child_cid(&node.vals[child_index])?;
+        let child_rightmost = node_rightmost && child_index.saturating_add(1) == node.len();
+        ancestors.push((node, child_index, node_rightmost));
+        cid = child;
+        node_rightmost = child_rightmost;
+    };
+    if ancestors.is_empty() {
+        return Ok(None);
+    }
+
+    let buffered = BufferedCanonicalManager::new(manager);
+    let subtree = Tree {
+        root: Some(cid.clone()),
+        config: tree.config.clone(),
+    };
+    let Some((rewritten_subtree, _)) = try_localized_height_two_deletes(
+        &buffered,
+        &subtree,
+        mutations,
+        stats,
+        measure_read_bytes,
+        node_rightmost,
+    )?
+    else {
+        return Ok(None);
+    };
+    let Some(replacement_cid) = rewritten_subtree.root else {
+        return Ok(None);
+    };
+    let replacement_node = buffered.write_load_arc(&replacement_cid)?;
+    if replacement_node.level != 2
+        || replacement_node.leaf
+        || replacement_node.validate().is_err()
+        || !canonical_node_remains_one_chunk(
+            &subtree_node,
+            &replacement_node,
+            node_rightmost,
+            &tree.config,
+        )?
+    {
+        return Ok(None);
+    }
+    let mut replacement = internal_summary(&replacement_cid, &replacement_node)?;
+
+    for (old, child_index, rightmost) in ancestors.into_iter().rev() {
+        let mut updated = (*old).clone();
+        updated.keys[child_index] = replacement.first_key;
+        updated.vals[child_index] = replacement.cid.0.to_vec();
+        updated.child_counts[child_index] = replacement.count;
+        if updated.validate().is_err()
+            || !canonical_node_remains_one_chunk(&old, &updated, rightmost, &tree.config)?
+        {
+            return Ok(None);
+        }
+        let bytes = updated.to_bytes();
+        let updated_cid = Cid::from_bytes(&bytes);
+        replacement = internal_summary(&updated_cid, &updated)?;
+        buffered.stage_node(updated_cid, updated)?;
+    }
+
+    let generated = buffered.store.take_generated();
+    if generated.is_empty() {
+        return Ok(None);
+    }
+    let entries = generated
+        .iter()
+        .map(|(cid, bytes)| (cid.as_slice(), bytes.as_slice()))
+        .collect::<Vec<_>>();
+    manager
+        .write_store()
+        .batch_put(&entries)
+        .map_err(|error| Error::Store(Box::new(error)))?;
+    let bytes_written = generated
+        .iter()
+        .map(|(_, bytes)| bytes.len())
+        .sum::<usize>();
+    manager.write_record_batch_metrics(generated.len(), bytes_written);
+    stats.nodes_written = generated.len() as u64;
+    stats.bytes_written = bytes_written as u64;
+    if generated.len() <= LOCAL_WRITE_CACHE_LIMIT {
+        for (cid, node) in buffered.take_cached() {
+            manager.write_cache_node(cid, (*node).clone());
+        }
+    }
+
+    Ok(Some((
+        Tree {
+            root: Some(replacement.cid),
+            config: tree.config.clone(),
+        },
+        *stats,
+    )))
+}
+
+fn internal_summary(cid: &Cid, node: &Node) -> Result<NodeSummary, Error> {
+    if node.leaf
+        || node.keys.is_empty()
+        || node.keys.len() != node.vals.len()
+        || node.child_counts.len() != node.len()
+    {
+        return Err(Error::InvalidNode);
+    }
+    let count = node
+        .child_counts
+        .iter()
+        .try_fold(0u64, |total, count| total.checked_add(*count))
+        .ok_or(Error::InvalidNode)?;
+    Ok(NodeSummary {
+        cid: cid.clone(),
+        first_key: node.keys[0].clone(),
+        count,
+    })
+}
+
+fn canonical_node_remains_one_chunk(
+    old: &Node,
+    new: &Node,
+    rightmost: bool,
+    config: &Config,
+) -> Result<bool, Error> {
+    if old.level != new.level || old.leaf != new.leaf {
+        return Ok(false);
+    }
+    let hard_max =
+        usize::try_from(config.format.chunking.hard_max_node_bytes).unwrap_or(usize::MAX);
+    if old.encoded_len() >= hard_max || new.encoded_len() >= hard_max || new.keys.is_empty() {
+        return Ok(false);
+    }
+    for (index, key) in new.keys.iter().enumerate() {
+        let is_last = index.saturating_add(1) == new.len();
+        let closes = entry_count_boundary(
+            &config.format.chunking,
+            u16::from(new.level),
+            index.saturating_add(1),
+            key,
+        )?;
+        if (!is_last && closes) || (is_last && !rightmost && !closes) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn try_localized_height_two_deletes<M: CanonicalWriteManager>(
+    manager: &M,
+    tree: &Tree,
+    mutations: &[(Vec<u8>, Option<Vec<u8>>)],
+    stats: &mut WriteStats,
+    measure_read_bytes: bool,
+    rightmost_tree: bool,
+) -> Result<Option<(Tree, WriteStats)>, Error> {
+    if mutations.is_empty()
         || mutations.iter().any(|(_, value)| value.is_some())
         || matches!(
             tree.config.format.node_layout,
@@ -1227,7 +1583,7 @@ fn try_localized_height_two_deletes<M: CanonicalWriteManager>(
     if mutation_index != mutations.len() {
         return Ok(None);
     }
-    if resynced_at.is_none() && window_end < root.len() {
+    if resynced_at.is_none() && (!rightmost_tree || window_end < root.len()) {
         return Ok(None);
     }
     emitter.flush()?;
@@ -1243,7 +1599,7 @@ fn try_localized_height_two_deletes<M: CanonicalWriteManager>(
     let builder = BatchBuilder::new(manager.write_store(), tree.config.clone());
     let (replacement_summaries, internal_nodes) =
         builder.build_level_serial_deferred(leaf_summaries, 1)?;
-    if window_end < root.len()
+    if (!rightmost_tree || window_end < root.len())
         && replacement_summaries.last().map(|summary| &summary.cid) != window_cids.last()
     {
         return Ok(None);
@@ -1981,6 +2337,7 @@ fn try_direct_single_delete<M: CanonicalWriteManager>(
         root,
         &mutations[0].0,
         &tree.config,
+        true,
         &mut leaves,
         &mut internals,
         stats,
@@ -2011,6 +2368,7 @@ fn try_direct_single_delete<M: CanonicalWriteManager>(
     stats.bytes_written += bytes_written as u64;
     stats.resync_distance_nodes = 1;
     stats.resync_distance_entries = stats.entries_streamed;
+    stats.used_key_stable_fast_path = true;
     drop(writes);
     for leaf in leaves {
         manager.write_cache_node(leaf.summary.cid, leaf.node);
@@ -2033,6 +2391,7 @@ fn rewrite_single_delete_subtree<M: CanonicalWriteManager>(
     cid: &Cid,
     key: &[u8],
     config: &super::config::Config,
+    rightmost: bool,
     leaves: &mut Vec<EmittedLeaf>,
     internals: &mut Vec<EmittedInternal>,
     stats: &mut WriteStats,
@@ -2073,7 +2432,7 @@ fn rewrite_single_delete_subtree<M: CanonicalWriteManager>(
             updated.len(),
             updated.keys.last().ok_or(Error::InvalidNode)?,
         )?;
-        if new_closed != old_closed {
+        if !rightmost && new_closed != old_closed {
             return Ok(DirectDelete::Fallback);
         }
         stats.entries_streamed += updated.len() as u64;
@@ -2105,6 +2464,7 @@ fn rewrite_single_delete_subtree<M: CanonicalWriteManager>(
         &child,
         key,
         config,
+        rightmost && child_index.saturating_add(1) == node.len(),
         leaves,
         internals,
         stats,
@@ -2633,6 +2993,145 @@ mod tests {
         collect_leaf_summaries(manager, tree, &mut WriteStats::default(), false)
             .unwrap()
             .0
+    }
+
+    #[test]
+    fn point_delete_of_leaf_first_key_uses_a_bounded_canonical_splice() {
+        let mut chunking = chunking::entry_count_key_hash();
+        chunking.min = 2;
+        chunking.target = 4;
+        chunking.max = 8;
+        chunking.rule = super::super::format::BoundaryRule::HashThreshold { factor: 4 };
+        let config = Config::builder().chunking(chunking).build();
+        let entry_count = 4_096;
+        let (manager, tree) = populated_tree(config, entry_count);
+        let root_level = manager
+            .write_load_arc(tree.root.as_ref().unwrap())
+            .unwrap()
+            .level;
+        assert!(root_level >= 2);
+
+        let leaves = old_leaf_summaries(&manager, &tree);
+        let key = leaves
+            .iter()
+            .skip(1)
+            .take(leaves.len().saturating_sub(2))
+            .find_map(|summary| {
+                let leaf = manager.write_load_arc(&summary.cid).unwrap();
+                (leaf.len() > tree.config.min_chunk_size()).then(|| leaf.keys[0].clone())
+            })
+            .expect("fixture should contain a non-edge leaf above minimum size");
+
+        let (deleted, stats) = manager
+            .batch_with_write_stats(&tree, vec![Mutation::Delete { key: key.clone() }])
+            .unwrap();
+
+        let expected_mutations = (0..entry_count)
+            .filter_map(|index| {
+                let candidate = format!("k{index:04}").into_bytes();
+                (candidate != key).then_some(Mutation::Upsert {
+                    key: candidate,
+                    val: vec![b'v'; 32],
+                })
+            })
+            .collect();
+        let expected = manager
+            .batch(&manager.create(), expected_mutations)
+            .unwrap();
+
+        assert_eq!(deleted.root, expected.root);
+        assert!(!stats.used_key_stable_fast_path, "{stats:?}");
+        assert!(stats.nodes_read < 100, "{stats:?}");
+        assert_eq!(manager.get(&deleted, &key).unwrap(), None);
+    }
+
+    #[test]
+    fn structural_point_delete_splices_a_height_two_subtree_in_a_deep_tree() {
+        let mut chunking = chunking::entry_count_key_hash();
+        chunking.min = 2;
+        chunking.target = 4;
+        chunking.max = 8;
+        chunking.rule = super::super::format::BoundaryRule::HashThreshold { factor: 4 };
+        let config = Config::builder().chunking(chunking).build();
+        let entry_count = 4_096;
+        let (manager, tree) = populated_tree(config, entry_count);
+        let root_level = manager
+            .write_load_arc(tree.root.as_ref().unwrap())
+            .unwrap()
+            .level;
+        assert!(root_level > 2);
+
+        let leaves = old_leaf_summaries(&manager, &tree);
+        let key = leaves
+            .iter()
+            .skip(1)
+            .take(leaves.len().saturating_sub(2))
+            .find_map(|summary| {
+                let leaf = manager.write_load_arc(&summary.cid).unwrap();
+                (leaf.len() == tree.config.max_chunk_size()).then(|| leaf.keys[1].clone())
+            })
+            .expect("fixture should contain a non-edge hard-cut leaf");
+
+        let (deleted, stats) = manager
+            .batch_with_write_stats(&tree, vec![Mutation::Delete { key: key.clone() }])
+            .unwrap();
+        let expected_mutations = (0..entry_count)
+            .filter_map(|index| {
+                let candidate = format!("k{index:04}").into_bytes();
+                (candidate != key).then_some(Mutation::Upsert {
+                    key: candidate,
+                    val: vec![b'v'; 32],
+                })
+            })
+            .collect();
+        let expected = manager
+            .batch(&manager.create(), expected_mutations)
+            .unwrap();
+
+        assert_eq!(deleted.root, expected.root);
+        assert!(!stats.used_key_stable_fast_path, "{stats:?}");
+        assert!(stats.nodes_read < 100, "{stats:?}");
+        assert_eq!(manager.get(&deleted, &key).unwrap(), None);
+    }
+
+    #[test]
+    fn sequential_structural_point_deletes_match_a_canonical_rebuild() {
+        let mut chunking = chunking::entry_count_key_hash();
+        chunking.min = 2;
+        chunking.target = 4;
+        chunking.max = 8;
+        chunking.rule = super::super::format::BoundaryRule::HashThreshold { factor: 4 };
+        let config = Config::builder().chunking(chunking).build();
+        let entry_count = 4_096;
+        let (manager, mut tree) = populated_tree(config, entry_count);
+        let deleted_indexes = (0..256)
+            .map(|offset| (entry_count / 4 + offset * 7) % entry_count)
+            .collect::<Vec<_>>();
+        let mut deleted = HashSet::new();
+
+        for index in &deleted_indexes {
+            deleted.insert(*index);
+            let delete_key = format!("k{index:04}").into_bytes();
+            let (next, stats) = manager
+                .batch_with_write_stats(&tree, vec![Mutation::Delete { key: delete_key }])
+                .unwrap();
+            tree = next;
+            let expected_mutations = (0..entry_count)
+                .filter(|index| !deleted.contains(index))
+                .map(|index| Mutation::Upsert {
+                    key: format!("k{index:04}").into_bytes(),
+                    val: vec![b'v'; 32],
+                })
+                .collect();
+            let expected = manager
+                .batch(&manager.create(), expected_mutations)
+                .unwrap();
+
+            assert_eq!(
+                tree.root, expected.root,
+                "diverged after deleting k{index:04}: {stats:?}"
+            );
+        }
     }
 
     #[test]
