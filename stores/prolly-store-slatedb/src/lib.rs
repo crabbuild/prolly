@@ -1,4 +1,4 @@
-//! SlateDB storage backend implementation.
+#![doc = include_str!("../README.md")]
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::future::Future;

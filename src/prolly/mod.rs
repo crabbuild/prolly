@@ -925,6 +925,104 @@ pub struct Prolly<S: Store> {
     recent_leaf_misses: AtomicUsize,
 }
 
+struct BranchLineageCache {
+    records: HashMap<(Option<Cid>, Cid), BranchLineage>,
+    insertion_order: VecDeque<(Option<Cid>, Cid)>,
+    max_records: usize,
+}
+
+pub(crate) struct BranchLineage {
+    mutations: Arc<Vec<Mutation>>,
+    #[cfg(test)]
+    leaves: Arc<Vec<builder::NodeSummary>>,
+    #[cfg(test)]
+    internals: Arc<HashSet<Cid>>,
+    #[cfg(test)]
+    levels: Arc<Vec<Vec<builder::NodeSummary>>>,
+    #[cfg(test)]
+    all_upserts: bool,
+}
+
+impl Default for BranchLineageCache {
+    fn default() -> Self {
+        Self {
+            records: HashMap::new(),
+            insertion_order: VecDeque::new(),
+            max_records: 4,
+        }
+    }
+}
+
+impl BranchLineageCache {
+    fn insert(&mut self, parent: Option<Cid>, root: Cid, lineage: BranchLineage) {
+        let key = (parent, root);
+        if self.records.insert(key.clone(), lineage).is_none() {
+            self.insertion_order.push_back(key);
+        }
+        while self.records.len() > self.max_records {
+            let Some(oldest) = self.insertion_order.pop_front() else {
+                break;
+            };
+            self.records.remove(&oldest);
+        }
+    }
+
+    fn direct_changes(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<Vec<Mutation>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.mutations))
+    }
+
+    #[cfg(test)]
+    fn direct_leaves(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<Vec<builder::NodeSummary>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.leaves))
+    }
+
+    #[cfg(test)]
+    fn direct_internals(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<HashSet<Cid>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.internals))
+    }
+
+    #[cfg(test)]
+    fn direct_levels(
+        &self,
+        parent: &Option<Cid>,
+        child: &Option<Cid>,
+    ) -> Option<Arc<Vec<Vec<builder::NodeSummary>>>> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| Arc::clone(&lineage.levels))
+    }
+
+    #[cfg(test)]
+    fn direct_all_upserts(&self, parent: &Option<Cid>, child: &Option<Cid>) -> Option<bool> {
+        let child = child.as_ref()?;
+        self.records
+            .get(&(parent.clone(), child.clone()))
+            .map(|lineage| lineage.all_upserts)
+    }
+}
+
 #[cfg(test)]
 struct RecentLeafRead {
     root: Cid,
@@ -1085,6 +1183,12 @@ impl<S: Store> Prolly<S> {
         self.engine.store.inner()
     }
 
+    pub(crate) fn load_arc_ready(&self, cid: &Cid) -> Result<Arc<Node>, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.load_arc(cid);
+        engine::ready::run_ready(ready_store.ready(future))
+    }
+
     #[cfg(test)]
     fn node_cache(&self) -> &RwLock<NodeCache> {
         &self.engine.node_cache
@@ -1093,6 +1197,50 @@ impl<S: Store> Prolly<S> {
     #[cfg(test)]
     fn raw_metrics(&self) -> &ProllyMetrics {
         &self.engine.metrics
+    }
+
+    pub(crate) fn format_digest(&self) -> Result<Cid, Error> {
+        self.engine.format_digest()
+    }
+
+    pub(crate) fn direct_branch_changes(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<Mutation>>> {
+        self.engine.direct_branch_changes(base, branch)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_leaves(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<builder::NodeSummary>>> {
+        self.engine.direct_branch_leaves(base, branch)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_internals(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<HashSet<Cid>>> {
+        self.engine.direct_branch_internals(base, branch)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_levels(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<Vec<builder::NodeSummary>>>> {
+        self.engine.direct_branch_levels(base, branch)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_all_upserts(&self, base: &Tree, branch: &Tree) -> Option<bool> {
+        self.engine.direct_branch_all_upserts(base, branch)
     }
 
     /// Create a new empty tree.
@@ -1839,18 +1987,14 @@ impl<S: Store> Prolly<S> {
         if right.root == base.root {
             return Ok(left.clone());
         }
-
         if let Some(merged) =
-            self.engine
-                .structural_merge_ready(base, left, right, resolver.as_deref())?
+            diff::try_lineage_merge_ready(self, base, left, right, resolver.as_deref())?
         {
             return Ok(merged);
         }
-
         let ready_store = self.engine.store.clone();
-        let future = self.engine.diff(base, right);
-        let right_diff = engine::ready::run_ready(ready_store.ready(future))?;
-        diff::merge_trees_with_right_diff(self, base, left, &right_diff, resolver)
+        let future = self.engine.merge(base, left, right, resolver);
+        engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Merge two trees with a callback-scoped zero-copy conflict resolver.
@@ -3828,6 +3972,46 @@ impl<S: Store> Prolly<S> {
         self.batch_with_origin(tree, mutations, PublicationOrigin::BatchMutation)
     }
 
+    /// Apply a sorted, unique mutation batch and retain its direct branch
+    /// lineage for subsequent same-manager three-way merges.
+    ///
+    /// The shared mutation vector lets version-oriented callers keep their
+    /// workload description without forcing the manager to retain a second
+    /// copy. Unsorted or duplicate input is still applied correctly, but is not
+    /// admitted to the lineage fast path.
+    pub fn batch_with_lineage(
+        &self,
+        tree: &Tree,
+        mutations: Arc<Vec<Mutation>>,
+    ) -> Result<Tree, Error> {
+        let branch = self
+            .engine
+            .canonical_batch_ready(
+                tree,
+                mutations.as_ref().clone(),
+                PublicationOrigin::BatchMutation,
+            )?
+            .0;
+        #[cfg(test)]
+        let all_upserts = mutations.iter().all(|mutation| !mutation.is_delete());
+        self.engine.record_branch_lineage(
+            tree,
+            &branch,
+            BranchLineage {
+                mutations,
+                #[cfg(test)]
+                leaves: Arc::new(Vec::new()),
+                #[cfg(test)]
+                internals: Arc::new(HashSet::new()),
+                #[cfg(test)]
+                levels: Arc::new(Vec::new()),
+                #[cfg(test)]
+                all_upserts,
+            },
+        );
+        Ok(branch)
+    }
+
     /// Apply mutations and return tree-write work counters.
     pub fn batch_with_write_stats(
         &self,
@@ -4277,6 +4461,40 @@ where
     pub async fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
         self.batch_with_origin(tree, mutations, PublicationOrigin::BatchMutation)
             .await
+    }
+
+    /// Apply a sorted, unique mutation batch and retain its direct ancestry for
+    /// a later same-engine three-way merge.
+    pub async fn batch_with_lineage(
+        &self,
+        tree: &Tree,
+        mutations: Arc<Vec<Mutation>>,
+    ) -> Result<Tree, Error> {
+        let branch = self
+            .batch_with_origin(
+                tree,
+                mutations.as_ref().clone(),
+                PublicationOrigin::BatchMutation,
+            )
+            .await?;
+        #[cfg(test)]
+        let all_upserts = mutations.iter().all(|mutation| !mutation.is_delete());
+        self.record_branch_lineage(
+            tree,
+            &branch,
+            BranchLineage {
+                mutations,
+                #[cfg(test)]
+                leaves: Arc::new(Vec::new()),
+                #[cfg(test)]
+                internals: Arc::new(HashSet::new()),
+                #[cfg(test)]
+                levels: Arc::new(Vec::new()),
+                #[cfg(test)]
+                all_upserts,
+            },
+        );
+        Ok(branch)
     }
 
     /// Apply multiple mutations through the canonical writer and return its

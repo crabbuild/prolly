@@ -3,7 +3,7 @@ name = "prolly-store-postgres"
 description = "PostgreSQL store adapter for prolly-map."
 edition = "2021"
 rust-version = "1.81"
-version = "0.1.0"
+version = "0.2.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
@@ -17,7 +17,7 @@ name = "prolly_store_postgres"
 path = "src/lib.rs"
 
 [dependencies]
-prolly = { package = "prolly-map", path = "../..", version = "0.3.0", features = ["async-store"] }
+prolly = { package = "prolly-map", path = "../..", version = "0.4.0", features = ["async-store"] }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 [dev-dependencies]

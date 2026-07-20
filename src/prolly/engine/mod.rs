@@ -3,12 +3,12 @@ pub(crate) mod ready;
 pub(crate) mod validation;
 pub(crate) mod write;
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use self::execution::{ExecutionConfig, OperationContext};
 use super::error::Error;
 use super::node::{Node, ReadNode};
-use super::store::AsyncStore;
+use super::store::{AsyncStore, Store, SyncStoreAsAsync};
 use super::tree::Tree;
 use super::{
     inline_positions_from_range, lower_bound_position_key, plan_cached_nodes, sorted_key_positions,
@@ -23,6 +23,8 @@ pub struct ProllyEngine<S: AsyncStore> {
     pub(super) execution: ExecutionConfig,
     pub(super) node_cache: Arc<RwLock<NodeCache>>,
     pub(super) metrics: Arc<ProllyMetrics>,
+    pub(super) format_digest: OnceLock<Cid>,
+    pub(super) branch_lineage: RwLock<super::BranchLineageCache>,
     pub(super) recent_leaf: RwLock<Option<(Cid, Arc<ReadNode>)>>,
     pub(super) rightmost_path_cache: RwLock<Option<(Cid, Vec<super::CachedRightmostPathEntry>)>>,
 }
@@ -41,6 +43,10 @@ where
     pub fn with_execution_config(store: S, config: Config, execution: ExecutionConfig) -> Self {
         let node_cache_max_nodes = config.runtime.node_cache_max_nodes;
         let node_cache_max_bytes = config.runtime.node_cache_max_bytes;
+        let format_digest = OnceLock::new();
+        if let Ok(digest) = config.format.digest() {
+            let _ = format_digest.set(digest);
+        }
         Self {
             store,
             config,
@@ -50,8 +56,96 @@ where
                 node_cache_max_bytes,
             ))),
             metrics: Arc::new(ProllyMetrics::default()),
+            format_digest,
+            branch_lineage: RwLock::new(super::BranchLineageCache::default()),
             recent_leaf: RwLock::new(None),
             rightmost_path_cache: RwLock::new(None),
+        }
+    }
+
+    pub(crate) fn format_digest(&self) -> Result<Cid, Error> {
+        if let Some(digest) = self.format_digest.get() {
+            return Ok(digest.clone());
+        }
+        let digest = self.config.format.digest()?;
+        let _ = self.format_digest.set(digest.clone());
+        Ok(digest)
+    }
+
+    pub(crate) fn direct_branch_changes(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<super::Mutation>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_changes(&base.root, &branch.root)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_leaves(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<super::builder::NodeSummary>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_leaves(&base.root, &branch.root)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_internals(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<std::collections::HashSet<Cid>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_internals(&base.root, &branch.root)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_levels(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<Vec<super::builder::NodeSummary>>>> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_levels(&base.root, &branch.root)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn direct_branch_all_upserts(&self, base: &Tree, branch: &Tree) -> Option<bool> {
+        self.branch_lineage
+            .read()
+            .ok()?
+            .direct_all_upserts(&base.root, &branch.root)
+    }
+
+    pub(crate) fn record_branch_lineage(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+        lineage_record: super::BranchLineage,
+    ) {
+        let Some(root) = branch.root.clone() else {
+            return;
+        };
+        if base.root == branch.root
+            || !lineage_record
+                .mutations
+                .windows(2)
+                .all(|pair| pair[0].key() < pair[1].key())
+        {
+            return;
+        }
+        if let Ok(mut lineage) = self.branch_lineage.write() {
+            lineage.insert(base.root.clone(), root, lineage_record);
         }
     }
 
@@ -329,6 +423,73 @@ where
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.insert(cid.clone(), node.clone(), bytes.len());
             self.metrics.add_cache_evictions(evictions);
+        }
+        Ok(node)
+    }
+}
+
+impl<S> ProllyEngine<SyncStoreAsAsync<Arc<S>>>
+where
+    S: Store,
+{
+    pub(crate) fn load_scan_read_arc_ready(
+        &self,
+        cid: &Cid,
+        observe_only: bool,
+    ) -> Result<Arc<ReadNode>, Error> {
+        let unbounded = if let Ok(cache) = self.node_cache.read() {
+            if let Some(node) = cache.peek_read(cid) {
+                self.metrics.add_cache_hits(1);
+                return Ok(node);
+            }
+            cache.is_unbounded()
+        } else {
+            false
+        };
+        let admit = !observe_only || unbounded;
+
+        let owned = if self.store.inner().has_native_shared_reads() {
+            None
+        } else if observe_only {
+            self.node_cache
+                .read()
+                .ok()
+                .and_then(|cache| cache.peek(cid))
+        } else if let Ok(mut cache) = self.node_cache.write() {
+            cache.get(cid)
+        } else {
+            None
+        };
+        if let Some(owned) = owned {
+            let packed = Arc::new(validation::decode_read(
+                cid,
+                &self.config.format,
+                Arc::from(owned.to_bytes()),
+            )?);
+            if admit {
+                if let Ok(mut cache) = self.node_cache.write() {
+                    let evictions = cache.insert_read(cid.clone(), packed.clone());
+                    self.metrics.add_cache_evictions(evictions);
+                }
+            }
+            self.metrics.add_cache_hits(1);
+            return Ok(packed);
+        }
+
+        self.metrics.add_cache_misses(1);
+        let bytes = self
+            .store
+            .inner()
+            .get_shared(cid.as_bytes())
+            .map_err(|error| Error::Store(Box::new(error)))?
+            .ok_or_else(|| Error::NotFound(cid.clone()))?;
+        self.metrics.record_point_read(bytes.len());
+        let node = Arc::new(validation::decode_read(cid, &self.config.format, bytes)?);
+        if admit {
+            if let Ok(mut cache) = self.node_cache.write() {
+                let evictions = cache.insert_read(cid.clone(), node.clone());
+                self.metrics.add_cache_evictions(evictions);
+            }
         }
         Ok(node)
     }

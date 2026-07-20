@@ -120,7 +120,14 @@ struct ScenarioResult {
 
 fn run_scenario(args: &Args) -> ScenarioResult {
     let store = Arc::new(MemStore::new());
-    let manager = Prolly::new(store, Config::default());
+    let mut config = Config::builder();
+    if let Some(max_nodes) = env_usize("PROLLY_COMPARE_CACHE_NODES") {
+        config = config.node_cache_max_nodes(max_nodes);
+    }
+    if let Some(max_bytes) = env_usize("PROLLY_COMPARE_CACHE_BYTES") {
+        config = config.node_cache_max_bytes(max_bytes);
+    }
+    let manager = Prolly::new(store, config.build());
     let (tree, write_operations, write_elapsed, digest, result_count) = match args.phase {
         Phase::Fresh => {
             let (tree, elapsed, digest) = build_fresh(&manager, args.records, args.workload);
@@ -226,6 +233,14 @@ fn run_scenario(args: &Args) -> ScenarioResult {
         digest,
         result_count,
     }
+}
+
+fn env_usize(name: &str) -> Option<usize> {
+    env::var(name).ok().map(|value| {
+        value
+            .parse::<usize>()
+            .unwrap_or_else(|_| panic!("{name} must be an integer"))
+    })
 }
 
 fn build_fresh(

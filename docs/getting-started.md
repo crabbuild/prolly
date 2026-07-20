@@ -17,7 +17,7 @@ From crates.io, once published:
 
 ```toml
 [dependencies]
-prolly-map = "0.3"
+prolly-map = "0.4"
 ```
 
 From a project that vendors this repository under `crates/prolly`:
@@ -37,7 +37,7 @@ Optional runtime integration and storage adapters:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.3", features = ["tokio"] }
+prolly-map = { version = "0.4", features = ["tokio"] }
 prolly-store-sqlite = "0.1"
 ```
 
@@ -284,7 +284,7 @@ The async API is always enabled and does not require Tokio.
 
 ```toml
 [dependencies]
-prolly-map = "0.3"
+prolly-map = "0.4"
 ```
 
 Use `SyncStoreAsAsync` for simple migration from an existing sync store:
@@ -308,7 +308,7 @@ Use `tokio` when you want blocking sync stores to run on Tokio's blocking pool:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.2", features = ["tokio"] }
+prolly-map = { version = "0.4", features = ["tokio"] }
 ```
 
 ## Run examples

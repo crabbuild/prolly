@@ -16,9 +16,7 @@ use crate::prolly::store::{
 use crate::prolly::tree::Tree;
 use crate::prolly::write::CanonicalWriteManager;
 use crate::prolly::{Cid, ProllyMetricsSnapshot};
-use crate::{Conflict, Resolution};
 
-const MAX_REPLAY_ROUNDS: usize = 256;
 type PublicationWrites = Vec<(Cid, Vec<u8>)>;
 
 enum ReadyNodeBytes {
@@ -191,17 +189,6 @@ where
             .map_err(|error| Error::Store(Box::new(error)))?;
         self.cache_rightmost_path(root.clone(), crate::prolly::cached_rightmost_entries(&path));
         Ok(())
-    }
-
-    pub(crate) fn structural_merge_ready(
-        &self,
-        base: &Tree,
-        left: &Tree,
-        right: &Tree,
-        resolver: Option<&(dyn Fn(&Conflict) -> Resolution + Send + Sync)>,
-    ) -> Result<Option<Tree>, Error> {
-        let manager = ReadyWriteManager::new(self, &base.config, PublicationOrigin::Merge);
-        crate::prolly::diff::try_structural_merge(&manager, base, left, right, resolver)
     }
 
     pub(crate) fn canonical_batch_ready(
@@ -1118,19 +1105,22 @@ where
             config: tree.config.clone(),
         };
 
-        let mut replay_rounds = 0usize;
+        let mut hydrated = HashSet::new();
         let mut operation_nodes_read = 0usize;
         let mut operation_bytes_read = 0usize;
         let mut result = loop {
-            if replay_rounds == MAX_REPLAY_ROUNDS {
-                return Err(Error::InvalidNode);
-            }
-            replay_rounds += 1;
             replay.begin_attempt();
             match operation(&manager) {
                 Ok(result) => break result,
                 Err(error) => {
                     let missing = replay.take_missing();
+                    if missing.is_empty() {
+                        return Err(error);
+                    }
+                    let missing = missing
+                        .into_iter()
+                        .filter(|cid| hydrated.insert(cid.clone()))
+                        .collect::<Vec<_>>();
                     if missing.is_empty() {
                         return Err(error);
                     }

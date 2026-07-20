@@ -129,6 +129,116 @@ fn layouts() -> [NodeLayoutSpec; 3] {
     ]
 }
 
+fn tracked_batch(
+    prolly: &Prolly<Arc<MemStore>>,
+    base: &prolly::Tree,
+    mutations: Vec<Mutation>,
+) -> prolly::Tree {
+    prolly
+        .batch_with_lineage(base, Arc::new(mutations))
+        .unwrap()
+}
+
+#[test]
+fn lineage_merge_splices_materialized_append_suffix() {
+    let (prolly, base) = fixture(NodeLayoutSpec::PrefixCompressed, 20_000);
+    let left = tracked_batch(
+        &prolly,
+        &base,
+        (20_000..22_000)
+            .map(|index| Mutation::Upsert {
+                key: format!("key/{index:06}").into_bytes(),
+                val: format!("left/{index:06}").into_bytes(),
+            })
+            .collect(),
+    );
+    let right_mutations = (22_000..24_000)
+        .map(|index| Mutation::Upsert {
+            key: format!("key/{index:06}").into_bytes(),
+            val: format!("right/{index:06}").into_bytes(),
+        })
+        .collect::<Vec<_>>();
+    let right = tracked_batch(&prolly, &base, right_mutations.clone());
+    let canonical = prolly.batch(&left, right_mutations).unwrap();
+
+    let merged = prolly.merge_with(&base, &left, &right, None).unwrap();
+    assert_eq!(merged.root, canonical.root);
+    assert_eq!(prolly.len(&merged).unwrap(), 24_000);
+    assert_eq!(
+        prolly.get(&merged, b"key/021999").unwrap(),
+        Some(b"left/021999".to_vec())
+    );
+    assert_eq!(
+        prolly.get(&merged, b"key/023999").unwrap(),
+        Some(b"right/023999".to_vec())
+    );
+}
+
+#[test]
+fn lineage_merge_reuses_disjoint_version_segments() {
+    let (prolly, base) = fixture(NodeLayoutSpec::PrefixCompressed, 12_000);
+    let left = tracked_batch(
+        &prolly,
+        &base,
+        (1_000..2_000)
+            .map(|index| Mutation::Upsert {
+                key: format!("key/{index:06}").into_bytes(),
+                val: format!("left/{index:06}").into_bytes(),
+            })
+            .collect(),
+    );
+    let right_mutations = (7_000..8_000)
+        .map(|index| Mutation::Upsert {
+            key: format!("key/{index:06}").into_bytes(),
+            val: format!("right/{index:06}").into_bytes(),
+        })
+        .collect::<Vec<_>>();
+    let right = tracked_batch(&prolly, &base, right_mutations.clone());
+    let canonical = prolly.batch(&left, right_mutations).unwrap();
+
+    let merged = prolly.merge_with(&base, &left, &right, None).unwrap();
+    assert_eq!(merged.root, canonical.root);
+    assert_eq!(prolly.len(&merged).unwrap(), 12_000);
+    assert_eq!(
+        prolly.get(&merged, b"key/001500").unwrap(),
+        Some(b"left/001500".to_vec())
+    );
+    assert_eq!(
+        prolly.get(&merged, b"key/007500").unwrap(),
+        Some(b"right/007500".to_vec())
+    );
+}
+
+#[test]
+fn lineage_merge_resolves_overlapping_changes_without_replaying_tree() {
+    let (prolly, base) = fixture(NodeLayoutSpec::PrefixCompressed, 8_000);
+    let left = tracked_batch(
+        &prolly,
+        &base,
+        (2_000..4_000)
+            .map(|index| Mutation::Upsert {
+                key: format!("key/{index:06}").into_bytes(),
+                val: format!("left/{index:06}").into_bytes(),
+            })
+            .collect(),
+    );
+    let right = tracked_batch(
+        &prolly,
+        &base,
+        (2_000..4_000)
+            .map(|index| Mutation::Upsert {
+                key: format!("key/{index:06}").into_bytes(),
+                val: format!("right/{index:06}").into_bytes(),
+            })
+            .collect(),
+    );
+
+    let merged = prolly
+        .merge_with(&base, &left, &right, Some(&Select(MergeDecision::UseLeft)))
+        .unwrap();
+    assert_eq!(merged.root, left.root);
+}
+
 #[test]
 fn cold_sync_mutation_uses_native_shared_node_reads() {
     let store = NativeSharedCountingStore::new();
@@ -159,6 +269,8 @@ fn cold_sync_mutation_uses_native_shared_node_reads() {
 #[test]
 fn cold_sync_batch_mutation_uses_native_shared_node_reads() {
     let store = NativeSharedCountingStore::new();
+    let owned_reads = store.owned_reads.clone();
+    let shared_reads = store.shared_reads.clone();
     let owned_batch_reads = store.owned_batch_reads.clone();
     let shared_batch_reads = store.shared_batch_reads.clone();
     let prolly = Prolly::new(store, Config::default());
@@ -172,6 +284,8 @@ fn cold_sync_batch_mutation_uses_native_shared_node_reads() {
         .collect();
     let tree = prolly.build_from_sorted_entries(entries).unwrap();
     prolly.clear_cache();
+    owned_reads.store(0, Ordering::Relaxed);
+    shared_reads.store(0, Ordering::Relaxed);
     owned_batch_reads.store(0, Ordering::Relaxed);
     shared_batch_reads.store(0, Ordering::Relaxed);
     let mutations = (0..4_096)
@@ -184,8 +298,9 @@ fn cold_sync_batch_mutation_uses_native_shared_node_reads() {
 
     prolly.batch(&tree, mutations).unwrap();
 
+    assert_eq!(owned_reads.load(Ordering::Relaxed), 0);
     assert_eq!(owned_batch_reads.load(Ordering::Relaxed), 0);
-    assert!(shared_batch_reads.load(Ordering::Relaxed) > 0);
+    assert!(shared_reads.load(Ordering::Relaxed) + shared_batch_reads.load(Ordering::Relaxed) > 0);
 }
 
 #[test]

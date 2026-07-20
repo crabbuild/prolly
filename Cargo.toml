@@ -4,7 +4,7 @@ description = "Content-addressed versioned map storage primitives."
 readme = "README.md"
 edition = "2021"
 rust-version = "1.81"
-version = "0.3.0"
+version = "0.4.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
@@ -63,6 +63,9 @@ js-sys = "0.3.103"
 # Keep it target-specific; sha2-asm does not support Windows, and WASM plus
 # unsupported architectures must retain the portable implementation.
 sha2 = { version = "0.10", features = ["asm-aarch64"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+mimalloc = "=0.1.52"
 
 [lints.rust]
 unsafe_code = "allow"

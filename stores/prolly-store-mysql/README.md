@@ -6,7 +6,16 @@ This crate implements `RemoteStoreBackend` using `sqlx::MySqlPool`. Use it
 through `RemoteProllyStore` and `AsyncProlly` when your deployment standardizes
 on MySQL and you want durable Prolly nodes, hints, and named roots in SQL.
 
-## When To Use It
+## Installation
+
+```toml
+[dependencies]
+prolly-map = "0.4"
+prolly-store-mysql = "0.2.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## When to use it
 
 Use this adapter for applications that already operate MySQL and want Prolly map
 semantics without adding another durable service. It is suitable for
@@ -17,7 +26,7 @@ Prefer PostgreSQL if your workload benefits from stronger bytea ergonomics or
 Postgres-specific operational features. Prefer Redis for ephemeral low-latency
 state and DynamoDB/Cosmos/Spanner for cloud-native managed scale.
 
-## Data Model
+## Data model
 
 `initialize_schema` creates:
 
@@ -68,7 +77,7 @@ backend.initialize_schema().await?;
 # }
 ```
 
-## Basic Usage
+## Basic usage
 
 ```rust
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -105,7 +114,7 @@ assert_eq!(
 # }
 ```
 
-## Branching, Diff, And Merge
+## Branching, diff, and merge
 
 ```rust
 # use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
@@ -149,18 +158,18 @@ assert_eq!(
 # }
 ```
 
-## Operational Notes
+## Operational notes
 
 - `initialize_schema` is idempotent.
-- MySQL named-root compare-and-swap uses SQL transactions and conditional
-  writes.
+- Strict commits validate named-root preconditions and apply node and root
+  writes in one MySQL transaction.
 - MySQL key length limits matter for named roots and hint keys; use compact
   binary or slash-separated names rather than large serialized metadata in the
   name itself.
 - Node rows are content-addressed and may be shared by many roots.
 - Deleting a named root does not immediately delete unreachable nodes.
 
-## Running The Example
+## Running the example
 
 From the standalone repository root:
 
@@ -171,3 +180,19 @@ cargo run --manifest-path stores/prolly-store-mysql/Cargo.toml --example basic_u
 
 The example initializes schema, writes and branches a tree, diffs and merges
 branches, resolves a conflict, publishes a named root, and reads it back.
+
+## Testing
+
+The integration test runs when `PROLLY_STORE_MYSQL_URL` is set and returns
+without connecting otherwise:
+
+```bash
+export PROLLY_STORE_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly
+cargo test --manifest-path stores/prolly-store-mysql/Cargo.toml
+```
+
+Run it against a disposable database or schema. The adapter tables are shared by
+every client using that database.
+
+See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
+async map, transaction, diff, and merge APIs used with this backend.

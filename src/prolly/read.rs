@@ -1031,29 +1031,7 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         key: &[u8],
         read: impl FnOnce(&[u8]) -> R,
     ) -> Result<Option<R>, Error> {
-        self.inner.point_read_performed = true;
-        if let Some(leaf) = self
-            .inner
-            .recent_leaf
-            .as_ref()
-            .filter(|_| !self.inner.recent_leaf_disabled)
-        {
-            validate_leaf(leaf)?;
-            if leaf
-                .key(0)
-                .zip(leaf.key(leaf.len().saturating_sub(1)))
-                .is_some_and(|(first, last)| key >= first && key <= last)
-            {
-                self.inner.recent_leaf_misses = 0;
-                return match leaf.search(key) {
-                    Ok(index) => Ok(Some(read(leaf.value(index).ok_or(Error::InvalidNode)?))),
-                    Err(_) => Ok(None),
-                };
-            }
-        }
-        let ready_store = self.inner.manager.store.clone();
-        let future = self.inner.get_with(key, read);
-        super::engine::ready::run_ready(ready_store.ready(future))
+        self.inner.get_with_ready(key, read)
     }
 
     pub fn get_lease(&mut self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
@@ -1143,11 +1121,15 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         &mut self,
         start: &[u8],
         end: Option<&[u8]>,
-        visit: impl for<'entry> FnMut(EntryRef<'entry>),
+        mut visit: impl for<'entry> FnMut(EntryRef<'entry>),
     ) -> Result<u64, Error> {
-        let ready_store = self.inner.manager.store.clone();
-        let future = self.inner.scan_range(start, end, visit);
-        super::engine::ready::run_ready(ready_store.ready(future))
+        Ok(self
+            .inner
+            .scan_range_until_ready(start, end, |entry| {
+                visit(entry);
+                ControlFlow::<()>::Continue(())
+            })?
+            .visited)
     }
 
     pub fn scan_range_until<B>(
@@ -1156,9 +1138,7 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         end: Option<&[u8]>,
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        let ready_store = self.inner.manager.store.clone();
-        let future = self.inner.scan_range_until(start, end, visit);
-        super::engine::ready::run_ready(ready_store.ready(future))
+        self.inner.scan_range_until_ready(start, end, visit)
     }
 
     pub fn scan_prefix(
@@ -1166,9 +1146,8 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         prefix: &[u8],
         visit: impl for<'entry> FnMut(EntryRef<'entry>),
     ) -> Result<u64, Error> {
-        let ready_store = self.inner.manager.store.clone();
-        let future = self.inner.scan_prefix(prefix, visit);
-        super::engine::ready::run_ready(ready_store.ready(future))
+        let (start, end) = key::prefix_range(prefix);
+        self.scan_range(&start, end.as_deref(), visit)
     }
 
     pub fn scan_prefix_until<B>(
@@ -1176,9 +1155,8 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         prefix: &[u8],
         visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
-        let ready_store = self.inner.manager.store.clone();
-        let future = self.inner.scan_prefix_until(prefix, visit);
-        super::engine::ready::run_ready(ready_store.ready(future))
+        let (start, end) = key::prefix_range(prefix);
+        self.scan_range_until(&start, end.as_deref(), visit)
     }
 
     pub fn scan_range_reverse(
@@ -1711,21 +1689,20 @@ impl<'manager, 'tree, S: Store> LegacyReadSession<'manager, 'tree, S> {
                 return Err(Error::InvalidNode);
             }
             Self::validate_leaf(&frame.node)?;
-            if frame.index >= frame.node.len() {
-                if !Self::advance_forward(self.manager, &mut stack)? {
+            while frame.index < frame.node.len() {
+                let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                if end.is_some_and(|end| key >= end) {
                     return Ok(ScanOutcome::complete(visited));
                 }
-                continue;
+                let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                frame.index += 1;
+                visited = visited.saturating_add(1);
+                if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                    return Ok(ScanOutcome::stopped(visited, value));
+                }
             }
-            let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
-            if end.is_some_and(|end| key >= end) {
+            if !Self::advance_forward(self.manager, &mut stack)? {
                 return Ok(ScanOutcome::complete(visited));
-            }
-            let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
-            frame.index += 1;
-            visited = visited.saturating_add(1);
-            if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
-                return Ok(ScanOutcome::stopped(visited, value));
             }
         }
     }
@@ -2223,6 +2200,176 @@ where
             .await
     }
 }
+impl<'manager, 'tree, S> AsyncReadSession<'manager, 'tree, SyncStoreAsAsync<Arc<S>>>
+where
+    S: Store,
+{
+    fn get_with_ready<R>(
+        &mut self,
+        key: &[u8],
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Result<Option<R>, Error> {
+        self.point_read_performed = true;
+        if let Some(leaf) = self
+            .recent_leaf
+            .as_ref()
+            .filter(|_| !self.recent_leaf_disabled)
+        {
+            validate_leaf(leaf)?;
+            if leaf
+                .key(0)
+                .zip(leaf.key(leaf.len().saturating_sub(1)))
+                .is_some_and(|(first, last)| key >= first && key <= last)
+            {
+                self.recent_leaf_misses = 0;
+                return match leaf.search(key) {
+                    Ok(index) => Ok(Some(read(leaf.value(index).ok_or(Error::InvalidNode)?))),
+                    Err(_) => Ok(None),
+                };
+            }
+            self.recent_leaf_misses = self.recent_leaf_misses.saturating_add(1);
+            if self.recent_leaf_misses >= RECENT_LEAF_DISABLE_AFTER_MISSES {
+                self.recent_leaf = None;
+                self.recent_leaf_misses = 0;
+                self.recent_leaf_disabled = true;
+            }
+        }
+
+        let Some(mut node) = self.root.clone() else {
+            return Ok(None);
+        };
+        loop {
+            if node.is_leaf() {
+                validate_leaf(&node)?;
+                if !self.recent_leaf_disabled {
+                    self.recent_leaf = Some(node.clone());
+                }
+                return match node.search(key) {
+                    Ok(index) => Ok(Some(read(node.value(index).ok_or(Error::InvalidNode)?))),
+                    Err(_) => Ok(None),
+                };
+            }
+            let index = async_route_index(&node, key)?;
+            let cid = node.child_cid(index)?;
+            node = match self.local_nodes.get(&cid) {
+                Some(node) => node,
+                None => {
+                    let node = self.manager.load_scan_read_arc_ready(&cid, false)?;
+                    if !node.is_leaf() {
+                        self.local_nodes.insert(cid, &node);
+                    }
+                    node
+                }
+            };
+        }
+    }
+
+    fn scan_range_until_ready<B>(
+        &mut self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        mut visit: impl for<'entry> FnMut(EntryRef<'entry>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        if end.is_some_and(|end| end <= start) {
+            return Ok(ScanOutcome::complete(0));
+        }
+        let mut stack = self.seek_forward_ready(start, false)?;
+        let observe_cache = self.scan_cache_was_warm || self.point_read_performed;
+        let mut visited = 0u64;
+        loop {
+            let Some(frame) = stack.last_mut() else {
+                return Ok(ScanOutcome::complete(visited));
+            };
+            validate_leaf(&frame.node)?;
+            if let Some(end) = end {
+                while frame.index < frame.node.len() {
+                    let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                    if key >= end {
+                        return Ok(ScanOutcome::complete(visited));
+                    }
+                    let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                    frame.index += 1;
+                    visited += 1;
+                    if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                        return Ok(ScanOutcome::stopped(visited, value));
+                    }
+                }
+            } else {
+                while frame.index < frame.node.len() {
+                    let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                    let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                    frame.index += 1;
+                    visited += 1;
+                    if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                        return Ok(ScanOutcome::stopped(visited, value));
+                    }
+                }
+            }
+            if !self.advance_forward_ready(&mut stack, observe_cache)? {
+                return Ok(ScanOutcome::complete(visited));
+            }
+        }
+    }
+
+    fn seek_forward_ready(
+        &self,
+        start: &[u8],
+        strict_start: bool,
+    ) -> Result<Vec<PathFrame>, Error> {
+        let Some(mut node) = self.root.clone() else {
+            return Ok(Vec::new());
+        };
+        let mut stack = Vec::new();
+        loop {
+            if node.is_leaf() {
+                let index = if strict_start {
+                    packed_partition_point(&node, |candidate| candidate <= start)
+                } else {
+                    packed_partition_point(&node, |candidate| candidate < start)
+                };
+                stack.push(PathFrame { node, index });
+                return Ok(stack);
+            }
+            validate_internal(&node)?;
+            let index =
+                packed_partition_point(&node, |candidate| candidate <= start).saturating_sub(1);
+            let cid = node.child_cid(index)?;
+            stack.push(PathFrame { node, index });
+            node = self.manager.load_scan_read_arc_ready(&cid, false)?;
+        }
+    }
+
+    fn advance_forward_ready(
+        &self,
+        stack: &mut Vec<PathFrame>,
+        observe_cache: bool,
+    ) -> Result<bool, Error> {
+        stack.pop();
+        while let Some(parent) = stack.last_mut() {
+            validate_internal(&parent.node)?;
+            parent.index += 1;
+            if parent.index >= parent.node.len() {
+                stack.pop();
+                continue;
+            }
+            let cid = parent.node.child_cid(parent.index)?;
+            let mut node = self.manager.load_scan_read_arc_ready(&cid, observe_cache)?;
+            loop {
+                if node.is_leaf() {
+                    validate_leaf(&node)?;
+                    stack.push(PathFrame { node, index: 0 });
+                    return Ok(true);
+                }
+                validate_internal(&node)?;
+                let cid = node.child_cid(0)?;
+                stack.push(PathFrame { node, index: 0 });
+                node = self.manager.load_scan_read_arc_ready(&cid, observe_cache)?;
+            }
+        }
+        Ok(false)
+    }
+}
+
 impl<'manager, 'tree, S> AsyncReadSession<'manager, 'tree, S>
 where
     S: AsyncStore,
@@ -2609,21 +2756,32 @@ where
             if !frame.node.is_leaf() {
                 return Err(Error::InvalidNode);
             }
-            if frame.index >= frame.node.len() {
-                if !self.advance_forward(&mut stack, observe_cache).await? {
-                    return Ok(ScanOutcome::complete(visited));
+            if let Some(end) = end {
+                while frame.index < frame.node.len() {
+                    let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                    if key >= end {
+                        return Ok(ScanOutcome::complete(visited));
+                    }
+                    let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                    frame.index += 1;
+                    visited += 1;
+                    if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                        return Ok(ScanOutcome::stopped(visited, value));
+                    }
                 }
-                continue;
+            } else {
+                while frame.index < frame.node.len() {
+                    let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                    let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                    frame.index += 1;
+                    visited += 1;
+                    if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                        return Ok(ScanOutcome::stopped(visited, value));
+                    }
+                }
             }
-            let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
-            if end.is_some_and(|end| key >= end) {
+            if !self.advance_forward(&mut stack, observe_cache).await? {
                 return Ok(ScanOutcome::complete(visited));
-            }
-            let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
-            frame.index += 1;
-            visited = visited.saturating_add(1);
-            if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
-                return Ok(ScanOutcome::stopped(visited, value));
             }
         }
     }
@@ -2681,18 +2839,22 @@ where
             if !frame.node.is_leaf() {
                 return Err(Error::InvalidNode);
             }
-            let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
-            if key < start {
-                return Ok(ScanOutcome::complete(visited));
-            }
-            let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
-            visited = visited.saturating_add(1);
-            if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
-                return Ok(ScanOutcome::stopped(visited, value));
-            }
-            if frame.index > 0 {
+            loop {
+                let key = frame.node.key(frame.index).ok_or(Error::InvalidNode)?;
+                if key < start {
+                    return Ok(ScanOutcome::complete(visited));
+                }
+                let value = frame.node.value(frame.index).ok_or(Error::InvalidNode)?;
+                visited += 1;
+                if let ControlFlow::Break(value) = visit(EntryRef::new(key, value)) {
+                    return Ok(ScanOutcome::stopped(visited, value));
+                }
+                if frame.index == 0 {
+                    break;
+                }
                 frame.index -= 1;
-            } else if !self.advance_reverse(&mut stack, observe_cache).await? {
+            }
+            if !self.advance_reverse(&mut stack, observe_cache).await? {
                 return Ok(ScanOutcome::complete(visited));
             }
         }

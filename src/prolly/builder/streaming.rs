@@ -337,6 +337,24 @@ impl HierarchicalEmitter {
         Ok(emitted)
     }
 
+    #[cfg(test)]
+    pub(crate) fn leaf_is_empty(&self) -> bool {
+        self.leaf.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn push_complete_leaf(
+        &mut self,
+        leaf: NodeSummary,
+    ) -> Result<Vec<EmittedNode>, Error> {
+        if !self.leaf.is_empty() {
+            return Err(Error::InvalidNode);
+        }
+        let mut emitted = Vec::new();
+        self.cascade(0, leaf, &mut emitted)?;
+        Ok(emitted)
+    }
+
     pub(crate) fn finish(&mut self) -> Result<(Option<NodeSummary>, Vec<EmittedNode>), Error> {
         let mut emitted = Vec::new();
         if let Some(node) = self.leaf.finish()? {

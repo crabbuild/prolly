@@ -1,4 +1,4 @@
-//! DynamoDB store adapter for prolly-map.
+#![doc = include_str!("../README.md")]
 
 pub use prolly::{
     RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,

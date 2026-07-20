@@ -1277,7 +1277,7 @@ Cargo dependencies:
 
 ```toml
 [dependencies]
-prolly-map = "0.2"
+prolly-map = "0.4"
 prolly-store-sqlite = "0.1"
 ```
 
@@ -1358,7 +1358,7 @@ Enable async support:
 
 ```toml
 [dependencies]
-prolly-map = "0.3"
+prolly-map = "0.4"
 ```
 
 Implement `AsyncStore` over your object client. Override `read_parallelism` or `batch_get_ordered` so tree traversal can overlap network reads.
