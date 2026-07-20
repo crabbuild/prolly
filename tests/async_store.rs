@@ -2033,6 +2033,60 @@ fn async_bounded_node_cache_limits_entries_and_preserves_reads() {
 }
 
 #[test]
+fn async_scan_preserves_hot_point_path_in_bounded_cache() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(2)
+            .node_cache_max_nodes(8)
+            .build();
+        let engine = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+        let mutations = (0..128)
+            .map(|idx| Mutation::Upsert {
+                key: format!("k{idx:03}").into_bytes(),
+                val: format!("v{idx:03}").into_bytes(),
+            })
+            .collect();
+        let tree = engine.batch(&engine.create(), mutations).await.unwrap();
+
+        engine.clear_cache();
+        {
+            let mut reader = engine.read(&tree).await.unwrap();
+            assert_eq!(
+                reader.get_with(b"k000", <[u8]>::to_vec).await.unwrap(),
+                Some(b"v000".to_vec())
+            );
+        }
+        assert!(engine.cache_len() <= 8);
+
+        engine.reset_metrics();
+        {
+            let mut scanner = engine.read(&tree).await.unwrap();
+            assert_eq!(scanner.scan_range(&[], None, |_| {}).await.unwrap(), 128);
+        }
+        assert_eq!(
+            engine.metrics().node_cache_evictions,
+            0,
+            "one-pass scan nodes must not displace the point-read working set"
+        );
+
+        engine.reset_metrics();
+        let mut reader = engine.read(&tree).await.unwrap();
+        assert_eq!(
+            reader.get_with(b"k000", <[u8]>::to_vec).await.unwrap(),
+            Some(b"v000".to_vec())
+        );
+        assert_eq!(
+            engine.metrics().node_cache_misses,
+            0,
+            "the point path primed before the scan must remain resident"
+        );
+    });
+}
+
+#[test]
 fn async_pinned_path_can_exceed_cache_limit_until_unpinned() {
     let store = Arc::new(MemStore::new());
     let config = Config::builder()

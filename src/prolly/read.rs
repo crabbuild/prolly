@@ -336,6 +336,8 @@ struct OwnedReadSessionState {
     recent_leaf_misses: u8,
     recent_leaf_disabled: bool,
     local_nodes: SessionNodeTable,
+    scan_cache_was_warm: bool,
+    point_read_performed: bool,
 }
 
 /// An owned, root-bound read context suitable for long-lived native binding
@@ -356,6 +358,7 @@ pub struct OwnedRangeScanSession<S: Store> {
     end: Option<Vec<u8>>,
     stack: Vec<PathFrame>,
     done: bool,
+    observe_cache: bool,
 }
 
 /// Reusable root-bound read context for an asynchronous store.
@@ -370,6 +373,8 @@ pub struct AsyncReadSession<'manager, 'tree, S: AsyncStore> {
     recent_leaf_misses: u8,
     recent_leaf_disabled: bool,
     local_nodes: SessionNodeTable,
+    scan_cache_was_warm: bool,
+    point_read_performed: bool,
 }
 
 /// Synchronous ready-only facade over the canonical async read session.
@@ -455,6 +460,8 @@ impl<S: Store> Prolly<S> {
             recent_leaf_misses: session.inner.recent_leaf_misses,
             recent_leaf_disabled: session.inner.recent_leaf_disabled,
             local_nodes: session.inner.local_nodes,
+            scan_cache_was_warm: session.inner.scan_cache_was_warm,
+            point_read_performed: session.inner.point_read_performed,
         };
         Ok(OwnedReadSession {
             manager: self.clone(),
@@ -671,6 +678,7 @@ impl<S: Store> OwnedReadSession<S> {
         state: &mut OwnedReadSessionState,
         key: &[u8],
     ) -> Result<Option<ReadValueHandle>, Error> {
+        state.point_read_performed = true;
         if let Some(leaf) = state
             .recent_leaf
             .as_ref()
@@ -769,12 +777,11 @@ impl<S: Store> OwnedReadSession<S> {
         if keys.is_empty() {
             return Ok(());
         }
-        let root = self
-            .state
-            .lock()
-            .map_err(|_| Error::InvalidNode)?
-            .root
-            .clone();
+        let root = {
+            let mut state = self.state.lock().map_err(|_| Error::InvalidNode)?;
+            state.point_read_performed = true;
+            state.root.clone()
+        };
         let Some(root) = root else {
             for (position, key) in keys.iter().enumerate() {
                 visit(position, key.as_ref(), None);
@@ -878,13 +885,11 @@ impl<S: Store> OwnedReadSession<S> {
         start: &[u8],
         end: Option<&[u8]>,
     ) -> Result<OwnedRangeScanSession<S>, Error> {
-        let root = self
-            .state
-            .lock()
-            .map_err(|_| Error::InvalidNode)?
-            .root
-            .clone();
-        OwnedRangeScanSession::new(self.manager.clone(), root, start, end)
+        let state = self.state.lock().map_err(|_| Error::InvalidNode)?;
+        let root = state.root.clone();
+        let observe_cache = state.scan_cache_was_warm || state.point_read_performed;
+        drop(state);
+        OwnedRangeScanSession::new(self.manager.clone(), root, start, end, observe_cache)
     }
 
     /// The immutable tree bound to this session.
@@ -899,6 +904,7 @@ impl<S: Store> OwnedRangeScanSession<S> {
         root: Option<Arc<ReadNode>>,
         start: &[u8],
         end: Option<&[u8]>,
+        observe_cache: bool,
     ) -> Result<Self, Error> {
         let done = end.is_some_and(|end| end <= start);
         let stack = if done {
@@ -913,6 +919,7 @@ impl<S: Store> OwnedRangeScanSession<S> {
             end: end.map(<[u8]>::to_vec),
             done,
             stack,
+            observe_cache,
         })
     }
 
@@ -969,7 +976,9 @@ impl<S: Store> OwnedRangeScanSession<S> {
             }
             validate_leaf(&frame.node)?;
             if frame.index >= frame.node.len() {
-                if !advance_forward_async(&self.manager.engine, &mut self.stack).await? {
+                if !advance_forward_async(&self.manager.engine, &mut self.stack, self.observe_cache)
+                    .await?
+                {
                     self.done = true;
                     return Ok(ScanOutcome::complete(visited));
                 }
@@ -1022,6 +1031,7 @@ impl<'manager, 'tree, S: Store> ReadSession<'manager, 'tree, S> {
         key: &[u8],
         read: impl FnOnce(&[u8]) -> R,
     ) -> Result<Option<R>, Error> {
+        self.inner.point_read_performed = true;
         if let Some(leaf) = self
             .inner
             .recent_leaf
@@ -1968,6 +1978,7 @@ where
                 actual: tree.config.format.digest()?,
             });
         }
+        let scan_cache_was_warm = self.has_cached_read_nodes();
         let root = tree.root.as_ref().map(|cid| self.load_read_arc(cid));
         let root = match root {
             Some(load) => Some(load.await?),
@@ -1989,6 +2000,8 @@ where
             recent_leaf_misses: 0,
             recent_leaf_disabled: false,
             local_nodes: SessionNodeTable::new(),
+            scan_cache_was_warm,
+            point_read_performed: false,
         })
     }
 
@@ -2370,6 +2383,7 @@ where
         key: &[u8],
         read: impl FnOnce(&[u8]) -> R,
     ) -> Result<Option<R>, Error> {
+        self.point_read_performed = true;
         if let Some(leaf) = self
             .recent_leaf
             .as_ref()
@@ -2429,6 +2443,7 @@ where
         &mut self,
         key: &[u8],
     ) -> Result<Option<ReadValueHandle>, Error> {
+        self.point_read_performed = true;
         if let Some(leaf) = self
             .recent_leaf
             .as_ref()
@@ -2505,6 +2520,7 @@ where
         if keys.is_empty() {
             return Ok(());
         }
+        self.point_read_performed = true;
         let Some(root) = self.root.clone() else {
             for (position, key) in keys.iter().enumerate() {
                 visit(position, key.as_ref(), None);
@@ -2584,6 +2600,7 @@ where
             return Ok(ScanOutcome::complete(0));
         }
         let mut stack = self.seek_forward(start, strict_start).await?;
+        let observe_cache = self.scan_cache_was_warm || self.point_read_performed;
         let mut visited = 0u64;
         loop {
             let Some(frame) = stack.last_mut() else {
@@ -2593,7 +2610,7 @@ where
                 return Err(Error::InvalidNode);
             }
             if frame.index >= frame.node.len() {
-                if !self.advance_forward(&mut stack).await? {
+                if !self.advance_forward(&mut stack, observe_cache).await? {
                     return Ok(ScanOutcome::complete(visited));
                 }
                 continue;
@@ -2655,6 +2672,7 @@ where
             return Ok(ScanOutcome::complete(0));
         }
         let mut stack = self.seek_reverse(end).await?;
+        let observe_cache = self.scan_cache_was_warm || self.point_read_performed;
         let mut visited = 0u64;
         loop {
             let Some(frame) = stack.last_mut() else {
@@ -2674,7 +2692,7 @@ where
             }
             if frame.index > 0 {
                 frame.index -= 1;
-            } else if !self.advance_reverse(&mut stack).await? {
+            } else if !self.advance_reverse(&mut stack, observe_cache).await? {
                 return Ok(ScanOutcome::complete(visited));
             }
         }
@@ -2804,7 +2822,11 @@ where
         }
     }
 
-    async fn advance_forward(&self, stack: &mut Vec<PathFrame>) -> Result<bool, Error> {
+    async fn advance_forward(
+        &self,
+        stack: &mut Vec<PathFrame>,
+        observe_cache: bool,
+    ) -> Result<bool, Error> {
         stack.pop();
         while let Some(parent) = stack.last_mut() {
             if parent.node.is_leaf() || parent.node.is_empty() {
@@ -2816,7 +2838,7 @@ where
                 continue;
             }
             let cid = parent.node.child_cid(parent.index)?;
-            let mut node = self.manager.load_read_arc(&cid).await?;
+            let mut node = self.manager.load_scan_read_arc(&cid, observe_cache).await?;
             loop {
                 if node.is_leaf() {
                     stack.push(PathFrame { node, index: 0 });
@@ -2827,13 +2849,17 @@ where
                 }
                 let cid = node.child_cid(0)?;
                 stack.push(PathFrame { node, index: 0 });
-                node = self.manager.load_read_arc(&cid).await?;
+                node = self.manager.load_scan_read_arc(&cid, observe_cache).await?;
             }
         }
         Ok(false)
     }
 
-    async fn advance_reverse(&self, stack: &mut Vec<PathFrame>) -> Result<bool, Error> {
+    async fn advance_reverse(
+        &self,
+        stack: &mut Vec<PathFrame>,
+        observe_cache: bool,
+    ) -> Result<bool, Error> {
         stack.pop();
         while let Some(parent) = stack.last_mut() {
             if parent.node.is_leaf() || parent.node.is_empty() {
@@ -2845,7 +2871,7 @@ where
             }
             parent.index -= 1;
             let cid = parent.node.child_cid(parent.index)?;
-            let mut node = self.manager.load_read_arc(&cid).await?;
+            let mut node = self.manager.load_scan_read_arc(&cid, observe_cache).await?;
             loop {
                 if node.is_leaf() {
                     let index = node.len().checked_sub(1).ok_or(Error::InvalidNode)?;
@@ -2858,7 +2884,7 @@ where
                 let index = node.len() - 1;
                 let cid = node.child_cid(index)?;
                 stack.push(PathFrame { node, index });
-                node = self.manager.load_read_arc(&cid).await?;
+                node = self.manager.load_scan_read_arc(&cid, observe_cache).await?;
             }
         }
         Ok(false)
@@ -2893,6 +2919,7 @@ fn route_index(node: &ReadNode, key: &[u8]) -> Result<usize, Error> {
 async fn advance_forward_async<S: Store>(
     manager: &super::engine::ProllyEngine<SyncStoreAsAsync<Arc<S>>>,
     stack: &mut Vec<PathFrame>,
+    observe_cache: bool,
 ) -> Result<bool, Error> {
     stack.pop();
     while let Some(parent) = stack.last_mut() {
@@ -2903,7 +2930,7 @@ async fn advance_forward_async<S: Store>(
             continue;
         }
         let cid = parent.node.child_cid(parent.index)?;
-        let mut node = manager.load_read_arc(&cid).await?;
+        let mut node = manager.load_scan_read_arc(&cid, observe_cache).await?;
         loop {
             if node.is_leaf() {
                 validate_leaf(&node)?;
@@ -2913,7 +2940,7 @@ async fn advance_forward_async<S: Store>(
             validate_internal(&node)?;
             let cid = node.child_cid(0)?;
             stack.push(PathFrame { node, index: 0 });
-            node = manager.load_read_arc(&cid).await?;
+            node = manager.load_scan_read_arc(&cid, observe_cache).await?;
         }
     }
     Ok(false)

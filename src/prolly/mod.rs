@@ -338,6 +338,12 @@ struct NodeCacheEntry {
     pinned: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReadCacheMode {
+    Admit,
+    ObserveOnly,
+}
+
 /// Hashes the first 64 bits of a content digest for in-process cache routing.
 ///
 /// CIDs are SHA-256 outputs, so their first word is already uniformly
@@ -379,6 +385,7 @@ struct NodeCache {
     access_log: VecDeque<(Cid, u64)>,
     next_generation: u64,
     bytes: usize,
+    read_nodes: usize,
 }
 
 impl NodeCache {
@@ -390,6 +397,7 @@ impl NodeCache {
             access_log: VecDeque::new(),
             next_generation: 0,
             bytes: 0,
+            read_nodes: 0,
         }
     }
 
@@ -399,6 +407,10 @@ impl NodeCache {
 
     fn bytes_len(&self) -> usize {
         self.bytes
+    }
+
+    fn has_read_nodes(&self) -> bool {
+        self.read_nodes > 0
     }
 
     fn pinned_len(&self) -> usize {
@@ -454,6 +466,7 @@ impl NodeCache {
         self.nodes.clear();
         self.access_log.clear();
         self.bytes = 0;
+        self.read_nodes = 0;
         evicted
     }
 
@@ -541,6 +554,9 @@ impl NodeCache {
         );
         let newly_pinned = pinned && previous.as_ref().map_or(true, |entry| !entry.pinned);
         if let Some(previous) = previous {
+            self.read_nodes = self
+                .read_nodes
+                .saturating_sub(usize::from(previous.read.get().is_some()));
             self.bytes = self.bytes.saturating_sub(previous.bytes);
             self.nodes
                 .get_mut(&cid)
@@ -587,11 +603,16 @@ impl NodeCache {
         );
         let newly_pinned = pinned && previous.as_ref().map_or(true, |entry| !entry.pinned);
         if let Some(previous) = previous {
+            if previous.read.get().is_none() {
+                self.read_nodes = self.read_nodes.saturating_add(1);
+            }
             self.bytes = self.bytes.saturating_sub(previous.bytes);
             self.nodes
                 .get_mut(&cid)
                 .expect("replacement cache entry")
                 .pinned |= previous.pinned;
+        } else {
+            self.read_nodes = self.read_nodes.saturating_add(1);
         }
         self.bytes = self.bytes.saturating_add(retained);
         if self.is_unbounded() {
@@ -672,6 +693,9 @@ impl NodeCache {
 
     fn remove_entry(&mut self, cid: &Cid) -> usize {
         if let Some(entry) = self.nodes.remove(cid) {
+            self.read_nodes = self
+                .read_nodes
+                .saturating_sub(usize::from(entry.read.get().is_some()));
             self.bytes = self.bytes.saturating_sub(entry.bytes);
             1
         } else {
@@ -6052,14 +6076,52 @@ where
     }
 
     pub(crate) async fn load_read_arc(&self, cid: &Cid) -> Result<Arc<ReadNode>, Error> {
-        if let Ok(cache) = self.node_cache.read() {
+        self.load_read_arc_with_cache_mode(cid, ReadCacheMode::Admit)
+            .await
+    }
+
+    pub(crate) fn has_cached_read_nodes(&self) -> bool {
+        self.node_cache
+            .read()
+            .is_ok_and(|cache| cache.has_read_nodes())
+    }
+
+    pub(crate) async fn load_scan_read_arc(
+        &self,
+        cid: &Cid,
+        observe_only: bool,
+    ) -> Result<Arc<ReadNode>, Error> {
+        let mode = if observe_only {
+            ReadCacheMode::ObserveOnly
+        } else {
+            ReadCacheMode::Admit
+        };
+        self.load_read_arc_with_cache_mode(cid, mode).await
+    }
+
+    async fn load_read_arc_with_cache_mode(
+        &self,
+        cid: &Cid,
+        mode: ReadCacheMode,
+    ) -> Result<Arc<ReadNode>, Error> {
+        let unbounded = if let Ok(cache) = self.node_cache.read() {
             if let Some(node) = cache.peek_read(cid) {
                 self.metrics.add_cache_hits(1);
                 return Ok(node);
             }
-        }
+            cache.is_unbounded()
+        } else {
+            false
+        };
+        let admit = mode == ReadCacheMode::Admit || unbounded;
+
         let owned = if self.store.has_native_shared_reads() {
             None
+        } else if mode == ReadCacheMode::ObserveOnly {
+            self.node_cache
+                .read()
+                .ok()
+                .and_then(|cache| cache.peek(cid))
         } else if let Ok(mut cache) = self.node_cache.write() {
             cache.get(cid)
         } else {
@@ -6071,9 +6133,11 @@ where
                 &self.config.format,
                 Arc::from(owned.to_bytes()),
             )?);
-            if let Ok(mut cache) = self.node_cache.write() {
-                let evictions = cache.insert_read(cid.clone(), packed.clone());
-                self.metrics.add_cache_evictions(evictions);
+            if admit {
+                if let Ok(mut cache) = self.node_cache.write() {
+                    let evictions = cache.insert_read(cid.clone(), packed.clone());
+                    self.metrics.add_cache_evictions(evictions);
+                }
             }
             self.metrics.add_cache_hits(1);
             return Ok(packed);
@@ -6092,9 +6156,11 @@ where
             &self.config.format,
             bytes,
         )?);
-        if let Ok(mut cache) = self.node_cache.write() {
-            let evictions = cache.insert_read(cid.clone(), node.clone());
-            self.metrics.add_cache_evictions(evictions);
+        if admit {
+            if let Ok(mut cache) = self.node_cache.write() {
+                let evictions = cache.insert_read(cid.clone(), node.clone());
+                self.metrics.add_cache_evictions(evictions);
+            }
         }
         Ok(node)
     }

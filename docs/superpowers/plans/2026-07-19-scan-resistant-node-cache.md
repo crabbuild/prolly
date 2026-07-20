@@ -48,7 +48,7 @@ Expected: FAIL for the same canonical cache behavior.
 ### Task 2: Add cache access modes to the canonical engine
 
 **Files:**
-- Modify: `src/prolly/engine/mod.rs`
+- Modify: `src/prolly/mod.rs`
 - Modify: `src/prolly/read.rs`
 
 **Interfaces:**
@@ -66,7 +66,8 @@ Observe-only hits also call `peek_read`. Observe-only misses still call
 Record whether a session opened over decoded read nodes. Change forward and
 reverse async cursor advancement, including owned range sessions, to use the
 observe-only loader only for warm sessions. Keep cold scans and initial seek on
-normal loading.
+normal loading. Mark non-empty single and batch point reads as warm-session
+activity before any early return or retained-leaf fast path.
 
 - [ ] **Step 3: Run the focused tests and verify GREEN**
 
