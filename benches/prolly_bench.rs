@@ -140,6 +140,21 @@ fn main() {
             bench_stream_diff_append_suffix(scale);
             return;
         }
+        Ok("diff-sparse") => {
+            bench_diff_sparse(scale);
+            bench_stream_diff_sparse(scale);
+            return;
+        }
+        Ok("diff-append") => {
+            bench_diff_append_suffix(scale);
+            bench_stream_diff_append_suffix(scale);
+            return;
+        }
+        Ok("diff-full") => {
+            bench_diff_empty_to_full(scale);
+            bench_diff_full_rewrite(scale);
+            return;
+        }
         Ok("append-chain") => {
             bench_append_batch_direct(scale);
             bench_append_batch_chain(scale);
