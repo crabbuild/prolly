@@ -4,14 +4,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use prolly::{
-    self, AuthenticatedProofBundleVerification,
-    AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
-    BatchApplyStats, BatchOp, BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobRef, BlobStore,
-    BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow,
-    DeletePolicy, Diff, DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding,
-    FileBlobStore, FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof,
-    KeyProofVerification, LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate,
-    MemBlobStore, MemStore, MergeFallbackReason, MergeFastPath, MergePolicyFn,
+    self, AuthenticatedProofBundleVerification, AuthenticatedProofEnvelope,
+    AuthenticatedProofEnvelopeVerification, BatchApplyResult, BatchApplyStats, BatchOp, BlobGcPlan,
+    BlobGcReachability, BlobGcSweep, BlobRef, BlobStore, BlobStoreScan, ChangedSpan,
+    ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow, DeletePolicy, Diff,
+    DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding, FileBlobStore,
+    FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof, KeyProofVerification,
+    LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate, MemBlobStore, MemStore,
+    MergeFallbackReason, MergeFastPath, MergePolicyFn,
     MergePolicyRegistry as CoreMergePolicyRegistry, MergeResolutionKind as CoreMergeResolutionKind,
     MergeReuseReason, MergeTrace, MergeTraceEvent, MergeTraceStage, MissingNodeCopy,
     MissingNodePlan, MultiKeyProof, MultiKeyProofVerification, MultiValueSet, Mutation,
@@ -33,9 +33,9 @@ use prolly_store_sqlite::SqliteStore;
 use serde::Serialize;
 use thiserror::Error;
 
+mod async_store;
 mod domain;
 mod fast_abi;
-mod async_store;
 
 pub use async_store::*;
 
