@@ -2,7 +2,11 @@
 
 ## Status
 
+<<<<<<< HEAD
 Implemented and measured on 2026-07-17. The retained commands, raw CSV, regression analysis, and limitations are in [`performance-results/canonical-parallel-executor-2026-07-17`](../../../performance-results/canonical-parallel-executor-2026-07-17/README.md). The repository is alpha-stage: migration and source compatibility are out of scope. Correctness is the release gate; sustained throughput and tail latency on many-core hardware are the performance goals.
+=======
+Approved in principle on 2026-07-17 through the canonical-parallel executor proposal. This document fixes the implementation boundary before development. The repository is alpha-stage: migration and source compatibility are out of scope. Correctness is the release gate; sustained throughput and tail latency on many-core hardware are the performance goals.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 ## Objective
 
@@ -10,6 +14,7 @@ Make `parallel_batch` a real, configurable, many-core execution path without rei
 
 The executor must improve large independent workloads while preserving the current low-overhead path for small, append-heavy, or highly contended batches. Multiple callers must share the process Rayon pool instead of creating a thread pool per batch.
 
+<<<<<<< HEAD
 ## Original Defects
 
 `ParallelConfig` was accepted but ignored by both `parallel_batch` and `parallel_batch_with_stats`. `max_threads`, `parallelism_threshold`, and `sequential()` therefore had no effect.
@@ -17,6 +22,15 @@ The executor must improve large independent workloads while preserving the curre
 `BatchWriterConfig` exposed several execution switches whose values no longer controlled canonical writes. Keeping inert performance controls was worse than removing them in an alpha API because callers could not reason about scheduling or benchmark a selected policy.
 
 The surviving parallel work was narrow and used fixed constants. Large key-stable value updates could route with a fixed width of 16 and prepare leaf groups through Rayon, and node decoding could run in parallel. General insert/delete and mixed mutation fallback remained predominantly sequential. Existing root-equivalence tests validated output, but existing benchmarks did not establish scaling by worker count.
+=======
+## Current Defects
+
+`ParallelConfig` is currently accepted but ignored by both `parallel_batch` and `parallel_batch_with_stats`. `max_threads`, `parallelism_threshold`, and `sequential()` therefore have no effect.
+
+`BatchWriterConfig` exposes several execution switches whose values no longer control canonical writes. Keeping inert performance controls is worse than removing them in an alpha API because callers cannot reason about scheduling or benchmark a selected policy.
+
+The surviving parallel work is narrow and uses fixed constants. Large key-stable value updates can route with a fixed width of 16 and prepare leaf groups through Rayon, and node decoding can run in parallel. General insert/delete and mixed mutation fallback remains predominantly sequential. Existing root-equivalence tests validate output, but existing benchmarks do not establish scaling by worker count.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 The removed `ParallelRebalancer` is not a suitable foundation. It ran independent legacy rebalances over caller-supplied nodes and ancestor paths, returned multiple roots, and used entry-count/stateless boundary decisions that were not canonical for every persisted chunking policy.
 
@@ -25,14 +39,23 @@ The removed `ParallelRebalancer` is not a suitable foundation. It ran independen
 1. One boundary authority: `BoundaryDetector` and canonical level emitters remain the only components allowed to decide persisted chunk boundaries.
 2. Determinism: worker count and task completion order must not change serialized node bytes, CIDs, or the final root.
 3. Real configuration: `ParallelConfig::max_threads`, `parallelism_threshold`, and `sequential()` must change execution scheduling observably and testably.
+<<<<<<< HEAD
 4. No per-call pools: all calls use the shared Rayon pool. When active writers would leave fewer than three pool threads per call, inner parallel work is disabled and caller-level concurrency supplies the parallelism.
 5. Bounded work: route reads and explicit CPU partitions are capped by policy; structural speculation uses waves bounded by worker width and a small fixed multiplier.
 6. Safe fallback: dense/overlapping island layouts are rejected before replay. If an admitted island cannot prove resynchronization on its first bounded replay, execution immediately runs the existing canonical path.
+=======
+4. No per-call pools: all calls use the shared Rayon pool, preventing thread creation latency and CPU oversubscription when callers execute concurrently.
+5. Bounded work: parallel routing, mutation application, and encoding operate in waves bounded by worker width and a small fixed multiplier.
+6. Safe fallback: if independence or resynchronization cannot be proven, execution coalesces work and runs the existing canonical path.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 7. Atomic publication: no root is returned until all nodes reachable from it have been successfully persisted.
 8. No inert public knobs: obsolete `BatchWriterConfig` choices are removed or replaced by the single execution configuration used by the canonical writer.
 9. No compatibility branches or legacy writer selection.
 10. Performance claims require release-mode worker-scaling evidence, including tail latency and memory.
+<<<<<<< HEAD
 11. Binding decoders and public facades must expose the same execution telemetry as Rust; no language-specific helper may substitute entry-count key/value hashing for the canonical chunker.
+=======
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 ## API and Configuration
 
@@ -57,6 +80,7 @@ configured width = max_threads == 0 ? rayon pool width : max_threads
 effective width  = min(configured width, available independent work)
 ```
 
+<<<<<<< HEAD
 The runtime also tracks active large canonical writes. If
 `active_writes * 3 > rayon_pool_width`, the effective inner width is one. This
 avoids paying per-call routing/task overhead once concurrent callers already
@@ -66,12 +90,17 @@ saturate the available CPUs.
 
 CPU width and ordered-read width are separate. Explicit `max_threads` caps both. Automatic scheduling uses the pool width for CPU work and up to `max(16, pool_width)` ordered-read partitions, capped by independent work, preserving high-latency-store route hydration without creating a private thread pool.
 
+=======
+`max_threads` limits the number of partitions created by this call. Tasks run on the shared Rayon pool. Parallel stages do not invoke nested parallel iterators, so a call cannot expand beyond its partition width.
+
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 `ParallelConfig::sequential()` selects width one and an effectively infinite threshold. Tests must demonstrate that it performs no parallel route-read waves or leaf-task execution.
 
 Ordinary `batch` uses an internal automatic execution policy selected for the store and mutation shape. `parallel_batch` uses the supplied policy. Both call the same canonical writer; configuration changes scheduling only.
 
 The obsolete `BatchWriterConfig` algorithm switches are removed. If `BatchWriter` remains as a convenience object, it stores a `ParallelConfig` and delegates to the canonical configured writer. It must not expose optimized-merge, bottom-up-rebuild, deferred-rebalance, or cache switches unless those switches have distinct canonical implementations and measurements.
 
+<<<<<<< HEAD
 `BatchApplyStats` is also a hard-cutover surface. It mirrors canonical write
 work—entries and nodes read/reused/written, bytes read/written,
 resynchronization distances, proved fast-path flags, and parallel/island
@@ -80,6 +109,8 @@ algorithm flags and synthesized affected/changed-leaf counts are removed from
 Rust and every generated or handwritten binding decoder. The wire field order
 is identical in all languages.
 
+=======
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 ## Architecture
 
 ### 1. Execution policy and scheduler
@@ -88,7 +119,11 @@ A small execution-policy module computes:
 
 - whether the workload crosses `parallelism_threshold`;
 - effective worker width;
+<<<<<<< HEAD
 - bounded structural wave size, `4 * effective_width`;
+=======
+- bounded wave size, initially `4 * effective_width`;
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 - whether the store benefits from ordered batched reads;
 - which mutation strategy has proved-safe independent work.
 
@@ -100,13 +135,21 @@ Sorting and last-write-wins deduplication remain deterministic. Large unsorted i
 
 ### 3. Ordered route hydration
 
+<<<<<<< HEAD
 The route planner walks each tree level in ordered frontier waves. It calls `load_many_ordered_with_parallelism` with the policy's ordered-read width. Duplicate CIDs are loaded once and results are expanded back to their ordered positions.
+=======
+The route planner walks each tree level in ordered frontier waves. It calls `load_many_ordered_with_parallelism` with the effective width instead of a fixed constant. Duplicate CIDs are loaded once and results are expanded back to their ordered positions.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 For a store that does not prefer batched reads, route planning avoids splitting a single cheap in-memory batch into unnecessary parallel calls. Node decoding may still use the configured CPU width when the frontier is large enough.
 
 ### 4. Key-stable leaf execution
 
+<<<<<<< HEAD
 When key-only entry-count hashing proves that non-growing value replacement cannot move boundaries, affected leaf groups are independent. The route is admitted only at widths of four or more. One representative route rejects pure insert batches before full hydration; it loads owned nodes into the same cache used by the full route, and the full route still proves every mutation before publication. Key+value, byte-measured, rolling, and Weibull policies always use canonical streaming, including on rightmost leaves. Groups are processed in indexed Rayon partitions:
+=======
+When the chunking input and measure prove that value replacement cannot move boundaries, affected leaf groups are independent. Groups are processed in indexed Rayon partitions:
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 1. merge mutations into the leaf;
 2. enforce exact serialized byte limits;
@@ -120,11 +163,19 @@ Parent frontiers are grouped by parent CID. Independent parents at the same leve
 
 Insert, delete, key-dependent byte-measure, rolling, and Weibull workloads may move boundaries. They cannot be split at arbitrary keys.
 
+<<<<<<< HEAD
 The route planner creates candidate mutation islands only at existing canonical leaf boundaries. A span-density precheck rejects work that cannot contain separated guards, and admission rejects plans whose guarded coverage exceeds one quarter of the leaf frontier or whose candidates collapse by more than 4:1. Each admitted island owns its mutations plus a bounded right-side resynchronization guard.
 
 An island starts a fresh canonical leaf emitter at an existing leaf boundary, replays old entries and mutations in key order, and succeeds only if it emits an old leaf CID before reaching the next island’s protected boundary. A matching old CID proves that the boundary detector has returned to the same reset state. Successful non-overlapping islands are independent.
 
 If an island does not resynchronize, touches its neighbor’s guard, or produces an ambiguous boundary, it is not published. The scheduler drops every speculative result and immediately invokes the current canonical sequential resynchronizing write. It never retries progressively larger speculative regions: measurement showed that iterative retry can create O(n log n) replay work and unbounded tail latency relative to the fallback.
+=======
+The route planner creates candidate mutation islands only at existing canonical leaf boundaries. Islands must be separated by at least one untouched canonical leaf. Each island owns its mutations plus a bounded right-side resynchronization guard.
+
+An island starts a fresh canonical leaf emitter at an existing leaf boundary, replays old entries and mutations in key order, and succeeds only if it emits an old leaf CID before reaching the next island’s protected boundary. A matching old CID proves that the boundary detector has returned to the same reset state. Successful non-overlapping islands are independent.
+
+If an island does not resynchronize, touches its neighbor’s guard, or produces an ambiguous boundary, it is not published. The scheduler deterministically coalesces it with the adjacent island and retries. Repeated collisions eventually produce one region, which is the current canonical sequential resynchronizing write. This makes speculation an optimization rather than a second correctness path.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 No speculative node is flushed before island validation. Failed island bytes stay local and are dropped.
 
@@ -144,9 +195,13 @@ The existing small-write cache policy remains automatic. Cache warming is not ex
 
 Any routing, decoding, boundary, encoding, hashing, or persistence error cancels the call and returns the original error. Rayon results are collected as ordered `Result` values; the first error in input order is returned for deterministic diagnostics.
 
+<<<<<<< HEAD
 Configured route hydration uses separate read and decode widths. Decode work is split into exactly the admitted CPU partitions; width one decodes serially. Partition results are collected first and transposed left-to-right so Rayon reduction order cannot select a different store or decode error.
 
 A failed speculative island is not an error when it merely cannot prove independence. Its bounded wave is allowed to finish, its local bytes are discarded, no later wave starts, and the call immediately uses the canonical sequential fallback. A malformed node, format mismatch, or store failure remains an error and is never converted to a fallback.
+=======
+A failed speculative island is not an error when it merely cannot prove independence. It is coalesced and retried. A malformed node, format mismatch, or store failure remains an error and is never converted to a fallback.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 Content-addressed nodes written before a later store failure may be unreachable, but no successful root is returned. This matches the existing publication contract.
 
@@ -158,10 +213,16 @@ Parallel planning is bypassed when any of these conditions holds:
 - effective width is one;
 - the strategy exposes fewer than two independent tasks;
 - the workload is already handled by a cheaper append or point-mutation fast path;
+<<<<<<< HEAD
 - the structural span is dense, guarded coverage exceeds 25%, candidates collapse by more than 4:1, or fewer than two islands remain;
 - active callers would leave fewer than three shared-pool threads per write.
 
 Structural islands are processed in waves of at most `4 * effective_width` tasks. Explicitly bounded key-stable calls create exactly the selected number of indexed partitions. When automatic width equals the shared pool width, the key-stable leaf vector uses Rayon's indexed dynamic splitting directly, avoiding hundreds of wave allocations while retaining deterministic collection order.
+=======
+- structural islands immediately coalesce into one region.
+
+Work is processed in waves of at most `4 * effective_width` tasks. This prevents mutation-count-proportional task metadata and keeps peak memory bounded while providing enough work for Rayon stealing.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 The implementation must not promise universal improvement: scheduling noise and hardware differ. The merge gate is empirical. Against the immediately preceding release baseline on the same host, protected small-workload medians may not regress beyond 2%, protected p95 latency may not regress beyond 5%, and any result inside that band must be reported as noise rather than an improvement. Large independent workloads must show positive scaling before the parallel route is enabled by default.
 
@@ -170,7 +231,11 @@ The implementation must not promise universal improvement: scheduling noise and 
 1. Compare `batch`, `parallel_batch`, and fresh bulk-build roots for widths 1, 2, 4, 8, and automatic.
 2. Run the matrix across all built-in chunking policies, fixed and variable values, and supported layouts.
 3. Cover sorted and unsorted inputs, duplicate mutations, append, random, clustered, value-only, insert-only, delete-only, and mixed batches.
+<<<<<<< HEAD
 4. Force mutation-island success, dense-span admission bypass, no-resync immediate fallback, store failure, shared-route rightmost classification, and rejection of value-sensitive chunking from the key-stable route.
+=======
+4. Force mutation-island success, collision/coalescing, no-resync fallback, and store failure.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 5. Assert byte-identical reachable node sets, not only root equality.
 6. Instrument maximum route-read width and task concurrency; verify `max_threads` and `sequential()`.
 7. Run concurrent callers against the same immutable base and shared store, verifying roots and absence of deadlock or oversubscription.
@@ -198,7 +263,11 @@ All performance conclusions use release builds and repeated samples. Capture raw
 - nodes and bytes read/written;
 - point and batched store calls;
 - maximum observed task and route-read concurrency;
+<<<<<<< HEAD
 - island admission, successful proof, and immediate-fallback rates.
+=======
+- speculative island success, coalescing, and fallback rates.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 
 ### Acceptance
 
@@ -206,7 +275,11 @@ All performance conclusions use release builds and repeated samples. Capture raw
 - Width one is behaviorally sequential.
 - `max_threads` is respected by instrumentation.
 - Small protected workloads remain inside the regression gates.
+<<<<<<< HEAD
 - Large key-stable value updates must demonstrate positive scaling before that route is enabled automatically. Structural workloads that cannot prove separated islands must remain inside the protected regression gates with zero parallel tasks; sparse admitted islands are evaluated separately.
+=======
+- At least the 100-thousand random value-update and mixed structural workloads demonstrate measurable improvement on available many-core hardware; otherwise their automatic parallel strategy remains disabled.
+>>>>>>> cbcb03c (docs: design canonical parallel mutation executor)
 - Reports state regressions and statistically inconclusive results explicitly.
 
 ## Implementation Boundaries
