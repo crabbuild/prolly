@@ -1,2 +1,0 @@
-version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
-original,normal,10000,3,random_batch_deletes,100,7089541,70895.410,14105.286,35,35,381623,377523,33,35,0,9900,40,39,1,1,410121,483328,921600,0,0,921600,75,791744,true,ok

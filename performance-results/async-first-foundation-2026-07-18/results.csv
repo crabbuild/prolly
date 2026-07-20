@@ -1,5 +1,0 @@
-facade,api,records,items_per_sample,samples,median_ns,p95_ns,throughput_items_per_sec,peak_rss_bytes
-sync_ready,get,100000,1000,30,326334,552667,3064345,20922368
-async_adapted,get,100000,1000,30,270917,308834,3691167,21053440
-sync_ready,get_many,100000,1000,30,466667,652166,2142856,21315584
-async_adapted,get_many,100000,1000,30,453125,590459,2206897,21331968

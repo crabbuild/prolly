@@ -1,2 +1,0 @@
-version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
-current,normal,50000,1,clustered_reads_cold_manager,1000000,426963792,426.964,2342118.978,41,0,426678,0,1063944,41,0,50000,187,186,1,1,2079577,2375680,2375680,0,32768,2408448,187,2079577,true,ok

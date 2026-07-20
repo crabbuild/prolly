@@ -1,2 +1,0 @@
-schema,revision,dirty,records,repetition,build_ns,records_per_sec,num_nodes,num_leaves,num_internal,height,tree_bytes,database_bytes,observed_records,error,validated
-sqlite-prolly-patterns-v1,1a738fc6c6d24d01c52b2ba19ee5a7e0a493e1df,true,100,1,250584,399067.7776713597,1,1,0,0,10441,28672,100,,true

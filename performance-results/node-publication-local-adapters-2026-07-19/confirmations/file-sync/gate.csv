@@ -1,7 +1,0 @@
-suite,target,records,api,pattern,pairs,samples_per_revision_pair,paired_median_latency_change_pct,paired_median_latency_change_ns,paired_median_throughput_change_pct,paired_median_p50_change_pct,paired_median_p50_change_ns,paired_median_p95_change_pct,paired_median_p95_change_ns,status,reasons
-local-adapters,file-sync,10000,batch,append,20,3,-0.20263447559507533,-18353.5,0.2037363531044117,-0.20263447559507533,-18353.5,-0.20263447559507533,-18353.5,pass,
-local-adapters,file-sync,10000,batch,clustered,20,3,-1.0598929847610123,-123292.0,1.0875570669672103,-1.0598929847610123,-123292.0,-1.0598929847610123,-123292.0,pass,
-local-adapters,file-sync,10000,batch,random,20,3,-0.4809848386087677,-629292.0,0.4969589654724193,-0.4809848386087677,-629292.0,-0.4809848386087677,-629292.0,pass,
-local-adapters,file-sync,10000,reopen,append,20,3,0.339100922756833,250.0,-0.33795451885724365,0.339100922756833,250.0,0.339100922756833,250.0,pass,
-local-adapters,file-sync,10000,reopen,clustered,20,3,-5.2551799648649755,-3979.0,5.546967926631202,-5.2551799648649755,-3979.0,-5.2551799648649755,-3979.0,pass,
-local-adapters,file-sync,10000,reopen,random,20,3,-4.343831319728059,-3500.0,4.557348452852446,-4.343831319728059,-3500.0,-4.343831319728059,-3500.0,pass,

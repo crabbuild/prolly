@@ -1,5 +1,0 @@
-suite,target,records,api,pattern,pairs,samples_per_revision_pair,paired_median_latency_change_pct,paired_median_latency_change_ns,paired_median_throughput_change_pct,paired_median_p50_change_pct,paired_median_p50_change_ns,paired_median_p95_change_pct,paired_median_p95_change_ns,status,reasons
-local-adapters,turso-async,10000,diff,append,20,3,5.290022068200434,604.0,-5.024237842500003,5.290022068200434,604.0,5.290022068200434,604.0,pass,
-local-adapters,turso-async,10000,diff,random,20,3,-4.575800383615645,-4271.0,4.796584539379928,-4.575800383615645,-4271.0,-4.575800383615645,-4271.0,pass,
-local-adapters,turso-async,10000,reopen,append,20,3,1.18767145279855,4937.5,-1.173499099014994,1.18767145279855,4937.5,1.18767145279855,4937.5,pass,
-local-adapters,turso-async,10000,reopen,random,20,3,3.5087220179897534,14812.0,-3.388288194091507,3.5087220179897534,14812.0,3.5087220179897534,14812.0,pass,

@@ -1,2 +1,0 @@
-version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
-current,full,50000,2,append_disjoint_sparse_merge,500,1488250,2976.500,335965.060,7,3,59058,23825,9,7,0,50500,190,189,1,1,2100520,2375680,2457600,0,0,2457600,196,2150939,true,ok

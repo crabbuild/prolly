@@ -1,8 +1,0 @@
-operation,rust_median_ns,go_median_ns,rust_cv_percent,go_cv_percent,rust_vs_go,winner,logical_parity
-full_diff,513721333,1587277708,2.99,0.39,3.0898,rust,true
-range_diff,59194333,143846000,4.26,0.63,2.4301,rust,true
-patch_generate,1667,35750,49.68,19.88,21.4457,rust,true
-patch_apply,5417,238959,8.92,2.09,44.1128,rust,true
-merge_disjoint,8121085417,4981556500,3.45,0.09,0.6134,dolt-go,true
-merge_convergent,292,23574875,45.10,1.09,80735.8733,rust,true
-merge_conflict,5261824958,3325222500,4.11,4.66,0.6320,dolt-go,true

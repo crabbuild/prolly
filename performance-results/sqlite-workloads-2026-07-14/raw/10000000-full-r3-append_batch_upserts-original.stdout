@@ -1,2 +1,0 @@
-version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
-original,full,10000000,3,append_batch_upserts,10000,98566083,9856.608,101454.777,3,40,19027,433066,0,3,0,10010000,36650,36515,135,2,414415620,466608128,467091456,0,0,467091456,36653,414434647,true,ok
