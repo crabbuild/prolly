@@ -1,0 +1,26 @@
+building base fixture: records=1000
+measuring: records=1000 repetition=1 operation=put pattern=append
+measuring: records=1000 repetition=1 operation=put pattern=random
+measuring: records=1000 repetition=1 operation=put pattern=clustered
+measuring: records=1000 repetition=1 operation=batch pattern=append
+measuring: records=1000 repetition=1 operation=batch pattern=random
+measuring: records=1000 repetition=1 operation=batch pattern=clustered
+measuring: records=1000 repetition=1 operation=get_cold pattern=append
+measuring: records=1000 repetition=1 operation=get_cold pattern=random
+measuring: records=1000 repetition=1 operation=get_cold pattern=clustered
+measuring: records=1000 repetition=1 operation=get_warm pattern=append
+measuring: records=1000 repetition=1 operation=get_warm pattern=random
+measuring: records=1000 repetition=1 operation=get_warm pattern=clustered
+measuring: records=1000 repetition=1 operation=query pattern=append
+measuring: records=1000 repetition=1 operation=query pattern=random
+measuring: records=1000 repetition=1 operation=query pattern=clustered
+measuring: records=1000 repetition=1 operation=scan pattern=append
+measuring: records=1000 repetition=1 operation=scan pattern=clustered
+measuring: records=1000 repetition=1 operation=full_scan pattern=append
+measuring: records=1000 repetition=1 operation=diff pattern=append
+measuring: records=1000 repetition=1 operation=diff pattern=random
+measuring: records=1000 repetition=1 operation=diff pattern=clustered
+measuring: records=1000 repetition=1 operation=merge pattern=append
+measuring: records=1000 repetition=1 operation=merge pattern=random
+measuring: records=1000 repetition=1 operation=merge pattern=clustered
+benchmark complete: 25 rows measured, 0 rows skipped

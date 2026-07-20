@@ -1,0 +1,6 @@
+captured_utc=2026-07-20T05:06:40Z
+docker_postgres_health=healthy
+host_cpu_idle_percent=77.51
+competing_prolly_perf_processes=0
+available_disk_gib=75
+note=CPU idle was sampled immediately before the corrected full run. macOS reported high compressed memory after another performance job had finished; no memory-throttled pages were observed during preflight.

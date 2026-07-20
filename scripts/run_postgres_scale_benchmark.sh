@@ -33,11 +33,13 @@ case "$PROFILE" in
     SIZES="${BENCH_SIZES:-1000}"
     RUNS="${BENCH_RUNS:-1}"
     CHANGES="${BENCH_CHANGES:-100}"
+    READ_SAMPLES="${BENCH_READ_SAMPLES:-100}"
     ;;
   full)
     SIZES="${BENCH_SIZES:-1000000,10000000}"
     RUNS="${BENCH_RUNS:-3}"
     CHANGES="${BENCH_CHANGES:-auto}"
+    READ_SAMPLES="${BENCH_READ_SAMPLES:-10000}"
     ;;
   *)
     printf 'BENCH_PROFILE must be smoke or full\n' >&2
@@ -101,6 +103,9 @@ fi
   printf 'operations=%s\n' "$OPERATIONS"
   printf 'patterns=%s\n' "$PATTERNS"
   printf 'changes=%s\n' "$CHANGES"
+  printf 'read_samples=%s\n' "$READ_SAMPLES"
+  printf 'merge_changes_semantics=total_split_evenly\n'
+  printf 'random_merge_branch_distribution=interleaved\n'
   printf 'min_free_gb=%s\n' "$MIN_FREE_GB"
   printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUTPUT/run-manifest.txt"
@@ -130,6 +135,7 @@ ARGS=(
   --operations "$OPERATIONS"
   --patterns "$PATTERNS"
   --changes "$CHANGES"
+  --read-samples "$READ_SAMPLES"
   --min-free-gb "$MIN_FREE_GB"
 )
 "$EXECUTABLE" "${ARGS[@]}" 2>&1 | tee "$OUTPUT/run.log"

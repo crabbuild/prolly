@@ -1,0 +1,15 @@
+schema=postgres-scale-v1
+revision=d6f33dc7351ba93f6117913a11cfb85e7d751696
+dirty=true
+seed=0x6a09e667f3bcc909
+profile=full
+sizes=1000000
+runs=3
+operations=put,batch,get_cold,get_warm,query,scan,full_scan,diff,merge
+patterns=append,random,clustered
+changes=300000
+read_samples=10000
+merge_changes_semantics=total_split_evenly
+min_free_gb=3
+started_utc=2026-07-20T04:54:00Z
+ended_utc=2026-07-20T05:03:44Z

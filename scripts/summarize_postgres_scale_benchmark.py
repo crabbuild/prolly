@@ -93,9 +93,12 @@ def aggregate(rows):
     return summaries
 
 
-def render_report(summaries, rows):
+def render_report(summaries, rows, manifest=None):
+    manifest = manifest or {}
     revision = rows[0].get("revision", "unknown") if rows else "unknown"
     dirty = rows[0].get("dirty", "unknown") if rows else "unknown"
+    changes = int(manifest.get("changes", "0")) if manifest.get("changes", "").isdigit() else 0
+    read_samples = int(manifest.get("read_samples", "0")) if manifest.get("read_samples", "").isdigit() else 0
     lines = [
         "# PostgreSQL-backed Prolly performance",
         "",
@@ -104,6 +107,17 @@ def render_report(summaries, rows):
         "This is an end-to-end single-client measurement of the public async Prolly API over SQLx and PostgreSQL 16 in Docker Desktop. Latency is wall-clock time; PostgreSQL execution time is separately observed by `pg_stat_statements`.",
         "",
     ]
+    if changes and read_samples:
+        lines.extend(
+            [
+                "## Workload cardinality",
+                "",
+                f"Batch and diff mutate {changes:,} keys. Point get, multi-get, and bounded scan sample {read_samples:,} keys or entries.",
+                f"Merge treats {changes:,} as the total change count: {changes // 2:,} changes per branch across two disjoint branches.",
+                "Random merge keys are interleaved across both branches so each branch spans the full base keyspace.",
+                "",
+            ]
+        )
     for records in sorted({item["records"] for item in summaries}):
         lines.extend(
             [
@@ -208,7 +222,9 @@ def summarize(input_path, manifest_path, output_dir, allow_partial=False):
         if summaries:
             writer.writeheader()
             writer.writerows(summaries)
-    (output_dir / "report.md").write_text(render_report(summaries, rows), encoding="utf-8")
+    (output_dir / "report.md").write_text(
+        render_report(summaries, rows, manifest), encoding="utf-8"
+    )
     return summaries
 
 
