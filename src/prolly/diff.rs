@@ -990,6 +990,9 @@ impl<S: Store> Iterator for SyncDiffIter<'_, S> {
         if self.inner.failed {
             return None;
         }
+        if let Some(diff) = self.inner.pop_append_lineage_diff() {
+            return Some(Ok(diff));
+        }
         if let Some(diff) = self.inner.pending.pop_front() {
             self.inner.stats.emitted_diffs += 1;
             return Some(Ok(diff));
@@ -2534,10 +2537,14 @@ where
 /// avoiding allocation of the full diff result.
 pub struct AsyncDiffIter<'a, S: AsyncStore> {
     prolly: &'a AsyncProlly<S>,
+    base: Tree,
     base_root: Option<Cid>,
     other_root: Option<Cid>,
     stack: Vec<DiffFrame>,
     pending: VecDeque<Diff>,
+    lineage_candidate: Option<Arc<Vec<Mutation>>>,
+    append_lineage: Option<Arc<Vec<Mutation>>>,
+    lineage_index: usize,
     failed: bool,
     stats: DiffTraversalStats,
 }
@@ -2549,10 +2556,16 @@ where
     pub(crate) fn new(prolly: &'a AsyncProlly<S>, base: &Tree, other: &Tree) -> Self {
         Self {
             prolly,
+            base: base.clone(),
             base_root: base.root.clone(),
             other_root: other.root.clone(),
             stack: initial_diff_stack(base, other),
             pending: VecDeque::new(),
+            lineage_candidate: prolly
+                .branch_changes_since(base, other)
+                .filter(|changes| changes.len() >= 16),
+            append_lineage: None,
+            lineage_index: 0,
             failed: false,
             stats: DiffTraversalStats::default(),
         }
@@ -2570,32 +2583,105 @@ where
 
         Ok(Self {
             prolly,
+            base: base.clone(),
             base_root: base.root.clone(),
             other_root: other.root.clone(),
             stack: cursor.markers.iter().map(DiffFrame::from_marker).collect(),
             pending: cursor.pending.iter().cloned().collect(),
+            lineage_candidate: None,
+            append_lineage: None,
+            lineage_index: 0,
             failed: false,
             stats: DiffTraversalStats::default(),
         })
     }
 
     fn checkpoint(&self) -> Option<StructuralDiffCursor> {
-        if self.stack.is_empty() && self.pending.is_empty() {
+        if self.stack.is_empty()
+            && self.pending.is_empty()
+            && self
+                .append_lineage
+                .as_ref()
+                .map_or(true, |changes| self.lineage_index >= changes.len())
+        {
             return None;
+        }
+
+        let mut pending = self.pending.iter().cloned().collect::<Vec<_>>();
+        if let Some(changes) = self.append_lineage.as_ref() {
+            pending.extend(changes[self.lineage_index..].iter().filter_map(|mutation| {
+                let Mutation::Upsert { key, val } = mutation else {
+                    return None;
+                };
+                Some(Diff::Added {
+                    key: key.clone(),
+                    val: val.clone(),
+                })
+            }));
         }
 
         Some(StructuralDiffCursor {
             base_root: self.base_root.clone(),
             other_root: self.other_root.clone(),
             markers: self.stack.iter().map(DiffFrame::to_marker).collect(),
-            pending: self.pending.iter().cloned().collect(),
+            pending,
         })
+    }
+
+    fn pop_append_lineage_diff(&mut self) -> Option<Diff> {
+        let changes = self.append_lineage.as_ref()?;
+        let mutation = changes.get(self.lineage_index)?;
+        self.lineage_index += 1;
+        self.stats.emitted_diffs += 1;
+        match mutation {
+            Mutation::Upsert { key, val } => Some(Diff::Added {
+                key: key.clone(),
+                val: val.clone(),
+            }),
+            Mutation::Delete { .. } => None,
+        }
+    }
+
+    async fn prepare_append_lineage(&mut self) -> Result<(), Error> {
+        let Some(changes) = self.lineage_candidate.take() else {
+            return Ok(());
+        };
+        let Some(first_key) = changes.first().map(Mutation::key) else {
+            return Ok(());
+        };
+        if changes.iter().any(Mutation::is_delete) {
+            return Ok(());
+        }
+        let base_maximum = self
+            .prolly
+            .last_entry_with(&self.base, |entry| entry.key().to_vec())
+            .await?;
+        if base_maximum
+            .as_deref()
+            .is_some_and(|maximum| first_key <= maximum)
+        {
+            return Ok(());
+        }
+        self.stack.clear();
+        self.append_lineage = Some(changes);
+        Ok(())
     }
 
     /// Return the next diff entry in lexicographic key order.
     pub async fn next(&mut self) -> Option<Result<Diff, Error>> {
         if self.failed {
             return None;
+        }
+
+        if let Some(diff) = self.pop_append_lineage_diff() {
+            return Some(Ok(diff));
+        }
+        if let Err(err) = self.prepare_append_lineage().await {
+            self.failed = true;
+            return Some(Err(err));
+        }
+        if let Some(diff) = self.pop_append_lineage_diff() {
+            return Some(Ok(diff));
         }
 
         if let Err(err) = self.fill_pending().await {
@@ -2673,7 +2759,11 @@ where
                     .await?;
                 }
             }
-            self.pending.extend(diffs);
+            // `fill_pending` only runs with an empty queue. Converting the
+            // freshly built vector lets `VecDeque` reuse its allocation rather
+            // than moving every owned diff through `extend` into a second
+            // buffer, which is significant for appended leaf runs.
+            self.pending = diffs.into();
         }
 
         Ok(())
@@ -3233,6 +3323,43 @@ where
 {
     if end.is_some_and(|end| end <= start) {
         return Ok(Vec::new());
+    }
+    if let Some(changes) = prolly.branch_changes_since(base, other) {
+        let first = changes.partition_point(|mutation| mutation.key() < start);
+        let last = end.map_or(changes.len(), |end| {
+            changes.partition_point(|mutation| mutation.key() < end)
+        });
+        let selected = &changes[first..last];
+        let keys = selected.iter().map(Mutation::key).collect::<Vec<_>>();
+        let mut diffs = Vec::with_capacity(selected.len());
+        prolly
+            .get_many_with(base, &keys, |position, _, base_value| {
+                let mutation = &selected[position];
+                match mutation {
+                    Mutation::Upsert { key, val } => match base_value {
+                        Some(old) if old != val.as_slice() => diffs.push(Diff::Changed {
+                            key: key.clone(),
+                            old: old.to_vec(),
+                            new: val.clone(),
+                        }),
+                        None => diffs.push(Diff::Added {
+                            key: key.clone(),
+                            val: val.clone(),
+                        }),
+                        Some(_) => {}
+                    },
+                    Mutation::Delete { key } => {
+                        if let Some(val) = base_value {
+                            diffs.push(Diff::Removed {
+                                key: key.clone(),
+                                val: val.to_vec(),
+                            });
+                        }
+                    }
+                }
+            })
+            .await?;
+        return Ok(diffs);
     }
 
     let mut diffs = Vec::new();
@@ -5440,10 +5567,7 @@ pub(crate) fn try_lineage_merge_ready<S: Store>(
     right: &Tree,
     resolver: Option<&(dyn Fn(&Conflict) -> Resolution + Send + Sync)>,
 ) -> Result<Option<Tree>, Error> {
-    let Some(left_changes) = prolly.direct_branch_changes(base, left) else {
-        return Ok(None);
-    };
-    let Some(right_changes) = prolly.direct_branch_changes(base, right) else {
+    let Some((left_changes, right_changes)) = prolly.branch_change_pair(base, left, right) else {
         return Ok(None);
     };
 
@@ -5451,13 +5575,20 @@ pub(crate) fn try_lineage_merge_ready<S: Store>(
     let mut overlap_keys = Vec::new();
     let mut left_index = 0usize;
     let mut right_index = 0usize;
+    let mut matches_right = true;
+    let mut matches_base = true;
     while left_index < left_changes.len() && right_index < right_changes.len() {
         match left_changes[left_index]
             .key()
             .cmp(right_changes[right_index].key())
         {
-            std::cmp::Ordering::Less => left_index += 1,
+            std::cmp::Ordering::Less => {
+                matches_right = false;
+                matches_base = false;
+                left_index += 1;
+            }
             std::cmp::Ordering::Greater => {
+                matches_base = false;
                 plan.push(LineageMergePlan::RightOnly(&right_changes[right_index]));
                 right_index += 1;
             }
@@ -5477,6 +5608,9 @@ pub(crate) fn try_lineage_merge_ready<S: Store>(
             .iter()
             .map(LineageMergePlan::RightOnly),
     );
+    matches_right &= left_index == left_changes.len();
+    matches_base &= left_index == left_changes.len();
+    matches_base &= right_index == right_changes.len();
 
     let base_values = if overlap_keys.is_empty() {
         Vec::new()
@@ -5496,10 +5630,17 @@ pub(crate) fn try_lineage_merge_ready<S: Store>(
                 let right_value = mutation_value(right_mutation);
                 overlap_index += 1;
 
-                if left_value == right_value || right_value == base_value {
+                if left_value == right_value {
+                    matches_base &= left_value == base_value;
+                    continue;
+                }
+                if right_value == base_value {
+                    matches_right = false;
+                    matches_base &= left_value == base_value;
                     continue;
                 }
                 if left_value == base_value {
+                    matches_base &= right_value == base_value;
                     push_change_mutation(&mut mutations, key, right_value);
                     continue;
                 }
@@ -5515,6 +5656,8 @@ pub(crate) fn try_lineage_merge_ready<S: Store>(
                     &mut recorder,
                 )
                 .map_err(Error::Conflict)?;
+                matches_right &= selected.as_deref() == right_value;
+                matches_base &= selected.as_deref() == base_value;
                 if selected.as_deref() != left_value {
                     push_change_mutation(&mut mutations, key, selected.as_deref());
                 }
@@ -5522,7 +5665,11 @@ pub(crate) fn try_lineage_merge_ready<S: Store>(
         }
     }
 
-    if mutations.is_empty() {
+    if matches_base {
+        Ok(Some(base.clone()))
+    } else if matches_right {
+        Ok(Some(right.clone()))
+    } else if mutations.is_empty() {
         Ok(Some(left.clone()))
     } else {
         Ok(Some(prolly.batch_with_origin(
@@ -5545,10 +5692,7 @@ where
     S: AsyncStore,
     S::Error: Send + Sync,
 {
-    let Some(left_changes) = prolly.direct_branch_changes(base, left) else {
-        return Ok(None);
-    };
-    let Some(right_changes) = prolly.direct_branch_changes(base, right) else {
+    let Some((left_changes, right_changes)) = prolly.branch_change_pair(base, left, right) else {
         return Ok(None);
     };
 
@@ -5556,13 +5700,20 @@ where
     let mut overlap_keys = Vec::new();
     let mut left_index = 0usize;
     let mut right_index = 0usize;
+    let mut matches_right = true;
+    let mut matches_base = true;
     while left_index < left_changes.len() && right_index < right_changes.len() {
         match left_changes[left_index]
             .key()
             .cmp(right_changes[right_index].key())
         {
-            std::cmp::Ordering::Less => left_index += 1,
+            std::cmp::Ordering::Less => {
+                matches_right = false;
+                matches_base = false;
+                left_index += 1;
+            }
             std::cmp::Ordering::Greater => {
+                matches_base = false;
                 plan.push(LineageMergePlan::RightOnly(&right_changes[right_index]));
                 right_index += 1;
             }
@@ -5582,6 +5733,9 @@ where
             .iter()
             .map(LineageMergePlan::RightOnly),
     );
+    matches_right &= left_index == left_changes.len();
+    matches_base &= left_index == left_changes.len();
+    matches_base &= right_index == right_changes.len();
 
     let base_values = if overlap_keys.is_empty() {
         Vec::new()
@@ -5600,10 +5754,17 @@ where
                 let right_value = mutation_value(right_mutation);
                 overlap_index += 1;
 
-                if left_value == right_value || right_value == base_value {
+                if left_value == right_value {
+                    matches_base &= left_value == base_value;
+                    continue;
+                }
+                if right_value == base_value {
+                    matches_right = false;
+                    matches_base &= left_value == base_value;
                     continue;
                 }
                 if left_value == base_value {
+                    matches_base &= right_value == base_value;
                     push_change_mutation(&mut mutations, key, right_value);
                     continue;
                 }
@@ -5619,6 +5780,8 @@ where
                     recorder,
                 )
                 .map_err(Error::Conflict)?;
+                matches_right &= selected.as_deref() == right_value;
+                matches_base &= selected.as_deref() == base_value;
                 if selected.as_deref() != left_value {
                     push_change_mutation(&mut mutations, key, selected.as_deref());
                 }
@@ -5631,7 +5794,11 @@ where
         mutations: mutations.len(),
         append_only: false,
     });
-    if mutations.is_empty() {
+    if matches_base {
+        Ok(Some(base.clone()))
+    } else if matches_right {
+        Ok(Some(right.clone()))
+    } else if mutations.is_empty() {
         Ok(Some(left.clone()))
     } else {
         Ok(Some(
@@ -5920,13 +6087,18 @@ fn try_lineage_merge<S: Store>(
     let mut overlap_keys = Vec::new();
     let mut left_index = 0usize;
     let mut right_index = 0usize;
+    let mut matches_base = true;
     while left_index < left_changes.len() && right_index < right_changes.len() {
         match left_changes[left_index]
             .key()
             .cmp(right_changes[right_index].key())
         {
-            std::cmp::Ordering::Less => left_index += 1,
+            std::cmp::Ordering::Less => {
+                matches_base = false;
+                left_index += 1;
+            }
             std::cmp::Ordering::Greater => {
+                matches_base = false;
                 plan.push(LineageMergePlan::RightOnly(&right_changes[right_index]));
                 right_index += 1;
             }
@@ -5947,6 +6119,8 @@ fn try_lineage_merge<S: Store>(
             .iter()
             .map(LineageMergePlan::RightOnly),
     );
+    matches_base &= left_index == left_changes.len();
+    matches_base &= right_index == right_changes.len();
     let base_values = if overlap_keys.is_empty() {
         Vec::new()
     } else {
@@ -5964,10 +6138,16 @@ fn try_lineage_merge<S: Store>(
                 let right_value = mutation_value(right_mutation);
                 overlap_index += 1;
 
-                if left_value == right_value || right_value == base_value {
+                if left_value == right_value {
+                    matches_base &= left_value == base_value;
+                    continue;
+                }
+                if right_value == base_value {
+                    matches_base &= left_value == base_value;
                     continue;
                 }
                 if left_value == base_value {
+                    matches_base &= right_value == base_value;
                     push_change_mutation(&mut mutations, key, right_value);
                     continue;
                 }
@@ -5984,6 +6164,7 @@ fn try_lineage_merge<S: Store>(
                     recorder,
                 )
                 .map_err(Error::Conflict)?;
+                matches_base &= selected.as_deref() == base_value;
                 if selected.as_deref() != left_value {
                     push_change_mutation(&mut mutations, key, selected.as_deref());
                 }
@@ -5996,7 +6177,9 @@ fn try_lineage_merge<S: Store>(
         mutations: mutations.len(),
         append_only: false,
     });
-    if mutations.is_empty() {
+    if matches_base {
+        Ok(Some(base.clone()))
+    } else if mutations.is_empty() {
         Ok(Some(left.clone()))
     } else {
         let result = rebuild_with_sorted_mutations(prolly, left, &mutations)?;

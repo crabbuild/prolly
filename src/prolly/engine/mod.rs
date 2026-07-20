@@ -72,6 +72,7 @@ where
         Ok(digest)
     }
 
+    #[cfg(test)]
     pub(crate) fn direct_branch_changes(
         &self,
         base: &Tree,
@@ -81,6 +82,29 @@ where
             .read()
             .ok()?
             .direct_changes(&base.root, &branch.root)
+    }
+
+    pub(crate) fn branch_changes_since(
+        &self,
+        base: &Tree,
+        branch: &Tree,
+    ) -> Option<Arc<Vec<super::Mutation>>> {
+        self.branch_lineage
+            .write()
+            .ok()?
+            .changes_since(&base.root, &branch.root)
+    }
+
+    pub(crate) fn branch_change_pair(
+        &self,
+        base: &Tree,
+        left: &Tree,
+        right: &Tree,
+    ) -> Option<super::BranchChangePair> {
+        self.branch_lineage
+            .write()
+            .ok()?
+            .change_pair(&base.root, &left.root, &right.root)
     }
 
     #[cfg(test)]

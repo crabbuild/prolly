@@ -119,8 +119,33 @@ fn main() {
             bench_merge_conflict_resolved(scale);
             return;
         }
+        Ok("merge-conflict-cold") => {
+            bench_merge_conflict_resolved_cold(scale);
+            return;
+        }
         Ok("stream-append") => {
             bench_stream_diff_append_suffix(scale);
+            return;
+        }
+        Ok("async-engine-recovery") => {
+            bench_range_scan(scale);
+            bench_stream_diff_append_suffix(scale);
+            bench_range_diff_window(scale);
+            bench_merge_sparse(scale);
+            bench_merge_conflict_resolved(scale);
+            bench_merge_conflict_resolved_cold(scale);
+            return;
+        }
+        Ok("async-engine-protected") => {
+            bench_incremental_insert(scale / 5);
+            bench_batch_builder(scale);
+            bench_point_get(scale);
+            bench_point_updates(scale);
+            bench_point_deletes(scale);
+            bench_batch_mutations(scale);
+            bench_batch_mutations_mixed(scale);
+            bench_batch_mutations_append(scale);
+            bench_parallel_batch_mutations(scale);
             return;
         }
         Ok("batch-regressions") => {
@@ -1401,6 +1426,40 @@ fn bench_merge_conflict_resolved(items: usize) {
         let resolver: Resolver =
             Box::new(|conflict| Resolution::value(conflict.right.clone().expect("right value")));
         let merged = prolly.merge(&base, &left, &right, Some(resolver)).unwrap();
+        black_box(merged.root);
+    });
+}
+
+fn bench_merge_conflict_resolved_cold(items: usize) {
+    let data = data_set(items);
+    let (store, prolly, base) = build_tree(&data);
+    let mut left = base.clone();
+    let mut right = base.clone();
+    let conflict_step = (items / 100).max(1);
+    let mut conflicts = 0;
+
+    for i in (0..items).step_by(conflict_step) {
+        let key = key_for_index(i);
+        left = prolly
+            .put(
+                &left,
+                key.clone(),
+                format!("left-conflict-{i:08}").into_bytes(),
+            )
+            .unwrap();
+        right = prolly
+            .put(&right, key, format!("right-conflict-{i:08}").into_bytes())
+            .unwrap();
+        conflicts += 1;
+    }
+
+    let reopened = Prolly::new(store, bench_config());
+    measure("merge_conflict_resolved_cold_mem", 10, conflicts, || {
+        let resolver: Resolver =
+            Box::new(|conflict| Resolution::value(conflict.right.clone().expect("right value")));
+        let merged = reopened
+            .merge(&base, &left, &right, Some(resolver))
+            .unwrap();
         black_box(merged.root);
     });
 }
