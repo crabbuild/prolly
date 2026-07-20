@@ -1,0 +1,6 @@
+driver=/Users/haipingfu/CrabDB/prolly/scripts/run_sqlite_scale_benchmark.sh
+revision=aca96b17fd44f9557181e571c64a854c7f495c07
+dirty=true
+started_utc=2026-07-20T05:57:53Z
+arguments= --profile full --output performance-results/sqlite/baseline --revision aca96b17fd44f9557181e571c64a854c7f495c07 --dirty --sizes 1000000 --runs 3 --operations put\,batch\,get_cold\,get_warm\,query\,scan\,full_scan\,diff\,merge --patterns append\,random\,clustered --changes auto --read-samples 10000 --min-free-gb 3
+ended_utc=2026-07-20T06:03:31Z

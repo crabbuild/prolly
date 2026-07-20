@@ -1,5 +1,5 @@
-use prolly_sqlite_pattern_bench::fixture::{clone_fixture, directory_bytes};
-use prolly_sqlite_pattern_bench::measurement::nearest_rank;
+use prolly_sqlite_scale_bench::fixture::{clone_fixture, directory_bytes};
+use prolly_sqlite_scale_bench::measurement::nearest_rank;
 
 #[test]
 fn nearest_rank_uses_one_based_ceiling() {

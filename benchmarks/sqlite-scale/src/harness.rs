@@ -60,6 +60,7 @@ pub fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
             config.output.display()
         )
     })?;
+    require_free_space(&config)?;
     ensure_manifest(&config)?;
     write_status(&config.output, "running")?;
 
@@ -145,7 +146,12 @@ pub fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
 
     let summaries = summarize(&raw_rows, config.runs)?;
     write_summary(&config.output.join("summary.csv"), &summaries)?;
-    write_report(&config.output.join("report.md"), &summaries, &fixture_rows)?;
+    write_report(
+        &config.output.join("report.md"),
+        &summaries,
+        &fixture_rows,
+        &config,
+    )?;
     write_status(&config.output, "complete")?;
     Ok(stats)
 }
@@ -170,8 +176,9 @@ fn failed_row(spec: &CellSpec, error: &str) -> RawRow {
         operation: spec.operation,
         pattern: spec.pattern,
         cache_state: spec.cache_state,
-        configured_operations: spec.operations,
-        observed_operations: 0,
+        sample_count: 0,
+        logical_operations: spec.logical_operations(),
+        observed_items: 0,
         total_ns: 0,
         ns_per_operation: 0.0,
         operations_per_sec: 0.0,
@@ -210,16 +217,41 @@ fn manifest(config: &RunConfig) -> String {
         .map(usize::to_string)
         .collect::<Vec<_>>()
         .join(",");
+    let operations = config
+        .operations
+        .iter()
+        .map(|operation| operation.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    let patterns = config
+        .patterns
+        .iter()
+        .map(|pattern| pattern.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
     format!(
-        "schema={SCHEMA_VERSION}\nrevision={}\ndirty={}\nsizes={sizes}\nruns={}\noperations={}\nkey_bytes=24\nvalue_bytes=100\nrandom_seed=0x6a09e667f3bcc909\nsqlite_journal=WAL\nsqlite_synchronous=NORMAL\nmanager_cache=fresh-or-warmed\nos_cache=uncontrolled\n",
+        "schema={SCHEMA_VERSION}\nrevision={}\ndirty={}\nsizes={sizes}\nruns={}\noperations={operations}\npatterns={patterns}\nchanges={}\nread_samples={}\nmerge_changes_semantics=total_split_evenly\nrandom_merge_branch_distribution=interleaved\nkey_bytes=24\nvalue_bytes=100\nrandom_seed=0x6a09e667f3bcc909\nsqlite_journal=WAL\nsqlite_synchronous=NORMAL\nmanager_cache=cold-per-get-or-warmed\nos_cache=uncontrolled\n",
         config.revision,
         config.dirty,
         config.runs,
         config
-            .explicit_operations
+            .changes
             .map(|value| value.to_string())
-            .unwrap_or_else(|| "auto".to_string())
+            .unwrap_or_else(|| "auto-30-percent".to_string()),
+        config.read_samples,
     )
+}
+
+fn require_free_space(config: &RunConfig) -> Result<(), String> {
+    let available = fs2::available_space(&config.output)
+        .map_err(|error| format!("failed to inspect free space: {error}"))?;
+    if available < config.min_free_bytes {
+        return Err(format!(
+            "insufficient free space: available {available} bytes, require {} bytes",
+            config.min_free_bytes
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_manifest(config: &RunConfig) -> Result<(), String> {

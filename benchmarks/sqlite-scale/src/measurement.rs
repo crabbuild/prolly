@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{CacheState, Operation, Pattern};
 
-pub const SCHEMA_VERSION: &str = "sqlite-prolly-patterns-v1";
+pub const SCHEMA_VERSION: &str = "sqlite-scale-v2";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RawRow {
@@ -19,8 +19,9 @@ pub struct RawRow {
     pub operation: Operation,
     pub pattern: Pattern,
     pub cache_state: CacheState,
-    pub configured_operations: usize,
-    pub observed_operations: usize,
+    pub sample_count: usize,
+    pub logical_operations: usize,
+    pub observed_items: usize,
     pub total_ns: u128,
     pub ns_per_operation: f64,
     pub operations_per_sec: f64,
