@@ -7,7 +7,7 @@ use crate::prolly::manifest::{ManifestStore, ManifestUpdate, RootManifest};
 use crate::prolly::proximity::storage::codec::{
     put_bytes, put_cid, put_varint, Reader, MAX_KEY_BYTES,
 };
-use crate::prolly::store::Store;
+use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 use std::collections::BTreeMap;
 
 const MAGIC: &[u8; 4] = b"CRMF";
@@ -224,8 +224,12 @@ fn persist_manifest<S: Store>(
             });
         }
     } else {
+        let entries = [(cid.as_bytes(), bytes.as_slice())];
         store
-            .put(cid.as_bytes(), &bytes)
+            .publish_nodes(NodePublication::new(
+                &entries,
+                PublicationOrigin::Maintenance,
+            ))
             .map_err(|error| Error::Store(Box::new(error)))?;
     }
     Ok(ContentRootPublication {

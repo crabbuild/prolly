@@ -45,7 +45,7 @@ public actor DynamoDBRemoteStore: ForeignRemoteStore {
 
     public func descriptor() async -> StoreDescriptorResultRecord {
         StoreDescriptorResultRecord(value: StoreDescriptorRecord(
-            protocolMajor: 1, adapterName: "dynamodb-v1", provider: "dynamodb", schemaVersion: 1,
+            protocolMajor: 2, adapterName: "dynamodb-v1", provider: "dynamodb", schemaVersion: 1,
             capabilities: StoreCapabilitiesRecord(
                 nativeBatchReads: true, atomicBatchWrites: false, nodeScan: true, hints: true,
                 atomicNodesAndHint: false, rootScan: true, rootCompareAndSwap: true,

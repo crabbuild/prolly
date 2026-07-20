@@ -47,7 +47,7 @@ class SqliteStore @JvmOverloads constructor(
     private val javaScope = CoroutineScope(SupervisorJob() + dispatcher)
     private val storeDescriptor = validateStoreDescriptor(
         StoreDescriptor(
-            protocolMajor = 1u,
+            protocolMajor = 2u,
             adapterName = options.adapterName.ifBlank { "sqlite-v1" },
             provider = "sqlite",
             schemaVersion = 1u,

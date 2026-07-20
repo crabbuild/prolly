@@ -1,7 +1,7 @@
 import {
-  StoreError, compareBytes, missingBytes, normalizeOptionalBytes, optionalEqual, ownBytes, presentBytes,
-  throwIfAborted, validateStoreDescriptor,
-  type NamedStoreRoot, type NodeEntry, type NodeMutation, type OptionalBytes, type RemoteStore,
+  STORE_PROTOCOL_MAJOR, StoreError, compareBytes, missingBytes, normalizeOptionalBytes, optionalEqual, ownBytes, presentBytes,
+  publishNodesWithGeneralPath, throwIfAborted, validateStoreDescriptor,
+  type NamedStoreRoot, type NodeEntry, type NodeMutation, type NodePublication, type OptionalBytes, type RemoteStore,
   type RootCasResult, type RootCondition, type RootWrite, type StoreDescriptor, type StoreTransactionResult,
 } from "@trail/prolly-wasm/remote-store";
 
@@ -42,7 +42,7 @@ export class IndexedDbStore implements RemoteStore {
     for (const name of [NODES, HINTS, ROOTS]) if (!database.objectStoreNames.contains(name)) throw new StoreError("invalid_argument", `IndexedDB database is missing ${name} object store`);
     this.#database = database;
     this.#storeDescriptor = validateStoreDescriptor({
-      protocolMajor: 1, adapterName: options.adapterName?.trim() || "indexeddb-v1", provider: "indexeddb", schemaVersion: 1,
+      protocolMajor: STORE_PROTOCOL_MAJOR, adapterName: options.adapterName?.trim() || "indexeddb-v1", provider: "indexeddb", schemaVersion: 1,
       capabilities: { nativeBatchReads: true, atomicBatchWrites: true, nodeScan: true, hints: true, atomicNodesAndHint: true, rootScan: true, rootCompareAndSwap: true, transactions: true, readParallelism: options.readParallelism ?? 16 }, limits: {},
     });
   }
@@ -57,6 +57,8 @@ export class IndexedDbStore implements RemoteStore {
     const owned = operations.map(cloneNodeMutation);
     return this.#runTransaction("batch_nodes", [NODES], "readwrite", signal, async (transaction) => { applyNodes(transaction.objectStore(NODES), owned); });
   }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> { return publishNodesWithGeneralPath(this, publication, signal); }
 
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> {
     const keys = cids.map(binaryKey);

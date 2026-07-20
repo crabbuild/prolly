@@ -5,7 +5,7 @@ mod common;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
@@ -14,17 +14,74 @@ use common::{
 };
 use futures_util::StreamExt as _;
 use prolly::{
-    catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, AsyncBlobStore,
-    AsyncProlly, BatchBuilder, BatchOp, BlobRef, BlobStore, Cid, Config, CrdtConfig,
-    CrdtResolution, DeletePolicy, Diff, Error, IndexControl, LargeValueConfig, MemBlobStore,
-    MemBlobStoreError, MemStore, MemStoreError, MultiValueSet, Mutation, NamedRootRetention,
-    NamedRootUpdate, NodeLayoutSpec, Prolly, RangeCursor, Resolution, ReverseCursor, Store,
-    SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue, ValueRef,
+    catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, AsyncBatchBuilder,
+    AsyncBlobStore, AsyncProlly, AsyncSortedBatchBuilder, BatchBuilder, BatchOp, BlobRef,
+    BlobStore, Cid, Config, CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, IndexControl,
+    LargeValueConfig, MemBlobStore, MemBlobStoreError, MemStore, MemStoreError, MultiValueSet,
+    Mutation, NamedRootRetention, NamedRootUpdate, Node, NodeLayoutSpec, Prolly, RangeCursor,
+    Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue,
+    ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
 
 const EXPECTED_ASYNC_NODE_PREFETCH_BATCH_CAP: usize = 64;
+
+#[test]
+fn async_get_rejects_valid_node_bytes_stored_under_wrong_cid() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let config = Config::default();
+        let writer = Prolly::new(store.clone(), config.clone());
+        let tree = writer
+            .put(&writer.create(), b"key".to_vec(), b"value".to_vec())
+            .unwrap();
+        let expected = tree.root.clone().unwrap();
+
+        let encoded = store.get(expected.as_bytes()).unwrap().unwrap();
+        let mut wrong_node = prolly::Node::from_bytes(&encoded).unwrap();
+        wrong_node.vals[0] = b"different-value".to_vec();
+        let wrong_bytes = wrong_node.to_bytes();
+        let actual = Cid::from_bytes(&wrong_bytes);
+        assert_ne!(actual, expected);
+        store.put(expected.as_bytes(), &wrong_bytes).unwrap();
+
+        let reader = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config);
+        let error = reader.get(&tree, b"key").await.unwrap_err();
+        assert!(matches!(
+            error,
+            Error::CidMismatch {
+                expected: found_expected,
+                actual: found_actual,
+            } if found_expected == expected && found_actual == actual
+        ));
+
+        store.put(expected.as_bytes(), &encoded).unwrap();
+        assert_eq!(
+            reader.get(&tree, b"key").await.unwrap(),
+            Some(b"value".to_vec())
+        );
+    });
+}
+
+#[test]
+fn async_get_rejects_correctly_addressed_node_with_wrong_tree_format() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let plain_config = Config::builder().node_layout(NodeLayoutSpec::Plain).build();
+        let writer = Prolly::new(store.clone(), plain_config);
+        let mut tree = writer
+            .put(&writer.create(), b"key".to_vec(), b"value".to_vec())
+            .unwrap();
+        tree.config = Config::default();
+
+        let reader = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        assert!(matches!(
+            reader.get(&tree, b"key").await,
+            Err(Error::FormatMismatch { .. })
+        ));
+    });
+}
 
 #[test]
 fn async_write_assembly_has_no_stateless_legacy_boundary_calls() {
@@ -47,6 +104,95 @@ fn block_on<F: Future>(future: F) -> F::Output {
             Poll::Pending => std::thread::yield_now(),
         }
     }
+}
+
+#[test]
+fn async_snapshot_and_node_gc_services_are_engine_native() {
+    block_on(async {
+        let source = Arc::new(MemStore::new());
+        let engine = AsyncProlly::new(SyncStoreAsAsync::new(source.clone()), Config::default());
+        let first = engine
+            .put(&engine.create(), b"a".to_vec(), b"one".to_vec())
+            .await
+            .unwrap();
+        let current = engine
+            .put(&first, b"b".to_vec(), b"two".to_vec())
+            .await
+            .unwrap();
+
+        let bundle = engine.export_snapshot(&current).await.unwrap();
+        let destination = Arc::new(MemStore::new());
+        let destination_engine = AsyncProlly::new(
+            SyncStoreAsAsync::new(destination.clone()),
+            Config::default(),
+        );
+        let imported = destination_engine.import_snapshot(&bundle).await.unwrap();
+        assert_eq!(
+            destination_engine.get(&imported, b"b").await.unwrap(),
+            Some(b"two".to_vec())
+        );
+
+        let candidates = engine
+            .mark_reachable(&[first.clone(), current.clone()])
+            .await
+            .unwrap()
+            .live_cids;
+        let plan = engine
+            .plan_gc(std::slice::from_ref(&current), &candidates)
+            .await
+            .unwrap();
+        assert!(plan.reclaimable_nodes > 0);
+
+        let swept = engine
+            .sweep_gc(std::slice::from_ref(&current), &candidates)
+            .await
+            .unwrap();
+        assert_eq!(swept.deleted_nodes, plan.reclaimable_nodes);
+        assert_eq!(
+            engine.get(&current, b"a").await.unwrap(),
+            Some(b"one".to_vec())
+        );
+    });
+}
+
+#[test]
+fn async_cursor_window_matches_ready_sync_seek_semantics() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let sync = Prolly::new(store.clone(), Config::default());
+        let tree = sync
+            .batch(
+                &sync.create(),
+                vec![
+                    Mutation::Upsert {
+                        key: b"a".to_vec(),
+                        val: b"1".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"c".to_vec(),
+                        val: b"3".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"e".to_vec(),
+                        val: b"5".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+        let engine = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+
+        assert_eq!(
+            engine.cursor_window(&tree, b"b", None, 2).await.unwrap(),
+            sync.cursor_window(&tree, b"b", None, 2).unwrap()
+        );
+        assert_eq!(
+            engine
+                .cursor_window(&tree, b"c", Some(b"e"), 4)
+                .await
+                .unwrap(),
+            sync.cursor_window(&tree, b"c", Some(b"e"), 4).unwrap()
+        );
+    });
 }
 
 #[test]
@@ -250,6 +396,7 @@ struct CountingBatchStore {
     put_hint_calls: AtomicUsize,
     max_batch_put_len: AtomicUsize,
     batch_get_ordered_unique_calls: AtomicUsize,
+    batch_get_ordered_unique_keys: AtomicUsize,
     max_batch_get_ordered_unique_len: AtomicUsize,
 }
 
@@ -257,6 +404,8 @@ impl CountingBatchStore {
     fn reset_read_counts(&self) {
         self.get_calls.store(0, Ordering::Relaxed);
         self.batch_get_ordered_unique_calls
+            .store(0, Ordering::Relaxed);
+        self.batch_get_ordered_unique_keys
             .store(0, Ordering::Relaxed);
         self.max_batch_get_ordered_unique_len
             .store(0, Ordering::Relaxed);
@@ -306,6 +455,8 @@ impl Store for CountingBatchStore {
     ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
         self.batch_get_ordered_unique_calls
             .fetch_add(1, Ordering::Relaxed);
+        self.batch_get_ordered_unique_keys
+            .fetch_add(keys.len(), Ordering::Relaxed);
         self.max_batch_get_ordered_unique_len
             .fetch_max(keys.len(), Ordering::Relaxed);
         self.inner.batch_get_ordered_unique(keys)
@@ -316,6 +467,10 @@ impl Store for CountingBatchStore {
     }
 
     fn supports_hints(&self) -> bool {
+        true
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
         true
     }
 
@@ -352,6 +507,86 @@ impl Store for CountingBatchStore {
     }
 }
 
+#[derive(Default)]
+struct InjectedFailureStore {
+    inner: MemStore,
+    fail_next_get: AtomicBool,
+    fail_next_batch_put: AtomicBool,
+    failed_batch_entries: Mutex<Vec<(Vec<u8>, Vec<u8>)>>,
+}
+
+impl InjectedFailureStore {
+    fn fail_next_get(&self) {
+        self.fail_next_get.store(true, Ordering::SeqCst);
+    }
+
+    fn fail_next_batch_put(&self) {
+        self.fail_next_batch_put.store(true, Ordering::SeqCst);
+    }
+
+    fn failed_batch_root(&self) -> Cid {
+        self.failed_batch_entries
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(cid, bytes)| {
+                let node = prolly::Node::from_bytes(bytes).unwrap();
+                let mut cid_bytes = [0u8; 32];
+                cid_bytes.copy_from_slice(cid);
+                (node.level, Cid(cid_bytes))
+            })
+            .max_by_key(|(level, _)| *level)
+            .expect("failed batch must contain a rewritten root")
+            .1
+    }
+}
+
+impl Store for InjectedFailureStore {
+    type Error = std::io::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        if self.fail_next_get.swap(false, Ordering::SeqCst) {
+            return Err(std::io::Error::other("injected async engine read failure"));
+        }
+        self.inner
+            .get(key)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        self.inner
+            .put(key, value)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        self.inner
+            .delete(key)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        self.inner
+            .batch(ops)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        if self.fail_next_batch_put.swap(false, Ordering::SeqCst) {
+            *self.failed_batch_entries.lock().unwrap() = entries
+                .iter()
+                .map(|(key, value)| (key.to_vec(), value.to_vec()))
+                .collect();
+            return Err(std::io::Error::other(
+                "injected async engine batch publication failure",
+            ));
+        }
+        self.inner
+            .batch_put(entries)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+}
+
 fn build_wide_tree(
     store: Arc<CountingBatchStore>,
     config: &Config,
@@ -371,6 +606,89 @@ fn build_wide_tree(
 fn sync_store_as_async_satisfies_async_store_contract() {
     let store = SyncStoreAsAsync::new(MemStore::new());
     block_on(assert_async_store_contract(&store));
+}
+
+#[test]
+fn async_engine_bulk_builds_match_canonical_builder_roots() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(211)
+        .build();
+    let entries = vec![
+        (b"c".to_vec(), b"3".to_vec()),
+        (b"a".to_vec(), b"old".to_vec()),
+        (b"b".to_vec(), b"2".to_vec()),
+        (b"a".to_vec(), b"new".to_vec()),
+    ];
+
+    let mut oracle = BatchBuilder::new(Arc::new(MemStore::new()), config.clone());
+    for (key, value) in &entries {
+        oracle.add(key.clone(), value.clone());
+    }
+    let oracle = oracle.build().unwrap();
+
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(MemStore::new()), config.clone());
+    let built = block_on(engine.build_from_entries(entries)).unwrap();
+    assert_eq!(built.root, oracle.root);
+
+    let sorted = vec![
+        (b"a".to_vec(), b"old".to_vec()),
+        (b"a".to_vec(), b"new".to_vec()),
+        (b"b".to_vec(), b"2".to_vec()),
+        (b"c".to_vec(), b"3".to_vec()),
+    ];
+    let sorted_built = block_on(engine.build_from_sorted_entries(sorted)).unwrap();
+    assert_eq!(sorted_built.root, oracle.root);
+
+    let error = block_on(engine.build_from_sorted_entries(vec![
+        (b"b".to_vec(), b"2".to_vec()),
+        (b"a".to_vec(), b"1".to_vec()),
+    ]))
+    .unwrap_err();
+    assert!(matches!(error, Error::UnsortedInput { .. }));
+}
+
+#[test]
+fn async_builders_share_canonical_roots_and_sorted_validation() {
+    block_on(async {
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(2)
+            .hash_seed(223)
+            .build();
+        let entries = (0..300)
+            .map(|index| {
+                (
+                    format!("k{index:04}").into_bytes(),
+                    format!("v{index:04}").into_bytes(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let mut unsorted =
+            AsyncBatchBuilder::new(SyncStoreAsAsync::new(MemStore::new()), config.clone());
+        for (key, value) in entries.iter().rev() {
+            unsorted.add(key.clone(), value.clone());
+        }
+        let unsorted = unsorted.build().await.unwrap();
+
+        let mut sorted =
+            AsyncSortedBatchBuilder::new(SyncStoreAsAsync::new(MemStore::new()), config);
+        for (key, value) in &entries {
+            sorted.add(key.clone(), value.clone()).await.unwrap();
+        }
+        let sorted = sorted.build().await.unwrap();
+        assert_eq!(sorted.root, unsorted.root);
+
+        let mut invalid =
+            AsyncSortedBatchBuilder::new(SyncStoreAsAsync::new(MemStore::new()), Config::default());
+        invalid.add(b"b".to_vec(), b"2".to_vec()).await.unwrap();
+        let error = invalid.add(b"a".to_vec(), b"1".to_vec()).await.unwrap_err();
+        assert!(matches!(error, Error::UnsortedInput { .. }));
+    });
 }
 
 #[test]
@@ -839,6 +1157,88 @@ fn async_batch_flushes_rebuilt_tree_once_and_matches_batch_semantics() {
 }
 
 #[test]
+fn async_engine_read_failure_keeps_the_base_tree_readable() {
+    let store = Arc::new(InjectedFailureStore::default());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(211)
+        .build();
+    let sync = Prolly::new(store.clone(), config.clone());
+    let mut base = sync.create();
+    for index in 0..64 {
+        base = sync
+            .put(
+                &base,
+                format!("key-{index:03}").into_bytes(),
+                format!("value-{index:03}").into_bytes(),
+            )
+            .unwrap();
+    }
+
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config);
+    engine.clear_cache();
+    store.fail_next_get();
+    let result = block_on(engine.put(&base, b"key-031".to_vec(), b"failed-value".to_vec()));
+
+    assert!(result.is_err());
+    assert_eq!(
+        sync.get(&base, b"key-031").unwrap(),
+        Some(b"value-031".to_vec())
+    );
+}
+
+#[test]
+fn async_engine_write_failure_never_admits_collector_only_nodes() {
+    let store = Arc::new(InjectedFailureStore::default());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(223)
+        .build();
+    let sync = Prolly::new(store.clone(), config.clone());
+    let mut base = sync.create();
+    for index in 0..64 {
+        base = sync
+            .put(
+                &base,
+                format!("key-{index:03}").into_bytes(),
+                format!("value-{index:03}").into_bytes(),
+            )
+            .unwrap();
+    }
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    engine.clear_cache();
+    store.fail_next_batch_put();
+    let result = block_on(engine.put(&base, b"key-031".to_vec(), b"failed-value".to_vec()));
+
+    assert!(result.is_err());
+    let mut unpublished = base.clone();
+    unpublished.root = Some(store.failed_batch_root());
+    assert!(matches!(
+        block_on(engine.get(&unpublished, b"key-031")),
+        Err(Error::NotFound(_))
+    ));
+    assert_eq!(
+        sync.get(&base, b"key-031").unwrap(),
+        Some(b"value-031".to_vec())
+    );
+
+    let updated =
+        block_on(engine.put(&base, b"key-031".to_vec(), b"committed-value".to_vec())).unwrap();
+    assert_eq!(
+        block_on(engine.get(&updated, b"key-031")).unwrap(),
+        Some(b"committed-value".to_vec())
+    );
+    assert_eq!(
+        sync.get(&base, b"key-031").unwrap(),
+        Some(b"value-031".to_vec())
+    );
+}
+
+#[test]
 fn async_batch_sparse_update_matches_the_sync_canonical_root() {
     let store = Arc::new(CountingBatchStore::default());
     let config = Config::builder()
@@ -880,6 +1280,13 @@ fn async_batch_sparse_update_matches_the_sync_canonical_root() {
     async_prolly.clear_cache();
     async_prolly.reset_metrics();
     let updated = block_on(async_prolly.batch(&tree, mutations)).unwrap();
+    let update_read_upper_bound = store.get_calls.load(Ordering::Relaxed)
+        + store.batch_get_ordered_unique_keys.load(Ordering::Relaxed);
+
+    assert!(
+        update_read_upper_bound < 16,
+        "one sparse update must route to touched leaves instead of scanning the tree; observed at least {update_read_upper_bound} node reads"
+    );
 
     assert_eq!(
         block_on(async_prolly.get(&updated, b"k042")).unwrap(),
@@ -1092,6 +1499,84 @@ fn async_batch_routes_multi_leaf_updates_with_batched_frontiers() {
 }
 
 #[test]
+fn async_scattered_value_batch_hydrates_routes_in_bounded_frontiers() {
+    const RECORDS: usize = 10_000;
+    const UPDATES: usize = 100;
+
+    let store = Arc::new(CountingBatchStore::default());
+    let config = Config::default();
+    let mut builder = BatchBuilder::new(store.clone(), config.clone());
+    for index in 0..RECORDS {
+        builder.add(
+            format!("key-{index:020}").into_bytes(),
+            format!("value-{index:020}-00").into_bytes(),
+        );
+    }
+    let base = builder.build().unwrap();
+    let tree_height = Prolly::new(store.clone(), config.clone())
+        .collect_stats(&base)
+        .unwrap()
+        .tree_height;
+    let changed = (0..UPDATES)
+        .map(|offset| (offset * 7_919) % RECORDS)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(changed.len(), UPDATES);
+    let mutations = changed
+        .iter()
+        .map(|index| Mutation::Upsert {
+            key: format!("key-{index:020}").into_bytes(),
+            val: format!("value-{index:020}-01").into_bytes(),
+        })
+        .collect::<Vec<_>>();
+
+    let engine = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    engine.clear_cache();
+    engine.reset_metrics();
+    store.reset_read_counts();
+    store.reset_write_counts();
+
+    let single_cpu = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let (updated, stats) = single_cpu
+        .install(|| block_on(engine.batch_with_write_stats(&base, mutations)))
+        .unwrap();
+    let metrics = engine.metrics();
+
+    let mut rebuilt = BatchBuilder::new(Arc::new(MemStore::new()), config);
+    for index in 0..RECORDS {
+        rebuilt.add(
+            format!("key-{index:020}").into_bytes(),
+            format!(
+                "value-{index:020}-{}",
+                if changed.contains(&index) { "01" } else { "00" }
+            )
+            .into_bytes(),
+        );
+    }
+    assert_eq!(updated.root, rebuilt.build().unwrap().root);
+    assert!(stats.used_key_stable_fast_path, "{stats:?}");
+    assert_eq!(store.batch_put_calls.load(Ordering::Relaxed), 1);
+    assert!(
+        store
+            .max_batch_get_ordered_unique_len
+            .load(Ordering::Relaxed)
+            > 1,
+        "scattered async routes must be hydrated as frontiers: metrics={metrics:?}, stats={stats:?}"
+    );
+    assert!(
+        store
+            .batch_get_ordered_unique_calls
+            .load(Ordering::Relaxed)
+            <= usize::from(tree_height).saturating_mul(2).saturating_add(2),
+        "a scattered batch must use bounded frontier rounds instead of discovering one missing node per replay: height={tree_height}, metrics={metrics:?}, stats={stats:?}"
+    );
+    assert_eq!(metrics.store_batch_put_calls, 1);
+    assert_eq!(metrics.nodes_read, stats.nodes_read);
+}
+
+#[test]
 fn async_append_batch_reuses_cached_rightmost_path_without_reads() {
     let store = Arc::new(CountingBatchStore::default());
     let config = Config::builder()
@@ -1207,6 +1692,30 @@ fn async_append_batch_loads_persisted_rightmost_hint_in_new_manager() {
         Some(b"tail".to_vec())
     );
     assert_tree_invariants(&store, &tree, &config);
+}
+
+#[test]
+fn persisted_rightmost_hint_cannot_bypass_cid_validation() {
+    let store = Arc::new(CountingBatchStore::default());
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .hash_seed(155)
+        .build();
+    let writer = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config.clone());
+    let tree = block_on(writer.put(&writer.create(), b"a".to_vec(), b"original".to_vec())).unwrap();
+    let root = tree.root.clone().unwrap();
+    assert!(store.put_hint_calls.load(Ordering::Relaxed) > 0);
+
+    let bytes = store.inner.get(root.as_bytes()).unwrap().unwrap();
+    let mut wrong = Node::from_bytes(&bytes).unwrap();
+    wrong.vals[0] = b"tampered".to_vec();
+    store.inner.put(root.as_bytes(), &wrong.to_bytes()).unwrap();
+
+    let reader = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+    let error = block_on(reader.put(&tree, b"b".to_vec(), b"next".to_vec())).unwrap_err();
+    assert!(matches!(error, Error::CidMismatch { .. }));
 }
 
 #[test]
@@ -1521,6 +2030,60 @@ fn async_bounded_node_cache_limits_entries_and_preserves_reads() {
     let metrics = async_prolly.metrics();
     assert!(metrics.node_cache_misses > 0);
     assert!(metrics.node_cache_evictions > 0);
+}
+
+#[test]
+fn async_scan_preserves_hot_point_path_in_bounded_cache() {
+    block_on(async {
+        let store = Arc::new(MemStore::new());
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(2)
+            .node_cache_max_nodes(8)
+            .build();
+        let engine = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+        let mutations = (0..128)
+            .map(|idx| Mutation::Upsert {
+                key: format!("k{idx:03}").into_bytes(),
+                val: format!("v{idx:03}").into_bytes(),
+            })
+            .collect();
+        let tree = engine.batch(&engine.create(), mutations).await.unwrap();
+
+        engine.clear_cache();
+        {
+            let mut reader = engine.read(&tree).await.unwrap();
+            assert_eq!(
+                reader.get_with(b"k000", <[u8]>::to_vec).await.unwrap(),
+                Some(b"v000".to_vec())
+            );
+        }
+        assert!(engine.cache_len() <= 8);
+
+        engine.reset_metrics();
+        {
+            let mut scanner = engine.read(&tree).await.unwrap();
+            assert_eq!(scanner.scan_range(&[], None, |_| {}).await.unwrap(), 128);
+        }
+        assert_eq!(
+            engine.metrics().node_cache_evictions,
+            0,
+            "one-pass scan nodes must not displace the point-read working set"
+        );
+
+        engine.reset_metrics();
+        let mut reader = engine.read(&tree).await.unwrap();
+        assert_eq!(
+            reader.get_with(b"k000", <[u8]>::to_vec).await.unwrap(),
+            Some(b"v000".to_vec())
+        );
+        assert_eq!(
+            engine.metrics().node_cache_misses,
+            0,
+            "the point path primed before the scan must remain resident"
+        );
+    });
 }
 
 #[test]

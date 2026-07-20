@@ -7,7 +7,7 @@ use crate::prolly::content_graph::{ContentObjectKind, TypedContentRoot};
 use crate::prolly::error::Error;
 use crate::prolly::proximity::storage::codec::{put_cid, put_varint, Reader, MAX_OBJECT_ENTRIES};
 use crate::prolly::proximity::ProximityTree;
-use crate::prolly::store::Store;
+use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 
 const MAGIC: &[u8; 4] = b"PACL";
 const VERSION: u8 = 1;
@@ -274,8 +274,12 @@ fn put_content<S: Store>(store: &S, cid: &Cid, bytes: &[u8]) -> Result<(), Error
         }
         return Ok(());
     }
+    let entries = [(cid.as_bytes(), bytes)];
     store
-        .put(cid.as_bytes(), bytes)
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::Maintenance,
+        ))
         .map_err(|error| Error::Store(Box::new(error)))
 }
 

@@ -7,12 +7,14 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   upsertNode,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -71,7 +73,7 @@ export class SqliteStore implements RemoteStore {
     }
     this.#database = database;
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: options.adapterName?.trim() || "sqlite-v1",
       provider: "sqlite",
       schemaVersion: 1,
@@ -135,6 +137,10 @@ export class SqliteStore implements RemoteStore {
     return this.#schedule(() => {
       this.#database.transaction(() => applyNodeMutations(this.#database, owned)).immediate();
     }, signal);
+  }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> {
+    return publishNodesWithGeneralPath(this, publication, signal);
   }
 
   async batchGetNodesOrdered(

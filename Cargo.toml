@@ -37,11 +37,12 @@ path = "src/lib.rs"
 
 [features]
 default = []
-async-store = ["dep:futures-util"]
-tokio = ["async-store", "dep:tokio"]
+# Compatibility spelling. Async traits and the async-first engine are unconditional.
+async-store = []
+tokio = ["dep:tokio"]
 
 [dependencies]
-futures-util = { version = "0.3", optional = true }
+futures-util = "0.3"
 rayon = "1.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11"
@@ -56,6 +57,12 @@ libc = "0.2"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3.103"
+
+[target.'cfg(all(target_arch = "aarch64", not(target_os = "windows")))'.dependencies]
+# sha2 0.10 gates its ARMv8 SHA-256 implementation behind this feature.
+# Keep it target-specific; sha2-asm does not support Windows, and WASM plus
+# unsupported architectures must retain the portable implementation.
+sha2 = { version = "0.10", features = ["asm-aarch64"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 mimalloc = "=0.1.52"
@@ -85,4 +92,8 @@ harness = false
 
 [[bench]]
 name = "scale_workloads"
+harness = false
+
+[[bench]]
+name = "async_first_foundation_bench"
 harness = false

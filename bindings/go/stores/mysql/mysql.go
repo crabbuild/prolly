@@ -73,7 +73,7 @@ func (s *Store) Descriptor(ctx context.Context) (prolly.StoreDescriptor, error) 
 		return prolly.StoreDescriptor{}, err
 	}
 	return prolly.StoreDescriptor{
-		ProtocolMajor: 1, AdapterName: s.options.AdapterName, Provider: "mysql", SchemaVersion: 1,
+		ProtocolMajor: prolly.StoreProtocolMajor, AdapterName: s.options.AdapterName, Provider: "mysql", SchemaVersion: 1,
 		Capabilities: prolly.StoreCapabilities{
 			NativeBatchReads: true, AtomicBatchWrites: true, NodeScan: true, Hints: true,
 			AtomicNodesAndHint: true, RootScan: true, RootCompareAndSwap: true,
@@ -108,6 +108,10 @@ func (s *Store) BatchNodes(ctx context.Context, mutations []prolly.NodeMutation)
 	}
 	return s.withTx(ctx, "batch_nodes", func(tx *sql.Tx) error { return applyNodes(ctx, tx, mutations) })
 }
+func (s *Store) PublishNodes(ctx context.Context, publication prolly.NodePublication) error {
+	return prolly.PublishNodesWithGeneralPath(ctx, s, publication)
+}
+
 func (s *Store) BatchGetNodesOrdered(ctx context.Context, keys [][]byte) ([]prolly.OptionalBytes, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err

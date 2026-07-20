@@ -29,7 +29,7 @@ export type RemoteStoreFactory = () => RemoteStore | Promise<RemoteStore>;
 export async function runStoreConformance(factory: RemoteStoreFactory): Promise<void> {
   const store = await factory();
   const descriptor = validateStoreDescriptor(await store.descriptor());
-  assert.equal(descriptor.protocolMajor, 1);
+  assert.equal(descriptor.protocolMajor, 2);
 
   const cases = await loadCases();
   assert.equal(cases.protocol_major, descriptor.protocolMajor);

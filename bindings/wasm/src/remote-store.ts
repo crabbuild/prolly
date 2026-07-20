@@ -1,5 +1,14 @@
-/** Browser-safe version-1 asynchronous store protocol. */
-export const STORE_PROTOCOL_MAJOR = 1 as const;
+/** Browser-safe version-2 asynchronous store protocol. */
+export const STORE_PROTOCOL_MAJOR = 2 as const;
+export const GENERAL = 0 as const;
+export const POINT_UPSERT = 1 as const;
+export const POINT_DELETE = 2 as const;
+export const BATCH_MUTATION = 3 as const;
+export const TREE_BUILD = 4 as const;
+export const MERGE = 5 as const;
+export const RANGE_DELETE = 6 as const;
+export const REPLICATION = 7 as const;
+export const MAINTENANCE = 8 as const;
 export type StoreErrorCode = "invalid_argument" | "invalid_data" | "unavailable" | "permission_denied" | "resource_exhausted" | "unsupported" | "cancelled" | "internal";
 
 export class StoreError extends Error {
@@ -19,6 +28,8 @@ export interface StoreDescriptor { readonly protocolMajor: number; readonly adap
 export interface OptionalBytes { readonly present: boolean; readonly value: Uint8Array; }
 export type NodeMutation = { readonly kind: "upsert"; readonly cid: Uint8Array; readonly node: Uint8Array } | { readonly kind: "delete"; readonly cid: Uint8Array };
 export interface NodeEntry { readonly cid: Uint8Array; readonly node: Uint8Array; }
+export interface NodePublicationHint { readonly namespace: Uint8Array; readonly key: Uint8Array; readonly value: Uint8Array; }
+export interface NodePublication { readonly nodes: readonly NodeEntry[]; readonly hint?: NodePublicationHint; readonly origin: number; }
 export interface NamedStoreRoot { readonly name: Uint8Array; readonly manifest: Uint8Array; }
 export interface RootCasResult { readonly applied: boolean; readonly current: OptionalBytes; }
 export interface RootCondition { readonly name: Uint8Array; readonly expected: OptionalBytes; }
@@ -32,6 +43,7 @@ export interface RemoteStore {
   putNode(cid: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<void>;
   deleteNode(cid: Uint8Array, signal?: AbortSignal): Promise<void>;
   batchNodes(operations: readonly NodeMutation[], signal?: AbortSignal): Promise<void>;
+  publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void>;
   batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]>;
   listNodeCids(signal?: AbortSignal): Promise<Uint8Array[]>;
   getHint(namespace: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<OptionalBytes>;
@@ -46,9 +58,17 @@ export interface RemoteStore {
 }
 
 export function validateStoreDescriptor(value: StoreDescriptor): StoreDescriptor {
-  if (value.protocolMajor !== 1 || !value.adapterName.trim() || !value.provider.trim() || value.schemaVersion < 1 || !Number.isSafeInteger(value.capabilities.readParallelism) || value.capabilities.readParallelism < 1) throw new StoreError("invalid_argument", "invalid browser store descriptor");
+  if (value.protocolMajor !== STORE_PROTOCOL_MAJOR || !value.adapterName.trim() || !value.provider.trim() || value.schemaVersion < 1 || !Number.isSafeInteger(value.capabilities.readParallelism) || value.capabilities.readParallelism < 1) throw new StoreError("invalid_argument", "invalid browser store descriptor");
   for (const limit of Object.values(value.limits)) if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) throw new StoreError("invalid_argument", "invalid browser store limit");
   return Object.freeze({ ...value, capabilities: Object.freeze({ ...value.capabilities }), limits: Object.freeze({ ...value.limits }) });
+}
+export function normalizePublicationOriginCode(code: number): number { return Number.isInteger(code) && code >= GENERAL && code <= MAINTENANCE ? code : GENERAL; }
+export async function publishNodesWithGeneralPath(store: RemoteStore, publication: NodePublication, signal?: AbortSignal): Promise<void> {
+  normalizePublicationOriginCode(publication.origin);
+  if (publication.hint) {
+    return store.batchPutNodesWithHint(publication.nodes, publication.hint.namespace, publication.hint.key, publication.hint.value, signal);
+  }
+  return store.batchNodes(publication.nodes.map(({ cid, node }) => ({ kind: "upsert" as const, cid, node })), signal);
 }
 export function ownBytes(value: Uint8Array): Uint8Array { return Uint8Array.from(value); }
 export function missingBytes(): OptionalBytes { return { present: false, value: new Uint8Array() }; }

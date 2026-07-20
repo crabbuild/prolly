@@ -645,36 +645,39 @@ internal interface UniffiCallbackInterfaceHostStoreCallbackMethod3 : com.sun.jna
     fun callback(`uniffiHandle`: Long,`ops`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod4 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`keys`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`publication`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod5 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`keys`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod6 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod7 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
-}
-internal interface UniffiCallbackInterfaceHostStoreCallbackMethod8 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
-}
-internal interface UniffiCallbackInterfaceHostStoreCallbackMethod9 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceHostStoreCallbackMethod8 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceHostStoreCallbackMethod9 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod10 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod11 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
-}
-internal interface UniffiCallbackInterfaceHostStoreCallbackMethod12 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceHostStoreCallbackMethod12 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod13 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`replacement`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceHostStoreCallbackMethod14 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`replacement`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceHostStoreCallbackMethod15 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceMergeResolverCallbackMethod0 : com.sun.jna.Callback {
@@ -696,36 +699,39 @@ internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod4 : com.sun.jn
     fun callback(`uniffiHandle`: Long,`ops`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod5 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`cids`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`publication`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod6 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`cids`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod7 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod8 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod9 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod10 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod11 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod12 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod13 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`new`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
-}
-internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod14 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod8 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod9 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod10 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod11 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod12 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod13 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod14 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`new`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
 internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod15 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceForeignRemoteStoreMethod16 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`conditions`: RustBuffer.ByValue,`roots`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceSecondaryIndexExtractorCallbackMethod0 : com.sun.jna.Callback {
@@ -810,7 +816,7 @@ internal open class UniffiVTableCallbackInterfaceEntryVisitorCallback(
     }
 
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "get", "put", "delete", "batch", "batchGetOrdered", "prefersBatchReads", "supportsHints", "getHint", "putHint", "listNodeCids", "getRoot", "putRoot", "deleteRoot", "compareAndSwapRoot", "listRoots")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "get", "put", "delete", "batch", "publishNodes", "batchGetOrdered", "prefersBatchReads", "supportsHints", "getHint", "putHint", "listNodeCids", "getRoot", "putRoot", "deleteRoot", "compareAndSwapRoot", "listRoots")
 internal open class UniffiVTableCallbackInterfaceHostStoreCallback(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -818,17 +824,18 @@ internal open class UniffiVTableCallbackInterfaceHostStoreCallback(
     @JvmField internal var `put`: UniffiCallbackInterfaceHostStoreCallbackMethod1? = null,
     @JvmField internal var `delete`: UniffiCallbackInterfaceHostStoreCallbackMethod2? = null,
     @JvmField internal var `batch`: UniffiCallbackInterfaceHostStoreCallbackMethod3? = null,
-    @JvmField internal var `batchGetOrdered`: UniffiCallbackInterfaceHostStoreCallbackMethod4? = null,
-    @JvmField internal var `prefersBatchReads`: UniffiCallbackInterfaceHostStoreCallbackMethod5? = null,
-    @JvmField internal var `supportsHints`: UniffiCallbackInterfaceHostStoreCallbackMethod6? = null,
-    @JvmField internal var `getHint`: UniffiCallbackInterfaceHostStoreCallbackMethod7? = null,
-    @JvmField internal var `putHint`: UniffiCallbackInterfaceHostStoreCallbackMethod8? = null,
-    @JvmField internal var `listNodeCids`: UniffiCallbackInterfaceHostStoreCallbackMethod9? = null,
-    @JvmField internal var `getRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod10? = null,
-    @JvmField internal var `putRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod11? = null,
-    @JvmField internal var `deleteRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod12? = null,
-    @JvmField internal var `compareAndSwapRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod13? = null,
-    @JvmField internal var `listRoots`: UniffiCallbackInterfaceHostStoreCallbackMethod14? = null,
+    @JvmField internal var `publishNodes`: UniffiCallbackInterfaceHostStoreCallbackMethod4? = null,
+    @JvmField internal var `batchGetOrdered`: UniffiCallbackInterfaceHostStoreCallbackMethod5? = null,
+    @JvmField internal var `prefersBatchReads`: UniffiCallbackInterfaceHostStoreCallbackMethod6? = null,
+    @JvmField internal var `supportsHints`: UniffiCallbackInterfaceHostStoreCallbackMethod7? = null,
+    @JvmField internal var `getHint`: UniffiCallbackInterfaceHostStoreCallbackMethod8? = null,
+    @JvmField internal var `putHint`: UniffiCallbackInterfaceHostStoreCallbackMethod9? = null,
+    @JvmField internal var `listNodeCids`: UniffiCallbackInterfaceHostStoreCallbackMethod10? = null,
+    @JvmField internal var `getRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod11? = null,
+    @JvmField internal var `putRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod12? = null,
+    @JvmField internal var `deleteRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod13? = null,
+    @JvmField internal var `compareAndSwapRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod14? = null,
+    @JvmField internal var `listRoots`: UniffiCallbackInterfaceHostStoreCallbackMethod15? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -837,18 +844,19 @@ internal open class UniffiVTableCallbackInterfaceHostStoreCallback(
         `put`: UniffiCallbackInterfaceHostStoreCallbackMethod1? = null,
         `delete`: UniffiCallbackInterfaceHostStoreCallbackMethod2? = null,
         `batch`: UniffiCallbackInterfaceHostStoreCallbackMethod3? = null,
-        `batchGetOrdered`: UniffiCallbackInterfaceHostStoreCallbackMethod4? = null,
-        `prefersBatchReads`: UniffiCallbackInterfaceHostStoreCallbackMethod5? = null,
-        `supportsHints`: UniffiCallbackInterfaceHostStoreCallbackMethod6? = null,
-        `getHint`: UniffiCallbackInterfaceHostStoreCallbackMethod7? = null,
-        `putHint`: UniffiCallbackInterfaceHostStoreCallbackMethod8? = null,
-        `listNodeCids`: UniffiCallbackInterfaceHostStoreCallbackMethod9? = null,
-        `getRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod10? = null,
-        `putRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod11? = null,
-        `deleteRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod12? = null,
-        `compareAndSwapRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod13? = null,
-        `listRoots`: UniffiCallbackInterfaceHostStoreCallbackMethod14? = null,
-    ): UniffiVTableCallbackInterfaceHostStoreCallback(`uniffiFree`,`uniffiClone`,`get`,`put`,`delete`,`batch`,`batchGetOrdered`,`prefersBatchReads`,`supportsHints`,`getHint`,`putHint`,`listNodeCids`,`getRoot`,`putRoot`,`deleteRoot`,`compareAndSwapRoot`,`listRoots`,), Structure.ByValue
+        `publishNodes`: UniffiCallbackInterfaceHostStoreCallbackMethod4? = null,
+        `batchGetOrdered`: UniffiCallbackInterfaceHostStoreCallbackMethod5? = null,
+        `prefersBatchReads`: UniffiCallbackInterfaceHostStoreCallbackMethod6? = null,
+        `supportsHints`: UniffiCallbackInterfaceHostStoreCallbackMethod7? = null,
+        `getHint`: UniffiCallbackInterfaceHostStoreCallbackMethod8? = null,
+        `putHint`: UniffiCallbackInterfaceHostStoreCallbackMethod9? = null,
+        `listNodeCids`: UniffiCallbackInterfaceHostStoreCallbackMethod10? = null,
+        `getRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod11? = null,
+        `putRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod12? = null,
+        `deleteRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod13? = null,
+        `compareAndSwapRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod14? = null,
+        `listRoots`: UniffiCallbackInterfaceHostStoreCallbackMethod15? = null,
+    ): UniffiVTableCallbackInterfaceHostStoreCallback(`uniffiFree`,`uniffiClone`,`get`,`put`,`delete`,`batch`,`publishNodes`,`batchGetOrdered`,`prefersBatchReads`,`supportsHints`,`getHint`,`putHint`,`listNodeCids`,`getRoot`,`putRoot`,`deleteRoot`,`compareAndSwapRoot`,`listRoots`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceHostStoreCallback) {
         `uniffiFree` = other.`uniffiFree`
@@ -857,6 +865,7 @@ internal open class UniffiVTableCallbackInterfaceHostStoreCallback(
         `put` = other.`put`
         `delete` = other.`delete`
         `batch` = other.`batch`
+        `publishNodes` = other.`publishNodes`
         `batchGetOrdered` = other.`batchGetOrdered`
         `prefersBatchReads` = other.`prefersBatchReads`
         `supportsHints` = other.`supportsHints`
@@ -890,7 +899,7 @@ internal open class UniffiVTableCallbackInterfaceMergeResolverCallback(
     }
 
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "descriptor", "getNode", "putNode", "deleteNode", "batchNodes", "batchGetNodesOrdered", "listNodeCids", "getHint", "putHint", "batchPutNodesWithHint", "getRootManifest", "putRootManifest", "deleteRootManifest", "compareAndSwapRootManifest", "listRootManifests", "commitTransaction")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "descriptor", "getNode", "putNode", "deleteNode", "batchNodes", "publishNodes", "batchGetNodesOrdered", "listNodeCids", "getHint", "putHint", "batchPutNodesWithHint", "getRootManifest", "putRootManifest", "deleteRootManifest", "compareAndSwapRootManifest", "listRootManifests", "commitTransaction")
 internal open class UniffiVTableCallbackInterfaceForeignRemoteStore(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -899,17 +908,18 @@ internal open class UniffiVTableCallbackInterfaceForeignRemoteStore(
     @JvmField internal var `putNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod2? = null,
     @JvmField internal var `deleteNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod3? = null,
     @JvmField internal var `batchNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod4? = null,
-    @JvmField internal var `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod5? = null,
-    @JvmField internal var `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod6? = null,
-    @JvmField internal var `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod7? = null,
-    @JvmField internal var `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8? = null,
-    @JvmField internal var `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9? = null,
-    @JvmField internal var `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod10? = null,
-    @JvmField internal var `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11? = null,
-    @JvmField internal var `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12? = null,
-    @JvmField internal var `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13? = null,
-    @JvmField internal var `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod14? = null,
-    @JvmField internal var `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod15? = null,
+    @JvmField internal var `publishNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod5? = null,
+    @JvmField internal var `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod6? = null,
+    @JvmField internal var `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod7? = null,
+    @JvmField internal var `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8? = null,
+    @JvmField internal var `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9? = null,
+    @JvmField internal var `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod10? = null,
+    @JvmField internal var `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11? = null,
+    @JvmField internal var `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12? = null,
+    @JvmField internal var `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13? = null,
+    @JvmField internal var `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod14? = null,
+    @JvmField internal var `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod15? = null,
+    @JvmField internal var `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod16? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -919,18 +929,19 @@ internal open class UniffiVTableCallbackInterfaceForeignRemoteStore(
         `putNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod2? = null,
         `deleteNode`: UniffiCallbackInterfaceForeignRemoteStoreMethod3? = null,
         `batchNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod4? = null,
-        `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod5? = null,
-        `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod6? = null,
-        `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod7? = null,
-        `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8? = null,
-        `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9? = null,
-        `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod10? = null,
-        `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11? = null,
-        `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12? = null,
-        `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13? = null,
-        `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod14? = null,
-        `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod15? = null,
-    ): UniffiVTableCallbackInterfaceForeignRemoteStore(`uniffiFree`,`uniffiClone`,`descriptor`,`getNode`,`putNode`,`deleteNode`,`batchNodes`,`batchGetNodesOrdered`,`listNodeCids`,`getHint`,`putHint`,`batchPutNodesWithHint`,`getRootManifest`,`putRootManifest`,`deleteRootManifest`,`compareAndSwapRootManifest`,`listRootManifests`,`commitTransaction`,), Structure.ByValue
+        `publishNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod5? = null,
+        `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod6? = null,
+        `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod7? = null,
+        `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8? = null,
+        `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9? = null,
+        `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod10? = null,
+        `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11? = null,
+        `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12? = null,
+        `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13? = null,
+        `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod14? = null,
+        `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod15? = null,
+        `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod16? = null,
+    ): UniffiVTableCallbackInterfaceForeignRemoteStore(`uniffiFree`,`uniffiClone`,`descriptor`,`getNode`,`putNode`,`deleteNode`,`batchNodes`,`publishNodes`,`batchGetNodesOrdered`,`listNodeCids`,`getHint`,`putHint`,`batchPutNodesWithHint`,`getRootManifest`,`putRootManifest`,`deleteRootManifest`,`compareAndSwapRootManifest`,`listRootManifests`,`commitTransaction`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceForeignRemoteStore) {
         `uniffiFree` = other.`uniffiFree`
@@ -940,6 +951,7 @@ internal open class UniffiVTableCallbackInterfaceForeignRemoteStore(
         `putNode` = other.`putNode`
         `deleteNode` = other.`deleteNode`
         `batchNodes` = other.`batchNodes`
+        `publishNodes` = other.`publishNodes`
         `batchGetNodesOrdered` = other.`batchGetNodesOrdered`
         `listNodeCids` = other.`listNodeCids`
         `getHint` = other.`getHint`
@@ -1289,6 +1301,8 @@ external fun uniffi_prolly_bindings_checksum_func_verify_proximity_membership_pr
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_crdtresolvercallback_resolve(
@@ -1304,6 +1318,8 @@ external fun uniffi_prolly_bindings_checksum_method_hoststorecallback_put(
 external fun uniffi_prolly_bindings_checksum_method_hoststorecallback_delete(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_hoststorecallback_batch(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered(
 ): Short
@@ -1720,6 +1736,8 @@ external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_put_node(
 external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered(
 ): Short
@@ -2362,6 +2380,8 @@ external fun uniffi_prolly_bindings_fn_method_hoststorecallback_delete(`ptr`: Lo
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_hoststorecallback_batch(`ptr`: Long,`ops`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes(`ptr`: Long,`publication`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_hoststorecallback_batch_get_ordered(`ptr`: Long,`keys`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_hoststorecallback_prefers_batch_reads(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2835,6 +2855,8 @@ external fun uniffi_prolly_bindings_fn_method_foreignremotestore_put_node(`ptr`:
 external fun uniffi_prolly_bindings_fn_method_foreignremotestore_delete_node(`ptr`: Long,`cid`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(`ptr`: Long,`ops`: RustBuffer.ByValue,
+): Long
+external fun uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes(`ptr`: Long,`publication`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered(`ptr`: Long,`cids`: RustBuffer.ByValue,
 ): Long
@@ -3748,6 +3770,8 @@ external fun uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(`p
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(`proof`: RustBuffer.ByValue,`expectedDescriptor`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_normalize_publication_origin_code(`code`: Int,uniffi_out_err: UniffiRustCallStatus,
+): Int
 external fun ffi_prolly_bindings_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun ffi_prolly_bindings_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4278,6 +4302,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof() != 14090.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code() != 55699.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit() != 1459.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4302,37 +4329,40 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch() != 32872.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered() != 59373.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes() != 35124.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads() != 44756.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered() != 24538.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints() != 40193.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads() != 10795.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint() != 32559.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints() != 22557.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint() != 60174.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint() != 29790.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids() != 35211.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint() != 5363.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root() != 3674.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids() != 45542.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root() != 41124.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root() != 61870.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root() != 17982.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root() != 8083.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root() != 10051.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root() != 9754.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots() != 52095.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root() != 60802.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots() != 391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_mergepolicyregistry_has_default() != 49635.toShort()) {
@@ -4926,37 +4956,40 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes() != 29227.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 45520.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 52203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 33243.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 62043.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 44048.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 42406.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 61298.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 54878.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 49897.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 58307.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 40552.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337.toShort()) {
@@ -17540,6 +17573,8 @@ public interface ForeignRemoteStore {
 
     suspend fun `batchNodes`(`ops`: List<NodeMutationRecord>): UnitResultRecord
 
+    suspend fun `publishNodes`(`publication`: NodePublicationRecord): UnitResultRecord
+
     suspend fun `batchGetNodesOrdered`(`cids`: List<kotlin.ByteArray>): OptionalBytesListResultRecord
 
     suspend fun `listNodeCids`(): BytesListResultRecord
@@ -17749,6 +17784,26 @@ open class ForeignRemoteStoreImpl: Disposable, AutoCloseable, ForeignRemoteStore
             UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(
                 uniffiHandle,
                 FfiConverterSequenceTypeNodeMutationRecord.lower(`ops`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUnitResultRecord.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `publishNodes`(`publication`: NodePublicationRecord) : UnitResultRecord {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes(
+                uniffiHandle,
+                FfiConverterTypeNodePublicationRecord.lower(`publication`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -18164,7 +18219,40 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod5 {
+    internal object `publishNodes`: UniffiCallbackInterfaceForeignRemoteStoreMethod5 {
+        override fun callback(`uniffiHandle`: Long,`publication`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`publishNodes`(
+                    FfiConverterTypeNodePublicationRecord.lift(`publication`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: UnitResultRecord ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeUnitResultRecord.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `batchGetNodesOrdered`: UniffiCallbackInterfaceForeignRemoteStoreMethod6 {
         override fun callback(`uniffiHandle`: Long,`cids`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18197,7 +18285,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod6 {
+    internal object `listNodeCids`: UniffiCallbackInterfaceForeignRemoteStoreMethod7 {
         override fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18229,7 +18317,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod7 {
+    internal object `getHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18263,7 +18351,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod8 {
+    internal object `putHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18298,7 +18386,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod9 {
+    internal object `batchPutNodesWithHint`: UniffiCallbackInterfaceForeignRemoteStoreMethod10 {
         override fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18334,7 +18422,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod10 {
+    internal object `getRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18367,7 +18455,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod11 {
+    internal object `putRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18401,7 +18489,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod12 {
+    internal object `deleteRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18434,7 +18522,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod13 {
+    internal object `compareAndSwapRootManifest`: UniffiCallbackInterfaceForeignRemoteStoreMethod14 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`new`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18469,7 +18557,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod14 {
+    internal object `listRootManifests`: UniffiCallbackInterfaceForeignRemoteStoreMethod15 {
         override fun callback(`uniffiHandle`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18501,7 +18589,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
             )
         }
     }
-    internal object `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod15 {
+    internal object `commitTransaction`: UniffiCallbackInterfaceForeignRemoteStoreMethod16 {
         override fun callback(`uniffiHandle`: Long,`nodes`: RustBuffer.ByValue,`conditions`: RustBuffer.ByValue,`roots`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignRemoteStore.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -18557,6 +18645,7 @@ internal object uniffiCallbackInterfaceForeignRemoteStore {
         `putNode`,
         `deleteNode`,
         `batchNodes`,
+        `publishNodes`,
         `batchGetNodesOrdered`,
         `listNodeCids`,
         `getHint`,
@@ -18720,6 +18809,8 @@ public interface HostStoreCallback {
     fun `delete`(`key`: kotlin.ByteArray): HostStoreUnitResultRecord
 
     fun `batch`(`ops`: List<MutationRecord>): HostStoreUnitResultRecord
+
+    fun `publishNodes`(`publication`: NodePublicationRecord): HostStoreUnitResultRecord
 
     fun `batchGetOrdered`(`keys`: List<kotlin.ByteArray>): HostStoreBatchGetResultRecord
 
@@ -18888,6 +18979,19 @@ open class HostStoreCallbackImpl: Disposable, AutoCloseable, HostStoreCallback
     UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_batch(
         it,
         FfiConverterSequenceTypeMutationRecord.lower(`ops`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `publishNodes`(`publication`: NodePublicationRecord): HostStoreUnitResultRecord {
+            return FfiConverterTypeHostStoreUnitResultRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes(
+        it,
+        FfiConverterTypeNodePublicationRecord.lower(`publication`),_status)
 }
     }
     )
@@ -19104,7 +19208,19 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `batchGetOrdered`: UniffiCallbackInterfaceHostStoreCallbackMethod4 {
+    internal object `publishNodes`: UniffiCallbackInterfaceHostStoreCallbackMethod4 {
+        override fun callback(`uniffiHandle`: Long,`publication`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`publishNodes`(
+                    FfiConverterTypeNodePublicationRecord.lift(`publication`),
+                )
+            }
+            val writeReturn = { value: HostStoreUnitResultRecord -> uniffiOutReturn.setValue(FfiConverterTypeHostStoreUnitResultRecord.lower(value)) }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `batchGetOrdered`: UniffiCallbackInterfaceHostStoreCallbackMethod5 {
         override fun callback(`uniffiHandle`: Long,`keys`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19116,7 +19232,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `prefersBatchReads`: UniffiCallbackInterfaceHostStoreCallbackMethod5 {
+    internal object `prefersBatchReads`: UniffiCallbackInterfaceHostStoreCallbackMethod6 {
         override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19127,7 +19243,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `supportsHints`: UniffiCallbackInterfaceHostStoreCallbackMethod6 {
+    internal object `supportsHints`: UniffiCallbackInterfaceHostStoreCallbackMethod7 {
         override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19138,7 +19254,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `getHint`: UniffiCallbackInterfaceHostStoreCallbackMethod7 {
+    internal object `getHint`: UniffiCallbackInterfaceHostStoreCallbackMethod8 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19151,7 +19267,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `putHint`: UniffiCallbackInterfaceHostStoreCallbackMethod8 {
+    internal object `putHint`: UniffiCallbackInterfaceHostStoreCallbackMethod9 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`value`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19165,7 +19281,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `listNodeCids`: UniffiCallbackInterfaceHostStoreCallbackMethod9 {
+    internal object `listNodeCids`: UniffiCallbackInterfaceHostStoreCallbackMethod10 {
         override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19176,7 +19292,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `getRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod10 {
+    internal object `getRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod11 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19188,7 +19304,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `putRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod11 {
+    internal object `putRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod12 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`manifest`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19201,7 +19317,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `deleteRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod12 {
+    internal object `deleteRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod13 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19213,7 +19329,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `compareAndSwapRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod13 {
+    internal object `compareAndSwapRoot`: UniffiCallbackInterfaceHostStoreCallbackMethod14 {
         override fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`expected`: RustBuffer.ByValue,`replacement`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19227,7 +19343,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `listRoots`: UniffiCallbackInterfaceHostStoreCallbackMethod14 {
+    internal object `listRoots`: UniffiCallbackInterfaceHostStoreCallbackMethod15 {
         override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeHostStoreCallback.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -19258,6 +19374,7 @@ internal object uniffiCallbackInterfaceHostStoreCallback {
         `put`,
         `delete`,
         `batch`,
+        `publishNodes`,
         `batchGetOrdered`,
         `prefersBatchReads`,
         `supportsHints`,
@@ -28750,6 +28867,92 @@ public object FfiConverterTypeNodeMutationRecord: FfiConverterRustBuffer<NodeMut
 
 
 
+data class NodePublicationHintRecord (
+    var `namespace`: kotlin.ByteArray
+    ,
+    var `key`: kotlin.ByteArray
+    ,
+    var `value`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodePublicationHintRecord: FfiConverterRustBuffer<NodePublicationHintRecord> {
+    override fun read(buf: ByteBuffer): NodePublicationHintRecord {
+        return NodePublicationHintRecord(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NodePublicationHintRecord) = (
+            FfiConverterByteArray.allocationSize(value.`namespace`) +
+            FfiConverterByteArray.allocationSize(value.`key`) +
+            FfiConverterByteArray.allocationSize(value.`value`)
+    )
+
+    override fun write(value: NodePublicationHintRecord, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`namespace`, buf)
+            FfiConverterByteArray.write(value.`key`, buf)
+            FfiConverterByteArray.write(value.`value`, buf)
+    }
+}
+
+
+
+data class NodePublicationRecord (
+    var `nodes`: List<NodeEntryRecord>
+    ,
+    var `hint`: NodePublicationHintRecord?
+    ,
+    var `origin`: PublicationOriginRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodePublicationRecord: FfiConverterRustBuffer<NodePublicationRecord> {
+    override fun read(buf: ByteBuffer): NodePublicationRecord {
+        return NodePublicationRecord(
+            FfiConverterSequenceTypeNodeEntryRecord.read(buf),
+            FfiConverterOptionalTypeNodePublicationHintRecord.read(buf),
+            FfiConverterTypePublicationOriginRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NodePublicationRecord) = (
+            FfiConverterSequenceTypeNodeEntryRecord.allocationSize(value.`nodes`) +
+            FfiConverterOptionalTypeNodePublicationHintRecord.allocationSize(value.`hint`) +
+            FfiConverterTypePublicationOriginRecord.allocationSize(value.`origin`)
+    )
+
+    override fun write(value: NodePublicationRecord, buf: ByteBuffer) {
+            FfiConverterSequenceTypeNodeEntryRecord.write(value.`nodes`, buf)
+            FfiConverterOptionalTypeNodePublicationHintRecord.write(value.`hint`, buf)
+            FfiConverterTypePublicationOriginRecord.write(value.`origin`, buf)
+    }
+}
+
+
+
 data class NodeRecord (
     var `keys`: List<kotlin.ByteArray>
     ,
@@ -30502,6 +30705,39 @@ public object FfiConverterTypeProximityVerificationRecord: FfiConverterRustBuffe
             FfiConverterUByte.write(value.`maximumLevel`, buf)
             FfiConverterULong.write(value.`maximumNodeBytes`, buf)
             FfiConverterULong.write(value.`distanceChecks`, buf)
+    }
+}
+
+
+
+data class PublicationOriginRecord (
+    var `code`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePublicationOriginRecord: FfiConverterRustBuffer<PublicationOriginRecord> {
+    override fun read(buf: ByteBuffer): PublicationOriginRecord {
+        return PublicationOriginRecord(
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PublicationOriginRecord) = (
+            FfiConverterUInt.allocationSize(value.`code`)
+    )
+
+    override fun write(value: PublicationOriginRecord, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`code`, buf)
     }
 }
 
@@ -35944,6 +36180,38 @@ public object FfiConverterOptionalTypeMutationRecord: FfiConverterRustBuffer<Mut
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeNodePublicationHintRecord: FfiConverterRustBuffer<NodePublicationHintRecord?> {
+    override fun read(buf: ByteBuffer): NodePublicationHintRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeNodePublicationHintRecord.read(buf)
+    }
+
+    override fun allocationSize(value: NodePublicationHintRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeNodePublicationHintRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: NodePublicationHintRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeNodePublicationHintRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeProductQuantizationBuildStatsRecord: FfiConverterRustBuffer<ProductQuantizationBuildStatsRecord?> {
     override fun read(buf: ByteBuffer): ProductQuantizationBuildStatsRecord? {
         if (buf.get().toInt() == 0) {
@@ -39314,6 +39582,16 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
     UniffiLib.uniffi_prolly_bindings_fn_func_verify_proximity_structure_proof(
 
         FfiConverterTypeProximityStructuralProofRecord.lower(`proof`),FfiConverterOptionalByteArray.lower(`expectedDescriptor`),FfiConverterTypeContentGraphLimitsRecord.lower(`limits`),_status)
+}
+    )
+    }
+
+ fun `normalizePublicationOriginCode`(`code`: kotlin.UInt): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_normalize_publication_origin_code(
+
+        FfiConverterUInt.lower(`code`),_status)
 }
     )
     }

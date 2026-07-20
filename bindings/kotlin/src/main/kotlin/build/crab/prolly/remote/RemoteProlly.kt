@@ -12,6 +12,7 @@ import build.crab.prolly.NamedRootRecord
 import build.crab.prolly.NamedRootUpdateRecord
 import build.crab.prolly.NodeEntryRecord
 import build.crab.prolly.NodeMutationRecord
+import build.crab.prolly.NodePublicationRecord
 import build.crab.prolly.OptionalBytesListResultRecord
 import build.crab.prolly.OptionalBytesRecord
 import build.crab.prolly.OptionalBytesResultRecord
@@ -196,6 +197,17 @@ internal class ForeignRemoteStoreAdapter(
 
     override suspend fun batchNodes(ops: List<NodeMutationRecord>): UnitResultRecord =
         unitResult { store.batchNodes(ops.map(NodeMutationRecord::toDomain)) }
+
+    override suspend fun publishNodes(publication: NodePublicationRecord): UnitResultRecord =
+        unitResult {
+            store.publishNodes(
+                NodePublication(
+                    nodes = publication.nodes.map { NodeEntry(it.key, it.value) },
+                    hint = publication.hint?.let { NodePublicationHint(it.namespace, it.key, it.value) },
+                    origin = PublicationOrigin(publication.origin.code),
+                ),
+            )
+        }
 
     override suspend fun batchGetNodesOrdered(cids: List<ByteArray>): OptionalBytesListResultRecord = try {
         OptionalBytesListResultRecord(

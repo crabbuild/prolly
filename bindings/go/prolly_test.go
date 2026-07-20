@@ -110,6 +110,18 @@ func (s *memoryHostStore) Batch(ops []Mutation) error {
 	return nil
 }
 
+func (s *memoryHostStore) PublishNodes(publication NodePublication) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, node := range publication.Nodes {
+		s.nodes[string(node.Key)] = cloneBytes(node.Value)
+	}
+	if publication.Hint != nil {
+		s.hints[hintKey(publication.Hint.Namespace, publication.Hint.Key)] = cloneBytes(publication.Hint.Value)
+	}
+	return nil
+}
+
 func (s *memoryHostStore) BatchGetOrdered(keys [][]byte) ([]HostStoreResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

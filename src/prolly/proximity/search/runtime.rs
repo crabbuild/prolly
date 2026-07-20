@@ -10,13 +10,11 @@ use crate::prolly::proximity::accelerator::{
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, ProximityNode};
-#[cfg(feature = "async-store")]
 use crate::prolly::store::{AsyncStore, SyncStoreAsAsync};
-use crate::prolly::store::{BatchOp, Store};
+use crate::prolly::store::{BatchOp, NodePublication, Store};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
-#[cfg(feature = "async-store")]
 use std::task::{Poll, Waker};
 
 static NEXT_STORE_NAMESPACE: AtomicU64 = AtomicU64::new(1);
@@ -139,7 +137,6 @@ impl<S> SearchIo<S> {
     /// Adapt a synchronous search I/O binding for native async traversal while
     /// retaining the same cache namespace, partition, counters, and decoder
     /// context. Shared reads remain backend-owned through `SyncStoreAsAsync`.
-    #[cfg(feature = "async-store")]
     pub fn sync_store_as_async(&self) -> SearchIo<SyncStoreAsAsync<S>>
     where
         S: Clone,
@@ -266,6 +263,10 @@ impl<S: Store + Clone> Store for SearchIo<S> {
         self.store.supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.store.prefers_rightmost_path_hints()
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         self.store.get_hint(namespace, key)
     }
@@ -273,9 +274,11 @@ impl<S: Store + Clone> Store for SearchIo<S> {
     fn put_hint(&self, namespace: &[u8], key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         self.store.put_hint(namespace, key, value)
     }
-}
 
-#[cfg(feature = "async-store")]
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.store.publish_nodes(publication)
+    }
+}
 impl<S: AsyncStore + Clone> AsyncStore for SearchIo<S>
 where
     S::Error: Send + Sync,
@@ -358,6 +361,10 @@ where
     fn read_parallelism(&self) -> usize {
         self.store.read_parallelism()
     }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.store.publish_nodes(publication).await
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -391,7 +398,6 @@ struct RuntimeState {
     authoritative_bytes: usize,
     hnsw_bytes: usize,
     pq_bytes: usize,
-    #[cfg(feature = "async-store")]
     async_waiters: HashMap<CacheKey, Vec<Waker>>,
 }
 
@@ -507,7 +513,6 @@ impl SearchRuntime {
             RuntimeLoad { bytes }
         });
         self.wake.notify_all();
-        #[cfg(feature = "async-store")]
         if let Some(waiters) = state.async_waiters.remove(&key) {
             for waiter in waiters {
                 waiter.wake();
@@ -580,17 +585,14 @@ impl SearchRuntime {
                 .state
                 .lock()
                 .unwrap_or_else(|poison| poison.into_inner());
-            #[cfg(feature = "async-store")]
             let mut async_wakers = Vec::new();
             for index in &leaders {
                 state.in_flight.remove(&keys[*index]);
-                #[cfg(feature = "async-store")]
                 if let Some(waiters) = state.async_waiters.remove(&keys[*index]) {
                     async_wakers.extend(waiters);
                 }
             }
             self.wake.notify_all();
-            #[cfg(feature = "async-store")]
             for waiter in async_wakers {
                 waiter.wake();
             }
@@ -625,8 +627,6 @@ impl SearchRuntime {
         }
         Ok(results)
     }
-
-    #[cfg(feature = "async-store")]
     pub(crate) async fn load_async<S: AsyncStore, F>(
         &self,
         io: &SearchIo<S>,
@@ -775,15 +775,11 @@ impl SearchRuntime {
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 struct AsyncInFlightGuard<'a> {
     runtime: &'a SearchRuntime,
     key: CacheKey,
     armed: bool,
 }
-
-#[cfg(feature = "async-store")]
 impl Drop for AsyncInFlightGuard<'_> {
     fn drop(&mut self) {
         if !self.armed {

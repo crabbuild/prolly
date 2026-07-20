@@ -41,7 +41,7 @@ public actor PostgresRemoteStore: ForeignRemoteStore {
         )
         return StoreDescriptorResultRecord(
             value: StoreDescriptorRecord(
-                protocolMajor: 1, adapterName: "postgres-v1", provider: "postgresql",
+                protocolMajor: 2, adapterName: "postgres-v1", provider: "postgresql",
                 schemaVersion: 1, capabilities: capabilities, limits: limits
             ), error: nil
         )

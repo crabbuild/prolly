@@ -58,7 +58,7 @@ module Prolly
 
     def descriptor
       value = StoreDescriptorRecord.new(
-        protocol_major: 1, adapter_name: 'dynamodb-v1', provider: 'dynamodb', schema_version: 1,
+        protocol_major: STORE_PROTOCOL_MAJOR, adapter_name: 'dynamodb-v1', provider: 'dynamodb', schema_version: 1,
         capabilities: StoreCapabilitiesRecord.new(
           native_batch_reads: true, atomic_batch_writes: false, node_scan: true,
           hints: true, atomic_nodes_and_hint: false, root_scan: true,

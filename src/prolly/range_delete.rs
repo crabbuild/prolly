@@ -11,11 +11,13 @@ use super::cid::Cid;
 use super::error::Error;
 use super::format::NodeLayoutSpec;
 use super::node::Node;
-use super::store::{BatchOp, Store};
+use super::store::{BatchOp, NodePublication, Store};
+use super::write::CanonicalWriteManager;
 use super::write::{LeafEmitter, WriteStats};
-use super::{Prolly, Tree};
+use super::Tree;
 
 const LOCAL_WRITE_CACHE_LIMIT: usize = 8;
+type OwnedEntry = (Vec<u8>, Vec<u8>);
 
 #[derive(Default)]
 struct StreamingWriteCounter {
@@ -78,10 +80,16 @@ impl<S: Store> Store for CountingStore<'_, S> {
         self.writes.record(entries);
         Ok(())
     }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.inner.publish_nodes(publication)?;
+        self.writes.record(publication.entries());
+        Ok(())
+    }
 }
 
-pub(crate) fn apply<S: Store>(
-    manager: &Prolly<S>,
+pub(crate) fn apply<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     start: &[u8],
     end: &[u8],
@@ -89,9 +97,9 @@ pub(crate) fn apply<S: Store>(
     if start >= end || tree.root.is_none() {
         return Ok((tree.clone(), WriteStats::default()));
     }
-    let metrics_before = manager.metrics();
+    let metrics_before = manager.write_metrics();
     if let Some(root) = &tree.root {
-        let node = manager.load_arc(root)?;
+        let node = manager.write_load_arc(root)?;
         if node.format != tree.config.format {
             return Err(Error::FormatMismatch {
                 expected: tree.config.format.digest()?,
@@ -106,26 +114,20 @@ pub(crate) fn apply<S: Store>(
         ));
     }
 
-    if manager
-        .range(tree, start, Some(end))?
-        .next()
-        .transpose()?
-        .is_none()
-    {
+    if !range_has_entry(manager, tree, start, end)? {
         return Ok((tree.clone(), metric_stats_since(manager, metrics_before)));
     }
 
     let writes = Arc::new(StreamingWriteCounter::default());
     let mut builder = SortedBatchBuilder::new(
         CountingStore {
-            inner: manager.store(),
+            inner: manager.write_store(),
             writes: Arc::clone(&writes),
         },
         tree.config.clone(),
     );
     let mut deleted_entries = 0u64;
-    for entry in manager.range(tree, &[], None)? {
-        let (key, value) = entry?;
+    for (key, value) in collect_entries(manager, tree)? {
         if key.as_slice() >= start && key.as_slice() < end {
             deleted_entries += 1;
         } else {
@@ -138,7 +140,7 @@ pub(crate) fn apply<S: Store>(
     );
     let written = builder.build()?;
     let (nodes_written, bytes_written) = writes.snapshot();
-    manager.record_batch_write_metrics(nodes_written, bytes_written);
+    manager.write_record_batch_metrics(nodes_written, bytes_written);
     Ok((
         written,
         with_metric_stats_since(
@@ -153,20 +155,11 @@ pub(crate) fn apply<S: Store>(
     ))
 }
 
-pub(crate) fn apply_tree<S: Store>(
-    manager: &Prolly<S>,
-    tree: &Tree,
-    start: &[u8],
-    end: &[u8],
-) -> Result<Tree, Error> {
-    Ok(apply(manager, tree, start, end)?.0)
-}
-
 /// Attempt a height-2 splice whose canonical equivalence is proved by matching
 /// both a recreated leaf and the final recreated internal node with unchanged
 /// old content. Returning `None` delegates to the full streaming rebuild.
-pub(crate) fn try_localized_height_two<S: Store>(
-    manager: &Prolly<S>,
+pub(crate) fn try_localized_height_two<M: CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     start: &[u8],
     end: &[u8],
@@ -180,9 +173,9 @@ pub(crate) fn try_localized_height_two<S: Store>(
     let Some(root_cid) = &tree.root else {
         return Ok(None);
     };
-    let metrics_before = manager.metrics();
+    let metrics_before = manager.write_metrics();
     let mut stats = WriteStats::default();
-    let root = manager.load_arc(root_cid)?;
+    let root = manager.write_load_arc(root_cid)?;
     stats.nodes_read += 1;
     stats.bytes_read += root.encoded_len() as u64;
     if root.format != tree.config.format {
@@ -207,7 +200,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
         .iter()
         .map(|value| child_cid(value))
         .collect::<Result<Vec<_>, _>>()?;
-    let window_nodes = manager.load_many_ordered(&window_cids)?;
+    let window_nodes = manager.write_load_many_ordered(&window_cids)?;
     let mut old_leaves = Vec::new();
     for (offset, node) in window_nodes.iter().enumerate() {
         stats.nodes_read += 1;
@@ -266,7 +259,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
         }
         debug_assert!(wholly_before || !wholly_covered);
 
-        let leaf = manager.load_arc(&summary.cid)?;
+        let leaf = manager.write_load_arc(&summary.cid)?;
         stats.nodes_read += 1;
         stats.bytes_read += leaf.encoded_len() as u64;
         if !leaf.leaf
@@ -314,7 +307,7 @@ pub(crate) fn try_localized_height_two<S: Store>(
     stats.input_mutations = deleted_entries;
     stats.effective_mutations = deleted_entries;
 
-    let builder = BatchBuilder::new(manager.store(), tree.config.clone());
+    let builder = BatchBuilder::new(manager.write_store(), tree.config.clone());
     let (replacement_summaries, internal_nodes) =
         builder.build_level_serial_deferred(replacement_leaves, 1)?;
     if replacement_summaries.is_empty()
@@ -407,17 +400,17 @@ pub(crate) fn try_localized_height_two<S: Store>(
             .map(|(cid, bytes, _)| (cid.as_bytes(), bytes.as_slice()))
             .collect::<Vec<_>>();
         manager
-            .store()
+            .write_store()
             .batch_put(&entries)
             .map_err(|error| Error::Store(Box::new(error)))?;
         let bytes_written = entries.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-        manager.record_batch_write_metrics(entries.len(), bytes_written);
+        manager.write_record_batch_metrics(entries.len(), bytes_written);
         stats.nodes_written += entries.len() as u64;
         stats.bytes_written += bytes_written as u64;
         if entries.len() <= LOCAL_WRITE_CACHE_LIMIT {
             drop(entries);
             for (cid, _, node) in writes {
-                manager.cache_node(cid, node);
+                manager.write_cache_node(cid, node);
             }
         }
     }
@@ -431,6 +424,83 @@ pub(crate) fn try_localized_height_two<S: Store>(
     )))
 }
 
+fn range_has_entry<M: CanonicalWriteManager>(
+    manager: &M,
+    tree: &Tree,
+    start: &[u8],
+    end: &[u8],
+) -> Result<bool, Error> {
+    let Some(root) = &tree.root else {
+        return Ok(false);
+    };
+    let mut cid = root.clone();
+    let mut ancestors = Vec::<(Arc<Node>, usize)>::new();
+    loop {
+        let node = manager.write_load_arc(&cid)?;
+        if node.is_empty() {
+            return Err(Error::InvalidNode);
+        }
+        if node.leaf {
+            let position = node.keys.partition_point(|key| key.as_slice() < start);
+            if let Some(key) = node.keys.get(position) {
+                return Ok(key.as_slice() < end);
+            }
+            break;
+        }
+        let child_index = separator_floor(&node.keys, start);
+        cid = child_cid(node.vals.get(child_index).ok_or(Error::InvalidNode)?)?;
+        ancestors.push((node, child_index));
+    }
+
+    while let Some((ancestor, child_index)) = ancestors.pop() {
+        if child_index + 1 >= ancestor.len() {
+            continue;
+        }
+        cid = child_cid(
+            ancestor
+                .vals
+                .get(child_index + 1)
+                .ok_or(Error::InvalidNode)?,
+        )?;
+        loop {
+            let node = manager.write_load_arc(&cid)?;
+            if node.is_empty() {
+                return Err(Error::InvalidNode);
+            }
+            if node.leaf {
+                return Ok(node.keys.first().is_some_and(|key| key.as_slice() < end));
+            }
+            cid = child_cid(node.vals.first().ok_or(Error::InvalidNode)?)?;
+        }
+    }
+    Ok(false)
+}
+
+fn collect_entries<M: CanonicalWriteManager>(
+    manager: &M,
+    tree: &Tree,
+) -> Result<Vec<OwnedEntry>, Error> {
+    let Some(root) = &tree.root else {
+        return Ok(Vec::new());
+    };
+    let mut entries = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(cid) = stack.pop() {
+        let node = manager.write_load_arc(&cid)?;
+        if node.leaf {
+            if node.keys.len() != node.vals.len() {
+                return Err(Error::InvalidNode);
+            }
+            entries.extend(node.keys.iter().cloned().zip(node.vals.iter().cloned()));
+        } else {
+            for value in node.vals.iter().rev() {
+                stack.push(child_cid(value)?);
+            }
+        }
+    }
+    Ok(entries)
+}
+
 fn separator_floor(separators: &[Vec<u8>], key: &[u8]) -> usize {
     separators
         .partition_point(|separator| separator.as_slice() <= key)
@@ -442,11 +512,11 @@ fn child_cid(bytes: &[u8]) -> Result<Cid, Error> {
     Ok(Cid(bytes))
 }
 
-fn metric_stats_since<S: Store>(
-    manager: &Prolly<S>,
+fn metric_stats_since<M: CanonicalWriteManager>(
+    manager: &M,
     metrics_before: super::ProllyMetricsSnapshot,
 ) -> WriteStats {
-    let metrics = manager.metrics();
+    let metrics = manager.write_metrics();
     WriteStats {
         nodes_read: metrics.nodes_read.saturating_sub(metrics_before.nodes_read),
         bytes_read: metrics.bytes_read.saturating_sub(metrics_before.bytes_read),
@@ -460,8 +530,8 @@ fn metric_stats_since<S: Store>(
     }
 }
 
-fn with_metric_stats_since<S: Store>(
-    manager: &Prolly<S>,
+fn with_metric_stats_since<M: CanonicalWriteManager>(
+    manager: &M,
     metrics_before: super::ProllyMetricsSnapshot,
     mut stats: WriteStats,
 ) -> WriteStats {
@@ -479,6 +549,7 @@ mod tests {
     use crate::prolly::config::Config;
     use crate::prolly::format::NodeLayoutSpec;
     use crate::prolly::store::MemStore;
+    use crate::prolly::Prolly;
 
     #[test]
     fn custom_layout_is_not_eligible_for_the_height_two_splice() {

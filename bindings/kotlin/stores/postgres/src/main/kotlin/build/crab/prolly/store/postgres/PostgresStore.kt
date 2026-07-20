@@ -47,7 +47,7 @@ class PostgresStore @JvmOverloads constructor(
     private val javaScope = CoroutineScope(SupervisorJob() + dispatcher)
     private val storeDescriptor = validateStoreDescriptor(
         StoreDescriptor(
-            protocolMajor = 1u,
+            protocolMajor = 2u,
             adapterName = options.adapterName.ifBlank { "postgres-v1" },
             provider = "postgresql",
             schemaVersion = 1u,

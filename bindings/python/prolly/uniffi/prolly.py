@@ -450,6 +450,10 @@ def _uniffi_load_indirect():
     This is how we find and load the dynamic library provided by the component.
     For now we just look it up by name.
     """
+    override = os.environ.get("PROLLY_BINDINGS_LIBRARY")
+    if override:
+        return ctypes.cdll.LoadLibrary(override)
+
     if sys.platform == "darwin":
         libname = "lib{}.dylib"
     elif sys.platform.startswith("win"):
@@ -592,6 +596,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_prolly_bindings_checksum_func_node_from_bytes() != 2212:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_node_to_bytes() != 56453:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code() != 55699:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine() != 31371:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1359,27 +1365,29 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes() != 29227:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 45520:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 52203:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 33243:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 62043:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 44048:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 42406:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 61298:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 54878:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 49897:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90:
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 58307:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 40552:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get() != 14064:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1389,27 +1397,29 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch() != 32872:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered() != 59373:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes() != 35124:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads() != 44756:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered() != 24538:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints() != 40193:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads() != 10795:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint() != 32559:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints() != 22557:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint() != 60174:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint() != 29790:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids() != 35211:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint() != 5363:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root() != 3674:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids() != 45542:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root() != 41124:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root() != 61870:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root() != 17982:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root() != 8083:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root() != 10051:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root() != 9754:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots() != 52095:
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root() != 60802:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots() != 391:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_prolly_bindings_checksum_constructor_mergepolicyregistry_new() != 19304:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -2453,25 +2463,27 @@ _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4 = ctypes.CFUNCTYP
 )
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD16 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,_UNIFFI_FOREIGN_FUTURE_COMPLETERUST_BUFFER,ctypes.c_uint64,ctypes.POINTER(_UniffiForeignFutureDroppedCallbackStruct),
 )
 _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_FOREIGN_REMOTE_STORE = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
 )
@@ -2486,17 +2498,18 @@ class _UniffiVTableCallbackInterfaceProllyForeignRemoteStore(ctypes.Structure):
         ("put_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD2),
         ("delete_node", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD3),
         ("batch_nodes", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD4),
-        ("batch_get_nodes_ordered", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5),
-        ("list_node_cids", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6),
-        ("get_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7),
-        ("put_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8),
-        ("batch_put_nodes_with_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9),
-        ("get_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10),
-        ("put_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11),
-        ("delete_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12),
-        ("compare_and_swap_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13),
-        ("list_root_manifests", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14),
-        ("commit_transaction", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15),
+        ("publish_nodes", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5),
+        ("batch_get_nodes_ordered", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6),
+        ("list_node_cids", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7),
+        ("get_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8),
+        ("put_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9),
+        ("batch_put_nodes_with_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10),
+        ("get_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11),
+        ("put_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12),
+        ("delete_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13),
+        ("compare_and_swap_root_manifest", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14),
+        ("list_root_manifests", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15),
+        ("commit_transaction", _UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD16),
     ]
 _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_foreignremotestore.argtypes = (
     ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyForeignRemoteStore),
@@ -2517,34 +2530,37 @@ _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD3 = ctypes.CFUNCTYPE
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD4 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD5 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD5 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD6 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD7 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD7 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD8 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD8 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD9 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD9 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD10 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD10 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD11 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD11 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD12 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD12 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD13 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD13 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
-_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD14 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD14 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,_UniffiRustBuffer,_UniffiRustBuffer,_UniffiRustBuffer,ctypes.POINTER(_UniffiRustBuffer),
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD15 = ctypes.CFUNCTYPE(None,ctypes.c_uint64,ctypes.POINTER(_UniffiRustBuffer),
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UNIFFI_CALLBACK_INTERFACE_CLONE_PROLLY_HOST_STORE_CALLBACK = ctypes.CFUNCTYPE(ctypes.c_uint64,ctypes.c_uint64,
@@ -2559,17 +2575,18 @@ class _UniffiVTableCallbackInterfaceProllyHostStoreCallback(ctypes.Structure):
         ("put", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD1),
         ("delete", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD2),
         ("batch", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD3),
-        ("batch_get_ordered", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD4),
-        ("prefers_batch_reads", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD5),
-        ("supports_hints", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD6),
-        ("get_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD7),
-        ("put_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD8),
-        ("list_node_cids", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD9),
-        ("get_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD10),
-        ("put_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD11),
-        ("delete_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD12),
-        ("compare_and_swap_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD13),
-        ("list_roots", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD14),
+        ("publish_nodes", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD4),
+        ("batch_get_ordered", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD5),
+        ("prefers_batch_reads", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD6),
+        ("supports_hints", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD7),
+        ("get_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD8),
+        ("put_hint", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD9),
+        ("list_node_cids", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD10),
+        ("get_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD11),
+        ("put_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD12),
+        ("delete_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD13),
+        ("compare_and_swap_root", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD14),
+        ("list_roots", _UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD15),
     ]
 _UniffiLib.uniffi_prolly_bindings_fn_init_callback_vtable_hoststorecallback.argtypes = (
     ctypes.POINTER(_UniffiVTableCallbackInterfaceProllyHostStoreCallback),
@@ -2903,6 +2920,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_func_normalize_publication_origin_code.argtypes = (
+    ctypes.c_uint32,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_func_normalize_publication_origin_code.restype = ctypes.c_uint32
 _UniffiLib.uniffi_prolly_bindings_fn_func_open_remote_prolly_engine.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -5228,6 +5250,11 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes.argty
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes.restype = ctypes.c_uint64
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes.restype = ctypes.c_uint64
 _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_get_nodes_ordered.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -5317,6 +5344,12 @@ _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_batch.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_batch.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_batch_get_ordered.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -6777,6 +6810,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_func_node_from_bytes.restype = ctypes
 _UniffiLib.uniffi_prolly_bindings_checksum_func_node_to_bytes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_node_to_bytes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_func_open_remote_prolly_engine.restype = ctypes.c_uint16
@@ -7926,6 +7962,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_node
 _UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered.restype = ctypes.c_uint16
@@ -7971,6 +8010,9 @@ _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_delete.resty
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch.restype = ctypes.c_uint16
+_UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes.argtypes = (
+)
+_UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes.restype = ctypes.c_uint16
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered.argtypes = (
 )
 _UniffiLib.uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered.restype = ctypes.c_uint16
@@ -20264,6 +20306,168 @@ class _UniffiFfiConverterTypeNodeMutationRecord(_UniffiConverterRustBuffer):
     def write(value, buf):
         _UniffiFfiConverterBytes.write(value.key, buf)
         _UniffiFfiConverterTypeOptionalBytesRecord.write(value.value, buf)
+
+@dataclass
+class NodePublicationHintRecord:
+    def __init__(self, *, namespace:bytes, key:bytes, value:bytes):
+        self.namespace = namespace
+        self.key = key
+        self.value = value
+
+
+
+
+    def __str__(self):
+        return "NodePublicationHintRecord(namespace={}, key={}, value={})".format(self.namespace, self.key, self.value)
+    def __eq__(self, other):
+        if self.namespace != other.namespace:
+            return False
+        if self.key != other.key:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNodePublicationHintRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NodePublicationHintRecord(
+            namespace=_UniffiFfiConverterBytes.read(buf),
+            key=_UniffiFfiConverterBytes.read(buf),
+            value=_UniffiFfiConverterBytes.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterBytes.check_lower(value.namespace)
+        _UniffiFfiConverterBytes.check_lower(value.key)
+        _UniffiFfiConverterBytes.check_lower(value.value)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterBytes.write(value.namespace, buf)
+        _UniffiFfiConverterBytes.write(value.key, buf)
+        _UniffiFfiConverterBytes.write(value.value, buf)
+
+class _UniffiFfiConverterSequenceTypeNodeEntryRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNodeEntryRecord.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNodeEntryRecord.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNodeEntryRecord.read(buf) for i in range(count)
+        ]
+
+class _UniffiFfiConverterOptionalTypeNodePublicationHintRecord(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeNodePublicationHintRecord.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeNodePublicationHintRecord.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeNodePublicationHintRecord.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+@dataclass
+class PublicationOriginRecord:
+    def __init__(self, *, code:int):
+        self.code = code
+
+
+
+
+    def __str__(self):
+        return "PublicationOriginRecord(code={})".format(self.code)
+    def __eq__(self, other):
+        if self.code != other.code:
+            return False
+        return True
+
+class _UniffiFfiConverterTypePublicationOriginRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return PublicationOriginRecord(
+            code=_UniffiFfiConverterUInt32.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.code)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.code, buf)
+
+@dataclass
+class NodePublicationRecord:
+    def __init__(self, *, nodes:typing.List[NodeEntryRecord], hint:typing.Optional[NodePublicationHintRecord], origin:PublicationOriginRecord):
+        self.nodes = nodes
+        self.hint = hint
+        self.origin = origin
+
+
+
+
+    def __str__(self):
+        return "NodePublicationRecord(nodes={}, hint={}, origin={})".format(self.nodes, self.hint, self.origin)
+    def __eq__(self, other):
+        if self.nodes != other.nodes:
+            return False
+        if self.hint != other.hint:
+            return False
+        if self.origin != other.origin:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNodePublicationRecord(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NodePublicationRecord(
+            nodes=_UniffiFfiConverterSequenceTypeNodeEntryRecord.read(buf),
+            hint=_UniffiFfiConverterOptionalTypeNodePublicationHintRecord.read(buf),
+            origin=_UniffiFfiConverterTypePublicationOriginRecord.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterSequenceTypeNodeEntryRecord.check_lower(value.nodes)
+        _UniffiFfiConverterOptionalTypeNodePublicationHintRecord.check_lower(value.hint)
+        _UniffiFfiConverterTypePublicationOriginRecord.check_lower(value.origin)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterSequenceTypeNodeEntryRecord.write(value.nodes, buf)
+        _UniffiFfiConverterOptionalTypeNodePublicationHintRecord.write(value.hint, buf)
+        _UniffiFfiConverterTypePublicationOriginRecord.write(value.origin, buf)
 
 class _UniffiFfiConverterSequenceTypeOptionalBytesRecord(_UniffiConverterRustBuffer):
     @classmethod
@@ -33909,29 +34113,6 @@ class _UniffiFfiConverterSequenceTypeNodeMutationRecord(_UniffiConverterRustBuff
             _UniffiFfiConverterTypeNodeMutationRecord.read(buf) for i in range(count)
         ]
 
-class _UniffiFfiConverterSequenceTypeNodeEntryRecord(_UniffiConverterRustBuffer):
-    @classmethod
-    def check_lower(cls, value):
-        for item in value:
-            _UniffiFfiConverterTypeNodeEntryRecord.check_lower(item)
-
-    @classmethod
-    def write(cls, value, buf):
-        items = len(value)
-        buf.write_i32(items)
-        for item in value:
-            _UniffiFfiConverterTypeNodeEntryRecord.write(item, buf)
-
-    @classmethod
-    def read(cls, buf):
-        count = buf.read_i32()
-        if count < 0:
-            raise InternalError("Unexpected negative sequence length")
-
-        return [
-            _UniffiFfiConverterTypeNodeEntryRecord.read(buf) for i in range(count)
-        ]
-
 class _UniffiFfiConverterSequenceTypeRootConditionRecord(_UniffiConverterRustBuffer):
     @classmethod
     def check_lower(cls, value):
@@ -33990,6 +34171,8 @@ class ForeignRemoteStore():
     async def delete_node(self, cid: bytes) -> UnitResultRecord:
         raise NotImplementedError
     async def batch_nodes(self, ops: typing.List[NodeMutationRecord]) -> UnitResultRecord:
+        raise NotImplementedError
+    async def publish_nodes(self, publication: NodePublicationRecord) -> UnitResultRecord:
         raise NotImplementedError
     async def batch_get_nodes_ordered(self, cids: typing.List[bytes]) -> OptionalBytesListResultRecord:
         raise NotImplementedError
@@ -34117,6 +34300,23 @@ class ForeignRemoteStoreImpl(ForeignRemoteStore):
         _uniffi_error_converter = None
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_batch_nodes(*_uniffi_lowered_args),
+            _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def publish_nodes(self, publication: NodePublicationRecord) -> UnitResultRecord:
+
+        _UniffiFfiConverterTypeNodePublicationRecord.check_lower(publication)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeNodePublicationRecord.lower(publication),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUnitResultRecord.lift
+        _uniffi_error_converter = None
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes(*_uniffi_lowered_args),
             _UniffiLib.ffi_prolly_bindings_rust_future_poll_rust_buffer,
             _UniffiLib.ffi_prolly_bindings_rust_future_complete_rust_buffer,
             _UniffiLib.ffi_prolly_bindings_rust_future_free_rust_buffer,
@@ -34506,6 +34706,38 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
     @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD5
+    def publish_nodes(
+            uniffi_handle,
+            publication,
+            uniffi_future_callback,
+            uniffi_callback_data,
+            uniffi_out_dropped_callback,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeForeignRemoteStore._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterTypeNodePublicationRecord.lift(publication), )
+            uniffi_method = uniffi_obj.publish_nodes
+            return uniffi_method(*uniffi_args)
+        def handle_success(return_value):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiFfiConverterTypeUnitResultRecord.lower(return_value),
+                    _UniffiRustCallStatus.default()
+                )
+            )
+
+        def handle_error(status_code, rust_buffer):
+            uniffi_future_callback(
+                uniffi_callback_data,
+                _UniffiForeignFutureResultRustBuffer(
+                    _UniffiRustBuffer.default(),
+                    _UniffiRustCallStatus(status_code, rust_buffer),
+                )
+            )
+        _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6
     def batch_get_nodes_ordered(
             uniffi_handle,
             cids,
@@ -34537,7 +34769,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD6
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7
     def list_node_cids(
             uniffi_handle,
             uniffi_future_callback,
@@ -34568,7 +34800,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD7
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8
     def get_hint(
             uniffi_handle,
             namespace,
@@ -34601,7 +34833,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD8
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9
     def put_hint(
             uniffi_handle,
             namespace,
@@ -34635,7 +34867,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD9
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10
     def batch_put_nodes_with_hint(
             uniffi_handle,
             nodes,
@@ -34670,7 +34902,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD10
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11
     def get_root_manifest(
             uniffi_handle,
             name,
@@ -34702,7 +34934,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD11
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12
     def put_root_manifest(
             uniffi_handle,
             name,
@@ -34735,7 +34967,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD12
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13
     def delete_root_manifest(
             uniffi_handle,
             name,
@@ -34767,7 +34999,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD13
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14
     def compare_and_swap_root_manifest(
             uniffi_handle,
             name,
@@ -34801,7 +35033,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD14
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15
     def list_root_manifests(
             uniffi_handle,
             uniffi_future_callback,
@@ -34832,7 +35064,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
             )
         _uniffi_trait_interface_call_async(make_call, uniffi_out_dropped_callback, handle_success, handle_error)
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD15
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_FOREIGN_REMOTE_STORE_METHOD16
     def commit_transaction(
             uniffi_handle,
             nodes,
@@ -34883,6 +35115,7 @@ class _UniffiTraitImplForeignRemoteStoreImpl:
         put_node,
         delete_node,
         batch_nodes,
+        publish_nodes,
         batch_get_nodes_ordered,
         list_node_cids,
         get_hint,
@@ -34947,6 +35180,8 @@ class HostStoreCallback():
     def delete(self, key: bytes) -> HostStoreUnitResultRecord:
         raise NotImplementedError
     def batch(self, ops: typing.List[MutationRecord]) -> HostStoreUnitResultRecord:
+        raise NotImplementedError
+    def publish_nodes(self, publication: NodePublicationRecord) -> HostStoreUnitResultRecord:
         raise NotImplementedError
     def batch_get_ordered(self, keys: typing.List[bytes]) -> HostStoreBatchGetResultRecord:
         raise NotImplementedError
@@ -35055,6 +35290,21 @@ class HostStoreCallbackImpl(HostStoreCallback):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_batch,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def publish_nodes(self, publication: NodePublicationRecord) -> HostStoreUnitResultRecord:
+
+        _UniffiFfiConverterTypeNodePublicationRecord.check_lower(publication)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeNodePublicationRecord.lower(publication),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeHostStoreUnitResultRecord.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -35319,6 +35569,26 @@ class _UniffiTraitImplHostStoreCallbackImpl:
         )
 
     @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD4
+    def publish_nodes(
+            uniffi_handle,
+            publication,
+            uniffi_out_return,
+            uniffi_call_status_ptr,
+        ):
+        uniffi_obj = _UniffiFfiConverterTypeHostStoreCallback._handle_map.get(uniffi_handle)
+        def make_call():
+            uniffi_args = (_UniffiFfiConverterTypeNodePublicationRecord.lift(publication), )
+            uniffi_method = uniffi_obj.publish_nodes
+            return uniffi_method(*uniffi_args)
+        def write_return_value(v):
+            uniffi_out_return[0] = _UniffiFfiConverterTypeHostStoreUnitResultRecord.lower(v)
+        _uniffi_trait_interface_call(
+                uniffi_call_status_ptr.contents,
+                make_call,
+                write_return_value,
+        )
+
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD5
     def batch_get_ordered(
             uniffi_handle,
             keys,
@@ -35338,7 +35608,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD5
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD6
     def prefers_batch_reads(
             uniffi_handle,
             uniffi_out_return,
@@ -35357,7 +35627,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD6
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD7
     def supports_hints(
             uniffi_handle,
             uniffi_out_return,
@@ -35376,7 +35646,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD7
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD8
     def get_hint(
             uniffi_handle,
             namespace,
@@ -35397,7 +35667,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD8
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD9
     def put_hint(
             uniffi_handle,
             namespace,
@@ -35419,7 +35689,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD9
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD10
     def list_node_cids(
             uniffi_handle,
             uniffi_out_return,
@@ -35438,7 +35708,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD10
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD11
     def get_root(
             uniffi_handle,
             name,
@@ -35458,7 +35728,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD11
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD12
     def put_root(
             uniffi_handle,
             name,
@@ -35479,7 +35749,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD12
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD13
     def delete_root(
             uniffi_handle,
             name,
@@ -35499,7 +35769,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD13
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD14
     def compare_and_swap_root(
             uniffi_handle,
             name,
@@ -35521,7 +35791,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
                 write_return_value,
         )
 
-    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD14
+    @_UNIFFI_CALLBACK_INTERFACE_PROLLY_HOST_STORE_CALLBACK_METHOD15
     def list_roots(
             uniffi_handle,
             uniffi_out_return,
@@ -35556,6 +35826,7 @@ class _UniffiTraitImplHostStoreCallbackImpl:
         put,
         delete,
         batch,
+        publish_nodes,
         batch_get_ordered,
         prefers_batch_reads,
         supports_hints,
@@ -36430,6 +36701,20 @@ def node_to_bytes(node: NodeRecord) -> bytes:
     _uniffi_ffi_result = _uniffi_rust_call_with_error(
         _uniffi_error_converter,
         _UniffiLib.uniffi_prolly_bindings_fn_func_node_to_bytes,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
+def normalize_publication_origin_code(code: int) -> int:
+
+    _UniffiFfiConverterUInt32.check_lower(code)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterUInt32.lower(code),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterUInt32.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_prolly_bindings_fn_func_normalize_publication_origin_code,
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
@@ -37823,6 +38108,9 @@ __all__ = [
     "NodeEntryRecord",
     "OptionalBytesRecord",
     "NodeMutationRecord",
+    "NodePublicationHintRecord",
+    "PublicationOriginRecord",
+    "NodePublicationRecord",
     "OptionalBytesListResultRecord",
     "OptionalBytesResultRecord",
     "ParallelConfigRecord",
@@ -37941,6 +38229,7 @@ __all__ = [
     "node_cid",
     "node_from_bytes",
     "node_to_bytes",
+    "normalize_publication_origin_code",
     "open_remote_prolly_engine",
     "parallel_config",
     "parallel_config_sequential",

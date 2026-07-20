@@ -33,7 +33,7 @@ module Prolly
         max_transaction_operations: nil, max_node_bytes: nil
       )
       value = StoreDescriptorRecord.new(
-        protocol_major: 1, adapter_name: 'sqlite-v1', provider: 'sqlite',
+        protocol_major: STORE_PROTOCOL_MAJOR, adapter_name: 'sqlite-v1', provider: 'sqlite',
         schema_version: 1, capabilities: capabilities, limits: limits
       )
       StoreDescriptorResultRecord.new(value: value, error: nil)

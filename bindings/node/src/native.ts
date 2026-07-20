@@ -765,6 +765,22 @@ export interface NativeHostStoreBatchRequest {
   ops: NativeMutationRecord[];
 }
 
+export interface NativePublicationOriginRecord {
+  code: number;
+}
+
+export interface NativeHostStorePublicationHintRecord {
+  namespace: Uint8Array;
+  key: Uint8Array;
+  value: Uint8Array;
+}
+
+export interface NativeHostStorePublicationRequest {
+  nodes: NativeEntryRecord[];
+  hint?: NativeHostStorePublicationHintRecord | null;
+  origin: NativePublicationOriginRecord;
+}
+
 export interface NativeHostStoreBatchGetRequest {
   keys: Uint8Array[];
 }
@@ -1283,6 +1299,12 @@ export interface NativeRemoteEntryRecord {
   node: Uint8Array;
 }
 
+export interface NativeRemotePublicationHintRecord {
+  namespace: Uint8Array;
+  key: Uint8Array;
+  value: Uint8Array;
+}
+
 export interface NativeRemoteNamedRootRecord {
   name: Uint8Array;
   manifest: Uint8Array;
@@ -1321,6 +1343,8 @@ export interface NativeRemoteStoreRequest {
   optionalBytes?: NativeRemoteOptionalBytesRecord[] | null;
   mutations?: NativeRemoteMutationRecord[] | null;
   entries?: NativeRemoteEntryRecord[] | null;
+  publicationOrigin?: number | null;
+  publicationHint?: NativeRemotePublicationHintRecord | null;
   conditions?: NativeRemoteRootConditionRecord[] | null;
   roots?: NativeRemoteRootWriteRecord[] | null;
 }
@@ -1414,6 +1438,7 @@ export interface NativeModule {
       put: (arg: NativeHostStorePutRequest) => NativeHostStoreUnitResult,
       delete_: (arg: NativeHostStoreKeyRequest) => NativeHostStoreUnitResult,
       batch: (arg: NativeHostStoreBatchRequest) => NativeHostStoreUnitResult,
+      publishNodes: (arg: NativeHostStorePublicationRequest) => NativeHostStoreUnitResult,
       batchGetOrdered: (arg: NativeHostStoreBatchGetRequest) => NativeHostStoreBatchGetResult,
       prefersBatchReads: (arg: NativeHostStoreEmptyRequest) => NativeHostStoreBoolResult,
       supportsHints: (arg: NativeHostStoreEmptyRequest) => NativeHostStoreBoolResult,

@@ -1,8 +1,8 @@
 import type { PGliteInterface, Results, Transaction } from "@electric-sql/pglite";
 import {
-  StoreError, compareBytes, equalBytes, hex, missingBytes, normalizeOptionalBytes, optionalEqual, ownBytes,
-  presentBytes, throwIfAborted, validateStoreDescriptor,
-  type NamedStoreRoot, type NodeEntry, type NodeMutation, type OptionalBytes, type RemoteStore,
+  STORE_PROTOCOL_MAJOR, StoreError, compareBytes, equalBytes, hex, missingBytes, normalizeOptionalBytes, optionalEqual, ownBytes,
+  presentBytes, publishNodesWithGeneralPath, throwIfAborted, validateStoreDescriptor,
+  type NamedStoreRoot, type NodeEntry, type NodeMutation, type NodePublication, type OptionalBytes, type RemoteStore,
   type RootCasResult, type RootCondition, type RootWrite, type StoreDescriptor, type StoreTransactionResult,
 } from "@trail/prolly-wasm/remote-store";
 
@@ -32,7 +32,7 @@ export class BrowserPGliteStore implements RemoteStore {
 
   constructor(database: PGliteInterface, options: BrowserPGliteStoreOptions = {}) {
     if (!database) throw new StoreError("invalid_argument", "PGlite database is required"); this.#database = database;
-    this.#storeDescriptor = validateStoreDescriptor({ protocolMajor: 1, adapterName: options.adapterName?.trim() || "browser-pglite-v1", provider: "pglite", schemaVersion: 1, capabilities: { nativeBatchReads: true, atomicBatchWrites: true, nodeScan: true, hints: true, atomicNodesAndHint: true, rootScan: true, rootCompareAndSwap: true, transactions: true, readParallelism: options.readParallelism ?? 16 }, limits: {} });
+    this.#storeDescriptor = validateStoreDescriptor({ protocolMajor: STORE_PROTOCOL_MAJOR, adapterName: options.adapterName?.trim() || "browser-pglite-v1", provider: "pglite", schemaVersion: 1, capabilities: { nativeBatchReads: true, atomicBatchWrites: true, nodeScan: true, hints: true, atomicNodesAndHint: true, rootScan: true, rootCompareAndSwap: true, transactions: true, readParallelism: options.readParallelism ?? 16 }, limits: {} });
   }
 
   async initializeSchema(signal?: AbortSignal): Promise<void> { return this.#run("initialize_schema", signal, async () => { await this.#database.exec(PGLITE_SCHEMA_SQL); }); }
@@ -42,6 +42,7 @@ export class BrowserPGliteStore implements RemoteStore {
   async putNode(cid: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<void> { const key = ownBytes(cid); const node = ownBytes(value); return this.#run("put_node", signal, async () => { await query(this.#database, UPSERT_NODE, [key, node], signal); }); }
   async deleteNode(cid: Uint8Array, signal?: AbortSignal): Promise<void> { const key = ownBytes(cid); return this.#run("delete_node", signal, async () => { await query(this.#database, DELETE_NODE, [key], signal); }); }
   async batchNodes(operations: readonly NodeMutation[], signal?: AbortSignal): Promise<void> { const owned = operations.map(cloneNodeMutation); return this.#run("batch_nodes", signal, () => this.#database.transaction(async (transaction) => applyNodeMutations(transaction, owned, signal))); }
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> { return publishNodesWithGeneralPath(this, publication, signal); }
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> { const keys = cids.map(ownBytes); return this.#run("batch_get_nodes_ordered", signal, async () => { if (!keys.length) return []; const placeholders = keys.map((_, index) => `$${index + 1}`).join(", "); const rows = (await query<{ cid: Uint8Array; node: Uint8Array }>(this.#database, `SELECT cid, node FROM prolly_nodes WHERE cid IN (${placeholders})`, keys, signal)).rows; const values = new Map(rows.map(({ cid, node }) => [hex(cid), ownBytes(node)])); return keys.map((key) => values.has(hex(key)) ? presentBytes(values.get(hex(key))!) : missingBytes()); }); }
   async listNodeCids(signal?: AbortSignal): Promise<Uint8Array[]> { return this.#run("list_node_cids", signal, async () => (await query<{ cid: Uint8Array }>(this.#database, "SELECT cid FROM prolly_nodes ORDER BY cid", [], signal)).rows.map(({ cid }) => ownBytes(cid)).filter((cid) => cid.byteLength === 32)); }
   async getHint(namespace: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<OptionalBytes> { const ns = ownBytes(namespace); const hintKey = ownBytes(key); return this.#run("get_hint", signal, () => queryOptional(this.#database, SELECT_HINT, [ns, hintKey], signal)); }

@@ -20,6 +20,7 @@ import {
   ownBytes,
   validateStoreDescriptor,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCondition,
@@ -337,6 +338,29 @@ export async function dispatchRemoteStore(
       case "batchNodes":
         await store.batchNodes((request.mutations ?? []).map(mutationFromNative), signal);
         return {};
+      case "publishNodes": {
+        if (request.publicationOrigin === undefined || request.publicationOrigin === null) {
+          throw new StoreError("invalid_data", "remote publication omitted its origin code");
+        }
+        const hint = request.publicationHint;
+        const publication: NodePublication = {
+          nodes: (request.entries ?? []).map((entry) => ({
+            cid: ownBytes(entry.cid),
+            node: ownBytes(entry.node),
+          })),
+          hint:
+            hint === undefined || hint === null
+              ? undefined
+              : {
+                  namespace: ownBytes(hint.namespace),
+                  key: ownBytes(hint.key),
+                  value: ownBytes(hint.value),
+                },
+          origin: { code: request.publicationOrigin },
+        };
+        await store.publishNodes(publication, signal);
+        return {};
+      }
       case "batchGetNodesOrdered":
         return {
           optionalValues: (await store.batchGetNodesOrdered(values, signal)).map(optionalToNative),

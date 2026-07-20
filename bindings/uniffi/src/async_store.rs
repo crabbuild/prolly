@@ -3,18 +3,19 @@ use std::fmt;
 use std::sync::Arc;
 
 use prolly::{
-    AsyncProlly, Mutation, OwnedAsyncProllyTransaction, RemoteBatchOp, RemoteManifestUpdate,
-    RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
-    RemoteTransactionUpdate, Tree,
+    AsyncProlly, Mutation, NodePublication, OwnedAsyncProllyTransaction, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionUpdate, Tree,
 };
 
 use crate::{
     resolver_from_name, to_usize, ConfigRecord, DiffRecord, EntryRecord, MutationRecord,
-    NamedRootRecord, NamedRootUpdateRecord, ProllyBindingError, RangeCursorRecord, RangePageRecord,
-    TransactionUpdateRecord, TreeRecord, TreeStatsRecord,
+    NamedRootRecord, NamedRootUpdateRecord, NodeEntryRecord, NodePublicationRecord,
+    ProllyBindingError, RangeCursorRecord, RangePageRecord, TransactionUpdateRecord, TreeRecord,
+    TreeStatsRecord,
 };
 
-const STORE_PROTOCOL_MAJOR: u32 = 1;
+const STORE_PROTOCOL_MAJOR: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct StoreCapabilitiesRecord {
@@ -147,12 +148,6 @@ pub struct NodeMutationRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct NodeEntryRecord {
-    pub key: Vec<u8>,
-    pub value: Vec<u8>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct NamedBytesRecord {
     pub name: Vec<u8>,
     pub value: Vec<u8>,
@@ -226,6 +221,8 @@ pub trait ForeignRemoteStore: Send + Sync {
     async fn delete_node(&self, cid: Vec<u8>) -> UnitResultRecord;
 
     async fn batch_nodes(&self, ops: Vec<NodeMutationRecord>) -> UnitResultRecord;
+
+    async fn publish_nodes(&self, publication: NodePublicationRecord) -> UnitResultRecord;
 
     async fn batch_get_nodes_ordered(&self, cids: Vec<Vec<u8>>) -> OptionalBytesListResultRecord;
 
@@ -347,6 +344,14 @@ impl RemoteStoreBackend for ForeignRemoteBackend {
             records.push(record);
         }
         finish_unit(self.callback.batch_nodes(records).await)
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.check_batch_write_count(publication.entries().len())?;
+        for (_, value) in publication.entries() {
+            self.check_node_size(value.len())?;
+        }
+        finish_unit(self.callback.publish_nodes(publication.into()).await)
     }
 
     async fn batch_get_nodes_ordered(
@@ -1235,18 +1240,18 @@ mod tests {
 
     #[test]
     fn descriptor_rejects_wrong_protocol_and_zero_parallelism() {
-        let wrong_protocol = validate_descriptor(descriptor(2, 4)).unwrap_err();
+        let wrong_protocol = validate_descriptor(descriptor(1, 4)).unwrap_err();
         assert_eq!(wrong_protocol.code, "invalid_descriptor");
         assert!(wrong_protocol.message.contains("protocol major"));
 
-        let zero_parallelism = validate_descriptor(descriptor(1, 0)).unwrap_err();
+        let zero_parallelism = validate_descriptor(descriptor(2, 0)).unwrap_err();
         assert_eq!(zero_parallelism.code, "invalid_descriptor");
         assert!(zero_parallelism.message.contains("read_parallelism"));
     }
 
     #[test]
     fn descriptor_rejects_zero_limits() {
-        let mut value = descriptor(1, 4);
+        let mut value = descriptor(2, 4);
         value.limits.max_batch_read_items = Some(0);
         let error = validate_descriptor(value).unwrap_err();
         assert_eq!(error.code, "invalid_descriptor");
@@ -1255,7 +1260,7 @@ mod tests {
 
     #[test]
     fn descriptor_rejects_atomic_hint_without_hint_support() {
-        let mut value = descriptor(1, 4);
+        let mut value = descriptor(2, 4);
         value.capabilities.hints = false;
         let error = validate_descriptor(value).unwrap_err();
         assert_eq!(error.code, "invalid_descriptor");
@@ -1268,7 +1273,7 @@ mod tests {
     impl ForeignRemoteStore for OrderedBatchStore {
         async fn descriptor(&self) -> StoreDescriptorResultRecord {
             StoreDescriptorResultRecord {
-                value: Some(descriptor(1, 4)),
+                value: Some(descriptor(2, 4)),
                 error: None,
             }
         }
@@ -1325,6 +1330,10 @@ mod tests {
         }
 
         async fn batch_nodes(&self, _ops: Vec<NodeMutationRecord>) -> UnitResultRecord {
+            UnitResultRecord { error: None }
+        }
+
+        async fn publish_nodes(&self, _publication: NodePublicationRecord) -> UnitResultRecord {
             UnitResultRecord { error: None }
         }
 
@@ -1505,18 +1514,37 @@ mod tests {
         nodes: BTreeMap<Vec<u8>, Vec<u8>>,
         hints: BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>>,
         roots: BTreeMap<Vec<u8>, Vec<u8>>,
+        publications: Vec<NodePublicationRecord>,
     }
 
-    #[derive(Default)]
     struct MemoryForeignStore {
         state: Mutex<MemoryForeignState>,
+        protocol_major: u32,
+    }
+
+    impl Default for MemoryForeignStore {
+        fn default() -> Self {
+            Self {
+                state: Mutex::new(MemoryForeignState::default()),
+                protocol_major: STORE_PROTOCOL_MAJOR,
+            }
+        }
+    }
+
+    impl MemoryForeignStore {
+        fn with_protocol_major(protocol_major: u32) -> Self {
+            Self {
+                state: Mutex::new(MemoryForeignState::default()),
+                protocol_major,
+            }
+        }
     }
 
     #[async_trait::async_trait]
     impl ForeignRemoteStore for MemoryForeignStore {
         async fn descriptor(&self) -> StoreDescriptorResultRecord {
             StoreDescriptorResultRecord {
-                value: Some(descriptor(1, 4)),
+                value: Some(descriptor(self.protocol_major, 4)),
                 error: None,
             }
         }
@@ -1542,6 +1570,21 @@ mod tests {
         async fn batch_nodes(&self, ops: Vec<NodeMutationRecord>) -> UnitResultRecord {
             let mut state = self.state.lock().unwrap();
             apply_node_mutations(&mut state, ops);
+            UnitResultRecord { error: None }
+        }
+
+        async fn publish_nodes(&self, publication: NodePublicationRecord) -> UnitResultRecord {
+            let mut state = self.state.lock().unwrap();
+            for node in &publication.nodes {
+                state.nodes.insert(node.key.clone(), node.value.clone());
+            }
+            if let Some(hint) = &publication.hint {
+                state.hints.insert(
+                    (hint.namespace.clone(), hint.key.clone()),
+                    hint.value.clone(),
+                );
+            }
+            state.publications.push(publication);
             UnitResultRecord { error: None }
         }
 
@@ -1728,6 +1771,52 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn foreign_publication_requires_protocol_two_and_preserves_owned_context() {
+        block_on(async {
+            let legacy = ForeignRemoteBackend::new(Arc::new(
+                MemoryForeignStore::with_protocol_major(1),
+            ))
+            .await
+            .err()
+            .expect("protocol version 1 must be rejected");
+            assert_eq!(legacy.0.code, "invalid_descriptor");
+
+            let callback = Arc::new(MemoryForeignStore::default());
+            let backend = ForeignRemoteBackend::new(callback.clone()).await.unwrap();
+            let bytes = b"published-node";
+            let cid = prolly::Cid::from_bytes(bytes);
+            let entries = [(cid.as_bytes(), bytes.as_slice())];
+            let hint = prolly::NodePublicationHint::new(b"rightmost", b"key", cid.as_bytes());
+            backend
+                .publish_nodes(NodePublication::with_hint(
+                    &entries,
+                    hint,
+                    prolly::PublicationOrigin::PointUpsert,
+                ))
+                .await
+                .unwrap();
+
+            assert_eq!(
+                callback.state.lock().unwrap().publications,
+                vec![NodePublicationRecord {
+                    nodes: vec![NodeEntryRecord {
+                        key: cid.as_bytes().to_vec(),
+                        value: bytes.to_vec(),
+                    }],
+                    hint: Some(crate::NodePublicationHintRecord {
+                        namespace: b"rightmost".to_vec(),
+                        key: b"key".to_vec(),
+                        value: cid.as_bytes().to_vec(),
+                    }),
+                    origin: crate::PublicationOriginRecord {
+                        code: crate::POINT_UPSERT,
+                    },
+                }]
+            );
+        });
     }
 
     #[test]

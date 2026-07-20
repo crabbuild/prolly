@@ -17,7 +17,7 @@ object StoreConformance {
     suspend fun run(factory: suspend () -> RemoteStore) {
         val store = factory()
         val descriptor = validateStoreDescriptor(store.descriptor())
-        check(descriptor.protocolMajor == 1u)
+        check(descriptor.protocolMajor == 2u)
         val prefix = UUID.randomUUID().toString().take(8)
 
         val cases = loadCases()
@@ -102,7 +102,7 @@ object StoreConformance {
         }
 
         val failures = loadFailures()
-        check(failures.path("protocol_major").asInt() == 1)
+        check(failures.path("protocol_major").asInt() == 2)
         val absentWithValue = failures.path("cases").first { it.path("name").asText() == "absent-with-value" }
         check(absentWithValue.path("present").asBoolean().not())
         check(runCatching { OptionalBytes.of(false, absentWithValue.path("hex").asText().hexBytes()) }.isFailure)

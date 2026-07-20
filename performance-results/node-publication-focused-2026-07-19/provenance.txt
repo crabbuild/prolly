@@ -1,0 +1,14 @@
+suite=sqlite-turso
+baseline_revision=a2f4e7a3066d2259783c8d815b45c0461c77b06b
+candidate_revision=81357948363fdb51dbc201ae5ba1a7377bb297e0
+sizes=10000
+runs=20
+changes=100
+apis=put,batch,diff,merge
+patterns=append,random,clustered
+adapters=sqlite-sync,turso-async
+execution=alternating-local-only
+isolate_cells=true
+measurement_samples=31
+minimum_pairs=5
+cloud_sync=disabled

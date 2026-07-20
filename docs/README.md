@@ -24,9 +24,10 @@ tests described here.
 - [Guides](guides.md): practical guidance for keys, values, range scans,
   named roots, merge resolvers, async storage, large values, GC, sync, and
   operational inspection.
-- [Async Store](async-store.md): design track for async-native stores,
-  sync-store adapters, object-store backends, browser/WASM storage, and remote
-  sync.
+- [Async-first Storage](async-store.md): production engine, adapter,
+  correctness, cancellation, and visibility contracts.
+- [Async-first Ownership Inventory](async-first-api-inventory.md): final owner
+  and execution convention for every storage-dependent API family.
 - [Object-Store VCS Design](object-store-vcs-design.md): technical design for
   direct object-store node/blob storage, distributed ref CAS, publish protocol,
   and GC for Git-like version-control systems.

@@ -15,7 +15,7 @@ use crate::prolly::proximity::{
     BuildParallelism, DistanceMetric, ProximityMap, ProximitySearchStats, SearchBackend,
     SearchCompletion, SearchPolicy, SearchRequest, SearchResult,
 };
-use crate::prolly::store::Store;
+use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 use crate::prolly::tree::Tree;
 use crate::prolly::Prolly;
 use rayon::prelude::*;
@@ -251,7 +251,11 @@ where
 
         let store = map.store_clone();
         let code_config = code_tree_config();
-        let mut builder = SortedBatchBuilder::new(store.clone(), code_config.clone());
+        let mut builder = SortedBatchBuilder::new_with_origin(
+            store.clone(),
+            code_config.clone(),
+            PublicationOrigin::Maintenance,
+        );
         let layout = subspace_layout(
             map.tree().config.dimensions as usize,
             config.subquantizers as usize,
@@ -334,8 +338,12 @@ where
                 });
             }
         } else {
+            let entries = [(manifest.as_bytes(), manifest_bytes.as_slice())];
             store
-                .put(manifest.as_bytes(), &manifest_bytes)
+                .publish_nodes(NodePublication::new(
+                    &entries,
+                    PublicationOrigin::Maintenance,
+                ))
                 .map_err(|error| Error::Store(Box::new(error)))?;
         }
         let stats = ProductQuantizationBuildStats {

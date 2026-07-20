@@ -351,7 +351,7 @@ mod async_tests {
         assert!(explanation.trace.events.iter().any(|event| matches!(
             event,
             MergeTraceEvent::ResolverCalled {
-                stage: MergeTraceStage::Batch,
+                stage: MergeTraceStage::Structural | MergeTraceStage::Batch,
                 key,
                 resolution: MergeResolutionKind::Unresolved,
             } if key == b"k"

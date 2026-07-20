@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use futures_util::StreamExt;
 use prolly::{
     append_batch, BatchApplyResult, BatchApplyStats, BatchOp, BatchWriter, Config, Error, Mutation,
-    Prolly, Resolution, Resolver, Store, Tree,
+    NodePublication, Prolly, Resolution, Resolver, Store, Tree,
 };
 use prolly_store_slatedb::SlateDbStore;
 use slatedb::object_store::aws::AmazonS3Builder;
@@ -247,6 +247,20 @@ impl<S: Store> Store for WriteCountingStore<S> {
         self.inner
             .batch_put_with_hint(entries, namespace, key, value)
     }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        let hint_bytes = publication.hint().map_or(0, |hint| hint.value().len());
+        self.count_write(
+            publication.entries().len() + usize::from(publication.hint().is_some()),
+            publication
+                .entries()
+                .iter()
+                .map(|(_, value)| value.len())
+                .sum::<usize>()
+                + hint_bytes,
+        );
+        self.inner.publish_nodes(publication)
+    }
 }
 
 fn main() {
@@ -272,7 +286,7 @@ fn main() {
     println!("max_chunk_size={}", config.max_chunk_size());
     println!("chunking_factor={}", config.chunking_factor());
     println!(
-        "operation,base_records,items,total_ms,items_per_sec,result_count,store_get_calls,store_get_bytes,store_batch_get_calls,store_batch_get_keys,store_batch_get_bytes,store_batch_get_ordered_calls,store_batch_get_ordered_keys,store_batch_get_ordered_bytes,store_hint_get_calls,store_hint_get_bytes,store_write_batches,store_write_entries,store_write_bytes,batch_input_mutations,batch_effective_mutations,batch_preprocess_input_sorted,batch_affected_leaves,batch_changed_leaves,batch_sparse_leaf_applies,batch_written_nodes,batch_written_bytes,batch_used_append_fast_path,batch_used_batched_route,batch_used_coalesced_rebuild,batch_used_deferred_rebalancing,batch_used_bottom_up_rebuild,batch_cache_written_nodes,verified,status"
+        "operation,base_records,items,total_ms,items_per_sec,result_count,store_get_calls,store_get_bytes,store_batch_get_calls,store_batch_get_keys,store_batch_get_bytes,store_batch_get_ordered_calls,store_batch_get_ordered_keys,store_batch_get_ordered_bytes,store_hint_get_calls,store_hint_get_bytes,store_write_batches,store_write_entries,store_write_bytes,batch_input_mutations,batch_effective_mutations,batch_preprocess_input_sorted,batch_entries_streamed,batch_nodes_read,batch_written_nodes,batch_nodes_reused,batch_bytes_read,batch_written_bytes,batch_resync_distance_entries,batch_resync_distance_nodes,batch_used_key_stable_fast_path,batch_used_batched_value_update_path,batch_parallel_width,batch_parallel_tasks,batch_structural_islands,batch_coalesced_islands,verified,status"
     );
 
     let store = Arc::new(WriteCountingStore::new(open_store(
@@ -1077,36 +1091,47 @@ fn print_row(row: PrintRow<'_>) {
     } else {
         0.0
     };
-    println!(
-        "{operation},{records},{items},{total_ms:.3},{items_per_sec:.0},{result_count},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{verified},{status}",
-        read_stats.get_calls,
-        read_stats.get_bytes,
-        read_stats.batch_get_calls,
-        read_stats.batch_get_keys,
-        read_stats.batch_get_bytes,
-        read_stats.batch_get_ordered_calls,
-        read_stats.batch_get_ordered_keys,
-        read_stats.batch_get_ordered_bytes,
-        read_stats.hint_get_calls,
-        read_stats.hint_get_bytes,
-        write_stats.batches,
-        write_stats.entries,
-        write_stats.bytes,
-        batch_stats.input_mutations,
-        batch_stats.effective_mutations,
-        batch_stats.preprocess_input_sorted,
-        batch_stats.affected_leaves,
-        batch_stats.changed_leaves,
-        batch_stats.sparse_leaf_applies,
-        batch_stats.written_nodes,
-        batch_stats.written_bytes,
-        batch_stats.used_append_fast_path,
-        batch_stats.used_batched_route,
-        batch_stats.used_coalesced_rebuild,
-        batch_stats.used_deferred_rebalancing,
-        batch_stats.used_bottom_up_rebuild,
-        batch_stats.cache_written_nodes
-    );
+    let fields = [
+        operation.to_owned(),
+        records.to_string(),
+        items.to_string(),
+        format!("{total_ms:.3}"),
+        format!("{items_per_sec:.0}"),
+        result_count.to_string(),
+        read_stats.get_calls.to_string(),
+        read_stats.get_bytes.to_string(),
+        read_stats.batch_get_calls.to_string(),
+        read_stats.batch_get_keys.to_string(),
+        read_stats.batch_get_bytes.to_string(),
+        read_stats.batch_get_ordered_calls.to_string(),
+        read_stats.batch_get_ordered_keys.to_string(),
+        read_stats.batch_get_ordered_bytes.to_string(),
+        read_stats.hint_get_calls.to_string(),
+        read_stats.hint_get_bytes.to_string(),
+        write_stats.batches.to_string(),
+        write_stats.entries.to_string(),
+        write_stats.bytes.to_string(),
+        batch_stats.input_mutations.to_string(),
+        batch_stats.effective_mutations.to_string(),
+        batch_stats.preprocess_input_sorted.to_string(),
+        batch_stats.entries_streamed.to_string(),
+        batch_stats.nodes_read.to_string(),
+        batch_stats.written_nodes.to_string(),
+        batch_stats.nodes_reused.to_string(),
+        batch_stats.bytes_read.to_string(),
+        batch_stats.written_bytes.to_string(),
+        batch_stats.resync_distance_entries.to_string(),
+        batch_stats.resync_distance_nodes.to_string(),
+        batch_stats.used_key_stable_fast_path.to_string(),
+        batch_stats.used_batched_value_update_path.to_string(),
+        batch_stats.parallel_width.to_string(),
+        batch_stats.parallel_tasks.to_string(),
+        batch_stats.structural_islands.to_string(),
+        batch_stats.coalesced_islands.to_string(),
+        verified.to_string(),
+        status.to_owned(),
+    ];
+    println!("{}", fields.join(","));
 }
 
 fn env_usize(name: &str) -> Option<usize> {

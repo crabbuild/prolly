@@ -1,8 +1,9 @@
 //! Shared conformance assertions for workspace store adapters.
 
 use prolly::{
-    BatchOp, Cid, Config, ManifestStore, ManifestStoreScan, ManifestUpdate, NodeStoreScan, Prolly,
-    RootManifest, SecondaryIndex, SecondaryIndexRegistry, Store, TransactionalStore,
+    BatchOp, Cid, Config, ManifestStore, ManifestStoreScan, ManifestUpdate, NodePublication,
+    NodeStoreScan, Prolly, PublicationOrigin, RootManifest, SecondaryIndex,
+    SecondaryIndexRegistry, Store, TransactionalStore,
 };
 
 pub fn assert_store_contract<S>(store: &S)
@@ -42,6 +43,20 @@ where
         .unwrap();
     assert_eq!(store.get(b"alpha").unwrap(), Some(b"updated".to_vec()));
     assert_eq!(store.get(b"beta").unwrap(), None);
+
+    let bytes = b"published-node";
+    let cid = Cid::from_bytes(bytes);
+    let entries = [(cid.as_bytes(), bytes.as_slice())];
+    store
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::PointUpsert,
+        ))
+        .unwrap();
+    assert_eq!(
+        store.get(cid.as_bytes()).unwrap(),
+        Some(bytes.to_vec())
+    );
 }
 
 pub fn assert_manifest_store_contract<S>(store: &S)

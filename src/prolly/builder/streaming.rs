@@ -337,10 +337,12 @@ impl HierarchicalEmitter {
         Ok(emitted)
     }
 
+    #[cfg(test)]
     pub(crate) fn leaf_is_empty(&self) -> bool {
         self.leaf.is_empty()
     }
 
+    #[cfg(test)]
     pub(crate) fn push_complete_leaf(
         &mut self,
         leaf: NodeSummary,

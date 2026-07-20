@@ -7,7 +7,7 @@ import (
 
 func validRemoteStoreDescriptor() StoreDescriptor {
 	return StoreDescriptor{
-		ProtocolMajor: 1,
+		ProtocolMajor: StoreProtocolMajor,
 		AdapterName:   "test-adapter",
 		Provider:      "test",
 		SchemaVersion: 1,
@@ -31,7 +31,7 @@ func TestStoreDescriptorValidate(t *testing.T) {
 		t.Fatalf("valid descriptor: %v", err)
 	}
 
-	descriptor.ProtocolMajor = 2
+	descriptor.ProtocolMajor = 1
 	if err := descriptor.Validate(); !errors.Is(err, ErrInvalidStoreDescriptor) {
 		t.Fatalf("wrong protocol error = %v", err)
 	}
@@ -66,6 +66,17 @@ func TestOptionalBytesPreservesMissingAndEmpty(t *testing.T) {
 	}
 	if !empty.Present || len(empty.Value) != 0 {
 		t.Fatalf("empty bytes = %#v", empty)
+	}
+}
+
+func TestNormalizePublicationOriginCodeFallsBackToGeneral(t *testing.T) {
+	for code := PublicationOriginGeneral; code <= PublicationOriginMaintenance; code++ {
+		if got := NormalizePublicationOriginCode(code); got != code {
+			t.Fatalf("NormalizePublicationOriginCode(%d) = %d", code, got)
+		}
+	}
+	if got := NormalizePublicationOriginCode(^uint32(0)); got != PublicationOriginGeneral {
+		t.Fatalf("unknown publication origin normalized to %d", got)
 	}
 }
 

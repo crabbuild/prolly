@@ -15,7 +15,7 @@ use crate::prolly::proximity::{
     BuildParallelism, DistanceMetric, HnswBuildLimits, HnswBuildStats,
     ProductQuantizationBuildLimits, ProductQuantizationBuildStats, ProximityMap, ProximityTree,
 };
-use crate::prolly::store::Store;
+use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 use crate::prolly::tree::Tree;
 
 const MAGIC: &[u8; 4] = b"PCOM";
@@ -327,8 +327,16 @@ where
         validate_source_pair(base_map.tree(), current_map.tree(), &base)?;
         let store = current_map.store_clone();
         let tree_config = composite_tree_config();
-        let mut delta_builder = SortedBatchBuilder::new(store.clone(), tree_config.clone());
-        let mut shadow_builder = SortedBatchBuilder::new(store.clone(), tree_config.clone());
+        let mut delta_builder = SortedBatchBuilder::new_with_origin(
+            store.clone(),
+            tree_config.clone(),
+            PublicationOrigin::Maintenance,
+        );
+        let mut shadow_builder = SortedBatchBuilder::new_with_origin(
+            store.clone(),
+            tree_config.clone(),
+            PublicationOrigin::Maintenance,
+        );
         let mut stats = CompositeBuildStats::default();
 
         for change in current_map
@@ -924,8 +932,12 @@ fn put_content<S: Store>(store: &S, cid: &Cid, bytes: &[u8]) -> Result<(), Error
         }
         return Ok(());
     }
+    let entries = [(cid.as_bytes(), bytes)];
     store
-        .put(cid.as_bytes(), bytes)
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::Maintenance,
+        ))
         .map_err(|error| Error::Store(Box::new(error)))
 }
 

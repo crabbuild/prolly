@@ -9,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use futures_util::StreamExt;
 use prolly::{
     BatchApplyStats, BatchOp, BatchWriter, Config, ManifestStore, ManifestStoreScan, ManifestUpdate,
-    Mutation, NamedRootManifest, Prolly, RootManifest, Store, Tree, TreeStats,
+    Mutation, NamedRootManifest, NodePublication, Prolly, RootManifest, Store, Tree, TreeStats,
 };
 use prolly_store_slatedb::{SlateDbStore, SlateDbStoreConfig};
 use slatedb::config::{CompressionCodec, Settings};
@@ -254,6 +254,20 @@ impl<S: Store> Store for CountingStore<S> {
         self.inner
             .batch_put_with_hint(entries, namespace, key, value)
     }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        let hint_bytes = publication.hint().map_or(0, |hint| hint.value().len());
+        self.count_write(
+            publication.entries().len() + usize::from(publication.hint().is_some()),
+            publication
+                .entries()
+                .iter()
+                .map(|(_, value)| value.len())
+                .sum::<usize>()
+                + hint_bytes,
+        );
+        self.inner.publish_nodes(publication)
+    }
 }
 
 impl<S: ManifestStore> ManifestStore for CountingStore<S> {
@@ -315,7 +329,7 @@ fn main() {
     println!("stats_max_records={}", workload.stats_max_records);
     print_slatedb_settings(&workload.store_config);
     println!(
-        "row,stage,target_records,total_records,operation,items,total_ms,items_per_sec,result_count,object_count,object_bytes,bytes_per_record,tree_nodes,tree_leaves,tree_internal_nodes,tree_height,tree_kv_pairs,tree_bytes,avg_node_bytes,avg_entries_per_node,avg_leaf_fill,store_get_calls,store_get_bytes,store_batch_get_calls,store_batch_get_keys,store_batch_get_bytes,store_batch_get_ordered_calls,store_batch_get_ordered_keys,store_batch_get_ordered_bytes,store_hint_get_calls,store_hint_get_bytes,store_write_batches,store_write_entries,store_write_bytes,batch_input_mutations,batch_effective_mutations,batch_affected_leaves,batch_changed_leaves,batch_written_nodes,batch_written_bytes,batch_append_fast_path,batch_batched_route,batch_cache_written_nodes,verified,status"
+        "row,stage,target_records,total_records,operation,items,total_ms,items_per_sec,result_count,object_count,object_bytes,bytes_per_record,tree_nodes,tree_leaves,tree_internal_nodes,tree_height,tree_kv_pairs,tree_bytes,avg_node_bytes,avg_entries_per_node,avg_leaf_fill,store_get_calls,store_get_bytes,store_batch_get_calls,store_batch_get_keys,store_batch_get_bytes,store_batch_get_ordered_calls,store_batch_get_ordered_keys,store_batch_get_ordered_bytes,store_hint_get_calls,store_hint_get_bytes,store_write_batches,store_write_entries,store_write_bytes,batch_input_mutations,batch_effective_mutations,batch_preprocess_input_sorted,batch_entries_streamed,batch_nodes_read,batch_written_nodes,batch_nodes_reused,batch_bytes_read,batch_written_bytes,batch_resync_distance_entries,batch_resync_distance_nodes,batch_used_key_stable_fast_path,batch_used_batched_value_update_path,batch_parallel_width,batch_parallel_tasks,batch_structural_islands,batch_coalesced_islands,verified,status"
     );
 
     let store = Arc::new(CountingStore::new(open_store(
@@ -1114,51 +1128,62 @@ fn print_row(row: PrintRow<'_>) {
     };
     let tree = row.tree_stats.unwrap_or_default();
 
-    println!(
-        "{},{},{},{},{},{},{total_ms:.3},{items_per_sec:.0},{},{},{},{bytes_per_record:.2},{},{},{},{},{},{},{:.2},{:.2},{:.4},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
-        row.row,
-        row.stage,
-        row.target_records,
-        row.total_records,
+    let fields = [
+        row.row.to_owned(),
+        row.stage.to_string(),
+        row.target_records.to_string(),
+        row.total_records.to_string(),
         row.operation,
-        row.items,
-        row.result_count,
-        row.object_stats.count,
-        row.object_stats.bytes,
-        tree.num_nodes,
-        tree.num_leaves,
-        tree.num_internal_nodes,
-        tree.tree_height,
-        tree.total_key_value_pairs,
-        tree.total_tree_size_bytes,
-        tree.avg_node_size_bytes,
-        tree.avg_entries_per_node,
-        tree.avg_leaf_fill_factor,
-        row.read_stats.get_calls,
-        row.read_stats.get_bytes,
-        row.read_stats.batch_get_calls,
-        row.read_stats.batch_get_keys,
-        row.read_stats.batch_get_bytes,
-        row.read_stats.batch_get_ordered_calls,
-        row.read_stats.batch_get_ordered_keys,
-        row.read_stats.batch_get_ordered_bytes,
-        row.read_stats.hint_get_calls,
-        row.read_stats.hint_get_bytes,
-        row.write_stats.batches,
-        row.write_stats.entries,
-        row.write_stats.bytes,
-        row.batch_stats.input_mutations,
-        row.batch_stats.effective_mutations,
-        row.batch_stats.affected_leaves,
-        row.batch_stats.changed_leaves,
-        row.batch_stats.written_nodes,
-        row.batch_stats.written_bytes,
-        row.batch_stats.used_append_fast_path,
-        row.batch_stats.used_batched_route,
-        row.batch_stats.cache_written_nodes,
-        row.verified,
-        row.status
-    );
+        row.items.to_string(),
+        format!("{total_ms:.3}"),
+        format!("{items_per_sec:.0}"),
+        row.result_count.to_string(),
+        row.object_stats.count.to_string(),
+        row.object_stats.bytes.to_string(),
+        format!("{bytes_per_record:.2}"),
+        tree.num_nodes.to_string(),
+        tree.num_leaves.to_string(),
+        tree.num_internal_nodes.to_string(),
+        tree.tree_height.to_string(),
+        tree.total_key_value_pairs.to_string(),
+        tree.total_tree_size_bytes.to_string(),
+        format!("{:.2}", tree.avg_node_size_bytes),
+        format!("{:.2}", tree.avg_entries_per_node),
+        format!("{:.4}", tree.avg_leaf_fill_factor),
+        row.read_stats.get_calls.to_string(),
+        row.read_stats.get_bytes.to_string(),
+        row.read_stats.batch_get_calls.to_string(),
+        row.read_stats.batch_get_keys.to_string(),
+        row.read_stats.batch_get_bytes.to_string(),
+        row.read_stats.batch_get_ordered_calls.to_string(),
+        row.read_stats.batch_get_ordered_keys.to_string(),
+        row.read_stats.batch_get_ordered_bytes.to_string(),
+        row.read_stats.hint_get_calls.to_string(),
+        row.read_stats.hint_get_bytes.to_string(),
+        row.write_stats.batches.to_string(),
+        row.write_stats.entries.to_string(),
+        row.write_stats.bytes.to_string(),
+        row.batch_stats.input_mutations.to_string(),
+        row.batch_stats.effective_mutations.to_string(),
+        row.batch_stats.preprocess_input_sorted.to_string(),
+        row.batch_stats.entries_streamed.to_string(),
+        row.batch_stats.nodes_read.to_string(),
+        row.batch_stats.written_nodes.to_string(),
+        row.batch_stats.nodes_reused.to_string(),
+        row.batch_stats.bytes_read.to_string(),
+        row.batch_stats.written_bytes.to_string(),
+        row.batch_stats.resync_distance_entries.to_string(),
+        row.batch_stats.resync_distance_nodes.to_string(),
+        row.batch_stats.used_key_stable_fast_path.to_string(),
+        row.batch_stats.used_batched_value_update_path.to_string(),
+        row.batch_stats.parallel_width.to_string(),
+        row.batch_stats.parallel_tasks.to_string(),
+        row.batch_stats.structural_islands.to_string(),
+        row.batch_stats.coalesced_islands.to_string(),
+        row.verified.to_string(),
+        row.status.to_owned(),
+    ];
+    println!("{}", fields.join(","));
 }
 
 fn maybe_tree_stats<S>(
@@ -1179,18 +1204,21 @@ where
 fn merge_batch_stats(total: &mut BatchApplyStats, next: &BatchApplyStats) {
     total.input_mutations += next.input_mutations;
     total.effective_mutations += next.effective_mutations;
-    total.affected_leaves += next.affected_leaves;
-    total.changed_leaves += next.changed_leaves;
-    total.sparse_leaf_applies += next.sparse_leaf_applies;
+    total.entries_streamed += next.entries_streamed;
+    total.nodes_read += next.nodes_read;
     total.written_nodes += next.written_nodes;
+    total.nodes_reused += next.nodes_reused;
+    total.bytes_read += next.bytes_read;
     total.written_bytes += next.written_bytes;
+    total.resync_distance_entries += next.resync_distance_entries;
+    total.resync_distance_nodes += next.resync_distance_nodes;
     total.preprocess_input_sorted |= next.preprocess_input_sorted;
-    total.used_append_fast_path |= next.used_append_fast_path;
-    total.used_batched_route |= next.used_batched_route;
-    total.used_coalesced_rebuild |= next.used_coalesced_rebuild;
-    total.used_deferred_rebalancing |= next.used_deferred_rebalancing;
-    total.used_bottom_up_rebuild |= next.used_bottom_up_rebuild;
-    total.cache_written_nodes |= next.cache_written_nodes;
+    total.used_key_stable_fast_path |= next.used_key_stable_fast_path;
+    total.used_batched_value_update_path |= next.used_batched_value_update_path;
+    total.parallel_width = total.parallel_width.max(next.parallel_width);
+    total.parallel_tasks += next.parallel_tasks;
+    total.structural_islands += next.structural_islands;
+    total.coalesced_islands += next.coalesced_islands;
 }
 
 #[derive(Clone)]

@@ -53,6 +53,16 @@ final class HostStoreAdapter implements HostStoreCallback {
     }
 
     @Override
+    public HostStoreUnitResultRecord publishNodes(NodePublicationRecord publication) {
+        try {
+            store.publishNodes(PublicationInterop.clonePublication(publication));
+            return unit();
+        } catch (Exception error) {
+            return unit(error);
+        }
+    }
+
+    @Override
     public HostStoreBatchGetResultRecord batchGetOrdered(List<byte[]> keys) {
         try {
             List<Optional<byte[]>> values = store.batchGetOrdered(cloneByteArrays(keys));
@@ -203,4 +213,5 @@ final class HostStoreAdapter implements HostStoreCallback {
         }
         return cloned;
     }
+
 }

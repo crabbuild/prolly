@@ -44,6 +44,11 @@ function makeHostStore(nativeModule: any): any {
       }
       return {};
     },
+    ({ nodes: publicationNodes, hint }: { nodes: Array<{ key: Uint8Array; value: Uint8Array }>; hint?: { namespace: Uint8Array; key: Uint8Array; value: Uint8Array } | null }) => {
+      for (const node of publicationNodes) nodes.set(keyOf(node.key), Buffer.from(node.value));
+      if (hint != null) hints.set(hintKey(hint.namespace, hint.key), Buffer.from(hint.value));
+      return {};
+    },
     ({ keys }: { keys: Uint8Array[] }) => ({
       values: keys.map((key) => {
         const value = nodes.get(keyOf(key));

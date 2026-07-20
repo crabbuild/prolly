@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::key::debug_key;
-#[cfg(feature = "async-store")]
 use super::store::AsyncStore;
-#[cfg(feature = "async-store")]
 use super::AsyncProlly;
-use super::{child_cid_at, Cid, Error, Prolly, Store, Tree};
+use super::{child_cid_at, Cid, Error, Tree};
+#[cfg(test)]
+use super::{Prolly, Store};
 
 /// Inspectable node metadata for debug tooling.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -202,6 +202,11 @@ impl TreeDebugNodeStatus {
     }
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async diagnostics"
+)]
 pub(crate) fn collect_tree_debug_view<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
@@ -245,6 +250,11 @@ pub(crate) fn collect_tree_debug_view<S: Store>(
     Ok(view_from_grouped(grouped))
 }
 
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "retained only as a correctness oracle for async diagnostics"
+)]
 pub(crate) fn compare_tree_debug_views<S: Store>(
     prolly: &Prolly<S>,
     left: &Tree,
@@ -254,8 +264,6 @@ pub(crate) fn compare_tree_debug_views<S: Store>(
     let right = collect_tree_debug_view(prolly, right)?;
     Ok(compare_views(left, right))
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn collect_tree_debug_view_async<S>(
     prolly: &AsyncProlly<S>,
     tree: &Tree,
@@ -273,7 +281,9 @@ where
     let mut frontier = vec![root_cid.clone()];
 
     while !frontier.is_empty() {
-        let nodes = prolly.load_child_frontier_ordered(&frontier).await?;
+        let nodes = prolly
+            .load_child_frontier_ordered_for_format(&frontier, &tree.config.format)
+            .await?;
         let mut next_frontier = Vec::new();
 
         for (cid, node) in frontier.iter().cloned().zip(nodes) {
@@ -302,8 +312,6 @@ where
 
     Ok(view_from_grouped(grouped))
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn compare_tree_debug_views_async<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,

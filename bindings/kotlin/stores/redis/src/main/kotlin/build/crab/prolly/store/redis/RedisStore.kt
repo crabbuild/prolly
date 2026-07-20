@@ -40,7 +40,7 @@ class RedisStore @JvmOverloads constructor(
     private val keyPrefix = options.keyPrefix.copyOf()
     private val storeDescriptor = validateStoreDescriptor(
         StoreDescriptor(
-            protocolMajor = 1u,
+            protocolMajor = 2u,
             adapterName = options.adapterName.ifBlank { "redis-v1" },
             provider = "redis",
             schemaVersion = 1u,

@@ -1,5 +1,5 @@
 {
-  "protocol_major": 1,
+  "protocol_major": 2,
   "cases": [
     {"name": "wrong-protocol", "code": "invalid_descriptor", "protocol_major": 2},
     {"name": "zero-read-parallelism", "code": "invalid_descriptor", "read_parallelism": 0},

@@ -7243,6 +7243,8 @@ public protocol ForeignRemoteStore: AnyObject, Sendable {
     
     func batchNodes(ops: [NodeMutationRecord]) async  -> UnitResultRecord
     
+    func publishNodes(publication: NodePublicationRecord) async  -> UnitResultRecord
+
     func batchGetNodesOrdered(cids: [Data]) async  -> OptionalBytesListResultRecord
     
     func listNodeCids() async  -> BytesListResultRecord
@@ -7409,6 +7411,24 @@ open func batchNodes(ops: [NodeMutationRecord])async  -> UnitResultRecord  {
         )
 }
     
+open func publishNodes(publication: NodePublicationRecord)async  -> UnitResultRecord  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_prolly_bindings_fn_method_foreignremotestore_publish_nodes(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeNodePublicationRecord_lower(publication)
+                )
+            },
+            pollFunc: ffi_prolly_bindings_rust_future_poll_rust_buffer,
+            completeFunc: ffi_prolly_bindings_rust_future_complete_rust_buffer,
+            freeFunc: ffi_prolly_bindings_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUnitResultRecord_lift,
+            errorHandler: nil
+
+        )
+}
+
 open func batchGetNodesOrdered(cids: [Data])async  -> OptionalBytesListResultRecord  {
     return
         try!  await uniffiRustCallAsync(
@@ -7818,6 +7838,48 @@ fileprivate struct UniffiCallbackInterfaceForeignRemoteStore {
                 }
                 return await uniffiObj.batchNodes(
                      ops: try FfiConverterSequenceTypeNodeMutationRecord.lift(ops)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: UnitResultRecord) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeUnitResultRecord_lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsync(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        publishNodes: { (
+            uniffiHandle: UInt64,
+            publication: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> UnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeForeignRemoteStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return await uniffiObj.publishNodes(
+                     publication: try FfiConverterTypeNodePublicationRecord_lift(publication)
                 )
             }
 
@@ -8403,6 +8465,8 @@ public protocol HostStoreCallback: AnyObject, Sendable {
     
     func batch(ops: [MutationRecord])  -> HostStoreUnitResultRecord
     
+    func publishNodes(publication: NodePublicationRecord)  -> HostStoreUnitResultRecord
+
     func batchGetOrdered(keys: [Data])  -> HostStoreBatchGetResultRecord
     
     func prefersBatchReads()  -> HostStoreBoolResultRecord
@@ -8516,6 +8580,15 @@ open func batch(ops: [MutationRecord]) -> HostStoreUnitResultRecord  {
 })
 }
     
+open func publishNodes(publication: NodePublicationRecord) -> HostStoreUnitResultRecord  {
+    return try!  FfiConverterTypeHostStoreUnitResultRecord_lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_method_hoststorecallback_publish_nodes(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeNodePublicationRecord_lower(publication),$0
+    )
+})
+}
+
 open func batchGetOrdered(keys: [Data]) -> HostStoreBatchGetResultRecord  {
     return try!  FfiConverterTypeHostStoreBatchGetResultRecord_lift(try! rustCall() {
     uniffi_prolly_bindings_fn_method_hoststorecallback_batch_get_ordered(
@@ -8737,6 +8810,30 @@ fileprivate struct UniffiCallbackInterfaceHostStoreCallback {
             }
 
             
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        publishNodes: { (
+            uniffiHandle: UInt64,
+            publication: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> HostStoreUnitResultRecord in
+                guard let uniffiObj = try? FfiConverterTypeHostStoreCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.publishNodes(
+                     publication: try FfiConverterTypeNodePublicationRecord_lift(publication)
+                )
+            }
+
+
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeHostStoreUnitResultRecord_lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -18110,6 +18207,122 @@ public func FfiConverterTypeNodeMutationRecord_lower(_ value: NodeMutationRecord
 }
 
 
+public struct NodePublicationHintRecord: Equatable, Hashable {
+    public var namespace: Data
+    public var key: Data
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(namespace: Data, key: Data, value: Data) {
+        self.namespace = namespace
+        self.key = key
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodePublicationHintRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodePublicationHintRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodePublicationHintRecord {
+        return
+            try NodePublicationHintRecord(
+                namespace: FfiConverterData.read(from: &buf),
+                key: FfiConverterData.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodePublicationHintRecord, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.namespace, into: &buf)
+        FfiConverterData.write(value.key, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodePublicationHintRecord_lift(_ buf: RustBuffer) throws -> NodePublicationHintRecord {
+    return try FfiConverterTypeNodePublicationHintRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodePublicationHintRecord_lower(_ value: NodePublicationHintRecord) -> RustBuffer {
+    return FfiConverterTypeNodePublicationHintRecord.lower(value)
+}
+
+
+public struct NodePublicationRecord: Equatable, Hashable {
+    public var nodes: [NodeEntryRecord]
+    public var hint: NodePublicationHintRecord?
+    public var origin: PublicationOriginRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(nodes: [NodeEntryRecord], hint: NodePublicationHintRecord?, origin: PublicationOriginRecord) {
+        self.nodes = nodes
+        self.hint = hint
+        self.origin = origin
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodePublicationRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodePublicationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodePublicationRecord {
+        return
+            try NodePublicationRecord(
+                nodes: FfiConverterSequenceTypeNodeEntryRecord.read(from: &buf),
+                hint: FfiConverterOptionTypeNodePublicationHintRecord.read(from: &buf),
+                origin: FfiConverterTypePublicationOriginRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodePublicationRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeNodeEntryRecord.write(value.nodes, into: &buf)
+        FfiConverterOptionTypeNodePublicationHintRecord.write(value.hint, into: &buf)
+        FfiConverterTypePublicationOriginRecord.write(value.origin, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodePublicationRecord_lift(_ buf: RustBuffer) throws -> NodePublicationRecord {
+    return try FfiConverterTypeNodePublicationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodePublicationRecord_lower(_ value: NodePublicationRecord) -> RustBuffer {
+    return FfiConverterTypeNodePublicationRecord.lower(value)
+}
+
+
 public struct NodeRecord: Equatable, Hashable {
     public var keys: [Data]
     public var vals: [Data]
@@ -20277,6 +20490,56 @@ public func FfiConverterTypeProximityVerificationRecord_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeProximityVerificationRecord_lower(_ value: ProximityVerificationRecord) -> RustBuffer {
     return FfiConverterTypeProximityVerificationRecord.lower(value)
+}
+
+
+public struct PublicationOriginRecord: Equatable, Hashable {
+    public var code: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(code: UInt32) {
+        self.code = code
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PublicationOriginRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicationOriginRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicationOriginRecord {
+        return
+            try PublicationOriginRecord(
+                code: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublicationOriginRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.code, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicationOriginRecord_lift(_ buf: RustBuffer) throws -> PublicationOriginRecord {
+    return try FfiConverterTypePublicationOriginRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicationOriginRecord_lower(_ value: PublicationOriginRecord) -> RustBuffer {
+    return FfiConverterTypePublicationOriginRecord.lower(value)
 }
 
 
@@ -27748,6 +28011,30 @@ fileprivate struct FfiConverterOptionTypeMutationRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNodePublicationHintRecord: FfiConverterRustBuffer {
+    typealias SwiftType = NodePublicationHintRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNodePublicationHintRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNodePublicationHintRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeProductQuantizationBuildStatsRecord: FfiConverterRustBuffer {
     typealias SwiftType = ProductQuantizationBuildStatsRecord?
 
@@ -30500,6 +30787,13 @@ public func verifyProximityStructureProof(proof: ProximityStructuralProofRecord,
     )
 })
 }
+public func normalizePublicationOriginCode(code: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_prolly_bindings_fn_func_normalize_publication_origin_code(
+        FfiConverterUInt32.lower(code),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -30927,6 +31221,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_func_verify_proximity_structure_proof() != 14090) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_prolly_bindings_checksum_func_normalize_publication_origin_code() != 55699) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_prolly_bindings_checksum_method_conflictvisitorcallback_visit() != 1459) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30951,37 +31248,40 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_hoststorecallback_batch() != 32872) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered() != 59373) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_publish_nodes() != 35124) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads() != 44756) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_batch_get_ordered() != 24538) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints() != 40193) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_prefers_batch_reads() != 10795) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint() != 32559) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_supports_hints() != 22557) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint() != 60174) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_get_hint() != 29790) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids() != 35211) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_put_hint() != 5363) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root() != 3674) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_list_node_cids() != 45542) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root() != 41124) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_get_root() != 61870) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root() != 17982) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_put_root() != 8083) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root() != 10051) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_delete_root() != 9754) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots() != 52095) {
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_compare_and_swap_root() != 60802) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_hoststorecallback_list_roots() != 391) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_mergepolicyregistry_has_default() != 49635) {
@@ -31575,37 +31875,40 @@ private let initializationResult: InitializationResult = {
     if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_nodes() != 58441) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 19651) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_publish_nodes() != 29227) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 19936) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_get_nodes_ordered() != 45520) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 47952) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_node_cids() != 52203) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 29623) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_hint() != 33243) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 26659) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_hint() != 62043) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 16335) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_batch_put_nodes_with_hint() != 44048) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 37302) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_get_root_manifest() != 42406) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 46149) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_put_root_manifest() != 61298) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 10430) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_delete_root_manifest() != 54878) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 17725) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_compare_and_swap_root_manifest() != 49897) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 90) {
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_list_root_manifests() != 58307) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_prolly_bindings_checksum_method_foreignremotestore_commit_transaction() != 40552) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_prolly_bindings_checksum_method_bindingindexregistry_len() != 2337) {

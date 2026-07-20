@@ -114,7 +114,7 @@ function verifyCell(language, provider, cell) {
   }
 }
 
-assert.equal(manifest.protocol_major, 1, "only store protocol major 1 is accepted");
+assert.equal(manifest.protocol_major, 2, "only store protocol major 2 is accepted");
 requireSupported("node", nodeProviders);
 requireSupported("kotlin", sharedProviders);
 requireSupported("java", sharedProviders);

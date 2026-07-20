@@ -7,9 +7,10 @@ use super::boundary::BoundaryDetector;
 use super::cid::Cid;
 use super::config::Config;
 use super::encoding::INIT_LEVEL;
+use super::engine::ProllyEngine;
 use super::error::Error;
 use super::node::Node;
-use super::store::Store;
+use super::store::{AsyncStore, NodePublication, PublicationOrigin, Store};
 use super::tree::Tree;
 
 use rayon::prelude::*;
@@ -19,7 +20,7 @@ pub(crate) use size::EncodedNodeSizer;
 mod streaming;
 pub(crate) use streaming::{EmittedNode, HierarchicalEmitter, LevelEmitter};
 
-const SORTED_BUILDER_NODE_BATCH: usize = 4_096;
+pub(crate) const SORTED_BUILDER_NODE_BATCH: usize = 4_096;
 const PARALLEL_BOUNDARY_HASH_MIN_ENTRIES: usize = 1_024;
 
 #[derive(Debug)]
@@ -67,6 +68,7 @@ pub(crate) struct NodeSummary {
 pub struct BatchBuilder<S: Store> {
     store: S,
     config: Config,
+    origin: PublicationOrigin,
     /// Key-value pairs to insert (will be sorted before build)
     entries: Vec<(Vec<u8>, Vec<u8>)>,
 }
@@ -80,9 +82,151 @@ pub struct BatchBuilder<S: Store> {
 pub struct SortedBatchBuilder<S: Store> {
     store: S,
     config: Config,
+    origin: PublicationOrigin,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     pending_nodes: Vec<BuiltNode>,
     hierarchy: HierarchicalEmitter,
+}
+
+/// Async-first bulk builder for unsorted entries.
+///
+/// Entries are retained until [`AsyncBatchBuilder::build`], then the engine's
+/// canonical mutation planner sorts, deduplicates, builds, validates, and
+/// publishes the resulting tree.
+pub struct AsyncBatchBuilder<S: AsyncStore> {
+    engine: ProllyEngine<S>,
+    origin: PublicationOrigin,
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+}
+
+/// Memory-bounded async builder for entries already sorted by key.
+///
+/// Finalized node batches are published as they are emitted. Those nodes remain
+/// unreachable until [`AsyncSortedBatchBuilder::build`] returns the root.
+pub struct AsyncSortedBatchBuilder<S: AsyncStore> {
+    engine: ProllyEngine<S>,
+    origin: PublicationOrigin,
+    pending_entry: Option<(Vec<u8>, Vec<u8>)>,
+    pending_nodes: Vec<DeferredNode>,
+    hierarchy: HierarchicalEmitter,
+}
+
+impl<S> AsyncBatchBuilder<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    /// Create an async bulk builder.
+    pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
+        Self {
+            engine: ProllyEngine::new(store, config),
+            origin,
+            entries: Vec::new(),
+        }
+    }
+
+    /// Add an entry. Input order is unrestricted.
+    pub fn add(&mut self, key: Vec<u8>, val: Vec<u8>) {
+        self.entries.push((key, val));
+    }
+
+    /// Build and publish the canonical tree.
+    pub async fn build(self) -> Result<Tree, Error> {
+        self.engine
+            .build_from_entries_with_origin(self.entries, self.origin)
+            .await
+    }
+}
+
+impl<S> AsyncSortedBatchBuilder<S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    /// Create a memory-bounded async sorted builder.
+    pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
+        let hierarchy = HierarchicalEmitter::new(config.clone())
+            .expect("configuration contains a registered persisted tree format");
+        Self {
+            engine: ProllyEngine::new(store, config),
+            origin,
+            pending_entry: None,
+            pending_nodes: Vec::new(),
+            hierarchy,
+        }
+    }
+
+    /// Add the next nondecreasing key/value pair.
+    ///
+    /// Duplicate keys replace the pending value. A decreasing key is rejected
+    /// before it can publish any node derived from that key.
+    pub async fn add(&mut self, key: Vec<u8>, val: Vec<u8>) -> Result<(), Error> {
+        if let Some((previous, previous_value)) = &mut self.pending_entry {
+            if key < *previous {
+                return Err(Error::UnsortedInput {
+                    previous: previous.clone(),
+                    next: key,
+                });
+            }
+            if key == *previous {
+                *previous_value = val;
+                return Ok(());
+            }
+        }
+
+        self.flush_pending_entry().await?;
+        self.pending_entry = Some((key, val));
+        Ok(())
+    }
+
+    async fn flush_pending_entry(&mut self) -> Result<(), Error> {
+        let Some((key, val)) = self.pending_entry.take() else {
+            return Ok(());
+        };
+        let emitted = self.hierarchy.push_leaf(key, val)?;
+        self.collect_emitted(emitted).await
+    }
+
+    async fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
+        self.pending_nodes
+            .extend(emitted.into_iter().map(|emitted| DeferredNode {
+                cid: emitted.summary.cid,
+                bytes: emitted.bytes,
+                node: emitted.node,
+            }));
+        if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
+            self.flush_pending_nodes().await?;
+        }
+        Ok(())
+    }
+
+    async fn flush_pending_nodes(&mut self) -> Result<(), Error> {
+        self.engine
+            .publish_builder_nodes(&self.pending_nodes, self.origin)
+            .await?;
+        self.pending_nodes.clear();
+        Ok(())
+    }
+
+    /// Finish and publish the remaining nodes, then return the visible root.
+    pub async fn build(mut self) -> Result<Tree, Error> {
+        self.flush_pending_entry().await?;
+        let (root, emitted) = self.hierarchy.finish()?;
+        self.collect_emitted(emitted).await?;
+        self.flush_pending_nodes().await?;
+        Ok(Tree {
+            root: root.map(|summary| summary.cid),
+            config: self.engine.config().clone(),
+        })
+    }
 }
 
 impl<S: Store + Clone + Send + Sync> BatchBuilder<S>
@@ -96,9 +240,14 @@ where
     /// * `config` - Tree configuration (chunking parameters, encoding, etc.)
     ///
     pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
         Self {
             store,
             config,
+            origin,
             entries: Vec::new(),
         }
     }
@@ -278,7 +427,7 @@ where
             .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
             .collect::<Vec<_>>();
         self.store
-            .batch_put(&entries)
+            .publish_nodes(NodePublication::new(&entries, self.origin))
             .map_err(|error| Error::Store(Box::new(error)))?;
         Ok((tree, written_nodes, written_bytes))
     }
@@ -434,7 +583,7 @@ where
     }
 
     fn persist_nodes(&self, nodes: &[BuiltNode]) -> Result<(), Error> {
-        persist_nodes(&self.store, nodes)
+        persist_nodes(&self.store, nodes, self.origin)
     }
 }
 
@@ -444,11 +593,16 @@ where
 {
     /// Create a sorted streaming builder.
     pub fn new(store: S, config: Config) -> Self {
+        Self::new_with_origin(store, config, PublicationOrigin::TreeBuild)
+    }
+
+    pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
         let hierarchy = HierarchicalEmitter::new(config.clone())
             .expect("configuration contains a registered persisted tree format");
         Self {
             store,
             config,
+            origin,
             pending_entry: None,
             pending_nodes: Vec::new(),
             hierarchy,
@@ -481,6 +635,7 @@ where
 
     /// Add one key/value pair when the internal caller has already proved the
     /// stream is strictly increasing and duplicate-free.
+    #[cfg(test)]
     pub(crate) fn add_unique_sorted(&mut self, key: Vec<u8>, val: Vec<u8>) -> Result<(), Error> {
         debug_assert!(match self.pending_entry.as_ref() {
             Some((previous, _)) => previous < &key,
@@ -494,6 +649,7 @@ where
     /// Reuse an already-persisted canonical leaf when the stream is currently
     /// aligned to a leaf boundary. Returns `false` when callers must replay the
     /// leaf's entries to re-establish alignment.
+    #[cfg(test)]
     pub(crate) fn add_complete_leaf(&mut self, leaf: NodeSummary) -> Result<bool, Error> {
         self.flush_pending_entry()?;
         if !self.hierarchy.leaf_is_empty() {
@@ -540,7 +696,7 @@ where
     }
 
     fn flush_pending_nodes(&mut self) -> Result<(), Error> {
-        persist_nodes(&self.store, &self.pending_nodes)?;
+        persist_nodes(&self.store, &self.pending_nodes, self.origin)?;
         self.pending_nodes.clear();
         Ok(())
     }
@@ -553,17 +709,6 @@ fn new_builder_node(config: &Config, leaf: bool, level: u8) -> Node {
         .tree_format(config.format.clone())
         .build()
 }
-
-#[cfg_attr(not(feature = "async-store"), allow(dead_code))]
-pub(crate) fn chunk_ranges_for_entries(
-    config: &Config,
-    level: u8,
-    entries: &[(Vec<u8>, Vec<u8>)],
-    child_counts: Option<&[u64]>,
-) -> Result<Vec<std::ops::RangeInclusive<usize>>, Error> {
-    chunk_ranges_for_entries_impl(config, level, entries, child_counts, false)
-}
-
 fn chunk_ranges_for_entries_parallel(
     config: &Config,
     level: u8,
@@ -737,7 +882,11 @@ fn reserve_node_entries(node: &mut Node, additional: usize) {
     node.vals.reserve_exact(additional);
 }
 
-fn persist_nodes<S: Store>(store: &S, nodes: &[BuiltNode]) -> Result<(), Error>
+fn persist_nodes<S: Store + Clone>(
+    store: &S,
+    nodes: &[BuiltNode],
+    origin: PublicationOrigin,
+) -> Result<(), Error>
 where
     S::Error: Send + Sync,
 {
@@ -745,13 +894,16 @@ where
         return Ok(());
     }
 
+    // BuiltNode is private to the canonical builder. Its CID and encoded bytes
+    // are produced together, so publication need not decode and validate them
+    // again; every later cache admission still validates persisted bytes.
     let entries = nodes
         .iter()
         .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
         .collect::<Vec<_>>();
     store
-        .batch_put(&entries)
-        .map_err(|e| Error::Store(Box::new(e)))
+        .publish_nodes(NodePublication::new(&entries, origin))
+        .map_err(|error| Error::Store(Box::new(error)))
 }
 
 #[cfg(test)]

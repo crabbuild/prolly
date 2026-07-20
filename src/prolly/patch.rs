@@ -178,7 +178,7 @@ impl<S: Store> Prolly<S> {
                 };
                 match cid {
                     Some(cid) => {
-                        let _ = self.load_arc(cid)?;
+                        let _ = self.load_arc_ready(cid)?;
                     }
                     None if *logical_count == 0 => {}
                     None => {

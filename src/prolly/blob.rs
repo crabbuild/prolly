@@ -209,6 +209,22 @@ impl<T: BlobStore> BlobStore for Arc<T> {
     }
 }
 
+impl<T: BlobStore + ?Sized> BlobStore for &T {
+    type Error = T::Error;
+
+    fn get_blob(&self, reference: &BlobRef) -> Result<Option<Vec<u8>>, Self::Error> {
+        (**self).get_blob(reference)
+    }
+
+    fn put_blob(&self, bytes: &[u8]) -> Result<BlobRef, Self::Error> {
+        (**self).put_blob(bytes)
+    }
+
+    fn delete_blob(&self, reference: &BlobRef) -> Result<(), Self::Error> {
+        (**self).delete_blob(reference)
+    }
+}
+
 /// Blob stores that can enumerate known blob references.
 ///
 /// This trait is separate from [`BlobStore`] so simple point-read blob stores
@@ -230,12 +246,10 @@ impl<T: BlobStoreScan> BlobStoreScan for Arc<T> {
 
 /// Async content-addressed blob storage used by large-value helpers.
 ///
-/// This trait is available behind the `async-store` feature and mirrors
-/// [`BlobStore`] for object stores, remote caches, browser storage, and other
-/// non-blocking blob backends. Like [`crate::AsyncStore`], it does not require
-/// `Send` or `Sync` at the trait level so single-threaded WASM stores can
-/// implement it.
-#[cfg(feature = "async-store")]
+/// This trait mirrors [`BlobStore`] for object stores, remote caches, browser
+/// storage, and other non-blocking blob backends. Like [`crate::AsyncStore`],
+/// it does not require `Send` or `Sync` at the trait level so single-threaded
+/// WASM stores can implement it.
 #[allow(async_fn_in_trait)]
 pub trait AsyncBlobStore {
     /// Error type for blob storage operations.
@@ -268,8 +282,6 @@ pub trait AsyncBlobStore {
         async_get_blobs_ordered_with_limit(self, references, self.read_parallelism()).await
     }
 }
-
-#[cfg(feature = "async-store")]
 async fn async_get_blobs_ordered_with_limit<S: AsyncBlobStore + ?Sized>(
     store: &S,
     references: &[BlobRef],
@@ -285,8 +297,6 @@ async fn async_get_blobs_ordered_with_limit<S: AsyncBlobStore + ?Sized>(
             .await?;
     Ok(plan.expand_owned(unique_values))
 }
-
-#[cfg(feature = "async-store")]
 async fn async_get_blob_refs_ordered_unique_with_limit<S: AsyncBlobStore + ?Sized>(
     store: &S,
     references: &[BlobRef],
@@ -335,8 +345,6 @@ async fn async_get_blob_refs_ordered_unique_with_limit<S: AsyncBlobStore + ?Size
 
     Ok(values)
 }
-
-#[cfg(feature = "async-store")]
 async fn async_get_blob_indexed<S: AsyncBlobStore + ?Sized>(
     store: &S,
     idx: usize,
@@ -344,14 +352,10 @@ async fn async_get_blob_indexed<S: AsyncBlobStore + ?Sized>(
 ) -> (usize, Result<Option<Vec<u8>>, S::Error>) {
     (idx, store.get_blob(&reference).await)
 }
-
-#[cfg(feature = "async-store")]
 struct OrderedBlobReadPlan {
     unique_refs: Vec<BlobRef>,
     positions: Option<Vec<usize>>,
 }
-
-#[cfg(feature = "async-store")]
 impl OrderedBlobReadPlan {
     fn new(references: &[BlobRef]) -> Self {
         if references.len() < 2 {
@@ -411,13 +415,10 @@ impl OrderedBlobReadPlan {
 /// This adapter calls the synchronous blob store directly and does not spawn
 /// blocking work. Use `TokioBlockingBlobStore` when a Tokio application needs
 /// to adapt a blocking blob backend without stalling async worker threads.
-#[cfg(feature = "async-store")]
 #[derive(Clone, Debug)]
 pub struct SyncBlobStoreAsAsync<S> {
     inner: S,
 }
-
-#[cfg(feature = "async-store")]
 impl<S> SyncBlobStoreAsAsync<S> {
     /// Create a new adapter.
     pub fn new(inner: S) -> Self {
@@ -434,8 +435,6 @@ impl<S> SyncBlobStoreAsAsync<S> {
         self.inner
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: BlobStore> AsyncBlobStore for SyncBlobStoreAsAsync<S> {
     type Error = S::Error;
 
@@ -451,8 +450,6 @@ impl<S: BlobStore> AsyncBlobStore for SyncBlobStoreAsAsync<S> {
         self.inner.delete_blob(reference)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<T: AsyncBlobStore> AsyncBlobStore for Arc<T> {
     type Error = T::Error;
 
@@ -1134,8 +1131,6 @@ where
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn encode_stored_value_async<B>(
     blob_store: &B,
     value: Vec<u8>,
@@ -1160,8 +1155,6 @@ where
         Ok(value)
     }
 }
-
-#[cfg(feature = "async-store")]
 pub(crate) async fn resolve_stored_value_async<B>(
     blob_store: &B,
     stored: &[u8],

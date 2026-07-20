@@ -18,6 +18,12 @@ The actual nodes live in a pluggable `Store`. Operations clone and rewrite only
 the affected path or subtrees, write new content-addressed nodes, and return a
 new `Tree` handle.
 
+All storage-backed tree work is implemented once by a runtime-neutral,
+async-first engine. `AsyncProlly<S: AsyncStore>` uses it directly;
+`Prolly<S: Store>` drives the same complete operation through an inline
+ready-only adapter. The synchronous path does not create a runtime, park a
+thread, or dispatch store calls to Tokio.
+
 ## Architecture
 
 ![Prolly tree architecture](diagram/prolly-tree-architecture.svg)
@@ -999,6 +1005,9 @@ Optional adapter crates:
 
 - `prolly-store-sqlite`: persistent SQLite backend, including a
   [durable semantic RAG example](stores/prolly-store-sqlite/examples/semantic_rag.rs).
+- [`prolly-store-turso`](stores/prolly-store-turso/README.md): native local
+  asynchronous Turso Database backend, with explicit cloud push/pull behind
+  its optional `turso-cloud-sync` feature.
 - `prolly-store-rocksdb`: embedded RocksDB backend.
 - `prolly-store-pglite`: PGlite/Node sidecar backend.
 - `prolly-store-slatedb`: object-store-backed SlateDB backend.
@@ -1006,15 +1015,17 @@ Optional adapter crates:
 
 Feature flags:
 
-- `async-store`: async store/blob traits, adapters, and `AsyncProlly` without a
-  hard Tokio dependency.
-- `tokio`: enables `async-store` plus the Tokio blocking-store adapter.
+- `async-store`: empty compatibility spelling; async traits, adapters, and
+  `AsyncProlly` are always available.
+- `tokio`: adds Tokio blocking-store/blob adapters. The core engine remains
+  runtime-neutral.
 
 ```sh
 cargo test
 cargo test --features async-store
 cargo test --features tokio
 cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-turso/Cargo.toml
 cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
 cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
@@ -1598,9 +1609,10 @@ assert_eq!(reopened.load_named_root(b"main").unwrap(), Some(tree));
 
 ## Async Store Support
 
-Enable the `async-store` feature when implementing remote, browser, object-store,
-or background-agent storage. The async API mirrors the sync `Store` trait while
-keeping existing embedded users on the zero-runtime sync path.
+Async storage is foundational and requires no Cargo feature. The async API is
+the canonical engine calling convention for remote, browser, object-store, and
+background-agent storage. Embedded synchronous users retain a zero-runtime path
+through the same engine.
 
 ```rust
 use prolly::{AsyncProlly, AsyncStore, Config, MemStore, Prolly, SyncStoreAsAsync};
@@ -1679,8 +1691,8 @@ tree traversals chunk child-frontier prefetches so stats, reachability, diff,
 range, batch routing, and missing-node sync do not hand one unbounded multi-get
 to remote or object-store-style backends.
 
-Large-value offloading also has async-native blob support under the same
-feature. `AsyncBlobStore` mirrors `BlobStore`, `SyncBlobStoreAsAsync` adapts
+Large-value offloading also has async-native blob support.
+`AsyncBlobStore` mirrors `BlobStore`, `SyncBlobStoreAsAsync` adapts
 embedded blob stores without a runtime dependency, and `AsyncProlly` can
 `put_large_value`, `get_large_value`, `mark_reachable_blobs`, `plan_blob_gc`,
 and `sweep_blob_gc` through async blob backends:
@@ -1743,8 +1755,9 @@ Append-heavy async batches use the same rightmost-path hint namespace as sync
 append batches, so fresh async managers can hydrate the append anchor through
 ordered reads.
 
-See [`docs/async-store.md`](docs/async-store.md) for the larger async roadmap, including
-`AsyncProlly`, object-store backends, browser/WASM storage, and remote sync.
+See [`docs/async-store.md`](docs/async-store.md) for the production architecture,
+correctness contract, visibility levels, cancellation semantics, and
+browser/WASM constraints.
 
 For async applications using blocking stores, enable the `tokio` feature and
 wrap the store with `TokioBlockingStore`. This runs sync store calls on Tokio's
@@ -1761,7 +1774,7 @@ let prolly = AsyncProlly::new(async_store, Config::default());
 
 ## Caches and Hints
 
-`Prolly<S>` and `AsyncProlly<S>` maintain two in-process caches:
+Each `Prolly<S>` or `AsyncProlly<S>` manager owns the same two engine caches:
 
 - `node_cache`: immutable nodes keyed by CID.
 - `rightmost_path_cache`: the known right edge for append-heavy workloads.

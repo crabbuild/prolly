@@ -10,9 +10,25 @@ the crate useful as versioned-map infrastructure.
 - Make equal content produce equal CIDs and roots.
 - Preserve sorted byte-key ordering for lookup, range scan, diff, and merge.
 - Rewrite only affected paths or subtrees on mutation.
-- Let stores be simple byte stores while keeping batching, hints, and async
-  concurrency available as optional optimizations.
+- Make async orchestration canonical while keeping pure deterministic work
+  synchronous and sync calls runtime-free through ready adapters.
+- Let stores be simple byte stores while keeping batching, hints, and bounded
+  concurrency as performance-only policies.
 - Keep cache entries, store hints, and fast paths correctness-optional.
+
+## Engine Boundary
+
+`ProllyEngine<S: AsyncStore>` is the only production owner of storage-backed
+ordered-tree algorithms. `AsyncProlly<S>` names that engine directly.
+`Prolly<S: Store>` owns an engine over `SyncStoreAsAsync<Arc<S>>` and evaluates
+one complete public operation with the sealed inline ready runner. It does not
+contain an alternate traversal, mutation, validation, or publication policy.
+
+Higher-level domains keep separate service boundaries for their own atomicity
+and capabilities. Versioned maps, transactions, snapshots, copy/GC, blobs,
+secondary indexes, content graphs, and proximity structures compose the tree
+engine or use their own validated content-addressed node family. One algorithm
+per domain does not mean one repository-wide god object.
 
 ## Public API Boundary
 
@@ -231,8 +247,8 @@ contract mirrors node GC:
 Object-store integrations can supply candidates from bucket listings or a blob
 index, while embedded applications can keep a local list of known blob
 references. GC never assumes the blob namespace is private to a single tree.
-The `AsyncBlobStore` surface follows the same contract for async/object-store
-implementations and remains behind the runtime-neutral `async-store` feature.
+The always-available `AsyncBlobStore` surface follows the same contract for
+async and object-store implementations.
 Backends that can list their blob namespace implement `BlobStoreScan`, enabling
 `plan_blob_store_gc` and `sweep_blob_store_gc`.
 
@@ -276,9 +292,10 @@ GC invariants:
 
 ## Async Store Contract
 
-`AsyncStore` mirrors `Store` behind the `async-store` feature. It is for
-object stores, remote peers, browser storage, network caches, and background
-agents that need to overlap I/O.
+`AsyncStore` mirrors `Store` and is always available. It is for object stores,
+remote peers, browser storage, network caches, and background agents that need
+to overlap I/O. The empty `async-store` feature remains only as a compatibility
+spelling.
 
 The base `AsyncStore` trait intentionally does not require `Send` or `Sync` so
 single-threaded browser or WASM stores can implement it. Native managers and

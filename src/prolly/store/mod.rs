@@ -6,10 +6,11 @@ pub use file::{FileNodeStore, FileNodeStoreError};
 pub use memory::{MemStore, MemStoreError};
 
 use std::collections::{hash_map::Entry, HashMap};
+use std::future::Future;
 use std::sync::Arc;
 
 use super::cid::Cid;
-#[cfg(feature = "async-store")]
+use super::engine::ready::{ready_only, ReadyOnly};
 use super::manifest::{
     AsyncManifestStore, AsyncManifestStoreScan, ManifestStore, ManifestStoreScan, ManifestUpdate,
     NamedRootManifest, RootManifest,
@@ -97,6 +98,134 @@ pub enum BatchOp<'a> {
     Upsert { key: &'a [u8], value: &'a [u8] },
     /// Delete a key
     Delete { key: &'a [u8] },
+}
+
+/// Logical source of an immutable-node publication.
+///
+/// The origin is an advisory, runtime-only optimization signal. Stores must
+/// use [`PublicationOrigin::General`] behavior for variants they do not
+/// recognize, and no origin may weaken correctness, atomicity, durability, or
+/// visibility guarantees.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum PublicationOrigin {
+    /// No more specific publication context is available.
+    #[default]
+    General,
+    /// A single logical key was inserted or updated.
+    PointUpsert,
+    /// A single logical key was deleted.
+    PointDelete,
+    /// Multiple logical mutations were applied together.
+    BatchMutation,
+    /// A tree was constructed or rebuilt.
+    TreeBuild,
+    /// Multiple trees were merged.
+    Merge,
+    /// A logical key range was deleted.
+    RangeDelete,
+    /// Existing immutable content was copied between stores.
+    Replication,
+    /// Derived or internal content was maintained.
+    Maintenance,
+}
+
+/// Optional non-canonical metadata accompanying a node publication.
+///
+/// Hints may improve backend performance but are never required to read or
+/// verify the published content-addressed nodes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NodePublicationHint<'a> {
+    namespace: &'a [u8],
+    key: &'a [u8],
+    value: &'a [u8],
+}
+
+impl<'a> NodePublicationHint<'a> {
+    /// Construct a borrowed performance hint.
+    #[inline(always)]
+    pub const fn new(namespace: &'a [u8], key: &'a [u8], value: &'a [u8]) -> Self {
+        Self {
+            namespace,
+            key,
+            value,
+        }
+    }
+
+    /// Return the logical hint namespace.
+    #[inline(always)]
+    pub const fn namespace(&self) -> &'a [u8] {
+        self.namespace
+    }
+
+    /// Return the hint key.
+    #[inline(always)]
+    pub const fn key(&self) -> &'a [u8] {
+        self.key
+    }
+
+    /// Return the hint value.
+    #[inline(always)]
+    pub const fn value(&self) -> &'a [u8] {
+        self.value
+    }
+}
+
+/// Borrowed request to publish canonical immutable nodes.
+///
+/// [`NodePublication::origin`] is advisory only. A store may select a faster
+/// implementation from it, but the request must retain the same node bytes,
+/// hint behavior, correctness, durability, atomicity, and visibility as the
+/// general publication path. Unknown origins must use that general path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NodePublication<'a> {
+    entries: &'a [(&'a [u8], &'a [u8])],
+    hint: Option<NodePublicationHint<'a>>,
+    origin: PublicationOrigin,
+}
+
+impl<'a> NodePublication<'a> {
+    /// Construct a node publication without a performance hint.
+    #[inline(always)]
+    pub const fn new(entries: &'a [(&'a [u8], &'a [u8])], origin: PublicationOrigin) -> Self {
+        Self {
+            entries,
+            hint: None,
+            origin,
+        }
+    }
+
+    /// Construct a node publication with a performance hint.
+    #[inline(always)]
+    pub const fn with_hint(
+        entries: &'a [(&'a [u8], &'a [u8])],
+        hint: NodePublicationHint<'a>,
+        origin: PublicationOrigin,
+    ) -> Self {
+        Self {
+            entries,
+            hint: Some(hint),
+            origin,
+        }
+    }
+
+    /// Return the content-addressed node entries.
+    #[inline(always)]
+    pub const fn entries(&self) -> &'a [(&'a [u8], &'a [u8])] {
+        self.entries
+    }
+
+    /// Return the optional non-canonical performance hint.
+    #[inline(always)]
+    pub const fn hint(&self) -> Option<NodePublicationHint<'a>> {
+        self.hint
+    }
+
+    /// Return the advisory logical publication origin.
+    #[inline(always)]
+    pub const fn origin(&self) -> PublicationOrigin {
+        self.origin
+    }
 }
 
 /// Ordered results from a retained immutable-byte batch read.
@@ -256,6 +385,15 @@ pub trait Store: Send + Sync {
         false
     }
 
+    /// Whether append-heavy writes should maintain the engine's rightmost-path hint.
+    ///
+    /// This is a measured performance preference, not a correctness capability.
+    /// Stores should opt in only when they also support hints and path hydration
+    /// saves more work than persisting one hint for each appended tree root.
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        false
+    }
+
     /// Retrieve an optional performance hint for a logical namespace and key.
     ///
     /// Hints are not part of the content-addressed tree semantics. Store
@@ -284,6 +422,24 @@ pub trait Store: Send + Sync {
     ) -> Result<(), Self::Error> {
         self.batch_put(entries)?;
         self.put_hint(namespace, key, value)
+    }
+
+    /// Publish canonical immutable nodes with advisory logical context.
+    ///
+    /// The default preserves existing batch and optional-hint behavior. Store
+    /// overrides may optimize by origin only when all general-path guarantees
+    /// remain unchanged.
+    #[inline(always)]
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        match publication.hint.as_ref() {
+            Some(hint) => self.batch_put_with_hint(
+                publication.entries,
+                hint.namespace(),
+                hint.key(),
+                hint.value(),
+            ),
+            None => self.batch_put(publication.entries),
+        }
     }
 }
 
@@ -332,13 +488,12 @@ pub(crate) fn sort_cids(cids: &mut [Cid]) {
 /// Async storage backend trait for Prolly Trees.
 ///
 /// This trait mirrors [`Store`] for remote, browser, object-store, and
-/// background-agent workloads. It is available behind the `async-store`
-/// feature and intentionally does not replace the synchronous `Store` trait.
+/// background-agent workloads. It is part of the runtime-neutral core and
+/// intentionally does not require a Tokio dependency.
 ///
 /// The base trait does not require `Send` or `Sync` so single-threaded browser
 /// stores can implement it. Async managers or native backends may add stronger
 /// bounds when they need cross-thread execution.
-#[cfg(feature = "async-store")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncStore {
     /// Error type for storage operations.
@@ -446,6 +601,15 @@ pub trait AsyncStore {
         false
     }
 
+    /// Whether append-heavy writes should maintain the engine's rightmost-path hint.
+    ///
+    /// This is a measured performance preference, not a correctness capability.
+    /// Stores should opt in only when they also support hints and path hydration
+    /// saves more work than persisting one hint for each appended tree root.
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        false
+    }
+
     /// Retrieve an optional performance hint.
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let _ = (namespace, key);
@@ -474,9 +638,31 @@ pub trait AsyncStore {
         self.batch_put(entries).await?;
         self.put_hint(namespace, key, value).await
     }
-}
 
-#[cfg(feature = "async-store")]
+    /// Publish canonical immutable nodes with advisory logical context.
+    ///
+    /// The default preserves existing async batch and optional-hint behavior.
+    /// Store overrides may optimize by origin only when all general-path
+    /// guarantees remain unchanged.
+    #[inline(always)]
+    fn publish_nodes<'a>(
+        &'a self,
+        publication: NodePublication<'a>,
+    ) -> impl Future<Output = Result<(), Self::Error>> + 'a {
+        use futures_util::future::Either;
+
+        let entries = publication.entries;
+        match publication.hint {
+            Some(hint) => Either::Left(self.batch_put_with_hint(
+                entries,
+                hint.namespace(),
+                hint.key(),
+                hint.value(),
+            )),
+            None => Either::Right(self.batch_put(entries)),
+        }
+    }
+}
 async fn async_batch_get_ordered_with_limit<S: AsyncStore + ?Sized>(
     store: &S,
     keys: &[&[u8]],
@@ -491,8 +677,6 @@ async fn async_batch_get_ordered_with_limit<S: AsyncStore + ?Sized>(
         async_batch_get_ordered_unique_with_limit(store, plan.unique_keys(), max_in_flight).await?;
     Ok(plan.expand_owned(unique_values))
 }
-
-#[cfg(feature = "async-store")]
 async fn async_batch_get_ordered_unique_with_limit<S: AsyncStore + ?Sized>(
     store: &S,
     keys: &[&[u8]],
@@ -533,8 +717,6 @@ async fn async_batch_get_ordered_unique_with_limit<S: AsyncStore + ?Sized>(
 
     Ok(values)
 }
-
-#[cfg(feature = "async-store")]
 async fn async_get_indexed<S: AsyncStore + ?Sized>(
     store: &S,
     idx: usize,
@@ -548,13 +730,19 @@ async fn async_get_indexed<S: AsyncStore + ?Sized>(
 /// This adapter calls the synchronous store directly and does not spawn
 /// blocking work. Runtime-specific `spawn_blocking` adapters can be layered on
 /// top by applications that need them.
-#[cfg(feature = "async-store")]
+///
+/// Arbitrary futures cannot opt into the internal ready-only contract:
+///
+/// ```compile_fail
+/// use prolly::{MemStore, SyncStoreAsAsync};
+///
+/// let adapter = SyncStoreAsAsync::new(MemStore::new());
+/// adapter.ready(std::future::pending::<()>());
+/// ```
 #[derive(Clone, Debug)]
 pub struct SyncStoreAsAsync<S> {
     inner: S,
 }
-
-#[cfg(feature = "async-store")]
 impl<S> SyncStoreAsAsync<S> {
     /// Create a new adapter.
     pub fn new(inner: S) -> Self {
@@ -570,9 +758,12 @@ impl<S> SyncStoreAsAsync<S> {
     pub fn into_inner(self) -> S {
         self.inner
     }
-}
 
-#[cfg(feature = "async-store")]
+    /// Mark an engine operation over this adapter as ready-only.
+    pub(crate) fn ready<F: Future>(&self, future: F) -> ReadyOnly<F> {
+        ready_only(future)
+    }
+}
 impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
     type Error = S::Error;
 
@@ -634,6 +825,10 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
         self.inner.supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.inner.prefers_rightmost_path_hints()
+    }
+
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         self.inner.get_hint(namespace, key)
     }
@@ -657,9 +852,12 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
         self.inner
             .batch_put_with_hint(entries, namespace, key, value)
     }
-}
 
-#[cfg(feature = "async-store")]
+    #[inline(always)]
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.inner.publish_nodes(publication)
+    }
+}
 impl<S: ManifestStore> AsyncManifestStore for SyncStoreAsAsync<S> {
     type Error = S::Error;
 
@@ -684,8 +882,6 @@ impl<S: ManifestStore> AsyncManifestStore for SyncStoreAsAsync<S> {
         self.inner.compare_and_swap_root(name, expected, new)
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: ManifestStoreScan> AsyncManifestStoreScan for SyncStoreAsAsync<S> {
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         self.inner.list_roots()
@@ -894,6 +1090,10 @@ where
         self.inner.supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        self.inner.prefers_rightmost_path_hints()
+    }
+
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let namespace = namespace.to_vec();
         let key = key.to_vec();
@@ -938,6 +1138,39 @@ where
                 .map(|(key, value)| (key.as_slice(), value.as_slice()))
                 .collect::<Vec<_>>();
             store.batch_put_with_hint(&entries, &namespace, &key, &value)
+        })
+        .await
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        let entries = publication
+            .entries()
+            .iter()
+            .map(|(key, value)| (key.to_vec(), value.to_vec()))
+            .collect::<Vec<_>>();
+        let hint = publication.hint().map(|hint| {
+            (
+                hint.namespace().to_vec(),
+                hint.key().to_vec(),
+                hint.value().to_vec(),
+            )
+        });
+        let origin = publication.origin();
+
+        spawn_store_blocking(self.inner.clone(), move |store| {
+            let entries = entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.as_slice()))
+                .collect::<Vec<_>>();
+            let publication = match hint.as_ref() {
+                Some((namespace, key, value)) => NodePublication::with_hint(
+                    &entries,
+                    NodePublicationHint::new(namespace, key, value),
+                    origin,
+                ),
+                None => NodePublication::new(&entries, origin),
+            };
+            store.publish_nodes(publication)
         })
         .await
     }
@@ -1074,6 +1307,10 @@ impl<T: Store> Store for std::sync::Arc<T> {
         (**self).supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         (**self).get_hint(namespace, key)
     }
@@ -1090,6 +1327,10 @@ impl<T: Store> Store for std::sync::Arc<T> {
         value: &[u8],
     ) -> Result<(), Self::Error> {
         (**self).batch_put_with_hint(entries, namespace, key, value)
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        (**self).publish_nodes(publication)
     }
 }
 
@@ -1159,6 +1400,10 @@ impl<T: Store + ?Sized> Store for &T {
         (**self).supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
+    }
+
     fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         (**self).get_hint(namespace, key)
     }
@@ -1176,9 +1421,11 @@ impl<T: Store + ?Sized> Store for &T {
     ) -> Result<(), Self::Error> {
         (**self).batch_put_with_hint(entries, namespace, key, value)
     }
-}
 
-#[cfg(feature = "async-store")]
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        (**self).publish_nodes(publication)
+    }
+}
 impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
     type Error = T::Error;
 
@@ -1244,6 +1491,10 @@ impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
         (**self).supports_hints()
     }
 
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        (**self).prefers_rightmost_path_hints()
+    }
+
     async fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         (**self).get_hint(namespace, key).await
     }
@@ -1268,6 +1519,10 @@ impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
             .batch_put_with_hint(entries, namespace, key, value)
             .await
     }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        (**self).publish_nodes(publication).await
+    }
 }
 
 #[cfg(test)]
@@ -1276,7 +1531,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
-    #[cfg(feature = "async-store")]
     use std::{
         future::Future,
         pin::Pin,
@@ -1351,7 +1605,132 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "async-store")]
+    type OwnedNodeEntry = (Vec<u8>, Vec<u8>);
+    type OwnedPublication = Vec<OwnedNodeEntry>;
+    type OwnedPublicationHint = (Vec<u8>, Vec<u8>, Vec<u8>);
+
+    #[derive(Default)]
+    struct DefaultPublicationStore {
+        batch_calls: AtomicUsize,
+        hinted_batch_calls: AtomicUsize,
+        published_entries: Mutex<Vec<OwnedPublication>>,
+        last_hint: Mutex<Option<OwnedPublicationHint>>,
+    }
+
+    impl DefaultPublicationStore {
+        fn record_entries(&self, entries: &[(&[u8], &[u8])]) {
+            self.published_entries.lock().unwrap().push(
+                entries
+                    .iter()
+                    .map(|(key, value)| (key.to_vec(), value.to_vec()))
+                    .collect(),
+            );
+        }
+    }
+
+    impl Store for DefaultPublicationStore {
+        type Error = DefaultReadStoreError;
+
+        fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+
+        fn put(&self, _key: &[u8], _value: &[u8]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn delete(&self, _key: &[u8]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn batch(&self, _ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+            self.batch_calls.fetch_add(1, Ordering::Relaxed);
+            self.record_entries(entries);
+            Ok(())
+        }
+
+        fn batch_put_with_hint(
+            &self,
+            entries: &[(&[u8], &[u8])],
+            namespace: &[u8],
+            key: &[u8],
+            value: &[u8],
+        ) -> Result<(), Self::Error> {
+            self.hinted_batch_calls.fetch_add(1, Ordering::Relaxed);
+            self.record_entries(entries);
+            *self.last_hint.lock().unwrap() =
+                Some((namespace.to_vec(), key.to_vec(), value.to_vec()));
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct ForwardingPublicationStore {
+        publication_calls: AtomicUsize,
+        last_origin: Mutex<Option<PublicationOrigin>>,
+    }
+
+    impl ForwardingPublicationStore {
+        fn record_publication(&self, publication: NodePublication<'_>) {
+            self.publication_calls.fetch_add(1, Ordering::Relaxed);
+            *self.last_origin.lock().unwrap() = Some(publication.origin());
+        }
+    }
+
+    impl Store for ForwardingPublicationStore {
+        type Error = DefaultReadStoreError;
+
+        fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+
+        fn put(&self, _key: &[u8], _value: &[u8]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn delete(&self, _key: &[u8]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn batch(&self, _ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+            self.record_publication(publication);
+            Ok(())
+        }
+    }
+
+    impl AsyncStore for ForwardingPublicationStore {
+        type Error = DefaultReadStoreError;
+
+        async fn get(&self, _key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn put(&self, _key: &[u8], _value: &[u8]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn delete(&self, _key: &[u8]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn batch(&self, _ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+            self.record_publication(publication);
+            Ok(())
+        }
+    }
+
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
         let mut cx = Context::from_waker(&waker);
@@ -1364,13 +1743,9 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     struct YieldOnce {
         yielded: bool,
     }
-
-    #[cfg(feature = "async-store")]
     impl Future for YieldOnce {
         type Output = ();
 
@@ -1384,8 +1759,6 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     struct DefaultAsyncReadStore {
         data: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
         get_calls: AtomicUsize,
@@ -1393,8 +1766,6 @@ mod tests {
         max_in_flight: AtomicUsize,
         read_parallelism: usize,
     }
-
-    #[cfg(feature = "async-store")]
     impl DefaultAsyncReadStore {
         fn with_entries(read_parallelism: usize, entries: &[(&[u8], &[u8])]) -> Self {
             let mut data = BTreeMap::new();
@@ -1411,8 +1782,6 @@ mod tests {
             }
         }
     }
-
-    #[cfg(feature = "async-store")]
     impl AsyncStore for DefaultAsyncReadStore {
         type Error = DefaultReadStoreError;
 
@@ -1480,6 +1849,107 @@ mod tests {
         assert_eq!(
             expanded,
             vec![Some(b"1".to_vec()), Some(b"2".to_vec()), None]
+        );
+    }
+
+    #[test]
+    fn publication_defaults_dispatch_once_and_preserve_borrowed_context() {
+        let store = DefaultPublicationStore::default();
+        let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+        let hint = NodePublicationHint::new(b"rightmost", b"root", b"path");
+
+        store
+            .publish_nodes(NodePublication::new(
+                &entries,
+                PublicationOrigin::PointUpsert,
+            ))
+            .unwrap();
+        store
+            .publish_nodes(NodePublication::with_hint(
+                &entries,
+                hint,
+                PublicationOrigin::TreeBuild,
+            ))
+            .unwrap();
+
+        assert_eq!(store.batch_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(store.hinted_batch_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            *store.last_hint.lock().unwrap(),
+            Some((b"rightmost".to_vec(), b"root".to_vec(), b"path".to_vec()))
+        );
+        assert_eq!(
+            *store.published_entries.lock().unwrap(),
+            vec![
+                vec![(b"node".to_vec(), b"bytes".to_vec())],
+                vec![(b"node".to_vec(), b"bytes".to_vec())]
+            ]
+        );
+        assert_eq!(hint.namespace(), b"rightmost");
+        assert_eq!(hint.key(), b"root");
+        assert_eq!(hint.value(), b"path");
+        assert!(
+            std::mem::size_of::<NodePublication<'static>>() <= std::mem::size_of::<[usize; 10]>()
+        );
+    }
+
+    #[test]
+    fn sync_store_as_async_publication_is_ready_on_first_poll() {
+        let store = SyncStoreAsAsync::new(DefaultPublicationStore::default());
+        let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+        let publication = NodePublication::new(&entries, PublicationOrigin::PointDelete);
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(AsyncStore::publish_nodes(&store, publication));
+
+        assert!(matches!(
+            future.as_mut().poll(&mut context),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(store.inner().batch_calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn sync_reference_and_arc_publications_forward_exactly_once() {
+        let store = Arc::new(ForwardingPublicationStore::default());
+        let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+
+        <Arc<ForwardingPublicationStore> as Store>::publish_nodes(
+            &store,
+            NodePublication::new(&entries, PublicationOrigin::Replication),
+        )
+        .unwrap();
+        let borrowed = store.as_ref();
+        <&ForwardingPublicationStore as Store>::publish_nodes(
+            &borrowed,
+            NodePublication::new(&entries, PublicationOrigin::Maintenance),
+        )
+        .unwrap();
+
+        assert_eq!(store.publication_calls.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            *store.last_origin.lock().unwrap(),
+            Some(PublicationOrigin::Maintenance)
+        );
+    }
+
+    #[test]
+    fn async_arc_publication_forwards_exactly_once() {
+        let store = Arc::new(ForwardingPublicationStore::default());
+        let entries = [(b"node".as_slice(), b"bytes".as_slice())];
+
+        block_on(
+            <Arc<ForwardingPublicationStore> as AsyncStore>::publish_nodes(
+                &store,
+                NodePublication::new(&entries, PublicationOrigin::BatchMutation),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(store.publication_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            *store.last_origin.lock().unwrap(),
+            Some(PublicationOrigin::BatchMutation)
         );
     }
 
@@ -1572,8 +2042,6 @@ mod tests {
             "unique ordered batch reads for point-read stores should read each requested key once"
         );
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_sync_store_adapter_preserves_default_store_behavior() {
         let store = DefaultReadStore::with_entries(&[(b"a", b"1"), (b"b", b"2")]);
@@ -1607,8 +2075,6 @@ mod tests {
             assert!(!mapped.contains_key(b"b".as_slice()));
         });
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_default_ordered_batch_reads_deduplicate_duplicate_keys() {
         let store = DefaultAsyncReadStore::with_entries(1, &[(b"a", b"1"), (b"b", b"2")]);
@@ -1632,8 +2098,6 @@ mod tests {
             "async ordered batch reads should point-read each unique key at most once"
         );
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn async_default_ordered_batch_reads_respect_read_parallelism() {
         let store = DefaultAsyncReadStore::with_entries(
@@ -1660,8 +2124,6 @@ mod tests {
             "default async batch reads should cap concurrent point reads"
         );
     }
-
-    #[cfg(feature = "async-store")]
     #[test]
     fn arc_async_store_forwards_ordered_reads() {
         let store = std::sync::Arc::new(DefaultAsyncReadStore::with_entries(

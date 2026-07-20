@@ -54,6 +54,13 @@ impl prolly::Store for FaultStore {
     fn batch(&self, ops: &[prolly::BatchOp<'_>]) -> Result<(), Self::Error> {
         prolly::Store::batch(&self.inner, ops).map_err(io_error)
     }
+
+    fn publish_nodes(&self, publication: prolly::NodePublication<'_>) -> Result<(), Self::Error> {
+        for (key, value) in publication.entries() {
+            self.put(key, value)?;
+        }
+        Ok(())
+    }
 }
 
 impl prolly::ManifestStore for FaultStore {

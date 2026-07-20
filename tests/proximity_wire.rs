@@ -1,6 +1,6 @@
 use prolly::{
-    BatchOp, Cid, DistanceMetric, Error, MemStore, ProximityConfig, ProximityMap, ProximityRecord,
-    Store,
+    BatchOp, Cid, DistanceMetric, Error, MemStore, NodePublication, ProximityConfig, ProximityMap,
+    ProximityRecord, Store,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -41,6 +41,19 @@ impl Store for RejectDescriptorStore {
 
     fn batch(&self, operations: &[BatchOp<'_>]) -> Result<(), Self::Error> {
         self.inner.batch(operations).map_err(|_| RejectedDescriptor)
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        if publication
+            .entries()
+            .iter()
+            .any(|(_, value)| value.starts_with(b"PRXI"))
+        {
+            return Err(RejectedDescriptor);
+        }
+        self.inner
+            .publish_nodes(publication)
+            .map_err(|_| RejectedDescriptor)
     }
 }
 

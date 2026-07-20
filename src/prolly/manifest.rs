@@ -495,7 +495,6 @@ pub trait ManifestStoreScan: ManifestStore {
 /// cloud-database backends. The mutable root layer stays separate from
 /// immutable node storage so remote implementations can use their native
 /// compare-and-swap or transaction mechanism for branch/head updates.
-#[cfg(feature = "async-store")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncManifestStore {
     /// Error type for manifest operations.
@@ -527,7 +526,6 @@ pub trait AsyncManifestStore {
 ///
 /// Scanning remains optional because point lookups and compare-and-swap are
 /// enough for normal publish/fetch paths, while retention and GC need listing.
-#[cfg(feature = "async-store")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncManifestStoreScan: AsyncManifestStore {
     /// List all durable named root manifests.
@@ -564,8 +562,6 @@ impl<T: ManifestStoreScan> ManifestStoreScan for Arc<T> {
         (**self).list_roots()
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<T: AsyncManifestStore> AsyncManifestStore for Arc<T> {
     type Error = T::Error;
 
@@ -590,8 +586,6 @@ impl<T: AsyncManifestStore> AsyncManifestStore for Arc<T> {
         (**self).compare_and_swap_root(name, expected, new).await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<T: AsyncManifestStoreScan> AsyncManifestStoreScan for Arc<T> {
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         (**self).list_roots().await

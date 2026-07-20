@@ -447,6 +447,15 @@ class UniFfiBindingTests(unittest.TestCase):
                         self.nodes.pop(op.key, None)
                 return prolly.HostStoreUnitResultRecord(error=None)
 
+            def publish_nodes(self, publication):
+                for node in publication.nodes:
+                    self.nodes[bytes(node.key)] = bytes(node.value)
+                if publication.hint is not None:
+                    self.hints[
+                        (bytes(publication.hint.namespace), bytes(publication.hint.key))
+                    ] = bytes(publication.hint.value)
+                return prolly.HostStoreUnitResultRecord(error=None)
+
             def batch_get_ordered(self, keys):
                 return prolly.HostStoreBatchGetResultRecord(
                     values=[self.nodes.get(key) for key in keys],

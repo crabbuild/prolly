@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::encoding::Encoding;
+use super::engine::execution::{
+    DEFAULT_NODE_CACHE_MAX_BYTES, DEFAULT_NODE_CACHE_MAX_NODES, DEFAULT_READ_PARALLELISM,
+};
 use super::format::{BoundaryRule, ChunkingSpec, NodeLayoutSpec, TreeFormat};
 
 /// Runtime-only tuning that never participates in persisted tree identity.
@@ -19,9 +22,9 @@ pub struct RuntimeConfig {
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
-            node_cache_max_nodes: None,
-            node_cache_max_bytes: None,
-            read_parallelism: 1,
+            node_cache_max_nodes: Some(DEFAULT_NODE_CACHE_MAX_NODES),
+            node_cache_max_bytes: Some(DEFAULT_NODE_CACHE_MAX_BYTES),
+            read_parallelism: DEFAULT_READ_PARALLELISM,
         }
     }
 }

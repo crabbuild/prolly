@@ -7,12 +7,8 @@ use std::cell::Cell;
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(test)]
 use rayon::prelude::*;
-
-use super::batch::{self, BatchApplyResult};
-use super::error::{Error, Mutation};
-use super::store::Store;
-use super::{Prolly, Tree};
 
 static ACTIVE_CANONICAL_WRITES: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
@@ -203,6 +199,7 @@ pub(crate) fn indexed_ranges(len: usize, width: usize) -> Vec<Range<usize>> {
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn map_indexed_ranges<T, F>(len: usize, width: usize, map: F) -> Vec<T>
 where
     T: Send,
@@ -212,15 +209,6 @@ where
         .into_par_iter()
         .map(map)
         .collect()
-}
-
-pub(crate) fn parallel_batch_with_stats<S: Store>(
-    prolly: &Prolly<S>,
-    tree: &Tree,
-    mutations: Vec<Mutation>,
-    config: &ParallelConfig,
-) -> Result<BatchApplyResult, Error> {
-    batch::apply_with_stats_configured(prolly, tree, mutations, config)
 }
 
 #[cfg(test)]

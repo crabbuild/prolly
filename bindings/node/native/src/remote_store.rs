@@ -9,7 +9,9 @@ use prolly_bindings::{
     default_config, AsyncProllyEngine as BindingRemoteEngine,
     AsyncProllyTransaction as BindingRemoteTransaction, BytesListResultRecord, ForeignRemoteStore,
     NamedBytesListResultRecord, NamedBytesRecord, NodeEntryRecord as StoreNodeEntryRecord,
-    NodeMutationRecord as StoreNodeMutationRecord, OptionalBytesListResultRecord,
+    NodeMutationRecord as StoreNodeMutationRecord,
+    NodePublicationHintRecord as StoreNodePublicationHintRecord,
+    NodePublicationRecord as StoreNodePublicationRecord, OptionalBytesListResultRecord,
     OptionalBytesRecord, OptionalBytesResultRecord, RootCasResultRecord, RootConditionRecord,
     RootWriteRecord, StoreCapabilitiesRecord, StoreDescriptorRecord, StoreDescriptorResultRecord,
     StoreErrorRecord, StoreTransactionConflictRecord, TransactionResultRecord, TreeRecord,
@@ -79,6 +81,13 @@ pub struct NodeRemoteEntryRecord {
 }
 
 #[napi(object)]
+pub struct NodeRemotePublicationHintRecord {
+    pub namespace: Buffer,
+    pub key: Buffer,
+    pub value: Buffer,
+}
+
+#[napi(object)]
 pub struct NodeRemoteNamedRootRecord {
     pub name: Buffer,
     pub manifest: Buffer,
@@ -123,6 +132,8 @@ pub struct NodeRemoteStoreRequest {
     pub optional_bytes: Option<Vec<NodeRemoteOptionalBytesRecord>>,
     pub mutations: Option<Vec<NodeRemoteMutationRecord>>,
     pub entries: Option<Vec<NodeRemoteEntryRecord>>,
+    pub publication_origin: Option<u32>,
+    pub publication_hint: Option<NodeRemotePublicationHintRecord>,
     pub conditions: Option<Vec<NodeRemoteRootConditionRecord>>,
     pub roots: Option<Vec<NodeRemoteRootWriteRecord>>,
 }
@@ -156,6 +167,8 @@ impl NodePromiseStore {
             optional_bytes: None,
             mutations: None,
             entries: None,
+            publication_origin: None,
+            publication_hint: None,
             conditions: None,
             roots: None,
         }
@@ -210,6 +223,14 @@ impl ForeignRemoteStore for NodePromiseStore {
     async fn batch_nodes(&self, ops: Vec<StoreNodeMutationRecord>) -> UnitResultRecord {
         let mut request = Self::request("batchNodes");
         request.mutations = Some(ops.into_iter().map(Into::into).collect());
+        unit_response(self.dispatch(request).await)
+    }
+
+    async fn publish_nodes(&self, publication: StoreNodePublicationRecord) -> UnitResultRecord {
+        let mut request = Self::request("publishNodes");
+        request.entries = Some(publication.nodes.into_iter().map(Into::into).collect());
+        request.publication_origin = Some(publication.origin.code);
+        request.publication_hint = publication.hint.map(Into::into);
         unit_response(self.dispatch(request).await)
     }
 
@@ -889,6 +910,16 @@ impl From<StoreNodeEntryRecord> for NodeRemoteEntryRecord {
         Self {
             cid: Buffer::from(value.key),
             node: Buffer::from(value.value),
+        }
+    }
+}
+
+impl From<StoreNodePublicationHintRecord> for NodeRemotePublicationHintRecord {
+    fn from(value: StoreNodePublicationHintRecord) -> Self {
+        Self {
+            namespace: Buffer::from(value.namespace),
+            key: Buffer::from(value.key),
+            value: Buffer::from(value.value),
         }
     }
 }

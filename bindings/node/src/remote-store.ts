@@ -1,4 +1,18 @@
-export const STORE_PROTOCOL_MAJOR = 1 as const;
+export const STORE_PROTOCOL_MAJOR = 2 as const;
+
+export const GENERAL = 0 as const;
+export const POINT_UPSERT = 1 as const;
+export const POINT_DELETE = 2 as const;
+export const BATCH_MUTATION = 3 as const;
+export const TREE_BUILD = 4 as const;
+export const MERGE = 5 as const;
+export const RANGE_DELETE = 6 as const;
+export const REPLICATION = 7 as const;
+export const MAINTENANCE = 8 as const;
+
+export function normalizePublicationOriginCode(code: number): number {
+  return Number.isSafeInteger(code) && code >= GENERAL && code <= MAINTENANCE ? code : GENERAL;
+}
 
 export type StoreErrorCode =
   | "invalid_argument"
@@ -76,6 +90,22 @@ export interface NodeEntry {
   readonly node: Uint8Array;
 }
 
+export interface PublicationOrigin {
+  readonly code: number;
+}
+
+export interface NodePublicationHint {
+  readonly namespace: Uint8Array;
+  readonly key: Uint8Array;
+  readonly value: Uint8Array;
+}
+
+export interface NodePublication {
+  readonly nodes: readonly NodeEntry[];
+  readonly hint?: NodePublicationHint;
+  readonly origin: PublicationOrigin;
+}
+
 export interface NamedStoreRoot {
   readonly name: Uint8Array;
   readonly manifest: Uint8Array;
@@ -111,6 +141,7 @@ export interface RemoteStore {
   putNode(cid: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<void>;
   deleteNode(cid: Uint8Array, signal?: AbortSignal): Promise<void>;
   batchNodes(operations: readonly NodeMutation[], signal?: AbortSignal): Promise<void>;
+  publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void>;
   batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]>;
   listNodeCids(signal?: AbortSignal): Promise<Uint8Array[]>;
   getHint(namespace: Uint8Array, key: Uint8Array, signal?: AbortSignal): Promise<OptionalBytes>;
@@ -143,6 +174,28 @@ export interface RemoteStore {
     roots: readonly RootWrite[],
     signal?: AbortSignal,
   ): Promise<StoreTransactionResult>;
+}
+
+export async function publishNodesWithGeneralPath(
+  store: Pick<RemoteStore, "batchNodes" | "batchPutNodesWithHint">,
+  publication: NodePublication,
+  signal?: AbortSignal,
+): Promise<void> {
+  normalizePublicationOriginCode(publication.origin.code);
+  if (publication.hint !== undefined) {
+    await store.batchPutNodesWithHint(
+      publication.nodes,
+      publication.hint.namespace,
+      publication.hint.key,
+      publication.hint.value,
+      signal,
+    );
+    return;
+  }
+  await store.batchNodes(
+    publication.nodes.map(({ cid, node }) => upsertNode(cid, node)),
+    signal,
+  );
 }
 
 export function validateStoreDescriptor(descriptor: StoreDescriptor): StoreDescriptor {

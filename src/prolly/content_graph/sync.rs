@@ -3,7 +3,7 @@ use super::{walk_content_graph, ContentGraphLimits, TypedContentRoot};
 use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
 use crate::prolly::manifest::ManifestStore;
-use crate::prolly::store::Store;
+use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 
 /// Descendant-first replication result.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -62,8 +62,12 @@ pub fn copy_content_graph<S: Store, D: Store>(
     // `walk.objects` and therefore `missing` are descendant-first. Publishing
     // each immutable object in this order keeps every visible parent closed.
     for object in &missing {
+        let entries = [(object.root.cid.as_bytes(), object.bytes.as_slice())];
         destination
-            .put(object.root.cid.as_bytes(), &object.bytes)
+            .publish_nodes(NodePublication::new(
+                &entries,
+                PublicationOrigin::Replication,
+            ))
             .map_err(|error| Error::Store(Box::new(error)))?;
         copied_bytes += object.bytes.len();
     }

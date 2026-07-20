@@ -1,7 +1,9 @@
 mod common;
 
+use std::sync::Arc;
+
 use common::configured_prolly;
-use prolly::{Config, MemStore, Prolly};
+use prolly::{Config, MemStore, Mutation, Prolly};
 
 #[test]
 fn put_get_delete_and_range_are_ordered() {
@@ -149,6 +151,195 @@ fn bounded_node_cache_limits_entries_and_preserves_reads() {
     let metrics = prolly.metrics();
     assert!(metrics.node_cache_misses > 0);
     assert!(metrics.node_cache_evictions > 0);
+}
+
+#[test]
+fn scan_preserves_hot_point_path_in_bounded_cache() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .node_cache_max_nodes(8)
+        .build();
+    let prolly = Prolly::new(MemStore::new(), config);
+    let mutations = (0..128)
+        .map(|idx| Mutation::Upsert {
+            key: format!("k{idx:03}").into_bytes(),
+            val: format!("v{idx:03}").into_bytes(),
+        })
+        .collect();
+    let tree = prolly.batch(&prolly.create(), mutations).unwrap();
+
+    prolly.clear_cache();
+    {
+        let mut reader = prolly.read(&tree).unwrap();
+        assert_eq!(
+            reader.get_with(b"k000", <[u8]>::to_vec).unwrap(),
+            Some(b"v000".to_vec())
+        );
+    }
+    assert!(prolly.cache_len() <= 8);
+
+    prolly.reset_metrics();
+    {
+        let mut scanner = prolly.read(&tree).unwrap();
+        assert_eq!(scanner.scan_range(&[], None, |_| {}).unwrap(), 128);
+    }
+    assert_eq!(
+        prolly.metrics().node_cache_evictions,
+        0,
+        "one-pass scan nodes must not displace the point-read working set"
+    );
+
+    prolly.reset_metrics();
+    let mut reader = prolly.read(&tree).unwrap();
+    assert_eq!(
+        reader.get_with(b"k000", <[u8]>::to_vec).unwrap(),
+        Some(b"v000".to_vec())
+    );
+    assert_eq!(
+        prolly.metrics().node_cache_misses,
+        0,
+        "the point path primed before the scan must remain resident"
+    );
+}
+
+#[test]
+fn batch_point_read_protects_cache_from_later_scan_in_same_session() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .node_cache_max_nodes(8)
+        .build();
+    let prolly = Prolly::new(MemStore::new(), config);
+    let mutations = (0..128)
+        .map(|idx| Mutation::Upsert {
+            key: format!("k{idx:03}").into_bytes(),
+            val: format!("v{idx:03}").into_bytes(),
+        })
+        .collect();
+    let tree = prolly.batch(&prolly.create(), mutations).unwrap();
+
+    prolly.clear_cache();
+    let mut reader = prolly.read(&tree).unwrap();
+    let keys = [b"k000".as_slice()];
+    reader
+        .get_many_with(&keys, |_, _, value| {
+            assert_eq!(value, Some(b"v000".as_slice()))
+        })
+        .unwrap();
+
+    prolly.reset_metrics();
+    assert_eq!(reader.scan_range(&[], None, |_| {}).unwrap(), 128);
+    assert_eq!(
+        prolly.metrics().node_cache_evictions,
+        0,
+        "a scan after get_many must preserve the batch point-read working set"
+    );
+}
+
+#[test]
+fn point_read_protects_cache_from_later_scan_in_same_session() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .node_cache_max_nodes(8)
+        .build();
+    let prolly = Prolly::new(MemStore::new(), config);
+    let mutations = (0..128)
+        .map(|idx| Mutation::Upsert {
+            key: format!("k{idx:03}").into_bytes(),
+            val: format!("v{idx:03}").into_bytes(),
+        })
+        .collect();
+    let tree = prolly.batch(&prolly.create(), mutations).unwrap();
+
+    prolly.clear_cache();
+    let mut reader = prolly.read(&tree).unwrap();
+    assert_eq!(
+        reader.get_with(b"k000", <[u8]>::to_vec).unwrap(),
+        Some(b"v000".to_vec())
+    );
+
+    prolly.reset_metrics();
+    assert_eq!(reader.scan_range(&[], None, |_| {}).unwrap(), 128);
+    assert_eq!(
+        prolly.metrics().node_cache_evictions,
+        0,
+        "a scan after get must preserve the point-read working set"
+    );
+}
+
+#[test]
+fn owned_batch_point_read_protects_cache_from_later_scan() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .node_cache_max_nodes(8)
+        .build();
+    let prolly = Arc::new(Prolly::new(MemStore::new(), config));
+    let mutations = (0..128)
+        .map(|idx| Mutation::Upsert {
+            key: format!("k{idx:03}").into_bytes(),
+            val: format!("v{idx:03}").into_bytes(),
+        })
+        .collect();
+    let tree = prolly.batch(&prolly.create(), mutations).unwrap();
+
+    prolly.clear_cache();
+    let reader = prolly.read_owned(tree).unwrap();
+    let keys = [b"k000".as_slice()];
+    reader
+        .get_many_with(&keys, |_, _, value| {
+            assert_eq!(value, Some(b"v000".as_slice()))
+        })
+        .unwrap();
+
+    prolly.reset_metrics();
+    assert_eq!(
+        reader
+            .scan_range_until(&[], None, |_| std::ops::ControlFlow::<()>::Continue(()))
+            .unwrap()
+            .visited,
+        128
+    );
+    assert_eq!(
+        prolly.metrics().node_cache_evictions,
+        0,
+        "an owned session scan after get_many must preserve its working set"
+    );
+}
+
+#[test]
+fn unbounded_scan_keeps_admitting_nodes_for_reuse() {
+    let config = Config::builder()
+        .min_chunk_size(2)
+        .max_chunk_size(4)
+        .chunking_factor(2)
+        .unbounded_node_cache()
+        .build();
+    let prolly = Prolly::new(MemStore::new(), config);
+    let mutations = (0..128)
+        .map(|idx| Mutation::Upsert {
+            key: format!("k{idx:03}").into_bytes(),
+            val: format!("v{idx:03}").into_bytes(),
+        })
+        .collect();
+    let tree = prolly.batch(&prolly.create(), mutations).unwrap();
+    let tree_nodes = prolly.collect_stats(&tree).unwrap().num_nodes;
+
+    prolly.clear_cache();
+    let mut first = prolly.read(&tree).unwrap();
+    assert_eq!(first.scan_range(&[], None, |_| {}).unwrap(), 128);
+    assert_eq!(prolly.cache_len(), tree_nodes);
+
+    prolly.reset_metrics();
+    let mut second = prolly.read(&tree).unwrap();
+    assert_eq!(second.scan_range(&[], None, |_| {}).unwrap(), 128);
+    assert_eq!(prolly.metrics().node_cache_misses, 0);
 }
 
 #[test]

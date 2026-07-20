@@ -71,4 +71,3 @@ fi
 } >"$OUT/driver-provenance.txt"
 
 exec "$ROOT/benchmarks/sqlite-prolly-patterns/target/release/prolly-sqlite-pattern-bench" "$@"
-

@@ -32,7 +32,6 @@ pub use accelerator::pq::{
     ProductQuantizationQuality, ProductQuantizer,
 };
 pub use accelerator::AcceleratorSet;
-#[cfg(feature = "async-store")]
 pub use accelerator::{
     AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
     AsyncProductQuantizer,
@@ -49,7 +48,6 @@ pub use search::{
     SearchIo, SearchOptions, SearchPlan, SearchPlanSummary, SearchRequest, SearchRuntime,
     SearchRuntimePolicy, StoreCacheNamespace, SEARCH_PLAN_FORMAT_VERSION,
 };
-#[cfg(feature = "async-store")]
 pub use search::{AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken};
 
 const MIN_PROXIMITY_NODE_BYTES: u32 = 64;

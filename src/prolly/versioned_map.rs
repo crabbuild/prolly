@@ -41,8 +41,6 @@ pub(crate) enum MapWriteAuthority<'a> {
     Unmanaged,
     IndexMaintenance(&'a IndexMaintenancePermit),
 }
-
-#[cfg(feature = "async-store")]
 async fn guard_async_managed_map_write<S>(
     tx: &super::transaction::AsyncProllyTransaction<'_, S>,
     map_id: &[u8],
@@ -1886,6 +1884,12 @@ impl<'a, S: Store> VersionedMap<'a, S> {
         name.extend_from_slice(id.as_cid().as_bytes());
         name
     }
+
+    fn async_service(
+        &self,
+    ) -> AsyncVersionedMap<'_, super::store::SyncStoreAsAsync<std::sync::Arc<S>>> {
+        AsyncVersionedMap::new(&self.prolly.engine, &self.id)
+    }
 }
 
 impl<S> VersionedMap<'_, S>
@@ -1920,20 +1924,10 @@ where
 
     /// Load the current version, or `None` when the index has not been initialized.
     pub fn head(&self) -> Result<Option<MapVersion>, Error> {
-        let manifest = self
-            .prolly
-            .store()
-            .get_root(&self.head_name)
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        manifest
-            .map(|manifest| {
-                MapVersion::new(
-                    manifest.to_tree(),
-                    manifest.updated_at_millis.or(manifest.created_at_millis),
-                    true,
-                )
-            })
-            .transpose()
+        let service = self.async_service();
+        let ready_store = self.prolly.engine.store.clone();
+        let future = service.head();
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Read a key from the current version. An absent index behaves like an empty map.
@@ -2092,29 +2086,10 @@ where
 
     /// Load a version by its stable identifier.
     pub fn version(&self, id: &MapVersionId) -> Result<Option<MapVersion>, Error> {
-        let manifest = self
-            .prolly
-            .store()
-            .get_root(&self.version_name(id))
-            .map_err(|err| Error::Store(Box::new(err)))?;
-        let Some(manifest) = manifest else {
-            return Ok(None);
-        };
-        let tree = manifest.to_tree();
-        let actual = MapVersionId::for_tree(&tree)?;
-        if actual != *id {
-            return Err(Error::InvalidVersionedMap(format!(
-                "version root {} points to content {}",
-                id, actual
-            )));
-        }
-        let is_head = self.head()?.map(|head| head.id == *id).unwrap_or(false);
-        Ok(Some(MapVersion {
-            id: actual,
-            tree,
-            created_at_millis: manifest.created_at_millis,
-            is_head,
-        }))
+        let service = self.async_service();
+        let ready_store = self.prolly.engine.store.clone();
+        let future = service.version(id);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Read a key from a specific version.
@@ -2268,7 +2243,6 @@ where
 }
 
 /// Async counterpart to [`VersionedMap`] for remote and browser stores.
-#[cfg(feature = "async-store")]
 pub struct AsyncVersionedMap<'a, S: super::store::AsyncStore> {
     prolly: &'a super::AsyncProlly<S>,
     id: Vec<u8>,
@@ -2277,20 +2251,16 @@ pub struct AsyncVersionedMap<'a, S: super::store::AsyncStore> {
 }
 
 /// Immutable version-pinned async read view.
-#[cfg(feature = "async-store")]
 pub struct AsyncMapSnapshot<'a, S: super::store::AsyncStore> {
     prolly: &'a super::AsyncProlly<S>,
     version: MapVersion,
 }
 
 /// Resumable async change subscription driven by explicit polling.
-#[cfg(feature = "async-store")]
 pub struct AsyncMapChangeSubscription<'a, S: super::store::AsyncStore> {
     map: AsyncVersionedMap<'a, S>,
     last_seen: Option<MapVersionId>,
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S: super::store::AsyncStore> AsyncVersionedMap<'a, S> {
     /// Create an async managed-map handle.
     pub fn new(prolly: &'a super::AsyncProlly<S>, id: impl AsRef<[u8]>) -> Self {
@@ -2315,8 +2285,6 @@ impl<'a, S: super::store::AsyncStore> AsyncVersionedMap<'a, S> {
         name
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncVersionedMap<'a, S>
 where
     S: super::store::AsyncStore + super::manifest::AsyncManifestStore,
@@ -2326,39 +2294,44 @@ where
     /// Load current async head.
     pub async fn head(&self) -> Result<Option<MapVersion>, Error> {
         self.prolly
-            .load_named_root(&self.head_name)
+            .load_named_root_manifest(&self.head_name)
             .await?
-            .map(|tree| {
-                Ok(MapVersion {
-                    id: MapVersionId::for_tree(&tree)?,
-                    tree,
-                    created_at_millis: None,
-                    is_head: true,
-                })
+            .map(|manifest| {
+                MapVersion::new(
+                    manifest.to_tree(),
+                    manifest.updated_at_millis.or(manifest.created_at_millis),
+                    true,
+                )
             })
             .transpose()
     }
 
     /// Load a cataloged immutable version.
     pub async fn version(&self, id: &MapVersionId) -> Result<Option<MapVersion>, Error> {
-        self.prolly
-            .load_named_root(&self.version_name(id))
-            .await?
-            .map(|tree| {
-                let actual = MapVersionId::for_tree(&tree)?;
-                if actual != *id {
-                    return Err(Error::InvalidVersionedMap(format!(
-                        "catalog root does not match async version {id}"
-                    )));
-                }
-                Ok(MapVersion {
-                    id: actual,
-                    tree,
-                    created_at_millis: None,
-                    is_head: false,
-                })
+        let manifest = self
+            .prolly
+            .load_named_root_manifest(&self.version_name(id))
+            .await?;
+        let Some(manifest) = manifest else {
+            return Ok(None);
+        };
+        let tree = manifest.to_tree();
+        let version = (|| {
+            let actual = MapVersionId::for_tree(&tree)?;
+            if actual != *id {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "catalog root does not match async version {id}"
+                )));
+            }
+            Ok(MapVersion {
+                id: actual,
+                tree,
+                created_at_millis: manifest.created_at_millis,
+                is_head: false,
             })
-            .transpose()
+        })()?;
+        let is_head = self.head().await?.is_some_and(|head| head.id == *id);
+        Ok(Some(MapVersion { is_head, ..version }))
     }
 
     /// Pin current head for repeatable async reads.
@@ -2407,8 +2380,6 @@ where
         }
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncMapChangeSubscription<'a, S>
 where
     S: super::store::AsyncStore + super::manifest::AsyncManifestStore,
@@ -2452,8 +2423,6 @@ where
         }))
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<'a, S> AsyncMapSnapshot<'a, S>
 where
     S: super::store::AsyncStore,
@@ -2555,8 +2524,6 @@ where
         self.prolly.prove_prefix(self.tree(), prefix).await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncVersionedMap<'_, S>
 where
     S: super::store::AsyncStore
@@ -2567,56 +2534,191 @@ where
 {
     /// Atomically apply a batch and retry optimistic head conflicts.
     pub async fn apply(&self, mutations: Vec<Mutation>) -> Result<MapVersion, Error> {
-        let timestamp_millis = current_unix_time_millis();
+        self.apply_at_millis(mutations, current_unix_time_millis())
+            .await
+    }
+
+    /// Atomically apply a batch with an explicit catalog timestamp.
+    pub async fn apply_at_millis(
+        &self,
+        mutations: Vec<Mutation>,
+        timestamp_millis: u64,
+    ) -> Result<MapVersion, Error> {
         let mut last_conflict = None;
         for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
-            let tx = self.prolly.begin_transaction()?;
-            guard_async_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged).await?;
-            let current = tx.load_named_root(&self.head_name).await?;
-            let base = current.clone().unwrap_or_else(|| tx.create());
-            let next = tx.batch(&base, mutations.clone()).await?;
-            if current.as_ref() == Some(&next) {
-                tx.rollback();
-                return Ok(MapVersion {
-                    id: MapVersionId::for_tree(&next)?,
-                    tree: next,
-                    created_at_millis: None,
-                    is_head: true,
-                });
-            }
-            let id = MapVersionId::for_tree(&next)?;
-            let version_name = self.version_name(&id);
-            match tx.load_named_root(&version_name).await? {
-                Some(existing) if existing != next => {
-                    tx.rollback();
-                    return Err(Error::InvalidVersionedMap(format!(
-                        "content identifier collision for async version {}",
-                        id
-                    )));
+            match self.try_apply(&mutations, None, timestamp_millis).await? {
+                UpdateAttempt::Applied { current, .. } => return Ok(current),
+                UpdateAttempt::Unchanged(Some(current)) => return Ok(current),
+                UpdateAttempt::Unchanged(None) => {
+                    return Err(Error::InvalidVersionedMap(
+                        "empty update did not initialize the index".to_string(),
+                    ));
                 }
-                Some(_) => {}
-                None => {
-                    tx.publish_named_root_at_millis(&version_name, &next, timestamp_millis)
-                        .await?;
-                }
-            }
-            tx.publish_named_root_at_millis(&self.head_name, &next, timestamp_millis)
-                .await?;
-            match tx.commit().await? {
-                TransactionUpdate::Applied { .. } => {
-                    return Ok(MapVersion {
-                        id,
-                        tree: next,
-                        created_at_millis: Some(timestamp_millis),
-                        is_head: true,
-                    });
-                }
-                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
+                UpdateAttempt::Conflict(conflict) => last_conflict = Some(conflict),
             }
         }
         Err(Error::transaction_conflict(
             last_conflict.expect("retry loop records a conflict before exhaustion"),
         ))
+    }
+
+    /// Apply a batch only when `expected` is still the current version.
+    pub async fn apply_if_at_millis(
+        &self,
+        expected: Option<&MapVersionId>,
+        mutations: Vec<Mutation>,
+        timestamp_millis: u64,
+    ) -> Result<VersionedMapUpdate, Error> {
+        match self
+            .try_apply(&mutations, Some(expected), timestamp_millis)
+            .await?
+        {
+            UpdateAttempt::Applied { previous, current } => {
+                Ok(VersionedMapUpdate::Applied { previous, current })
+            }
+            UpdateAttempt::Unchanged(current) => Ok(VersionedMapUpdate::Unchanged { current }),
+            UpdateAttempt::Conflict(_) => Ok(VersionedMapUpdate::Conflict {
+                current: self.head().await?,
+            }),
+        }
+    }
+
+    async fn try_apply(
+        &self,
+        mutations: &[Mutation],
+        expected: Option<Option<&MapVersionId>>,
+        timestamp_millis: u64,
+    ) -> Result<UpdateAttempt, Error> {
+        let tx = self.prolly.begin_transaction()?;
+        guard_async_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged).await?;
+        let current_tree = tx.load_named_root(&self.head_name).await?;
+        let current_id = current_tree
+            .as_ref()
+            .map(MapVersionId::for_tree)
+            .transpose()?;
+
+        if let Some(expected) = expected {
+            if current_id.as_ref() != expected {
+                tx.rollback();
+                return Ok(UpdateAttempt::Conflict(TransactionConflict::new(
+                    self.head_name.clone(),
+                    None,
+                    None,
+                )));
+            }
+        }
+
+        let base = current_tree.clone().unwrap_or_else(|| tx.create());
+        let next = tx.batch(&base, mutations.to_vec()).await?;
+        if current_tree.as_ref() == Some(&next) {
+            let current = Some(MapVersion {
+                id: current_id
+                    .clone()
+                    .expect("an unchanged existing tree has a version id"),
+                tree: next,
+                created_at_millis: None,
+                is_head: true,
+            });
+            return match tx.commit().await? {
+                TransactionUpdate::Applied { .. } => Ok(UpdateAttempt::Unchanged(current)),
+                TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
+            };
+        }
+
+        let next_id = MapVersionId::for_tree(&next)?;
+        let version_name = self.version_name(&next_id);
+        match tx.load_named_root(&version_name).await? {
+            Some(existing) if existing != next => {
+                tx.rollback();
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for version {}",
+                    next_id
+                )));
+            }
+            Some(_) => {}
+            None => {
+                tx.publish_named_root_at_millis(&version_name, &next, timestamp_millis)
+                    .await?;
+            }
+        }
+        tx.publish_named_root_at_millis(&self.head_name, &next, timestamp_millis)
+            .await?;
+
+        match tx.commit().await? {
+            TransactionUpdate::Applied { .. } => Ok(UpdateAttempt::Applied {
+                previous: current_id,
+                current: MapVersion {
+                    id: next_id,
+                    tree: next,
+                    created_at_millis: Some(timestamp_millis),
+                    is_head: true,
+                },
+            }),
+            TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
+        }
+    }
+
+    async fn publish_tree_if(
+        &self,
+        expected: Option<&MapVersionId>,
+        tree: &Tree,
+        timestamp_millis: u64,
+    ) -> Result<VersionedMapUpdate, Error> {
+        let tx = self.prolly.begin_transaction()?;
+        guard_async_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged).await?;
+        let current_tree = tx.load_named_root(&self.head_name).await?;
+        let current_id = current_tree
+            .as_ref()
+            .map(MapVersionId::for_tree)
+            .transpose()?;
+        if current_id.as_ref() != expected {
+            tx.rollback();
+            return Ok(VersionedMapUpdate::Conflict {
+                current: self.head().await?,
+            });
+        }
+        if current_tree.as_ref() == Some(tree) {
+            let current = self.head().await?;
+            return match tx.commit().await? {
+                TransactionUpdate::Applied { .. } => Ok(VersionedMapUpdate::Unchanged { current }),
+                TransactionUpdate::Conflict(_) => Ok(VersionedMapUpdate::Conflict {
+                    current: self.head().await?,
+                }),
+            };
+        }
+
+        let id = MapVersionId::for_tree(tree)?;
+        let version_name = self.version_name(&id);
+        match tx.load_named_root(&version_name).await? {
+            Some(existing) if existing != *tree => {
+                tx.rollback();
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for merged version {}",
+                    id
+                )));
+            }
+            Some(_) => {}
+            None => {
+                tx.publish_named_root_at_millis(&version_name, tree, timestamp_millis)
+                    .await?;
+            }
+        }
+        tx.publish_named_root_at_millis(&self.head_name, tree, timestamp_millis)
+            .await?;
+        match tx.commit().await? {
+            TransactionUpdate::Applied { .. } => Ok(VersionedMapUpdate::Applied {
+                previous: current_id,
+                current: MapVersion {
+                    id,
+                    tree: tree.clone(),
+                    created_at_millis: Some(timestamp_millis),
+                    is_head: true,
+                },
+            }),
+            TransactionUpdate::Conflict(_) => Ok(VersionedMapUpdate::Conflict {
+                current: self.head().await?,
+            }),
+        }
     }
 
     /// Put one key asynchronously.
@@ -2647,8 +2749,6 @@ where
         self.apply(editor.into_mutations()).await
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S: super::store::AsyncStore> super::AsyncProlly<S> {
     /// Open an async managed map.
     pub fn versioned_map(&self, id: impl AsRef<[u8]>) -> AsyncVersionedMap<'_, S> {
@@ -2908,22 +3008,10 @@ where
         mutations: Vec<Mutation>,
         timestamp_millis: u64,
     ) -> Result<MapVersion, Error> {
-        let mut last_conflict = None;
-        for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
-            match self.try_apply(&mutations, None, timestamp_millis)? {
-                UpdateAttempt::Applied { current, .. } => return Ok(current),
-                UpdateAttempt::Unchanged(Some(current)) => return Ok(current),
-                UpdateAttempt::Unchanged(None) => {
-                    return Err(Error::InvalidVersionedMap(
-                        "empty update did not initialize the index".to_string(),
-                    ));
-                }
-                UpdateAttempt::Conflict(conflict) => last_conflict = Some(conflict),
-            }
-        }
-        Err(Error::transaction_conflict(
-            last_conflict.expect("retry loop records a conflict before exhaustion"),
-        ))
+        let service = self.async_service();
+        let ready_store = self.prolly.engine.store.clone();
+        let future = service.apply_at_millis(mutations, timestamp_millis);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Apply mutations only when `expected` still identifies the current head.
@@ -2942,15 +3030,10 @@ where
         mutations: Vec<Mutation>,
         timestamp_millis: u64,
     ) -> Result<VersionedMapUpdate, Error> {
-        match self.try_apply(&mutations, Some(expected), timestamp_millis)? {
-            UpdateAttempt::Applied { previous, current } => {
-                Ok(VersionedMapUpdate::Applied { previous, current })
-            }
-            UpdateAttempt::Unchanged(current) => Ok(VersionedMapUpdate::Unchanged { current }),
-            UpdateAttempt::Conflict(_) => Ok(VersionedMapUpdate::Conflict {
-                current: self.head()?,
-            }),
-        }
+        let service = self.async_service();
+        let ready_store = self.prolly.engine.store.clone();
+        let future = service.apply_if_at_millis(expected, mutations, timestamp_millis);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Conditionally insert or replace one key.
@@ -3178,136 +3261,16 @@ where
         ))
     }
 
-    fn try_apply(
-        &self,
-        mutations: &[Mutation],
-        expected: Option<Option<&MapVersionId>>,
-        timestamp_millis: u64,
-    ) -> Result<UpdateAttempt, Error> {
-        let tx = self.prolly.begin_transaction()?;
-        guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
-        let current_tree = tx.load_named_root(&self.head_name)?;
-        let current_id = current_tree
-            .as_ref()
-            .map(MapVersionId::for_tree)
-            .transpose()?;
-
-        if let Some(expected) = expected {
-            if current_id.as_ref() != expected {
-                tx.rollback();
-                return Ok(UpdateAttempt::Conflict(TransactionConflict::new(
-                    self.head_name.clone(),
-                    None,
-                    None,
-                )));
-            }
-        }
-
-        let base = current_tree.clone().unwrap_or_else(|| tx.create());
-        let next = tx.batch(&base, mutations.to_vec())?;
-        if current_tree.as_ref() == Some(&next) {
-            let current = Some(MapVersion {
-                id: current_id
-                    .clone()
-                    .expect("an unchanged existing tree has a version id"),
-                tree: next,
-                created_at_millis: None,
-                is_head: true,
-            });
-            return match tx.commit()? {
-                TransactionUpdate::Applied { .. } => Ok(UpdateAttempt::Unchanged(current)),
-                TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
-            };
-        }
-
-        let next_id = MapVersionId::for_tree(&next)?;
-        let version_name = self.version_name(&next_id);
-        match tx.load_named_root(&version_name)? {
-            Some(existing) if existing != next => {
-                tx.rollback();
-                return Err(Error::InvalidVersionedMap(format!(
-                    "content identifier collision for version {}",
-                    next_id
-                )));
-            }
-            Some(_) => {}
-            None => {
-                tx.publish_named_root_at_millis(&version_name, &next, timestamp_millis)?;
-            }
-        }
-        tx.publish_named_root_at_millis(&self.head_name, &next, timestamp_millis)?;
-
-        match tx.commit()? {
-            TransactionUpdate::Applied { .. } => Ok(UpdateAttempt::Applied {
-                previous: current_id,
-                current: MapVersion {
-                    id: next_id,
-                    tree: next,
-                    created_at_millis: Some(timestamp_millis),
-                    is_head: true,
-                },
-            }),
-            TransactionUpdate::Conflict(conflict) => Ok(UpdateAttempt::Conflict(*conflict)),
-        }
-    }
-
     fn publish_tree_if(
         &self,
         expected: Option<&MapVersionId>,
         tree: &Tree,
         timestamp_millis: u64,
     ) -> Result<VersionedMapUpdate, Error> {
-        let tx = self.prolly.begin_transaction()?;
-        guard_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged)?;
-        let current_tree = tx.load_named_root(&self.head_name)?;
-        let current_id = current_tree
-            .as_ref()
-            .map(MapVersionId::for_tree)
-            .transpose()?;
-        if current_id.as_ref() != expected {
-            tx.rollback();
-            return Ok(VersionedMapUpdate::Conflict {
-                current: self.head()?,
-            });
-        }
-        if current_tree.as_ref() == Some(tree) {
-            let current = self.head()?;
-            return match tx.commit()? {
-                TransactionUpdate::Applied { .. } => Ok(VersionedMapUpdate::Unchanged { current }),
-                TransactionUpdate::Conflict(_) => Ok(VersionedMapUpdate::Conflict {
-                    current: self.head()?,
-                }),
-            };
-        }
-
-        let id = MapVersionId::for_tree(tree)?;
-        let version_name = self.version_name(&id);
-        match tx.load_named_root(&version_name)? {
-            Some(existing) if existing != *tree => {
-                tx.rollback();
-                return Err(Error::InvalidVersionedMap(format!(
-                    "content identifier collision for merged version {}",
-                    id
-                )));
-            }
-            Some(_) => {}
-            None => tx.publish_named_root_at_millis(&version_name, tree, timestamp_millis)?,
-        }
-        tx.publish_named_root_at_millis(&self.head_name, tree, timestamp_millis)?;
-        match tx.commit()? {
-            TransactionUpdate::Applied { .. } => Ok(VersionedMapUpdate::Applied {
-                previous: current_id,
-                current: MapVersion {
-                    id,
-                    tree: tree.clone(),
-                    created_at_millis: Some(timestamp_millis),
-                    is_head: true,
-                },
-            }),
-            TransactionUpdate::Conflict(_) => Ok(VersionedMapUpdate::Conflict {
-                current: self.head()?,
-            }),
-        }
+        let service = self.async_service();
+        let ready_store = self.prolly.engine.store.clone();
+        let future = service.publish_tree_if(expected, tree, timestamp_millis);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 }
 

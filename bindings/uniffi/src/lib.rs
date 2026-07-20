@@ -33,11 +33,13 @@ use prolly_store_sqlite::SqliteStore;
 use serde::Serialize;
 use thiserror::Error;
 
+mod async_store;
 mod domain;
 mod fast_abi;
-mod async_store;
+mod publication;
 
 pub use async_store::*;
+pub use publication::*;
 
 pub use domain::indexed::{
     default_secondary_index_limits, ActiveIndexHealthRecord, BindingIndexRegistry,
@@ -798,6 +800,7 @@ pub trait HostStoreCallback: Send + Sync {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> HostStoreUnitResultRecord;
     fn delete(&self, key: Vec<u8>) -> HostStoreUnitResultRecord;
     fn batch(&self, ops: Vec<MutationRecord>) -> HostStoreUnitResultRecord;
+    fn publish_nodes(&self, publication: NodePublicationRecord) -> HostStoreUnitResultRecord;
     fn batch_get_ordered(&self, keys: Vec<Vec<u8>>) -> HostStoreBatchGetResultRecord;
     fn prefers_batch_reads(&self) -> HostStoreBoolResultRecord;
     fn supports_hints(&self) -> HostStoreBoolResultRecord;
@@ -1752,6 +1755,10 @@ impl Store for HostStore {
     fn batch(&self, ops: &[BatchOp]) -> Result<(), Self::Error> {
         let records = ops.iter().map(Self::mutation_from_batch_op).collect();
         Self::unit(self.callback.batch(records))
+    }
+
+    fn publish_nodes(&self, publication: prolly::NodePublication<'_>) -> Result<(), Self::Error> {
+        Self::unit(self.callback.publish_nodes(publication.into()))
     }
 
     fn batch_get(&self, keys: &[&[u8]]) -> Result<HashMap<Vec<u8>, Vec<u8>>, Self::Error> {
@@ -8016,6 +8023,7 @@ mod tests {
         nodes: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
         hints: Mutex<TestHintMap>,
         roots: Mutex<BTreeMap<Vec<u8>, RootManifestRecord>>,
+        publications: Mutex<Vec<NodePublicationRecord>>,
     }
 
     impl TestHostStore {
@@ -8054,6 +8062,23 @@ mod tests {
                         nodes.remove(&op.key);
                     }
                 }
+            }
+            Self::unit()
+        }
+
+        fn publish_nodes(&self, publication: NodePublicationRecord) -> HostStoreUnitResultRecord {
+            self.publications.lock().unwrap().push(publication.clone());
+            {
+                let mut nodes = self.nodes.lock().unwrap();
+                for node in publication.nodes {
+                    nodes.insert(node.key, node.value);
+                }
+            }
+            if let Some(hint) = publication.hint {
+                self.hints
+                    .lock()
+                    .unwrap()
+                    .insert((hint.namespace, hint.key), hint.value);
             }
             Self::unit()
         }
@@ -8168,6 +8193,44 @@ mod tests {
                 error: None,
             }
         }
+    }
+
+    #[test]
+    fn host_store_publication_preserves_owned_context_and_normalizes_unknown_codes() {
+        let callback = Arc::new(TestHostStore::default());
+        let store = HostStore::new(callback.clone());
+        let bytes = b"published-node";
+        let cid = Cid::from_bytes(bytes);
+        let entries = [(cid.as_bytes(), bytes.as_slice())];
+        let hint = prolly::NodePublicationHint::new(b"rightmost", b"key", cid.as_bytes());
+
+        store
+            .publish_nodes(prolly::NodePublication::with_hint(
+                &entries,
+                hint,
+                prolly::PublicationOrigin::PointUpsert,
+            ))
+            .unwrap();
+
+        assert_eq!(
+            *callback.publications.lock().unwrap(),
+            vec![NodePublicationRecord {
+                nodes: vec![NodeEntryRecord {
+                    key: cid.as_bytes().to_vec(),
+                    value: bytes.to_vec(),
+                }],
+                hint: Some(NodePublicationHintRecord {
+                    namespace: b"rightmost".to_vec(),
+                    key: b"key".to_vec(),
+                    value: cid.as_bytes().to_vec(),
+                }),
+                origin: PublicationOriginRecord { code: POINT_UPSERT },
+            }]
+        );
+        assert_eq!(
+            normalize_publication_origin_code(PublicationOriginRecord { code: u32::MAX }.code),
+            GENERAL
+        );
     }
 
     #[test]

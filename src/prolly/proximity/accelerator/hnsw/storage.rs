@@ -7,7 +7,7 @@ use crate::prolly::proximity::storage::codec::{
     put_bytes, put_cid, put_f32, put_varint, Reader, MAX_KEY_BYTES, MAX_OBJECT_ENTRIES,
 };
 use crate::prolly::proximity::DistanceMetric;
-use crate::prolly::store::Store;
+use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 
 const MANIFEST_MAGIC: &[u8; 4] = b"HNSW";
 const NODE_MAGIC: &[u8; 4] = b"HNSN";
@@ -245,8 +245,12 @@ pub(super) fn put_content<S: Store>(store: &S, cid: &Cid, bytes: &[u8]) -> Resul
         }
         return Ok(());
     }
+    let entries = [(cid.as_bytes(), bytes)];
     store
-        .put(cid.as_bytes(), bytes)
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::Maintenance,
+        ))
         .map_err(|error| Error::Store(Box::new(error)))
 }
 

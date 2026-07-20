@@ -1,0 +1,5 @@
+suite,target,records,api,pattern,pairs,samples_per_revision_pair,paired_median_latency_change_pct,paired_median_latency_change_ns,paired_median_throughput_change_pct,paired_median_p50_change_pct,paired_median_p50_change_ns,paired_median_p95_change_pct,paired_median_p95_change_ns,status,reasons
+local-adapters,slatedb-sync,10000,diff,clustered,20,3,-0.6956397016637981,-145.5,0.7054545454545498,-0.6956397016637981,-145.5,-0.6956397016637981,-145.5,pass,
+local-adapters,slatedb-sync,10000,diff,random,20,3,0.19353820551861894,2937.0,-0.19316316043819065,0.19353820551861894,2937.0,0.19353820551861894,2937.0,pass,
+local-adapters,slatedb-sync,10000,reopen,clustered,20,3,-4.909054682378078,-28583.5,5.164642093834415,-4.909054682378078,-28583.5,-4.909054682378078,-28583.5,pass,
+local-adapters,slatedb-sync,10000,reopen,random,20,3,-2.989049080730317,-17312.0,3.0898426722401933,-2.989049080730317,-17312.0,-2.989049080730317,-17312.0,pass,

@@ -396,6 +396,7 @@ impl BatchWriteCollector {
             .map_err(|e| Error::Store(Box::new(e)))
     }
 
+    #[cfg(test)]
     pub(crate) fn cache_nodes<S: Store>(&self, prolly: &Prolly<S>) -> Result<(), Error> {
         if let Some(cache_nodes) = &self.cache_nodes {
             for (cid, node) in cache_nodes {
@@ -409,6 +410,22 @@ impl BatchWriteCollector {
             prolly.cache_node(cid.clone(), node);
         }
 
+        Ok(())
+    }
+
+    pub(crate) fn cache_nodes_with<M: super::write::CanonicalWriteManager>(
+        &self,
+        manager: &M,
+    ) -> Result<(), Error> {
+        if let Some(cache_nodes) = &self.cache_nodes {
+            for (cid, node) in cache_nodes {
+                manager.write_cache_node(cid.clone(), node.clone());
+            }
+            return Ok(());
+        }
+        for (cid, node_bytes) in &self.nodes {
+            manager.write_cache_node(cid.clone(), Node::from_bytes(node_bytes)?);
+        }
         Ok(())
     }
 
@@ -500,7 +517,7 @@ pub struct BatchApplyResult {
 }
 
 impl BatchApplyResult {
-    fn from_write_stats(
+    pub(crate) fn from_write_stats(
         tree: Tree,
         write_stats: super::write::WriteStats,
         input_sorted: bool,
@@ -1260,12 +1277,15 @@ pub(crate) fn split_oversized_node<S: Store>(prolly: &Prolly<S>, node: &Node) ->
     split_node_canonical(prolly, node).expect("test node must be canonically chunkable")
 }
 
-fn split_node_canonical<S: Store>(prolly: &Prolly<S>, node: &Node) -> Result<Vec<Node>, Error> {
+fn split_node_canonical<M: super::write::CanonicalWriteManager>(
+    manager: &M,
+    node: &Node,
+) -> Result<Vec<Node>, Error> {
     if node.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut config = prolly.config().clone();
+    let mut config = manager.write_config().clone();
     config.format = node.format.clone();
     let mut emitter = LevelEmitter::new(config, node.leaf, node.level)?;
     let mut chunks = Vec::new();
@@ -1528,20 +1548,17 @@ pub(crate) fn rebuild_from_modified_leaves<S: Store>(
     // Return the single root CID
     Ok(current_cids.into_iter().next())
 }
-
-#[cfg(any(test, feature = "async-store"))]
+#[cfg(test)]
 pub(crate) fn preprocess_mutations(mutations: Vec<Mutation>) -> Vec<Mutation> {
     preprocess_mutations_with_info(mutations).mutations
 }
-
-#[cfg(any(test, feature = "async-store"))]
+#[cfg(test)]
 struct PreprocessedMutations {
     mutations: Vec<Mutation>,
     #[cfg(test)]
     input_was_sorted: bool,
 }
-
-#[cfg(any(test, feature = "async-store"))]
+#[cfg(test)]
 fn preprocess_mutations_with_info(mut mutations: Vec<Mutation>) -> PreprocessedMutations {
     if mutations.len() < 2 {
         return PreprocessedMutations {
@@ -1587,8 +1604,7 @@ fn preprocess_mutations_with_info(mut mutations: Vec<Mutation>) -> PreprocessedM
         input_was_sorted,
     }
 }
-
-#[cfg(any(test, feature = "async-store"))]
+#[cfg(test)]
 fn inspect_sorted_mutations(mutations: &[Mutation]) -> (bool, bool) {
     let mut has_duplicates = false;
     for pair in mutations.windows(2) {
@@ -2103,7 +2119,7 @@ pub fn append_batch<S: Store>(
     tree: &Tree,
     mutations: Vec<Mutation>,
 ) -> Result<Tree, Error> {
-    super::write::apply_tree(prolly, tree, mutations)
+    prolly.append_batch(tree, mutations)
 }
 
 fn ensure_node_value_count(node: &Node) -> Result<(), Error> {
@@ -2114,6 +2130,7 @@ fn ensure_node_value_count(node: &Node) -> Result<(), Error> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn get_max_key<S: Store>(
     prolly: &Prolly<S>,
     root_cid: &Cid,
@@ -2209,8 +2226,8 @@ pub(crate) fn should_use_deferred_rebalancing<S: Store>(
 }
 
 /// Find the path to the rightmost leaf in the tree.
-fn build_parent_nodes<S: Store>(
-    prolly: &Prolly<S>,
+fn build_parent_nodes<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     child_cids: &[Cid],
     first_keys: &[Vec<u8>],
     child_counts: &[u64],
@@ -2220,7 +2237,7 @@ fn build_parent_nodes<S: Store>(
     debug_assert_eq!(child_cids.len(), child_counts.len());
 
     let mut parents = Vec::new();
-    let mut emitter = LevelEmitter::new(prolly.config().clone(), false, level)?;
+    let mut emitter = LevelEmitter::new(manager.write_config().clone(), false, level)?;
     for ((cid, first_key), count) in child_cids.iter().zip(first_keys).zip(child_counts) {
         let emitted = emitter.push_child(NodeSummary {
             cid: cid.clone(),
@@ -2235,24 +2252,13 @@ fn build_parent_nodes<S: Store>(
     Ok(parents)
 }
 
-pub(crate) fn apply_with_stats<S: Store>(
-    prolly: &Prolly<S>,
-    tree: &Tree,
-    mutations: Vec<Mutation>,
-) -> Result<BatchApplyResult, Error> {
-    let input_sorted = mutations
-        .windows(2)
-        .all(|pair| pair[0].key() <= pair[1].key());
-    let (tree, write_stats) = super::write::apply(prolly, tree, mutations)?;
-    Ok(BatchApplyResult::from_write_stats(
-        tree,
-        write_stats,
-        input_sorted,
-    ))
-}
-
-pub(crate) fn apply_with_stats_configured<S: Store>(
-    prolly: &Prolly<S>,
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "legacy facade oracle retained for root comparison"
+)]
+pub(crate) fn apply_with_stats_configured<M: super::write::CanonicalWriteManager>(
+    prolly: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     config: &ParallelConfig,
@@ -2269,27 +2275,34 @@ pub(crate) fn apply_with_stats_configured<S: Store>(
 }
 
 const BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 256;
+const ASYNC_BATCHED_VALUE_UPDATE_MIN_MUTATIONS: usize = 100;
 
-pub(crate) fn should_try_batched_value_updates<S: Store>(
-    prolly: &Prolly<S>,
+pub(crate) fn should_try_batched_value_updates<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutation_count: usize,
     policy: ExecutionPolicy,
 ) -> bool {
-    policy.enabled()
-        && policy.width() >= 4
-        && mutation_count >= BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    let scheduling_allowed =
+        M::EAGER_BATCHED_VALUE_UPDATES || (policy.enabled() && policy.width() >= 4);
+    let minimum_mutations = if M::EAGER_BATCHED_VALUE_UPDATES {
+        ASYNC_BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    } else {
+        BATCHED_VALUE_UPDATE_MIN_MUTATIONS
+    };
+    scheduling_allowed
+        && mutation_count >= minimum_mutations
         && tree.root.is_some()
-        && prolly.store().prefers_batch_reads()
+        && manager.write_store().prefers_batch_reads()
 }
 
-pub(crate) fn try_apply_batched_value_updates<S: Store>(
-    prolly: &Prolly<S>,
+pub(crate) fn try_apply_batched_value_updates<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     policy: ExecutionPolicy,
 ) -> Result<KeyStableBatchAttempt, Error> {
-    if !should_try_batched_value_updates(prolly, tree, mutations.len(), policy) {
+    if !should_try_batched_value_updates(manager, tree, mutations.len(), policy) {
         return Ok(KeyStableBatchAttempt::Fallback {
             mutations,
             parallel_width: 1,
@@ -2300,7 +2313,7 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     let mut route_parallel_width = 1usize;
     let mut route_parallel_tasks = 0usize;
     let groups = group_mutations_by_leaf_with_paths_batched(
-        prolly,
+        manager,
         tree,
         mutations,
         policy.read_width(),
@@ -2325,8 +2338,8 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     let leaf_policy = policy.limit_to(affected_leaves);
     let entries_streamed = groups.iter().map(|group| group.leaf.len()).sum();
     let mut collector = batch_write_collector(false);
-    let applied = apply_groups_coalesced(prolly, tree, groups, true, leaf_policy, &mut collector)?;
-    flush_batch_collector(prolly, &collector, false)?;
+    let applied = apply_groups_coalesced(manager, tree, groups, true, leaf_policy, &mut collector)?;
+    flush_batch_collector(manager, &collector, false)?;
 
     Ok(KeyStableBatchAttempt::Applied(Box::new(
         KeyStableBatchResult {
@@ -2349,8 +2362,10 @@ pub(crate) fn try_apply_batched_value_updates<S: Store>(
     )))
 }
 
-pub(crate) fn sampled_value_updates_are_likely_key_stable<S: Store>(
-    prolly: &Prolly<S>,
+pub(crate) fn sampled_value_updates_are_likely_key_stable<
+    M: super::write::CanonicalWriteManager,
+>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     policy: ExecutionPolicy,
@@ -2358,7 +2373,7 @@ pub(crate) fn sampled_value_updates_are_likely_key_stable<S: Store>(
     let mut parallel_width = 1usize;
     let mut parallel_tasks = 0usize;
     let groups = group_mutations_by_leaf_with_paths_batched(
-        prolly,
+        manager,
         tree,
         mutations,
         policy.read_width(),
@@ -2529,15 +2544,23 @@ pub(crate) fn apply_batch_with_rebuild<S: Store>(
     })
 }
 
-fn flush_batch_collector<S: Store>(
-    prolly: &Prolly<S>,
+fn flush_batch_collector<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     collector: &BatchWriteCollector,
     cache_written_nodes: bool,
 ) -> Result<(), Error> {
-    collector.flush(prolly.store())?;
-    prolly.record_batch_write_metrics(collector.len(), collector.bytes_len());
+    collector.flush(manager.write_store())?;
+    manager.write_record_batch_metrics(collector.len(), collector.bytes_len());
     if cache_written_nodes {
-        collector.cache_nodes(prolly)?;
+        if let Some(cache_nodes) = &collector.cache_nodes {
+            for (cid, node) in cache_nodes {
+                manager.write_cache_node(cid.clone(), node.clone());
+            }
+        } else {
+            for (cid, bytes) in &collector.nodes {
+                manager.write_cache_node(cid.clone(), Node::from_bytes(bytes)?);
+            }
+        }
     }
     Ok(())
 }
@@ -2685,8 +2708,8 @@ fn group_mutations_by_leaf_optimized<S: Store>(
     Ok(groups.into_iter().map(LeafMutationGroup::from).collect())
 }
 
-fn group_mutations_by_leaf_with_paths_batched<S: Store>(
-    prolly: &Prolly<S>,
+fn group_mutations_by_leaf_with_paths_batched<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     mutations: Vec<Mutation>,
     prefetch_parallelism: usize,
@@ -2702,7 +2725,11 @@ fn group_mutations_by_leaf_with_paths_batched<S: Store>(
         let mutations = Arc::new(mutations);
         let range = 0..mutations.len();
         return Ok(vec![LeafMutationGroupWithPath {
-            leaf: prolly.new_leaf_node(),
+            leaf: Node::builder()
+                .leaf(true)
+                .level(super::encoding::INIT_LEVEL)
+                .tree_format(tree.config.format.clone())
+                .build(),
             ancestors: vec![],
             ancestor_cids: vec![],
             route_path: None,
@@ -2724,14 +2751,16 @@ fn group_mutations_by_leaf_with_paths_batched<S: Store>(
             .iter()
             .map(|frame| frame.cid.clone())
             .collect::<Vec<_>>();
-        let execution = prolly.load_many_ordered_with_widths_and_stats(
-            &cids,
-            prefetch_parallelism,
-            decode_parallelism,
-        )?;
-        *parallel_width = (*parallel_width).max(execution.parallel_width);
-        *parallel_tasks = parallel_tasks.saturating_add(execution.parallel_tasks);
-        let nodes = execution.nodes;
+        let nodes =
+            manager.write_load_many_ordered_with_parallelism(&cids, prefetch_parallelism)?;
+        let admitted_width = cids
+            .len()
+            .min(prefetch_parallelism.max(1))
+            .min(decode_parallelism.max(1));
+        *parallel_width = (*parallel_width).max(admitted_width);
+        if admitted_width > 1 {
+            *parallel_tasks = parallel_tasks.saturating_add(cids.len().div_ceil(admitted_width));
+        }
         let mut next_frames = Vec::with_capacity(frames.len());
 
         for (frame, node) in frames.into_iter().zip(nodes) {
@@ -3480,8 +3509,8 @@ pub(crate) fn bottom_up_rebuild_groups<S: Store>(
     build_root_from_child_refs(prolly, root_refs.unwrap_or_default(), collector)
 }
 
-fn apply_groups_coalesced<S: Store>(
-    prolly: &Prolly<S>,
+fn apply_groups_coalesced<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     tree: &Tree,
     groups: Vec<LeafMutationGroupWithPath>,
     use_optimized_merge: bool,
@@ -3515,7 +3544,7 @@ fn apply_groups_coalesced<S: Store>(
             &mut contexts,
         );
 
-        let child_refs = child_refs_from_modified_node(prolly, modified_leaf, collector)?;
+        let child_refs = child_refs_from_modified_node(manager, modified_leaf, collector)?;
         if let Some((parent_cid, child_index)) =
             group_leaf_parent_from_parts(route_path.as_ref(), &ancestors, &ancestor_cids)?
         {
@@ -3539,7 +3568,7 @@ fn apply_groups_coalesced<S: Store>(
 
     if let Some(replacement) = root_replacement {
         return Ok(CoalescedApplyResult {
-            root: build_root_from_child_refs(prolly, replacement, collector)?,
+            root: build_root_from_child_refs(manager, replacement, collector)?,
         });
     }
 
@@ -3550,7 +3579,7 @@ fn apply_groups_coalesced<S: Store>(
         for (node_cid, replacements) in current {
             let context = contexts.get(&node_cid).ok_or(Error::InvalidNode)?;
             let replacement_refs =
-                apply_child_replacements(prolly, &context.node, replacements, collector)?;
+                apply_child_replacements(manager, &context.node, replacements, collector)?;
 
             if let Some(parent) = &context.parent {
                 pending
@@ -3565,7 +3594,7 @@ fn apply_groups_coalesced<S: Store>(
 
     let root_refs = root_refs.ok_or(Error::InvalidNode)?;
     Ok(CoalescedApplyResult {
-        root: build_root_from_child_refs(prolly, root_refs, collector)?,
+        root: build_root_from_child_refs(manager, root_refs, collector)?,
     })
 }
 
@@ -3732,8 +3761,8 @@ fn collect_ancestor_contexts(
     }
 }
 
-fn child_refs_from_modified_node<S: Store>(
-    prolly: &Prolly<S>,
+fn child_refs_from_modified_node<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     node: Node,
     collector: &mut BatchWriteCollector,
 ) -> Result<Vec<ChildRef>, Error> {
@@ -3758,13 +3787,13 @@ fn child_refs_from_modified_node<S: Store>(
     }
 
     Ok(child_refs_from_nodes(
-        split_node_canonical(prolly, &node)?,
+        split_node_canonical(manager, &node)?,
         collector,
     ))
 }
 
-fn apply_child_replacements<S: Store>(
-    prolly: &Prolly<S>,
+fn apply_child_replacements<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     node: &Node,
     mut replacements: ChildReplacements,
     collector: &mut BatchWriteCollector,
@@ -3794,7 +3823,7 @@ fn apply_child_replacements<S: Store>(
             "coalesced batch rebuild must preserve parent key order"
         );
 
-        return child_refs_from_modified_node(prolly, updated, collector);
+        return child_refs_from_modified_node(manager, updated, collector);
     }
 
     let replacement_len = node.len() - replacements.len()
@@ -3802,7 +3831,11 @@ fn apply_child_replacements<S: Store>(
             .iter()
             .map(|(_, children)| children.len())
             .sum::<usize>();
-    let mut updated = prolly.new_node_like(node);
+    let mut updated = Node::builder()
+        .leaf(node.leaf)
+        .level(node.level)
+        .tree_format(node.format.clone())
+        .build();
     reserve_node_entries(&mut updated, replacement_len);
     let mut replacements = replacements.into_iter().peekable();
 
@@ -3830,11 +3863,11 @@ fn apply_child_replacements<S: Store>(
         "coalesced batch rebuild must preserve parent key order"
     );
 
-    child_refs_from_modified_node(prolly, updated, collector)
+    child_refs_from_modified_node(manager, updated, collector)
 }
 
-fn build_root_from_child_refs<S: Store>(
-    prolly: &Prolly<S>,
+fn build_root_from_child_refs<M: super::write::CanonicalWriteManager>(
+    manager: &M,
     child_refs: Vec<ChildRef>,
     collector: &mut BatchWriteCollector,
 ) -> Result<Option<Cid>, Error> {
@@ -3861,7 +3894,7 @@ fn build_root_from_child_refs<S: Store>(
     let mut level = child_refs[0].level + 1;
 
     loop {
-        let parents = build_parent_nodes(prolly, &cids, &first_keys, &child_counts, level)?;
+        let parents = build_parent_nodes(manager, &cids, &first_keys, &child_counts, level)?;
         let parent_refs = child_refs_from_nodes(parents, collector);
 
         if parent_refs.len() == 1 {
@@ -3976,7 +4009,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<Tree, Error> {
-        super::write::apply_tree_configured(prolly, tree, mutations, &self.config)
+        prolly.parallel_batch(tree, mutations, &self.config)
     }
 
     /// Apply batch mutations and return store-neutral execution stats.
@@ -3991,7 +4024,7 @@ impl BatchWriter {
         tree: &Tree,
         mutations: Vec<Mutation>,
     ) -> Result<BatchApplyResult, Error> {
-        apply_with_stats_configured(prolly, tree, mutations, &self.config)
+        prolly.parallel_batch_with_stats(tree, mutations, &self.config)
     }
 }
 
@@ -5084,7 +5117,10 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(err, Error::InvalidNode));
+        assert!(
+            matches!(err, Error::InvalidNode),
+            "malformed rightmost root returned {err:?}"
+        );
     }
 
     #[test]

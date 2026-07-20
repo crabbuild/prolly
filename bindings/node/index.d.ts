@@ -427,6 +427,11 @@ export interface NodeRemoteEntryRecord {
   cid: Buffer
   node: Buffer
 }
+export interface NodeRemotePublicationHintRecord {
+  namespace: Buffer
+  key: Buffer
+  value: Buffer
+}
 export interface NodeRemoteNamedRootRecord {
   name: Buffer
   manifest: Buffer
@@ -459,6 +464,8 @@ export interface NodeRemoteStoreRequest {
   optionalBytes?: Array<NodeRemoteOptionalBytesRecord>
   mutations?: Array<NodeRemoteMutationRecord>
   entries?: Array<NodeRemoteEntryRecord>
+  publicationOrigin?: number
+  publicationHint?: NodeRemotePublicationHintRecord
   conditions?: Array<NodeRemoteRootConditionRecord>
   roots?: Array<NodeRemoteRootWriteRecord>
 }
@@ -596,6 +603,19 @@ export interface NodeHostStorePutRequest {
 }
 export interface NodeHostStoreBatchRequest {
   ops: Array<NodeMutationRecord>
+}
+export interface NodePublicationOriginRecord {
+  code: number
+}
+export interface NodeHostStorePublicationHintRecord {
+  namespace: Buffer
+  key: Buffer
+  value: Buffer
+}
+export interface NodeHostStorePublicationRequest {
+  nodes: Array<NodeEntryRecord>
+  hint?: NodeHostStorePublicationHintRecord
+  origin: NodePublicationOriginRecord
 }
 export interface NodeHostStoreBatchGetRequest {
   keys: Array<Buffer>
@@ -1533,7 +1553,7 @@ export declare class NativeMergePolicyRegistry {
   pushExactResolver(key: Buffer, resolver: (conflict: NodeConflictRecord) => NodeResolutionRecord): void
 }
 export declare class NativeHostStore {
-  constructor(get: (arg: NodeHostStoreKeyRequest) => NodeHostStoreBytesResult, put: (arg: NodeHostStorePutRequest) => NodeHostStoreUnitResult, delete: (arg: NodeHostStoreKeyRequest) => NodeHostStoreUnitResult, batch: (arg: NodeHostStoreBatchRequest) => NodeHostStoreUnitResult, batchGetOrdered: (arg: NodeHostStoreBatchGetRequest) => NodeHostStoreBatchGetResult, prefersBatchReads: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreBoolResult, supportsHints: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreBoolResult, getHint: (arg: NodeHostStoreHintRequest) => NodeHostStoreBytesResult, putHint: (arg: NodeHostStorePutHintRequest) => NodeHostStoreUnitResult, listNodeCids: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreListBytesResult, getRoot: (arg: NodeHostStoreRootRequest) => NodeHostStoreRootResult, putRoot: (arg: NodeHostStorePutRootRequest) => NodeHostStoreUnitResult, deleteRoot: (arg: NodeHostStoreRootRequest) => NodeHostStoreUnitResult, compareAndSwapRoot: (arg: NodeHostStoreCasRootRequest) => NodeHostStoreCasResult, listRoots: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreListRootsResult)
+  constructor(get: (arg: NodeHostStoreKeyRequest) => NodeHostStoreBytesResult, put: (arg: NodeHostStorePutRequest) => NodeHostStoreUnitResult, delete: (arg: NodeHostStoreKeyRequest) => NodeHostStoreUnitResult, batch: (arg: NodeHostStoreBatchRequest) => NodeHostStoreUnitResult, publishNodes: (arg: NodeHostStorePublicationRequest) => NodeHostStoreUnitResult, batchGetOrdered: (arg: NodeHostStoreBatchGetRequest) => NodeHostStoreBatchGetResult, prefersBatchReads: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreBoolResult, supportsHints: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreBoolResult, getHint: (arg: NodeHostStoreHintRequest) => NodeHostStoreBytesResult, putHint: (arg: NodeHostStorePutHintRequest) => NodeHostStoreUnitResult, listNodeCids: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreListBytesResult, getRoot: (arg: NodeHostStoreRootRequest) => NodeHostStoreRootResult, putRoot: (arg: NodeHostStorePutRootRequest) => NodeHostStoreUnitResult, deleteRoot: (arg: NodeHostStoreRootRequest) => NodeHostStoreUnitResult, compareAndSwapRoot: (arg: NodeHostStoreCasRootRequest) => NodeHostStoreCasResult, listRoots: (arg: NodeHostStoreEmptyRequest) => NodeHostStoreListRootsResult)
 }
 export declare class NativeProllyTransaction {
   create(): NodeTreeRecord

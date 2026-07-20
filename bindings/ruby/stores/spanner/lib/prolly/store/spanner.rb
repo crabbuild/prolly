@@ -30,7 +30,7 @@ module Prolly
 
     def descriptor
       value = StoreDescriptorRecord.new(
-        protocol_major: 1, adapter_name: 'spanner-v1', provider: 'spanner', schema_version: 1,
+        protocol_major: STORE_PROTOCOL_MAJOR, adapter_name: 'spanner-v1', provider: 'spanner', schema_version: 1,
         capabilities: StoreCapabilitiesRecord.new(
           native_batch_reads: false, atomic_batch_writes: true, node_scan: true,
           hints: true, atomic_nodes_and_hint: true, root_scan: true,

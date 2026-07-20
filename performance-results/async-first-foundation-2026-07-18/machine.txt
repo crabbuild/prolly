@@ -1,0 +1,9 @@
+date=2026-07-18
+os=Darwin 25.5.0 arm64
+cpu=Apple M2 Max
+memory_bytes=34359738368
+rustc=1.97.0 (2d8144b78 2026-07-07)
+cargo=1.97.0 (c980f4866 2026-06-30)
+llvm=22.1.6
+benchmark_profile=release optimized
+benchmark_commit=d8b7feb0a0d89b54de1099f3486bd9dd29abe4dd

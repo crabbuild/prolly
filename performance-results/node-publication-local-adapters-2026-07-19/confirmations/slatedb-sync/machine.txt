@@ -1,0 +1,8 @@
+captured_utc=2026-07-19T22:25:26Z
+Darwin Haipings-Mac-Studio.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:24 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6020 arm64
+rustc 1.97.0 (2d8144b78 2026-07-07)
+cargo 1.97.0 (c980f4866 2026-06-30)
+Apple M2 Max
+34359738368
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   460Gi   392Gi    19Gi    96%    4.2M  203M    2%   /System/Volumes/Data

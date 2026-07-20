@@ -1,4 +1,3 @@
-#[cfg(feature = "async-store")]
 mod r#async;
 pub mod catalog;
 pub mod composite;
@@ -12,10 +11,7 @@ use self::pq::ProductQuantizer;
 use super::ProximityTree;
 use crate::prolly::error::Error;
 use crate::prolly::store::Store;
-
-#[cfg(feature = "async-store")]
 pub(crate) use r#async::AsyncCompositeBase;
-#[cfg(feature = "async-store")]
 pub use r#async::{
     AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
     AsyncProductQuantizer,

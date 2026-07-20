@@ -12,11 +12,9 @@ use super::error::{Diff, Error};
 use super::key;
 use super::node::Node;
 use super::range::{RangeCursor, RangePage};
-#[cfg(feature = "async-store")]
 use super::store::AsyncStore;
 use super::store::Store;
 use super::tree::Tree;
-#[cfg(feature = "async-store")]
 use super::AsyncProlly;
 use super::Prolly;
 use serde::{Deserialize, Serialize};
@@ -838,38 +836,9 @@ impl<S: Store> Prolly<S> {
     /// The returned proof is self-contained and can be verified without access
     /// to this store. A valid proof may prove either key presence or absence.
     pub fn prove_key(&self, tree: &Tree, key: &[u8]) -> Result<KeyProof, Error> {
-        let mut path = Vec::new();
-
-        let Some(root_cid) = &tree.root else {
-            return Ok(KeyProof {
-                root: None,
-                key: key.to_vec(),
-                path,
-            });
-        };
-
-        let mut cid = root_cid.clone();
-        loop {
-            let node = self.load(&cid)?;
-            let is_leaf = node.leaf;
-            let child_index = path_child_index(&node, key);
-            path.push(node.clone());
-
-            if is_leaf {
-                break;
-            }
-
-            let Some(child_bytes) = node.vals.get(child_index) else {
-                return Err(Error::InvalidNode);
-            };
-            cid = cid_from_child_bytes(child_bytes).ok_or(Error::InvalidNode)?;
-        }
-
-        Ok(KeyProof {
-            root: Some(root_cid.clone()),
-            key: key.to_vec(),
-            path,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.prove_key(tree, key);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build one shared proof for multiple keys.
@@ -882,44 +851,9 @@ impl<S: Store> Prolly<S> {
         tree: &Tree,
         keys: &[K],
     ) -> Result<MultiKeyProof, Error> {
-        let keys = keys
-            .iter()
-            .map(|key| key.as_ref().to_vec())
-            .collect::<Vec<_>>();
-        let mut path = Vec::new();
-
-        let Some(root_cid) = &tree.root else {
-            return Ok(MultiKeyProof {
-                root: None,
-                keys,
-                path,
-            });
-        };
-
-        if keys.is_empty() {
-            return Ok(MultiKeyProof {
-                root: Some(root_cid.clone()),
-                keys,
-                path,
-            });
-        }
-
-        let mut seen = HashSet::new();
-        for key in &keys {
-            let key_proof = self.prove_key(tree, key)?;
-            for node in key_proof.path {
-                let cid = node.cid();
-                if seen.insert(cid) {
-                    path.push(node);
-                }
-            }
-        }
-
-        Ok(MultiKeyProof {
-            root: Some(root_cid.clone()),
-            keys,
-            path,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.prove_keys(tree, keys);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build a complete proof for every entry in `[start, end)`.
@@ -932,35 +866,9 @@ impl<S: Store> Prolly<S> {
         start: &[u8],
         end: Option<&[u8]>,
     ) -> Result<RangeProof, Error> {
-        let mut path = Vec::new();
-
-        let Some(root_cid) = &tree.root else {
-            return Ok(RangeProof {
-                root: None,
-                start: start.to_vec(),
-                end: end.map(<[u8]>::to_vec),
-                path,
-            });
-        };
-
-        if range_is_empty_by_bounds(start, end) {
-            return Ok(RangeProof {
-                root: Some(root_cid.clone()),
-                start: start.to_vec(),
-                end: end.map(<[u8]>::to_vec),
-                path,
-            });
-        }
-
-        let mut seen = HashSet::new();
-        self.collect_range_proof_nodes(root_cid, start, end, &mut seen, &mut path)?;
-
-        Ok(RangeProof {
-            root: Some(root_cid.clone()),
-            start: start.to_vec(),
-            end: end.map(<[u8]>::to_vec),
-            path,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.prove_range(tree, start, end);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Build a complete proof for every entry whose key starts with `prefix`.
@@ -969,8 +877,9 @@ impl<S: Store> Prolly<S> {
     /// [`crate::prefix_range`], but makes prefix/namespace proofs explicit at
     /// API boundaries.
     pub fn prove_prefix(&self, tree: &Tree, prefix: &[u8]) -> Result<RangeProof, Error> {
-        let (start, end) = key::prefix_range(prefix);
-        self.prove_range(tree, &start, end.as_deref())
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.prove_prefix(tree, prefix);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Read a bounded range page and build a proof for exactly that page window.
@@ -985,60 +894,9 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         limit: usize,
     ) -> Result<ProvedRangePage, Error> {
-        let after = cursor.after().map(<[u8]>::to_vec);
-
-        if limit == 0 {
-            let proof_end = after.clone().or_else(|| Some(Vec::new()));
-            return Ok(ProvedRangePage {
-                page: RangePage {
-                    entries: Vec::new(),
-                    next_cursor: Some(cursor.clone()),
-                },
-                proof: RangePageProof {
-                    root: tree.root.clone(),
-                    after,
-                    end: proof_end,
-                    path: Vec::new(),
-                },
-            });
-        }
-
-        let mut iter = self.range_from_cursor(tree, cursor, end)?;
-        let mut entries = Vec::with_capacity(limit);
-
-        for _ in 0..limit {
-            let Some(item) = iter.next() else {
-                let proof = self.prove_range_page_window(tree, after.as_deref(), end)?;
-                return Ok(ProvedRangePage {
-                    page: RangePage {
-                        entries,
-                        next_cursor: None,
-                    },
-                    proof,
-                });
-            };
-            entries.push(item?);
-        }
-
-        let lookahead = iter.next().transpose()?;
-        let proof_end = lookahead
-            .as_ref()
-            .map(|(key, _)| key.clone())
-            .or_else(|| end.map(<[u8]>::to_vec));
-        let proof = self.prove_range_page_window(tree, after.as_deref(), proof_end.as_deref())?;
-        let next_cursor = lookahead.as_ref().and_then(|_| {
-            entries
-                .last()
-                .map(|(key, _)| RangeCursor::after_key(key.clone()))
-        });
-
-        Ok(ProvedRangePage {
-            page: RangePage {
-                entries,
-                next_cursor,
-            },
-            proof,
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.prove_range_page(tree, cursor, end, limit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
     /// Read a bounded diff page and build a proof for exactly that page.
@@ -1054,80 +912,16 @@ impl<S: Store> Prolly<S> {
         end: Option<&[u8]>,
         limit: usize,
     ) -> Result<ProvedDiffPage, Error> {
-        let after = cursor.after().map(<[u8]>::to_vec);
-
-        if limit == 0 {
-            let proof_end = after.clone().or_else(|| Some(Vec::new()));
-            return Ok(ProvedDiffPage {
-                page: DiffPage {
-                    diffs: Vec::new(),
-                    next_cursor: Some(cursor.clone()),
-                },
-                proof: DiffPageProof {
-                    base: RangePageProof {
-                        root: base.root.clone(),
-                        after: after.clone(),
-                        end: proof_end.clone(),
-                        path: Vec::new(),
-                    },
-                    other: RangePageProof {
-                        root: other.root.clone(),
-                        after,
-                        end: proof_end,
-                        path: Vec::new(),
-                    },
-                    lookahead_base: None,
-                    lookahead_other: None,
-                    requested_end: end.map(<[u8]>::to_vec),
-                    limit,
-                },
-            });
-        }
-
-        let mut all_diffs = self.diff_from_cursor(base, other, cursor, end)?;
-        let has_more = all_diffs.len() > limit;
-        let lookahead_key = has_more.then(|| all_diffs[limit].key().to_vec());
-        if has_more {
-            all_diffs.truncate(limit);
-        }
-
-        let next_cursor = if has_more {
-            all_diffs
-                .last()
-                .map(|diff| RangeCursor::after_key(diff.key().to_vec()))
-        } else {
-            None
-        };
-        let proof_end = lookahead_key.clone().or_else(|| end.map(<[u8]>::to_vec));
-        let lookahead_base = lookahead_key
-            .as_ref()
-            .map(|key| self.prove_key(base, key))
-            .transpose()?;
-        let lookahead_other = lookahead_key
-            .as_ref()
-            .map(|key| self.prove_key(other, key))
-            .transpose()?;
-
-        Ok(ProvedDiffPage {
-            page: DiffPage {
-                diffs: all_diffs,
-                next_cursor,
-            },
-            proof: DiffPageProof {
-                base: self.prove_range_page_window(base, after.as_deref(), proof_end.as_deref())?,
-                other: self.prove_range_page_window(
-                    other,
-                    after.as_deref(),
-                    proof_end.as_deref(),
-                )?,
-                lookahead_base,
-                lookahead_other,
-                requested_end: end.map(<[u8]>::to_vec),
-                limit,
-            },
-        })
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.prove_diff_page(base, other, cursor, end, limit);
+        super::engine::ready::run_ready(ready_store.ready(future))
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async proofs"
+    )]
     fn prove_range_page_window(
         &self,
         tree: &Tree,
@@ -1164,6 +958,11 @@ impl<S: Store> Prolly<S> {
         })
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async proofs"
+    )]
     fn collect_range_proof_nodes(
         &self,
         cid: &Cid,
@@ -1199,6 +998,11 @@ impl<S: Store> Prolly<S> {
         Ok(())
     }
 
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "retained only as a correctness oracle for async proofs"
+    )]
     fn collect_range_page_proof_nodes(
         &self,
         cid: &Cid,
@@ -1235,8 +1039,6 @@ impl<S: Store> Prolly<S> {
         Ok(())
     }
 }
-
-#[cfg(feature = "async-store")]
 impl<S> AsyncProlly<S>
 where
     S: AsyncStore,

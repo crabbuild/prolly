@@ -40,7 +40,7 @@ public actor SQLiteRemoteStore: ForeignRemoteStore {
         )
         return StoreDescriptorResultRecord(
             value: StoreDescriptorRecord(
-                protocolMajor: 1, adapterName: "sqlite-v1", provider: "sqlite",
+                protocolMajor: 2, adapterName: "sqlite-v1", provider: "sqlite",
                 schemaVersion: 1, capabilities: capabilities, limits: limits
             ),
             error: nil

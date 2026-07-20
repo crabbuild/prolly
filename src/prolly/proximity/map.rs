@@ -3,8 +3,8 @@ use super::super::cid::Cid;
 use super::super::config::Config;
 use super::super::error::{Error, Mutation as TreeMutation};
 use super::super::read::{OwnedValueLease, ReadSession, ScanOutcome};
-use super::super::splice::{splice, SpliceStats};
-use super::super::store::Store;
+use super::super::splice::{splice_with_origin, SpliceStats};
+use super::super::store::{NodePublication, PublicationOrigin, Store};
 use super::super::Prolly;
 use super::builder::{build_hierarchy, build_hierarchy_parallel, IndexedRecord};
 use super::cache::{ContentCache, DEFAULT_PROXIMITY_CACHE_NODES};
@@ -163,7 +163,11 @@ where
         }
 
         let directory_config = Config::default();
-        let mut directory_builder = BatchBuilder::new(store.clone(), directory_config.clone());
+        let mut directory_builder = BatchBuilder::new_with_origin(
+            store.clone(),
+            directory_config.clone(),
+            PublicationOrigin::Maintenance,
+        );
         let mut indexed = Vec::with_capacity(records.len());
         for record in records {
             let stored = StoredRecord::new(
@@ -190,9 +194,7 @@ where
         };
         let descriptor_bytes = descriptor.encode();
         let descriptor_cid = Cid::from_bytes(&descriptor_bytes);
-        store
-            .put(descriptor_cid.as_bytes(), &descriptor_bytes)
-            .map_err(|error| Error::Store(Box::new(error)))?;
+        publish_maintenance_content(&store, &descriptor_cid, &descriptor_bytes)?;
 
         let stats = ProximityBuildStats {
             distance_evaluations: hierarchy.distance_evaluations,
@@ -409,8 +411,12 @@ where
                 },
             });
         }
-        let (directory_tree, directory_stats) =
-            splice(&self.directory, &self.tree.directory, directory_mutations)?;
+        let (directory_tree, directory_stats) = splice_with_origin(
+            &self.directory,
+            &self.tree.directory,
+            directory_mutations,
+            PublicationOrigin::Maintenance,
+        )?;
 
         if logical_edits.is_empty() {
             let descriptor = Descriptor {
@@ -421,9 +427,7 @@ where
             };
             let bytes = descriptor.encode();
             let descriptor_cid = Cid::from_bytes(&bytes);
-            self.store
-                .put(descriptor_cid.as_bytes(), &bytes)
-                .map_err(|error| Error::Store(Box::new(error)))?;
+            publish_maintenance_content(&self.store, &descriptor_cid, &bytes)?;
             let map = Self {
                 directory: Prolly::new(self.store.clone(), directory_tree.config.clone()),
                 store: self.store.clone(),
@@ -499,9 +503,7 @@ where
         };
         let descriptor_bytes = descriptor.encode();
         let descriptor_cid = Cid::from_bytes(&descriptor_bytes);
-        self.store
-            .put(descriptor_cid.as_bytes(), &descriptor_bytes)
-            .map_err(|error| Error::Store(Box::new(error)))?;
+        publish_maintenance_content(&self.store, &descriptor_cid, &descriptor_bytes)?;
         Ok((
             Self {
                 directory: Prolly::new(self.store.clone(), directory_tree.config.clone()),
@@ -1888,6 +1890,16 @@ fn load_content<S: Store>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
+fn publish_maintenance_content<S: Store>(store: &S, cid: &Cid, bytes: &[u8]) -> Result<(), Error> {
+    let entries = [(cid.as_bytes(), bytes)];
+    store
+        .publish_nodes(NodePublication::new(
+            &entries,
+            PublicationOrigin::Maintenance,
+        ))
+        .map_err(|error| Error::Store(Box::new(error)))
+}
+
 fn distance_budget_exhausted(request: &SearchRequest<'_>, stats: &ProximitySearchStats) -> bool {
     request
         .budget
@@ -1925,9 +1937,14 @@ fn put_missing_nodes<S: Store>(store: &S, nodes: &[(Cid, Vec<u8>)]) -> Result<us
                 .then_some((cid.as_bytes(), bytes.as_slice()))
         })
         .collect();
-    store
-        .batch_put(&missing)
-        .map_err(|error| Error::Store(Box::new(error)))?;
+    if !missing.is_empty() {
+        store
+            .publish_nodes(NodePublication::new(
+                &missing,
+                PublicationOrigin::Maintenance,
+            ))
+            .map_err(|error| Error::Store(Box::new(error)))?;
+    }
     Ok(missing.len())
 }
 

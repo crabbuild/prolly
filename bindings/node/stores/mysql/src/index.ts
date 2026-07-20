@@ -12,12 +12,14 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   upsertNode,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -61,7 +63,7 @@ export class MysqlStore implements RemoteStore {
     if (pool == null) throw new StoreError("invalid_argument", "MySQL pool is required");
     this.#pool = pool;
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1,
+      protocolMajor: 2,
       adapterName: options.adapterName?.trim() || "mysql-v1",
       provider: "mysql",
       schemaVersion: 1,
@@ -122,6 +124,10 @@ export class MysqlStore implements RemoteStore {
     return this.#run("batch_nodes", signal, () =>
       this.#transaction(signal, (connection) => applyNodeMutations(this, connection, owned, signal)),
     );
+  }
+
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> {
+    return publishNodesWithGeneralPath(this, publication, signal);
   }
 
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> {

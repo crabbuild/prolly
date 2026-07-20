@@ -7,12 +7,14 @@ import {
   normalizeOptionalBytes,
   ownBytes,
   presentBytes,
+  publishNodesWithGeneralPath,
   throwIfAborted,
   upsertNode,
   validateStoreDescriptor,
   type NamedStoreRoot,
   type NodeEntry,
   type NodeMutation,
+  type NodePublication,
   type OptionalBytes,
   type RemoteStore,
   type RootCasResult,
@@ -74,7 +76,7 @@ export class CosmosDbStore implements RemoteStore {
     this.#partition = options.partitionKey?.trim() || "prolly";
     this.#keyPrefix = Buffer.from(options.keyPrefix ?? Buffer.from("prolly:"));
     this.#descriptor = validateStoreDescriptor({
-      protocolMajor: 1, adapterName: options.adapterName?.trim() || "cosmosdb-v1", provider: "cosmosdb", schemaVersion: 1,
+      protocolMajor: 2, adapterName: options.adapterName?.trim() || "cosmosdb-v1", provider: "cosmosdb", schemaVersion: 1,
       capabilities: { nativeBatchReads: false, atomicBatchWrites: false, nodeScan: true, hints: true, atomicNodesAndHint: false, rootScan: true, rootCompareAndSwap: true, transactions: true, readParallelism: options.readParallelism ?? 16 },
       limits: { maxTransactionOperations: TRANSACTION_LIMIT },
     });
@@ -91,6 +93,7 @@ export class CosmosDbStore implements RemoteStore {
   async putNode(cid: Uint8Array, value: Uint8Array, signal?: AbortSignal): Promise<void> { return this.#upsert("node", this.#familyKey(NODE, cid), value, "put_node", signal); }
   async deleteNode(cid: Uint8Array, signal?: AbortSignal): Promise<void> { return this.#delete(this.#familyKey(NODE, cid), "", true, "delete_node", signal); }
   async batchNodes(operations: readonly NodeMutation[], signal?: AbortSignal): Promise<void> { for (const operation of operations.map(cloneMutation)) { if (operation.kind === "upsert") await this.putNode(operation.cid, operation.node, signal); else await this.deleteNode(operation.cid, signal); } }
+  async publishNodes(publication: NodePublication, signal?: AbortSignal): Promise<void> { return publishNodesWithGeneralPath(this, publication, signal); }
   async batchGetNodesOrdered(cids: readonly Uint8Array[], signal?: AbortSignal): Promise<OptionalBytes[]> { const result: OptionalBytes[] = []; for (const cid of cids) result.push(await this.getNode(cid, signal)); return result; }
 
   async listNodeCids(signal?: AbortSignal): Promise<Uint8Array[]> {

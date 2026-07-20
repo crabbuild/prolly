@@ -28,6 +28,9 @@ func (*remoteStoreStub) DeleteNode(context.Context, []byte) error      { return 
 func (*remoteStoreStub) BatchNodes(context.Context, []NodeMutation) error {
 	return nil
 }
+func (s *remoteStoreStub) PublishNodes(ctx context.Context, publication NodePublication) error {
+	return PublishNodesWithGeneralPath(ctx, s, publication)
+}
 func (*remoteStoreStub) BatchGetNodesOrdered(_ context.Context, keys [][]byte) ([]OptionalBytes, error) {
 	return make([]OptionalBytes, len(keys)), nil
 }
@@ -87,10 +90,11 @@ func TestAsyncEngineCancellationReachesStore(t *testing.T) {
 
 type memoryRemoteStore struct {
 	remoteStoreStub
-	mu    sync.Mutex
-	nodes map[string][]byte
-	hints map[string][]byte
-	roots map[string][]byte
+	mu           sync.Mutex
+	nodes        map[string][]byte
+	hints        map[string][]byte
+	roots        map[string][]byte
+	publications []NodePublication
 }
 
 func newMemoryRemoteStore() *memoryRemoteStore {
@@ -130,6 +134,28 @@ func (s *memoryRemoteStore) BatchNodes(_ context.Context, mutations []NodeMutati
 	defer s.mu.Unlock()
 	applyNodeMutations(s.nodes, mutations)
 	return nil
+}
+
+func (s *memoryRemoteStore) PublishNodes(ctx context.Context, publication NodePublication) error {
+	s.mu.Lock()
+	s.publications = append(s.publications, cloneNodePublication(publication))
+	s.mu.Unlock()
+	return PublishNodesWithGeneralPath(ctx, s, publication)
+}
+
+func cloneNodePublication(publication NodePublication) NodePublication {
+	cloned := NodePublication{Origin: publication.Origin, Nodes: make([]NodeEntry, len(publication.Nodes))}
+	for index, node := range publication.Nodes {
+		cloned.Nodes[index] = NodeEntry{Key: cloneRemoteBytes(node.Key), Value: cloneRemoteBytes(node.Value)}
+	}
+	if publication.Hint != nil {
+		cloned.Hint = &NodePublicationHint{
+			Namespace: cloneRemoteBytes(publication.Hint.Namespace),
+			Key:       cloneRemoteBytes(publication.Hint.Key),
+			Value:     cloneRemoteBytes(publication.Hint.Value),
+		}
+	}
+	return cloned
 }
 
 func (s *memoryRemoteStore) BatchGetNodesOrdered(_ context.Context, keys [][]byte) ([]OptionalBytes, error) {
@@ -259,7 +285,8 @@ func applyNodeMutations(nodes map[string][]byte, mutations []NodeMutation) {
 
 func TestAsyncEngineRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	engine, err := NewAsyncEngine(ctx, newMemoryRemoteStore(), nil)
+	store := newMemoryRemoteStore()
+	engine, err := NewAsyncEngine(ctx, store, nil)
 	if err != nil {
 		t.Fatalf("NewAsyncEngine: %v", err)
 	}
@@ -272,6 +299,20 @@ func TestAsyncEngineRoundTrip(t *testing.T) {
 	tree, err = engine.Put(ctx, tree, []byte("answer"), []byte("42"))
 	if err != nil {
 		t.Fatalf("Put: %v", err)
+	}
+	store.mu.Lock()
+	publicationCount := len(store.publications)
+	if publicationCount != 1 {
+		store.mu.Unlock()
+		t.Fatalf("publication count = %d, want 1", publicationCount)
+	}
+	publication := cloneNodePublication(store.publications[0])
+	store.mu.Unlock()
+	if publication.Origin != PublicationOriginPointUpsert {
+		t.Fatalf("publication origin = %d, want %d", publication.Origin, PublicationOriginPointUpsert)
+	}
+	if len(publication.Nodes) == 0 || publication.Hint == nil {
+		t.Fatalf("publication = %#v, want nodes and rightmost hint", publication)
 	}
 	value, found, err := engine.Get(ctx, tree, []byte("answer"))
 	if err != nil {

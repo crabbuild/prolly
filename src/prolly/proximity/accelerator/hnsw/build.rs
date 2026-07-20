@@ -6,7 +6,7 @@ use crate::prolly::proximity::distance::score;
 use crate::prolly::proximity::storage::StoredRecord;
 use crate::prolly::proximity::vector::promotion_level;
 use crate::prolly::proximity::ProximityMap;
-use crate::prolly::store::Store;
+use crate::prolly::store::{PublicationOrigin, Store};
 use crate::prolly::tree::Tree;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BinaryHeap, HashSet};
@@ -205,7 +205,8 @@ where
         }
     }
 
-    let mut builder = BatchBuilder::new(store, graph_config());
+    let mut builder =
+        BatchBuilder::new_with_origin(store, graph_config(), PublicationOrigin::Maintenance);
     let mut directed_edges = 0usize;
     let mut encoded_graph_bytes = 0usize;
     for node in &nodes {
