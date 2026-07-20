@@ -1,5 +1,5 @@
-use prolly_sqlite_pattern_bench::cli::{parse_args, USAGE};
-use prolly_sqlite_pattern_bench::harness::run_matrix;
+use prolly_sqlite_scale_bench::cli::{parse_args, USAGE};
+use prolly_sqlite_scale_bench::harness::run_matrix;
 
 fn main() {
     let config = match parse_args(std::env::args()) {

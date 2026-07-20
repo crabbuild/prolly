@@ -1,6 +1,6 @@
-use prolly_sqlite_pattern_bench::fixture::FixtureLayout;
-use prolly_sqlite_pattern_bench::model::{enumerate_cells, FixtureSpec, RunConfig};
-use prolly_sqlite_pattern_bench::sqlite_runner::{build_fixture, run_cell};
+use prolly_sqlite_scale_bench::fixture::FixtureLayout;
+use prolly_sqlite_scale_bench::model::{enumerate_cells, FixtureSpec, RunConfig};
+use prolly_sqlite_scale_bench::sqlite_runner::{build_fixture, run_cell};
 
 #[test]
 fn every_smoke_cell_validates() {
@@ -10,11 +10,18 @@ fn every_smoke_cell_validates() {
     let fixture = build_fixture(&FixtureSpec::from_config(&config, 100, 1), &layout).unwrap();
     assert!(fixture.validated);
     let cells = enumerate_cells(&config, 100, 1);
-    assert_eq!(cells.len(), 15);
+    assert_eq!(cells.len(), 25);
     for cell in cells {
         layout.clone_for(&cell).unwrap();
         let row = run_cell(&cell, &layout).unwrap();
         assert!(row.validated, "{cell:?}");
+        assert_eq!(
+            row.logical_operations,
+            cell.logical_operations(),
+            "{cell:?}"
+        );
+        assert_eq!(row.expected_entries, row.observed_entries, "{cell:?}");
+        assert_eq!(row.observed_items, cell.logical_operations(), "{cell:?}");
         layout.remove_cell(&cell).unwrap();
     }
 }

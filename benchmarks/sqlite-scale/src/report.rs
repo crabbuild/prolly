@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::measurement::{FixtureRow, RawRow};
-use crate::model::{CacheState, Operation, Pattern};
+use crate::model::{CacheState, Operation, Pattern, RunConfig};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SummaryRow {
@@ -90,14 +90,42 @@ pub fn write_report(
     path: &Path,
     summaries: &[SummaryRow],
     fixtures: &[FixtureRow],
+    config: &RunConfig,
 ) -> Result<(), String> {
     let mut file = File::create(path)
         .map_err(|error| format!("failed to create {}: {error}", path.display()))?;
-    writeln!(file, "# SQLite-backed prolly key-pattern benchmark\n")
-        .map_err(|error| error.to_string())?;
+    writeln!(file, "# SQLite prolly scale baseline\n").map_err(|error| error.to_string())?;
     writeln!(
         file,
         "All values below are medians of independent repetitions.\n"
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(file, "## Workload contract\n").map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- Sizes: {} records; repetitions: {}.",
+        config
+            .sizes
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+        config.runs
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- Mutations: {}; read/scan samples: {}.",
+        config
+            .changes
+            .map(|changes| changes.to_string())
+            .unwrap_or_else(|| "30% of each base".to_string()),
+        config.read_samples
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- Merge changes are the total across two equal, disjoint branches.\n"
     )
     .map_err(|error| error.to_string())?;
     writeln!(file, "## Workloads\n").map_err(|error| error.to_string())?;
@@ -123,8 +151,47 @@ pub fn write_report(
     writeln!(file, "\n## Fixture context\n").map_err(|error| error.to_string())?;
     writeln!(
         file,
-        "Validated fixture rows: {}.\n",
-        fixtures.iter().filter(|row| row.validated).count()
+        "| Records | Repetitions | Median build ms | Median records/s | Median database MiB |"
+    )
+    .map_err(|error| error.to_string())?;
+    writeln!(file, "|---:|---:|---:|---:|---:|").map_err(|error| error.to_string())?;
+    let mut grouped = BTreeMap::<usize, Vec<&FixtureRow>>::new();
+    for fixture in fixtures.iter().filter(|fixture| fixture.validated) {
+        grouped.entry(fixture.records).or_default().push(fixture);
+    }
+    for (records, group) in grouped {
+        let mut build_ns = group.iter().map(|row| row.build_ns).collect::<Vec<_>>();
+        let mut rates = group
+            .iter()
+            .map(|row| row.records_per_sec)
+            .collect::<Vec<_>>();
+        let mut bytes = group
+            .iter()
+            .map(|row| row.database_bytes)
+            .collect::<Vec<_>>();
+        build_ns.sort_unstable();
+        rates.sort_by(f64::total_cmp);
+        bytes.sort_unstable();
+        let middle = group.len() / 2;
+        writeln!(
+            file,
+            "| {records} | {} | {:.3} | {:.1} | {:.2} |",
+            group.len(),
+            build_ns[middle] as f64 / 1_000_000.0,
+            rates[middle],
+            bytes[middle] as f64 / (1024.0 * 1024.0)
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    writeln!(file).map_err(|error| error.to_string())?;
+    writeln!(file, "## Measurement boundaries\n").map_err(|error| error.to_string())?;
+    writeln!(file, "- Fixture cloning, diff/merge branch setup, validation, stats, publication, and reopen checks are outside timed intervals.")
+        .map_err(|error| error.to_string())?;
+    writeln!(file, "- Scans include full iterator consumption; cold point gets clear the manager cache before every lookup.")
+        .map_err(|error| error.to_string())?;
+    writeln!(
+        file,
+        "- Each workload cell uses an isolated clone of a closed SQLite fixture.\n"
     )
     .map_err(|error| error.to_string())?;
     writeln!(file, "## Interpretation limits\n").map_err(|error| error.to_string())?;
