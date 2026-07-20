@@ -1,2 +1,0 @@
-version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
-original,normal,10000,3,clustered_conflict_resolved_merge,50,346042,6920.840,144491.131,6,0,46026,0,0,6,0,10000,40,39,1,1,414221,483328,528384,0,0,528384,44,444905,true,ok

@@ -1,2 +1,0 @@
-version,profile,records,run,workload,operations,total_ns,ns_per_op,ops_per_sec,nodes_read,nodes_written,bytes_read,bytes_written,cache_hits,cache_misses,cache_evictions,result_entries,num_nodes,num_leaves,num_internal,height,tree_bytes,db_bytes_before,db_bytes_after,wal_bytes_after,shm_bytes_after,fixture_bytes_after,sqlite_node_count,sqlite_node_payload_bytes,validated,status
-current,normal,50000,5,clustered_sparse_diff,500,1929750,3859.500,259100.920,8,0,78336,0,2,8,0,50000,187,186,1,1,2079577,2375680,2420736,0,32768,2453504,191,2118745,true,ok

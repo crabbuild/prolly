@@ -1,7 +1,0 @@
-check,value,status
-common_rows,1410,PASS
-lifecycle_rows,195,PASS
-winner_flip_groups,14,WARN
-median_cv_percent,4.913,PASS
-p95_cv_percent,72.645,PASS
-max_cv_percent,137.183,PASS
