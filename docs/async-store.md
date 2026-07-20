@@ -131,8 +131,9 @@ their own CID and format validators.
   large blobs in separate namespaces and verify content IDs at the trust
   boundary.
 
-The local SQLite/Turso comparison and its reproducible runner are documented in
-[`sqlite-turso-local-performance.md`](sqlite-turso-local-performance.md).
+The current local Turso scale baseline and its reproducible runner are documented in
+[`turso-scale-benchmark.md`](turso-scale-benchmark.md). Historical SQLite/Turso
+comparison results remain in their dated `performance-results` directories.
 
 ## Minimal examples
 

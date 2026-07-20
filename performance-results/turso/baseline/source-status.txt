@@ -1,0 +1,62 @@
+ M benchmarks/postgres-scale/Cargo.lock
+ M benchmarks/postgres-scale/src/cli.rs
+ M benchmarks/postgres-scale/src/harness.rs
+ M benchmarks/postgres-scale/src/model.rs
+ M benchmarks/postgres-scale/src/workloads.rs
+ D benchmarks/sqlite-prolly-patterns/Cargo.lock
+ D benchmarks/sqlite-prolly-patterns/Cargo.toml
+ D benchmarks/sqlite-prolly-patterns/src/cli.rs
+ D benchmarks/sqlite-prolly-patterns/src/fixture.rs
+ D benchmarks/sqlite-prolly-patterns/src/harness.rs
+ D benchmarks/sqlite-prolly-patterns/src/lib.rs
+ D benchmarks/sqlite-prolly-patterns/src/main.rs
+ D benchmarks/sqlite-prolly-patterns/src/measurement.rs
+ D benchmarks/sqlite-prolly-patterns/src/model.rs
+ D benchmarks/sqlite-prolly-patterns/src/report.rs
+ D benchmarks/sqlite-prolly-patterns/src/sqlite_runner.rs
+ D benchmarks/sqlite-prolly-patterns/tests/matrix.rs
+ D benchmarks/sqlite-prolly-patterns/tests/measurement_fixture.rs
+ D benchmarks/sqlite-prolly-patterns/tests/model_cli.rs
+ D benchmarks/sqlite-prolly-patterns/tests/sqlite_smoke.rs
+ D benchmarks/sqlite-turso-local/Cargo.lock
+ D benchmarks/sqlite-turso-local/Cargo.toml
+ D benchmarks/sqlite-turso-local/src/cli.rs
+ D benchmarks/sqlite-turso-local/src/fixture.rs
+ D benchmarks/sqlite-turso-local/src/harness.rs
+ D benchmarks/sqlite-turso-local/src/lib.rs
+ D benchmarks/sqlite-turso-local/src/main.rs
+ D benchmarks/sqlite-turso-local/src/measurement.rs
+ D benchmarks/sqlite-turso-local/src/model.rs
+ D benchmarks/sqlite-turso-local/src/sqlite_runner.rs
+ D benchmarks/sqlite-turso-local/src/turso_runner.rs
+ D benchmarks/sqlite-turso-local/tests/local_smoke.rs
+ M docs/async-store.md
+ D docs/sqlite-prolly-pattern-benchmark.md
+ D docs/sqlite-turso-local-performance.md
+ M scripts/run_postgres_scale_benchmark.sh
+ D scripts/run_sqlite_prolly_pattern_benchmark.sh
+ D scripts/run_sqlite_turso_local_comparison.sh
+ M scripts/summarize_postgres_scale_benchmark.py
+ D scripts/tests/test_run_sqlite_turso_local_comparison.py
+ M scripts/tests/test_summarize_postgres_scale_benchmark.py
+ M stores/prolly-store-turso/Cargo.toml
+?? benchmarks/sqlite-scale/
+?? benchmarks/turso-scale/
+?? bindings/kotlin/.gradle/
+?? docs/sqlite-scale-benchmark.md
+?? docs/superpowers/plans/2026-07-19-postgres-1m-30pct-baseline.md
+?? docs/superpowers/plans/2026-07-19-sqlite-1m-30pct-baseline.md
+?? docs/superpowers/plans/2026-07-19-turso-1m-30pct-baseline.md
+?? docs/superpowers/specs/2026-07-19-postgres-1m-30pct-baseline-design.md
+?? docs/superpowers/specs/2026-07-19-sqlite-1m-30pct-baseline-design.md
+?? docs/superpowers/specs/2026-07-19-turso-1m-30pct-baseline-design.md
+?? docs/turso-scale-benchmark.md
+?? dolt/
+?? graphify-out/
+?? performance-results/postgres/
+?? performance-results/sqlite/
+?? performance-results/turso/
+?? scripts/run_sqlite_scale_benchmark.sh
+?? scripts/run_turso_scale_benchmark.sh
+?? scripts/tests/test_run_turso_scale_benchmark.py
+?? zvec/
