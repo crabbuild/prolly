@@ -165,6 +165,11 @@ fully offline 1,536-dimensional `ProximityMap` that persists its corpus and
 named descriptor in SQLite, reopens it across process runs, and emits ranked
 RAG citations plus an LLM-ready context block.
 
+Native Rust store adapters live under [`stores/`](stores/). The
+[`prolly-store-turso`](stores/prolly-store-turso/README.md) adapter embeds the
+native async Turso Database engine for local storage and optionally exposes
+explicit Turso Cloud push/pull behind its `sync` Cargo feature.
+
 ## Key helpers
 
 Keys are raw bytes and sort lexicographically. For application-level schemas,
