@@ -1,3 +1,5 @@
+#[path = "prolly_benchmark_support/config.rs"]
+mod benchmark_config;
 #[path = "prolly_version_support/mod.rs"]
 mod support;
 
@@ -6,7 +8,7 @@ use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Instant;
 
-use prolly::{Config, MapVersion, MemStore, Mutation, Prolly};
+use prolly::{MapVersion, MemStore, Mutation, Prolly};
 use support::{
     base_mutations, branch_mutations, digest_bytes, digest_entry, digest_u64, key_for_id,
     value_for, Locality, FNV_OFFSET,
@@ -118,7 +120,10 @@ fn parse_args() -> Args {
 }
 
 fn run_publish(args: &Args) -> Vec<Measurement<'static>> {
-    let manager = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let manager = Prolly::new(
+        Arc::new(MemStore::new()),
+        benchmark_config::benchmark_config(),
+    );
     let map = manager.versioned_map(b"version-lifecycle-publish");
     let base = map
         .apply_at_millis(base_mutations(args.records), 1)
@@ -152,12 +157,14 @@ fn run_publish(args: &Args) -> Vec<Measurement<'static>> {
 }
 
 fn run_read(args: &Args) -> Vec<Measurement<'static>> {
-    let manager = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let manager = Prolly::new(
+        Arc::new(MemStore::new()),
+        benchmark_config::benchmark_config(),
+    );
     let map = manager.versioned_map(b"version-lifecycle-read");
-    let versions = build_history(&map, args.records);
+    let (versions, history_digest) = build_history(&map, args.records);
     let head_id = versions.last().expect("history has head").id.clone();
     let base_count = args.records;
-    let history_digest = digest_versions(&versions);
     let mut rows = Vec::new();
 
     let started = Instant::now();
@@ -271,12 +278,14 @@ fn run_read(args: &Args) -> Vec<Measurement<'static>> {
 }
 
 fn run_rollback(args: &Args) -> Vec<Measurement<'static>> {
-    let manager = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let manager = Prolly::new(
+        Arc::new(MemStore::new()),
+        benchmark_config::benchmark_config(),
+    );
     let map = manager.versioned_map(b"version-lifecycle-rollback");
-    let versions = build_history(&map, args.records);
+    let (versions, workload) = build_history(&map, args.records);
     let first = &versions[HISTORY_DEPTH / 4].id;
     let second = &versions[HISTORY_DEPTH * 3 / 4].id;
-    let workload = digest_versions(&versions);
     let started = Instant::now();
     let mut result_digest = FNV_OFFSET;
     for index in 0..ROLLBACK_REPETITIONS {
@@ -301,13 +310,15 @@ fn run_rollback(args: &Args) -> Vec<Measurement<'static>> {
 }
 
 fn run_prune(args: &Args) -> Vec<Measurement<'static>> {
-    let manager = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let manager = Prolly::new(
+        Arc::new(MemStore::new()),
+        benchmark_config::benchmark_config(),
+    );
     let map = manager.versioned_map(b"version-lifecycle-prune");
-    let versions = build_history(&map, args.records);
+    let (versions, workload) = build_history(&map, args.records);
     let old_head = versions[HISTORY_DEPTH / 4].id.clone();
     map.rollback_to(&old_head)
         .expect("pre-prune rollback succeeds");
-    let workload = digest_versions(&versions);
     let started = Instant::now();
     let result = map.prune_versions(black_box(10)).expect("pruning succeeds");
     let elapsed = started.elapsed().as_nanos();
@@ -333,27 +344,29 @@ fn run_prune(args: &Args) -> Vec<Measurement<'static>> {
 fn build_history<'a>(
     map: &prolly::VersionedMap<'a, Arc<MemStore>>,
     records: usize,
-) -> Vec<MapVersion> {
+) -> (Vec<MapVersion>, u64) {
     let mut versions = Vec::with_capacity(HISTORY_DEPTH);
+    let base = base_mutations(records);
+    let mut workload_digest =
+        support::workload_digest(records, "lifecycle-history-v1", &[base.as_slice()]);
     versions.push(
-        map.apply_at_millis(base_mutations(records), 1)
+        map.apply_at_millis(base, 1)
             .expect("base history version publishes"),
     );
     for index in 1..HISTORY_DEPTH {
         let position = index % records;
+        let key = key_for_id(position * 2);
+        let val = value_for((position * 2) as u64, 10 + index as u64);
+        workload_digest = digest_u64(workload_digest, 1);
+        workload_digest = digest_bytes(workload_digest, &[1]);
+        workload_digest = digest_entry(workload_digest, &key, &val);
         versions.push(
-            map.apply_at_millis(
-                vec![Mutation::Upsert {
-                    key: key_for_id(position * 2),
-                    val: value_for((position * 2) as u64, 10 + index as u64),
-                }],
-                index as u64 + 1,
-            )
-            .expect("history version publishes"),
+            map.apply_at_millis(vec![Mutation::Upsert { key, val }], index as u64 + 1)
+                .expect("history version publishes"),
         );
     }
     assert_eq!(map.versions().expect("history lists").len(), HISTORY_DEPTH);
-    versions
+    (versions, digest_u64(workload_digest, HISTORY_DEPTH as u64))
 }
 
 fn historical_read_digest<S: prolly::Store>(

@@ -1,3 +1,5 @@
+#[path = "prolly_benchmark_support/config.rs"]
+mod benchmark_config;
 #[path = "prolly_version_support/mod.rs"]
 mod support;
 
@@ -16,8 +18,7 @@ unsafe extern "C" {
 }
 
 use prolly::{
-    BorrowedMergeResolver, Config, ConflictRef, Diff, MemStore, MergeDecision, Mutation, Prolly,
-    Tree,
+    BorrowedMergeResolver, ConflictRef, Diff, MemStore, MergeDecision, Mutation, Prolly, Tree,
 };
 use support::{
     base_mutations, branch_mutations, change_count, conflicting_mutations, digest_diffs,
@@ -50,7 +51,10 @@ fn main() {
 }
 
 fn run(args: &Args) -> Vec<Measurement<'static>> {
-    let manager = Prolly::new(Arc::new(MemStore::new()), Config::default());
+    let manager = Prolly::new(
+        Arc::new(MemStore::new()),
+        benchmark_config::benchmark_config(),
+    );
     let base = build(&manager, None, base_mutations(args.records));
     let base_summary = tree_summary(&manager, &base);
     assert_eq!(base_summary.0, args.records);

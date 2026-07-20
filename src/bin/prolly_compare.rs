@@ -1,3 +1,6 @@
+#[path = "prolly_benchmark_support/config.rs"]
+mod benchmark_config;
+
 use std::env;
 use std::hint::black_box;
 use std::sync::Arc;
@@ -127,7 +130,14 @@ fn run_scenario(args: &Args) -> ScenarioResult {
     if let Some(max_bytes) = env_usize("PROLLY_COMPARE_CACHE_BYTES") {
         config = config.node_cache_max_bytes(max_bytes);
     }
-    let manager = Prolly::new(store, config.build());
+    let explicit_limits = env::var_os("PROLLY_COMPARE_CACHE_NODES").is_some()
+        || env::var_os("PROLLY_COMPARE_CACHE_BYTES").is_some();
+    let config = if explicit_limits {
+        config.build()
+    } else {
+        benchmark_config::benchmark_config()
+    };
+    let manager = Prolly::new(store, config);
     let (tree, write_operations, write_elapsed, digest, result_count) = match args.phase {
         Phase::Fresh => {
             let (tree, elapsed, digest) = build_fresh(&manager, args.records, args.workload);
