@@ -1,0 +1,542 @@
+prolly-redis-scale-bench v0.0.0 (/Users/haipingfu/CrabDB/prolly/benchmarks/redis-scale)
+├── csv feature "default"
+│   └── csv v1.4.0
+│       ├── csv-core feature "default"
+│       │   └── csv-core v0.1.13
+│       │       └── memchr v2.8.3
+│       ├── itoa feature "default"
+│       │   └── itoa v1.0.18
+│       ├── ryu feature "default"
+│       │   └── ryu v1.0.23
+│       └── serde_core feature "default"
+│           ├── serde_core v1.0.229
+│           ├── serde_core feature "result"
+│           │   └── serde_core v1.0.229
+│           └── serde_core feature "std"
+│               └── serde_core v1.0.229
+├── fs2 feature "default"
+│   └── fs2 v0.4.3
+│       └── libc feature "default"
+│           ├── libc v0.2.186
+│           └── libc feature "std"
+│               └── libc v0.2.186
+├── prolly-map feature "async-store"
+│   └── prolly-map v0.4.0 (/Users/haipingfu/CrabDB/prolly)
+│       ├── futures-util feature "default"
+│       │   ├── futures-util v0.3.33
+│       │   │   ├── futures-core v0.3.33
+│       │   │   ├── futures-macro v0.3.33 (proc-macro)
+│       │   │   │   ├── proc-macro2 feature "default"
+│       │   │   │   │   ├── proc-macro2 v1.0.107
+│       │   │   │   │   │   └── unicode-ident feature "default"
+│       │   │   │   │   │       └── unicode-ident v1.0.24
+│       │   │   │   │   └── proc-macro2 feature "proc-macro"
+│       │   │   │   │       └── proc-macro2 v1.0.107 (*)
+│       │   │   │   ├── quote feature "default"
+│       │   │   │   │   ├── quote v1.0.47
+│       │   │   │   │   │   └── proc-macro2 v1.0.107 (*)
+│       │   │   │   │   └── quote feature "proc-macro"
+│       │   │   │   │       ├── quote v1.0.47 (*)
+│       │   │   │   │       └── proc-macro2 feature "proc-macro" (*)
+│       │   │   │   ├── syn feature "default"
+│       │   │   │   │   ├── syn v2.0.119
+│       │   │   │   │   │   ├── proc-macro2 v1.0.107 (*)
+│       │   │   │   │   │   ├── quote v1.0.47 (*)
+│       │   │   │   │   │   └── unicode-ident feature "default" (*)
+│       │   │   │   │   ├── syn feature "clone-impls"
+│       │   │   │   │   │   └── syn v2.0.119 (*)
+│       │   │   │   │   ├── syn feature "derive"
+│       │   │   │   │   │   └── syn v2.0.119 (*)
+│       │   │   │   │   ├── syn feature "parsing"
+│       │   │   │   │   │   └── syn v2.0.119 (*)
+│       │   │   │   │   ├── syn feature "printing"
+│       │   │   │   │   │   └── syn v2.0.119 (*)
+│       │   │   │   │   └── syn feature "proc-macro"
+│       │   │   │   │       ├── syn v2.0.119 (*)
+│       │   │   │   │       ├── proc-macro2 feature "proc-macro" (*)
+│       │   │   │   │       └── quote feature "proc-macro" (*)
+│       │   │   │   └── syn feature "full"
+│       │   │   │       └── syn v2.0.119 (*)
+│       │   │   ├── futures-sink v0.3.33
+│       │   │   ├── futures-task v0.3.33
+│       │   │   ├── slab v0.4.12
+│       │   │   └── pin-project-lite feature "default"
+│       │   │       └── pin-project-lite v0.2.17
+│       │   ├── futures-util feature "async-await"
+│       │   │   └── futures-util v0.3.33 (*)
+│       │   ├── futures-util feature "async-await-macro"
+│       │   │   ├── futures-util v0.3.33 (*)
+│       │   │   ├── futures-util feature "async-await" (*)
+│       │   │   └── futures-util feature "futures-macro"
+│       │   │       └── futures-util v0.3.33 (*)
+│       │   └── futures-util feature "std"
+│       │       ├── futures-util v0.3.33 (*)
+│       │       ├── futures-util feature "alloc"
+│       │       │   ├── futures-util v0.3.33 (*)
+│       │       │   ├── futures-util feature "slab"
+│       │       │   │   └── futures-util v0.3.33 (*)
+│       │       │   ├── futures-core feature "alloc"
+│       │       │   │   └── futures-core v0.3.33
+│       │       │   └── futures-task feature "alloc"
+│       │       │       └── futures-task v0.3.33
+│       │       ├── futures-util feature "slab" (*)
+│       │       ├── futures-core feature "std"
+│       │       │   ├── futures-core v0.3.33
+│       │       │   └── futures-core feature "alloc" (*)
+│       │       ├── futures-task feature "std"
+│       │       │   ├── futures-task v0.3.33
+│       │       │   └── futures-task feature "alloc" (*)
+│       │       └── slab feature "std"
+│       │           └── slab v0.4.12
+│       ├── mimalloc feature "default"
+│       │   └── mimalloc v0.1.52
+│       │       └── libmimalloc-sys v0.1.49
+│       │           [build-dependencies]
+│       │           └── cc feature "default"
+│       │               └── cc v1.3.0
+│       │                   ├── find-msvc-tools feature "default"
+│       │                   │   └── find-msvc-tools v0.1.9
+│       │                   └── shlex feature "default"
+│       │                       ├── shlex v2.0.1
+│       │                       └── shlex feature "std"
+│       │                           └── shlex v2.0.1
+│       ├── rayon feature "default"
+│       │   └── rayon v1.12.0
+│       │       ├── either v1.16.0
+│       │       └── rayon-core feature "default"
+│       │           └── rayon-core v1.13.0
+│       │               ├── crossbeam-deque feature "default"
+│       │               │   ├── crossbeam-deque v0.8.7
+│       │               │   │   ├── crossbeam-epoch v0.9.20
+│       │               │   │   │   └── crossbeam-utils v0.8.22
+│       │               │   │   └── crossbeam-utils v0.8.22
+│       │               │   └── crossbeam-deque feature "std"
+│       │               │       ├── crossbeam-deque v0.8.7 (*)
+│       │               │       ├── crossbeam-epoch feature "std"
+│       │               │       │   ├── crossbeam-epoch v0.9.20 (*)
+│       │               │       │   ├── crossbeam-epoch feature "alloc"
+│       │               │       │   │   └── crossbeam-epoch v0.9.20 (*)
+│       │               │       │   └── crossbeam-utils feature "std"
+│       │               │       │       └── crossbeam-utils v0.8.22
+│       │               │       └── crossbeam-utils feature "std" (*)
+│       │               └── crossbeam-utils feature "default"
+│       │                   ├── crossbeam-utils v0.8.22
+│       │                   └── crossbeam-utils feature "std" (*)
+│       ├── serde feature "default"
+│       │   ├── serde v1.0.229
+│       │   │   ├── serde_core feature "result" (*)
+│       │   │   └── serde_derive feature "default"
+│       │   │       └── serde_derive v1.0.229 (proc-macro)
+│       │   │           ├── proc-macro2 feature "proc-macro" (*)
+│       │   │           ├── quote feature "proc-macro" (*)
+│       │   │           ├── syn feature "clone-impls"
+│       │   │           │   └── syn v3.0.2
+│       │   │           │       ├── proc-macro2 v1.0.107 (*)
+│       │   │           │       ├── quote v1.0.47 (*)
+│       │   │           │       └── unicode-ident feature "default" (*)
+│       │   │           ├── syn feature "derive"
+│       │   │           │   └── syn v3.0.2 (*)
+│       │   │           ├── syn feature "parsing"
+│       │   │           │   └── syn v3.0.2 (*)
+│       │   │           ├── syn feature "printing"
+│       │   │           │   └── syn v3.0.2 (*)
+│       │   │           └── syn feature "proc-macro"
+│       │   │               ├── syn v3.0.2 (*)
+│       │   │               ├── proc-macro2 feature "proc-macro" (*)
+│       │   │               └── quote feature "proc-macro" (*)
+│       │   └── serde feature "std"
+│       │       ├── serde v1.0.229 (*)
+│       │       └── serde_core feature "std" (*)
+│       ├── serde feature "derive"
+│       │   ├── serde v1.0.229 (*)
+│       │   └── serde feature "serde_derive"
+│       │       └── serde v1.0.229 (*)
+│       ├── serde_cbor feature "default"
+│       │   ├── serde_cbor v0.11.2
+│       │   │   ├── serde v1.0.229 (*)
+│       │   │   └── half feature "default"
+│       │   │       └── half v1.8.3
+│       │   └── serde_cbor feature "std"
+│       │       ├── serde_cbor v0.11.2 (*)
+│       │       └── serde feature "std" (*)
+│       ├── serde_json feature "default"
+│       │   ├── serde_json v1.0.151
+│       │   │   ├── memchr v2.8.3
+│       │   │   ├── serde_core v1.0.229
+│       │   │   ├── itoa feature "default" (*)
+│       │   │   └── zmij feature "default"
+│       │   │       └── zmij v1.0.23
+│       │   └── serde_json feature "std"
+│       │       ├── serde_json v1.0.151 (*)
+│       │       ├── memchr feature "std"
+│       │       │   ├── memchr v2.8.3
+│       │       │   └── memchr feature "alloc"
+│       │       │       └── memchr v2.8.3
+│       │       └── serde_core feature "std" (*)
+│       ├── sha2 feature "asm-aarch64"
+│       │   ├── sha2 v0.10.9
+│       │   │   ├── cfg-if feature "default"
+│       │   │   │   └── cfg-if v1.0.4
+│       │   │   ├── cpufeatures feature "default"
+│       │   │   │   └── cpufeatures v0.2.17
+│       │   │   │       └── libc v0.2.186
+│       │   │   ├── digest feature "default"
+│       │   │   │   ├── digest v0.10.7
+│       │   │   │   │   ├── block-buffer feature "default"
+│       │   │   │   │   │   └── block-buffer v0.10.4
+│       │   │   │   │   │       └── generic-array feature "default"
+│       │   │   │   │   │           └── generic-array v0.14.7
+│       │   │   │   │   │               └── typenum feature "default"
+│       │   │   │   │   │                   └── typenum v1.20.1
+│       │   │   │   │   │               [build-dependencies]
+│       │   │   │   │   │               └── version_check feature "default"
+│       │   │   │   │   │                   └── version_check v0.9.5
+│       │   │   │   │   └── crypto-common feature "default"
+│       │   │   │   │       └── crypto-common v0.1.7
+│       │   │   │   │           ├── generic-array feature "default" (*)
+│       │   │   │   │           ├── generic-array feature "more_lengths"
+│       │   │   │   │           │   └── generic-array v0.14.7 (*)
+│       │   │   │   │           └── typenum feature "default" (*)
+│       │   │   │   └── digest feature "core-api"
+│       │   │   │       ├── digest v0.10.7 (*)
+│       │   │   │       └── digest feature "block-buffer"
+│       │   │   │           └── digest v0.10.7 (*)
+│       │   │   └── sha2-asm feature "default"
+│       │   │       └── sha2-asm v0.6.4
+│       │   │           [build-dependencies]
+│       │   │           └── cc feature "default" (*)
+│       │   └── sha2 feature "asm"
+│       │       ├── sha2 v0.10.9 (*)
+│       │       └── sha2 feature "sha2-asm"
+│       │           └── sha2 v0.10.9 (*)
+│       ├── sha2 feature "default"
+│       │   ├── sha2 v0.10.9 (*)
+│       │   └── sha2 feature "std"
+│       │       ├── sha2 v0.10.9 (*)
+│       │       └── digest feature "std"
+│       │           ├── digest v0.10.7 (*)
+│       │           ├── digest feature "alloc"
+│       │           │   └── digest v0.10.7 (*)
+│       │           └── crypto-common feature "std"
+│       │               └── crypto-common v0.1.7 (*)
+│       ├── xxhash-rust feature "default"
+│       │   └── xxhash-rust v0.8.17
+│       └── xxhash-rust feature "xxh64"
+│           └── xxhash-rust v0.8.17
+├── prolly-map feature "default"
+│   └── prolly-map v0.4.0 (/Users/haipingfu/CrabDB/prolly) (*)
+├── serde feature "default" (*)
+├── serde feature "derive" (*)
+├── prolly-store-redis feature "default"
+│   └── prolly-store-redis v0.2.1 (/Users/haipingfu/CrabDB/prolly/stores/prolly-store-redis)
+│       ├── prolly-map feature "async-store" (*)
+│       ├── prolly-map feature "default" (*)
+│       ├── redis feature "aio"
+│       │   ├── redis v0.32.7
+│       │   │   ├── backon v1.6.0
+│       │   │   │   └── fastrand v2.5.0
+│       │   │   ├── itoa feature "default" (*)
+│       │   │   ├── ryu feature "default" (*)
+│       │   │   ├── futures-util feature "sink"
+│       │   │   │   ├── futures-util v0.3.33 (*)
+│       │   │   │   └── futures-util feature "futures-sink"
+│       │   │   │       └── futures-util v0.3.33 (*)
+│       │   │   ├── futures-util feature "std" (*)
+│       │   │   ├── pin-project-lite feature "default" (*)
+│       │   │   ├── cfg-if feature "default" (*)
+│       │   │   ├── arc-swap feature "default"
+│       │   │   │   └── arc-swap v1.9.2
+│       │   │   │       └── rustversion feature "default"
+│       │   │   │           └── rustversion v1.0.23 (proc-macro)
+│       │   │   ├── bytes feature "default"
+│       │   │   │   ├── bytes v1.12.1
+│       │   │   │   └── bytes feature "std"
+│       │   │   │       └── bytes v1.12.1
+│       │   │   ├── combine feature "std"
+│       │   │   │   ├── combine v4.6.7
+│       │   │   │   │   ├── futures-core v0.3.33
+│       │   │   │   │   ├── memchr v2.8.3
+│       │   │   │   │   ├── tokio v1.53.0
+│       │   │   │   │   │   ├── mio v1.2.2
+│       │   │   │   │   │   │   └── libc feature "default" (*)
+│       │   │   │   │   │   ├── libc feature "default" (*)
+│       │   │   │   │   │   ├── pin-project-lite feature "default" (*)
+│       │   │   │   │   │   ├── socket2 feature "all"
+│       │   │   │   │   │   │   └── socket2 v0.6.5
+│       │   │   │   │   │   │       └── libc feature "default" (*)
+│       │   │   │   │   │   ├── socket2 feature "default"
+│       │   │   │   │   │   │   └── socket2 v0.6.5 (*)
+│       │   │   │   │   │   └── tokio-macros feature "default"
+│       │   │   │   │   │       └── tokio-macros v2.7.1 (proc-macro)
+│       │   │   │   │   │           ├── proc-macro2 feature "default" (*)
+│       │   │   │   │   │           ├── quote feature "default" (*)
+│       │   │   │   │   │           ├── syn feature "default" (*)
+│       │   │   │   │   │           └── syn feature "full" (*)
+│       │   │   │   │   ├── pin-project-lite feature "default" (*)
+│       │   │   │   │   ├── bytes feature "default" (*)
+│       │   │   │   │   └── tokio-util feature "codec"
+│       │   │   │   │       └── tokio-util v0.7.18
+│       │   │   │   │           ├── futures-core feature "default"
+│       │   │   │   │           │   ├── futures-core v0.3.33
+│       │   │   │   │           │   └── futures-core feature "std" (*)
+│       │   │   │   │           ├── futures-sink feature "default"
+│       │   │   │   │           │   ├── futures-sink v0.3.33
+│       │   │   │   │           │   └── futures-sink feature "std"
+│       │   │   │   │           │       ├── futures-sink v0.3.33
+│       │   │   │   │           │       └── futures-sink feature "alloc"
+│       │   │   │   │           │           └── futures-sink v0.3.33
+│       │   │   │   │           ├── pin-project-lite feature "default" (*)
+│       │   │   │   │           ├── bytes feature "default" (*)
+│       │   │   │   │           ├── tokio feature "default"
+│       │   │   │   │           │   └── tokio v1.53.0 (*)
+│       │   │   │   │           └── tokio feature "sync"
+│       │   │   │   │               └── tokio v1.53.0 (*)
+│       │   │   │   ├── memchr feature "std" (*)
+│       │   │   │   ├── combine feature "alloc"
+│       │   │   │   │   └── combine v4.6.7 (*)
+│       │   │   │   └── combine feature "bytes"
+│       │   │   │       └── combine v4.6.7 (*)
+│       │   │   ├── tokio feature "default" (*)
+│       │   │   ├── tokio feature "net"
+│       │   │   │   ├── tokio v1.53.0 (*)
+│       │   │   │   ├── tokio feature "libc"
+│       │   │   │   │   └── tokio v1.53.0 (*)
+│       │   │   │   ├── tokio feature "mio"
+│       │   │   │   │   └── tokio v1.53.0 (*)
+│       │   │   │   ├── tokio feature "socket2"
+│       │   │   │   │   └── tokio v1.53.0 (*)
+│       │   │   │   ├── mio feature "net"
+│       │   │   │   │   └── mio v1.2.2 (*)
+│       │   │   │   ├── mio feature "os-ext"
+│       │   │   │   │   ├── mio v1.2.2 (*)
+│       │   │   │   │   └── mio feature "os-poll"
+│       │   │   │   │       └── mio v1.2.2 (*)
+│       │   │   │   └── mio feature "os-poll" (*)
+│       │   │   ├── tokio feature "rt"
+│       │   │   │   └── tokio v1.53.0 (*)
+│       │   │   ├── tokio feature "sync" (*)
+│       │   │   ├── tokio feature "time"
+│       │   │   │   └── tokio v1.53.0 (*)
+│       │   │   ├── socket2 feature "all" (*)
+│       │   │   ├── socket2 feature "default" (*)
+│       │   │   ├── tokio-util feature "default"
+│       │   │   │   └── tokio-util v0.7.18 (*)
+│       │   │   ├── futures-channel feature "default"
+│       │   │   │   ├── futures-channel v0.3.33
+│       │   │   │   │   └── futures-core v0.3.33
+│       │   │   │   └── futures-channel feature "std"
+│       │   │   │       ├── futures-channel v0.3.33 (*)
+│       │   │   │       ├── futures-core feature "std" (*)
+│       │   │   │       └── futures-channel feature "alloc"
+│       │   │   │           ├── futures-channel v0.3.33 (*)
+│       │   │   │           └── futures-core feature "alloc" (*)
+│       │   │   ├── num-bigint feature "default"
+│       │   │   │   ├── num-bigint v0.4.8
+│       │   │   │   │   ├── num-integer feature "i128"
+│       │   │   │   │   │   └── num-integer v0.1.46
+│       │   │   │   │   │       └── num-traits feature "i128"
+│       │   │   │   │   │           └── num-traits v0.2.19
+│       │   │   │   │   │               [build-dependencies]
+│       │   │   │   │   │               └── autocfg feature "default"
+│       │   │   │   │   │                   └── autocfg v1.5.1
+│       │   │   │   │   └── num-traits feature "i128" (*)
+│       │   │   │   └── num-bigint feature "std"
+│       │   │   │       ├── num-bigint v0.4.8 (*)
+│       │   │   │       ├── num-integer feature "std"
+│       │   │   │       │   ├── num-integer v0.1.46 (*)
+│       │   │   │       │   └── num-traits feature "std"
+│       │   │   │       │       └── num-traits v0.2.19 (*)
+│       │   │   │       └── num-traits feature "std" (*)
+│       │   │   ├── percent-encoding feature "default"
+│       │   │   │   ├── percent-encoding v2.3.2
+│       │   │   │   └── percent-encoding feature "std"
+│       │   │   │       ├── percent-encoding v2.3.2
+│       │   │   │       └── percent-encoding feature "alloc"
+│       │   │   │           └── percent-encoding v2.3.2
+│       │   │   ├── sha1_smol feature "default"
+│       │   │   │   └── sha1_smol v1.0.1
+│       │   │   └── url feature "default"
+│       │   │       ├── url v2.5.8
+│       │   │       │   ├── percent-encoding feature "alloc" (*)
+│       │   │       │   ├── form_urlencoded feature "alloc"
+│       │   │       │   │   ├── form_urlencoded v1.2.2
+│       │   │       │   │   │   └── percent-encoding v2.3.2
+│       │   │       │   │   └── percent-encoding feature "alloc" (*)
+│       │   │       │   ├── idna feature "alloc"
+│       │   │       │   │   └── idna v1.1.0
+│       │   │       │   │       ├── idna_adapter feature "default"
+│       │   │       │   │       │   └── idna_adapter v1.2.2
+│       │   │       │   │       │       ├── icu_normalizer v2.2.0
+│       │   │       │   │       │       │   ├── icu_collections v2.2.0
+│       │   │       │   │       │       │   │   ├── displaydoc v0.2.6 (proc-macro)
+│       │   │       │   │       │       │   │   │   ├── proc-macro2 feature "default" (*)
+│       │   │       │   │       │       │   │   │   ├── quote feature "default" (*)
+│       │   │       │   │       │       │   │   │   └── syn feature "default" (*)
+│       │   │       │   │       │       │   │   ├── utf8_iter v1.0.4
+│       │   │       │   │       │       │   │   ├── potential_utf feature "zerovec"
+│       │   │       │   │       │       │   │   │   └── potential_utf v0.1.5
+│       │   │       │   │       │       │   │   │       └── zerovec v0.11.6
+│       │   │       │   │       │       │   │   │           ├── yoke v0.8.3
+│       │   │       │   │       │       │   │   │           │   ├── stable_deref_trait v1.2.1
+│       │   │       │   │       │       │   │   │           │   ├── yoke-derive v0.8.2 (proc-macro)
+│       │   │       │   │       │       │   │   │           │   │   ├── proc-macro2 feature "default" (*)
+│       │   │       │   │       │       │   │   │           │   │   ├── quote feature "default" (*)
+│       │   │       │   │       │       │   │   │           │   │   ├── syn feature "default" (*)
+│       │   │       │   │       │       │   │   │           │   │   ├── syn feature "fold"
+│       │   │       │   │       │       │   │   │           │   │   │   └── syn v2.0.119 (*)
+│       │   │       │   │       │       │   │   │           │   │   └── synstructure feature "default"
+│       │   │       │   │       │       │   │   │           │   │       ├── synstructure v0.13.2
+│       │   │       │   │       │       │   │   │           │   │       │   ├── proc-macro2 v1.0.107 (*)
+│       │   │       │   │       │       │   │   │           │   │       │   ├── quote v1.0.47 (*)
+│       │   │       │   │       │       │   │   │           │   │       │   ├── syn feature "clone-impls" (*)
+│       │   │       │   │       │       │   │   │           │   │       │   ├── syn feature "derive" (*)
+│       │   │       │   │       │       │   │   │           │   │       │   ├── syn feature "extra-traits"
+│       │   │       │   │       │       │   │   │           │   │       │   │   └── syn v2.0.119 (*)
+│       │   │       │   │       │       │   │   │           │   │       │   ├── syn feature "parsing" (*)
+│       │   │       │   │       │       │   │   │           │   │       │   ├── syn feature "printing" (*)
+│       │   │       │   │       │       │   │   │           │   │       │   └── syn feature "visit"
+│       │   │       │   │       │       │   │   │           │   │       │       └── syn v2.0.119 (*)
+│       │   │       │   │       │       │   │   │           │   │       └── synstructure feature "proc-macro"
+│       │   │       │   │       │       │   │   │           │   │           ├── synstructure v0.13.2 (*)
+│       │   │       │   │       │       │   │   │           │   │           ├── proc-macro2 feature "proc-macro" (*)
+│       │   │       │   │       │       │   │   │           │   │           ├── quote feature "proc-macro" (*)
+│       │   │       │   │       │       │   │   │           │   │           └── syn feature "proc-macro" (*)
+│       │   │       │   │       │       │   │   │           │   └── zerofrom v0.1.8
+│       │   │       │   │       │       │   │   │           │       └── zerofrom-derive v0.1.7 (proc-macro)
+│       │   │       │   │       │       │   │   │           │           ├── proc-macro2 feature "default" (*)
+│       │   │       │   │       │       │   │   │           │           ├── quote feature "default" (*)
+│       │   │       │   │       │       │   │   │           │           ├── syn feature "default" (*)
+│       │   │       │   │       │       │   │   │           │           ├── syn feature "fold" (*)
+│       │   │       │   │       │       │   │   │           │           └── synstructure feature "default" (*)
+│       │   │       │   │       │       │   │   │           ├── zerofrom v0.1.8 (*)
+│       │   │       │   │       │       │   │   │           └── zerovec-derive v0.11.3 (proc-macro)
+│       │   │       │   │       │       │   │   │               ├── proc-macro2 feature "default" (*)
+│       │   │       │   │       │       │   │   │               ├── quote feature "default" (*)
+│       │   │       │   │       │       │   │   │               ├── syn feature "default" (*)
+│       │   │       │   │       │       │   │   │               └── syn feature "extra-traits" (*)
+│       │   │       │   │       │       │   │   ├── zerovec feature "derive"
+│       │   │       │   │       │       │   │   │   └── zerovec v0.11.6 (*)
+│       │   │       │   │       │       │   │   ├── zerovec feature "yoke"
+│       │   │       │   │       │       │   │   │   └── zerovec v0.11.6 (*)
+│       │   │       │   │       │       │   │   ├── yoke feature "derive"
+│       │   │       │   │       │       │   │   │   ├── yoke v0.8.3 (*)
+│       │   │       │   │       │       │   │   │   ├── yoke feature "zerofrom"
+│       │   │       │   │       │       │   │   │   │   └── yoke v0.8.3 (*)
+│       │   │       │   │       │       │   │   │   └── zerofrom feature "derive"
+│       │   │       │   │       │       │   │   │       └── zerofrom v0.1.8 (*)
+│       │   │       │   │       │       │   │   └── zerofrom feature "derive" (*)
+│       │   │       │   │       │       │   ├── icu_normalizer_data v2.2.0
+│       │   │       │   │       │       │   ├── icu_provider v2.2.0
+│       │   │       │   │       │       │   │   ├── displaydoc v0.2.6 (proc-macro) (*)
+│       │   │       │   │       │       │   │   ├── icu_locale_core v2.2.0
+│       │   │       │   │       │       │   │   │   ├── displaydoc v0.2.6 (proc-macro) (*)
+│       │   │       │   │       │       │   │   │   ├── litemap v0.8.2
+│       │   │       │   │       │       │   │   │   ├── tinystr v0.8.3
+│       │   │       │   │       │       │   │   │   │   ├── displaydoc v0.2.6 (proc-macro) (*)
+│       │   │       │   │       │       │   │   │   │   └── zerovec v0.11.6 (*)
+│       │   │       │   │       │       │   │   │   ├── writeable v0.6.3
+│       │   │       │   │       │       │   │   │   └── zerovec v0.11.6 (*)
+│       │   │       │   │       │       │   │   ├── writeable v0.6.3
+│       │   │       │   │       │       │   │   ├── zerotrie v0.2.4
+│       │   │       │   │       │       │   │   │   ├── displaydoc v0.2.6 (proc-macro) (*)
+│       │   │       │   │       │       │   │   │   ├── zerofrom v0.1.8 (*)
+│       │   │       │   │       │       │   │   │   └── yoke feature "derive" (*)
+│       │   │       │   │       │       │   │   ├── zerovec feature "derive" (*)
+│       │   │       │   │       │       │   │   ├── yoke feature "derive" (*)
+│       │   │       │   │       │       │   │   └── zerofrom feature "derive" (*)
+│       │   │       │   │       │       │   ├── smallvec v1.15.2
+│       │   │       │   │       │       │   └── zerovec v0.11.6 (*)
+│       │   │       │   │       │       └── icu_properties v2.2.0
+│       │   │       │   │       │           ├── icu_collections v2.2.0 (*)
+│       │   │       │   │       │           ├── icu_properties_data v2.2.0
+│       │   │       │   │       │           ├── icu_provider v2.2.0 (*)
+│       │   │       │   │       │           ├── zerovec feature "derive" (*)
+│       │   │       │   │       │           ├── zerovec feature "yoke" (*)
+│       │   │       │   │       │           ├── icu_locale_core feature "zerovec"
+│       │   │       │   │       │           │   ├── icu_locale_core v2.2.0 (*)
+│       │   │       │   │       │           │   └── tinystr feature "zerovec"
+│       │   │       │   │       │           │       └── tinystr v0.8.3 (*)
+│       │   │       │   │       │           ├── zerotrie feature "yoke"
+│       │   │       │   │       │           │   └── zerotrie v0.2.4 (*)
+│       │   │       │   │       │           └── zerotrie feature "zerofrom"
+│       │   │       │   │       │               └── zerotrie v0.2.4 (*)
+│       │   │       │   │       ├── utf8_iter feature "default"
+│       │   │       │   │       │   └── utf8_iter v1.0.4
+│       │   │       │   │       ├── smallvec feature "const_generics"
+│       │   │       │   │       │   └── smallvec v1.15.2
+│       │   │       │   │       └── smallvec feature "default"
+│       │   │       │   │           └── smallvec v1.15.2
+│       │   │       │   └── idna feature "compiled_data"
+│       │   │       │       ├── idna v1.1.0 (*)
+│       │   │       │       └── idna_adapter feature "compiled_data"
+│       │   │       │           ├── idna_adapter v1.2.2 (*)
+│       │   │       │           ├── icu_normalizer feature "compiled_data"
+│       │   │       │           │   ├── icu_normalizer v2.2.0 (*)
+│       │   │       │           │   └── icu_provider feature "baked"
+│       │   │       │           │       └── icu_provider v2.2.0 (*)
+│       │   │       │           └── icu_properties feature "compiled_data"
+│       │   │       │               ├── icu_properties v2.2.0 (*)
+│       │   │       │               └── icu_provider feature "baked" (*)
+│       │   │       └── url feature "std"
+│       │   │           ├── url v2.5.8 (*)
+│       │   │           ├── percent-encoding feature "std" (*)
+│       │   │           ├── form_urlencoded feature "std"
+│       │   │           │   ├── form_urlencoded v1.2.2 (*)
+│       │   │           │   ├── percent-encoding feature "std" (*)
+│       │   │           │   └── form_urlencoded feature "alloc" (*)
+│       │   │           └── idna feature "std"
+│       │   │               ├── idna v1.1.0 (*)
+│       │   │               └── idna feature "alloc" (*)
+│       │   ├── redis feature "bytes"
+│       │   │   └── redis v0.32.7 (*)
+│       │   ├── redis feature "tokio-util"
+│       │   │   └── redis v0.32.7 (*)
+│       │   ├── combine feature "tokio"
+│       │   │   ├── combine v4.6.7 (*)
+│       │   │   ├── combine feature "futures-core-03"
+│       │   │   │   └── combine v4.6.7 (*)
+│       │   │   ├── combine feature "pin-project-lite"
+│       │   │   │   └── combine v4.6.7 (*)
+│       │   │   ├── combine feature "tokio-dep"
+│       │   │   │   └── combine v4.6.7 (*)
+│       │   │   ├── combine feature "tokio-util"
+│       │   │   │   └── combine v4.6.7 (*)
+│       │   │   └── tokio-util feature "io"
+│       │   │       └── tokio-util v0.7.18 (*)
+│       │   └── tokio-util feature "codec" (*)
+│       ├── redis feature "connection-manager"
+│       │   ├── redis v0.32.7 (*)
+│       │   └── redis feature "aio" (*)
+│       ├── redis feature "script"
+│       │   └── redis v0.32.7 (*)
+│       └── redis feature "tokio-comp"
+│           ├── redis v0.32.7 (*)
+│           ├── redis feature "aio" (*)
+│           ├── redis feature "tokio"
+│           │   └── redis v0.32.7 (*)
+│           └── tokio feature "net" (*)
+├── redis feature "aio" (*)
+├── redis feature "connection-manager" (*)
+├── redis feature "default"
+│   ├── redis v0.32.7 (*)
+│   ├── redis feature "acl"
+│   │   └── redis v0.32.7 (*)
+│   ├── redis feature "geospatial"
+│   │   └── redis v0.32.7 (*)
+│   ├── redis feature "keep-alive"
+│   │   └── redis v0.32.7 (*)
+│   ├── redis feature "num-bigint"
+│   │   └── redis v0.32.7 (*)
+│   ├── redis feature "script" (*)
+│   └── redis feature "streams"
+│       └── redis v0.32.7 (*)
+├── redis feature "tokio-comp" (*)
+├── tokio feature "default" (*)
+├── tokio feature "macros"
+│   ├── tokio v1.53.0 (*)
+│   └── tokio feature "tokio-macros"
+│       └── tokio v1.53.0 (*)
+├── tokio feature "rt-multi-thread"
+│   ├── tokio v1.53.0 (*)
+│   └── tokio feature "rt" (*)
+└── tokio feature "time" (*)

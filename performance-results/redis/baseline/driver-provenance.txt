@@ -1,0 +1,9 @@
+driver=/Users/haipingfu/CrabDB/prolly/scripts/run_redis_scale_benchmark.sh
+revision=3e7c338cf0eaf191f0eb05ea23bc10d8bdf86a70
+dirty=true
+started_utc=2026-07-20T15:11:19Z
+redis_url=redis://127.0.0.1:57923/
+redis_image=redis:7.4.2-bookworm
+durability=appendonly=yes,appendfsync=always,save=disabled,auto-aof-rewrite=disabled
+arguments= --profile full --redis-url redis://127.0.0.1:57923/ --output performance-results/redis/baseline --revision 3e7c338cf0eaf191f0eb05ea23bc10d8bdf86a70 --dirty --sizes 1000000 --runs 3 --operations put\,batch\,get_cold\,get_warm\,query\,scan\,full_scan\,diff\,merge --patterns append\,random\,clustered --changes auto --read-samples 10000 --min-free-gb 3 --tokio-workers 4
+ended_utc=2026-07-20T15:18:25Z

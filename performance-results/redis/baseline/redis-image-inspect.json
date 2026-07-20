@@ -1,0 +1,100 @@
+[
+    {
+        "Id": "sha256:9203d186d252274ab6e4d14e69eec83387717b4d8218c3bf9198771aa56ecd40",
+        "RepoTags": [
+            "redis:7.4.2-bookworm"
+        ],
+        "RepoDigests": [
+            "redis@sha256:fbdbaea47b9ae4ecc2082ecdb4e1cea81e32176ffb1dcf643d422ad07427e5d9"
+        ],
+        "Parent": "",
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2025-01-06T16:14:31Z",
+        "Container": "",
+        "ContainerConfig": {
+            "Hostname": "",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": null,
+            "Cmd": null,
+            "Image": "",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": null
+        },
+        "DockerVersion": "",
+        "Author": "",
+        "Config": {
+            "Hostname": "",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "6379/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "GOSU_VERSION=1.17",
+                "REDIS_VERSION=7.4.2",
+                "REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-7.4.2.tar.gz",
+                "REDIS_DOWNLOAD_SHA=4ddebbf09061cbb589011786febdb34f29767dd7f89dbe712d2b68e808af6a1f"
+            ],
+            "Cmd": [
+                "redis-server"
+            ],
+            "Image": "",
+            "Volumes": {
+                "/data": {}
+            },
+            "WorkingDir": "/data",
+            "Entrypoint": [
+                "docker-entrypoint.sh"
+            ],
+            "OnBuild": null,
+            "Labels": null
+        },
+        "Architecture": "arm64",
+        "Variant": "v8",
+        "Os": "linux",
+        "Size": 139570819,
+        "VirtualSize": 139570819,
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/6e04a7ff1e5f04321eb7e20bc4226f00009257952334b6e1a03e5ffe8a7c0f93/diff:/var/lib/docker/overlay2/c7134c91beebffe8fa7a4c364b86c887b6dfc341b31a8bd93da28b15d6148ed0/diff:/var/lib/docker/overlay2/8ff4d26b90ee705c216fb2cb19d11dc342c9c99fc747e6e8883768b5f806a96e/diff:/var/lib/docker/overlay2/732e1139733d7f6522f4ef969bea601a382727dce4da30b5a0c90d305b95e8e8/diff:/var/lib/docker/overlay2/44ea8d2f6394d0145157f0154e05f7bc582a1cb30f990955e3b13632668945a0/diff:/var/lib/docker/overlay2/2bac036f117abfa58103e4c5556f853f10ff673dc5806e863dfe8d0b80bf2d4a/diff:/var/lib/docker/overlay2/070f59e1b6f1fc1a37436c3ef34f8f97516580f613986b8c91d1c18397c327fc/diff",
+                "MergedDir": "/var/lib/docker/overlay2/d29c09c79ec13ae9928421c4510d7cdd7f6124dc7141212bf593a485eeb2241d/merged",
+                "UpperDir": "/var/lib/docker/overlay2/d29c09c79ec13ae9928421c4510d7cdd7f6124dc7141212bf593a485eeb2241d/diff",
+                "WorkDir": "/var/lib/docker/overlay2/d29c09c79ec13ae9928421c4510d7cdd7f6124dc7141212bf593a485eeb2241d/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:c9b18059ed426422229b2c624582e54e7e32862378c9556b90a99c116ae10a04",
+                "sha256:1a636be83f7cdaa690e234a226800d5c706fb7932cd1d1289a744d6f2012c4b3",
+                "sha256:379429e67fc6edc147ce41bbc25412c94d65334adf89806e0ca8669f288f8699",
+                "sha256:bec91c926eae4983edd58074a33234275e1e3294853092f397f573cce687a814",
+                "sha256:3a5092a8f777be0c049c9f0bf40fb8d3fe37302bd5858677daf6ec1378ee3b85",
+                "sha256:7fafac04bfe6348cac462f5cf8b057e658705af916004a87d20e8a8fc6d333bc",
+                "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+                "sha256:3f8d35f308f09b10a7ba3ff2de7b5bf18ec7866bf8e200e78c140c6f841e614d"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "0001-01-01T00:00:00Z"
+        }
+    }
+]
