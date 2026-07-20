@@ -1242,6 +1242,18 @@ fn branch_lineage_from_mutations(mutations: &[Mutation]) -> Option<BranchLineage
     })
 }
 
+fn automatic_branch_lineage(
+    origin: PublicationOrigin,
+    mutations: &[Mutation],
+) -> Option<BranchLineage> {
+    matches!(
+        origin,
+        PublicationOrigin::PointUpsert | PublicationOrigin::PointDelete | PublicationOrigin::Merge
+    )
+    .then(|| branch_lineage_from_mutations(mutations))
+    .flatten()
+}
+
 #[cfg(test)]
 struct RecentLeafRead {
     root: Cid,
@@ -1726,7 +1738,7 @@ impl<S: Store> Prolly<S> {
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        let lineage = branch_lineage_from_mutations(&mutations);
+        let lineage = automatic_branch_lineage(origin, &mutations);
         let branch = self
             .engine
             .canonical_batch_tree_ready(tree, mutations, origin)?;
@@ -4631,7 +4643,7 @@ where
         mutations: Vec<Mutation>,
         origin: PublicationOrigin,
     ) -> Result<Tree, Error> {
-        let lineage = branch_lineage_from_mutations(&mutations);
+        let lineage = automatic_branch_lineage(origin, &mutations);
         let branch = self.canonical_batch(tree, mutations, origin).await?.0;
         if let Some(lineage) = lineage {
             self.record_branch_lineage(tree, &branch, lineage);

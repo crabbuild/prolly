@@ -109,6 +109,52 @@ fn main() {
             bench_batch_builder(scale);
             return;
         }
+        Ok("incremental-insert") => {
+            bench_incremental_insert(scale / 5);
+            return;
+        }
+        Ok("point-reads") => {
+            bench_point_get(scale);
+            return;
+        }
+        Ok("point-updates") => {
+            bench_point_updates(scale);
+            return;
+        }
+        Ok("point-deletes") => {
+            bench_point_deletes(scale);
+            return;
+        }
+        Ok("range-scans") => {
+            bench_range_scan(scale);
+            bench_range_scan_window(scale);
+            return;
+        }
+        Ok("diff-suite") => {
+            bench_diff_identical(scale);
+            bench_diff_sparse(scale);
+            bench_diff_append_suffix(scale);
+            bench_diff_empty_to_full(scale);
+            bench_diff_full_rewrite(scale);
+            bench_stream_diff_sparse(scale);
+            bench_stream_diff_append_suffix(scale);
+            return;
+        }
+        Ok("diff-sparse") => {
+            bench_diff_sparse(scale);
+            bench_stream_diff_sparse(scale);
+            return;
+        }
+        Ok("diff-append") => {
+            bench_diff_append_suffix(scale);
+            bench_stream_diff_append_suffix(scale);
+            return;
+        }
+        Ok("diff-full") => {
+            bench_diff_empty_to_full(scale);
+            bench_diff_full_rewrite(scale);
+            return;
+        }
         Ok("append-chain") => {
             bench_append_batch_direct(scale);
             bench_append_batch_chain(scale);
@@ -920,6 +966,11 @@ fn bench_chunking_cutover(items: usize) {
 }
 
 fn bench_incremental_insert(items: usize) {
+    let items = std::env::var("PROLLY_BENCH_INCREMENTAL_ITEMS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(items);
     let data = data_set(items);
     let config = bench_config();
 
@@ -954,7 +1005,11 @@ fn bench_batch_builder(items: usize) {
 fn bench_point_get(items: usize) {
     let data = data_set(items);
     let (_, prolly, tree) = build_tree(&data);
-    let gets = items * 20;
+    let gets = std::env::var("PROLLY_BENCH_GETS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(items * 20);
 
     if std::env::var_os("PROLLY_BENCH_DIAG").is_some() {
         println!(
@@ -1710,12 +1765,22 @@ fn point_delete_keys(items: usize, count: usize) -> Vec<Vec<u8>> {
 }
 
 fn mutation_count(items: usize) -> usize {
-    (items / 10).max(100)
+    std::env::var("PROLLY_BENCH_MUTATIONS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| (items / 10).max(100))
+        .min(items)
 }
 
 fn window_bounds(items: usize) -> (usize, usize) {
     let start = items / 3;
-    let len = (items / 10).max(100).min(items - start);
+    let len = std::env::var("PROLLY_BENCH_WINDOW_ITEMS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| (items / 10).max(100))
+        .min(items - start);
     (start, start + len)
 }
 
