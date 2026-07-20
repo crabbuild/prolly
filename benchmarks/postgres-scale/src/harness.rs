@@ -32,6 +32,7 @@ pub fn enumerate_cells(config: &RunConfig, records: usize) -> Vec<CellSpec> {
                         pattern: Pattern::Append,
                         repetition,
                         changes,
+                        read_samples: config.read_samples,
                     });
                 }
                 continue;
@@ -45,6 +46,7 @@ pub fn enumerate_cells(config: &RunConfig, records: usize) -> Vec<CellSpec> {
                     pattern: *pattern,
                     repetition,
                     changes,
+                    read_samples: config.read_samples,
                 });
             }
         }
@@ -219,7 +221,9 @@ mod tests {
 
     #[test]
     fn matrix_has_unique_cells_and_only_meaningful_scans() {
-        let config = RunConfig::smoke();
+        let mut config = RunConfig::smoke();
+        config.changes = Some(300);
+        config.read_samples = 100;
         let cells = enumerate_cells(&config, 1_000);
         let keys = cells
             .iter()
@@ -236,6 +240,8 @@ mod tests {
                 .count(),
             1
         );
+        assert!(cells.iter().all(|cell| cell.changes == 300));
+        assert!(cells.iter().all(|cell| cell.read_samples == 100));
     }
 
     #[tokio::test]

@@ -62,10 +62,23 @@ class SummarizerTests(unittest.TestCase):
 
     def test_report_labels_single_sample_and_limitations(self):
         module = load_module()
-        report = module.render_report(module.aggregate([row(1, 1000)]), [row(1, 1000)])
+        report = module.render_report(
+            module.aggregate([row(1, 1000)]),
+            [row(1, 1000)],
+            {
+                "changes": "300000",
+                "read_samples": "10000",
+                "merge_changes_semantics": "total_split_evenly",
+                "random_merge_branch_distribution": "interleaved",
+            },
+        )
         self.assertIn("n=1", report)
         self.assertIn("Docker Desktop", report)
         self.assertIn("cold-manager", report)
+        self.assertIn("300,000", report)
+        self.assertIn("10,000", report)
+        self.assertIn("150,000 changes per branch", report)
+        self.assertIn("interleaved across both branches", report)
 
     def test_summary_csv_uses_repository_lf_line_endings(self):
         module = load_module()

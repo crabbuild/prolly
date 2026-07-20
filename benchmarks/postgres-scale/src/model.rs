@@ -129,19 +129,28 @@ pub fn pattern_ids(records: usize, count: usize, pattern: Pattern, salt: u64) ->
 }
 
 pub fn merge_ids(records: usize, count: usize, pattern: Pattern) -> (Vec<usize>, Vec<usize>) {
+    let branch_count = count / 2;
     match pattern {
         Pattern::Append => (
-            (records..records.saturating_add(count)).collect(),
-            (records.saturating_add(count)..records.saturating_add(count.saturating_mul(2)))
-                .collect(),
+            (records..records.saturating_add(branch_count)).collect(),
+            (records.saturating_add(branch_count)..records.saturating_add(count)).collect(),
         ),
         Pattern::Random => {
-            let ids = random_ids(records, count.saturating_mul(2), 0x006d_6572_6765);
-            (ids[..count].to_vec(), ids[count..].to_vec())
+            let ids = random_ids(records, count, 0x006d_6572_6765);
+            let mut left = Vec::with_capacity(branch_count);
+            let mut right = Vec::with_capacity(branch_count);
+            for (index, id) in ids.into_iter().enumerate() {
+                if index % 2 == 0 {
+                    left.push(id);
+                } else {
+                    right.push(id);
+                }
+            }
+            (left, right)
         }
         Pattern::Clustered => {
-            let ids = pattern_ids(records, count.saturating_mul(2), pattern, 0);
-            (ids[..count].to_vec(), ids[count..].to_vec())
+            let ids = pattern_ids(records, count, pattern, 0);
+            (ids[..branch_count].to_vec(), ids[branch_count..].to_vec())
         }
     }
 }
@@ -210,12 +219,25 @@ mod tests {
     }
 
     #[test]
-    fn merge_branches_are_disjoint_for_every_pattern() {
+    fn merge_total_is_split_evenly_into_disjoint_branches() {
         for pattern in Pattern::ALL {
             let (left, right) = merge_ids(100_000, 1_000, pattern);
-            assert_eq!(left.len(), 1_000);
-            assert_eq!(right.len(), 1_000);
+            assert_eq!(left.len(), 500);
+            assert_eq!(right.len(), 500);
             assert!(left.iter().all(|id| !right.contains(id)));
         }
+    }
+
+    #[test]
+    fn random_merge_branches_are_interleaved_across_the_keyspace() {
+        let (left, right) = merge_ids(100_000, 1_000, Pattern::Random);
+        let left = left.into_iter().collect::<BTreeSet<_>>();
+        let right = right.into_iter().collect::<BTreeSet<_>>();
+        let combined = left.union(&right).copied().collect::<Vec<_>>();
+        let transitions = combined
+            .windows(2)
+            .filter(|pair| left.contains(&pair[0]) != left.contains(&pair[1]))
+            .count();
+        assert!(transitions > 900, "only {transitions} branch transitions");
     }
 }

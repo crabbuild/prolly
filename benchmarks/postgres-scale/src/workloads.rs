@@ -27,6 +27,7 @@ pub struct CellSpec {
     pub pattern: Pattern,
     pub repetition: u32,
     pub changes: usize,
+    pub read_samples: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -277,7 +278,7 @@ async fn run_get(
     spec: CellSpec,
     meta: &RunMeta,
 ) -> Result<RawRow, String> {
-    let ids = lookup_ids(fixture.records, spec.changes, spec.pattern);
+    let ids = lookup_ids(fixture.records, spec.read_samples, spec.pattern);
     let manager = manager(&fixture.backend);
     if spec.operation == Operation::GetWarm {
         for id in &ids {
@@ -346,7 +347,7 @@ async fn run_query(
     spec: CellSpec,
     meta: &RunMeta,
 ) -> Result<RawRow, String> {
-    let ids = lookup_ids(fixture.records, spec.changes, spec.pattern);
+    let ids = lookup_ids(fixture.records, spec.read_samples, spec.pattern);
     let keys = ids.iter().map(|id| key(*id)).collect::<Vec<_>>();
     let manager = manager(&fixture.backend);
     let before = read_physical_size(fixture.backend.pool())
@@ -406,7 +407,7 @@ async fn run_scan(
     let (start_key, end_key, expected) = if spec.operation == Operation::FullScan {
         (Vec::new(), None, fixture.records)
     } else {
-        let ids = lookup_ids(fixture.records, spec.changes, spec.pattern);
+        let ids = lookup_ids(fixture.records, spec.read_samples, spec.pattern);
         let start = *ids
             .first()
             .ok_or_else(|| "scan IDs are empty".to_string())?;
@@ -537,6 +538,9 @@ async fn run_merge(
     spec: CellSpec,
     meta: &RunMeta,
 ) -> Result<RawRow, String> {
+    if spec.changes % 2 != 0 {
+        return Err("merge requires an even total change count".to_string());
+    }
     let (left_ids, right_ids) = merge_ids(fixture.records, spec.changes, spec.pattern);
     let builder = manager(&fixture.backend);
     let left = builder
@@ -857,6 +861,7 @@ mod tests {
                         pattern,
                         repetition: 1,
                         changes: 100,
+                        read_samples: 100,
                     },
                     &meta,
                 )
@@ -873,6 +878,7 @@ mod tests {
                 pattern: Pattern::Append,
                 repetition: 1,
                 changes: 100,
+                read_samples: 100,
             },
             &meta,
         )

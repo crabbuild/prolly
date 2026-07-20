@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use crate::model::{Operation, Pattern};
 
-pub const USAGE: &str = "usage: prolly-postgres-scale-bench [--profile smoke|full] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--min-free-gb N]";
+pub const USAGE: &str = "usage: prolly-postgres-scale-bench [--profile smoke|full] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--min-free-gb N]";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunConfig {
@@ -16,6 +16,7 @@ pub struct RunConfig {
     pub operations: Vec<Operation>,
     pub patterns: Vec<Pattern>,
     pub changes: Option<usize>,
+    pub read_samples: usize,
     pub min_free_bytes: u64,
 }
 
@@ -31,6 +32,7 @@ impl RunConfig {
             operations: Operation::ALL.to_vec(),
             patterns: Pattern::ALL.to_vec(),
             changes: Some(100),
+            read_samples: 100,
             min_free_bytes: 0,
         }
     }
@@ -40,6 +42,7 @@ impl RunConfig {
             sizes: vec![1_000_000, 10_000_000],
             runs: 3,
             changes: None,
+            read_samples: 10_000,
             min_free_bytes: 3 * 1024 * 1024 * 1024,
             output: PathBuf::from("performance-results/postgres-scale"),
             ..Self::smoke()
@@ -56,8 +59,13 @@ impl RunConfig {
         if self.operations.is_empty() || self.patterns.is_empty() {
             return Err("operation and pattern filters must be non-empty".to_string());
         }
-        if self.changes == Some(0) {
-            return Err("changes must be positive".to_string());
+        if self.changes == Some(0) || self.read_samples == 0 {
+            return Err("changes and read samples must be positive".to_string());
+        }
+        if self.operations.contains(&Operation::Merge)
+            && self.changes.is_some_and(|changes| changes % 2 != 0)
+        {
+            return Err("merge requires an even total change count".to_string());
         }
         Ok(())
     }
@@ -123,6 +131,9 @@ where
                     Some(parse_number(&value, flag)?)
                 };
             }
+            "--read-samples" => {
+                config.read_samples = parse_number(&take(&overrides, &mut index, flag)?, flag)?;
+            }
             "--min-free-gb" => {
                 let gib: u64 = parse_number(&take(&overrides, &mut index, flag)?, flag)?;
                 config.min_free_bytes = gib.saturating_mul(1024 * 1024 * 1024);
@@ -174,6 +185,7 @@ mod tests {
         assert_eq!(config.sizes, vec![1_000_000, 10_000_000]);
         assert_eq!(config.runs, 3);
         assert_eq!(config.changes, None);
+        assert_eq!(config.read_samples, 10_000);
         assert!(config.operations.contains(&Operation::Merge));
         assert_eq!(config.patterns, Pattern::ALL);
     }
@@ -194,11 +206,14 @@ mod tests {
             "random,clustered",
             "--changes",
             "25",
+            "--read-samples",
+            "10",
         ])
         .unwrap();
         assert_eq!(config.sizes, vec![500, 1_000]);
         assert_eq!(config.runs, 2);
         assert_eq!(config.changes, Some(25));
+        assert_eq!(config.read_samples, 10);
         assert_eq!(
             config.operations,
             vec![Operation::GetCold, Operation::Query]
