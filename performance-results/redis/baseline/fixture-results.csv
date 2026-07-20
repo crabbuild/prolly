@@ -1,0 +1,4 @@
+schema,revision,dirty,records,repetition,build_ns,records_per_sec,num_nodes,num_leaves,num_internal,height,tree_bytes,redis_used_memory_bytes,redis_used_memory_rss_bytes,redis_used_memory_dataset_bytes,aof_current_size_bytes,namespace_keys,observed_records,error,validated
+redis-scale-v1,3e7c338cf0eaf191f0eb05ea23bc10d8bdf86a70,true,1000000,1,1929055875,518388.3022569266,7719,7644,75,3,104662829,117187768,144564224,115833312,105484646,7720,1000000,,true
+redis-scale-v1,3e7c338cf0eaf191f0eb05ea23bc10d8bdf86a70,true,1000000,2,1768299292,565515.1277411698,7719,7644,75,3,104662829,117265632,278413312,115911176,105484734,7720,1000000,,true
+redis-scale-v1,3e7c338cf0eaf191f0eb05ea23bc10d8bdf86a70,true,1000000,3,1755362125,569683.0219576488,7719,7644,75,3,104662829,117265632,212668416,115911176,105484734,7720,1000000,,true

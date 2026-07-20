@@ -1,0 +1,39 @@
+name: prolly-redis-bench-65796
+services:
+  redis:
+    command:
+    - redis-server
+    - /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      timeout: 3s
+      interval: 1s
+      retries: 60
+    image: redis:7.4.2-bookworm
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 6379
+      protocol: tcp
+    volumes:
+    - type: bind
+      source: /Users/haipingfu/CrabDB/prolly/benchmarks/redis-scale/redis.conf
+      target: /usr/local/etc/redis/redis.conf
+      read_only: true
+      bind:
+        create_host_path: true
+    - type: volume
+      source: redis-data
+      target: /data
+      volume: {}
+networks:
+  default:
+    name: prolly-redis-bench-65796_default
+volumes:
+  redis-data:
+    name: prolly-redis-bench-65796_redis-data

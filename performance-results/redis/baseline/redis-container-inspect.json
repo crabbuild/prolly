@@ -1,0 +1,282 @@
+[
+    {
+        "Id": "2d65e20216e922792b98392eab38c9e47803878551dc175042294efe885127c0",
+        "Created": "2026-07-20T15:11:19.246245093Z",
+        "Path": "docker-entrypoint.sh",
+        "Args": [
+            "redis-server",
+            "/usr/local/etc/redis/redis.conf"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 2897,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-20T15:11:19.39738126Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "starting",
+                "FailingStreak": 0,
+                "Log": []
+            }
+        },
+        "Image": "sha256:9203d186d252274ab6e4d14e69eec83387717b4d8218c3bf9198771aa56ecd40",
+        "ResolvConfPath": "/var/lib/docker/containers/2d65e20216e922792b98392eab38c9e47803878551dc175042294efe885127c0/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/2d65e20216e922792b98392eab38c9e47803878551dc175042294efe885127c0/hostname",
+        "HostsPath": "/var/lib/docker/containers/2d65e20216e922792b98392eab38c9e47803878551dc175042294efe885127c0/hosts",
+        "LogPath": "/var/lib/docker/containers/2d65e20216e922792b98392eab38c9e47803878551dc175042294efe885127c0/2d65e20216e922792b98392eab38c9e47803878551dc175042294efe885127c0-json.log",
+        "Name": "/prolly-redis-bench-65796-redis-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": [
+                "/Users/haipingfu/CrabDB/prolly/benchmarks/redis-scale/redis.conf:/usr/local/etc/redis/redis.conf:ro"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "prolly-redis-bench-65796_default",
+            "PortBindings": {
+                "6379/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "0"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "volume",
+                    "Source": "prolly-redis-bench-65796_redis-data",
+                    "Target": "/data",
+                    "VolumeOptions": {}
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/asound",
+                "/proc/acpi",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/964de8f224f52799a32132586e0e985a9e6958b286eb94d00cbfabf3cba51f1b-init/diff:/var/lib/docker/overlay2/d29c09c79ec13ae9928421c4510d7cdd7f6124dc7141212bf593a485eeb2241d/diff:/var/lib/docker/overlay2/6e04a7ff1e5f04321eb7e20bc4226f00009257952334b6e1a03e5ffe8a7c0f93/diff:/var/lib/docker/overlay2/c7134c91beebffe8fa7a4c364b86c887b6dfc341b31a8bd93da28b15d6148ed0/diff:/var/lib/docker/overlay2/8ff4d26b90ee705c216fb2cb19d11dc342c9c99fc747e6e8883768b5f806a96e/diff:/var/lib/docker/overlay2/732e1139733d7f6522f4ef969bea601a382727dce4da30b5a0c90d305b95e8e8/diff:/var/lib/docker/overlay2/44ea8d2f6394d0145157f0154e05f7bc582a1cb30f990955e3b13632668945a0/diff:/var/lib/docker/overlay2/2bac036f117abfa58103e4c5556f853f10ff673dc5806e863dfe8d0b80bf2d4a/diff:/var/lib/docker/overlay2/070f59e1b6f1fc1a37436c3ef34f8f97516580f613986b8c91d1c18397c327fc/diff",
+                "MergedDir": "/var/lib/docker/overlay2/964de8f224f52799a32132586e0e985a9e6958b286eb94d00cbfabf3cba51f1b/merged",
+                "UpperDir": "/var/lib/docker/overlay2/964de8f224f52799a32132586e0e985a9e6958b286eb94d00cbfabf3cba51f1b/diff",
+                "WorkDir": "/var/lib/docker/overlay2/964de8f224f52799a32132586e0e985a9e6958b286eb94d00cbfabf3cba51f1b/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/Users/haipingfu/CrabDB/prolly/benchmarks/redis-scale/redis.conf",
+                "Destination": "/usr/local/etc/redis/redis.conf",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "volume",
+                "Name": "prolly-redis-bench-65796_redis-data",
+                "Source": "/var/lib/docker/volumes/prolly-redis-bench-65796_redis-data/_data",
+                "Destination": "/data",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "2d65e20216e9",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "6379/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "GOSU_VERSION=1.17",
+                "REDIS_VERSION=7.4.2",
+                "REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-7.4.2.tar.gz",
+                "REDIS_DOWNLOAD_SHA=4ddebbf09061cbb589011786febdb34f29767dd7f89dbe712d2b68e808af6a1f"
+            ],
+            "Cmd": [
+                "redis-server",
+                "/usr/local/etc/redis/redis.conf"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD",
+                    "redis-cli",
+                    "ping"
+                ],
+                "Interval": 1000000000,
+                "Timeout": 3000000000,
+                "Retries": 60
+            },
+            "Image": "redis:7.4.2-bookworm",
+            "Volumes": {
+                "/data": {}
+            },
+            "WorkingDir": "/data",
+            "Entrypoint": [
+                "docker-entrypoint.sh"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "f1fea05ea34454503a444064043d13421e07c43f0f7c34ad019d4c52cbb1b60a",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:9203d186d252274ab6e4d14e69eec83387717b4d8218c3bf9198771aa56ecd40",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "prolly-redis-bench-65796",
+                "com.docker.compose.project.config_files": "/Users/haipingfu/CrabDB/prolly/benchmarks/redis-scale/docker-compose.yml",
+                "com.docker.compose.project.working_dir": "/Users/haipingfu/CrabDB/prolly/benchmarks/redis-scale",
+                "com.docker.compose.service": "redis",
+                "com.docker.compose.version": "2.20.2"
+            }
+        },
+        "NetworkSettings": {
+            "Bridge": "",
+            "SandboxID": "f9f1b04631ea7968a041280df76cd2e68cd5c10dda1f56d14c33c453ab0afce5",
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "Ports": {
+                "6379/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "57923"
+                    }
+                ]
+            },
+            "SandboxKey": "/var/run/docker/netns/f9f1b04631ea",
+            "SecondaryIPAddresses": null,
+            "SecondaryIPv6Addresses": null,
+            "EndpointID": "",
+            "Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "MacAddress": "",
+            "Networks": {
+                "prolly-redis-bench-65796_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "prolly-redis-bench-65796-redis-1",
+                        "redis",
+                        "2d65e20216e9"
+                    ],
+                    "NetworkID": "118465ac6a554ea3b7a68e1911c02f365190baf1a666e27bded0c245311046d3",
+                    "EndpointID": "9447287f30518554cffa5905c735838d7550a92e2f2076c43a2664ab4e3386f0",
+                    "Gateway": "172.21.0.1",
+                    "IPAddress": "172.21.0.2",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "MacAddress": "02:42:ac:15:00:02",
+                    "DriverOpts": null
+                }
+            }
+        }
+    }
+]
