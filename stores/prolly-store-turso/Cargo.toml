@@ -21,7 +21,7 @@ default = []
 turso-cloud-sync = ["turso/sync"]
 
 [dependencies]
-prolly = { package = "prolly-map", path = "../..", version = "0.3.0", features = ["async-store"] }
+prolly = { package = "prolly-map", path = "../..", version = "0.4.0", features = ["async-store"] }
 turso = { version = "0.7", default-features = false }
 
 [dev-dependencies]
@@ -34,4 +34,3 @@ unsafe_code = "forbid"
 [[example]]
 name = "basic_usage"
 path = "examples/basic_usage.rs"
-

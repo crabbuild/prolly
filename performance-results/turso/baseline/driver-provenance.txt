@@ -1,0 +1,6 @@
+driver=/Users/haipingfu/CrabDB/prolly/scripts/run_turso_scale_benchmark.sh
+revision=6b2a603f73997e20d1669c3f270917c2a3c1b0b7
+dirty=true
+started_utc=2026-07-20T06:42:01Z
+arguments= --profile full --output /Users/haipingfu/CrabDB/prolly/performance-results/turso/baseline --revision 6b2a603f73997e20d1669c3f270917c2a3c1b0b7 --dirty --sizes 1000000 --runs 3 --operations put\,batch\,get_cold\,get_warm\,query\,scan\,full_scan\,diff\,merge --patterns append\,random\,clustered --changes auto --read-samples 10000 --min-free-gb 3 --tokio-workers 4
+ended_utc=2026-07-20T06:46:37Z
