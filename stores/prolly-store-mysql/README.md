@@ -11,7 +11,7 @@ on MySQL and you want durable Prolly nodes, hints, and named roots in SQL.
 ```toml
 [dependencies]
 prolly-map = "0.4"
-prolly-store-mysql = "0.2.1"
+prolly-store-mysql = "0.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

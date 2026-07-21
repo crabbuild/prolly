@@ -16,7 +16,7 @@ important. Choose a remote adapter when multiple hosts must share the store.
 ```toml
 [dependencies]
 prolly-map = "0.4"
-prolly-store-rocksdb = "0.2.1"
+prolly-store-rocksdb = "0.3.0"
 ```
 
 The `rocksdb` dependency builds native code. Development and CI environments

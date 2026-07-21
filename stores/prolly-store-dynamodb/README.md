@@ -13,7 +13,7 @@ The AWS versions below match the adapter's SDK line:
 ```toml
 [dependencies]
 prolly-map = "0.4"
-prolly-store-dynamodb = "0.2.1"
+prolly-store-dynamodb = "0.3.0"
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "=1.73.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

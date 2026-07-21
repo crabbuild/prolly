@@ -12,7 +12,7 @@ Prolly tree storage.
 ```toml
 [dependencies]
 prolly-map = "0.4"
-prolly-store-cosmosdb = "0.2.1"
+prolly-store-cosmosdb = "0.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
