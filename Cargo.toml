@@ -75,25 +75,25 @@ name = "prolly_bench"
 harness = false
 
 [[bench]]
-name = "ai_workloads_bench"
+name = "prolly_ai_workloads_bench"
 harness = false
 
 [[bench]]
-name = "store_diff_merge_bench"
+name = "prolly_store_diff_merge_bench"
 harness = false
 
 [[bench]]
-name = "secondary_index_bench"
+name = "prolly_secondary_index_bench"
 harness = false
 
 [[bench]]
-name = "proximity_bench"
+name = "prolly_proximity_bench"
 harness = false
 
 [[bench]]
-name = "scale_workloads"
+name = "prolly_scale_workloads"
 harness = false
 
 [[bench]]
-name = "async_first_foundation_bench"
+name = "prolly_async_engine_bench"
 harness = false
