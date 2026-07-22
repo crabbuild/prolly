@@ -198,10 +198,18 @@ impl ReadNode {
             }
             _ => 0,
         };
+        if !leaf && entries.is_empty() {
+            return Err(Error::InvalidNode);
+        }
+        let mut previous = None;
         for entry in &mut entries {
             let key =
                 read_slice(key_source, entry.key_start, entry.key_len).ok_or(Error::InvalidNode)?;
+            if previous.is_some_and(|previous| previous >= key) {
+                return Err(Error::InvalidNode);
+            }
             entry.key_order = key_order_word(key, common_prefix_len);
+            previous = Some(key);
         }
 
         let node = Self {
@@ -213,7 +221,6 @@ impl ReadNode {
             level,
             format,
         };
-        node.validate()?;
         Ok(node)
     }
 
@@ -369,22 +376,6 @@ impl ReadNode {
                     .len()
                     .saturating_mul(mem::size_of::<ReadEntryMeta>()),
             )
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        if !self.leaf && self.entries.is_empty() {
-            return Err(Error::InvalidNode);
-        }
-        let mut previous: Option<&[u8]> = None;
-        for index in 0..self.len() {
-            let key = self.key(index).ok_or(Error::InvalidNode)?;
-            self.value(index).ok_or(Error::InvalidNode)?;
-            if previous.is_some_and(|previous| previous >= key) {
-                return Err(Error::InvalidNode);
-            }
-            previous = Some(key);
-        }
-        Ok(())
     }
 }
 

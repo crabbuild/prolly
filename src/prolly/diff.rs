@@ -137,6 +137,7 @@ const DIFF_COLLECTION_PREFETCH_PARALLELISM: usize = 16;
 #[cfg(test)]
 const DIFF_FRAME_PREFETCH_PARALLELISM: usize = 16;
 const MERGE_FRONTIER_PREFETCH_PARALLELISM: usize = 16;
+const STRUCTURAL_MERGE_MAX_VISITED_NODES: usize = 256;
 #[cfg(test)]
 #[expect(
     dead_code,
@@ -3453,6 +3454,13 @@ where
         return Ok(left.clone());
     }
 
+    if let Some(merged) = try_structural_merge_async(prolly, base, left, right, resolver.as_deref())
+        .await?
+        .0?
+    {
+        return Ok(merged);
+    }
+
     let mut lineage_recorder = MergeTraceRecorder::disabled();
     if let Some(merged) = try_lineage_merge_async(
         prolly,
@@ -3467,15 +3475,8 @@ where
         return Ok(merged);
     }
 
-    if let Some(merged) = try_structural_merge_async(prolly, base, left, right, resolver.as_deref())
-        .await?
-        .0?
-    {
-        return Ok(merged);
-    }
-
     let right_diff = compute_async_diff(prolly, base, right).await?;
-    merge_trees_with_right_diff_async(prolly, left, &right_diff, resolver).await
+    merge_trees_with_right_diff_async(prolly, left, right, &right_diff, resolver).await
 }
 
 /// Async three-way merge using callback-scoped conflict views.
@@ -3693,8 +3694,15 @@ where
     let (right_diff, stats) = compute_async_diff_with_stats(prolly, base, right).await?;
     trace.push(MergeTraceEvent::DiffTraversal { stats });
     let mut recorder = MergeTraceRecorder::new(trace);
-    merge_trees_with_right_diff_async_traced(prolly, left, &right_diff, resolver, &mut recorder)
-        .await
+    merge_trees_with_right_diff_async_traced(
+        prolly,
+        left,
+        right,
+        &right_diff,
+        resolver,
+        &mut recorder,
+    )
+    .await
 }
 
 /// Merge only right-side changes whose keys are in `[start, end)` through an async store.
@@ -3716,11 +3724,12 @@ where
     }
 
     let right_diff = compute_async_range_diff(prolly, base, right, start, end).await?;
-    merge_trees_with_right_diff_async(prolly, left, &right_diff, resolver).await
+    merge_trees_with_right_diff_async(prolly, left, right, &right_diff, resolver).await
 }
 async fn merge_trees_with_right_diff_async<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,
+    right: &Tree,
     right_diff: &[Diff],
     resolver: Option<Resolver>,
 ) -> Result<Tree, Error>
@@ -3729,12 +3738,20 @@ where
     S::Error: Send + Sync,
 {
     let mut recorder = MergeTraceRecorder::disabled();
-    merge_trees_with_right_diff_async_traced(prolly, left, right_diff, resolver, &mut recorder)
-        .await
+    merge_trees_with_right_diff_async_traced(
+        prolly,
+        left,
+        right,
+        right_diff,
+        resolver,
+        &mut recorder,
+    )
+    .await
 }
 async fn merge_trees_with_right_diff_async_traced<S>(
     prolly: &AsyncProlly<S>,
     left: &Tree,
+    right: &Tree,
     right_diff: &[Diff],
     resolver: Option<Resolver>,
     recorder: &mut MergeTraceRecorder<'_>,
@@ -3744,6 +3761,40 @@ where
     S::Error: Send + Sync,
 {
     let right_changes = build_merge_change_refs(right_diff);
+    if let Some(first_key) = right_changes.iter().map(|entry| entry.key).min() {
+        let all_additions = right_changes
+            .iter()
+            .all(|entry| entry.base.is_none() && entry.value.is_some());
+        if all_additions {
+            let mut left_suffix = prolly.range(left, first_key, None).await?;
+            if left_suffix.next().await.is_none() {
+                let (publication, merged) = prolly
+                    .execute_replay(
+                        left,
+                        false,
+                        PublicationOrigin::Merge,
+                        |manager| {
+                            let merged = super::write::append_tree_suffix(
+                                manager, left, right, first_key, None, None, None,
+                            )?;
+                            let publication = merged.clone().unwrap_or_else(|| left.clone());
+                            Ok((publication, merged))
+                        },
+                        |_, _| {},
+                    )
+                    .await?;
+                if let Some(merged) = merged {
+                    recorder.record(MergeTraceEvent::BatchMerge {
+                        right_changes: right_changes.len(),
+                        mutations: right_changes.len(),
+                        append_only: true,
+                    });
+                    debug_assert_eq!(publication.root, merged.root);
+                    return Ok(merged);
+                }
+            }
+        }
+    }
     let mut mutations = Vec::with_capacity(right_changes.len());
     let keys = right_changes
         .iter()
@@ -6510,6 +6561,7 @@ fn try_structural_merge_traced<M: CanonicalWriteManager>(
 
     recorder.record(MergeTraceEvent::StructuralMergeStarted);
     let mut collector = BatchWriteCollector::new_cached();
+    let mut remaining_nodes = STRUCTURAL_MERGE_MAX_VISITED_NODES;
     let Some(root) = try_structural_merge_cids(
         manager,
         base_cid,
@@ -6518,6 +6570,7 @@ fn try_structural_merge_traced<M: CanonicalWriteManager>(
         resolver,
         &mut collector,
         recorder,
+        &mut remaining_nodes,
     )?
     else {
         return Ok(None);
@@ -6558,6 +6611,7 @@ fn try_structural_merge_cids<M: CanonicalWriteManager>(
     resolver: Option<MergeResolverRef<'_>>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
+    remaining_nodes: &mut usize,
 ) -> Result<Option<StructuralMergeResult>, Error> {
     if left_cid == right_cid {
         recorder.record_reuse(left_cid, MergeReuseReason::BranchesEqual);
@@ -6571,6 +6625,11 @@ fn try_structural_merge_cids<M: CanonicalWriteManager>(
         recorder.record_reuse(left_cid, MergeReuseReason::RightUnchanged);
         return Ok(Some(StructuralMergeResult::reused(left_cid.clone())));
     }
+    let Some(next_remaining) = remaining_nodes.checked_sub(1) else {
+        recorder.record_fallback(MergeFallbackReason::ChildFallback);
+        return Ok(None);
+    };
+    *remaining_nodes = next_remaining;
 
     let nodes = manager.write_load_many_ordered(&[
         base_cid.clone(),
@@ -6600,7 +6659,17 @@ fn try_structural_merge_cids<M: CanonicalWriteManager>(
     }
 
     try_structural_merge_internal(
-        manager, &base, &left, &right, base_cid, left_cid, right_cid, resolver, collector, recorder,
+        manager,
+        &base,
+        &left,
+        &right,
+        base_cid,
+        left_cid,
+        right_cid,
+        resolver,
+        collector,
+        recorder,
+        remaining_nodes,
     )
 }
 
@@ -6616,6 +6685,7 @@ fn try_structural_merge_internal<M: CanonicalWriteManager>(
     resolver: Option<MergeResolverRef<'_>>,
     collector: &mut BatchWriteCollector,
     recorder: &mut MergeTraceRecorder<'_>,
+    remaining_nodes: &mut usize,
 ) -> Result<Option<StructuralMergeResult>, Error> {
     ensure_node_value_count(base)?;
     ensure_node_value_count(left)?;
@@ -6642,6 +6712,7 @@ fn try_structural_merge_internal<M: CanonicalWriteManager>(
             resolver,
             collector,
             recorder,
+            remaining_nodes,
         )?
         else {
             recorder.record_fallback(MergeFallbackReason::ChildFallback);

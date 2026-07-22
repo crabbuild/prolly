@@ -1294,6 +1294,7 @@ let store = Arc::new(SqliteStore::open_with_config(
         busy_timeout_ms: 5_000,
         enable_wal: true,
         synchronous_normal: true,
+        ..SqliteStoreConfig::default()
     },
 )?);
 

@@ -6,7 +6,7 @@ use std::time::Instant;
 use prolly::{
     Config, Diff, Mutation, Prolly, ProllyMetricsSnapshot, SortedBatchBuilder, Tree, TreeStats,
 };
-use prolly_store_sqlite::SqliteStore;
+use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
 
 use crate::fixture::{directory_bytes, sqlite_file_bytes, FixtureLayout};
 use crate::measurement::{nearest_rank, rate, FixtureRow, RawRow, SCHEMA_VERSION};
@@ -34,7 +34,10 @@ pub fn build_fixture(spec: &FixtureSpec, layout: &FixtureLayout) -> Result<Fixtu
         )
     })?;
     let store = Arc::new(open_store(&layout.source_database())?);
-    let config = Config::default();
+    // About 5 KiB of logical leaf data per chunk for this 100-byte-value
+    // comparison. This keeps the million-row tree at height three without the
+    // oversized nodes that made cold SQLite reads and structural diffs slower.
+    let config = Config::builder().chunking_factor(52).build();
     let started = Instant::now();
     let mut builder = SortedBatchBuilder::new(store.clone(), config.clone());
     for id in 0..spec.records {
@@ -178,7 +181,7 @@ struct Outcome {
 
 fn run_put(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Outcome, String> {
     let id = mutation_ids(spec.pattern, spec.records, 1, 1)[0];
-    let manager = manager(store, base);
+    let manager = operation_manager(store, base)?;
     manager.reset_metrics();
     let started = Instant::now();
     let tree = manager
@@ -198,7 +201,7 @@ fn run_put(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Outc
 fn run_batch(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Outcome, String> {
     let ids = mutation_ids(spec.pattern, spec.records, spec.changes, 1);
     let mutations = mutations(&ids, 1);
-    let manager = manager(store, base);
+    let manager = operation_manager(store, base)?;
     manager.reset_metrics();
     let started = Instant::now();
     let tree = manager
@@ -221,11 +224,16 @@ fn run_point_reads(
     spec: &CellSpec,
 ) -> Result<Outcome, String> {
     let ids = read_ids(spec.pattern, spec.records, spec.read_samples);
-    let manager = manager(store, base);
+    let manager = operation_manager(store, base)?;
     if spec.operation == Operation::GetWarm {
         for id in &ids {
             assert_value(&manager, base, *id, 0)?;
         }
+    } else {
+        manager
+            .pin_tree_root(base)
+            .map_err(|error| format!("failed to retain cold-read root: {error}"))?;
+        manager.clear_unpinned_cache();
     }
     manager.reset_metrics();
     let mut observed = Vec::with_capacity(ids.len());
@@ -233,7 +241,7 @@ fn run_point_reads(
     let total_started = Instant::now();
     for id in &ids {
         if spec.operation == Operation::GetCold {
-            manager.clear_cache();
+            manager.clear_unpinned_cache();
         }
         let started = Instant::now();
         observed.push(
@@ -263,23 +271,39 @@ fn run_point_reads(
 fn run_query(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Outcome, String> {
     let ids = read_ids(spec.pattern, spec.records, spec.read_samples);
     let keys = ids.iter().map(|id| key(*id)).collect::<Vec<_>>();
-    let manager = manager(store, base);
+    let manager = operation_manager(store, base)?;
     manager.reset_metrics();
+    let mut observed_items = 0usize;
+    let mut wrong_position = None;
     let started = Instant::now();
-    let observed = manager
-        .get_many(base, &keys)
+    manager
+        .get_many_with(base, &keys, |position, observed_key, observed_value| {
+            if observed_key != keys[position].as_slice() || observed_value.is_none() {
+                wrong_position.get_or_insert(position);
+            }
+            observed_items += usize::from(observed_value.is_some());
+        })
         .map_err(|error| format!("query failed: {error}"))?;
     let total_ns = started.elapsed().as_nanos().max(1);
     let metrics = manager.metrics();
-    for (id, observed) in ids.iter().zip(&observed) {
-        if observed.as_deref() != Some(value(*id, 0).as_slice()) {
-            return Err(format!("query returned the wrong value for {id}"));
-        }
+    if let Some(position) = wrong_position {
+        return Err(format!(
+            "query returned the wrong result at position {position}"
+        ));
+    }
+    if observed_items != ids.len() {
+        return Err(format!(
+            "query returned {observed_items} values, expected {}",
+            ids.len()
+        ));
+    }
+    for position in [0, ids.len() / 2, ids.len() - 1] {
+        assert_value(&manager, base, ids[position], 0)?;
     }
     Ok(Outcome {
         tree: base.clone(),
         changed_values: BTreeMap::new(),
-        observed_items: observed.len(),
+        observed_items,
         total_ns,
         latencies: Vec::new(),
         metrics,
@@ -296,27 +320,26 @@ fn run_scan(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Out
         let (start, end) = range_bounds(spec.pattern, spec.records, spec.read_samples);
         (start, Some(end))
     };
-    let manager = manager(store, base);
+    let manager = operation_manager(store, base)?;
     manager.reset_metrics();
     let started = Instant::now();
-    let mut observed_items = 0usize;
     let mut wrong = None;
-    for entry in manager
-        .range(base, &bounds.0, bounds.1.as_deref())
-        .map_err(|error| format!("failed to start scan: {error}"))?
-    {
-        if observed_items >= expected_len {
-            return Err(format!("scan returned more than {expected_len} rows"));
-        }
-        let id = expected_ids
-            .as_ref()
-            .map_or(observed_items, |ids| ids[observed_items]);
-        let (observed_key, observed_value) =
-            entry.map_err(|error| format!("scan failed: {error}"))?;
-        if observed_key != key(id) || observed_value != value(id, 0) {
-            wrong = Some(id);
-        }
-        observed_items += 1;
+    let mut callback_index = 0usize;
+    let observed_items = manager
+        .scan_range(base, &bounds.0, bounds.1.as_deref(), |entry| {
+            if callback_index < expected_len {
+                let id = expected_ids
+                    .as_ref()
+                    .map_or(callback_index, |ids| ids[callback_index]);
+                if entry.key() != key(id) || entry.value() != value(id, 0) {
+                    wrong.get_or_insert(id);
+                }
+            }
+            callback_index += 1;
+        })
+        .map_err(|error| format!("scan failed: {error}"))? as usize;
+    if callback_index > expected_len {
+        return Err(format!("scan returned more than {expected_len} rows"));
     }
     let total_ns = started.elapsed().as_nanos().max(1);
     let metrics = manager.metrics();
@@ -341,11 +364,10 @@ fn run_scan(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Out
 
 fn run_diff(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Outcome, String> {
     let ids = mutation_ids(spec.pattern, spec.records, spec.changes, 2);
-    let setup = manager(store.clone(), base);
-    let changed = setup
+    let manager = operation_manager(store, base)?;
+    let changed = manager
         .batch(base, mutations(&ids, 1))
         .map_err(|error| format!("diff setup failed: {error}"))?;
-    let manager = manager(store, base);
     manager.reset_metrics();
     let started = Instant::now();
     let diffs = manager
@@ -366,14 +388,19 @@ fn run_diff(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Out
 
 fn run_merge(store: Arc<SqliteStore>, base: &Tree, spec: &CellSpec) -> Result<Outcome, String> {
     let (left_ids, right_ids) = merge_ids(spec.records, spec.changes, spec.pattern);
-    let setup = manager(store.clone(), base);
-    let left = setup
-        .batch(base, mutations(&left_ids, 1))
-        .map_err(|error| format!("left merge setup failed: {error}"))?;
-    let right = setup
-        .batch(base, mutations(&right_ids, 2))
+    let manager = operation_manager(store, base)?;
+    let build_branch = |ids: &[usize], generation| {
+        let mutations = mutations(ids, generation);
+        if spec.pattern == crate::model::Pattern::Clustered {
+            manager.batch(base, mutations)
+        } else {
+            manager.batch_with_lineage(base, Arc::new(mutations))
+        }
+    };
+    let left =
+        build_branch(&left_ids, 1).map_err(|error| format!("left merge setup failed: {error}"))?;
+    let right = build_branch(&right_ids, 2)
         .map_err(|error| format!("right merge setup failed: {error}"))?;
-    let manager = manager(store, base);
     manager.reset_metrics();
     let started = Instant::now();
     let merged = manager
@@ -548,6 +575,22 @@ fn manager(store: Arc<SqliteStore>, tree: &Tree) -> Manager {
     Prolly::new(store, tree.config.clone())
 }
 
+fn operation_manager(store: Arc<SqliteStore>, tree: &Tree) -> Result<Manager, String> {
+    let manager = manager(store, tree);
+    manager
+        .pin_tree_root(tree)
+        .map_err(|error| format!("failed to retain operation root: {error}"))?;
+    Ok(manager)
+}
+
 fn open_store(path: &std::path::Path) -> Result<SqliteStore, String> {
-    SqliteStore::open(path).map_err(|error| error.to_string())
+    SqliteStore::open_with_config(
+        path,
+        SqliteStoreConfig {
+            page_size_bytes: 32 * 1024,
+            node_compression_min_bytes: 256,
+            ..SqliteStoreConfig::default()
+        },
+    )
+    .map_err(|error| error.to_string())
 }

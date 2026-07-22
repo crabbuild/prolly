@@ -55,13 +55,27 @@ tree handle.
 
 `open`, `open_with_config`, and `open_in_memory` create these tables if needed:
 
-- `prolly_nodes(cid, node)` stores nodes by 32-byte CID.
+- `prolly_nodes(cid, encoding, node)` stores nodes by 32-byte CID, using raw or
+  LZ4-encoded payloads.
 - `prolly_hints(namespace, key, value)` stores optional traversal hints.
 - `prolly_roots(name, manifest)` stores named root manifests.
 
-`SqliteStoreConfig` controls the busy timeout, WAL journaling, and SQLite's
-`synchronous=NORMAL` setting. Defaults are a 5-second busy timeout, WAL for
-file-backed databases, and `synchronous=NORMAL`.
+`SqliteStoreConfig` controls the busy timeout, WAL journaling, SQLite's
+`synchronous=NORMAL` setting, database page size, page cache, WAL checkpoint
+interval, the decoded-node read cache, the minimum node size considered for
+compression, and the maximum memory-mapped read window.
+Defaults are a 5-second busy timeout, WAL for file-backed databases,
+`synchronous=NORMAL`, 64 KiB database pages, a 64 MiB page cache, a
+32,768-page automatic checkpoint interval, a 128 MiB decoded-node cache, and a
+256 MiB mapping. Nodes of at least 8 KiB are compressed when LZ4 makes them
+smaller; typical compact nodes remain raw to avoid spending more CPU than the
+write saves. Larger pages pack those node payloads efficiently, while the page
+cache avoids repeated dirty-page spills during bulk publication. The
+decoded-node cache retains shared immutable nodes across
+operations, and the checkpoint interval keeps checkpoint I/O outside typical
+publication commits while retaining bounded WAL growth. The mapping reduces
+page-read syscall overhead without changing transaction or durability
+behavior.
 
 ```rust,no_run
 use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
@@ -72,6 +86,8 @@ let store = SqliteStore::open_with_config(
         busy_timeout_ms: 10_000,
         enable_wal: true,
         synchronous_normal: false,
+        node_compression_min_bytes: 8 * 1024,
+        ..SqliteStoreConfig::default()
     },
 )?;
 # Ok::<(), Box<dyn std::error::Error>>(())

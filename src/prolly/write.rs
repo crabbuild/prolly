@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 use rayon::prelude::*;
 
 use super::boundary::entry_count_boundary;
-#[cfg(test)]
 use super::builder::EmittedNode;
 use super::builder::{BatchBuilder, LevelEmitter, NodeSummary};
 use super::cid::Cid;
@@ -1849,7 +1848,6 @@ fn try_append<M: CanonicalWriteManager>(
 /// Append a suffix that is already materialized in another tree from the same
 /// store. Only the boundary leaf is replayed; complete suffix leaves are reused
 /// by CID and the destination's rightmost parent frontier is rebuilt.
-#[cfg(test)]
 pub(crate) fn append_tree_suffix<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,
@@ -2822,7 +2820,6 @@ fn collect_leaf_summaries<M: CanonicalWriteManager>(
     Ok((leaves, internals))
 }
 
-#[cfg(test)]
 pub(crate) fn tree_leaf_summaries<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,
@@ -2831,7 +2828,6 @@ pub(crate) fn tree_leaf_summaries<M: CanonicalWriteManager>(
     collect_leaf_summaries(manager, tree, &mut stats, false).map(|(leaves, _)| leaves)
 }
 
-#[cfg(test)]
 pub(crate) fn tree_level_summaries<M: CanonicalWriteManager>(
     manager: &M,
     tree: &Tree,

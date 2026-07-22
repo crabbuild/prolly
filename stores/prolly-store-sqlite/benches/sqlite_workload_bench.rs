@@ -850,6 +850,7 @@ fn open_store(path: &Path, profile: DurabilityProfile) -> Result<SqliteStore, St
             busy_timeout_ms: 5_000,
             enable_wal: true,
             synchronous_normal: matches!(profile, DurabilityProfile::Normal),
+            ..SqliteStoreConfig::default()
         },
     )
     .map_err(|err| err.to_string())
