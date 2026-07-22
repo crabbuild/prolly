@@ -1013,6 +1013,8 @@ Optional adapter crates:
 - [`prolly-store-turso`](stores/prolly-store-turso/README.md): native local
   asynchronous Turso Database backend, with explicit cloud push/pull behind
   its optional `turso-cloud-sync` feature.
+- [`prolly-store-redb`](stores/prolly-store-redb/README.md): pure-Rust,
+  single-file redb backend with atomic transactions.
 - `prolly-store-rocksdb`: embedded RocksDB backend.
 - `prolly-store-pglite`: PGlite/Node sidecar backend.
 - `prolly-store-slatedb`: object-store-backed SlateDB backend.
@@ -1031,6 +1033,7 @@ cargo test --features async-store
 cargo test --features tokio
 cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
 cargo test --manifest-path stores/prolly-store-turso/Cargo.toml
+cargo test --manifest-path stores/prolly-store-redb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml
 cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
@@ -2058,6 +2061,7 @@ Run shared store contract coverage:
 cargo test --test store_conformance
 cargo test --features async-store --test async_store
 cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
+cargo test --manifest-path stores/prolly-store-redb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-rocksdb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-slatedb/Cargo.toml
 cargo test --manifest-path stores/prolly-store-pglite/Cargo.toml

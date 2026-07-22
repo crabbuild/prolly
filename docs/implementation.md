@@ -181,6 +181,7 @@ Current store families include:
 - `MemStore`: in-memory development and tests.
 - `FileNodeStore`: file-backed node storage.
 - `prolly-store-sqlite`: durable embedded SQLite adapter.
+- `prolly-store-redb`: pure-Rust, single-file redb adapter.
 - `prolly-store-rocksdb`: RocksDB adapter.
 - `prolly-store-slatedb`: SlateDB adapter.
 - `prolly-store-pglite`: PGlite adapter.
