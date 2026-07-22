@@ -2104,6 +2104,16 @@ PROLLY_SQLITE_SCALE_BATCH=100000 \
 cargo bench --manifest-path stores/prolly-store-sqlite/Cargo.toml --bench sqlite_scale_bench
 ```
 
+Compare the Dolt Go and Rust prolly trees with SQLite backends:
+
+```sh
+BENCH_PROFILE=smoke scripts/run_dolt_sqlite_comparison.sh
+```
+
+See [`docs/prolly-go-rust-sqlite-benchmark.md`](docs/prolly-go-rust-sqlite-benchmark.md)
+for the full matrix, timing boundaries, correctness gates, and interpretation
+limits.
+
 See [`docs/performance.md`](docs/performance.md) for the performance guide,
 current benchmark coverage, and measured SQLite scale results.
 

@@ -21,6 +21,11 @@ Use these goals when you evaluate a change:
 
 The key tradeoff is deliberate. Prolly trees add content-addressed metadata, but they buy cheap snapshots, structural diff, merge, sync, retention, and reproducible roots.
 
+For a process-isolated comparison of this Rust tree and Dolt's Go tree over
+SQLite, see the [Dolt Go vs Rust SQLite benchmark](prolly-go-rust-sqlite-benchmark.md).
+It mirrors the complete local SQLite operation matrix and rejects logical or
+cardinality mismatches before reporting performance.
+
 ## Mental model
 
 Think about cost in three layers:
