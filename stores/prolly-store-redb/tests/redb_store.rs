@@ -7,7 +7,8 @@ use prolly::{
     NodeStoreScan, Prolly, PublicationOrigin, RootCondition, RootManifest, RootWrite, Store,
     TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
-use prolly_store_redb::{Durability, RedbStore, RedbStoreConfig};
+use prolly_store_redb::{Durability, RedbStore, RedbStoreConfig, RedbStoreOptions};
+use redb::{Database, ReadableDatabase, TableDefinition};
 
 #[test]
 fn redb_store_satisfies_store_contract() {
@@ -134,6 +135,173 @@ fn redb_store_accepts_custom_cache_and_durability() {
     .unwrap();
     store.put(b"configured", b"value").unwrap();
     assert_eq!(store.get(b"configured").unwrap(), Some(b"value".to_vec()));
+    drop(store);
+    remove_db(&path);
+}
+
+#[test]
+fn redb_store_retains_native_shared_reads() {
+    let path = temp_db_path("shared-reads");
+    remove_db(&path);
+    let store = RedbStore::open_with_options(
+        &path,
+        RedbStoreOptions {
+            database: RedbStoreConfig {
+                cache_size_bytes: 8 * 1024 * 1024,
+                durability: Durability::None,
+            },
+            node_read_cache_size_bytes: 1024 * 1024,
+            compress_nodes: true,
+        },
+    )
+    .unwrap();
+    store.put(b"shared", b"immutable-value").unwrap();
+
+    assert!(store.has_native_shared_reads());
+    let first = store.get_shared(b"shared").unwrap().unwrap();
+    let second = store.get_shared(b"shared").unwrap().unwrap();
+    assert!(Arc::ptr_eq(&first, &second));
+    store.put(b"shared", b"replacement").unwrap();
+    let replacement = store.get_shared(b"shared").unwrap().unwrap();
+    assert_eq!(replacement.as_ref(), b"replacement");
+    assert!(!Arc::ptr_eq(&first, &replacement));
+    drop(store);
+    remove_db(&path);
+}
+
+#[test]
+fn redb_store_compresses_large_nodes_transparently() {
+    const NODES_V2: TableDefinition<&[u8], (u8, &[u8])> = TableDefinition::new("prolly_nodes_v2");
+
+    let path = temp_db_path("compressed-nodes");
+    remove_db(&path);
+    let key = Cid::from_bytes(b"compressible-node");
+    let value = vec![0x5a; 64 * 1024];
+    {
+        let store = RedbStore::open(&path).unwrap();
+        store.put(key.as_bytes(), &value).unwrap();
+        assert_eq!(store.get(key.as_bytes()).unwrap(), Some(value.clone()));
+    }
+
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_read().unwrap();
+    let table = transaction.open_table(NODES_V2).unwrap();
+    let stored = table.get(key.as_bytes()).unwrap().unwrap();
+    let (encoding, bytes) = stored.value();
+    assert_eq!(encoding, 1);
+    assert!(bytes.len() < value.len() / 4);
+    drop(stored);
+    drop(table);
+    drop(transaction);
+    drop(database);
+    remove_db(&path);
+}
+
+#[test]
+fn redb_store_can_disable_cache_and_compression() {
+    const NODES_V2: TableDefinition<&[u8], (u8, &[u8])> = TableDefinition::new("prolly_nodes_v2");
+
+    let path = temp_db_path("uncompressed-nodes");
+    remove_db(&path);
+    let key = Cid::from_bytes(b"uncompressed-node");
+    let value = vec![0x5a; 16 * 1024];
+    {
+        let store = RedbStore::open_with_options(
+            &path,
+            RedbStoreOptions {
+                database: RedbStoreConfig::default(),
+                node_read_cache_size_bytes: 0,
+                compress_nodes: false,
+            },
+        )
+        .unwrap();
+        assert!(!store.has_native_shared_reads());
+        store.put(key.as_bytes(), &value).unwrap();
+        assert_eq!(store.get(key.as_bytes()).unwrap(), Some(value.clone()));
+    }
+
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_read().unwrap();
+    let table = transaction.open_table(NODES_V2).unwrap();
+    let stored = table.get(key.as_bytes()).unwrap().unwrap();
+    let (encoding, bytes) = stored.value();
+    assert_eq!(encoding, 0);
+    assert_eq!(bytes, value);
+    drop(stored);
+    drop(table);
+    drop(transaction);
+    drop(database);
+    remove_db(&path);
+}
+
+#[test]
+fn redb_store_reads_legacy_raw_node_table() {
+    const LEGACY_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
+
+    let path = temp_db_path("legacy-nodes");
+    remove_db(&path);
+    let key = Cid::from_bytes(b"legacy-node");
+    let current_key = Cid::from_bytes(b"current-node");
+    {
+        let database = Database::create(&path).unwrap();
+        let transaction = database.begin_write().unwrap();
+        {
+            let mut table = transaction.open_table(LEGACY_NODES).unwrap();
+            table
+                .insert(key.as_bytes(), b"legacy-value".as_slice())
+                .unwrap();
+        }
+        transaction.commit().unwrap();
+    }
+
+    let store = RedbStore::open(&path).unwrap();
+    assert_eq!(
+        store.get(key.as_bytes()).unwrap(),
+        Some(b"legacy-value".to_vec())
+    );
+    store.put(current_key.as_bytes(), b"current-value").unwrap();
+    let mut expected = vec![key.clone(), current_key];
+    expected.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+    assert_eq!(store.list_node_cids().unwrap(), expected);
+
+    store.put(key.as_bytes(), b"migrated-value").unwrap();
+    assert_eq!(
+        store.get(key.as_bytes()).unwrap(),
+        Some(b"migrated-value".to_vec())
+    );
+    assert_eq!(store.list_node_cids().unwrap(), expected);
+    drop(store);
+    remove_db(&path);
+}
+
+#[test]
+fn redb_store_compaction_preserves_data() {
+    let path = temp_db_path("compaction");
+    remove_db(&path);
+    let key = Cid::from_bytes(b"retained-node");
+    let mut store = RedbStore::open(&path).unwrap();
+    store.put(key.as_bytes(), b"retained-value").unwrap();
+    for index in 0_u32..256 {
+        store
+            .put(&index.to_be_bytes(), &vec![index as u8; 16 * 1024])
+            .unwrap();
+    }
+    for index in 0_u32..256 {
+        store.delete(&index.to_be_bytes()).unwrap();
+    }
+
+    let _compacted = store.compact().unwrap();
+    assert_eq!(
+        store.get(key.as_bytes()).unwrap(),
+        Some(b"retained-value".to_vec())
+    );
+    drop(store);
+
+    let store = RedbStore::open(&path).unwrap();
+    assert_eq!(
+        store.get(key.as_bytes()).unwrap(),
+        Some(b"retained-value".to_vec())
+    );
     drop(store);
     remove_db(&path);
 }
