@@ -1,0 +1,27 @@
+[package]
+name = "prolly-store-redb"
+description = "redb store adapter for prolly-map."
+edition = "2021"
+rust-version = "1.89"
+version = "0.3.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/crabbuild/prolly"
+homepage = "https://github.com/crabbuild/prolly"
+documentation = "https://docs.rs/prolly-store-redb"
+readme = "README.md"
+keywords = ["prolly-tree", "storage", "database", "redb"]
+categories = ["database-implementations"]
+
+[lib]
+name = "prolly_store_redb"
+path = "src/lib.rs"
+
+[dependencies]
+prolly = { package = "prolly-map", path = "../..", version = "0.5.0" }
+redb = "4.1.0"
+
+[dev-dependencies]
+prolly-store-test = { path = "../prolly-store-test" }
+
+[lints.rust]
+unsafe_code = "forbid"
