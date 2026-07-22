@@ -470,6 +470,19 @@ impl NodeCache {
         evicted
     }
 
+    fn clear_unpinned(&mut self) -> usize {
+        let before = self.nodes.len();
+        self.nodes.retain(|_, entry| entry.pinned);
+        self.access_log.clear();
+        self.bytes = self.nodes.values().map(|entry| entry.bytes).sum();
+        self.read_nodes = self
+            .nodes
+            .values()
+            .filter(|entry| entry.read.get().is_some())
+            .count();
+        before.saturating_sub(self.nodes.len())
+    }
+
     fn get(&mut self, cid: &Cid) -> Option<Arc<Node>> {
         if self.is_unbounded() {
             return self.peek(cid);
@@ -971,7 +984,7 @@ impl Default for BranchLineageCache {
             accelerations: VecDeque::new(),
             acceleration_bytes: 0,
             max_records: 8_192,
-            max_bytes: 8 * 1024 * 1024,
+            max_bytes: 64 * 1024 * 1024,
             retained_bytes: 0,
         }
     }
@@ -1040,6 +1053,14 @@ impl BranchLineageCache {
             })
         {
             return Some(Arc::clone(&acceleration.changes));
+        }
+        if let Some(direct) = self
+            .records
+            .iter()
+            .rev()
+            .find(|(root, record)| root == branch_root && &record.parent == base)
+        {
+            return Some(Arc::clone(&direct.1.lineage.mutations));
         }
         self.ensure_ancestry_index();
         let index = self.ancestry_index.as_ref()?;
@@ -3766,6 +3787,12 @@ impl<S: Store> Prolly<S> {
         self.engine.clear_cache();
     }
 
+    /// Clear all unpinned manager cache entries while retaining explicitly
+    /// pinned roots or paths.
+    pub fn clear_unpinned_cache(&self) {
+        self.engine.clear_unpinned_cache();
+    }
+
     /// Return the number of cached nodes in this Prolly manager.
     pub fn cache_len(&self) -> usize {
         self.engine.cache_len()
@@ -5904,6 +5931,21 @@ where
     pub fn clear_cache(&self) {
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.clear();
+            self.metrics.add_cache_evictions(evictions);
+        }
+        if let Ok(mut cache) = self.rightmost_path_cache.write() {
+            *cache = None;
+        }
+        if let Ok(mut recent) = self.recent_leaf.write() {
+            *recent = None;
+        }
+    }
+
+    /// Clear decoded cache entries except roots or paths explicitly pinned by
+    /// the caller. Recent-leaf and right-edge traversal state is still reset.
+    pub fn clear_unpinned_cache(&self) {
+        if let Ok(mut cache) = self.node_cache.write() {
+            let evictions = cache.clear_unpinned();
             self.metrics.add_cache_evictions(evictions);
         }
         if let Ok(mut cache) = self.rightmost_path_cache.write() {
@@ -8055,6 +8097,42 @@ mod tests {
             store.batch_get_ordered_calls.load(Ordering::Relaxed),
             0,
             "single-CID miss batches should not pay ordered batch overhead"
+        );
+    }
+
+    #[test]
+    fn clear_unpinned_cache_retains_an_explicitly_pinned_root() {
+        let store = Arc::new(CountingStore::default());
+        let prolly = Prolly::new(store.clone(), Config::default());
+
+        let mut leaf = prolly.new_leaf_node();
+        leaf.keys = vec![b"a".to_vec(), b"b".to_vec()];
+        leaf.vals = vec![b"1".to_vec(), b"2".to_vec()];
+        let leaf_cid = prolly.save(&leaf).unwrap();
+
+        let mut root = prolly.new_internal_node(1);
+        root.keys = vec![b"a".to_vec()];
+        root.vals = vec![leaf_cid.0.to_vec()];
+        root.child_counts = vec![2];
+        let tree = Tree {
+            root: Some(prolly.save(&root).unwrap()),
+            config: Config::default(),
+        };
+
+        prolly.clear_cache();
+        assert_eq!(prolly.pin_tree_root(&tree).unwrap(), 1);
+        assert_eq!(prolly.cache_len(), 1);
+        assert_eq!(prolly.get(&tree, b"a").unwrap(), Some(b"1".to_vec()));
+        assert_eq!(prolly.cache_len(), 2);
+
+        prolly.clear_unpinned_cache();
+        assert_eq!(prolly.cache_len(), 1);
+        let gets_before = store.get_calls.load(Ordering::Relaxed);
+        assert_eq!(prolly.get(&tree, b"b").unwrap(), Some(b"2".to_vec()));
+        assert_eq!(
+            store.get_calls.load(Ordering::Relaxed) - gets_before,
+            1,
+            "the pinned root should remain cached while its unpinned leaf reloads"
         );
     }
 

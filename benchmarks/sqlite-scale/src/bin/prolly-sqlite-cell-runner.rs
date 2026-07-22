@@ -151,7 +151,7 @@ fn fixture_row(row: FixtureRow) -> ProtocolRow {
 }
 
 fn cell_row(row: RawRow) -> ProtocolRow {
-    let query_strategy = (row.operation == Operation::Query).then_some("native_get_many");
+    let query_strategy = (row.operation == Operation::Query).then_some("native_get_many_borrowed");
     ProtocolRow {
         contract_version: CONTRACT_VERSION,
         kind: "cell",

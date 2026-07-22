@@ -48,7 +48,11 @@ fi
 
 sha256_file() { shasum -a 256 "$1" | awk '{print $1}'; }
 source_hash() {
-    find "$1" -type f | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done | shasum -a 256 | awk '{print $1}'
+    find "$1" -type d \( -name .git -o -name target \) -prune -o -type f -print |
+        LC_ALL=C sort |
+        while IFS= read -r file; do shasum -a 256 "$file"; done |
+        shasum -a 256 |
+        awk '{print $1}'
 }
 
 if [ "${DOLT_SQLITE_SKIP_BUILD:-0}" = 1 ]; then

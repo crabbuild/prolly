@@ -94,7 +94,11 @@ def validate_row(row, line_number):
         if not isinstance(row[field], (int, float)) or not math.isfinite(row[field]) or row[field] < 0:
             raise ValueError(f"row {line_number} has invalid {field}")
     if row["operation"] == "query":
-        expected = "native_get_many" if row["implementation"] == "rust" else "repeated_map_get"
+        expected = (
+            "native_get_many_borrowed"
+            if row["implementation"] == "rust"
+            else "repeated_map_get"
+        )
         if row["query_strategy"] != expected:
             raise ValueError(f"row {line_number} has wrong query strategy")
     elif row["query_strategy"] is not None:
