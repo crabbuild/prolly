@@ -197,7 +197,7 @@ pub fn write_report(
     writeln!(file, "## Interpretation limits\n").map_err(|error| error.to_string())?;
     writeln!(
         file,
-        "- End-to-end synchronous `Prolly<SqliteStore>` on one local connection."
+        "- End-to-end synchronous `Prolly<SqliteStore>` on one workload thread; this matrix does not measure read-pool concurrency or group commit."
     )
     .map_err(|error| error.to_string())?;
     writeln!(
