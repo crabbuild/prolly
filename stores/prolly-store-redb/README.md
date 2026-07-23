@@ -100,15 +100,21 @@ Ok::<(), Box<dyn std::error::Error>>(())
 Set `node_read_cache_size_bytes` to zero to disable decoded-node retention.
 The page-cache and node-cache limits are separate memory budgets. Compression
 is enabled by default; update-heavy workloads can set `compress_nodes` to
-`false` when write latency matters more than file size.
+`false` when write latency matters more than file size. The adapter retains a
+redb MVCC read snapshot between node lookups in either mode and refreshes it
+after every node commit, avoiding per-lookup transaction setup without serving
+stale post-commit data.
 
 ## Storage model
 
-The adapter creates four typed tables inside one redb file:
+The adapter creates five typed tables inside one redb file:
 
-- `prolly_nodes_v2` stores content-addressed nodes with an explicit raw or LZ4
+- `prolly_nodes_v3` stores content-addressed nodes with an explicit raw or LZ4
   encoding. Nodes smaller than 8 KiB and nodes that do not compress smaller are
-  stored raw.
+  stored raw. Raw values are copied directly into space reserved in redb's
+  B-tree page, avoiding an intermediate serialized node allocation.
+- `prolly_nodes_v2` retains the tuple-encoded node layout from the initial 0.3.1
+  implementation. Existing nodes remain readable and move to v3 when updated.
 - `prolly_nodes` is the legacy raw-node table retained for transparent reads of
   databases created by adapter 0.3.0. New and updated nodes move to the v2 table.
 - `prolly_roots` stores encoded named-root manifests.
@@ -150,6 +156,15 @@ Run the adapter's conformance, transaction, persistence, and concurrency tests:
 
 ```bash
 cargo test --manifest-path stores/prolly-store-redb/Cargo.toml
+```
+
+Run the persistent randomized engine oracle and the reproducible one-million
+record redb/SQLite matrix:
+
+```bash
+cargo +1.89.0 run --release \
+  --manifest-path benchmarks/redb-correctness/Cargo.toml
+benchmarks/redb-sqlite-1m/run-matrix.sh 3
 ```
 
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for map,

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use prolly::{Config, Error, Prolly};
+use prolly::{Config, Error, NamedRootRetention, Prolly};
 use prolly_store_sqlite::SqliteStore;
 
 #[test]
@@ -60,6 +60,33 @@ fn sqlite_store_commits_and_rolls_back_strict_transactions() {
     });
     assert!(matches!(result, Err(Error::Serialize(_))));
     assert_eq!(prolly.load_named_root(b"main").unwrap(), Some(committed));
+}
+
+#[test]
+fn sqlite_store_sweeps_nodes_unreachable_from_retained_named_roots() {
+    let store = SqliteStore::open_in_memory().unwrap();
+    let prolly = Prolly::new(store, Config::default());
+    let _orphan = prolly
+        .put(&prolly.create(), b"orphan".to_vec(), b"discard".to_vec())
+        .unwrap();
+    let retained = prolly
+        .put(&prolly.create(), b"live".to_vec(), b"retain".to_vec())
+        .unwrap();
+    prolly.publish_named_root(b"main", &retained).unwrap();
+
+    let plan = prolly
+        .plan_store_gc_for_retention(&NamedRootRetention::all())
+        .unwrap();
+    assert!(plan.reclaimable_nodes >= 1);
+
+    let sweep = prolly
+        .sweep_store_gc_for_retention(&NamedRootRetention::all())
+        .unwrap();
+    assert_eq!(sweep.deleted_nodes, plan.reclaimable_nodes);
+    assert_eq!(
+        prolly.get(&retained, b"live").unwrap(),
+        Some(b"retain".to_vec())
+    );
 }
 
 #[test]

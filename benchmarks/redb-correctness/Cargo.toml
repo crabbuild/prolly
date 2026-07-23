@@ -1,0 +1,21 @@
+[package]
+name = "prolly-redb-correctness"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+
+[workspace]
+
+[dependencies]
+lz4_flex = "0.11.5"
+prolly = { package = "prolly-map", path = "../.." }
+prolly-store-redb = { path = "../../stores/prolly-store-redb" }
+redb = "4.1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "prolly-redb-correctness"
+path = "src/main.rs"
