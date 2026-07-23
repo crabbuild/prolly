@@ -44,7 +44,7 @@ assert_eq!(
     prolly.get(&loaded, b"project/name")?,
     Some(b"CrabDB".to_vec())
 );
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Use `SqliteStore::open("./data/app.prolly.sqlite")` for persistence. Reopen the
@@ -90,7 +90,7 @@ let store = SqliteStore::open_with_config(
         ..SqliteStoreConfig::default()
     },
 )?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Use a separate database file for physical tenant or environment isolation.

@@ -15,7 +15,7 @@ its lower minimum Rust version.
 
 ```toml
 [dependencies]
-prolly-map = "0.5"
+prolly-map = "0.5.1"
 prolly-store-redb = "0.3"
 ```
 
@@ -67,8 +67,8 @@ let store = RedbStore::open_with_config(
         durability: Durability::Immediate,
     },
 )?;
-# drop(store);
-# Ok::<(), Box<dyn std::error::Error>>(())
+drop(store);
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `Durability::None` can improve throughput when loss of recent commits after a
@@ -93,8 +93,8 @@ let store = RedbStore::open_with_options(
         compress_nodes: true,
     },
 )?;
-# drop(store);
-# Ok::<(), Box<dyn std::error::Error>>(())
+drop(store);
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Set `node_read_cache_size_bytes` to zero to disable decoded-node retention.

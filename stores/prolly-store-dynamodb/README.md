@@ -12,7 +12,7 @@ The AWS versions below match the adapter's SDK line:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-dynamodb = "0.3.0"
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "=1.73.0"
@@ -94,34 +94,34 @@ use aws_sdk_dynamodb::config::{BehaviorVersion, Credentials, Region};
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
 use prolly_store_dynamodb::DynamoDbBackend;
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let config = aws_sdk_dynamodb::config::Builder::new()
-    .behavior_version(BehaviorVersion::latest())
-    .region(Region::new("us-west-2"))
-    .endpoint_url("http://127.0.0.1:8000")
-    .credentials_provider(Credentials::new("test", "test", None, None, "local"))
-    .build();
-let backend = DynamoDbBackend::new(
-    aws_sdk_dynamodb::Client::from_conf(config),
-    "prolly_store_example",
-)
-.with_key_prefix(b"my-app:".to_vec());
-backend.initialize_schema().await?;
-
-let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-let tree = prolly
-    .batch(
-        &prolly.create(),
-        vec![Mutation::Upsert {
-            key: b"task/1".to_vec(),
-            val: b"open".to_vec(),
-        }],
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let config = aws_sdk_dynamodb::config::Builder::new()
+        .behavior_version(BehaviorVersion::latest())
+        .region(Region::new("us-west-2"))
+        .endpoint_url("http://127.0.0.1:8000")
+        .credentials_provider(Credentials::new("test", "test", None, None, "local"))
+        .build();
+    let backend = DynamoDbBackend::new(
+        aws_sdk_dynamodb::Client::from_conf(config),
+        "prolly_store_example",
     )
-    .await?;
+    .with_key_prefix(b"my-app:".to_vec());
+    backend.initialize_schema().await?;
 
-prolly.publish_named_root(b"tasks/main", &tree).await?;
-# Ok(())
-# }
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let tree = prolly
+        .batch(
+            &prolly.create(),
+            vec![Mutation::Upsert {
+                key: b"task/1".to_vec(),
+                val: b"open".to_vec(),
+            }],
+        )
+        .await?;
+
+    prolly.publish_named_root(b"tasks/main", &tree).await?;
+    Ok(())
+}
 ```
 
 ## Diff and merge
@@ -130,43 +130,44 @@ Branching is immutable. A branch update writes new content-addressed nodes while
 unchanged subtrees keep their existing CIDs:
 
 ```rust
-# use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
-# use prolly_store_dynamodb::DynamoDbBackend;
-# async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>> {
-# let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-# let base = prolly.batch(&prolly.create(), vec![
-#     Mutation::Upsert { key: b"task/1".to_vec(), val: b"open".to_vec() },
-#     Mutation::Upsert { key: b"task/2".to_vec(), val: b"open".to_vec() },
-# ]).await?;
-let left = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"task/1".to_vec(),
-            val: b"in-review".to_vec(),
-        }],
-    )
-    .await?;
-let right = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"task/2".to_vec(),
-            val: b"done".to_vec(),
-        }],
-    )
-    .await?;
+use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
+use prolly_store_dynamodb::DynamoDbBackend;
 
-let diffs = prolly.diff(&base, &left).await?;
-assert_eq!(diffs.len(), 1);
+async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let base = prolly.batch(&prolly.create(), vec![
+        Mutation::Upsert { key: b"task/1".to_vec(), val: b"open".to_vec() },
+        Mutation::Upsert { key: b"task/2".to_vec(), val: b"open".to_vec() },
+    ]).await?;
+    let left = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"task/1".to_vec(),
+                val: b"in-review".to_vec(),
+            }],
+        )
+        .await?;
+    let right = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"task/2".to_vec(),
+                val: b"done".to_vec(),
+            }],
+        )
+        .await?;
 
-let merged = prolly.merge(&base, &left, &right, None).await?;
-assert_eq!(
-    prolly.get(&merged, b"task/2").await?,
-    Some(b"done".to_vec())
-);
-# Ok(())
-# }
+    let diffs = prolly.diff(&base, &left).await?;
+    assert_eq!(diffs.len(), 1);
+
+    let merged = prolly.merge(&base, &left, &right, None).await?;
+    assert_eq!(
+        prolly.get(&merged, b"task/2").await?,
+        Some(b"done".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Operational notes
