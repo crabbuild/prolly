@@ -22,7 +22,8 @@ use prolly::{
 pub use redb::Durability;
 
 const LEGACY_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
-const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v2");
+const V2_NODES: TableDefinition<&[u8], (u8, &[u8])> = TableDefinition::new("prolly_nodes_v2");
+const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v3");
 const ROOTS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_roots");
 const HINTS: TableDefinition<(&[u8], &[u8]), &[u8]> = TableDefinition::new("prolly_hints");
 
@@ -32,6 +33,7 @@ const MIN_COMPRESSIBLE_NODE_BYTES: usize = 8 * 1024;
 const DEFAULT_NODE_READ_CACHE_SIZE_BYTES: usize = 128 * 1024 * 1024;
 
 type NodeTable<'txn> = redb::Table<'txn, &'static [u8], &'static [u8]>;
+type V2NodeTable<'txn> = redb::Table<'txn, &'static [u8], (u8, &'static [u8])>;
 
 /// Configuration for [`RedbStore`].
 #[derive(Debug, Clone, Copy)]
@@ -226,6 +228,7 @@ pub struct RedbStore {
     node_read_cache_enabled: bool,
     node_read_transaction: RwLock<Option<redb::ReadTransaction>>,
     compress_nodes: bool,
+    v2_nodes_present: AtomicBool,
     legacy_nodes_present: AtomicBool,
 }
 
@@ -239,6 +242,10 @@ impl std::fmt::Debug for RedbStore {
                 &self.node_read_cache.lock().max_bytes,
             )
             .field("compress_nodes", &self.compress_nodes)
+            .field(
+                "v2_nodes_present",
+                &self.v2_nodes_present.load(Ordering::Relaxed),
+            )
             .field(
                 "legacy_nodes_present",
                 &self.legacy_nodes_present.load(Ordering::Relaxed),
@@ -287,6 +294,7 @@ impl RedbStore {
             node_read_cache_enabled: options.node_read_cache_size_bytes != 0,
             node_read_transaction: RwLock::new(None),
             compress_nodes: options.compress_nodes,
+            v2_nodes_present: AtomicBool::new(false),
             legacy_nodes_present: AtomicBool::new(false),
         };
         store.initialize_tables()?;
@@ -308,12 +316,19 @@ impl RedbStore {
     fn initialize_tables(&self) -> Result<(), RedbStoreError> {
         let transaction = self.begin_write("failed to begin table initialization")?;
         let legacy_nodes_present;
+        let v2_nodes_present;
         {
             let legacy_nodes = transaction.open_table(LEGACY_NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to initialize legacy node table", error)
             })?;
             legacy_nodes_present = !legacy_nodes.is_empty().map_err(|error| {
                 RedbStoreError::with_source("failed to inspect legacy node table", error)
+            })?;
+            let v2_nodes = transaction.open_table(V2_NODES).map_err(|error| {
+                RedbStoreError::with_source("failed to initialize v2 node table", error)
+            })?;
+            v2_nodes_present = !v2_nodes.is_empty().map_err(|error| {
+                RedbStoreError::with_source("failed to inspect v2 node table", error)
             })?;
             let _nodes = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to initialize node table", error)
@@ -330,6 +345,8 @@ impl RedbStore {
         })?;
         self.legacy_nodes_present
             .store(legacy_nodes_present, Ordering::Relaxed);
+        self.v2_nodes_present
+            .store(v2_nodes_present, Ordering::Relaxed);
         Ok(())
     }
 
@@ -365,6 +382,22 @@ impl RedbStore {
             })
     }
 
+    fn open_v2_nodes_for_write<'txn>(
+        &self,
+        transaction: &'txn WriteTransaction,
+        operation: &str,
+    ) -> Result<Option<V2NodeTable<'txn>>, RedbStoreError> {
+        if !self.v2_nodes_present.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
+        transaction.open_table(V2_NODES).map(Some).map_err(|error| {
+            RedbStoreError::with_source(
+                format!("failed to open v2 node table for {operation}"),
+                error,
+            )
+        })
+    }
+
     fn read_nodes_shared_ordered_unique(
         &self,
         keys: &[&[u8]],
@@ -394,6 +427,18 @@ impl RedbStore {
             let table = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to open node table for reading", error)
             })?;
+            let v2 = self
+                .v2_nodes_present
+                .load(Ordering::Relaxed)
+                .then(|| {
+                    transaction.open_table(V2_NODES).map_err(|error| {
+                        RedbStoreError::with_source(
+                            "failed to open v2 node table for reading",
+                            error,
+                        )
+                    })
+                })
+                .transpose()?;
             let legacy = self
                 .legacy_nodes_present
                 .load(Ordering::Relaxed)
@@ -416,6 +461,18 @@ impl RedbStore {
                     .map_err(|error| RedbStoreError::with_source("failed to read node", error))?
                 {
                     Some(Arc::from(decode_stored_node(value.value())?))
+                } else if let Some(value) = v2
+                    .as_ref()
+                    .map(|v2| {
+                        v2.get(*key).map_err(|error| {
+                            RedbStoreError::with_source("failed to read v2 node", error)
+                        })
+                    })
+                    .transpose()?
+                    .flatten()
+                {
+                    let (encoding, bytes) = value.value();
+                    Some(Arc::from(decode_v2_stored_node(encoding, bytes)?))
                 } else {
                     legacy
                         .as_ref()
@@ -433,6 +490,7 @@ impl RedbStore {
                 loaded_values.push(value);
             }
             drop(legacy);
+            drop(v2);
             drop(table);
             drop(transaction_guard);
 
@@ -462,6 +520,15 @@ impl RedbStore {
         let table = transaction.open_table(NODES).map_err(|error| {
             RedbStoreError::with_source("failed to open node table for reading", error)
         })?;
+        let v2 = self
+            .v2_nodes_present
+            .load(Ordering::Relaxed)
+            .then(|| {
+                transaction.open_table(V2_NODES).map_err(|error| {
+                    RedbStoreError::with_source("failed to open v2 node table for reading", error)
+                })
+            })
+            .transpose()?;
         let legacy = self
             .legacy_nodes_present
             .load(Ordering::Relaxed)
@@ -486,6 +553,18 @@ impl RedbStore {
                 .map_err(|error| RedbStoreError::with_source("failed to read node", error))?
             {
                 decode_stored_node(value.value()).map(Some)
+            } else if let Some(value) = v2
+                .as_ref()
+                .map(|v2| {
+                    v2.get(key).map_err(|error| {
+                        RedbStoreError::with_source("failed to read v2 node", error)
+                    })
+                })
+                .transpose()?
+                .flatten()
+            {
+                let (encoding, bytes) = value.value();
+                decode_v2_stored_node(encoding, bytes).map(Some)
             } else {
                 legacy
                     .as_ref()
@@ -582,6 +661,7 @@ impl Store for RedbStore {
             let mut table = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to open node table for writing", error)
             })?;
+            let mut v2 = self.open_v2_nodes_for_write(&transaction, "writing")?;
             let mut legacy = self.open_legacy_nodes_for_write(&transaction, "writing")?;
             let mut compression_scratch = Vec::new();
             insert_stored_node(
@@ -592,6 +672,11 @@ impl Store for RedbStore {
                 &mut compression_scratch,
             )
             .map_err(|error| RedbStoreError::with_source("failed to write node", error))?;
+            if let Some(v2) = v2.as_mut() {
+                v2.remove(key).map_err(|error| {
+                    RedbStoreError::with_source("failed to remove superseded v2 node", error)
+                })?;
+            }
             if let Some(legacy) = legacy.as_mut() {
                 legacy.remove(key).map_err(|error| {
                     RedbStoreError::with_source("failed to remove superseded legacy node", error)
@@ -611,10 +696,16 @@ impl Store for RedbStore {
             let mut table = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to open node table for deletion", error)
             })?;
+            let mut v2 = self.open_v2_nodes_for_write(&transaction, "deletion")?;
             let mut legacy = self.open_legacy_nodes_for_write(&transaction, "deletion")?;
             table
                 .remove(key)
                 .map_err(|error| RedbStoreError::with_source("failed to delete node", error))?;
+            if let Some(v2) = v2.as_mut() {
+                v2.remove(key).map_err(|error| {
+                    RedbStoreError::with_source("failed to delete v2 node", error)
+                })?;
+            }
             if let Some(legacy) = legacy.as_mut() {
                 legacy.remove(key).map_err(|error| {
                     RedbStoreError::with_source("failed to delete legacy node", error)
@@ -634,6 +725,7 @@ impl Store for RedbStore {
             let mut table = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to open node table for batch", error)
             })?;
+            let mut v2 = self.open_v2_nodes_for_write(&transaction, "batch")?;
             let mut legacy = self.open_legacy_nodes_for_write(&transaction, "batch")?;
             let mut compression_scratch = Vec::new();
             for op in ops {
@@ -649,6 +741,14 @@ impl Store for RedbStore {
                         .map_err(|error| {
                             RedbStoreError::with_source("failed to write node in batch", error)
                         })?;
+                        if let Some(v2) = v2.as_mut() {
+                            v2.remove(*key).map_err(|error| {
+                                RedbStoreError::with_source(
+                                    "failed to remove superseded v2 node in batch",
+                                    error,
+                                )
+                            })?;
+                        }
                         if let Some(legacy) = legacy.as_mut() {
                             legacy.remove(*key).map_err(|error| {
                                 RedbStoreError::with_source(
@@ -662,6 +762,14 @@ impl Store for RedbStore {
                         table.remove(*key).map_err(|error| {
                             RedbStoreError::with_source("failed to delete node in batch", error)
                         })?;
+                        if let Some(v2) = v2.as_mut() {
+                            v2.remove(*key).map_err(|error| {
+                                RedbStoreError::with_source(
+                                    "failed to delete v2 node in batch",
+                                    error,
+                                )
+                            })?;
+                        }
                         if let Some(legacy) = legacy.as_mut() {
                             legacy.remove(*key).map_err(|error| {
                                 RedbStoreError::with_source(
@@ -727,6 +835,7 @@ impl Store for RedbStore {
             let mut table = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to open node table for batch put", error)
             })?;
+            let mut v2 = self.open_v2_nodes_for_write(&transaction, "batch put")?;
             let mut legacy = self.open_legacy_nodes_for_write(&transaction, "batch put")?;
             let mut order = (0..entries.len()).collect::<Vec<_>>();
             order.sort_by(|&left, &right| entries[left].0.cmp(entries[right].0));
@@ -743,6 +852,14 @@ impl Store for RedbStore {
                 .map_err(|error| {
                     RedbStoreError::with_source("failed to write node in batch put", error)
                 })?;
+                if let Some(v2) = v2.as_mut() {
+                    v2.remove(key).map_err(|error| {
+                        RedbStoreError::with_source(
+                            "failed to remove superseded v2 node in batch put",
+                            error,
+                        )
+                    })?;
+                }
                 if let Some(legacy) = legacy.as_mut() {
                     legacy.remove(key).map_err(|error| {
                         RedbStoreError::with_source(
@@ -804,6 +921,7 @@ impl Store for RedbStore {
             let mut nodes = transaction.open_table(NODES).map_err(|error| {
                 RedbStoreError::with_source("failed to open node table for publication", error)
             })?;
+            let mut v2 = self.open_v2_nodes_for_write(&transaction, "publication")?;
             let mut legacy = self.open_legacy_nodes_for_write(&transaction, "publication")?;
             let mut hints = transaction.open_table(HINTS).map_err(|error| {
                 RedbStoreError::with_source("failed to open hint table for publication", error)
@@ -821,6 +939,14 @@ impl Store for RedbStore {
                     &mut compression_scratch,
                 )
                 .map_err(|error| RedbStoreError::with_source("failed to publish node", error))?;
+                if let Some(v2) = v2.as_mut() {
+                    v2.remove(node_key).map_err(|error| {
+                        RedbStoreError::with_source(
+                            "failed to remove superseded v2 node during publication",
+                            error,
+                        )
+                    })?;
+                }
                 if let Some(legacy) = legacy.as_mut() {
                     legacy.remove(node_key).map_err(|error| {
                         RedbStoreError::with_source(
@@ -861,6 +987,19 @@ impl NodeStoreScan for RedbStore {
                 RedbStoreError::with_source("failed to read node scan entry", error)
             })?;
             cids.push(cid_from_store_key(key.value())?);
+        }
+        if self.v2_nodes_present.load(Ordering::Relaxed) {
+            let v2 = transaction.open_table(V2_NODES).map_err(|error| {
+                RedbStoreError::with_source("failed to open v2 node table for scanning", error)
+            })?;
+            for entry in v2.iter().map_err(|error| {
+                RedbStoreError::with_source("failed to iterate v2 node table", error)
+            })? {
+                let (key, _) = entry.map_err(|error| {
+                    RedbStoreError::with_source("failed to read v2 node scan entry", error)
+                })?;
+                cids.push(cid_from_store_key(key.value())?);
+            }
         }
         if self.legacy_nodes_present.load(Ordering::Relaxed) {
             let legacy = transaction.open_table(LEGACY_NODES).map_err(|error| {
@@ -1020,6 +1159,9 @@ impl TransactionalStore for RedbStore {
                     error,
                 ))
             })?;
+            let mut v2_nodes = self
+                .open_v2_nodes_for_write(&transaction, "strict transaction")
+                .map_err(store_error)?;
             let mut legacy_nodes = self
                 .open_legacy_nodes_for_write(&transaction, "strict transaction")
                 .map_err(store_error)?;
@@ -1071,6 +1213,14 @@ impl TransactionalStore for RedbStore {
                                 error,
                             ))
                         })?;
+                        if let Some(v2_nodes) = v2_nodes.as_mut() {
+                            v2_nodes.remove(key.as_slice()).map_err(|error| {
+                                store_error(RedbStoreError::with_source(
+                                    "failed to remove superseded v2 node in strict transaction",
+                                    error,
+                                ))
+                            })?;
+                        }
                         if let Some(legacy_nodes) = legacy_nodes.as_mut() {
                             legacy_nodes.remove(key.as_slice()).map_err(|error| {
                                 store_error(RedbStoreError::with_source(
@@ -1087,6 +1237,14 @@ impl TransactionalStore for RedbStore {
                                 error,
                             ))
                         })?;
+                        if let Some(v2_nodes) = v2_nodes.as_mut() {
+                            v2_nodes.remove(key.as_slice()).map_err(|error| {
+                                store_error(RedbStoreError::with_source(
+                                    "failed to delete v2 node in strict transaction",
+                                    error,
+                                ))
+                            })?;
+                        }
                         if let Some(legacy_nodes) = legacy_nodes.as_mut() {
                             legacy_nodes.remove(key.as_slice()).map_err(|error| {
                                 store_error(RedbStoreError::with_source(
@@ -1191,6 +1349,17 @@ fn decode_stored_node(stored: &[u8]) -> Result<Vec<u8>, RedbStoreError> {
             .map_err(|error| RedbStoreError::with_source("failed to decompress node", error)),
         other => Err(RedbStoreError::message(format!(
             "unsupported node encoding {other}"
+        ))),
+    }
+}
+
+fn decode_v2_stored_node(encoding: u8, node: &[u8]) -> Result<Vec<u8>, RedbStoreError> {
+    match encoding {
+        NODE_ENCODING_RAW => Ok(node.to_vec()),
+        NODE_ENCODING_LZ4 => lz4_flex::decompress_size_prepended(node)
+            .map_err(|error| RedbStoreError::with_source("failed to decompress v2 node", error)),
+        other => Err(RedbStoreError::message(format!(
+            "unsupported v2 node encoding {other}"
         ))),
     }
 }
