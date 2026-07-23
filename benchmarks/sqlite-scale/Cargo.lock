@@ -457,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-store-sqlite"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "lru",
  "lz4_flex",
