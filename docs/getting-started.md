@@ -17,7 +17,7 @@ From crates.io, once published:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 ```
 
 From a project that vendors this repository under `crates/prolly`:
@@ -37,8 +37,8 @@ Optional runtime integration and storage adapters:
 
 ```toml
 [dependencies]
-prolly-map = { version = "0.4", features = ["tokio"] }
-prolly-store-sqlite = "0.1"
+prolly-map = { version = "0.5.1", features = ["tokio"] }
+prolly-store-sqlite = "0.3.2"
 ```
 
 Feature guide:
