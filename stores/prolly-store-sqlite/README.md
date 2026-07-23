@@ -16,8 +16,8 @@ same store.
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
-prolly-store-sqlite = "0.3.0"
+prolly-map = "0.5.1"
+prolly-store-sqlite = "0.3.1"
 ```
 
 The crate enables `rusqlite`'s bundled SQLite build, so a system SQLite library
@@ -63,19 +63,17 @@ tree handle.
 `SqliteStoreConfig` controls the busy timeout, WAL journaling, SQLite's
 `synchronous=NORMAL` setting, database page size, page cache, WAL checkpoint
 interval, the decoded-node read cache, the minimum node size considered for
-compression, and the maximum memory-mapped read window.
+compression, the maximum memory-mapped read window, the read-connection pool,
+adaptive multi-key reads, background checkpoints, and optional group commit.
 Defaults are a 5-second busy timeout, WAL for file-backed databases,
 `synchronous=NORMAL`, 64 KiB database pages, a 64 MiB page cache, a
-32,768-page automatic checkpoint interval, a 128 MiB decoded-node cache, and a
-256 MiB mapping. Nodes of at least 8 KiB are compressed when LZ4 makes them
-smaller; typical compact nodes remain raw to avoid spending more CPU than the
-write saves. Larger pages pack those node payloads efficiently, while the page
-cache avoids repeated dirty-page spills during bulk publication. The
-decoded-node cache retains shared immutable nodes across
-operations, and the checkpoint interval keeps checkpoint I/O outside typical
-publication commits while retaining bounded WAL growth. The mapping reduces
-page-read syscall overhead without changing transaction or durability
-behavior.
+128 MiB sharded decoded-node cache, a 256 MiB mapping, four thread-affine read
+connections, and a dedicated passive checkpoint worker. The worker begins
+checkpointing after 64 MiB of WAL allocation and caps retained WAL
+allocation at 256 MiB. Nodes of at least 8 KiB are compressed when LZ4 makes
+them smaller; typical compact nodes remain raw to avoid spending more CPU than
+the write saves. Group commit remains disabled unless
+`group_commit_delay_micros` is set.
 
 ```rust,no_run
 use prolly_store_sqlite::{SqliteStore, SqliteStoreConfig};
@@ -87,6 +85,8 @@ let store = SqliteStore::open_with_config(
         enable_wal: true,
         synchronous_normal: false,
         node_compression_min_bytes: 8 * 1024,
+        reader_connections: 4,
+        checkpoint_wal_bytes: 64 * 1024 * 1024,
         ..SqliteStoreConfig::default()
     },
 )?;
@@ -116,10 +116,40 @@ The adapter implements `Store`, `ManifestStore`, scanning, and
 preconditions and apply node and root writes. A stale precondition returns a
 conflict without committing staged changes.
 
-`SqliteStore` owns one connection behind a mutex, so calls through one store are
-thread-safe and serialized. WAL and the busy timeout help when multiple SQLite
-connections contend for a file; application-level concurrency should still be
-measured under the intended workload.
+File-backed stores use one serialized writer and a pool of read-only
+connections. By default, the first reading thread reuses the writer connection
+to preserve SQLite's single-thread page and statement cache fast path. Other
+calling threads remain affine to one reader, allowing independent threads to
+read in parallel with WAL publication. Set `primary_reader_uses_writer` to
+`false` when every application thread should use the read-only pool. In-memory
+and caller-supplied connections retain the single-connection behavior.
+
+Set `group_commit_delay_micros` to a small non-zero window when many threads
+publish independent immutable-node batches. Concurrent publications collected
+inside that window share one durable SQLite transaction; every caller returns
+only after that transaction commits. Root compare-and-swap transactions remain
+strictly serialized and are never merged implicitly.
+
+## Operations and maintenance
+
+`metrics()` reports decoded-cache activity, publication and transaction counts,
+compression savings, checkpoint activity, and SQLite pager hit, miss, write,
+and spill counters. `storage_stats()` reports page, freelist, database, and WAL
+frame sizes.
+
+Use `checkpoint` for an explicit passive, full, restart, or truncate checkpoint.
+The default background worker keeps checkpoint synchronization out of the
+writer's commit path. `quick_check` provides a fast structural health check,
+`backup_to` creates a consistent online backup, `optimize` runs bounded SQLite
+planner maintenance, and `compact` runs an explicit blocking `VACUUM` after the
+application has quiesced traffic.
+
+Tree reachability and garbage collection are provided by `prolly-map`:
+`plan_store_gc_for_retention` performs the dry run and
+`sweep_store_gc_for_retention` deletes unreachable nodes through one SQLite
+batch transaction. Inspect `storage_stats().free_bytes` after sweeping and run
+`compact` during an appropriate maintenance window when filesystem reclamation
+is needed.
 
 Deleting a named root does not immediately delete unreachable nodes. Plan
 retention and garbage collection before pruning content-addressed data.

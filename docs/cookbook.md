@@ -1277,8 +1277,8 @@ Cargo dependencies:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
-prolly-store-sqlite = "0.1"
+prolly-map = "0.5.1"
+prolly-store-sqlite = "0.3.1"
 ```
 
 Setup:
@@ -1313,13 +1313,14 @@ let prolly = Prolly::new(store, config);
 - Use non-zero `busy_timeout_ms` for contended local writes
 - Publish every durable head as a named root
 - Run `plan_store_gc_for_retention` before sweeping
+- Inspect `metrics()` and `storage_stats()` before changing cache or WAL tuning
+- Use `backup_to` for an online consistent backup and `quick_check` for health checks
+- Quiesce traffic before running the blocking `compact` operation
 - Use `TokioBlockingStore` in async Tokio apps that call a sync SQLite backend
 
 ### Future enhancements
 
 - Add app-level migrations stored under a metadata key
-- Add backup and restore examples
-- Add store health checks before startup
 - Add CLI inspection for SQLite-backed stores
 
 ## Object-store backed snapshots

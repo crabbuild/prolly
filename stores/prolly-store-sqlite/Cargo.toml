@@ -17,16 +17,17 @@ name = "prolly_store_sqlite"
 path = "src/lib.rs"
 
 [dependencies]
-ahash = "0.8"
+lru = "0.12"
 lz4_flex = "0.11"
 parking_lot = "0.12"
 prolly = { package = "prolly-map", path = "../..", version = "0.5.1" }
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["backup", "bundled"] }
 
 [dev-dependencies]
 prolly-store-test = { path = "../prolly-store-test" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tempfile = "3.27"
 
 [lints.rust]
 unsafe_code = "allow"
