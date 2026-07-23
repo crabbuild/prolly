@@ -15,7 +15,7 @@ important. Choose a remote adapter when multiple hosts must share the store.
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-rocksdb = "0.3.0"
 ```
 
@@ -69,7 +69,7 @@ let store = RocksDBStore::open_with_config(
         ..RocksDBConfig::default()
     },
 )?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 The default configuration creates missing databases, uses LZ4 compression, and

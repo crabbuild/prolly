@@ -10,7 +10,7 @@ hints, and named root manifests in PostgreSQL.
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-postgres = "0.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -65,14 +65,14 @@ export PROLLY_STORE_POSTGRES_URL=postgres://prolly:prolly@127.0.0.1:55432/prolly
 The adapter can create its own tables:
 
 ```rust
-# async fn run() -> Result<(), sqlx::Error> {
-let backend = prolly_store_postgres::PostgresBackend::connect(
-    "postgres://prolly:prolly@127.0.0.1:55432/prolly",
-)
-.await?;
-backend.initialize_schema().await?;
-# Ok(())
-# }
+async fn run() -> Result<(), sqlx::Error> {
+    let backend = prolly_store_postgres::PostgresBackend::connect(
+        "postgres://prolly:prolly@127.0.0.1:55432/prolly",
+    )
+    .await?;
+    backend.initialize_schema().await?;
+    Ok(())
+}
 ```
 
 ## Basic usage
@@ -81,38 +81,38 @@ backend.initialize_schema().await?;
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
 use prolly_store_postgres::PostgresBackend;
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let backend = PostgresBackend::connect(
-    "postgres://prolly:prolly@127.0.0.1:55432/prolly",
-)
-.await?;
-backend.initialize_schema().await?;
-
-let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-let tree = prolly
-    .batch(
-        &prolly.create(),
-        vec![
-            Mutation::Upsert {
-                key: b"user/1".to_vec(),
-                val: b"Ada".to_vec(),
-            },
-            Mutation::Upsert {
-                key: b"user/2".to_vec(),
-                val: b"Grace".to_vec(),
-            },
-        ],
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = PostgresBackend::connect(
+        "postgres://prolly:prolly@127.0.0.1:55432/prolly",
     )
     .await?;
+    backend.initialize_schema().await?;
 
-prolly.publish_named_root(b"main", &tree).await?;
-let loaded = prolly.load_named_root(b"main").await?.expect("main root");
-assert_eq!(
-    prolly.get(&loaded, b"user/1").await?,
-    Some(b"Ada".to_vec())
-);
-# Ok(())
-# }
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let tree = prolly
+        .batch(
+            &prolly.create(),
+            vec![
+                Mutation::Upsert {
+                    key: b"user/1".to_vec(),
+                    val: b"Ada".to_vec(),
+                },
+                Mutation::Upsert {
+                    key: b"user/2".to_vec(),
+                    val: b"Grace".to_vec(),
+                },
+            ],
+        )
+        .await?;
+
+    prolly.publish_named_root(b"main", &tree).await?;
+    let loaded = prolly.load_named_root(b"main").await?.expect("main root");
+    assert_eq!(
+        prolly.get(&loaded, b"user/1").await?,
+        Some(b"Ada".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Diff, merge, and conflict resolution
@@ -121,45 +121,46 @@ Each update returns a new immutable `Tree`. Old and new trees share unchanged
 subtrees, so diffs and merges only need to inspect changed branches:
 
 ```rust
-# use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
-# use prolly_store_postgres::PostgresBackend;
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-# let backend = PostgresBackend::connect("postgres://prolly:prolly@127.0.0.1:55432/prolly").await?;
-# backend.initialize_schema().await?;
-# let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-# let base = prolly.batch(&prolly.create(), vec![
-#     Mutation::Upsert { key: b"user/1".to_vec(), val: b"Ada".to_vec() },
-#     Mutation::Upsert { key: b"user/2".to_vec(), val: b"Grace".to_vec() },
-# ]).await?;
-let left = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"user/1".to_vec(),
-            val: b"Ada Lovelace".to_vec(),
-        }],
-    )
-    .await?;
-let right = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"user/2".to_vec(),
-            val: b"Grace Hopper".to_vec(),
-        }],
-    )
-    .await?;
+use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
+use prolly_store_postgres::PostgresBackend;
 
-let diffs = prolly.diff(&base, &left).await?;
-assert_eq!(diffs.len(), 1);
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = PostgresBackend::connect("postgres://prolly:prolly@127.0.0.1:55432/prolly").await?;
+    backend.initialize_schema().await?;
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let base = prolly.batch(&prolly.create(), vec![
+        Mutation::Upsert { key: b"user/1".to_vec(), val: b"Ada".to_vec() },
+        Mutation::Upsert { key: b"user/2".to_vec(), val: b"Grace".to_vec() },
+    ]).await?;
+    let left = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"user/1".to_vec(),
+                val: b"Ada Lovelace".to_vec(),
+            }],
+        )
+        .await?;
+    let right = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"user/2".to_vec(),
+                val: b"Grace Hopper".to_vec(),
+            }],
+        )
+        .await?;
 
-let merged = prolly.merge(&base, &left, &right, None).await?;
-assert_eq!(
-    prolly.get(&merged, b"user/2").await?,
-    Some(b"Grace Hopper".to_vec())
-);
-# Ok(())
-# }
+    let diffs = prolly.diff(&base, &left).await?;
+    assert_eq!(diffs.len(), 1);
+
+    let merged = prolly.merge(&base, &left, &right, None).await?;
+    assert_eq!(
+        prolly.get(&merged, b"user/2").await?,
+        Some(b"Grace Hopper".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Operational notes

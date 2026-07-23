@@ -23,7 +23,7 @@ Add the Rust crates:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-pglite = "0.3.0"
 ```
 
@@ -84,7 +84,7 @@ let store = PgliteStore::open_with_config(PgliteStoreConfig {
     node_command: PathBuf::from("node"),
     node_working_dir: Some(PathBuf::from("./pglite-runtime")),
 })?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## Storage model

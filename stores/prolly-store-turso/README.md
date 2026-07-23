@@ -21,7 +21,7 @@ backups for production data and follow Turso's release notes when upgrading.
 
 ```toml
 [dependencies]
-prolly-map = "0.3"
+prolly-map = "0.5.1"
 prolly-store-turso = "0.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -30,15 +30,15 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 use prolly::{AsyncProlly, Config};
 use prolly_store_turso::{TursoBackend, TursoStore};
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let backend = TursoBackend::open("app.prolly.turso").await?;
-let prolly = AsyncProlly::new(TursoStore::new(backend), Config::default());
-let tree = prolly
-    .put(&prolly.create(), b"name".to_vec(), b"Ada".to_vec())
-    .await?;
-prolly.publish_named_root(b"main", &tree).await?;
-# Ok(())
-# }
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = TursoBackend::open("app.prolly.turso").await?;
+    let prolly = AsyncProlly::new(TursoStore::new(backend), Config::default());
+    let tree = prolly
+        .put(&prolly.create(), b"name".to_vec(), b"Ada".to_vec())
+        .await?;
+    prolly.publish_named_root(b"main", &tree).await?;
+    Ok(())
+}
 ```
 
 `open` creates the schema when necessary. Reopening the same path preserves
@@ -63,27 +63,27 @@ prolly-store-turso = { version = "0.1", features = ["turso-cloud-sync"] }
 use prolly::{AsyncProlly, Config};
 use prolly_store_turso::{TursoBackend, TursoStore};
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let backend = TursoBackend::open_synced(
-    "app-replica.db",
-    std::env::var("TURSO_DATABASE_URL")?,
-    std::env::var("TURSO_AUTH_TOKEN")?,
-)
-.await?;
-let cloud_sync = backend.clone();
-let prolly = AsyncProlly::new(TursoStore::new(backend), Config::default());
-
-let tree = prolly
-    .put(&prolly.create(), b"name".to_vec(), b"Grace".to_vec())
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = TursoBackend::open_synced(
+        "app-replica.db",
+        std::env::var("TURSO_DATABASE_URL")?,
+        std::env::var("TURSO_AUTH_TOKEN")?,
+    )
     .await?;
-prolly.publish_named_root(b"main", &tree).await?;
+    let cloud_sync = backend.clone();
+    let prolly = AsyncProlly::new(TursoStore::new(backend), Config::default());
 
-// Network synchronization happens only at these explicit calls.
-cloud_sync.push().await?;
-let remote_changes_applied = cloud_sync.pull().await?;
-println!("remote changes applied: {remote_changes_applied}");
-# Ok(())
-# }
+    let tree = prolly
+        .put(&prolly.create(), b"name".to_vec(), b"Grace".to_vec())
+        .await?;
+    prolly.publish_named_root(b"main", &tree).await?;
+
+    // Network synchronization happens only at these explicit calls.
+    cloud_sync.push().await?;
+    let remote_changes_applied = cloud_sync.pull().await?;
+    println!("remote changes applied: {remote_changes_applied}");
+    Ok(())
+}
 ```
 
 Calling `push()` or `pull()` on a backend created with `open` returns
@@ -95,16 +95,16 @@ For dynamic authentication, remote encryption, partial sync, or other Turso
 builder settings, construct the database yourself and retain those settings:
 
 ```rust
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let database = turso::sync::Builder::new_remote("app-replica.db")
-    .with_remote_url(std::env::var("TURSO_DATABASE_URL")?)
-    .with_auth_token(std::env::var("TURSO_AUTH_TOKEN")?)
-    .build()
-    .await?;
-let backend = prolly_store_turso::TursoBackend::from_synced_database(database).await?;
-# let _ = backend;
-# Ok(())
-# }
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let database = turso::sync::Builder::new_remote("app-replica.db")
+        .with_remote_url(std::env::var("TURSO_DATABASE_URL")?)
+        .with_auth_token(std::env::var("TURSO_AUTH_TOKEN")?)
+        .build()
+        .await?;
+    let backend = prolly_store_turso::TursoBackend::from_synced_database(database).await?;
+    let _ = backend;
+    Ok(())
+}
 ```
 
 For caller-configured local databases, use `TursoBackend::from_local_database`.

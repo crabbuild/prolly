@@ -13,7 +13,7 @@ The client dependency is listed explicitly because applications construct the
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-spanner = "0.3.0"
 google-cloud-spanner = { package = "gcloud-spanner", version = "=1.8.1" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -89,67 +89,68 @@ use google_cloud_spanner::client::ClientConfig;
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
 use prolly_store_spanner::SpannerBackend;
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let database = "projects/my-project/instances/my-instance/databases/my-db";
-let config = ClientConfig::default().with_auth().await?;
-let backend = SpannerBackend::connect(database, config).await?;
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let database = "projects/my-project/instances/my-instance/databases/my-db";
+    let config = ClientConfig::default().with_auth().await?;
+    let backend = SpannerBackend::connect(database, config).await?;
 
-let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-let tree = prolly
-    .batch(
-        &prolly.create(),
-        vec![Mutation::Upsert {
-            key: b"account/1".to_vec(),
-            val: b"active".to_vec(),
-        }],
-    )
-    .await?;
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let tree = prolly
+        .batch(
+            &prolly.create(),
+            vec![Mutation::Upsert {
+                key: b"account/1".to_vec(),
+                val: b"active".to_vec(),
+            }],
+        )
+        .await?;
 
-prolly.publish_named_root(b"accounts/main", &tree).await?;
-# Ok(())
-# }
+    prolly.publish_named_root(b"accounts/main", &tree).await?;
+    Ok(())
+}
 ```
 
 ## Diff and merge
 
 ```rust
-# use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
-# use prolly_store_spanner::SpannerBackend;
-# async fn run(backend: SpannerBackend) -> Result<(), Box<dyn std::error::Error>> {
-# let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-# let base = prolly.batch(&prolly.create(), vec![
-#     Mutation::Upsert { key: b"account/1".to_vec(), val: b"active".to_vec() },
-#     Mutation::Upsert { key: b"account/2".to_vec(), val: b"active".to_vec() },
-# ]).await?;
-let left = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"account/1".to_vec(),
-            val: b"suspended".to_vec(),
-        }],
-    )
-    .await?;
-let right = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"account/2".to_vec(),
-            val: b"closed".to_vec(),
-        }],
-    )
-    .await?;
+use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
+use prolly_store_spanner::SpannerBackend;
 
-let diffs = prolly.diff(&base, &left).await?;
-assert_eq!(diffs.len(), 1);
+async fn run(backend: SpannerBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let base = prolly.batch(&prolly.create(), vec![
+        Mutation::Upsert { key: b"account/1".to_vec(), val: b"active".to_vec() },
+        Mutation::Upsert { key: b"account/2".to_vec(), val: b"active".to_vec() },
+    ]).await?;
+    let left = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"account/1".to_vec(),
+                val: b"suspended".to_vec(),
+            }],
+        )
+        .await?;
+    let right = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"account/2".to_vec(),
+                val: b"closed".to_vec(),
+            }],
+        )
+        .await?;
 
-let merged = prolly.merge(&base, &left, &right, None).await?;
-assert_eq!(
-    prolly.get(&merged, b"account/2").await?,
-    Some(b"closed".to_vec())
-);
-# Ok(())
-# }
+    let diffs = prolly.diff(&base, &left).await?;
+    assert_eq!(diffs.len(), 1);
+
+    let merged = prolly.merge(&base, &left, &right, None).await?;
+    assert_eq!(
+        prolly.get(&merged, b"account/2").await?,
+        Some(b"closed".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Operational notes

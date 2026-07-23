@@ -11,7 +11,7 @@ Prolly tree storage.
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-cosmosdb = "0.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -86,29 +86,29 @@ az cosmosdb sql container create \
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
 use prolly_store_cosmosdb::CosmosDbBackend;
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let backend = CosmosDbBackend::with_key(
-    "https://example.documents.azure.com:443",
-    "<base64-account-key>",
-    "prolly",
-    "prolly_store",
-)?
-.with_key_prefix(b"tenant-a:".to_vec());
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = CosmosDbBackend::with_key(
+        "https://example.documents.azure.com:443",
+        "<base64-account-key>",
+        "prolly",
+        "prolly_store",
+    )?
+    .with_key_prefix(b"tenant-a:".to_vec());
 
-let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-let tree = prolly
-    .batch(
-        &prolly.create(),
-        vec![Mutation::Upsert {
-            key: b"item/1".to_vec(),
-            val: b"active".to_vec(),
-        }],
-    )
-    .await?;
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let tree = prolly
+        .batch(
+            &prolly.create(),
+            vec![Mutation::Upsert {
+                key: b"item/1".to_vec(),
+                val: b"active".to_vec(),
+            }],
+        )
+        .await?;
 
-prolly.publish_named_root(b"items/main", &tree).await?;
-# Ok(())
-# }
+    prolly.publish_named_root(b"items/main", &tree).await?;
+    Ok(())
+}
 ```
 
 ## Transactions
@@ -125,43 +125,44 @@ operations. Large transactions should be split by the caller.
 ## Diff and merge
 
 ```rust
-# use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
-# use prolly_store_cosmosdb::CosmosDbBackend;
-# async fn run(backend: CosmosDbBackend) -> Result<(), Box<dyn std::error::Error>> {
-# let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-# let base = prolly.batch(&prolly.create(), vec![
-#     Mutation::Upsert { key: b"item/1".to_vec(), val: b"active".to_vec() },
-#     Mutation::Upsert { key: b"item/2".to_vec(), val: b"active".to_vec() },
-# ]).await?;
-let left = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"item/1".to_vec(),
-            val: b"paused".to_vec(),
-        }],
-    )
-    .await?;
-let right = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"item/2".to_vec(),
-            val: b"deleted".to_vec(),
-        }],
-    )
-    .await?;
+use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
+use prolly_store_cosmosdb::CosmosDbBackend;
 
-let diffs = prolly.diff(&base, &left).await?;
-assert_eq!(diffs.len(), 1);
+async fn run(backend: CosmosDbBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let base = prolly.batch(&prolly.create(), vec![
+        Mutation::Upsert { key: b"item/1".to_vec(), val: b"active".to_vec() },
+        Mutation::Upsert { key: b"item/2".to_vec(), val: b"active".to_vec() },
+    ]).await?;
+    let left = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"item/1".to_vec(),
+                val: b"paused".to_vec(),
+            }],
+        )
+        .await?;
+    let right = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"item/2".to_vec(),
+                val: b"deleted".to_vec(),
+            }],
+        )
+        .await?;
 
-let merged = prolly.merge(&base, &left, &right, None).await?;
-assert_eq!(
-    prolly.get(&merged, b"item/2").await?,
-    Some(b"deleted".to_vec())
-);
-# Ok(())
-# }
+    let diffs = prolly.diff(&base, &left).await?;
+    assert_eq!(diffs.len(), 1);
+
+    let merged = prolly.merge(&base, &left, &right, None).await?;
+    assert_eq!(
+        prolly.get(&merged, b"item/2").await?,
+        Some(b"deleted".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Operational notes

@@ -20,7 +20,7 @@ a direct dependency as well as the adapter:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-slatedb = "0.3.0"
 slatedb = "0.14"
 ```

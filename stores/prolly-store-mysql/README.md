@@ -10,7 +10,7 @@ on MySQL and you want durable Prolly nodes, hints, and named roots in SQL.
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-mysql = "0.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -67,14 +67,14 @@ export PROLLY_STORE_MYSQL_URL=mysql://prolly:prolly@127.0.0.1:53306/prolly
 Initialize schema during application startup:
 
 ```rust
-# async fn run() -> Result<(), sqlx::Error> {
-let backend = prolly_store_mysql::MySqlBackend::connect(
-    "mysql://prolly:prolly@127.0.0.1:53306/prolly",
-)
-.await?;
-backend.initialize_schema().await?;
-# Ok(())
-# }
+async fn run() -> Result<(), sqlx::Error> {
+    let backend = prolly_store_mysql::MySqlBackend::connect(
+        "mysql://prolly:prolly@127.0.0.1:53306/prolly",
+    )
+    .await?;
+    backend.initialize_schema().await?;
+    Ok(())
+}
 ```
 
 ## Basic usage
@@ -83,79 +83,80 @@ backend.initialize_schema().await?;
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
 use prolly_store_mysql::MySqlBackend;
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let backend = MySqlBackend::connect("mysql://prolly:prolly@127.0.0.1:53306/prolly").await?;
-backend.initialize_schema().await?;
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = MySqlBackend::connect("mysql://prolly:prolly@127.0.0.1:53306/prolly").await?;
+    backend.initialize_schema().await?;
 
-let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-let tree = prolly
-    .batch(
-        &prolly.create(),
-        vec![
-            Mutation::Upsert {
-                key: b"doc/1".to_vec(),
-                val: b"draft".to_vec(),
-            },
-            Mutation::Upsert {
-                key: b"doc/2".to_vec(),
-                val: b"published".to_vec(),
-            },
-        ],
-    )
-    .await?;
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let tree = prolly
+        .batch(
+            &prolly.create(),
+            vec![
+                Mutation::Upsert {
+                    key: b"doc/1".to_vec(),
+                    val: b"draft".to_vec(),
+                },
+                Mutation::Upsert {
+                    key: b"doc/2".to_vec(),
+                    val: b"published".to_vec(),
+                },
+            ],
+        )
+        .await?;
 
-prolly.publish_named_root(b"docs/main", &tree).await?;
-let loaded = prolly.load_named_root(b"docs/main").await?.expect("root");
-assert_eq!(
-    prolly.get(&loaded, b"doc/1").await?,
-    Some(b"draft".to_vec())
-);
-# Ok(())
-# }
+    prolly.publish_named_root(b"docs/main", &tree).await?;
+    let loaded = prolly.load_named_root(b"docs/main").await?.expect("root");
+    assert_eq!(
+        prolly.get(&loaded, b"doc/1").await?,
+        Some(b"draft".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Branching, diff, and merge
 
 ```rust
-# use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
-# use prolly_store_mysql::MySqlBackend;
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-# let backend = MySqlBackend::connect("mysql://prolly:prolly@127.0.0.1:53306/prolly").await?;
-# backend.initialize_schema().await?;
-# let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-# let base = prolly.batch(&prolly.create(), vec![
-#     Mutation::Upsert { key: b"doc/1".to_vec(), val: b"draft".to_vec() },
-#     Mutation::Upsert { key: b"doc/2".to_vec(), val: b"published".to_vec() },
-# ]).await?;
-let writer_a = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"doc/1".to_vec(),
-            val: b"review".to_vec(),
-        }],
-    )
-    .await?;
-let writer_b = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"doc/2".to_vec(),
-            val: b"archived".to_vec(),
-        }],
-    )
-    .await?;
+use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
+use prolly_store_mysql::MySqlBackend;
 
-let diffs = prolly.diff(&base, &writer_a).await?;
-assert_eq!(diffs.len(), 1);
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = MySqlBackend::connect("mysql://prolly:prolly@127.0.0.1:53306/prolly").await?;
+    backend.initialize_schema().await?;
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let base = prolly.batch(&prolly.create(), vec![
+        Mutation::Upsert { key: b"doc/1".to_vec(), val: b"draft".to_vec() },
+        Mutation::Upsert { key: b"doc/2".to_vec(), val: b"published".to_vec() },
+    ]).await?;
+    let writer_a = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"doc/1".to_vec(),
+                val: b"review".to_vec(),
+            }],
+        )
+        .await?;
+    let writer_b = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"doc/2".to_vec(),
+                val: b"archived".to_vec(),
+            }],
+        )
+        .await?;
 
-let merged = prolly.merge(&base, &writer_a, &writer_b, None).await?;
-assert_eq!(
-    prolly.get(&merged, b"doc/2").await?,
-    Some(b"archived".to_vec())
-);
-# Ok(())
-# }
+    let diffs = prolly.diff(&base, &writer_a).await?;
+    assert_eq!(diffs.len(), 1);
+
+    let merged = prolly.merge(&base, &writer_a, &writer_b, None).await?;
+    assert_eq!(
+        prolly.get(&merged, b"doc/2").await?,
+        Some(b"archived".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Operational notes

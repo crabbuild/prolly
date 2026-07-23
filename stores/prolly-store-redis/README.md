@@ -9,7 +9,7 @@ This crate implements `RemoteStoreBackend` for Redis and is intended for async
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.5.1"
 prolly-store-redis = "0.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -63,38 +63,38 @@ export PROLLY_STORE_REDIS_URL=redis://127.0.0.1:56379/
 use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
 use prolly_store_redis::RedisBackend;
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let backend = RedisBackend::connect("redis://127.0.0.1:56379/")
-    .await?
-    .with_key_prefix(b"my-app:prolly:".to_vec());
-let store = RemoteProllyStore::new(backend);
-let prolly = AsyncProlly::new(store, Config::default());
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = RedisBackend::connect("redis://127.0.0.1:56379/")
+        .await?
+        .with_key_prefix(b"my-app:prolly:".to_vec());
+    let store = RemoteProllyStore::new(backend);
+    let prolly = AsyncProlly::new(store, Config::default());
 
-let tree = prolly.create();
-let tree = prolly
-    .batch(
-        &tree,
-        vec![
-            Mutation::Upsert {
-                key: b"user/1".to_vec(),
-                val: b"Ada".to_vec(),
-            },
-            Mutation::Upsert {
-                key: b"user/2".to_vec(),
-                val: b"Grace".to_vec(),
-            },
-        ],
-    )
-    .await?;
+    let tree = prolly.create();
+    let tree = prolly
+        .batch(
+            &tree,
+            vec![
+                Mutation::Upsert {
+                    key: b"user/1".to_vec(),
+                    val: b"Ada".to_vec(),
+                },
+                Mutation::Upsert {
+                    key: b"user/2".to_vec(),
+                    val: b"Grace".to_vec(),
+                },
+            ],
+        )
+        .await?;
 
-prolly.publish_named_root(b"main", &tree).await?;
-let loaded = prolly.load_named_root(b"main").await?.expect("main root");
-assert_eq!(
-    prolly.get(&loaded, b"user/1").await?,
-    Some(b"Ada".to_vec())
-);
-# Ok(())
-# }
+    prolly.publish_named_root(b"main", &tree).await?;
+    let loaded = prolly.load_named_root(b"main").await?.expect("main root");
+    assert_eq!(
+        prolly.get(&loaded, b"user/1").await?,
+        Some(b"Ada".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Diff and merge
@@ -103,44 +103,45 @@ Redis stores all nodes needed by multiple immutable tree versions, so you can
 branch, diff, and merge without copying the full map:
 
 ```rust
-# use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
-# use prolly_store_redis::RedisBackend;
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-# let backend = RedisBackend::connect("redis://127.0.0.1:56379/").await?;
-# let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
-# let base = prolly.batch(&prolly.create(), vec![
-#     Mutation::Upsert { key: b"user/1".to_vec(), val: b"Ada".to_vec() },
-#     Mutation::Upsert { key: b"user/2".to_vec(), val: b"Grace".to_vec() },
-# ]).await?;
-let left = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"user/1".to_vec(),
-            val: b"Ada Lovelace".to_vec(),
-        }],
-    )
-    .await?;
-let right = prolly
-    .batch(
-        &base,
-        vec![Mutation::Upsert {
-            key: b"user/2".to_vec(),
-            val: b"Grace Hopper".to_vec(),
-        }],
-    )
-    .await?;
+use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore};
+use prolly_store_redis::RedisBackend;
 
-let diffs = prolly.diff(&base, &left).await?;
-assert_eq!(diffs.len(), 1);
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = RedisBackend::connect("redis://127.0.0.1:56379/").await?;
+    let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
+    let base = prolly.batch(&prolly.create(), vec![
+        Mutation::Upsert { key: b"user/1".to_vec(), val: b"Ada".to_vec() },
+        Mutation::Upsert { key: b"user/2".to_vec(), val: b"Grace".to_vec() },
+    ]).await?;
+    let left = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"user/1".to_vec(),
+                val: b"Ada Lovelace".to_vec(),
+            }],
+        )
+        .await?;
+    let right = prolly
+        .batch(
+            &base,
+            vec![Mutation::Upsert {
+                key: b"user/2".to_vec(),
+                val: b"Grace Hopper".to_vec(),
+            }],
+        )
+        .await?;
 
-let merged = prolly.merge(&base, &left, &right, None).await?;
-assert_eq!(
-    prolly.get(&merged, b"user/2").await?,
-    Some(b"Grace Hopper".to_vec())
-);
-# Ok(())
-# }
+    let diffs = prolly.diff(&base, &left).await?;
+    assert_eq!(diffs.len(), 1);
+
+    let merged = prolly.merge(&base, &left, &right, None).await?;
+    assert_eq!(
+        prolly.get(&merged, b"user/2").await?,
+        Some(b"Grace Hopper".to_vec())
+    );
+    Ok(())
+}
 ```
 
 ## Namespacing and cleanup
@@ -150,12 +151,12 @@ tenants. `clear_namespace` deletes every key under the current prefix and should
 be used only for isolated test namespaces:
 
 ```rust
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-# let backend = prolly_store_redis::RedisBackend::connect("redis://127.0.0.1:56379/").await?;
-let backend = backend.with_key_prefix(b"test-run-123:".to_vec());
-backend.clear_namespace().await?;
-# Ok(())
-# }
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let backend = prolly_store_redis::RedisBackend::connect("redis://127.0.0.1:56379/").await?;
+    let backend = backend.with_key_prefix(b"test-run-123:".to_vec());
+    backend.clear_namespace().await?;
+    Ok(())
+}
 ```
 
 ## Transactions and durability
