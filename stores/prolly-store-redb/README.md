@@ -107,16 +107,17 @@ stale post-commit data.
 
 ## Storage model
 
-The adapter creates five typed tables inside one redb file:
+The adapter creates four typed tables inside one redb file:
 
-- `prolly_nodes_v3` stores content-addressed nodes with an explicit raw or LZ4
-  encoding. Nodes smaller than 8 KiB and nodes that do not compress smaller are
-  stored raw. Raw values are copied directly into space reserved in redb's
-  B-tree page, avoiding an intermediate serialized node allocation.
+- `prolly_nodes` is the default content-addressed node table. New values use a
+  versioned envelope with an explicit raw or LZ4 encoding. Nodes smaller than
+  8 KiB and nodes that do not compress smaller are stored raw. Raw values are
+  copied directly into space reserved in redb's B-tree page, avoiding an
+  intermediate serialized node allocation. Unenveloped raw values created by
+  adapter 0.3.0 remain readable and gain the envelope when updated.
 - `prolly_nodes_v2` retains the tuple-encoded node layout from the initial 0.3.1
-  implementation. Existing nodes remain readable and move to v3 when updated.
-- `prolly_nodes` is the legacy raw-node table retained for transparent reads of
-  databases created by adapter 0.3.0. New and updated nodes move to the v2 table.
+  implementation. Existing nodes remain readable and move to the default
+  `prolly_nodes` table when updated.
 - `prolly_roots` stores encoded named-root manifests.
 - `prolly_hints` stores advisory values by `(namespace, key)`.
 

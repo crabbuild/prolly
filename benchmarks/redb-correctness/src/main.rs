@@ -385,8 +385,7 @@ fn model_diff(base: &BTreeMap<Vec<u8>, Vec<u8>>, target: &BTreeMap<Vec<u8>, Vec<
 }
 
 fn legacy_engine_migration(path: &Path) {
-    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v3");
-    const LEGACY_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
+    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
 
     let config = Config::builder()
         .min_chunk_size(32)
@@ -416,7 +415,8 @@ fn legacy_engine_migration(path: &Path) {
     let mut decoded_nodes = Vec::new();
     for entry in nodes.iter().unwrap() {
         let (key, value) = entry.unwrap();
-        let (encoding, stored) = value.value().split_first().unwrap();
+        let envelope = value.value().strip_prefix(b"PRN1").unwrap();
+        let (encoding, stored) = envelope.split_first().unwrap();
         let decoded = match *encoding {
             0 => stored.to_vec(),
             1 => lz4_flex::decompress_size_prepended(stored).unwrap(),
@@ -429,10 +429,8 @@ fn legacy_engine_migration(path: &Path) {
     let transaction = database.begin_write().unwrap();
     {
         let mut nodes = transaction.open_table(NODES).unwrap();
-        let mut legacy = transaction.open_table(LEGACY_NODES).unwrap();
         for (key, value) in &decoded_nodes {
-            legacy.insert(key.as_slice(), value.as_slice()).unwrap();
-            nodes.remove(key.as_slice()).unwrap();
+            nodes.insert(key.as_slice(), value.as_slice()).unwrap();
         }
     }
     transaction.commit().unwrap();
@@ -627,20 +625,19 @@ fn randomized_reopen_differential(path: &Path, seed: u64) {
 }
 
 fn inspect_storage(path: &Path) {
-    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v3");
-    const LEGACY_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
+    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
 
     let database = Database::open(path).unwrap();
     let transaction = database.begin_read().unwrap();
     let nodes = transaction.open_table(NODES).unwrap();
-    let legacy = transaction.open_table(LEGACY_NODES).unwrap();
     let mut raw_nodes = 0_u64;
     let mut compressed_nodes = 0_u64;
     let mut stored_bytes = 0_u64;
     let mut decoded_bytes = 0_u64;
     for entry in nodes.iter().unwrap() {
         let (key, value) = entry.unwrap();
-        let (encoding, stored) = value.value().split_first().unwrap();
+        let envelope = value.value().strip_prefix(b"PRN1").unwrap();
+        let (encoding, stored) = envelope.split_first().unwrap();
         let decoded = match *encoding {
             0 => {
                 raw_nodes += 1;
@@ -659,7 +656,6 @@ fn inspect_storage(path: &Path) {
     }
     assert!(raw_nodes > 0);
     assert!(compressed_nodes > 0);
-    assert_eq!(legacy.iter().unwrap().count(), 0);
     println!(
         "STORAGE,raw_nodes={raw_nodes},compressed_nodes={compressed_nodes},stored_bytes={stored_bytes},decoded_bytes={decoded_bytes}"
     );
