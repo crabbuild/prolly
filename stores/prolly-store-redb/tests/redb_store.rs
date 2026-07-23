@@ -171,7 +171,7 @@ fn redb_store_retains_native_shared_reads() {
 
 #[test]
 fn redb_store_compresses_large_nodes_transparently() {
-    const NODES_V3: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v3");
+    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
 
     let path = temp_db_path("compressed-nodes");
     remove_db(&path);
@@ -185,9 +185,10 @@ fn redb_store_compresses_large_nodes_transparently() {
 
     let database = Database::open(&path).unwrap();
     let transaction = database.begin_read().unwrap();
-    let table = transaction.open_table(NODES_V3).unwrap();
+    let table = transaction.open_table(NODES).unwrap();
     let stored = table.get(key.as_bytes()).unwrap().unwrap();
-    let (encoding, bytes) = stored.value().split_first().unwrap();
+    let envelope = stored.value().strip_prefix(b"PRN1").unwrap();
+    let (encoding, bytes) = envelope.split_first().unwrap();
     assert_eq!(*encoding, 1);
     assert!(bytes.len() < value.len() / 4);
     drop(stored);
@@ -199,7 +200,7 @@ fn redb_store_compresses_large_nodes_transparently() {
 
 #[test]
 fn redb_store_can_disable_cache_and_compression() {
-    const NODES_V3: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v3");
+    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
 
     let path = temp_db_path("uncompressed-nodes");
     remove_db(&path);
@@ -222,9 +223,10 @@ fn redb_store_can_disable_cache_and_compression() {
 
     let database = Database::open(&path).unwrap();
     let transaction = database.begin_read().unwrap();
-    let table = transaction.open_table(NODES_V3).unwrap();
+    let table = transaction.open_table(NODES).unwrap();
     let stored = table.get(key.as_bytes()).unwrap().unwrap();
-    let (encoding, bytes) = stored.value().split_first().unwrap();
+    let envelope = stored.value().strip_prefix(b"PRN1").unwrap();
+    let (encoding, bytes) = envelope.split_first().unwrap();
     assert_eq!(*encoding, 0);
     assert_eq!(bytes, value);
     drop(stored);
@@ -267,7 +269,7 @@ fn redb_store_refreshes_retained_read_snapshot_after_writes() {
 
 #[test]
 fn redb_store_reads_legacy_raw_node_table() {
-    const LEGACY_NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
+    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
 
     let path = temp_db_path("legacy-nodes");
     remove_db(&path);
@@ -277,7 +279,7 @@ fn redb_store_reads_legacy_raw_node_table() {
         let database = Database::create(&path).unwrap();
         let transaction = database.begin_write().unwrap();
         {
-            let mut table = transaction.open_table(LEGACY_NODES).unwrap();
+            let mut table = transaction.open_table(NODES).unwrap();
             table
                 .insert(key.as_bytes(), b"legacy-value".as_slice())
                 .unwrap();
@@ -302,13 +304,23 @@ fn redb_store_reads_legacy_raw_node_table() {
     );
     assert_eq!(store.list_node_cids().unwrap(), expected);
     drop(store);
+
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_read().unwrap();
+    let table = transaction.open_table(NODES).unwrap();
+    let migrated = table.get(key.as_bytes()).unwrap().unwrap();
+    assert!(migrated.value().starts_with(b"PRN1"));
+    drop(migrated);
+    drop(table);
+    drop(transaction);
+    drop(database);
     remove_db(&path);
 }
 
 #[test]
 fn redb_store_reads_and_migrates_v2_encoded_nodes() {
     const NODES_V2: TableDefinition<&[u8], (u8, &[u8])> = TableDefinition::new("prolly_nodes_v2");
-    const NODES_V3: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes_v3");
+    const NODES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("prolly_nodes");
 
     let path = temp_db_path("v2-nodes");
     remove_db(&path);
@@ -331,20 +343,20 @@ fn redb_store_reads_and_migrates_v2_encoded_nodes() {
         Some(b"v2-value".to_vec())
     );
     assert_eq!(store.list_node_cids().unwrap(), vec![key.clone()]);
-    store.put(key.as_bytes(), b"v3-value").unwrap();
+    store.put(key.as_bytes(), b"default-value").unwrap();
     assert_eq!(
         store.get(key.as_bytes()).unwrap(),
-        Some(b"v3-value".to_vec())
+        Some(b"default-value".to_vec())
     );
     drop(store);
 
     let database = Database::open(&path).unwrap();
     let transaction = database.begin_read().unwrap();
     let v2 = transaction.open_table(NODES_V2).unwrap();
-    let v3 = transaction.open_table(NODES_V3).unwrap();
+    let nodes = transaction.open_table(NODES).unwrap();
     assert!(v2.get(key.as_bytes()).unwrap().is_none());
-    assert!(v3.get(key.as_bytes()).unwrap().is_some());
-    drop(v3);
+    assert!(nodes.get(key.as_bytes()).unwrap().is_some());
+    drop(nodes);
     drop(v2);
     drop(transaction);
     drop(database);
