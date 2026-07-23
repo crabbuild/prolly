@@ -158,5 +158,14 @@ Run the adapter's conformance, transaction, persistence, and concurrency tests:
 cargo test --manifest-path stores/prolly-store-redb/Cargo.toml
 ```
 
+Run the persistent randomized engine oracle and the reproducible one-million
+record redb/SQLite matrix:
+
+```bash
+cargo +1.89.0 run --release \
+  --manifest-path benchmarks/redb-correctness/Cargo.toml
+benchmarks/redb-sqlite-1m/run-matrix.sh 3
+```
+
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for map,
 transaction, diff, merge, indexing, and garbage-collection APIs.

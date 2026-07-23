@@ -1,0 +1,20 @@
+[package]
+name = "prolly-redb-sqlite-1m"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+
+[workspace]
+
+[dependencies]
+prolly = { package = "prolly-map", path = "../.." }
+prolly-store-redb = { path = "../../stores/prolly-store-redb" }
+prolly-store-sqlite = { path = "../../stores/prolly-store-sqlite" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "prolly-redb-sqlite-1m"
+path = "src/main.rs"
