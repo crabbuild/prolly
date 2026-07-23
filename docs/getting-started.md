@@ -38,7 +38,7 @@ Optional runtime integration and storage adapters:
 ```toml
 [dependencies]
 prolly-map = { version = "0.5.1", features = ["tokio"] }
-prolly-store-sqlite = "0.3.2"
+prolly-store-sqlite = "0.3.3"
 ```
 
 Feature guide:

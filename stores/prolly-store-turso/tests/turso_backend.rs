@@ -218,10 +218,7 @@ async fn point_publications_preserve_nodes_and_optional_hints() {
         Some(hinted_bytes.to_vec())
     );
     assert_eq!(
-        backend
-            .get_hint(b"point", b"rightmost")
-            .await
-            .unwrap(),
+        backend.get_hint(b"point", b"rightmost").await.unwrap(),
         Some(hinted_cid.as_bytes().to_vec())
     );
 }
@@ -343,9 +340,7 @@ async fn local_store_persists_named_root_across_reopen() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn concurrent_point_upserts_remain_readable_after_reopen() {
-    fn successful_or_busy(
-        result: Result<prolly::Tree, prolly::Error>,
-    ) -> Option<prolly::Tree> {
+    fn successful_or_busy(result: Result<prolly::Tree, prolly::Error>) -> Option<prolly::Tree> {
         match result {
             Ok(tree) => Some(tree),
             Err(prolly::Error::Store(error)) => {
@@ -377,8 +372,7 @@ async fn concurrent_point_upserts_remain_readable_after_reopen() {
     );
     let successful = [
         successful_or_busy(left_result).map(|tree| (tree, b"left".as_slice(), b"one".as_slice())),
-        successful_or_busy(right_result)
-            .map(|tree| (tree, b"right".as_slice(), b"two".as_slice())),
+        successful_or_busy(right_result).map(|tree| (tree, b"right".as_slice(), b"two".as_slice())),
     ]
     .into_iter()
     .flatten()
@@ -394,7 +388,10 @@ async fn concurrent_point_upserts_remain_readable_after_reopen() {
         Config::default(),
     );
     for (tree, key, value) in successful {
-        assert_eq!(reopened.get(&tree, key).await.unwrap(), Some(value.to_vec()));
+        assert_eq!(
+            reopened.get(&tree, key).await.unwrap(),
+            Some(value.to_vec())
+        );
     }
 }
 
