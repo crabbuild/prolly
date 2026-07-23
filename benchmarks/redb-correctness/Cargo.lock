@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-map"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "futures-util",
  "js-sys",
@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-store-redb"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "ahash",
  "lz4_flex",

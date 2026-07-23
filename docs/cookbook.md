@@ -1278,7 +1278,7 @@ Cargo dependencies:
 ```toml
 [dependencies]
 prolly-map = "0.5.1"
-prolly-store-sqlite = "0.3.2"
+prolly-store-sqlite = "0.3.3"
 ```
 
 Setup:
