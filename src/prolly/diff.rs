@@ -8701,7 +8701,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_lookup_splits_wide_frontiers_for_batched_read_stores() {
+    fn merge_lookup_coalesces_wide_frontiers_for_batched_read_stores() {
         let store = Arc::new(CountingStore {
             prefer_batch_reads: true,
             ..CountingStore::default()
@@ -8729,13 +8729,16 @@ mod tests {
         for (idx, value) in values.into_iter().enumerate() {
             assert_eq!(value, Some(format!("v{:04}", idx * 8).into_bytes()));
         }
+        let calls = store.batch_get_ordered_calls.load(Ordering::Relaxed);
+        let max_batch = store.max_batch_get_ordered_len.load(Ordering::Relaxed);
         assert!(
-            store.batch_get_ordered_calls.load(Ordering::Relaxed) > 16,
-            "wide get_many lookups should split frontier reads into parallel ordered batches"
+            calls <= 16,
+            "native batch lookup should use a bounded number of coalesced calls, got {calls}"
         );
         assert!(
-            store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 64,
-            "bounded parallel lookup should avoid one huge ordered batch for hundreds of misses"
+            max_batch > crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE
+                && max_batch <= 16 * crate::prolly::ASYNC_NODE_PREFETCH_BATCH_SIZE,
+            "coalesced native batch width was {max_batch}"
         );
     }
 

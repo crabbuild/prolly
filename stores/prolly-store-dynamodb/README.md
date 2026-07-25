@@ -13,7 +13,7 @@ The AWS versions below match the adapter's SDK line:
 ```toml
 [dependencies]
 prolly-map = "0.5.1"
-prolly-store-dynamodb = "0.3.0"
+prolly-store-dynamodb = "0.3.1"
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "=1.73.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -105,7 +105,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         aws_sdk_dynamodb::Client::from_conf(config),
         "prolly_store_example",
     )
-    .with_key_prefix(b"my-app:".to_vec());
+    .with_key_prefix(b"my-app:".to_vec())
+    .with_read_parallelism(16)
+    .with_batch_get_parallelism(8)
+    .with_batch_write_parallelism(8)
+    .with_scan_parallelism(8);
     backend.initialize_schema().await?;
 
     let prolly = AsyncProlly::new(RemoteProllyStore::new(backend), Config::default());
@@ -172,8 +176,18 @@ async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>>
 
 ## Operational notes
 
-- DynamoDB limits batch writes to 25 items; the adapter chunks writes and
-  retries unprocessed items.
+- DynamoDB limits batch writes to 25 items and batch reads to 100 items. The
+  adapter chunks large requests, executes a bounded number concurrently, and
+  retries unprocessed items with exponential backoff.
+- `with_batch_get_parallelism` and `with_batch_write_parallelism` control
+  request concurrency. The default is 8 for each. Lower these values for
+  provisioned tables with limited capacity; raise them only after observing
+  throttling and consumed capacity.
+- `with_read_parallelism` controls the async Prolly traversal fan-out and is
+  independent of DynamoDB batch-request concurrency.
+- `with_scan_parallelism` controls parallel table-scan segments used by root
+  and node enumeration and namespace cleanup. Parallel scans reduce elapsed
+  time on large shared tables while consuming read capacity more aggressively.
 - Strict transactions use `TransactWriteItems` and are limited to 100 combined
   condition checks, node writes, and root writes.
 - Individual serialized nodes must fit DynamoDB item limits.
@@ -207,6 +221,19 @@ cargo test --manifest-path stores/prolly-store-dynamodb/Cargo.toml
 ```
 
 The test uses a unique binary key prefix and clears only that namespace.
+
+## Performance evaluation
+
+The repository includes a configurable Rust benchmark and Docker runner:
+
+```bash
+./scripts/run_dynamodb_scale_benchmark.sh --profile smoke
+./scripts/run_dynamodb_scale_benchmark.sh --profile full
+```
+
+See `benchmarks/dynamodb-scale/README.md` for large-tree, concurrency, and
+before/after comparison options. DynamoDB Local results are suitable for
+regression comparisons on the same machine, not production capacity planning.
 
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
 async map, transaction, diff, and merge APIs used with this backend.

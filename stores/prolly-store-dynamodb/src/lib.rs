@@ -10,6 +10,7 @@ pub mod dynamodb {
     use std::collections::{HashMap, HashSet};
     use std::error::Error as StdError;
     use std::fmt;
+    use std::time::Duration;
 
     use aws_sdk_dynamodb::error::SdkError;
     use aws_sdk_dynamodb::operation::create_table::CreateTableError;
@@ -23,6 +24,7 @@ pub mod dynamodb {
         PutRequest, ReturnValuesOnConditionCheckFailure, ScalarAttributeType, TableDescription,
         TransactWriteItem, WriteRequest,
     };
+    use futures_util::stream::{self, StreamExt, TryStreamExt};
 
     use crate::{
         RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
@@ -43,6 +45,9 @@ pub mod dynamodb {
         table_name: String,
         key_prefix: Vec<u8>,
         read_parallelism: usize,
+        batch_get_parallelism: usize,
+        batch_write_parallelism: usize,
+        scan_parallelism: usize,
     }
 
     impl DynamoDbBackend {
@@ -53,6 +58,9 @@ pub mod dynamodb {
                 table_name: table_name.into(),
                 key_prefix: DEFAULT_KEY_PREFIX.to_vec(),
                 read_parallelism: DEFAULT_READ_PARALLELISM,
+                batch_get_parallelism: DEFAULT_BATCH_GET_PARALLELISM,
+                batch_write_parallelism: DEFAULT_BATCH_WRITE_PARALLELISM,
+                scan_parallelism: DEFAULT_SCAN_PARALLELISM,
             }
         }
 
@@ -80,6 +88,35 @@ pub mod dynamodb {
         /// Set the read parallelism advertised to async prolly traversals.
         pub fn with_read_parallelism(mut self, read_parallelism: usize) -> Self {
             self.read_parallelism = read_parallelism.max(1);
+            self
+        }
+
+        /// Set the maximum number of concurrent `BatchGetItem` requests.
+        ///
+        /// DynamoDB limits each request to 100 items. Values greater than one
+        /// allow large reads to use multiple requests concurrently.
+        pub fn with_batch_get_parallelism(mut self, parallelism: usize) -> Self {
+            self.batch_get_parallelism = parallelism.max(1);
+            self
+        }
+
+        /// Set the maximum number of concurrent `BatchWriteItem` requests.
+        ///
+        /// DynamoDB limits each request to 25 items. Keep this bounded to the
+        /// write capacity available to the table.
+        pub fn with_batch_write_parallelism(mut self, parallelism: usize) -> Self {
+            self.batch_write_parallelism = parallelism.max(1);
+            self
+        }
+
+        /// Set the number of segments used for parallel table scans.
+        ///
+        /// Scans back root enumeration, node enumeration, and namespace
+        /// cleanup because the adapter's binary partition key has no sortable
+        /// family component. Parallel scans reduce wall-clock time but consume
+        /// the same total read capacity more aggressively.
+        pub fn with_scan_parallelism(mut self, parallelism: usize) -> Self {
+            self.scan_parallelism = parallelism.clamp(1, DYNAMODB_SCAN_SEGMENT_LIMIT);
             self
         }
 
@@ -250,6 +287,19 @@ pub mod dynamodb {
             &self,
             prefix: &[u8],
         ) -> Result<Vec<Vec<u8>>, DynamoDbBackendError> {
+            let partitions = stream::iter(0..self.scan_parallelism)
+                .map(|segment| self.scan_primary_keys_segment(prefix, segment))
+                .buffer_unordered(self.scan_parallelism)
+                .try_collect::<Vec<_>>()
+                .await?;
+            Ok(partitions.into_iter().flatten().collect())
+        }
+
+        async fn scan_primary_keys_segment(
+            &self,
+            prefix: &[u8],
+            segment: usize,
+        ) -> Result<Vec<Vec<u8>>, DynamoDbBackendError> {
             let mut start_key = None;
             let mut keys = Vec::new();
 
@@ -263,6 +313,8 @@ pub mod dynamodb {
                     .filter_expression("begins_with(#pk, :prefix)")
                     .expression_attribute_names("#pk", PK_ATTR)
                     .expression_attribute_values(":prefix", binary_attr(prefix))
+                    .total_segments(self.scan_parallelism as i32)
+                    .segment(segment as i32)
                     .set_exclusive_start_key(start_key)
                     .send()
                     .await
@@ -279,6 +331,60 @@ pub mod dynamodb {
             }
 
             Ok(keys)
+        }
+
+        async fn scan_items_with_prefix(
+            &self,
+            prefix: &[u8],
+        ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, DynamoDbBackendError> {
+            let partitions = stream::iter(0..self.scan_parallelism)
+                .map(|segment| self.scan_items_segment(prefix, segment))
+                .buffer_unordered(self.scan_parallelism)
+                .try_collect::<Vec<_>>()
+                .await?;
+            Ok(partitions.into_iter().flatten().collect())
+        }
+
+        async fn scan_items_segment(
+            &self,
+            prefix: &[u8],
+            segment: usize,
+        ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, DynamoDbBackendError> {
+            let mut start_key = None;
+            let mut items = Vec::new();
+
+            loop {
+                let output = self
+                    .client
+                    .scan()
+                    .table_name(&self.table_name)
+                    .consistent_read(true)
+                    .projection_expression("#pk, #value")
+                    .filter_expression("begins_with(#pk, :prefix)")
+                    .expression_attribute_names("#pk", PK_ATTR)
+                    .expression_attribute_names("#value", VALUE_ATTR)
+                    .expression_attribute_values(":prefix", binary_attr(prefix))
+                    .total_segments(self.scan_parallelism as i32)
+                    .segment(segment as i32)
+                    .set_exclusive_start_key(start_key)
+                    .send()
+                    .await
+                    .map_err(DynamoDbBackendError::sdk)?;
+
+                for item in output.items() {
+                    items.push((
+                        binary_value_attr(item, PK_ATTR)?,
+                        binary_value_attr(item, VALUE_ATTR)?,
+                    ));
+                }
+
+                start_key = output.last_evaluated_key().cloned();
+                if start_key.is_none() {
+                    break;
+                }
+            }
+
+            Ok(items)
         }
 
         fn put_write_request(
@@ -311,38 +417,127 @@ pub mod dynamodb {
             &self,
             requests: &[WriteRequest],
         ) -> Result<(), DynamoDbBackendError> {
-            for chunk in requests.chunks(DYNAMODB_BATCH_WRITE_LIMIT) {
-                let mut pending = chunk.to_vec();
-                let mut attempts = 0;
+            stream::iter(
+                requests
+                    .chunks(DYNAMODB_BATCH_WRITE_LIMIT)
+                    .map(<[WriteRequest]>::to_vec),
+            )
+            .map(|pending| self.batch_write_chunk(pending))
+            .buffer_unordered(self.batch_write_parallelism)
+            .try_collect::<Vec<_>>()
+            .await?;
+            Ok(())
+        }
 
-                while !pending.is_empty() {
-                    let output = self
-                        .client
-                        .batch_write_item()
-                        .request_items(&self.table_name, pending)
-                        .send()
-                        .await
-                        .map_err(DynamoDbBackendError::sdk)?;
+        async fn batch_write_chunk(
+            &self,
+            mut pending: Vec<WriteRequest>,
+        ) -> Result<(), DynamoDbBackendError> {
+            let mut attempts = 0;
+            while !pending.is_empty() {
+                let output = self
+                    .client
+                    .batch_write_item()
+                    .request_items(&self.table_name, pending)
+                    .send()
+                    .await
+                    .map_err(DynamoDbBackendError::sdk)?;
 
-                    pending = output
-                        .unprocessed_items()
-                        .and_then(|items| items.get(&self.table_name).cloned())
-                        .unwrap_or_default();
-                    if pending.is_empty() {
-                        break;
-                    }
+                pending = output
+                    .unprocessed_items()
+                    .and_then(|items| items.get(&self.table_name).cloned())
+                    .unwrap_or_default();
+                if pending.is_empty() {
+                    return Ok(());
+                }
 
-                    attempts += 1;
-                    if attempts >= DYNAMODB_BATCH_RETRY_LIMIT {
-                        return Err(DynamoDbBackendError::UnprocessedBatch {
-                            operation: "batch_write_item",
-                            remaining: pending.len(),
-                        });
+                attempts += 1;
+                if attempts >= DYNAMODB_BATCH_RETRY_LIMIT {
+                    return Err(DynamoDbBackendError::UnprocessedBatch {
+                        operation: "batch_write_item",
+                        remaining: pending.len(),
+                    });
+                }
+                retry_backoff(attempts).await;
+            }
+            Ok(())
+        }
+
+        async fn batch_get_values(
+            &self,
+            keys: &[Vec<u8>],
+        ) -> Result<HashMap<Vec<u8>, Vec<u8>>, DynamoDbBackendError> {
+            let chunks = stream::iter(
+                keys.chunks(DYNAMODB_BATCH_GET_LIMIT)
+                    .map(<[Vec<u8>]>::to_vec),
+            )
+            .map(|chunk| self.batch_get_chunk(chunk))
+            .buffer_unordered(self.batch_get_parallelism)
+            .try_collect::<Vec<_>>()
+            .await?;
+
+            Ok(chunks.into_iter().flatten().collect())
+        }
+
+        async fn batch_get_chunk(
+            &self,
+            keys: Vec<Vec<u8>>,
+        ) -> Result<HashMap<Vec<u8>, Vec<u8>>, DynamoDbBackendError> {
+            let mut pending = KeysAndAttributes::builder()
+                .set_keys(Some(
+                    keys.into_iter()
+                        .map(|key| self.key_item(key))
+                        .collect::<Vec<_>>(),
+                ))
+                .consistent_read(true)
+                .projection_expression("#pk, #value")
+                .expression_attribute_names("#pk", PK_ATTR)
+                .expression_attribute_names("#value", VALUE_ATTR)
+                .build()
+                .map_err(DynamoDbBackendError::sdk)?;
+            let mut found = HashMap::new();
+            let mut attempts = 0;
+
+            loop {
+                let mut output = self
+                    .client
+                    .batch_get_item()
+                    .request_items(&self.table_name, pending)
+                    .send()
+                    .await
+                    .map_err(DynamoDbBackendError::sdk)?;
+
+                if let Some(items) = output
+                    .responses
+                    .take()
+                    .and_then(|mut responses| responses.remove(&self.table_name))
+                {
+                    for mut item in items {
+                        found.insert(
+                            take_binary_value_attr(&mut item, PK_ATTR)?,
+                            take_binary_value_attr(&mut item, VALUE_ATTR)?,
+                        );
                     }
                 }
-            }
 
-            Ok(())
+                let unprocessed = output
+                    .unprocessed_keys
+                    .take()
+                    .and_then(|mut items| items.remove(&self.table_name));
+                match unprocessed {
+                    Some(keys) if !keys.keys().is_empty() => pending = keys,
+                    _ => return Ok(found),
+                }
+
+                attempts += 1;
+                if attempts >= DYNAMODB_BATCH_RETRY_LIMIT {
+                    return Err(DynamoDbBackendError::UnprocessedBatch {
+                        operation: "batch_get_item",
+                        remaining: pending.keys().len(),
+                    });
+                }
+                retry_backoff(attempts).await;
+            }
         }
 
         fn condition_check_item(
@@ -496,60 +691,7 @@ pub mod dynamodb {
                 }
             }
 
-            let mut found = HashMap::<Vec<u8>, Vec<u8>>::new();
-            for chunk in unique_keys.chunks(DYNAMODB_BATCH_GET_LIMIT) {
-                let mut pending = KeysAndAttributes::builder()
-                    .set_keys(Some(
-                        chunk
-                            .iter()
-                            .map(|key| self.key_item(key.clone()))
-                            .collect::<Vec<_>>(),
-                    ))
-                    .consistent_read(true)
-                    .projection_expression("#pk, #value")
-                    .expression_attribute_names("#pk", PK_ATTR)
-                    .expression_attribute_names("#value", VALUE_ATTR)
-                    .build()
-                    .map_err(DynamoDbBackendError::sdk)?;
-                let mut attempts = 0;
-
-                loop {
-                    let output = self
-                        .client
-                        .batch_get_item()
-                        .request_items(&self.table_name, pending)
-                        .send()
-                        .await
-                        .map_err(DynamoDbBackendError::sdk)?;
-
-                    if let Some(items) = output
-                        .responses()
-                        .and_then(|responses| responses.get(&self.table_name))
-                    {
-                        for item in items {
-                            let key = binary_value_attr(item, PK_ATTR)?;
-                            let value = binary_value_attr(item, VALUE_ATTR)?;
-                            found.insert(key, value);
-                        }
-                    }
-
-                    let unprocessed = output
-                        .unprocessed_keys()
-                        .and_then(|items| items.get(&self.table_name).cloned());
-                    match unprocessed {
-                        Some(keys) if !keys.keys().is_empty() => pending = keys,
-                        _ => break,
-                    }
-
-                    attempts += 1;
-                    if attempts >= DYNAMODB_BATCH_RETRY_LIMIT {
-                        return Err(DynamoDbBackendError::UnprocessedBatch {
-                            operation: "batch_get_item",
-                            remaining: pending.keys().len(),
-                        });
-                    }
-                }
-            }
+            let found = self.batch_get_values(&unique_keys).await?;
 
             Ok(keys
                 .iter()
@@ -628,8 +770,16 @@ pub mod dynamodb {
             key: &[u8],
             value: &[u8],
         ) -> Result<(), Self::Error> {
-            self.batch_put_nodes(entries).await?;
-            self.put_hint(namespace, key, value).await
+            let mut latest = HashMap::<Vec<u8>, Vec<u8>>::new();
+            for (key, value) in entries {
+                latest.insert(self.node_key(key), value.to_vec());
+            }
+            latest.insert(self.hint_key(namespace, key), value.to_vec());
+            let requests = latest
+                .into_iter()
+                .map(|(key, value)| self.put_write_request(key, &value))
+                .collect::<Result<Vec<_>, _>>()?;
+            self.batch_write_requests(&requests).await
         }
 
         async fn get_root_manifest(&self, name: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -719,7 +869,7 @@ pub mod dynamodb {
             match result {
                 Ok(()) => Ok(RemoteManifestUpdate::Applied),
                 Err(err) if err.is_condition_failed() => {
-                    let current = self.get_value_by_key(root_key).await?;
+                    let current = err.condition_failure_value()?;
                     Ok(RemoteManifestUpdate::Conflict { current })
                 }
                 Err(err) => Err(DynamoDbBackendError::sdk(err)),
@@ -728,20 +878,16 @@ pub mod dynamodb {
 
         async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error> {
             let prefix = self.family_prefix(ROOT_FAMILY);
-            let mut names = self
-                .scan_primary_keys_with_prefix(&prefix)
+            let mut roots = self
+                .scan_items_with_prefix(&prefix)
                 .await?
                 .into_iter()
-                .filter_map(|key| key.strip_prefix(prefix.as_slice()).map(<[u8]>::to_vec))
+                .filter_map(|(key, manifest)| {
+                    key.strip_prefix(prefix.as_slice())
+                        .map(|name| RemoteNamedRoot::new(name.to_vec(), manifest))
+                })
                 .collect::<Vec<_>>();
-            names.sort();
-
-            let mut roots = Vec::with_capacity(names.len());
-            for name in names {
-                if let Some(manifest) = self.get_root_manifest(&name).await? {
-                    roots.push(RemoteNamedRoot::new(name, manifest));
-                }
-            }
+            roots.sort_by(|left, right| left.name.cmp(&right.name));
             Ok(roots)
         }
 
@@ -825,8 +971,13 @@ pub mod dynamodb {
                         .as_service_error()
                         .is_some_and(|err| err.is_transaction_canceled_exception()) =>
                 {
-                    for condition in root_conditions {
-                        let current = self.get_root_manifest(&condition.name).await?;
+                    let root_keys = root_conditions
+                        .iter()
+                        .map(|condition| self.root_key(&condition.name))
+                        .collect::<Vec<_>>();
+                    let current_roots = self.batch_get_values(&root_keys).await?;
+                    for (condition, root_key) in root_conditions.iter().zip(root_keys) {
+                        let current = current_roots.get(&root_key).cloned();
                         if current != condition.expected {
                             return Ok(RemoteTransactionUpdate::Conflict(
                                 RemoteTransactionConflict::new(
@@ -930,6 +1081,23 @@ pub mod dynamodb {
                     .as_service_error()
                     .is_some_and(DeleteItemError::is_conditional_check_failed_exception),
             }
+        }
+
+        fn condition_failure_value(&self) -> Result<Option<Vec<u8>>, DynamoDbBackendError> {
+            let item = match self {
+                Self::Put(err) => match err.as_service_error() {
+                    Some(PutItemError::ConditionalCheckFailedException(failure)) => failure.item(),
+                    _ => None,
+                },
+                Self::Delete(err) => match err.as_service_error() {
+                    Some(DeleteItemError::ConditionalCheckFailedException(failure)) => {
+                        failure.item()
+                    }
+                    _ => None,
+                },
+            };
+            item.map(|item| binary_value_attr(item, VALUE_ATTR))
+                .transpose()
         }
     }
 
@@ -1079,12 +1247,38 @@ pub mod dynamodb {
         Ok(blob.as_ref().to_vec())
     }
 
+    fn take_binary_value_attr(
+        item: &mut HashMap<String, AttributeValue>,
+        attribute: &'static str,
+    ) -> Result<Vec<u8>, DynamoDbBackendError> {
+        let value = item
+            .remove(attribute)
+            .ok_or(DynamoDbBackendError::MissingAttribute(attribute))?;
+        match value {
+            AttributeValue::B(blob) => Ok(blob.into_inner()),
+            _ => Err(DynamoDbBackendError::UnexpectedAttribute(attribute)),
+        }
+    }
+
+    async fn retry_backoff(attempt: usize) {
+        let exponent = attempt.saturating_sub(1).min(7) as u32;
+        tokio::time::sleep(Duration::from_millis(
+            DYNAMODB_BATCH_RETRY_BASE_DELAY_MS.saturating_mul(1_u64 << exponent),
+        ))
+        .await;
+    }
+
     const DEFAULT_KEY_PREFIX: &[u8] = b"prolly:";
     const DEFAULT_READ_PARALLELISM: usize = 16;
+    const DEFAULT_BATCH_GET_PARALLELISM: usize = 8;
+    const DEFAULT_BATCH_WRITE_PARALLELISM: usize = 8;
+    const DEFAULT_SCAN_PARALLELISM: usize = 8;
     const DYNAMODB_BATCH_GET_LIMIT: usize = 100;
     const DYNAMODB_BATCH_WRITE_LIMIT: usize = 25;
     const DYNAMODB_TRANSACTION_WRITE_LIMIT: usize = 100;
     const DYNAMODB_BATCH_RETRY_LIMIT: usize = 8;
+    const DYNAMODB_BATCH_RETRY_BASE_DELAY_MS: u64 = 5;
+    const DYNAMODB_SCAN_SEGMENT_LIMIT: usize = 1_000_000;
     const PK_ATTR: &str = "pk";
     const VALUE_ATTR: &str = "value";
 
