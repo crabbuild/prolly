@@ -1,9 +1,17 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use crate::config::{CommandConfig, SuiteSelection, WorkloadConfig};
 use crate::model::{Operation, Pattern};
 
 pub const USAGE: &str = "usage: prolly-postgres-scale-bench [--profile smoke|full] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--min-free-gb N]";
+pub const COMMAND_USAGE: &str = "usage: prolly-postgres-scale-bench [--config PATH] [--suite service|scale|both] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--baseline PATH] [--allow-environment-mismatch] [--clients LIST] [--pool-sizes LIST] [--warmup-ms N] [--duration-ms N] [--adapter-batch-items N] [--service-records N] [--service-value-bytes N] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--scale-value-bytes N] [--min-free-gb N]";
+
+#[derive(Clone, Debug)]
+pub enum ParsedCommand {
+    LegacyScale(RunConfig),
+    Unified(Box<CommandConfig>),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunConfig {
@@ -12,6 +20,7 @@ pub struct RunConfig {
     pub revision: String,
     pub dirty: bool,
     pub sizes: Vec<usize>,
+    pub value_bytes: usize,
     pub runs: u32,
     pub operations: Vec<Operation>,
     pub patterns: Vec<Pattern>,
@@ -28,6 +37,7 @@ impl RunConfig {
             revision: "unknown".to_string(),
             dirty: true,
             sizes: vec![1_000],
+            value_bytes: 27,
             runs: 1,
             operations: Operation::ALL.to_vec(),
             patterns: Pattern::ALL.to_vec(),
@@ -53,7 +63,11 @@ impl RunConfig {
         if self.url.is_empty() || self.revision.is_empty() {
             return Err("URL and revision must be non-empty".to_string());
         }
-        if self.sizes.is_empty() || self.sizes.contains(&0) || self.runs == 0 {
+        if self.sizes.is_empty()
+            || self.sizes.contains(&0)
+            || self.value_bytes == 0
+            || self.runs == 0
+        {
             return Err("sizes and runs must be positive".to_string());
         }
         if self.operations.is_empty() || self.patterns.is_empty() {
@@ -120,6 +134,9 @@ where
             "--output" => config.output = PathBuf::from(take(&overrides, &mut index, flag)?),
             "--revision" => config.revision = take(&overrides, &mut index, flag)?,
             "--sizes" => config.sizes = parse_list(&take(&overrides, &mut index, flag)?)?,
+            "--value-bytes" => {
+                config.value_bytes = parse_number(&take(&overrides, &mut index, flag)?, flag)?;
+            }
             "--runs" => config.runs = parse_number(&take(&overrides, &mut index, flag)?, flag)?,
             "--operations" => config.operations = parse_list(&take(&overrides, &mut index, flag)?)?,
             "--patterns" => config.patterns = parse_list(&take(&overrides, &mut index, flag)?)?,
@@ -145,6 +162,154 @@ where
     }
     config.validate()?;
     Ok(config)
+}
+
+pub fn parse_command_args<I, S>(args: I) -> Result<ParsedCommand, String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let values = args
+        .into_iter()
+        .map(|value| value.as_ref().to_string())
+        .collect::<Vec<_>>();
+    if values.iter().any(|value| value == "--profile") {
+        return parse_args(values).map(ParsedCommand::LegacyScale);
+    }
+
+    let mut workload_path = WorkloadConfig::default_path();
+    let mut index = 1;
+    while index < values.len() {
+        if values[index] == "--config" {
+            workload_path = PathBuf::from(
+                values
+                    .get(index + 1)
+                    .ok_or_else(|| "--config requires a value".to_string())?,
+            );
+            break;
+        }
+        index += 1;
+    }
+    let mut workload = WorkloadConfig::load(&workload_path)?;
+    let mut suites = match (workload.service.enabled, workload.scale.enabled) {
+        (true, true) => SuiteSelection::Both,
+        (true, false) => SuiteSelection::Service,
+        (false, true) => SuiteSelection::Scale,
+        (false, false) => return Err("workload enables no suites".to_string()),
+    };
+    let mut url = "postgres://prolly:prolly@127.0.0.1:55433/prolly".to_string();
+    let mut output = PathBuf::from("performance-results/postgres-service");
+    let mut revision = "unknown".to_string();
+    let mut dirty = true;
+    let mut baseline = None;
+    let mut allow_environment_mismatch = false;
+
+    index = 1;
+    while index < values.len() {
+        let flag = values[index].as_str();
+        match flag {
+            "--config" => {
+                index += 1;
+            }
+            "--suite" => {
+                suites = SuiteSelection::parse(&command_value(&values, &mut index, flag)?)?;
+            }
+            "--url" => url = command_value(&values, &mut index, flag)?,
+            "--output" => {
+                output = PathBuf::from(command_value(&values, &mut index, flag)?);
+            }
+            "--revision" => revision = command_value(&values, &mut index, flag)?,
+            "--dirty" => dirty = true,
+            "--clean" => dirty = false,
+            "--baseline" => {
+                baseline = Some(PathBuf::from(command_value(&values, &mut index, flag)?));
+            }
+            "--allow-environment-mismatch" => allow_environment_mismatch = true,
+            "--clients" => {
+                workload.service.clients = parse_list(&command_value(&values, &mut index, flag)?)?;
+            }
+            "--pool-sizes" => {
+                workload.service.pool_sizes =
+                    parse_list(&command_value(&values, &mut index, flag)?)?;
+            }
+            "--warmup-ms" => {
+                workload.service.warmup_ms =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--duration-ms" => {
+                workload.service.duration_ms =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--adapter-batch-items" => {
+                workload.service.adapter_batch_items =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--service-records" => {
+                workload.service.records =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--service-value-bytes" => {
+                workload.service.value_bytes =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--sizes" => {
+                workload.scale.sizes = parse_list(&command_value(&values, &mut index, flag)?)?;
+            }
+            "--runs" => {
+                workload.scale.runs =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--operations" => {
+                workload.scale.operations = parse_list(&command_value(&values, &mut index, flag)?)?;
+            }
+            "--patterns" => {
+                workload.scale.patterns = parse_list(&command_value(&values, &mut index, flag)?)?;
+            }
+            "--changes" => {
+                let value = command_value(&values, &mut index, flag)?;
+                workload.scale.changes = if value == "auto" {
+                    None
+                } else {
+                    Some(parse_number(&value, flag)?)
+                };
+            }
+            "--read-samples" => {
+                workload.scale.read_samples =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--scale-value-bytes" => {
+                workload.scale.value_bytes =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--min-free-gb" => {
+                workload.scale.min_free_gb =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
+            "--help" | "-h" => return Err(COMMAND_USAGE.to_string()),
+            _ => return Err(format!("unknown option: {flag}\n{COMMAND_USAGE}")),
+        }
+        index += 1;
+    }
+    workload.validate()?;
+    Ok(ParsedCommand::Unified(Box::new(CommandConfig {
+        workload,
+        workload_path,
+        suites,
+        url,
+        output,
+        revision,
+        dirty,
+        baseline,
+        allow_environment_mismatch,
+    })))
+}
+
+fn command_value(values: &[String], index: &mut usize, flag: &str) -> Result<String, String> {
+    *index += 1;
+    values
+        .get(*index)
+        .cloned()
+        .ok_or_else(|| format!("{flag} requires a value"))
 }
 
 fn take(values: &[String], index: &mut usize, flag: &str) -> Result<String, String> {
@@ -219,5 +384,43 @@ mod tests {
             vec![Operation::GetCold, Operation::Query]
         );
         assert_eq!(config.patterns, vec![Pattern::Random, Pattern::Clustered]);
+    }
+
+    #[test]
+    fn unified_command_loads_toml_and_applies_overrides() {
+        let path = WorkloadConfig::default_path()
+            .parent()
+            .unwrap()
+            .join("smoke.toml");
+        let parsed = parse_command_args([
+            "bench".to_string(),
+            "--config".to_string(),
+            path.display().to_string(),
+            "--suite".to_string(),
+            "both".to_string(),
+            "--clients".to_string(),
+            "2,4".to_string(),
+            "--pool-sizes".to_string(),
+            "2".to_string(),
+            "--sizes".to_string(),
+            "500,1000".to_string(),
+            "--operations".to_string(),
+            "batch,query".to_string(),
+            "--patterns".to_string(),
+            "random".to_string(),
+        ])
+        .unwrap();
+        let ParsedCommand::Unified(command) = parsed else {
+            panic!("expected unified command");
+        };
+        assert_eq!(command.workload.service.clients, vec![2, 4]);
+        assert_eq!(command.workload.service.pool_sizes, vec![2]);
+        assert_eq!(command.workload.scale.sizes, vec![500, 1_000]);
+        assert_eq!(
+            command.workload.scale.operations,
+            vec![Operation::Batch, Operation::Query]
+        );
+        assert_eq!(command.workload.scale.patterns, vec![Pattern::Random]);
+        assert_eq!(command.suites, SuiteSelection::Both);
     }
 }

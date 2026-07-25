@@ -1,6 +1,12 @@
 pub mod cli;
+pub mod config;
 pub mod harness;
 pub mod measurement;
 pub mod model;
 pub mod postgres;
+pub mod runner;
+pub mod service_harness;
+pub mod service_measurement;
+pub mod service_model;
+pub mod service_workloads;
 pub mod workloads;

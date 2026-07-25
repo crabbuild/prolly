@@ -7,7 +7,10 @@ pub use prolly::{
 
 /// Postgres adapter entry point.
 pub mod postgres {
-    use sqlx::{PgPool, Row};
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::num::NonZeroUsize;
+
+    use sqlx::{PgConnection, PgPool, Row};
 
     use crate::{
         RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
@@ -17,26 +20,72 @@ pub mod postgres {
     /// Store adapter for PostgreSQL-backed prolly nodes and roots.
     pub type PostgresStore = crate::RemoteProllyStore<PostgresBackend>;
 
+    /// PostgreSQL adapter tuning that does not change stored data.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct PostgresBackendOptions {
+        max_batch_items: NonZeroUsize,
+    }
+
+    impl PostgresBackendOptions {
+        /// Create options with the maximum number of items sent in one SQL batch.
+        pub const fn new(max_batch_items: NonZeroUsize) -> Self {
+            Self { max_batch_items }
+        }
+
+        /// Maximum number of items sent in one SQL batch.
+        pub const fn max_batch_items(self) -> usize {
+            self.max_batch_items.get()
+        }
+    }
+
+    impl Default for PostgresBackendOptions {
+        fn default() -> Self {
+            Self::new(NonZeroUsize::new(1_024).expect("1024 is nonzero"))
+        }
+    }
+
     /// SQLx-backed PostgreSQL backend.
     #[derive(Clone, Debug)]
     pub struct PostgresBackend {
         pool: PgPool,
+        options: PostgresBackendOptions,
     }
 
     impl PostgresBackend {
         /// Create a backend from an existing SQLx pool.
         pub fn new(pool: PgPool) -> Self {
-            Self { pool }
+            Self::new_with_options(pool, PostgresBackendOptions::default())
+        }
+
+        /// Create a backend from an existing SQLx pool and adapter options.
+        pub fn new_with_options(pool: PgPool, options: PostgresBackendOptions) -> Self {
+            Self { pool, options }
         }
 
         /// Connect to PostgreSQL using `database_url`.
         pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
-            Ok(Self::new(PgPool::connect(database_url).await?))
+            Self::connect_with_options(database_url, PostgresBackendOptions::default()).await
+        }
+
+        /// Connect to PostgreSQL using `database_url` and adapter options.
+        pub async fn connect_with_options(
+            database_url: &str,
+            options: PostgresBackendOptions,
+        ) -> Result<Self, sqlx::Error> {
+            Ok(Self::new_with_options(
+                PgPool::connect(database_url).await?,
+                options,
+            ))
         }
 
         /// Borrow the underlying pool.
         pub fn pool(&self) -> &PgPool {
             &self.pool
+        }
+
+        /// Return this backend's adapter options.
+        pub const fn options(&self) -> PostgresBackendOptions {
+            self.options
         }
 
         /// Create the required tables if they do not already exist.
@@ -79,28 +128,31 @@ pub mod postgres {
         }
 
         async fn batch_nodes(&self, ops: &[RemoteBatchOp<'_>]) -> Result<(), Self::Error> {
-            let mut tx = self.pool.begin().await?;
+            if ops.is_empty() {
+                return Ok(());
+            }
+            let mut final_ops = BTreeMap::<Vec<u8>, Option<Vec<u8>>>::new();
             for op in ops {
                 match op {
                     RemoteBatchOp::Upsert { key, value } => {
-                        sqlx::query(
-                            "\
-                            INSERT INTO prolly_nodes (cid, node) VALUES ($1, $2) \
-                            ON CONFLICT(cid) DO UPDATE SET node = excluded.node",
-                        )
-                        .bind(*key)
-                        .bind(*value)
-                        .execute(&mut *tx)
-                        .await?;
+                        final_ops.insert((*key).to_vec(), Some((*value).to_vec()));
                     }
                     RemoteBatchOp::Delete { key } => {
-                        sqlx::query("DELETE FROM prolly_nodes WHERE cid = $1")
-                            .bind(*key)
-                            .execute(&mut *tx)
-                            .await?;
+                        final_ops.insert((*key).to_vec(), None);
                     }
                 }
             }
+            let deletes = final_ops
+                .iter()
+                .filter_map(|(key, value)| value.is_none().then_some(key.as_slice()))
+                .collect::<Vec<_>>();
+            let upserts = final_ops
+                .iter()
+                .filter_map(|(key, value)| value.as_deref().map(|value| (key.as_slice(), value)))
+                .collect::<Vec<_>>();
+            let mut tx = self.pool.begin().await?;
+            delete_node_chunks(&mut tx, &deletes, self.options.max_batch_items()).await?;
+            upsert_node_chunks(&mut tx, &upserts, self.options.max_batch_items()).await?;
             tx.commit().await
         }
 
@@ -108,26 +160,40 @@ pub mod postgres {
             &self,
             keys: &[&[u8]],
         ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+            if keys.is_empty() {
+                return Ok(Vec::new());
+            }
             let mut values = Vec::with_capacity(keys.len());
-            for key in keys {
-                values.push(self.get_node(key).await?);
+            for chunk in keys.chunks(self.options.max_batch_items()) {
+                let requested = chunk.iter().map(|key| (*key).to_vec()).collect::<Vec<_>>();
+                let rows = sqlx::query(
+                    "\
+                    SELECT requested.ord, nodes.node \
+                    FROM unnest($1::bytea[]) WITH ORDINALITY AS requested(cid, ord) \
+                    LEFT JOIN prolly_nodes AS nodes ON nodes.cid = requested.cid \
+                    ORDER BY requested.ord",
+                )
+                .bind(requested)
+                .fetch_all(&self.pool)
+                .await?;
+                for row in rows {
+                    values.push(row.try_get::<Option<Vec<u8>>, _>("node")?);
+                }
             }
             Ok(values)
         }
 
         async fn batch_put_nodes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
-            let mut tx = self.pool.begin().await?;
-            for (key, value) in entries {
-                sqlx::query(
-                    "\
-                    INSERT INTO prolly_nodes (cid, node) VALUES ($1, $2) \
-                    ON CONFLICT(cid) DO UPDATE SET node = excluded.node",
-                )
-                .bind(*key)
-                .bind(*value)
-                .execute(&mut *tx)
-                .await?;
+            if entries.is_empty() {
+                return Ok(());
             }
+            let entries = deduplicate_entries(entries);
+            let entries = entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.as_slice()))
+                .collect::<Vec<_>>();
+            let mut tx = self.pool.begin().await?;
+            upsert_node_chunks(&mut tx, &entries, self.options.max_batch_items()).await?;
             tx.commit().await
         }
 
@@ -186,18 +252,13 @@ pub mod postgres {
             key: &[u8],
             value: &[u8],
         ) -> Result<(), Self::Error> {
+            let entries = deduplicate_entries(entries);
+            let entries = entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.as_slice()))
+                .collect::<Vec<_>>();
             let mut tx = self.pool.begin().await?;
-            for (key, value) in entries {
-                sqlx::query(
-                    "\
-                    INSERT INTO prolly_nodes (cid, node) VALUES ($1, $2) \
-                    ON CONFLICT(cid) DO UPDATE SET node = excluded.node",
-                )
-                .bind(*key)
-                .bind(*value)
-                .execute(&mut *tx)
-                .await?;
-            }
+            upsert_node_chunks(&mut tx, &entries, self.options.max_batch_items()).await?;
             sqlx::query(
                 "\
                 INSERT INTO prolly_hints (namespace, key, value) VALUES ($1, $2, $3) \
@@ -221,24 +282,18 @@ pub mod postgres {
         }
 
         async fn put_root_manifest(&self, name: &[u8], manifest: &[u8]) -> Result<(), Self::Error> {
-            sqlx::query(
-                "\
-                INSERT INTO prolly_roots (name, manifest) VALUES ($1, $2) \
-                ON CONFLICT(name) DO UPDATE SET manifest = excluded.manifest",
-            )
-            .bind(name)
-            .bind(manifest)
-            .execute(&self.pool)
-            .await?;
-            Ok(())
+            let mut tx = self.pool.begin().await?;
+            lock_root_names(&mut tx, &[name.to_vec()]).await?;
+            upsert_root_chunks(&mut tx, &[(name, manifest)], self.options.max_batch_items())
+                .await?;
+            tx.commit().await
         }
 
         async fn delete_root_manifest(&self, name: &[u8]) -> Result<(), Self::Error> {
-            sqlx::query("DELETE FROM prolly_roots WHERE name = $1")
-                .bind(name)
-                .execute(&self.pool)
-                .await?;
-            Ok(())
+            let mut tx = self.pool.begin().await?;
+            lock_root_names(&mut tx, &[name.to_vec()]).await?;
+            delete_root_chunks(&mut tx, &[name], self.options.max_batch_items()).await?;
+            tx.commit().await
         }
 
         async fn compare_and_swap_root_manifest(
@@ -248,9 +303,7 @@ pub mod postgres {
             new: Option<&[u8]>,
         ) -> Result<RemoteManifestUpdate, Self::Error> {
             let mut tx = self.pool.begin().await?;
-            sqlx::query("LOCK TABLE prolly_roots IN SHARE ROW EXCLUSIVE MODE")
-                .execute(&mut *tx)
-                .await?;
+            lock_root_names(&mut tx, &[name.to_vec()]).await?;
 
             let current = sqlx::query("SELECT manifest FROM prolly_roots WHERE name = $1")
                 .bind(name)
@@ -265,21 +318,15 @@ pub mod postgres {
 
             match new {
                 Some(manifest) => {
-                    sqlx::query(
-                        "\
-                        INSERT INTO prolly_roots (name, manifest) VALUES ($1, $2) \
-                        ON CONFLICT(name) DO UPDATE SET manifest = excluded.manifest",
+                    upsert_root_chunks(
+                        &mut tx,
+                        &[(name, manifest)],
+                        self.options.max_batch_items(),
                     )
-                    .bind(name)
-                    .bind(manifest)
-                    .execute(&mut *tx)
                     .await?;
                 }
                 None => {
-                    sqlx::query("DELETE FROM prolly_roots WHERE name = $1")
-                        .bind(name)
-                        .execute(&mut *tx)
-                        .await?;
+                    delete_root_chunks(&mut tx, &[name], self.options.max_batch_items()).await?;
                 }
             }
 
@@ -312,17 +359,12 @@ pub mod postgres {
             root_writes: &[RemoteRootWrite],
         ) -> Result<RemoteTransactionUpdate, Self::Error> {
             let mut tx = self.pool.begin().await?;
-            sqlx::query("LOCK TABLE prolly_roots IN SHARE ROW EXCLUSIVE MODE")
-                .execute(&mut *tx)
-                .await?;
+            let root_names = root_names(root_conditions, root_writes);
+            lock_root_names(&mut tx, &root_names).await?;
+            let current_roots = read_root_manifests(&mut tx, &root_names).await?;
 
             for condition in root_conditions {
-                let current = sqlx::query("SELECT manifest FROM prolly_roots WHERE name = $1")
-                    .bind(&condition.name)
-                    .fetch_optional(&mut *tx)
-                    .await?
-                    .map(|row| row.try_get("manifest"))
-                    .transpose()?;
+                let current = current_roots.get(&condition.name).cloned().unwrap_or(None);
                 if current != condition.expected {
                     tx.rollback().await?;
                     return Ok(RemoteTransactionUpdate::Conflict(
@@ -335,53 +377,208 @@ pub mod postgres {
                 }
             }
 
+            let mut final_nodes = BTreeMap::<Vec<u8>, Option<Vec<u8>>>::new();
             for write in node_writes {
                 match write {
                     RemoteBatchOp::Upsert { key, value } => {
-                        sqlx::query(
-                            "\
-                            INSERT INTO prolly_nodes (cid, node) VALUES ($1, $2) \
-                            ON CONFLICT(cid) DO UPDATE SET node = excluded.node",
-                        )
-                        .bind(*key)
-                        .bind(*value)
-                        .execute(&mut *tx)
-                        .await?;
+                        final_nodes.insert((*key).to_vec(), Some((*value).to_vec()));
                     }
                     RemoteBatchOp::Delete { key } => {
-                        sqlx::query("DELETE FROM prolly_nodes WHERE cid = $1")
-                            .bind(*key)
-                            .execute(&mut *tx)
-                            .await?;
+                        final_nodes.insert((*key).to_vec(), None);
                     }
-                }
+                };
             }
+            let node_deletes = final_nodes
+                .iter()
+                .filter_map(|(key, value)| value.is_none().then_some(key.as_slice()))
+                .collect::<Vec<_>>();
+            let node_upserts = final_nodes
+                .iter()
+                .filter_map(|(key, value)| value.as_deref().map(|value| (key.as_slice(), value)))
+                .collect::<Vec<_>>();
+            delete_node_chunks(&mut tx, &node_deletes, self.options.max_batch_items()).await?;
+            upsert_node_chunks(&mut tx, &node_upserts, self.options.max_batch_items()).await?;
 
+            let mut final_roots = BTreeMap::<Vec<u8>, Option<Vec<u8>>>::new();
             for write in root_writes {
                 match write {
                     RemoteRootWrite::Put { name, manifest } => {
-                        sqlx::query(
-                            "\
-                            INSERT INTO prolly_roots (name, manifest) VALUES ($1, $2) \
-                            ON CONFLICT(name) DO UPDATE SET manifest = excluded.manifest",
-                        )
-                        .bind(name)
-                        .bind(manifest)
-                        .execute(&mut *tx)
-                        .await?;
+                        final_roots.insert(name.clone(), Some(manifest.clone()));
                     }
                     RemoteRootWrite::Delete { name } => {
-                        sqlx::query("DELETE FROM prolly_roots WHERE name = $1")
-                            .bind(name)
-                            .execute(&mut *tx)
-                            .await?;
+                        final_roots.insert(name.clone(), None);
                     }
                 }
             }
+            let root_deletes = final_roots
+                .iter()
+                .filter_map(|(name, manifest)| manifest.is_none().then_some(name.as_slice()))
+                .collect::<Vec<_>>();
+            let root_upserts = final_roots
+                .iter()
+                .filter_map(|(name, manifest)| {
+                    manifest
+                        .as_deref()
+                        .map(|manifest| (name.as_slice(), manifest))
+                })
+                .collect::<Vec<_>>();
+            delete_root_chunks(&mut tx, &root_deletes, self.options.max_batch_items()).await?;
+            upsert_root_chunks(&mut tx, &root_upserts, self.options.max_batch_items()).await?;
 
             tx.commit().await?;
             Ok(RemoteTransactionUpdate::Applied)
         }
+    }
+
+    async fn upsert_node_chunks(
+        connection: &mut PgConnection,
+        entries: &[(&[u8], &[u8])],
+        max_batch_items: usize,
+    ) -> Result<(), sqlx::Error> {
+        for chunk in entries.chunks(max_batch_items) {
+            let keys = chunk
+                .iter()
+                .map(|(key, _)| (*key).to_vec())
+                .collect::<Vec<_>>();
+            let values = chunk
+                .iter()
+                .map(|(_, value)| (*value).to_vec())
+                .collect::<Vec<_>>();
+            sqlx::query(
+                "\
+                INSERT INTO prolly_nodes (cid, node) \
+                SELECT input.cid, input.node \
+                FROM unnest($1::bytea[], $2::bytea[]) AS input(cid, node) \
+                ON CONFLICT(cid) DO UPDATE SET node = excluded.node",
+            )
+            .bind(keys)
+            .bind(values)
+            .execute(&mut *connection)
+            .await?;
+        }
+        Ok(())
+    }
+
+    fn deduplicate_entries(entries: &[(&[u8], &[u8])]) -> BTreeMap<Vec<u8>, Vec<u8>> {
+        entries
+            .iter()
+            .map(|(key, value)| ((*key).to_vec(), (*value).to_vec()))
+            .collect()
+    }
+
+    async fn delete_node_chunks(
+        connection: &mut PgConnection,
+        keys: &[&[u8]],
+        max_batch_items: usize,
+    ) -> Result<(), sqlx::Error> {
+        for chunk in keys.chunks(max_batch_items) {
+            let keys = chunk.iter().map(|key| (*key).to_vec()).collect::<Vec<_>>();
+            sqlx::query("DELETE FROM prolly_nodes WHERE cid = ANY($1::bytea[])")
+                .bind(keys)
+                .execute(&mut *connection)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn upsert_root_chunks(
+        connection: &mut PgConnection,
+        entries: &[(&[u8], &[u8])],
+        max_batch_items: usize,
+    ) -> Result<(), sqlx::Error> {
+        for chunk in entries.chunks(max_batch_items) {
+            let names = chunk
+                .iter()
+                .map(|(name, _)| (*name).to_vec())
+                .collect::<Vec<_>>();
+            let manifests = chunk
+                .iter()
+                .map(|(_, manifest)| (*manifest).to_vec())
+                .collect::<Vec<_>>();
+            sqlx::query(
+                "\
+                INSERT INTO prolly_roots (name, manifest) \
+                SELECT input.name, input.manifest \
+                FROM unnest($1::bytea[], $2::bytea[]) AS input(name, manifest) \
+                ON CONFLICT(name) DO UPDATE SET manifest = excluded.manifest",
+            )
+            .bind(names)
+            .bind(manifests)
+            .execute(&mut *connection)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn delete_root_chunks(
+        connection: &mut PgConnection,
+        names: &[&[u8]],
+        max_batch_items: usize,
+    ) -> Result<(), sqlx::Error> {
+        for chunk in names.chunks(max_batch_items) {
+            let names = chunk
+                .iter()
+                .map(|name| (*name).to_vec())
+                .collect::<Vec<_>>();
+            sqlx::query("DELETE FROM prolly_roots WHERE name = ANY($1::bytea[])")
+                .bind(names)
+                .execute(&mut *connection)
+                .await?;
+        }
+        Ok(())
+    }
+
+    fn root_names(conditions: &[RemoteRootCondition], writes: &[RemoteRootWrite]) -> Vec<Vec<u8>> {
+        let mut names = BTreeSet::new();
+        names.extend(conditions.iter().map(|condition| condition.name.clone()));
+        names.extend(writes.iter().map(|write| match write {
+            RemoteRootWrite::Put { name, .. } | RemoteRootWrite::Delete { name } => name.clone(),
+        }));
+        names.into_iter().collect()
+    }
+
+    async fn lock_root_names(
+        connection: &mut PgConnection,
+        names: &[Vec<u8>],
+    ) -> Result<(), sqlx::Error> {
+        for name in names {
+            sqlx::query(
+                "\
+                SELECT pg_advisory_xact_lock( \
+                    hashtextextended('prolly-root-v1:' || encode($1::bytea, 'hex'), 0) \
+                )",
+            )
+            .bind(name)
+            .execute(&mut *connection)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn read_root_manifests(
+        connection: &mut PgConnection,
+        names: &[Vec<u8>],
+    ) -> Result<BTreeMap<Vec<u8>, Option<Vec<u8>>>, sqlx::Error> {
+        if names.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let rows = sqlx::query(
+            "\
+            SELECT requested.name, roots.manifest \
+            FROM unnest($1::bytea[]) AS requested(name) \
+            LEFT JOIN prolly_roots AS roots ON roots.name = requested.name",
+        )
+        .bind(names)
+        .fetch_all(&mut *connection)
+        .await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok((
+                    row.try_get::<Vec<u8>, _>("name")?,
+                    row.try_get::<Option<Vec<u8>>, _>("manifest")?,
+                ))
+            })
+            .collect()
     }
 
     async fn execute_statements(pool: &PgPool, sql: &str) -> Result<(), sqlx::Error> {

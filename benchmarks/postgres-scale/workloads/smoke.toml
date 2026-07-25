@@ -1,0 +1,46 @@
+schema = 1
+seed = 7640891576956012809
+
+[service]
+enabled = true
+records = 1000
+value_bytes = 64
+clients = [1, 4]
+pool_sizes = [2]
+tenants = 4
+hot_roots = 1
+hot_root_share = 0.25
+warmup_ms = 200
+duration_ms = 2000
+operation_timeout_ms = 5000
+multi_read_keys = 8
+commit_keys = 4
+retained_versions = 8
+cas_retries = 3
+adapter_batch_items = 128
+
+[service.operation_mix]
+point_read = 45
+multi_read = 15
+commit = 25
+diff = 10
+merge = 5
+
+[scale]
+enabled = true
+sizes = [1000]
+value_bytes = 27
+runs = 1
+changes = 100
+read_samples = 100
+operations = ["put", "batch", "get_cold", "get_warm", "query", "scan", "full_scan", "diff", "merge"]
+patterns = ["append", "random", "clustered"]
+min_free_gb = 0
+
+[regression]
+max_throughput_loss_percent = 100.0
+max_p99_increase_percent = 100.0
+max_conflict_rate = 1.0
+max_error_rate = 0.0
+max_pg_statements_per_operation = 1000.0
+minimum_percentile_samples = 1

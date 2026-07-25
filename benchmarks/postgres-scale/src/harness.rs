@@ -104,20 +104,24 @@ pub async fn run_matrix(config: RunConfig) -> Result<RunStats, String> {
         }
 
         let fixture = if completed.contains(&build_key) {
-            match crate::workloads::load_fixture(backend.clone(), *records).await {
+            match crate::workloads::load_fixture(backend.clone(), *records, config.value_bytes)
+                .await
+            {
                 Ok(fixture) => fixture,
                 Err(load_error) => {
                     eprintln!(
                         "snapshot cannot resume records={records} ({load_error}); rebuilding fixture"
                     );
-                    let (fixture, _) = build_fixture(backend.clone(), *records, &meta).await?;
+                    let (fixture, _) =
+                        build_fixture(backend.clone(), *records, config.value_bytes, &meta).await?;
                     stats.fixtures_built += 1;
                     fixture
                 }
             }
         } else {
             eprintln!("building base fixture: records={records}");
-            let (fixture, build_row) = build_fixture(backend.clone(), *records, &meta).await?;
+            let (fixture, build_row) =
+                build_fixture(backend.clone(), *records, config.value_bytes, &meta).await?;
             sink.append(&build_row)?;
             completed.insert(build_row.key());
             stats.measured += 1;

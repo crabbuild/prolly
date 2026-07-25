@@ -1,5 +1,121 @@
 # PostgreSQL-backed Prolly scale performance
 
+## Reproducible service and scale harness
+
+The Rust harness now measures two complementary suites:
+
+- `service`: closed-loop concurrent point reads, multi-reads, commits, diffs,
+  and merges across independent and contended named roots. It sweeps client
+  counts and SQLx pool sizes and includes pool wait in end-to-end latency.
+  Each logical operation uses a fresh Prolly manager, deliberately preventing
+  decoded node-cache reuse between requests while leaving PostgreSQL and host
+  caches warm.
+- `scale`: the existing serial large-tree matrix, now configurable for record
+  count, value size, operations, mutation patterns, and repetitions.
+
+Run the fast combined smoke profile:
+
+```bash
+scripts/run_postgres_scale_benchmark.sh \
+  --config benchmarks/postgres-scale/workloads/smoke.toml \
+  --suite both \
+  --output performance-results/postgres-service-smoke
+```
+
+Run the default service-scale profile:
+
+```bash
+scripts/run_postgres_scale_benchmark.sh \
+  --config benchmarks/postgres-scale/workloads/default.toml \
+  --suite service \
+  --output performance-results/postgres-service
+```
+
+The TOML file is the workload contract. Service controls include tree records
+and value bytes, clients, pool sizes, tenant count, hot-root share, operation
+mix, warmup and measurement duration, timeouts, CAS retries, retained versions,
+and PostgreSQL adapter batch size. Scale controls include sizes, value bytes,
+operations, patterns, changes, read samples, and disk guard. Common settings
+can also be overridden on the Rust executable; run it with `--help` for the
+complete list.
+
+Each result directory contains the original and resolved TOML, a configuration
+hash and revision manifest, machine and PostgreSQL fingerprints, dependency and
+binary provenance, durable raw CSV rows, summary CSV files, and a generated
+Markdown report. Interrupted service runs discard only incomplete
+client/pool cells and resume completed cells with matching provenance.
+
+Service raw rows include HDR p50/p95/p99/p99.9/max latency, attempted and
+successful throughput, CAS conflict/retry counters, Prolly cache/node/store
+counters, `pg_stat_statements`, I/O/WAL/transaction counters, and physical
+database/table/index sizes. A baseline directory enables configured throughput,
+p99, conflict, error, and SQL-statement regression gates:
+
+```bash
+scripts/run_postgres_scale_benchmark.sh \
+  --config benchmarks/postgres-scale/workloads/default.toml \
+  --suite service \
+  --baseline performance-results/postgres-service-baseline
+```
+
+Material machine or PostgreSQL configuration mismatches reject regression
+comparison by default. `--allow-environment-mismatch` makes the comparison
+explicitly exploratory and skips its gates.
+
+## 2026-07-25 verification evidence
+
+The combined smoke evidence is in
+[`performance-results/postgres-service-smoke`](../performance-results/postgres-service-smoke/).
+It contains 20 concurrent service rows and 25 serial scale rows. All 45 rows
+validated, a second invocation measured zero rows and skipped all 45 completed
+rows, and a deliberately mismatched revision was rejected without changing the
+existing run manifest.
+
+On this host, the 1,000-record smoke workload produced 250.3 successful
+operations/s with one client and 298.7 successful operations/s with four
+clients sharing a two-connection pool. The four-client cell recorded 81 CAS
+conflicts and no timeout, SQL, validation, or worker-panic errors. These short
+smoke numbers validate the harness and are not capacity estimates.
+
+The adapter integration test observed exactly three node `INSERT` statements
+when publishing five unique nodes with a two-item chunk limit, equal to
+`ceil(5 / 2)`. A forced failure in the third chunk left neither earlier-chunk
+node in the table. The ordered read test returned five requested slots,
+including a missing CID and a duplicate, across three two-item `UNNEST`
+chunks. Sixteen same-root CAS contenders produced exactly one winner; a
+separately locked root did not prevent another root from completing.
+
+The smoke scale rows also show the removal of per-node publication statements.
+An append batch wrote five nodes in one engine batch and used three total
+Prolly-table statements; a random batch wrote nine nodes and used five total
+statements. In the historical 1-million-record baseline, the corresponding
+append and random batch rows wrote 2,295 and 7,659 nodes while recording 2,299
+and 15,318 statements. The tree sizes differ, so these are statement
+amplification observations rather than latency comparisons.
+
+A representative 100,000-record saturation run is recorded in
+[`performance-results/postgres-service-verification`](../performance-results/postgres-service-verification/).
+Each of its eight cells used a five-second warmup and 20-second measurement:
+
+| Clients | Pool | Successful ops/s | Conflicts | Retries | Worst operation/class p99 | PG statements/success |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 8 | 26.6 | 0 | 0 | 175 ms | 16.69 |
+| 1 | 32 | 26.2 | 0 | 0 | 180 ms | 16.68 |
+| 8 | 8 | 83.0 | 126 | 76 | 926 ms | 18.03 |
+| 8 | 32 | 92.0 | 147 | 92 | 582 ms | 18.27 |
+| 32 | 8 | 74.4 | 344 | 268 | 1,991 ms | 19.50 |
+| 32 | 32 | 103.3 | 515 | 396 | 1,417 ms | 20.28 |
+| 64 | 8 | 70.3 | 452 | 345 | 3,823 ms | 20.17 |
+| 64 | 32 | 98.2 | 646 | 493 | 2,647 ms | 20.93 |
+
+All eight cells completed with zero unexpected errors. The sweep demonstrates
+both connection-pool saturation and deliberate head contention: throughput
+peaked at 32 clients with a 32-connection pool, while retries and tail latency
+rose as concurrency increased. The result remains specific to the captured
+machine, Docker/PostgreSQL configuration, workload, and dirty revision.
+
+## Historical serial baseline
+
 Measured on 2026-07-18 at revision `42873d1561c3641c9091fe2a616567e790029762`
 with a dirty working tree. The complete generated table, raw rows, PostgreSQL
 counters, and environment metadata are in

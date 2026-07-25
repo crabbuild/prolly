@@ -75,6 +75,29 @@ async fn run() -> Result<(), sqlx::Error> {
 }
 ```
 
+For large publications or memory-constrained services, configure the maximum
+number of node or root items sent in one set-based SQL statement:
+
+```rust
+use std::num::NonZeroUsize;
+
+use prolly_store_postgres::{PostgresBackend, PostgresBackendOptions};
+
+async fn connect() -> Result<PostgresBackend, sqlx::Error> {
+    let options =
+        PostgresBackendOptions::new(NonZeroUsize::new(4_096).expect("nonzero batch size"));
+    PostgresBackend::connect_with_options(
+        "postgres://prolly:prolly@127.0.0.1:55432/prolly",
+        options,
+    )
+    .await
+}
+```
+
+`PostgresBackend::new` and `PostgresBackend::connect` use 1,024-item batches.
+You can also pass options to a caller-owned pool with
+`PostgresBackend::new_with_options`.
+
 ## Basic usage
 
 ```rust
@@ -166,8 +189,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 ## Operational notes
 
 - `initialize_schema` is idempotent and safe to run during startup.
-- Strict commits lock the roots table, validate named-root preconditions, and
-  apply node and root writes in one PostgreSQL transaction.
+- Strict commits validate named-root preconditions and apply node and root
+  writes in one PostgreSQL transaction.
+- Node batch reads preserve requested order, duplicates, and missing values
+  with chunked `UNNEST` queries. Node publications use chunked set-based
+  upserts.
+- Root writers use transaction-scoped advisory locks derived with
+  `hashtextextended('prolly-root-v1:' || encode(name, 'hex'), 0)`.
+  Multi-root commits sort and deduplicate names before acquiring locks, so
+  unrelated roots can progress concurrently without lock-order deadlocks.
+  Hash collisions can serialize unrelated roots but cannot change results.
 - Node rows are content-addressed and can be shared by many named roots.
 - Removing a named root does not immediately delete unreachable nodes. Use a
   higher-level retention/GC flow before pruning nodes.

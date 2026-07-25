@@ -6,11 +6,23 @@ import csv
 import itertools
 import math
 import pathlib
+import shutil
 import statistics
+import tomllib
 
 
 SCHEMA = "postgres-scale-v1"
 KEY_FIELDS = ("records", "repetition", "operation", "pattern", "cache_state")
+SERVICE_SCHEMA = "postgres-service-v1"
+SERVICE_KEY_FIELDS = (
+    "config_hash",
+    "records",
+    "value_bytes",
+    "clients",
+    "pool_size",
+    "operation",
+    "tenant_class",
+)
 
 
 def validate_rows(rows):
@@ -91,6 +103,346 @@ def aggregate(rows):
             summary[target] = statistics.median(values) if values else ""
         summaries.append(summary)
     return summaries
+
+
+def validate_service_rows(rows):
+    seen = set()
+    for row in rows:
+        key = tuple(row[name] for name in SERVICE_KEY_FIELDS)
+        if key in seen:
+            raise ValueError(f"duplicate service cell row: {key}")
+        seen.add(key)
+        if row.get("schema") != SERVICE_SCHEMA:
+            raise ValueError(f"unsupported service schema: {row.get('schema')}")
+        if row.get("validated", "").lower() != "true" or row.get("error"):
+            raise ValueError(f"failed service row: {key}: {row.get('error', '')}")
+        attempted = int(row["attempted"])
+        completed = int(row["completed"])
+        cell_attempted = int(row["cell_attempted"])
+        cell_completed = int(row["cell_completed"])
+        duration_ns = int(row["duration_ns"])
+        percentiles = [
+            int(row[name])
+            for name in ("p50_ns", "p95_ns", "p99_ns", "p999_ns", "max_ns")
+        ]
+        if attempted <= 0 or duration_ns <= 0:
+            raise ValueError(f"non-positive service metric: {key}")
+        if not (0 <= completed <= attempted <= cell_attempted):
+            raise ValueError(f"inconsistent service counts: {key}")
+        if not (completed <= cell_completed <= cell_attempted):
+            raise ValueError(f"inconsistent service cell counts: {key}")
+        if percentiles != sorted(percentiles):
+            raise ValueError(f"unordered service percentiles: {key}")
+        seconds = duration_ns / 1_000_000_000
+        expected_attempted = attempted / seconds
+        expected_successful = completed / seconds
+        for field, expected in (
+            ("attempted_ops_per_sec", expected_attempted),
+            ("successful_ops_per_sec", expected_successful),
+        ):
+            actual = float(row[field])
+            if not math.isfinite(actual) or not math.isclose(
+                actual, expected, rel_tol=1e-9, abs_tol=1e-9
+            ):
+                raise ValueError(f"service throughput mismatch: {key}/{field}")
+
+
+def aggregate_service(rows):
+    validate_service_rows(rows)
+    summaries = []
+    for row in sorted(
+        rows,
+        key=lambda item: (
+            int(item["clients"]),
+            int(item["pool_size"]),
+            item["operation"],
+            item["tenant_class"],
+        ),
+    ):
+        attempted = int(row["attempted"])
+        completed = int(row["completed"])
+        cas_attempts = int(row["cas_attempts"])
+        cell_completed = int(row["cell_completed"])
+        unexpected_errors = sum(
+            int(row[name])
+            for name in (
+                "timeouts",
+                "sql_errors",
+                "validation_errors",
+                "worker_panics",
+            )
+        )
+        summaries.append(
+            {
+                "config_hash": row["config_hash"],
+                "records": int(row["records"]),
+                "value_bytes": int(row["value_bytes"]),
+                "clients": int(row["clients"]),
+                "pool_size": int(row["pool_size"]),
+                "operation": row["operation"],
+                "tenant_class": row["tenant_class"],
+                "attempted": attempted,
+                "completed": completed,
+                "successful_ops_per_sec": float(row["successful_ops_per_sec"]),
+                "p50_ns": int(row["p50_ns"]),
+                "p95_ns": int(row["p95_ns"]),
+                "p99_ns": int(row["p99_ns"]),
+                "p999_ns": int(row["p999_ns"]),
+                "max_ns": int(row["max_ns"]),
+                "conflict_rate": (
+                    int(row["conflicts"]) / cas_attempts if cas_attempts else 0.0
+                ),
+                "retry_rate": int(row["retries"]) / attempted,
+                "error_rate": unexpected_errors / attempted,
+                "pg_statements_per_cell_operation": (
+                    int(row["pg_statement_calls"]) / cell_completed
+                    if cell_completed
+                    else math.inf
+                ),
+                "pg_wal_bytes_per_cell_operation": (
+                    int(row["pg_wal_bytes"]) / cell_completed
+                    if cell_completed
+                    else math.inf
+                ),
+                "prolly_nodes_read_per_operation": (
+                    int(row["prolly_nodes_read"]) / completed
+                    if completed
+                    else math.inf
+                ),
+                "prolly_nodes_written_per_operation": (
+                    int(row["prolly_nodes_written"]) / completed
+                    if completed
+                    else math.inf
+                ),
+                "prolly_batch_reads_per_operation": (
+                    int(row["prolly_store_batch_get_calls"]) / completed
+                    if completed
+                    else math.inf
+                ),
+            }
+        )
+    return summaries
+
+
+def compare_service(
+    current,
+    baseline,
+    budgets,
+    current_environment=None,
+    baseline_environment=None,
+    allow_environment_mismatch=False,
+):
+    validate_service_rows(current)
+    validate_service_rows(baseline)
+    current_environment = current_environment or {}
+    baseline_environment = baseline_environment or {}
+    current_hashes = {row["config_hash"] for row in current}
+    baseline_hashes = {row["config_hash"] for row in baseline}
+    if len(current_hashes) != 1 or current_hashes != baseline_hashes:
+        raise ValueError("service configuration hash mismatch")
+    if current_environment != baseline_environment:
+        if allow_environment_mismatch:
+            return ["exploratory: environment mismatch; regression gates skipped"]
+        raise ValueError("service environment mismatch")
+    baseline_by_key = {
+        tuple(row[name] for name in SERVICE_KEY_FIELDS[1:]): row for row in baseline
+    }
+    failures = []
+    minimum_samples = int(budgets.get("minimum_percentile_samples", 1000))
+    for row in current:
+        key = tuple(row[name] for name in SERVICE_KEY_FIELDS[1:])
+        reference = baseline_by_key.get(key)
+        if reference is None:
+            failures.append(f"missing baseline cell {key}")
+            continue
+        current_rate = float(row["successful_ops_per_sec"])
+        baseline_rate = float(reference["successful_ops_per_sec"])
+        throughput_loss = (
+            (baseline_rate - current_rate) * 100 / baseline_rate
+            if baseline_rate
+            else 0.0
+        )
+        if throughput_loss > float(
+            budgets.get("max_throughput_loss_percent", math.inf)
+        ):
+            failures.append(f"throughput regression {key}: {throughput_loss:.2f}%")
+        if int(row["attempted"]) >= minimum_samples:
+            current_p99 = int(row["p99_ns"])
+            baseline_p99 = int(reference["p99_ns"])
+            p99_increase = (
+                (current_p99 - baseline_p99) * 100 / baseline_p99
+                if baseline_p99
+                else 0.0
+            )
+            if p99_increase > float(
+                budgets.get("max_p99_increase_percent", math.inf)
+            ):
+                failures.append(f"p99 regression {key}: {p99_increase:.2f}%")
+        cas_attempts = int(row["cas_attempts"])
+        conflict_rate = int(row["conflicts"]) / cas_attempts if cas_attempts else 0
+        if conflict_rate > float(budgets.get("max_conflict_rate", math.inf)):
+            failures.append(f"conflict-rate regression {key}: {conflict_rate:.6f}")
+        unexpected_errors = sum(
+            int(row[name])
+            for name in (
+                "timeouts",
+                "sql_errors",
+                "validation_errors",
+                "worker_panics",
+            )
+        )
+        error_rate = unexpected_errors / int(row["attempted"])
+        if error_rate > float(budgets.get("max_error_rate", 0.0)):
+            failures.append(f"error-rate regression {key}: {error_rate:.6f}")
+        statements_per_operation = int(row["pg_statement_calls"]) / max(
+            int(row["cell_completed"]), 1
+        )
+        if statements_per_operation > float(
+            budgets.get("max_pg_statements_per_operation", math.inf)
+        ):
+            failures.append(
+                f"statement regression {key}: {statements_per_operation:.3f}"
+            )
+    if failures:
+        raise ValueError("; ".join(failures))
+    return []
+
+
+def write_service_summary(path, summaries):
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(summaries[0]) if summaries else [],
+            lineterminator="\n",
+        )
+        if summaries:
+            writer.writeheader()
+            writer.writerows(summaries)
+
+
+def render_service_report(summaries, rows, regression_messages=None):
+    regression_messages = regression_messages or []
+    revision = rows[0].get("revision", "unknown") if rows else "unknown"
+    dirty = rows[0].get("dirty", "unknown") if rows else "unknown"
+    lines = [
+        "# PostgreSQL-backed Prolly service performance",
+        "",
+        f"Revision `{revision}` (dirty={dirty}); {len(rows)} validated service rows.",
+        "",
+        "This closed-loop workload measures end-to-end public Prolly operations. Latency includes PostgreSQL pool wait.",
+        "",
+        "## Service saturation",
+        "",
+        "| Clients | Pool | Attempted ops/s | Successful ops/s | Conflicts | Unexpected errors | PG statements/op | Prolly node reads/op |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    grouped = {}
+    for row in rows:
+        key = (int(row["clients"]), int(row["pool_size"]))
+        cell = grouped.setdefault(
+            key,
+            {
+                "attempted_rate": 0.0,
+                "successful_rate": 0.0,
+                "conflicts": 0,
+                "errors": 0,
+                "pg_calls": int(row["pg_statement_calls"]),
+                "completed": int(row["cell_completed"]),
+                "nodes_read": 0,
+            },
+        )
+        cell["attempted_rate"] += float(row["attempted_ops_per_sec"])
+        cell["successful_rate"] += float(row["successful_ops_per_sec"])
+        cell["conflicts"] += int(row["conflicts"])
+        cell["errors"] += sum(
+            int(row[name])
+            for name in (
+                "timeouts",
+                "sql_errors",
+                "validation_errors",
+                "worker_panics",
+            )
+        )
+        cell["nodes_read"] += int(row["prolly_nodes_read"])
+    for (clients, pool_size), cell in sorted(grouped.items()):
+        calls_per_operation = cell["pg_calls"] / max(cell["completed"], 1)
+        lines.append(
+            f"| {clients} | {pool_size} | {cell['attempted_rate']:.1f} | "
+            f"{cell['successful_rate']:.1f} | {cell['conflicts']} | "
+            f"{cell['errors']} | {calls_per_operation:.3f} | "
+            f"{cell['nodes_read'] / max(cell['completed'], 1):.3f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Operation latency",
+            "",
+            "| Clients | Pool | Operation | Tenant class | Samples | Successful ops/s | p50 ms | p95 ms | p99 ms | p99.9 ms | Max ms | Conflict rate |",
+            "|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for item in summaries:
+        lines.append(
+            "| {clients} | {pool} | {operation} | {tenant} | {attempted} | "
+            "{rate:.1f} | {p50:.3f} | {p95:.3f} | {p99:.3f} | "
+            "{p999:.3f} | {maximum:.3f} | {conflicts:.4f} |".format(
+                clients=item["clients"],
+                pool=item["pool_size"],
+                operation=item["operation"],
+                tenant=item["tenant_class"],
+                attempted=item["attempted"],
+                rate=item["successful_ops_per_sec"],
+                p50=item["p50_ns"] / 1_000_000,
+                p95=item["p95_ns"] / 1_000_000,
+                p99=item["p99_ns"] / 1_000_000,
+                p999=item["p999_ns"] / 1_000_000,
+                maximum=item["max_ns"] / 1_000_000,
+                conflicts=item["conflict_rate"],
+            )
+        )
+    lines.extend(["", "## Regression verdict", ""])
+    if regression_messages:
+        lines.extend(f"- {message}" for message in regression_messages)
+    else:
+        lines.append("- All configured service gates passed or no baseline was supplied.")
+    lines.extend(
+        [
+            "",
+            "## Interpretation limits",
+            "",
+            "- Results apply to the recorded machine, PostgreSQL settings, pool sizes, workload, and revision.",
+            "- The generator is closed-loop; it measures saturation by concurrency rather than an external arrival-rate distribution.",
+            "- Each logical service operation uses a fresh Prolly manager, so decoded node-cache entries are not shared between operations; PostgreSQL and host caches remain warm.",
+            "- Scheduler and transaction interleaving are nondeterministic even though operation traces and data are seeded.",
+            "- PostgreSQL statement and WAL counters are cell-wide and are repeated on operation rows; the report divides them by total cell completions.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def read_environment(directory):
+    environment = {}
+    for name in ("machine.txt", "postgres.txt"):
+        path = directory / name
+        contents = path.read_text(encoding="utf-8") if path.exists() else ""
+        if name == "machine.txt":
+            material_lines = []
+            for line in contents.splitlines():
+                if line.startswith("Filesystem"):
+                    break
+                if not line.startswith("captured_utc="):
+                    material_lines.append(line)
+            contents = "\n".join(material_lines)
+        environment[name] = contents.strip()
+    return environment
+
+
+def read_service_budgets(path):
+    if not path or not path.exists():
+        return {}
+    with path.open("rb") as handle:
+        return tomllib.load(handle).get("regression", {})
 
 
 def render_report(summaries, rows, manifest=None):
@@ -234,18 +586,76 @@ def _number(value):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=pathlib.Path, required=True)
+    parser.add_argument("--input", type=pathlib.Path)
+    parser.add_argument("--scale-input", type=pathlib.Path)
+    parser.add_argument("--service-input", type=pathlib.Path)
     parser.add_argument("--manifest", type=pathlib.Path)
+    parser.add_argument("--resolved-config", type=pathlib.Path)
+    parser.add_argument("--baseline-dir", type=pathlib.Path)
+    parser.add_argument("--allow-environment-mismatch", action="store_true")
     parser.add_argument("--output-dir", type=pathlib.Path, required=True)
     parser.add_argument("--allow-partial", action="store_true")
     args = parser.parse_args()
-    summaries = summarize(
-        args.input,
-        args.manifest,
-        args.output_dir,
-        allow_partial=args.allow_partial,
+    scale_input = args.scale_input or args.input
+    scale_report = ""
+    scale_summaries = []
+    if scale_input:
+        scale_summaries = summarize(
+            scale_input,
+            args.manifest,
+            args.output_dir,
+            allow_partial=args.allow_partial,
+        )
+        generated_report = args.output_dir / "report.md"
+        if generated_report.exists():
+            scale_report = generated_report.read_text(encoding="utf-8")
+        generated_summary = args.output_dir / "summary.csv"
+        if generated_summary.exists() and args.scale_input:
+            shutil.copyfile(
+                generated_summary, args.output_dir / "scale-summary.csv"
+            )
+
+    service_summaries = []
+    if args.service_input:
+        with args.service_input.open(newline="", encoding="utf-8") as handle:
+            service_rows = list(csv.DictReader(handle))
+        service_summaries = aggregate_service(service_rows)
+        write_service_summary(
+            args.output_dir / "service-summary.csv", service_summaries
+        )
+        regression_messages = []
+        if args.baseline_dir:
+            baseline_path = args.baseline_dir / "service-raw.csv"
+            if not baseline_path.exists():
+                raise ValueError(f"missing service baseline: {baseline_path}")
+            with baseline_path.open(newline="", encoding="utf-8") as handle:
+                baseline_rows = list(csv.DictReader(handle))
+            regression_messages = compare_service(
+                service_rows,
+                baseline_rows,
+                read_service_budgets(args.resolved_config),
+                read_environment(args.output_dir),
+                read_environment(args.baseline_dir),
+                allow_environment_mismatch=args.allow_environment_mismatch,
+            )
+        service_report = render_service_report(
+            service_summaries, service_rows, regression_messages
+        )
+        combined = service_report
+        if scale_report:
+            combined += "\n\n" + scale_report.replace(
+                "# PostgreSQL-backed Prolly performance",
+                "## Serial large-tree performance",
+                1,
+            )
+        (args.output_dir / "report.md").write_text(combined, encoding="utf-8")
+
+    if not scale_input and not args.service_input:
+        parser.error("one of --input, --scale-input, or --service-input is required")
+    print(
+        "validated and summarized "
+        f"{len(service_summaries)} service rows and {len(scale_summaries)} scale groups"
     )
-    print(f"validated and summarized {len(summaries)} workload groups")
 
 
 if __name__ == "__main__":
