@@ -1,6 +1,6 @@
-# prolly-map
+# Prolly
 
-`prolly-map` publishes the `prolly` Rust library crate. Users depend on the
+`Prolly` publishes the `prolly` Rust library crate. Users depend on the
 package as `prolly-map`, while code imports stay concise:
 `use prolly::{Config, Prolly};`.
 
