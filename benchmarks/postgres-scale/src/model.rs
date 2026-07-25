@@ -112,6 +112,14 @@ pub fn value(id: usize, generation: u8) -> Vec<u8> {
     format!("val-{id:020}-{generation:02}").into_bytes()
 }
 
+pub fn value_with_size(id: usize, generation: u8, bytes: usize) -> Vec<u8> {
+    if bytes == 27 {
+        value(id, generation)
+    } else {
+        crate::service_model::value_sized(id, generation as u64, bytes)
+    }
+}
+
 pub fn change_count(records: usize) -> usize {
     records.min((records / 100).max(100)).min(10_000)
 }
@@ -182,6 +190,7 @@ mod tests {
         assert_eq!(key(0).len(), 24);
         assert_eq!(key(9_999_999).len(), 24);
         assert_eq!(value(0, 0).len(), 27);
+        assert_eq!(value_with_size(0, 0, 4_096).len(), 4_096);
         assert!(key(9) < key(10));
         assert!(key(999_999) < key(1_000_000));
     }

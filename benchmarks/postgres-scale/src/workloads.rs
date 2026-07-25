@@ -7,7 +7,7 @@ use prolly::{
 use prolly_store_postgres::{PostgresBackend, PostgresStore};
 
 use crate::measurement::{percentile, PgMetrics, PhysicalSize, RawRow, SCHEMA_VERSION};
-use crate::model::{key, merge_ids, pattern_ids, value, Operation, Pattern};
+use crate::model::{key, merge_ids, pattern_ids, value_with_size, Operation, Pattern};
 use crate::postgres::{
     clear_all, initialize_benchmark_schema, read_pg_metrics, read_physical_size, reset_pg_stats,
     restore_base, snapshot_base,
@@ -36,11 +36,16 @@ pub struct Fixture {
     base: Tree,
     stats: TreeStats,
     records: usize,
+    value_bytes: usize,
 }
 
 type Manager = AsyncProlly<PostgresStore>;
 
-pub async fn load_fixture(backend: PostgresBackend, records: usize) -> Result<Fixture, String> {
+pub async fn load_fixture(
+    backend: PostgresBackend,
+    records: usize,
+    value_bytes: usize,
+) -> Result<Fixture, String> {
     backend.initialize_schema().await.map_err(error)?;
     initialize_benchmark_schema(backend.pool())
         .await
@@ -59,12 +64,14 @@ pub async fn load_fixture(backend: PostgresBackend, records: usize) -> Result<Fi
         base,
         stats,
         records,
+        value_bytes,
     })
 }
 
 pub async fn build_fixture(
     backend: PostgresBackend,
     records: usize,
+    value_bytes: usize,
     meta: &RunMeta,
 ) -> Result<(Fixture, RawRow), String> {
     backend.initialize_schema().await.map_err(error)?;
@@ -76,7 +83,7 @@ pub async fn build_fixture(
     let mutations = (0..records)
         .map(|id| Mutation::Upsert {
             key: key(id),
-            val: value(id, 0),
+            val: value_with_size(id, 0, value_bytes),
         })
         .collect::<Vec<_>>();
     let build_manager = manager(&backend);
@@ -104,7 +111,7 @@ pub async fn build_fixture(
             stats.total_key_value_pairs
         ));
     }
-    validate_samples(&build_manager, &base, records, 0).await?;
+    validate_samples(&build_manager, &base, records, value_bytes, 0).await?;
     let reopened = manager(&backend)
         .load_named_root(BASE_ROOT)
         .await
@@ -140,6 +147,7 @@ pub async fn build_fixture(
             base,
             stats,
             records,
+            value_bytes,
         },
         row,
     ))
@@ -186,7 +194,7 @@ async fn run_put(
     manager.reset_metrics();
     let started = Instant::now();
     let changed = manager
-        .put(base, key(id), value(id, 1))
+        .put(base, key(id), value_with_size(id, 1, fixture.value_bytes))
         .await
         .map_err(error)?;
     let elapsed = started.elapsed();
@@ -197,7 +205,7 @@ async fn run_put(
     let after = read_physical_size(fixture.backend.pool())
         .await
         .map_err(error)?;
-    assert_value(&manager, &changed, id, 1).await?;
+    assert_value(&manager, &changed, id, fixture.value_bytes, 1).await?;
     let stats = manager.collect_stats(&changed).await.map_err(error)?;
     let expected = fixture.records + usize::from(spec.pattern == Pattern::Append);
     require_count(&stats, expected)?;
@@ -225,7 +233,7 @@ async fn run_batch(
     meta: &RunMeta,
 ) -> Result<RawRow, String> {
     let ids = pattern_ids(fixture.records, spec.changes, spec.pattern, 1);
-    let mutations = mutations(&ids, 1);
+    let mutations = mutations(&ids, 1, fixture.value_bytes);
     let manager = manager(&fixture.backend);
     let before = read_physical_size(fixture.backend.pool())
         .await
@@ -245,7 +253,7 @@ async fn run_batch(
         .await
         .map_err(error)?;
     for id in &ids {
-        assert_value(&manager, &changed, *id, 1).await?;
+        assert_value(&manager, &changed, *id, fixture.value_bytes, 1).await?;
     }
     let stats = manager.collect_stats(&changed).await.map_err(error)?;
     let expected = fixture.records
@@ -282,7 +290,7 @@ async fn run_get(
     let manager = manager(&fixture.backend);
     if spec.operation == Operation::GetWarm {
         for id in &ids {
-            assert_value(&manager, base, *id, 0).await?;
+            assert_value(&manager, base, *id, fixture.value_bytes, 0).await?;
         }
     }
     let before = read_physical_size(fixture.backend.pool())
@@ -302,7 +310,7 @@ async fn run_get(
         let started = Instant::now();
         let found = manager.get(base, &key(*id)).await.map_err(error)?;
         samples.push(started.elapsed().as_nanos());
-        if found.as_deref() == Some(value(*id, 0).as_slice()) {
+        if found.as_deref() == Some(value_with_size(*id, 0, fixture.value_bytes).as_slice()) {
             hits += 1;
         }
     }
@@ -370,7 +378,9 @@ async fn run_query(
     let hits = values
         .iter()
         .zip(&ids)
-        .filter(|(found, id)| found.as_deref() == Some(value(**id, 0).as_slice()))
+        .filter(|(found, id)| {
+            found.as_deref() == Some(value_with_size(**id, 0, fixture.value_bytes).as_slice())
+        })
         .count();
     if hits != ids.len() {
         return Err(format!(
@@ -481,7 +491,7 @@ async fn run_diff(
 ) -> Result<RawRow, String> {
     let ids = pattern_ids(fixture.records, spec.changes, spec.pattern, 2);
     let changed = manager(&fixture.backend)
-        .batch(base, mutations(&ids, 1))
+        .batch(base, mutations(&ids, 1, fixture.value_bytes))
         .await
         .map_err(error)?;
     let manager = manager(&fixture.backend);
@@ -538,17 +548,17 @@ async fn run_merge(
     spec: CellSpec,
     meta: &RunMeta,
 ) -> Result<RawRow, String> {
-    if spec.changes % 2 != 0 {
+    if !spec.changes.is_multiple_of(2) {
         return Err("merge requires an even total change count".to_string());
     }
     let (left_ids, right_ids) = merge_ids(fixture.records, spec.changes, spec.pattern);
     let builder = manager(&fixture.backend);
     let left = builder
-        .batch(base, mutations(&left_ids, 1))
+        .batch(base, mutations(&left_ids, 1, fixture.value_bytes))
         .await
         .map_err(error)?;
     let right = builder
-        .batch(base, mutations(&right_ids, 2))
+        .batch(base, mutations(&right_ids, 2, fixture.value_bytes))
         .await
         .map_err(error)?;
     let manager = manager(&fixture.backend);
@@ -573,10 +583,10 @@ async fn run_merge(
         .await
         .map_err(error)?;
     for id in &left_ids {
-        assert_value(&manager, &merged, *id, 1).await?;
+        assert_value(&manager, &merged, *id, fixture.value_bytes, 1).await?;
     }
     for id in &right_ids {
-        assert_value(&manager, &merged, *id, 2).await?;
+        assert_value(&manager, &merged, *id, fixture.value_bytes, 2).await?;
     }
     let stats = manager.collect_stats(&merged).await.map_err(error)?;
     let expected = fixture.records
@@ -586,7 +596,15 @@ async fn run_merge(
             0
         };
     require_count(&stats, expected)?;
-    validate_unaffected_sample(&manager, &merged, fixture.records, &left_ids, &right_ids).await?;
+    validate_unaffected_sample(
+        &manager,
+        &merged,
+        fixture.records,
+        fixture.value_bytes,
+        &left_ids,
+        &right_ids,
+    )
+    .await?;
     finish_cell(
         fixture,
         spec,
@@ -735,11 +753,11 @@ fn manager(backend: &PostgresBackend) -> Manager {
     AsyncProlly::new(RemoteProllyStore::new(backend.clone()), Config::default())
 }
 
-fn mutations(ids: &[usize], generation: u8) -> Vec<Mutation> {
+fn mutations(ids: &[usize], generation: u8, value_bytes: usize) -> Vec<Mutation> {
     ids.iter()
         .map(|id| Mutation::Upsert {
             key: key(*id),
-            val: value(*id, generation),
+            val: value_with_size(*id, generation, value_bytes),
         })
         .collect()
 }
@@ -767,10 +785,11 @@ async fn assert_value(
     manager: &Manager,
     tree: &Tree,
     id: usize,
+    value_bytes: usize,
     generation: u8,
 ) -> Result<(), String> {
     let found = manager.get(tree, &key(id)).await.map_err(error)?;
-    if found.as_deref() != Some(value(id, generation).as_slice()) {
+    if found.as_deref() != Some(value_with_size(id, generation, value_bytes).as_slice()) {
         return Err(format!(
             "value mismatch for id {id}, generation {generation}"
         ));
@@ -782,10 +801,11 @@ async fn validate_samples(
     manager: &Manager,
     tree: &Tree,
     records: usize,
+    value_bytes: usize,
     generation: u8,
 ) -> Result<(), String> {
     for id in [0, records / 2, records - 1] {
-        assert_value(manager, tree, id, generation).await?;
+        assert_value(manager, tree, id, value_bytes, generation).await?;
     }
     Ok(())
 }
@@ -794,12 +814,13 @@ async fn validate_unaffected_sample(
     manager: &Manager,
     tree: &Tree,
     records: usize,
+    value_bytes: usize,
     left: &[usize],
     right: &[usize],
 ) -> Result<(), String> {
     for candidate in [0, records / 4, records / 2, records.saturating_sub(1)] {
         if !left.contains(&candidate) && !right.contains(&candidate) {
-            assert_value(manager, tree, candidate, 0).await?;
+            assert_value(manager, tree, candidate, value_bytes, 0).await?;
             return Ok(());
         }
     }
@@ -835,7 +856,7 @@ mod tests {
             revision: "test".to_string(),
             dirty: true,
         };
-        let (fixture, build) = build_fixture(backend, 1_000, &meta).await.unwrap();
+        let (fixture, build) = build_fixture(backend, 1_000, 27, &meta).await.unwrap();
         assert!(build.validated);
         assert_eq!(build.observed_items, 1_000);
 

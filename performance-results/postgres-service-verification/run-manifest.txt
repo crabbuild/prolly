@@ -1,0 +1,17 @@
+schema=postgres-service-scale-v1
+started_unix_ms=1785008394739
+config_hash=226f7ec3adda703157b06c3be370251fb2ec3c8b2ca80a7d5686b6593ced7b9a
+revision=b3d69526b4ddf6993b611b46926ef748c0c14687
+dirty=true
+seed=7640891576956012809
+suites=Service
+sizes=1000000,10000000
+runs=3
+operations=put,batch,get_cold,get_warm,query,scan,full_scan,diff,merge
+patterns=append,random,clustered
+changes=auto
+read_samples=10000
+merge_changes_semantics=total_split_evenly
+baseline=
+allow_environment_mismatch=false
+ended_utc=2026-07-25T19:39:54Z
