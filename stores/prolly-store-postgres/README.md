@@ -11,7 +11,7 @@ hints, and named root manifests in PostgreSQL.
 ```toml
 [dependencies]
 prolly-map = "0.5.1"
-prolly-store-postgres = "0.3.0"
+prolly-store-postgres = "0.4.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
