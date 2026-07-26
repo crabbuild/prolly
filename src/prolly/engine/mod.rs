@@ -259,7 +259,13 @@ where
                 .collect::<Vec<_>>();
             let mut nodes = Vec::with_capacity(cids.len());
             let parallelism = self.execution.read_parallelism().get();
-            let chunk_size = if cids.len() <= parallelism {
+            let chunk_size = if self.store.prefers_batch_reads() {
+                cids.len().min(
+                    parallelism
+                        .saturating_mul(super::ASYNC_NODE_PREFETCH_BATCH_SIZE)
+                        .max(1),
+                )
+            } else if cids.len() <= parallelism {
                 cids.len()
             } else {
                 cids.len()

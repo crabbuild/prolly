@@ -8896,7 +8896,7 @@ mod tests {
     }
 
     #[test]
-    fn get_many_splits_wide_frontiers_for_batched_read_stores() {
+    fn get_many_coalesces_wide_frontiers_for_batched_read_stores() {
         let store = Arc::new(CountingStore {
             prefer_batch_reads: true,
             ..CountingStore::default()
@@ -8925,14 +8925,64 @@ mod tests {
         for (idx, value) in values.into_iter().enumerate() {
             assert_eq!(value, Some(format!("v{:04}", indices[idx]).into_bytes()));
         }
+        let calls = store
+            .batch_get_ordered_calls
+            .load(Ordering::Relaxed)
+            .saturating_sub(calls_before);
+        let max_batch = store.max_batch_get_ordered_len.load(Ordering::Relaxed);
         assert!(
-            store.batch_get_ordered_calls.load(Ordering::Relaxed)
-                > calls_before + GET_MANY_PREFETCH_PARALLELISM,
-            "wide get_many should split frontier reads into parallel ordered batches"
+            calls <= GET_MANY_PREFETCH_PARALLELISM,
+            "native batch get_many should use bounded coalesced calls, got {calls}"
         );
         assert!(
-            store.max_batch_get_ordered_len.load(Ordering::Relaxed) <= 64,
-            "bounded parallel get_many should avoid one huge ordered batch for hundreds of misses"
+            max_batch > ASYNC_NODE_PREFETCH_BATCH_SIZE
+                && max_batch <= GET_MANY_PREFETCH_PARALLELISM * ASYNC_NODE_PREFETCH_BATCH_SIZE,
+            "coalesced native batch width was {max_batch}"
+        );
+    }
+
+    #[test]
+    fn async_get_many_coalesces_native_batch_read_frontiers() {
+        let store = Arc::new(CountingStore {
+            prefer_batch_reads: true,
+            ..CountingStore::default()
+        });
+        let config = Config::builder()
+            .min_chunk_size(2)
+            .max_chunk_size(4)
+            .chunking_factor(u32::MAX)
+            .build();
+        let key_for = |idx: usize| format!("k{idx:04}").into_bytes();
+        let mut builder = builder::BatchBuilder::new(store.clone(), config.clone());
+        for idx in 0..4096 {
+            builder.add(key_for(idx), format!("v{idx:04}").into_bytes());
+        }
+        let tree = builder.build().unwrap();
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store.clone()), config);
+        let indices = (0..4096).step_by(8).rev().collect::<Vec<_>>();
+        let keys = indices.iter().map(|idx| key_for(*idx)).collect::<Vec<_>>();
+
+        let values = block_on(async_prolly.get_many(&tree, &keys)).unwrap();
+
+        assert_eq!(values.len(), keys.len());
+        for (position, value) in values.into_iter().enumerate() {
+            assert_eq!(
+                value,
+                Some(format!("v{:04}", indices[position]).into_bytes())
+            );
+        }
+        let max_batch = store.max_batch_get_ordered_len.load(Ordering::Relaxed);
+        assert!(
+            max_batch > ASYNC_NODE_PREFETCH_BATCH_SIZE,
+            "native async batches should coalesce more than one prefetch chunk"
+        );
+        assert!(
+            max_batch
+                <= Config::default()
+                    .runtime
+                    .read_parallelism
+                    .saturating_mul(ASYNC_NODE_PREFETCH_BATCH_SIZE),
+            "native async batches must remain bounded by the configured frontier width"
         );
     }
 

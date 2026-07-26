@@ -1,0 +1,14 @@
+[package]
+name = "prolly-dynamodb-scale-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+aws-sdk-dynamodb = "=1.73.0"
+csv = "1.3"
+futures-util = "0.3"
+prolly = { package = "prolly-map", path = "../..", features = ["async-store"] }
+prolly-store-dynamodb = { path = "../../stores/prolly-store-dynamodb" }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
