@@ -40,9 +40,8 @@ The adapter uses a primary table with:
 - No sort key
 - Payload attribute: `value`
 
-The primary table stores content-addressed nodes, canonical root manifests, and
-traversal hints under binary family prefixes. Keeping canonical root manifests
-here preserves read compatibility with older adapter releases.
+The primary table stores content-addressed nodes and traversal hints under
+binary family prefixes. It does not store named roots.
 
 Root enumeration uses a companion registry table, named
 `<primary-table>-roots` by default, with:
@@ -50,14 +49,18 @@ Root enumeration uses a companion registry table, named
 - Partition key: `pk` (binary namespace)
 - Sort key: `sk` (binary root name)
 
-`list_root_manifests` queries this registry and batch-loads only the matching
-canonical manifests. Its read work is therefore proportional to the number of
-roots in the namespace, not the number of node items in the primary table.
+The companion table is the sole canonical store for named root manifests.
+`list_root_manifests` returns names and manifests directly from a strongly
+consistent query, so its read work is proportional to the number of roots in
+the namespace rather than the number of node items in the primary table.
 
-`initialize_schema` creates both tables with on-demand billing if needed. On
-upgrade, it performs one legacy primary-table scan per namespace and records a
-migration marker after all existing roots are indexed. Override the companion
-name with `with_root_table_name` when table naming or IAM policy requires it.
+`initialize_schema` creates both tables with on-demand billing if needed.
+Override the companion name with `with_root_table_name` when table naming or
+IAM policy requires it.
+
+Version 0.4 is a hard schema cutover. It does not read or migrate root entries
+written by 0.3 or earlier. Export or republish required named roots into the
+0.4 root table before switching production traffic.
 
 ## Local setup
 
@@ -207,20 +210,18 @@ async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>>
 - `with_read_parallelism` controls the async Prolly traversal fan-out and is
   independent of DynamoDB batch-request concurrency.
 - `with_scan_parallelism` controls parallel primary-table scans used by node
-  enumeration, namespace cleanup, and the one-time legacy-root migration.
-  Normal root enumeration does not scan the primary table.
-- Root writes update the canonical manifest and registry entry atomically with
-  `TransactWriteItems`. Each root write therefore consumes two of DynamoDB's
-  100 transaction item slots.
+  enumeration and namespace cleanup. Root operations never scan the primary
+  table.
+- Each root is one item in the companion table. Ordinary root updates use one
+  conditional write, while multi-root commits participate directly in the
+  caller's `TransactWriteItems` transaction.
 - Individual serialized nodes must fit DynamoDB item limits.
 - Use `with_key_prefix` for tenant or test isolation inside a shared table.
 - `clear_namespace` scans primary-table items under the prefix and queries the
   matching root registry partition before deleting both. Use it for tests, not
   as a production cleanup primitive.
-- During an upgrade, stop old-version writers before running
-  `initialize_schema` with this release. New clients continue writing
-  backward-readable canonical manifests, but an old writer creating a brand
-  new root after migration would not create its registry entry.
+- Do not run 0.3 and 0.4 writers against the same logical namespace. They use
+  different root stores and intentionally do not interoperate.
 
 ## Running the example
 

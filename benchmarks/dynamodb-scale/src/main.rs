@@ -8,7 +8,7 @@ use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore, RemoteStoreBacken
 use prolly_store_dynamodb::{DynamoDbBackend, DynamoDbStore};
 use serde::{Deserialize, Serialize};
 
-const SCHEMA: &str = "dynamodb-local-scale-v3";
+const SCHEMA: &str = "dynamodb-local-scale-v4";
 
 type Manager = AsyncProlly<DynamoDbStore>;
 

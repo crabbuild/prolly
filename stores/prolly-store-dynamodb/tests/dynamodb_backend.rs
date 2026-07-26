@@ -50,7 +50,7 @@ fn dynamodb_backend_satisfies_remote_backend_contract_when_table_is_set() {
 }
 
 #[test]
-fn dynamodb_backend_indexes_legacy_roots_and_keeps_registry_consistent() {
+fn dynamodb_backend_hard_cutover_ignores_legacy_primary_table_roots() {
     let Some(table_name) = env_var(
         "PROLLY_STORE_DYNAMODB_TABLE",
         "PROLLY_ADAPTERS_DYNAMODB_TABLE",
@@ -73,7 +73,7 @@ fn dynamodb_backend_indexes_legacy_roots_and_keeps_registry_consistent() {
         let backend =
             DynamoDbBackend::new(client.clone(), &table_name).with_key_prefix(prefix.clone());
         let name = b"branches/main";
-        let manifest = b"legacy-manifest";
+        let legacy_manifest = b"legacy-manifest";
         let mut legacy_key = prefix;
         legacy_key.extend_from_slice(b"root:");
         legacy_key.extend_from_slice(name);
@@ -81,24 +81,23 @@ fn dynamodb_backend_indexes_legacy_roots_and_keeps_registry_consistent() {
             .put_item()
             .table_name(&table_name)
             .item("pk", AttributeValue::B(Blob::new(legacy_key)))
-            .item("value", AttributeValue::B(Blob::new(manifest)))
+            .item("value", AttributeValue::B(Blob::new(legacy_manifest)))
             .send()
             .await
             .unwrap();
 
         backend.initialize_schema().await.unwrap();
-        assert_eq!(
-            backend.list_root_manifests().await.unwrap(),
-            vec![prolly::RemoteNamedRoot::new(
-                name.to_vec(),
-                manifest.to_vec()
-            )]
-        );
+        assert_eq!(backend.get_root_manifest(name).await.unwrap(), None);
+        assert!(backend.list_root_manifests().await.unwrap().is_empty());
 
         backend
             .put_root_manifest(name, b"current-manifest")
             .await
             .unwrap();
+        assert_eq!(
+            backend.get_root_manifest(name).await.unwrap(),
+            Some(b"current-manifest".to_vec())
+        );
         assert_eq!(
             backend.list_root_manifests().await.unwrap()[0].manifest,
             b"current-manifest"
