@@ -6603,6 +6603,7 @@ impl StructuralMergeResult {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn try_structural_merge_cids<M: CanonicalWriteManager>(
     manager: &M,
     base_cid: &Cid,

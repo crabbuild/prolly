@@ -1,0 +1,13 @@
+result=byte-for-byte-identical
+records=10000
+changes_per_kind_per_branch=200
+base_root=aa2abcf59cca12f2898fd4fed9e6f4463480360499f05111c777a3b779f7680f
+merged_root=00fb0afb90e8d32fb3fe2c7c2d58bcf7d3cf75e3306280ea00cacef855583209
+conflict_merged_root=e7bc36ecc8d960db9f38c1781546a6e296f10bd7ee96299bd699214ec827b9ab
+left_diff_entries=600
+right_diff_entries=600
+merged_diff_entries=1200
+conflicts_observed=2
+merged_reachable_nodes=83
+all_stored_nodes=149
+all_stored_node_bytes=809544

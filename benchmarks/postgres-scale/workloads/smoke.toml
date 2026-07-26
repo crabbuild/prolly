@@ -33,7 +33,8 @@ value_bytes = 27
 runs = 1
 changes = 100
 read_samples = 100
-operations = ["put", "batch", "get_cold", "get_warm", "query", "scan", "full_scan", "diff", "merge"]
+concurrency = 32
+operations = ["put", "batch", "get_cold", "get_warm", "query", "concurrent_query", "scan", "full_scan", "diff", "merge"]
 patterns = ["append", "random", "clustered"]
 min_free_gb = 0
 

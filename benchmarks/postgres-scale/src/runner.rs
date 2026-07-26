@@ -46,6 +46,7 @@ pub async fn run_benchmark(command: CommandConfig) -> Result<RunStats, String> {
             patterns: scale.patterns.clone(),
             changes: scale.changes,
             read_samples: scale.read_samples,
+            concurrency: scale.concurrency,
             min_free_bytes: scale.min_free_gb.saturating_mul(1024 * 1024 * 1024),
         };
         add_stats(&mut total, run_matrix(config).await?);

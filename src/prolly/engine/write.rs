@@ -17,7 +17,13 @@ use crate::prolly::tree::Tree;
 use crate::prolly::write::CanonicalWriteManager;
 use crate::prolly::{Cid, ProllyMetricsSnapshot};
 
-type PublicationWrites = Vec<(Cid, Vec<u8>)>;
+struct PublicationWrite {
+    cid: Cid,
+    bytes: Vec<u8>,
+    node: Node,
+}
+
+type PublicationWrites = Vec<PublicationWrite>;
 
 enum ReadyNodeBytes {
     Owned(Vec<u8>),
@@ -820,6 +826,7 @@ impl ReplayStore {
     fn publication_writes(
         &self,
         root: Option<&Cid>,
+        format: &crate::prolly::format::TreeFormat,
     ) -> Result<(PublicationWrites, Vec<Cid>), Error> {
         let Some(root) = root else {
             return Ok((Vec::new(), Vec::new()));
@@ -842,8 +849,7 @@ impl ReplayStore {
                 continue;
             };
             let bytes = value.as_ref().ok_or_else(|| Error::NotFound(cid.clone()))?;
-            publication.insert(cid.as_bytes().to_vec(), (cid.clone(), bytes.clone()));
-            let node = Node::from_bytes(bytes)?;
+            let node = validation::decode_owned(&cid, format, bytes)?;
             if !node.leaf {
                 for value in &node.vals {
                     let child =
@@ -851,6 +857,14 @@ impl ReplayStore {
                     stack.push(Cid(child));
                 }
             }
+            publication.insert(
+                cid.as_bytes().to_vec(),
+                PublicationWrite {
+                    cid,
+                    bytes: bytes.clone(),
+                    node,
+                },
+            );
         }
         let missing = missing
             .into_iter()
@@ -1061,11 +1075,20 @@ where
         } else {
             false
         };
+        let consume_mutations_once = tree.root.is_none();
+        let mut mutations = Some(mutations);
         self.execute_replay(
             tree,
             publish_rightmost_hint,
             origin,
-            |manager| crate::prolly::write::apply(manager, tree, mutations.clone()),
+            |manager| {
+                let attempt = if consume_mutations_once {
+                    mutations.take().ok_or(Error::InvalidNode)?
+                } else {
+                    mutations.as_ref().ok_or(Error::InvalidNode)?.clone()
+                };
+                crate::prolly::write::apply(manager, tree, attempt)
+            },
             update_write_stats,
         )
         .await
@@ -1132,7 +1155,8 @@ where
         };
 
         let writes = loop {
-            let (writes, missing) = replay.publication_writes(result.0.root.as_ref())?;
+            let (writes, missing) =
+                replay.publication_writes(result.0.root.as_ref(), &tree.config.format)?;
             if missing.is_empty() {
                 break writes;
             }
@@ -1140,17 +1164,12 @@ where
             operation_nodes_read = operation_nodes_read.saturating_add(nodes);
             operation_bytes_read = operation_bytes_read.saturating_add(bytes);
         };
+        let nodes_written = writes.len();
+        let bytes_written = writes.iter().map(|write| write.bytes.len()).sum();
         if !writes.is_empty() {
-            let mut decoded = Vec::with_capacity(writes.len());
-            for (cid, bytes) in &writes {
-                decoded.push((
-                    cid.clone(),
-                    validation::decode_owned(cid, &tree.config.format, bytes)?,
-                ));
-            }
             let entries = writes
                 .iter()
-                .map(|(cid, bytes)| (cid.as_bytes(), bytes.as_slice()))
+                .map(|write| (write.cid.as_bytes(), write.bytes.as_slice()))
                 .collect::<Vec<_>>();
             if publish_rightmost_hint
                 && self.store.supports_hints()
@@ -1181,13 +1200,12 @@ where
                     .await
                     .map_err(|error| Error::Store(Box::new(error)))?;
             }
-            let bytes_written = writes.iter().map(|(_, bytes)| bytes.len()).sum();
-            self.metrics.record_batch_write(writes.len(), bytes_written);
+            self.metrics
+                .record_batch_write(nodes_written, bytes_written);
             if let Ok(mut cache) = self.node_cache.write() {
                 let mut evictions = 0;
-                for (cid, node) in decoded {
-                    let bytes = node.encoded_len();
-                    evictions += cache.insert(cid, Arc::new(node), bytes);
+                for write in writes {
+                    evictions += cache.insert(write.cid, Arc::new(write.node), write.bytes.len());
                 }
                 self.metrics.add_cache_evictions(evictions);
             }
@@ -1197,8 +1215,8 @@ where
             ReplayIo {
                 nodes_read: operation_nodes_read,
                 bytes_read: operation_bytes_read,
-                nodes_written: writes.len(),
-                bytes_written: writes.iter().map(|(_, bytes)| bytes.len()).sum(),
+                nodes_written,
+                bytes_written,
             },
         );
         Ok(result)

@@ -8,7 +8,7 @@ use prolly::{AsyncProlly, Config, Mutation, RemoteProllyStore, RemoteStoreBacken
 use prolly_store_dynamodb::{DynamoDbBackend, DynamoDbStore};
 use serde::{Deserialize, Serialize};
 
-const SCHEMA: &str = "dynamodb-local-scale-v4";
+const SCHEMA: &str = "dynamodb-local-scale-v5";
 
 type Manager = AsyncProlly<DynamoDbStore>;
 
@@ -282,8 +282,8 @@ async fn run(args: Args) -> Result<(), String> {
         .batch(&base, mutations(&change_ids, 1, args.value_bytes))
         .await
         .map_err(error)?;
-    let merge_ids = deterministic_ids(args.records, args.changes.saturating_mul(2), 53);
-    let (left_ids, right_ids) = merge_ids.split_at(args.changes.min(merge_ids.len()));
+    let merge_ids = deterministic_ids(args.records, args.changes, 53);
+    let (left_ids, right_ids) = merge_ids.split_at(merge_ids.len() / 2);
     let left = fixture_manager
         .batch(&base, mutations(left_ids, 2, args.value_bytes))
         .await
@@ -399,7 +399,7 @@ async fn run(args: Args) -> Result<(), String> {
             &mut completed,
             repetition,
             "merge",
-            args.changes.saturating_mul(2),
+            args.changes,
             async {
                 let merged = merge_manager
                     .merge(&base, &left, &right, None)
@@ -682,7 +682,8 @@ fn validate_args(args: &Args) -> Result<(), String> {
         || args.runs == 0
         || args.samples > args.records
         || args.concurrent_operations > args.records
-        || args.changes.saturating_mul(2) > args.records
+        || args.changes > args.records
+        || !args.changes.is_multiple_of(2)
     {
         return Err("benchmark counts and strings must be positive and in range".to_string());
     }

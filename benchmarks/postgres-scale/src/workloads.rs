@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use futures_util::stream::{self, StreamExt, TryStreamExt};
 use prolly::{
     AsyncProlly, Config, Diff, Mutation, ProllyMetricsSnapshot, RemoteProllyStore, Tree, TreeStats,
 };
@@ -28,6 +29,7 @@ pub struct CellSpec {
     pub repetition: u32,
     pub changes: usize,
     pub read_samples: usize,
+    pub concurrency: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -171,10 +173,62 @@ pub async fn run_cell(fixture: &Fixture, spec: CellSpec, meta: &RunMeta) -> Resu
         Operation::Batch => run_batch(fixture, &base, spec, meta).await,
         Operation::GetCold | Operation::GetWarm => run_get(fixture, &base, spec, meta).await,
         Operation::Query => run_query(fixture, &base, spec, meta).await,
+        Operation::ConcurrentQuery => run_concurrent_query(fixture, &base, spec, meta).await,
         Operation::Scan | Operation::FullScan => run_scan(fixture, &base, spec, meta).await,
         Operation::Diff => run_diff(fixture, &base, spec, meta).await,
         Operation::Merge => run_merge(fixture, &base, spec, meta).await,
     }
+}
+
+async fn run_concurrent_query(
+    fixture: &Fixture,
+    base: &Tree,
+    spec: CellSpec,
+    meta: &RunMeta,
+) -> Result<RawRow, String> {
+    let ids = lookup_ids(fixture.records, spec.read_samples, spec.pattern);
+    let keys = ids.iter().map(|id| key(*id)).collect::<Vec<_>>();
+    let manager = manager(&fixture.backend);
+    let before = read_physical_size(fixture.backend.pool())
+        .await
+        .map_err(error)?;
+    reset_pg_stats(fixture.backend.pool())
+        .await
+        .map_err(error)?;
+    manager.reset_metrics();
+    let started = Instant::now();
+    let values = stream::iter(keys.iter())
+        .map(|key| manager.get(base, key))
+        .buffer_unordered(spec.concurrency)
+        .try_collect::<Vec<_>>()
+        .await
+        .map_err(error)?;
+    let elapsed_ns = started.elapsed().as_nanos();
+    if values.iter().any(Option::is_none) {
+        return Err("concurrent query returned a missing value".to_string());
+    }
+    let metrics = manager.metrics();
+    let pg = read_pg_metrics(fixture.backend.pool())
+        .await
+        .map_err(error)?;
+    let after = read_physical_size(fixture.backend.pool())
+        .await
+        .map_err(error)?;
+    finish_cell(
+        fixture,
+        spec,
+        meta,
+        ids.len(),
+        values.len(),
+        elapsed_ns,
+        &[],
+        metrics,
+        &fixture.stats,
+        &pg,
+        &before,
+        &after,
+        "cold-manager",
+    )
 }
 
 async fn run_put(
@@ -866,6 +920,7 @@ mod tests {
             Operation::GetCold,
             Operation::GetWarm,
             Operation::Query,
+            Operation::ConcurrentQuery,
             Operation::Scan,
             Operation::Diff,
             Operation::Merge,
@@ -883,6 +938,7 @@ mod tests {
                         repetition: 1,
                         changes: 100,
                         read_samples: 100,
+                        concurrency: 32,
                     },
                     &meta,
                 )
@@ -900,6 +956,7 @@ mod tests {
                 repetition: 1,
                 changes: 100,
                 read_samples: 100,
+                concurrency: 32,
             },
             &meta,
         )

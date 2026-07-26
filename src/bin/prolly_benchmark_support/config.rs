@@ -31,7 +31,7 @@ mod tests {
         let implicit = config_for_profile(None);
         let explicit = config_for_profile(Some("bounded"));
         assert_eq!(implicit, explicit);
-        assert!(explicit.runtime.node_cache_max_nodes.is_some());
+        assert_eq!(explicit.runtime.node_cache_max_nodes, None);
         assert!(explicit.runtime.node_cache_max_bytes.is_some());
     }
 
