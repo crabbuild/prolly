@@ -13,7 +13,7 @@ The AWS versions below match the adapter's SDK line:
 ```toml
 [dependencies]
 prolly-map = "0.5.1"
-prolly-store-dynamodb = "0.3.1"
+prolly-store-dynamodb = "0.4.0"
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "=1.73.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -33,21 +33,31 @@ Java simulator has very different scaling behavior.
 
 ## Table model
 
-The adapter uses one table with:
+The adapter uses a primary table with:
 
 - Partition key: `pk`
 - Partition key type: binary
 - No sort key
 - Payload attribute: `value`
 
-Logical records are namespaced by binary prefixes:
+The primary table stores content-addressed nodes, canonical root manifests, and
+traversal hints under binary family prefixes. Keeping canonical root manifests
+here preserves read compatibility with older adapter releases.
 
-- `node:` content-addressed Prolly nodes keyed by CID.
-- `root:` named root manifests.
-- `hint:` traversal hints.
+Root enumeration uses a companion registry table, named
+`<primary-table>-roots` by default, with:
 
-`initialize_schema` creates the table with on-demand billing if it does not
-exist. Existing tables must already have the binary `pk` partition key.
+- Partition key: `pk` (binary namespace)
+- Sort key: `sk` (binary root name)
+
+`list_root_manifests` queries this registry and batch-loads only the matching
+canonical manifests. Its read work is therefore proportional to the number of
+roots in the namespace, not the number of node items in the primary table.
+
+`initialize_schema` creates both tables with on-demand billing if needed. On
+upgrade, it performs one legacy primary-table scan per namespace and records a
+migration marker after all existing roots are indexed. Override the companion
+name with `with_root_table_name` when table naming or IAM policy requires it.
 
 ## Local setup
 
@@ -85,6 +95,16 @@ aws dynamodb create-table \
   --attribute-definitions AttributeName=pk,AttributeType=B \
   --key-schema AttributeName=pk,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
+
+aws dynamodb create-table \
+  --table-name prolly_store-roots \
+  --attribute-definitions \
+      AttributeName=pk,AttributeType=B \
+      AttributeName=sk,AttributeType=B \
+  --key-schema \
+      AttributeName=pk,KeyType=HASH \
+      AttributeName=sk,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST
 ```
 
 ## Basic usage
@@ -106,6 +126,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         "prolly_store_example",
     )
     .with_key_prefix(b"my-app:".to_vec())
+    .with_root_table_name("prolly_store_example-roots")
     .with_read_parallelism(16)
     .with_batch_get_parallelism(8)
     .with_batch_write_parallelism(8)
@@ -185,16 +206,21 @@ async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>>
   throttling and consumed capacity.
 - `with_read_parallelism` controls the async Prolly traversal fan-out and is
   independent of DynamoDB batch-request concurrency.
-- `with_scan_parallelism` controls parallel table-scan segments used by root
-  and node enumeration and namespace cleanup. Parallel scans reduce elapsed
-  time on large shared tables while consuming read capacity more aggressively.
-- Strict transactions use `TransactWriteItems` and are limited to 100 combined
-  condition checks, node writes, and root writes.
+- `with_scan_parallelism` controls parallel primary-table scans used by node
+  enumeration, namespace cleanup, and the one-time legacy-root migration.
+  Normal root enumeration does not scan the primary table.
+- Root writes update the canonical manifest and registry entry atomically with
+  `TransactWriteItems`. Each root write therefore consumes two of DynamoDB's
+  100 transaction item slots.
 - Individual serialized nodes must fit DynamoDB item limits.
 - Use `with_key_prefix` for tenant or test isolation inside a shared table.
-- `clear_namespace` scans and deletes every item under the prefix. Use it for
-  tests, not as a production cleanup primitive.
-- Root compare-and-swap uses DynamoDB conditional writes.
+- `clear_namespace` scans primary-table items under the prefix and queries the
+  matching root registry partition before deleting both. Use it for tests, not
+  as a production cleanup primitive.
+- During an upgrade, stop old-version writers before running
+  `initialize_schema` with this release. New clients continue writing
+  backward-readable canonical manifests, but an old writer creating a brand
+  new root after migration would not create its registry entry.
 
 ## Running the example
 

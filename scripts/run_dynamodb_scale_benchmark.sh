@@ -123,7 +123,7 @@ if [[ "${PROLLY_BENCH_SKIP_DOCKER:-0}" != 1 ]]; then
 fi
 
 {
-  printf 'schema=dynamodb-local-scale-v2\n'
+  printf 'schema=dynamodb-local-scale-v3\n'
   printf 'revision=%s\n' "$REVISION"
   printf 'dirty=%s\n' "$DIRTY"
   printf 'profile=%s\n' "$PROFILE"

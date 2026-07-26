@@ -1139,7 +1139,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-store-dynamodb"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
