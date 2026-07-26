@@ -10,7 +10,7 @@ pub mod dynamodb {
     use std::collections::{HashMap, HashSet};
     use std::error::Error as StdError;
     use std::fmt;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use aws_sdk_dynamodb::error::SdkError;
     use aws_sdk_dynamodb::operation::create_table::CreateTableError;
@@ -22,7 +22,7 @@ pub mod dynamodb {
         AttributeDefinition, AttributeValue, BillingMode, ConditionCheck, Delete as TransactDelete,
         DeleteRequest, KeySchemaElement, KeyType, KeysAndAttributes, Put as TransactPut,
         PutRequest, ReturnValuesOnConditionCheckFailure, ScalarAttributeType, TableDescription,
-        TransactWriteItem, WriteRequest,
+        TableStatus, TransactWriteItem, WriteRequest,
     };
     use futures_util::stream::{self, StreamExt, TryStreamExt};
 
@@ -36,13 +36,15 @@ pub mod dynamodb {
 
     /// AWS SDK-backed DynamoDB backend.
     ///
-    /// The table must use a binary partition key named `pk`. The adapter stores
-    /// binary payloads in a `value` attribute and separates nodes, roots, and
-    /// hints by prefixing `pk`.
+    /// The primary table must use a binary partition key named `pk`. The
+    /// companion root registry table uses binary partition and sort keys named
+    /// `pk` and `sk`. The adapter creates and validates both tables through
+    /// [`DynamoDbBackend::initialize_schema`].
     #[derive(Clone, Debug)]
     pub struct DynamoDbBackend {
         client: aws_sdk_dynamodb::Client,
         table_name: String,
+        root_table_name: String,
         key_prefix: Vec<u8>,
         read_parallelism: usize,
         batch_get_parallelism: usize,
@@ -53,9 +55,12 @@ pub mod dynamodb {
     impl DynamoDbBackend {
         /// Create a backend from an existing AWS SDK DynamoDB client.
         pub fn new(client: aws_sdk_dynamodb::Client, table_name: impl Into<String>) -> Self {
+            let table_name = table_name.into();
+            let root_table_name = format!("{table_name}{ROOT_TABLE_SUFFIX}");
             Self {
                 client,
-                table_name: table_name.into(),
+                table_name,
+                root_table_name,
                 key_prefix: DEFAULT_KEY_PREFIX.to_vec(),
                 read_parallelism: DEFAULT_READ_PARALLELISM,
                 batch_get_parallelism: DEFAULT_BATCH_GET_PARALLELISM,
@@ -72,6 +77,20 @@ pub mod dynamodb {
         /// Return the DynamoDB table name.
         pub fn table_name(&self) -> &str {
             &self.table_name
+        }
+
+        /// Return the companion root registry table name.
+        pub fn root_table_name(&self) -> &str {
+            &self.root_table_name
+        }
+
+        /// Override the companion root registry table name.
+        ///
+        /// All clients that share a primary table and key prefix must use the
+        /// same root registry table.
+        pub fn with_root_table_name(mut self, table_name: impl Into<String>) -> Self {
+            self.root_table_name = table_name.into();
+            self
         }
 
         /// Return the namespace prefix prepended to all item keys.
@@ -120,10 +139,18 @@ pub mod dynamodb {
             self
         }
 
-        /// Create the required DynamoDB table if it does not already exist.
+        /// Create the required DynamoDB tables if they do not already exist.
         ///
-        /// Existing tables must have a binary partition key named `pk`.
+        /// The primary table uses a binary partition key named `pk`. The root
+        /// registry uses binary partition and sort keys named `pk` and `sk`.
+        /// Version 0.4 uses the root table as the sole named-root store and
+        /// does not read or migrate root entries from older schemas.
         pub async fn initialize_schema(&self) -> Result<(), DynamoDbBackendError> {
+            self.initialize_primary_table().await?;
+            self.initialize_root_table().await
+        }
+
+        async fn initialize_primary_table(&self) -> Result<(), DynamoDbBackendError> {
             match self
                 .client
                 .describe_table()
@@ -138,8 +165,8 @@ pub mod dynamodb {
                             self.table_name
                         ))
                     })?;
-                    self.validate_table_schema(table)?;
-                    return Ok(());
+                    self.validate_primary_table_schema(table)?;
+                    return self.wait_for_table_active(&self.table_name).await;
                 }
                 Err(err) if describe_table_not_found(&err) => {}
                 Err(err) => return Err(DynamoDbBackendError::sdk(err)),
@@ -172,7 +199,75 @@ pub mod dynamodb {
                     } else {
                         Err(DynamoDbBackendError::sdk(err))
                     }
-                })
+                })?;
+            self.wait_for_table_active(&self.table_name).await
+        }
+
+        async fn initialize_root_table(&self) -> Result<(), DynamoDbBackendError> {
+            match self
+                .client
+                .describe_table()
+                .table_name(&self.root_table_name)
+                .send()
+                .await
+            {
+                Ok(output) => {
+                    let table = output.table().ok_or_else(|| {
+                        DynamoDbBackendError::InvalidConfiguration(format!(
+                            "DynamoDB root registry table {} was described without table metadata",
+                            self.root_table_name
+                        ))
+                    })?;
+                    self.validate_root_table_schema(table)?;
+                    return self.wait_for_table_active(&self.root_table_name).await;
+                }
+                Err(err) if describe_table_not_found(&err) => {}
+                Err(err) => return Err(DynamoDbBackendError::sdk(err)),
+            }
+
+            self.client
+                .create_table()
+                .table_name(&self.root_table_name)
+                .attribute_definitions(
+                    AttributeDefinition::builder()
+                        .attribute_name(PK_ATTR)
+                        .attribute_type(ScalarAttributeType::B)
+                        .build()
+                        .map_err(DynamoDbBackendError::sdk)?,
+                )
+                .attribute_definitions(
+                    AttributeDefinition::builder()
+                        .attribute_name(SK_ATTR)
+                        .attribute_type(ScalarAttributeType::B)
+                        .build()
+                        .map_err(DynamoDbBackendError::sdk)?,
+                )
+                .key_schema(
+                    KeySchemaElement::builder()
+                        .attribute_name(PK_ATTR)
+                        .key_type(KeyType::Hash)
+                        .build()
+                        .map_err(DynamoDbBackendError::sdk)?,
+                )
+                .key_schema(
+                    KeySchemaElement::builder()
+                        .attribute_name(SK_ATTR)
+                        .key_type(KeyType::Range)
+                        .build()
+                        .map_err(DynamoDbBackendError::sdk)?,
+                )
+                .billing_mode(BillingMode::PayPerRequest)
+                .send()
+                .await
+                .map(|_| ())
+                .or_else(|err| {
+                    if create_table_in_use(&err) {
+                        Ok(())
+                    } else {
+                        Err(DynamoDbBackendError::sdk(err))
+                    }
+                })?;
+            self.wait_for_table_active(&self.root_table_name).await
         }
 
         /// Delete every item under this backend's namespace prefix.
@@ -190,15 +285,33 @@ pub mod dynamodb {
                 .into_iter()
                 .map(|key| self.delete_write_request(key))
                 .collect::<Result<Vec<_>, _>>()?;
-            self.batch_write_requests(&requests).await
+            self.batch_write_requests(&requests).await?;
+
+            let root_keys = self.root_keys().await?;
+            let requests = root_keys
+                .into_iter()
+                .map(|key| self.delete_item_write_request(key))
+                .collect::<Result<Vec<_>, _>>()?;
+            self.batch_write_requests_for_table(&self.root_table_name, &requests)
+                .await
         }
 
         fn node_key(&self, key: &[u8]) -> Vec<u8> {
             self.family_key(NODE_FAMILY, key)
         }
 
-        fn root_key(&self, name: &[u8]) -> Vec<u8> {
-            self.family_key(ROOT_FAMILY, name)
+        fn root_partition_key(&self) -> Vec<u8> {
+            let mut key = Vec::with_capacity(ROOT_PARTITION_PREFIX.len() + self.key_prefix.len());
+            key.extend_from_slice(ROOT_PARTITION_PREFIX);
+            key.extend_from_slice(&self.key_prefix);
+            key
+        }
+
+        fn root_sort_key(&self, name: &[u8]) -> Vec<u8> {
+            let mut key = Vec::with_capacity(ROOT_ENTRY_PREFIX.len() + name.len());
+            key.extend_from_slice(ROOT_ENTRY_PREFIX);
+            key.extend_from_slice(name);
+            key
         }
 
         fn hint_key(&self, namespace: &[u8], key: &[u8]) -> Vec<u8> {
@@ -232,7 +345,20 @@ pub mod dynamodb {
             HashMap::from([(PK_ATTR.to_string(), binary_attr(key))])
         }
 
-        fn validate_table_schema(
+        fn root_key_item(&self, name: &[u8]) -> HashMap<String, AttributeValue> {
+            HashMap::from([
+                (PK_ATTR.to_string(), binary_attr(self.root_partition_key())),
+                (SK_ATTR.to_string(), binary_attr(self.root_sort_key(name))),
+            ])
+        }
+
+        fn root_item(&self, name: &[u8], manifest: &[u8]) -> HashMap<String, AttributeValue> {
+            let mut item = self.root_key_item(name);
+            item.insert(VALUE_ATTR.to_string(), binary_attr(manifest));
+            item
+        }
+
+        fn validate_primary_table_schema(
             &self,
             table: &TableDescription,
         ) -> Result<(), DynamoDbBackendError> {
@@ -261,6 +387,86 @@ pub mod dynamodb {
             Ok(())
         }
 
+        fn validate_root_table_schema(
+            &self,
+            table: &TableDescription,
+        ) -> Result<(), DynamoDbBackendError> {
+            let key_schema = table.key_schema();
+            let has_pk = key_schema
+                .iter()
+                .any(|key| key.attribute_name() == PK_ATTR && key.key_type() == &KeyType::Hash);
+            let has_sk = key_schema
+                .iter()
+                .any(|key| key.attribute_name() == SK_ATTR && key.key_type() == &KeyType::Range);
+            if key_schema.len() != 2 || !has_pk || !has_sk {
+                return Err(DynamoDbBackendError::InvalidConfiguration(format!(
+                    "DynamoDB root registry table {} must use HASH key {PK_ATTR} and RANGE key {SK_ATTR}",
+                    self.root_table_name
+                )));
+            }
+
+            for attribute_name in [PK_ATTR, SK_ATTR] {
+                let has_binary_key = table.attribute_definitions().iter().any(|attribute| {
+                    attribute.attribute_name() == attribute_name
+                        && attribute.attribute_type() == &ScalarAttributeType::B
+                });
+                if !has_binary_key {
+                    return Err(DynamoDbBackendError::InvalidConfiguration(format!(
+                        "DynamoDB root registry table {} key {attribute_name} must be binary",
+                        self.root_table_name
+                    )));
+                }
+            }
+
+            Ok(())
+        }
+
+        async fn wait_for_table_active(
+            &self,
+            table_name: &str,
+        ) -> Result<(), DynamoDbBackendError> {
+            let started = Instant::now();
+            loop {
+                match self
+                    .client
+                    .describe_table()
+                    .table_name(table_name)
+                    .send()
+                    .await
+                {
+                    Ok(output)
+                        if output
+                            .table()
+                            .and_then(TableDescription::table_status)
+                            .is_some_and(|status| status == &TableStatus::Active) =>
+                    {
+                        return Ok(());
+                    }
+                    Ok(_) if started.elapsed() < DYNAMODB_TABLE_READY_TIMEOUT => {
+                        tokio::time::sleep(DYNAMODB_TABLE_READY_POLL_INTERVAL).await;
+                    }
+                    Err(err)
+                        if describe_table_not_found(&err)
+                            && started.elapsed() < DYNAMODB_TABLE_READY_TIMEOUT =>
+                    {
+                        tokio::time::sleep(DYNAMODB_TABLE_READY_POLL_INTERVAL).await;
+                    }
+                    Ok(output) => {
+                        let status = output
+                            .table()
+                            .and_then(TableDescription::table_status)
+                            .map(TableStatus::as_str)
+                            .unwrap_or("UNKNOWN");
+                        return Err(DynamoDbBackendError::InvalidConfiguration(format!(
+                            "DynamoDB table {table_name} did not become ACTIVE within {} seconds (status {status})",
+                            DYNAMODB_TABLE_READY_TIMEOUT.as_secs()
+                        )));
+                    }
+                    Err(err) => return Err(DynamoDbBackendError::sdk(err)),
+                }
+            }
+        }
+
         async fn get_value_by_key(
             &self,
             key: Vec<u8>,
@@ -270,6 +476,28 @@ pub mod dynamodb {
                 .get_item()
                 .table_name(&self.table_name)
                 .key(PK_ATTR, binary_attr(key))
+                .consistent_read(true)
+                .projection_expression("#value")
+                .expression_attribute_names("#value", VALUE_ATTR)
+                .send()
+                .await
+                .map_err(DynamoDbBackendError::sdk)?;
+
+            output
+                .item()
+                .map(|item| binary_value_attr(item, VALUE_ATTR))
+                .transpose()
+        }
+
+        async fn get_root_value(
+            &self,
+            name: &[u8],
+        ) -> Result<Option<Vec<u8>>, DynamoDbBackendError> {
+            let output = self
+                .client
+                .get_item()
+                .table_name(&self.root_table_name)
+                .set_key(Some(self.root_key_item(name)))
                 .consistent_read(true)
                 .projection_expression("#value")
                 .expression_attribute_names("#value", VALUE_ATTR)
@@ -333,58 +561,83 @@ pub mod dynamodb {
             Ok(keys)
         }
 
-        async fn scan_items_with_prefix(
+        async fn root_keys(
             &self,
-            prefix: &[u8],
-        ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, DynamoDbBackendError> {
-            let partitions = stream::iter(0..self.scan_parallelism)
-                .map(|segment| self.scan_items_segment(prefix, segment))
-                .buffer_unordered(self.scan_parallelism)
-                .try_collect::<Vec<_>>()
-                .await?;
-            Ok(partitions.into_iter().flatten().collect())
-        }
-
-        async fn scan_items_segment(
-            &self,
-            prefix: &[u8],
-            segment: usize,
-        ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, DynamoDbBackendError> {
+        ) -> Result<Vec<HashMap<String, AttributeValue>>, DynamoDbBackendError> {
             let mut start_key = None;
-            let mut items = Vec::new();
+            let mut keys = Vec::new();
 
             loop {
                 let output = self
                     .client
-                    .scan()
-                    .table_name(&self.table_name)
+                    .query()
+                    .table_name(&self.root_table_name)
                     .consistent_read(true)
-                    .projection_expression("#pk, #value")
-                    .filter_expression("begins_with(#pk, :prefix)")
+                    .key_condition_expression("#pk = :pk")
+                    .projection_expression("#sk")
                     .expression_attribute_names("#pk", PK_ATTR)
-                    .expression_attribute_names("#value", VALUE_ATTR)
-                    .expression_attribute_values(":prefix", binary_attr(prefix))
-                    .total_segments(self.scan_parallelism as i32)
-                    .segment(segment as i32)
+                    .expression_attribute_names("#sk", SK_ATTR)
+                    .expression_attribute_values(":pk", binary_attr(self.root_partition_key()))
                     .set_exclusive_start_key(start_key)
                     .send()
                     .await
                     .map_err(DynamoDbBackendError::sdk)?;
 
                 for item in output.items() {
-                    items.push((
-                        binary_value_attr(item, PK_ATTR)?,
-                        binary_value_attr(item, VALUE_ATTR)?,
-                    ));
+                    let sort_key = binary_value_attr(item, SK_ATTR)?;
+                    let name = sort_key
+                        .strip_prefix(ROOT_ENTRY_PREFIX)
+                        .ok_or(DynamoDbBackendError::UnexpectedAttribute(SK_ATTR))?;
+                    keys.push(self.root_key_item(name));
                 }
-
                 start_key = output.last_evaluated_key().cloned();
                 if start_key.is_none() {
                     break;
                 }
             }
 
-            Ok(items)
+            Ok(keys)
+        }
+
+        async fn query_roots(&self) -> Result<Vec<RemoteNamedRoot>, DynamoDbBackendError> {
+            let mut start_key = None;
+            let mut roots = Vec::new();
+
+            loop {
+                let output = self
+                    .client
+                    .query()
+                    .table_name(&self.root_table_name)
+                    .consistent_read(true)
+                    .key_condition_expression("#pk = :pk AND begins_with(#sk, :entry)")
+                    .projection_expression("#sk, #value")
+                    .expression_attribute_names("#pk", PK_ATTR)
+                    .expression_attribute_names("#sk", SK_ATTR)
+                    .expression_attribute_names("#value", VALUE_ATTR)
+                    .expression_attribute_values(":pk", binary_attr(self.root_partition_key()))
+                    .expression_attribute_values(":entry", binary_attr(ROOT_ENTRY_PREFIX))
+                    .set_exclusive_start_key(start_key)
+                    .send()
+                    .await
+                    .map_err(DynamoDbBackendError::sdk)?;
+
+                for item in output.items() {
+                    let sort_key = binary_value_attr(item, SK_ATTR)?;
+                    let name = sort_key
+                        .strip_prefix(ROOT_ENTRY_PREFIX)
+                        .ok_or(DynamoDbBackendError::UnexpectedAttribute(SK_ATTR))?;
+                    roots.push(RemoteNamedRoot::new(
+                        name.to_vec(),
+                        binary_value_attr(item, VALUE_ATTR)?,
+                    ));
+                }
+                start_key = output.last_evaluated_key().cloned();
+                if start_key.is_none() {
+                    break;
+                }
+            }
+
+            Ok(roots)
         }
 
         fn put_write_request(
@@ -403,10 +656,17 @@ pub mod dynamodb {
         }
 
         fn delete_write_request(&self, key: Vec<u8>) -> Result<WriteRequest, DynamoDbBackendError> {
+            self.delete_item_write_request(self.key_item(key))
+        }
+
+        fn delete_item_write_request(
+            &self,
+            key: HashMap<String, AttributeValue>,
+        ) -> Result<WriteRequest, DynamoDbBackendError> {
             Ok(WriteRequest::builder()
                 .delete_request(
                     DeleteRequest::builder()
-                        .set_key(Some(self.key_item(key)))
+                        .set_key(Some(key))
                         .build()
                         .map_err(DynamoDbBackendError::sdk)?,
                 )
@@ -417,12 +677,21 @@ pub mod dynamodb {
             &self,
             requests: &[WriteRequest],
         ) -> Result<(), DynamoDbBackendError> {
+            self.batch_write_requests_for_table(&self.table_name, requests)
+                .await
+        }
+
+        async fn batch_write_requests_for_table(
+            &self,
+            table_name: &str,
+            requests: &[WriteRequest],
+        ) -> Result<(), DynamoDbBackendError> {
             stream::iter(
                 requests
                     .chunks(DYNAMODB_BATCH_WRITE_LIMIT)
                     .map(<[WriteRequest]>::to_vec),
             )
-            .map(|pending| self.batch_write_chunk(pending))
+            .map(|pending| self.batch_write_chunk(table_name, pending))
             .buffer_unordered(self.batch_write_parallelism)
             .try_collect::<Vec<_>>()
             .await?;
@@ -431,6 +700,7 @@ pub mod dynamodb {
 
         async fn batch_write_chunk(
             &self,
+            table_name: &str,
             mut pending: Vec<WriteRequest>,
         ) -> Result<(), DynamoDbBackendError> {
             let mut attempts = 0;
@@ -438,14 +708,14 @@ pub mod dynamodb {
                 let output = self
                     .client
                     .batch_write_item()
-                    .request_items(&self.table_name, pending)
+                    .request_items(table_name, pending)
                     .send()
                     .await
                     .map_err(DynamoDbBackendError::sdk)?;
 
                 pending = output
                     .unprocessed_items()
-                    .and_then(|items| items.get(&self.table_name).cloned())
+                    .and_then(|items| items.get(table_name).cloned())
                     .unwrap_or_default();
                 if pending.is_empty() {
                     return Ok(());
@@ -547,8 +817,8 @@ pub mod dynamodb {
             let check = self
                 .apply_root_condition(
                     ConditionCheck::builder()
-                        .table_name(&self.table_name)
-                        .set_key(Some(self.key_item(self.root_key(&condition.name)))),
+                        .table_name(&self.root_table_name)
+                        .set_key(Some(self.root_key_item(&condition.name))),
                     condition.expected.as_deref(),
                 )
                 .build()
@@ -560,13 +830,13 @@ pub mod dynamodb {
             &self,
             name: &[u8],
             manifest: &[u8],
-            condition: Option<&RemoteRootCondition>,
+            expected: Option<Option<&[u8]>>,
         ) -> Result<TransactWriteItem, DynamoDbBackendError> {
             let mut builder = TransactPut::builder()
-                .table_name(&self.table_name)
-                .set_item(Some(self.item(self.root_key(name), manifest)));
-            if let Some(condition) = condition {
-                builder = self.apply_root_condition(builder, condition.expected.as_deref());
+                .table_name(&self.root_table_name)
+                .set_item(Some(self.root_item(name, manifest)));
+            if let Some(expected) = expected {
+                builder = self.apply_root_condition(builder, expected);
             }
             let put = builder.build().map_err(DynamoDbBackendError::sdk)?;
             Ok(TransactWriteItem::builder().put(put).build())
@@ -575,13 +845,13 @@ pub mod dynamodb {
         fn root_delete_item(
             &self,
             name: &[u8],
-            condition: Option<&RemoteRootCondition>,
+            expected: Option<Option<&[u8]>>,
         ) -> Result<TransactWriteItem, DynamoDbBackendError> {
             let mut builder = TransactDelete::builder()
-                .table_name(&self.table_name)
-                .set_key(Some(self.key_item(self.root_key(name))));
-            if let Some(condition) = condition {
-                builder = self.apply_root_condition(builder, condition.expected.as_deref());
+                .table_name(&self.root_table_name)
+                .set_key(Some(self.root_key_item(name)));
+            if let Some(expected) = expected {
+                builder = self.apply_root_condition(builder, expected);
             }
             let delete = builder.build().map_err(DynamoDbBackendError::sdk)?;
             Ok(TransactWriteItem::builder().delete(delete).build())
@@ -783,14 +1053,14 @@ pub mod dynamodb {
         }
 
         async fn get_root_manifest(&self, name: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
-            self.get_value_by_key(self.root_key(name)).await
+            self.get_root_value(name).await
         }
 
         async fn put_root_manifest(&self, name: &[u8], manifest: &[u8]) -> Result<(), Self::Error> {
             self.client
                 .put_item()
-                .table_name(&self.table_name)
-                .set_item(Some(self.item(self.root_key(name), manifest)))
+                .table_name(&self.root_table_name)
+                .set_item(Some(self.root_item(name, manifest)))
                 .send()
                 .await
                 .map_err(DynamoDbBackendError::sdk)?;
@@ -800,8 +1070,8 @@ pub mod dynamodb {
         async fn delete_root_manifest(&self, name: &[u8]) -> Result<(), Self::Error> {
             self.client
                 .delete_item()
-                .table_name(&self.table_name)
-                .set_key(Some(self.key_item(self.root_key(name))))
+                .table_name(&self.root_table_name)
+                .set_key(Some(self.root_key_item(name)))
                 .send()
                 .await
                 .map_err(DynamoDbBackendError::sdk)?;
@@ -814,14 +1084,13 @@ pub mod dynamodb {
             expected: Option<&[u8]>,
             new: Option<&[u8]>,
         ) -> Result<RemoteManifestUpdate, Self::Error> {
-            let root_key = self.root_key(name);
             let result = match new {
                 Some(manifest) => {
                     let mut request = self
                         .client
                         .put_item()
-                        .table_name(&self.table_name)
-                        .set_item(Some(self.item(root_key.clone(), manifest)))
+                        .table_name(&self.root_table_name)
+                        .set_item(Some(self.root_item(name, manifest)))
                         .return_values_on_condition_check_failure(
                             ReturnValuesOnConditionCheckFailure::AllOld,
                         );
@@ -844,8 +1113,8 @@ pub mod dynamodb {
                     let mut request = self
                         .client
                         .delete_item()
-                        .table_name(&self.table_name)
-                        .set_key(Some(self.key_item(root_key.clone())))
+                        .table_name(&self.root_table_name)
+                        .set_key(Some(self.root_key_item(name)))
                         .return_values_on_condition_check_failure(
                             ReturnValuesOnConditionCheckFailure::AllOld,
                         );
@@ -877,16 +1146,7 @@ pub mod dynamodb {
         }
 
         async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error> {
-            let prefix = self.family_prefix(ROOT_FAMILY);
-            let mut roots = self
-                .scan_items_with_prefix(&prefix)
-                .await?
-                .into_iter()
-                .filter_map(|(key, manifest)| {
-                    key.strip_prefix(prefix.as_slice())
-                        .map(|name| RemoteNamedRoot::new(name.to_vec(), manifest))
-                })
-                .collect::<Vec<_>>();
+            let mut roots = self.query_roots().await?;
             roots.sort_by(|left, right| left.name.cmp(&right.name));
             Ok(roots)
         }
@@ -923,17 +1183,16 @@ pub mod dynamodb {
             for write in root_writes {
                 match write {
                     RemoteRootWrite::Put { name, manifest } => {
-                        items.push(self.root_put_item(
-                            name,
-                            manifest,
-                            conditions_by_name.get(name.as_slice()).copied(),
-                        )?);
+                        let expected = conditions_by_name
+                            .get(name.as_slice())
+                            .map(|condition| condition.expected.as_deref());
+                        items.push(self.root_put_item(name, manifest, expected)?);
                     }
                     RemoteRootWrite::Delete { name } => {
-                        items.push(self.root_delete_item(
-                            name,
-                            conditions_by_name.get(name.as_slice()).copied(),
-                        )?);
+                        let expected = conditions_by_name
+                            .get(name.as_slice())
+                            .map(|condition| condition.expected.as_deref());
+                        items.push(self.root_delete_item(name, expected)?);
                     }
                 }
             }
@@ -971,13 +1230,21 @@ pub mod dynamodb {
                         .as_service_error()
                         .is_some_and(|err| err.is_transaction_canceled_exception()) =>
                 {
-                    let root_keys = root_conditions
-                        .iter()
-                        .map(|condition| self.root_key(&condition.name))
-                        .collect::<Vec<_>>();
-                    let current_roots = self.batch_get_values(&root_keys).await?;
-                    for (condition, root_key) in root_conditions.iter().zip(root_keys) {
-                        let current = current_roots.get(&root_key).cloned();
+                    let current_roots = stream::iter(root_conditions)
+                        .map(|condition| async move {
+                            Ok::<_, DynamoDbBackendError>((
+                                condition.name.clone(),
+                                self.get_root_value(&condition.name).await?,
+                            ))
+                        })
+                        .buffer_unordered(self.batch_get_parallelism)
+                        .try_collect::<HashMap<_, _>>()
+                        .await?;
+                    for condition in root_conditions {
+                        let current = current_roots
+                            .get(condition.name.as_slice())
+                            .cloned()
+                            .flatten();
                         if current != condition.expected {
                             return Ok(RemoteTransactionUpdate::Conflict(
                                 RemoteTransactionConflict::new(
@@ -1279,17 +1546,20 @@ pub mod dynamodb {
     const DYNAMODB_BATCH_RETRY_LIMIT: usize = 8;
     const DYNAMODB_BATCH_RETRY_BASE_DELAY_MS: u64 = 5;
     const DYNAMODB_SCAN_SEGMENT_LIMIT: usize = 1_000_000;
+    const DYNAMODB_TABLE_READY_TIMEOUT: Duration = Duration::from_secs(120);
+    const DYNAMODB_TABLE_READY_POLL_INTERVAL: Duration = Duration::from_millis(250);
     const PK_ATTR: &str = "pk";
+    const SK_ATTR: &str = "sk";
     const VALUE_ATTR: &str = "value";
+    const ROOT_TABLE_SUFFIX: &str = "-roots";
+    const ROOT_PARTITION_PREFIX: &[u8] = b"roots:";
+    const ROOT_ENTRY_PREFIX: &[u8] = b"\x01";
 
     const NODE_FAMILY: &[u8] = b"node:";
-    const ROOT_FAMILY: &[u8] = b"root:";
     const HINT_FAMILY: &[u8] = b"hint:";
 
     /// Recommended partition key prefix for immutable node items.
     pub const NODE_PK_PREFIX: &str = "node#";
-    /// Recommended partition key prefix for named root manifest items.
-    pub const ROOT_PK_PREFIX: &str = "root#";
     /// Recommended partition key prefix for hint items.
     pub const HINT_PK_PREFIX: &str = "hint#";
 }
