@@ -133,6 +133,30 @@ impl Workload {
         self.query_ids.iter().copied().map(key).collect()
     }
 
+    pub fn expected_diff_records(&self) -> Vec<DiffRecord> {
+        self.diff_mutations
+            .iter()
+            .map(|mutation| match mutation {
+                MutationRecord::Upsert { key, value: after } => {
+                    let id = key_id(key).expect("generated workload keys are valid");
+                    DiffRecord {
+                        key: key.clone(),
+                        before: Some(value(id, 0, self.spec)),
+                        after: Some(after.clone()),
+                    }
+                }
+                MutationRecord::Delete { key } => {
+                    let id = key_id(key).expect("generated workload keys are valid");
+                    DiffRecord {
+                        key: key.clone(),
+                        before: Some(value(id, 0, self.spec)),
+                        after: None,
+                    }
+                }
+            })
+            .collect()
+    }
+
     pub fn expected_value(&self, tree: ExpectedTree, id: usize) -> Option<Vec<u8>> {
         if id >= self.spec.records {
             return None;
@@ -161,6 +185,15 @@ impl Workload {
 
 pub fn key(id: usize) -> Vec<u8> {
     format!("key-{id:020}").into_bytes()
+}
+
+pub fn key_id(key: &[u8]) -> Result<usize, String> {
+    std::str::from_utf8(key)
+        .map_err(|error| format!("key is not UTF-8: {error}"))?
+        .strip_prefix("key-")
+        .ok_or_else(|| "key does not use the workload prefix".to_string())?
+        .parse()
+        .map_err(|error| format!("key identifier is invalid: {error}"))
 }
 
 pub fn value(id: usize, generation: u64, spec: WorkloadSpec) -> Vec<u8> {

@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::future::Future;
 use std::time::Instant;
 
@@ -7,12 +8,13 @@ pub struct Measured<T> {
     pub elapsed_ns: u128,
 }
 
-pub async fn measure<T, F>(future: F) -> Result<Measured<T>, String>
+pub async fn measure<T, F, E>(future: F) -> Result<Measured<T>, String>
 where
-    F: Future<Output = Result<T, String>>,
+    F: Future<Output = Result<T, E>>,
+    E: Display,
 {
     let started = Instant::now();
-    let value = future.await?;
+    let value = future.await.map_err(|error| error.to_string())?;
     let elapsed_ns = started.elapsed().as_nanos().max(1);
     Ok(Measured { value, elapsed_ns })
 }
