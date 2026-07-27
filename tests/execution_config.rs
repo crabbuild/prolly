@@ -27,7 +27,7 @@ fn execution_defaults_are_finite_and_nonzero() {
     assert!(config.node_cache_max_bytes().get() > 0);
 
     let legacy_defaults = Config::default();
-    assert!(legacy_defaults.runtime.node_cache_max_nodes.is_some());
+    assert_eq!(legacy_defaults.runtime.node_cache_max_nodes, None);
     assert!(legacy_defaults.runtime.node_cache_max_bytes.is_some());
     assert!(legacy_defaults.runtime.read_parallelism > 0);
 }

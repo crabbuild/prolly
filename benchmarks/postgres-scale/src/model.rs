@@ -49,6 +49,7 @@ pub enum Operation {
     GetCold,
     GetWarm,
     Query,
+    ConcurrentQuery,
     Scan,
     FullScan,
     Diff,
@@ -56,12 +57,13 @@ pub enum Operation {
 }
 
 impl Operation {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Put,
         Self::Batch,
         Self::GetCold,
         Self::GetWarm,
         Self::Query,
+        Self::ConcurrentQuery,
         Self::Scan,
         Self::FullScan,
         Self::Diff,
@@ -76,6 +78,7 @@ impl Operation {
             Self::GetCold => "get_cold",
             Self::GetWarm => "get_warm",
             Self::Query => "query",
+            Self::ConcurrentQuery => "concurrent_query",
             Self::Scan => "scan",
             Self::FullScan => "full_scan",
             Self::Diff => "diff",
@@ -95,6 +98,7 @@ impl FromStr for Operation {
             "get_cold" => Ok(Self::GetCold),
             "get_warm" => Ok(Self::GetWarm),
             "query" => Ok(Self::Query),
+            "concurrent_query" => Ok(Self::ConcurrentQuery),
             "scan" => Ok(Self::Scan),
             "full_scan" => Ok(Self::FullScan),
             "diff" => Ok(Self::Diff),

@@ -4,8 +4,8 @@ use std::str::FromStr;
 use crate::config::{CommandConfig, SuiteSelection, WorkloadConfig};
 use crate::model::{Operation, Pattern};
 
-pub const USAGE: &str = "usage: prolly-postgres-scale-bench [--profile smoke|full] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--min-free-gb N]";
-pub const COMMAND_USAGE: &str = "usage: prolly-postgres-scale-bench [--config PATH] [--suite service|scale|both] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--baseline PATH] [--allow-environment-mismatch] [--clients LIST] [--pool-sizes LIST] [--warmup-ms N] [--duration-ms N] [--adapter-batch-items N] [--service-records N] [--service-value-bytes N] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--scale-value-bytes N] [--min-free-gb N]";
+pub const USAGE: &str = "usage: prolly-postgres-scale-bench [--profile smoke|full] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--concurrency N] [--min-free-gb N]";
+pub const COMMAND_USAGE: &str = "usage: prolly-postgres-scale-bench [--config PATH] [--suite service|scale|both] [--url URL] [--output PATH] [--revision REV] [--dirty|--clean] [--baseline PATH] [--allow-environment-mismatch] [--clients LIST] [--pool-sizes LIST] [--warmup-ms N] [--duration-ms N] [--adapter-batch-items N] [--service-records N] [--service-value-bytes N] [--sizes LIST] [--runs N] [--operations LIST] [--patterns LIST] [--changes N|auto] [--read-samples N] [--concurrency N] [--scale-value-bytes N] [--min-free-gb N]";
 
 #[derive(Clone, Debug)]
 pub enum ParsedCommand {
@@ -26,6 +26,7 @@ pub struct RunConfig {
     pub patterns: Vec<Pattern>,
     pub changes: Option<usize>,
     pub read_samples: usize,
+    pub concurrency: usize,
     pub min_free_bytes: u64,
 }
 
@@ -43,6 +44,7 @@ impl RunConfig {
             patterns: Pattern::ALL.to_vec(),
             changes: Some(100),
             read_samples: 100,
+            concurrency: 32,
             min_free_bytes: 0,
         }
     }
@@ -73,8 +75,8 @@ impl RunConfig {
         if self.operations.is_empty() || self.patterns.is_empty() {
             return Err("operation and pattern filters must be non-empty".to_string());
         }
-        if self.changes == Some(0) || self.read_samples == 0 {
-            return Err("changes and read samples must be positive".to_string());
+        if self.changes == Some(0) || self.read_samples == 0 || self.concurrency == 0 {
+            return Err("changes, read samples, and concurrency must be positive".to_string());
         }
         if self.operations.contains(&Operation::Merge)
             && self.changes.is_some_and(|changes| changes % 2 != 0)
@@ -150,6 +152,9 @@ where
             }
             "--read-samples" => {
                 config.read_samples = parse_number(&take(&overrides, &mut index, flag)?, flag)?;
+            }
+            "--concurrency" => {
+                config.concurrency = parse_number(&take(&overrides, &mut index, flag)?, flag)?;
             }
             "--min-free-gb" => {
                 let gib: u64 = parse_number(&take(&overrides, &mut index, flag)?, flag)?;
@@ -277,6 +282,10 @@ where
                 workload.scale.read_samples =
                     parse_number(&command_value(&values, &mut index, flag)?, flag)?;
             }
+            "--concurrency" => {
+                workload.scale.concurrency =
+                    parse_number(&command_value(&values, &mut index, flag)?, flag)?;
+            }
             "--scale-value-bytes" => {
                 workload.scale.value_bytes =
                     parse_number(&command_value(&values, &mut index, flag)?, flag)?;
@@ -373,12 +382,15 @@ mod tests {
             "25",
             "--read-samples",
             "10",
+            "--concurrency",
+            "7",
         ])
         .unwrap();
         assert_eq!(config.sizes, vec![500, 1_000]);
         assert_eq!(config.runs, 2);
         assert_eq!(config.changes, Some(25));
         assert_eq!(config.read_samples, 10);
+        assert_eq!(config.concurrency, 7);
         assert_eq!(
             config.operations,
             vec![Operation::GetCold, Operation::Query]
@@ -408,6 +420,8 @@ mod tests {
             "batch,query".to_string(),
             "--patterns".to_string(),
             "random".to_string(),
+            "--concurrency".to_string(),
+            "6".to_string(),
         ])
         .unwrap();
         let ParsedCommand::Unified(command) = parsed else {
@@ -421,6 +435,7 @@ mod tests {
             vec![Operation::Batch, Operation::Query]
         );
         assert_eq!(command.workload.scale.patterns, vec![Pattern::Random]);
+        assert_eq!(command.workload.scale.concurrency, 6);
         assert_eq!(command.suites, SuiteSelection::Both);
     }
 }

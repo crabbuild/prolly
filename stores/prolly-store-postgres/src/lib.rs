@@ -7,7 +7,7 @@ pub use prolly::{
 
 /// Postgres adapter entry point.
 pub mod postgres {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::num::NonZeroUsize;
 
     use sqlx::{PgConnection, PgPool, Row};
@@ -131,24 +131,24 @@ pub mod postgres {
             if ops.is_empty() {
                 return Ok(());
             }
-            let mut final_ops = BTreeMap::<Vec<u8>, Option<Vec<u8>>>::new();
+            let mut final_ops = HashMap::<&[u8], Option<&[u8]>>::with_capacity(ops.len());
             for op in ops {
                 match op {
                     RemoteBatchOp::Upsert { key, value } => {
-                        final_ops.insert((*key).to_vec(), Some((*value).to_vec()));
+                        final_ops.insert(key, Some(value));
                     }
                     RemoteBatchOp::Delete { key } => {
-                        final_ops.insert((*key).to_vec(), None);
+                        final_ops.insert(key, None);
                     }
                 }
             }
             let deletes = final_ops
                 .iter()
-                .filter_map(|(key, value)| value.is_none().then_some(key.as_slice()))
+                .filter_map(|(key, value)| value.is_none().then_some(*key))
                 .collect::<Vec<_>>();
             let upserts = final_ops
                 .iter()
-                .filter_map(|(key, value)| value.as_deref().map(|value| (key.as_slice(), value)))
+                .filter_map(|(key, value)| value.map(|value| (*key, value)))
                 .collect::<Vec<_>>();
             let mut tx = self.pool.begin().await?;
             delete_node_chunks(&mut tx, &deletes, self.options.max_batch_items()).await?;
@@ -188,10 +188,7 @@ pub mod postgres {
                 return Ok(());
             }
             let entries = deduplicate_entries(entries);
-            let entries = entries
-                .iter()
-                .map(|(key, value)| (key.as_slice(), value.as_slice()))
-                .collect::<Vec<_>>();
+            let entries = entries.into_iter().collect::<Vec<_>>();
             let mut tx = self.pool.begin().await?;
             upsert_node_chunks(&mut tx, &entries, self.options.max_batch_items()).await?;
             tx.commit().await
@@ -253,10 +250,7 @@ pub mod postgres {
             value: &[u8],
         ) -> Result<(), Self::Error> {
             let entries = deduplicate_entries(entries);
-            let entries = entries
-                .iter()
-                .map(|(key, value)| (key.as_slice(), value.as_slice()))
-                .collect::<Vec<_>>();
+            let entries = entries.into_iter().collect::<Vec<_>>();
             let mut tx = self.pool.begin().await?;
             upsert_node_chunks(&mut tx, &entries, self.options.max_batch_items()).await?;
             sqlx::query(
@@ -377,24 +371,25 @@ pub mod postgres {
                 }
             }
 
-            let mut final_nodes = BTreeMap::<Vec<u8>, Option<Vec<u8>>>::new();
+            let mut final_nodes =
+                HashMap::<&[u8], Option<&[u8]>>::with_capacity(node_writes.len());
             for write in node_writes {
                 match write {
                     RemoteBatchOp::Upsert { key, value } => {
-                        final_nodes.insert((*key).to_vec(), Some((*value).to_vec()));
+                        final_nodes.insert(key, Some(value));
                     }
                     RemoteBatchOp::Delete { key } => {
-                        final_nodes.insert((*key).to_vec(), None);
+                        final_nodes.insert(key, None);
                     }
                 };
             }
             let node_deletes = final_nodes
                 .iter()
-                .filter_map(|(key, value)| value.is_none().then_some(key.as_slice()))
+                .filter_map(|(key, value)| value.is_none().then_some(*key))
                 .collect::<Vec<_>>();
             let node_upserts = final_nodes
                 .iter()
-                .filter_map(|(key, value)| value.as_deref().map(|value| (key.as_slice(), value)))
+                .filter_map(|(key, value)| value.map(|value| (*key, value)))
                 .collect::<Vec<_>>();
             delete_node_chunks(&mut tx, &node_deletes, self.options.max_batch_items()).await?;
             upsert_node_chunks(&mut tx, &node_upserts, self.options.max_batch_items()).await?;
@@ -459,11 +454,8 @@ pub mod postgres {
         Ok(())
     }
 
-    fn deduplicate_entries(entries: &[(&[u8], &[u8])]) -> BTreeMap<Vec<u8>, Vec<u8>> {
-        entries
-            .iter()
-            .map(|(key, value)| ((*key).to_vec(), (*value).to_vec()))
-            .collect()
+    fn deduplicate_entries<'a>(entries: &[(&'a [u8], &'a [u8])]) -> HashMap<&'a [u8], &'a [u8]> {
+        entries.iter().copied().collect()
     }
 
     async fn delete_node_chunks(

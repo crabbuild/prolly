@@ -66,6 +66,7 @@ pub struct ScaleConfig {
     pub runs: u32,
     pub changes: Option<usize>,
     pub read_samples: usize,
+    pub concurrency: usize,
     pub operations: Vec<Operation>,
     pub patterns: Vec<Pattern>,
     pub min_free_gb: u64,
@@ -278,6 +279,7 @@ impl ScaleConfig {
             || self.runs == 0
             || self.changes == Some(0)
             || self.read_samples == 0
+            || self.concurrency == 0
             || self.operations.is_empty()
             || self.patterns.is_empty()
         {
@@ -301,6 +303,7 @@ impl Default for ScaleConfig {
             runs: 3,
             changes: None,
             read_samples: 10_000,
+            concurrency: 32,
             operations: Operation::ALL.to_vec(),
             patterns: Pattern::ALL.to_vec(),
             min_free_gb: 3,

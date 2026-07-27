@@ -131,8 +131,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     .with_key_prefix(b"my-app:".to_vec())
     .with_root_table_name("prolly_store_example-roots")
     .with_read_parallelism(16)
-    .with_batch_get_parallelism(8)
-    .with_batch_write_parallelism(8)
+    .with_batch_get_parallelism(16)
+    .with_batch_write_parallelism(16)
     .with_scan_parallelism(8);
     backend.initialize_schema().await?;
 
@@ -204,8 +204,8 @@ async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>>
   adapter chunks large requests, executes a bounded number concurrently, and
   retries unprocessed items with exponential backoff.
 - `with_batch_get_parallelism` and `with_batch_write_parallelism` control
-  request concurrency. The default is 8 for each. Lower these values for
-  provisioned tables with limited capacity; raise them only after observing
+  request concurrency. The measured default is 16 for each. Lower these values
+  for provisioned tables with limited capacity; tune them while observing
   throttling and consumed capacity.
 - `with_read_parallelism` controls the async Prolly traversal fan-out and is
   independent of DynamoDB batch-request concurrency.

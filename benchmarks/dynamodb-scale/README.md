@@ -5,6 +5,10 @@ operations against DynamoDB Local. It covers raw batch reads and writes, named
 root scans, compare-and-swap conflicts, concurrent point reads, tree creation,
 batched mutation, query, diff, and merge.
 
+`BENCH_CHANGES` is the total mutation count for batch, diff, and merge. Merge
+splits that count evenly across two disjoint branches so its workload matches
+the PostgreSQL scale harness.
+
 DynamoDB Local makes regression testing repeatable. Its throughput and latency
 do not predict AWS DynamoDB performance.
 

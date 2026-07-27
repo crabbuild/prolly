@@ -1,0 +1,15 @@
+[package]
+name = "prolly-backend-workload-contract"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.81"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10"
+
+[lints.rust]
+unsafe_code = "forbid"

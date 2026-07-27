@@ -926,11 +926,11 @@ pub mod dynamodb {
         }
 
         async fn batch_nodes(&self, ops: &[RemoteBatchOp<'_>]) -> Result<(), Self::Error> {
-            let mut latest = HashMap::<Vec<u8>, Option<Vec<u8>>>::new();
+            let mut latest = HashMap::<Vec<u8>, Option<&[u8]>>::with_capacity(ops.len());
             for op in ops {
                 match op {
                     RemoteBatchOp::Upsert { key, value } => {
-                        latest.insert(self.node_key(key), Some(value.to_vec()));
+                        latest.insert(self.node_key(key), Some(value));
                     }
                     RemoteBatchOp::Delete { key } => {
                         latest.insert(self.node_key(key), None);
@@ -941,7 +941,7 @@ pub mod dynamodb {
             let requests = latest
                 .into_iter()
                 .map(|(key, value)| match value {
-                    Some(value) => self.put_write_request(key, &value),
+                    Some(value) => self.put_write_request(key, value),
                     None => self.delete_write_request(key),
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -952,31 +952,34 @@ pub mod dynamodb {
             &self,
             keys: &[&[u8]],
         ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
-            let mut seen = HashSet::new();
-            let mut unique_keys = Vec::new();
-            for key in keys {
-                let dynamo_key = self.node_key(key);
+            let dynamo_keys = keys
+                .iter()
+                .map(|key| self.node_key(key))
+                .collect::<Vec<_>>();
+            let mut seen = HashSet::with_capacity(dynamo_keys.len());
+            let mut unique_keys = Vec::with_capacity(dynamo_keys.len());
+            for dynamo_key in &dynamo_keys {
                 if seen.insert(dynamo_key.clone()) {
-                    unique_keys.push(dynamo_key);
+                    unique_keys.push(dynamo_key.clone());
                 }
             }
 
             let found = self.batch_get_values(&unique_keys).await?;
 
-            Ok(keys
+            Ok(dynamo_keys
                 .iter()
-                .map(|key| found.get(&self.node_key(key)).cloned())
+                .map(|key| found.get(key).cloned())
                 .collect())
         }
 
         async fn batch_put_nodes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
-            let mut latest = HashMap::<Vec<u8>, Vec<u8>>::new();
+            let mut latest = HashMap::<Vec<u8>, &[u8]>::with_capacity(entries.len());
             for (key, value) in entries {
-                latest.insert(self.node_key(key), value.to_vec());
+                latest.insert(self.node_key(key), value);
             }
             let requests = latest
                 .into_iter()
-                .map(|(key, value)| self.put_write_request(key, &value))
+                .map(|(key, value)| self.put_write_request(key, value))
                 .collect::<Result<Vec<_>, _>>()?;
             self.batch_write_requests(&requests).await
         }
@@ -1040,14 +1043,14 @@ pub mod dynamodb {
             key: &[u8],
             value: &[u8],
         ) -> Result<(), Self::Error> {
-            let mut latest = HashMap::<Vec<u8>, Vec<u8>>::new();
+            let mut latest = HashMap::<Vec<u8>, &[u8]>::with_capacity(entries.len() + 1);
             for (key, value) in entries {
-                latest.insert(self.node_key(key), value.to_vec());
+                latest.insert(self.node_key(key), value);
             }
-            latest.insert(self.hint_key(namespace, key), value.to_vec());
+            latest.insert(self.hint_key(namespace, key), value);
             let requests = latest
                 .into_iter()
-                .map(|(key, value)| self.put_write_request(key, &value))
+                .map(|(key, value)| self.put_write_request(key, value))
                 .collect::<Result<Vec<_>, _>>()?;
             self.batch_write_requests(&requests).await
         }
@@ -1537,8 +1540,8 @@ pub mod dynamodb {
 
     const DEFAULT_KEY_PREFIX: &[u8] = b"prolly:";
     const DEFAULT_READ_PARALLELISM: usize = 16;
-    const DEFAULT_BATCH_GET_PARALLELISM: usize = 8;
-    const DEFAULT_BATCH_WRITE_PARALLELISM: usize = 8;
+    const DEFAULT_BATCH_GET_PARALLELISM: usize = 16;
+    const DEFAULT_BATCH_WRITE_PARALLELISM: usize = 16;
     const DEFAULT_SCAN_PARALLELISM: usize = 8;
     const DYNAMODB_BATCH_GET_LIMIT: usize = 100;
     const DYNAMODB_BATCH_WRITE_LIMIT: usize = 25;

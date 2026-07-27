@@ -73,6 +73,8 @@ esac
 
 OPERATIONS="${BENCH_OPERATIONS:-put,batch,get_cold,get_warm,query,scan,full_scan,diff,merge}"
 PATTERNS="${BENCH_PATTERNS:-append,random,clustered}"
+VALUE_BYTES="${BENCH_VALUE_BYTES:-27}"
+CONCURRENCY="${BENCH_CONCURRENCY:-32}"
 MIN_FREE_GB="${BENCH_MIN_FREE_GB:-3}"
 REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf unknown)"
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)" ]]; then
@@ -152,6 +154,8 @@ fi
   printf 'runs=%s\n' "$RUNS"
   printf 'operations=%s\n' "$OPERATIONS"
   printf 'patterns=%s\n' "$PATTERNS"
+  printf 'value_bytes=%s\n' "$VALUE_BYTES"
+  printf 'concurrency=%s\n' "$CONCURRENCY"
   printf 'changes=%s\n' "$CHANGES"
   printf 'read_samples=%s\n' "$READ_SAMPLES"
   printf 'merge_changes_semantics=total_split_evenly\n'
@@ -198,6 +202,8 @@ else
     --runs "$RUNS"
     --operations "$OPERATIONS"
     --patterns "$PATTERNS"
+    --value-bytes "$VALUE_BYTES"
+    --concurrency "$CONCURRENCY"
     --changes "$CHANGES"
     --read-samples "$READ_SAMPLES"
     --min-free-gb "$MIN_FREE_GB"

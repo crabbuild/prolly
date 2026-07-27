@@ -33,6 +33,7 @@ pub fn enumerate_cells(config: &RunConfig, records: usize) -> Vec<CellSpec> {
                         repetition,
                         changes,
                         read_samples: config.read_samples,
+                        concurrency: config.concurrency,
                     });
                 }
                 continue;
@@ -47,6 +48,7 @@ pub fn enumerate_cells(config: &RunConfig, records: usize) -> Vec<CellSpec> {
                     repetition,
                     changes,
                     read_samples: config.read_samples,
+                    concurrency: config.concurrency,
                 });
             }
         }
