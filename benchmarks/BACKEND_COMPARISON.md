@@ -38,6 +38,12 @@ The report declares a winner only when the paired bootstrap 95% confidence inter
 
 DynamoDB Local supports repeatable adapter regression testing. It does not predict Amazon DynamoDB network latency, throttling, partitions, capacity, or cost. PostgreSQL also runs locally in Docker, so the comparison measures local adapter implementations rather than production infrastructure.
 
+## Recorded 10M comparison
+
+The audited seven-repetition 10M result is in
+[`performance-results/backend-comparison-10m-hardened-2026-07-26`](../performance-results/backend-comparison-10m-hardened-2026-07-26/report.md).
+Its manifest records the exact clean source tree, release binaries, workload configuration, commands, and pinned container images used for the run.
+
 ## Verify broader byte-for-byte behavior
 
 Run the separate deterministic cross-backend correctness harness:

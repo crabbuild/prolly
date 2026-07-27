@@ -1,0 +1,11 @@
+records=10000000
+value_bytes=27
+changes=10000
+samples=10000
+concurrency=32
+repetitions=7
+seed=0x6a09e667f3bcc909
+read_parallelism=16
+batch_get_parallelism=16
+batch_write_parallelism=16
+scan_parallelism=8

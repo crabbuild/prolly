@@ -1,0 +1,3 @@
+55cb549ff92089e5e1c3024272b0dd7d305e9124b46ad42c05a25a248f255eab  bin/prolly-backend-postgres
+7bb82f439e0a7e53d8ef7f3ffae99e8d20073bec61403f8077db401aaa9de0fa  bin/prolly-backend-dynamodb
+ad69a12e46a770d56f5bd0c17d60c2fc0f69e2c1efc7ad73a39d17aba5b5cf8d  bin/prolly-backend-summarize

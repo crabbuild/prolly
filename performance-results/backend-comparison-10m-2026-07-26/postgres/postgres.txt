@@ -1,6 +1,0 @@
-PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
-pg_stat_statements
-on
-128MB
-4MB
-on
