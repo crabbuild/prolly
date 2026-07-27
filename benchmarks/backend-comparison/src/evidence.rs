@@ -1,4 +1,6 @@
 use std::fmt;
+use std::fs::OpenOptions;
+use std::path::Path;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -201,6 +203,39 @@ impl EvidenceRow {
     }
 }
 
+pub fn write_rows_new(path: &Path, rows: &[EvidenceRow]) -> Result<(), String> {
+    if rows.is_empty() {
+        return Err("cannot write an empty evidence file".to_string());
+    }
+    for row in rows {
+        row.validate()?;
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("refusing to overwrite {}: {error}", path.display()))?;
+    let mut writer = csv::WriterBuilder::new()
+        .terminator(csv::Terminator::Any(b'\n'))
+        .from_writer(file);
+    for row in rows {
+        writer
+            .serialize(row)
+            .map_err(|error| format!("failed to serialize evidence: {error}"))?;
+    }
+    writer
+        .flush()
+        .map_err(|error| format!("failed to flush evidence: {error}"))?;
+    writer
+        .get_ref()
+        .sync_all()
+        .map_err(|error| format!("failed to sync evidence: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,5 +256,15 @@ mod tests {
         let mut broken = row;
         broken.validated = false;
         assert!(broken.validate().is_err());
+    }
+
+    #[test]
+    fn evidence_writer_refuses_to_overwrite() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("row.csv");
+        write_rows_new(&path, &[EvidenceRow::example()]).unwrap();
+        assert!(write_rows_new(&path, &[EvidenceRow::example()])
+            .unwrap_err()
+            .contains("refusing to overwrite"));
     }
 }
