@@ -33,6 +33,7 @@ pub struct Manifest {
     pub commands_sha256: String,
     pub postgres_binary_sha256: String,
     pub dynamodb_binary_sha256: String,
+    pub summarizer_binary_sha256: String,
     pub postgres_image: String,
     pub postgres_image_id: String,
     pub dynamodb_image: String,
@@ -73,6 +74,7 @@ impl Manifest {
             commands_sha256: take(&mut values, "commands_sha256")?,
             postgres_binary_sha256: take(&mut values, "postgres_binary_sha256")?,
             dynamodb_binary_sha256: take(&mut values, "dynamodb_binary_sha256")?,
+            summarizer_binary_sha256: take(&mut values, "summarizer_binary_sha256")?,
             postgres_image: take(&mut values, "postgres_image")?,
             postgres_image_id: take(&mut values, "postgres_image_id")?,
             dynamodb_image: take(&mut values, "dynamodb_image")?,
@@ -126,6 +128,11 @@ impl Manifest {
                 self.dynamodb_binary_sha256.as_str(),
                 64,
             ),
+            (
+                "summarizer_binary_sha256",
+                self.summarizer_binary_sha256.as_str(),
+                64,
+            ),
         ] {
             if value.len() != length || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                 return Err(format!(
@@ -155,6 +162,7 @@ impl Manifest {
             commands_sha256: "e".repeat(64),
             postgres_binary_sha256: "1".repeat(64),
             dynamodb_binary_sha256: "2".repeat(64),
+            summarizer_binary_sha256: "3".repeat(64),
             postgres_image: "postgres@sha256:test".to_string(),
             postgres_image_id: "sha256:postgres".to_string(),
             dynamodb_image: "dynamodb@sha256:test".to_string(),
@@ -253,6 +261,7 @@ pub fn summarize_rows(
         let mut postgres = Vec::with_capacity(manifest.repetitions);
         let mut dynamodb = Vec::with_capacity(manifest.repetitions);
         let mut logical_operations = None;
+        let mut identity = None;
         for repetition in 1..=manifest.repetitions as u32 {
             let pg = indexed
                 .get(&(Backend::Postgres, operation, repetition))
@@ -263,6 +272,11 @@ pub fn summarize_rows(
                     format!("missing DynamoDB Local {operation} repetition {repetition}")
                 })?;
             require_equivalent(pg, ddb)?;
+            if let Some(reference) = identity {
+                require_same_workload(reference, pg)?;
+            } else {
+                identity = Some(*pg);
+            }
             match logical_operations {
                 Some(expected) if expected != pg.logical_operations => {
                     return Err(format!("{operation} logical operation count changed"))
@@ -306,6 +320,27 @@ pub fn summarize_rows(
         });
     }
     Ok(summaries)
+}
+
+fn require_same_workload(reference: &EvidenceRow, row: &EvidenceRow) -> Result<(), String> {
+    if reference.records != row.records
+        || reference.value_bytes != row.value_bytes
+        || reference.changes != row.changes
+        || reference.samples != row.samples
+        || reference.concurrency != row.concurrency
+        || reference.seed != row.seed
+        || reference.logical_operations != row.logical_operations
+        || reference.observed_items != row.observed_items
+        || reference.workload_digest != row.workload_digest
+        || reference.outcome_digest != row.outcome_digest
+        || reference.root != row.root
+    {
+        return Err(format!(
+            "{} workload or outcome changed between repetitions",
+            row.operation
+        ));
+    }
+    Ok(())
 }
 
 fn require_equivalent(postgres: &EvidenceRow, dynamodb: &EvidenceRow) -> Result<(), String> {
@@ -510,6 +545,21 @@ mod tests {
         assert!(summarize_rows(&rows, &manifest)
             .unwrap_err()
             .contains("differs between backends"));
+    }
+
+    #[test]
+    fn repetition_workload_drift_fails_closed() {
+        let manifest = Manifest::example();
+        let mut rows = fixture_rows(&manifest);
+        for row in rows
+            .iter_mut()
+            .filter(|row| row.operation == Operation::Build && row.repetition == 7)
+        {
+            row.workload_digest = "8".repeat(64);
+        }
+        assert!(summarize_rows(&rows, &manifest)
+            .unwrap_err()
+            .contains("changed between repetitions"));
     }
 
     fn fixture_rows(manifest: &Manifest) -> Vec<EvidenceRow> {

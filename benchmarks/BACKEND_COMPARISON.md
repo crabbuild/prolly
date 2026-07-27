@@ -1,60 +1,49 @@
-# PostgreSQL and DynamoDB Local comparison
+# Reproduce the PostgreSQL and DynamoDB Local comparison
 
-Run the equivalent backend workloads with one command:
+The backend comparison runs byte-identical public Prolly operations against fresh local PostgreSQL and DynamoDB Local containers. It validates complete logical outcomes after timing and refuses incomplete, dirty, resumed, or mismatched evidence.
+
+Run the default 1M-record comparison:
 
 ```bash
 ./scripts/run_backend_comparison.sh
 ```
 
-The default run uses 1 million records, 27-byte values, 10,000 sampled or
-changed keys, and three repetitions. The runner starts each Docker service
-separately, runs the public Prolly API workloads, stops that service, and emits:
+The driver requires one excluded warm-up and at least seven measured repetitions. It alternates backend order, removes service volumes between invocations, and runs the exact release binaries copied into the result directory.
 
-- `postgres/report.md`
-- `dynamodb/report.md`
-- `comparison.csv`
-- `report.md`
-
-All important scale and concurrency dimensions are configurable:
+Configure a 10M-record run:
 
 ```bash
 BENCH_RECORDS=10000000 \
+BENCH_VALUE_BYTES=27 \
 BENCH_CHANGES=10000 \
 BENCH_SAMPLES=10000 \
-BENCH_RUNS=3 \
-BENCH_CONCURRENCY=64 \
-BENCH_BATCH_GET_PARALLELISM=16 \
-BENCH_BATCH_WRITE_PARALLELISM=16 \
-BENCH_OUT=performance-results/backend-comparison-10m \
+BENCH_CONCURRENCY=32 \
+BENCH_RUNS=7 \
 ./scripts/run_backend_comparison.sh
 ```
 
-`BENCH_CHANGES` must be even. Batch and diff apply that many changes; merge
-splits the same total evenly across two non-conflicting branches. PostgreSQL
-and DynamoDB Local are never kept active together, which avoids cross-backend
-CPU and memory interference.
+`BENCH_CHANGES` must be even and cannot exceed the record count. `BENCH_SAMPLES` cannot exceed the record count.
 
-DynamoDB Local results are regression measurements, not predictions of AWS
-DynamoDB latency or capacity behavior.
+Each result directory contains:
 
-Set `BENCH_POSTGRES_BASELINE` and `BENCH_DYNAMODB_BASELINE` to prior result
-directories to add a compatible-operation before/after section. Legacy
-DynamoDB results remain usable for build, batch, query, and diff; merge is
-automatically omitted because schema v4 measured twice as many merge changes.
+- `manifest.txt`: clean source, binary, workload, command, and image identity
+- `raw-results.csv`: all measured rows in the common evidence schema
+- `comparison.csv`: validated descriptive statistics and confidence intervals
+- `report.md`: latency, throughput, dispersion, and supported winner claims
+- `measurement-commands.txt`: exact service and runner commands
+- `bin/`: the release binaries used by the run
+- `invocations/` and `warmup/`: per-process evidence
 
-## Byte-for-byte correctness
+The report declares a winner only when the paired bootstrap 95% confidence interval excludes parity and the median latency effect exceeds 5%.
 
-Run the deterministic cross-backend verifier separately from the timed
-benchmark:
+DynamoDB Local supports repeatable adapter regression testing. It does not predict Amazon DynamoDB network latency, throttling, partitions, capacity, or cost. PostgreSQL also runs locally in Docker, so the comparison measures local adapter implementations rather than production infrastructure.
+
+## Verify broader byte-for-byte behavior
+
+Run the separate deterministic cross-backend correctness harness:
 
 ```bash
 ./scripts/run_backend_correctness.sh
 ```
 
-It starts PostgreSQL and DynamoDB Local, applies identical shuffled builds,
-duplicate mutations, deletes, inserts, disjoint merges, and conflicting merges,
-then compares both adapters with an in-memory oracle. It requires exact equality
-for ordered diff payloads, conflict payloads, logical records, canonical roots,
-cold-reopened snapshot bundles, every stored CID, and every serialized node
-byte. Override `PROLLY_CORRECTNESS_RECORDS` or
-`PROLLY_CORRECTNESS_CHANGES_PER_KIND` to increase the deterministic fixture.
+That harness covers shuffled builds, duplicate mutations, deletes, inserts, disjoint merges, conflicting merges, reopened snapshots, stored content identifiers, and serialized node bytes.
