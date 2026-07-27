@@ -86,7 +86,7 @@ pub enum MutationRecord {
 }
 ```
 
-Build complete expected `BTreeMap` states and logical diff records during generation.
+Store compact changed-identifier generation maps. Derive expected bytes procedurally so the 10M workload does not retain several complete oracle maps. Small tests may materialize `BTreeMap` states, while the runner validates large trees with a streaming oracle.
 
 - [ ] **Step 4: Run tests and formatting**
 
