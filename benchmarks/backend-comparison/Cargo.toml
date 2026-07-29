@@ -46,3 +46,8 @@ required-features = ["dynamodb"]
 [[bin]]
 name = "prolly-backend-summarize"
 path = "src/bin/summarize.rs"
+
+[[test]]
+name = "dynamodb_smoke"
+path = "tests/dynamodb_smoke.rs"
+required-features = ["dynamodb"]
