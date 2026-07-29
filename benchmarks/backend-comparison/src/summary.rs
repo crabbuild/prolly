@@ -590,6 +590,7 @@ fn manifest_prefix(backend: Backend) -> &'static str {
         Backend::Postgres => "postgres",
         Backend::MySql => "mysql",
         Backend::DynamoDbLocal => "dynamodb",
+        Backend::Spanner => "spanner",
     }
 }
 
@@ -606,6 +607,7 @@ fn backend_label(backend: Backend) -> &'static str {
         Backend::Postgres => "PostgreSQL",
         Backend::MySql => "MySQL",
         Backend::DynamoDbLocal => "DynamoDB Local",
+        Backend::Spanner => "Spanner",
     }
 }
 
@@ -624,6 +626,9 @@ fn backend_limitation(backend: Backend) -> &'static str {
         }
         Backend::Postgres | Backend::MySql => {
             "- Local SQL container measurements compare captured adapter and service configurations, not every production deployment."
+        }
+        Backend::Spanner => {
+            "- The Spanner emulator serializes read-write transactions and does not model production latency, scaling, replication, IAM, or query planning."
         }
     }
 }

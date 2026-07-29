@@ -54,6 +54,7 @@ CREATE TABLE ProllyRoots (
 ```
 
 The same DDL is exposed as `SPANNER_SCHEMA`.
+It is also checked in as `schema.sql` for provisioning tools.
 
 ## Setup
 
@@ -159,6 +160,12 @@ async fn run(backend: SpannerBackend) -> Result<(), Box<dyn std::error::Error>> 
 - Strict commits validate named-root preconditions and apply node and root
   mutations in one Spanner read-write transaction.
 - `batch_put_nodes` is applied as Spanner mutations.
+- Point reads use Spanner's native key-read API rather than SQL. Ordered batch
+  reads coalesce keys into bounded streaming reads and reconstruct caller order.
+- Transactions read all named-root preconditions in one request. Retry closures
+  share immutable staged writes rather than cloning their payloads per attempt.
+- `SpannerBackendOptions` controls native batch-read size, traversal
+  parallelism, and rightmost-path hint maintenance.
 - There is no adapter-level key prefix. Use distinct named-root prefixes for
   tenants or environments, and isolate databases when you need full physical
   separation.
@@ -191,6 +198,18 @@ cargo test --manifest-path stores/prolly-store-spanner/Cargo.toml
 
 Use a dedicated test database or distinct named-root prefix. The adapter does
 not provide a backend-wide key prefix or cleanup helper.
+
+For a credential-free local Cosmos/Spanner conformance and performance
+comparison, run:
+
+```bash
+scripts/run-cosmos-spanner-comparison.sh
+```
+
+The script provisions both Docker emulators through their local APIs; neither
+`gcloud` nor cloud credentials are required. Existing
+`PROLLY_STORE_COSMOS_*` and `PROLLY_STORE_SPANNER_DATABASE` values select
+managed services instead.
 
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
 async map, transaction, diff, and merge APIs used with this backend.

@@ -52,6 +52,48 @@ The SQL result directory adds:
 - `service-comparison.csv`: paired service statistics
 - `service-report.md`: batch, concurrent-read, and root-contention comparison
 
+## Spanner vs PostgreSQL
+
+Run the reproducible local comparison with pinned Cloud Spanner emulator and
+PostgreSQL containers:
+
+```bash
+./scripts/run_spanner_postgres_comparison.sh
+```
+
+The driver uses the same seeded public Prolly and adapter service workloads,
+validation digests, excluded warm-up, seven-or-more alternating repetitions,
+median/MAD/CV statistics, and paired bootstrap confidence intervals as the
+other backend comparisons. Each backend gets a freshly recreated service for
+every invocation.
+
+Tune a local comparison with `BENCH_RECORDS`, `BENCH_VALUE_BYTES`,
+`BENCH_CHANGES`, `BENCH_SAMPLES`, `BENCH_CONCURRENCY`, `BENCH_POOL_SIZE`,
+`BENCH_ADAPTER_BATCH_ITEMS`, and `BENCH_RUNS`.
+
+Managed PostgreSQL and Cloud Spanner are supported through disposable
+benchmark databases:
+
+```bash
+BENCH_MODE=external \
+BENCH_EXTERNAL_RESET_ACK=I_UNDERSTAND_BENCHMARK_DATA_WILL_BE_DELETED \
+BENCH_EXTERNAL_POSTGRES_IDENTITY='provider/postgres/version/config' \
+BENCH_EXTERNAL_SPANNER_IDENTITY='project/instance/config/nodes/region' \
+PROLLY_BACKEND_POSTGRES_URL='postgres://…' \
+PROLLY_BACKEND_SPANNER_DATABASE='projects/…/instances/…/databases/…' \
+./scripts/run_spanner_postgres_comparison.sh
+```
+
+External mode uses Application Default Credentials for Spanner and deletes all
+rows in the three Prolly tables before each invocation. Use only isolated,
+disposable databases.
+
+The local emulator is useful for deterministic adapter correctness and
+regression measurements, but it serializes read-write transactions and does
+not model production Spanner latency, replication, scaling, IAM, or cost.
+Therefore local results compare adapter paths under emulation; they are not a
+managed-service performance claim.
+
 ## PostgreSQL vs DynamoDB Local
 
 The backend comparison runs byte-identical public Prolly operations against fresh local PostgreSQL and DynamoDB Local containers. It validates complete logical outcomes after timing and refuses incomplete, dirty, resumed, or mismatched evidence.

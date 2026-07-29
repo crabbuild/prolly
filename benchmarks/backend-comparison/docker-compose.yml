@@ -40,6 +40,12 @@ services:
     ports:
       - "127.0.0.1:${PROLLY_BACKEND_DYNAMODB_PORT:-58000}:8000"
 
+  spanner:
+    image: gcr.io/cloud-spanner-emulator/emulator@sha256:ad54472fe7b161b9214f7f816f304b649a4779e348229c375ac067f5ed5a6422
+    ports:
+      - "127.0.0.1:${PROLLY_BACKEND_SPANNER_GRPC_PORT:-59010}:9010"
+      - "127.0.0.1:${PROLLY_BACKEND_SPANNER_REST_PORT:-59020}:9020"
+
 volumes:
   postgres-data:
   mysql-data:

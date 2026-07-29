@@ -1,0 +1,15 @@
+CREATE TABLE ProllyNodes (
+  Cid BYTES(32) NOT NULL,
+  Node BYTES(MAX) NOT NULL
+) PRIMARY KEY (Cid);
+
+CREATE TABLE ProllyHints (
+  Namespace BYTES(MAX) NOT NULL,
+  HintKey BYTES(MAX) NOT NULL,
+  Value BYTES(MAX) NOT NULL
+) PRIMARY KEY (Namespace, HintKey);
+
+CREATE TABLE ProllyRoots (
+  Name BYTES(MAX) NOT NULL,
+  Manifest BYTES(MAX) NOT NULL
+) PRIMARY KEY (Name);

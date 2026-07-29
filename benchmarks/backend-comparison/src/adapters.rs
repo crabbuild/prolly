@@ -8,6 +8,8 @@ use prolly_backend_workload_contract::Workload;
 use prolly_store_dynamodb::DynamoDbBackend;
 use prolly_store_mysql::{MySqlBackend, MySqlBackendOptions};
 use prolly_store_postgres::{PostgresBackend, PostgresBackendOptions};
+#[cfg(feature = "spanner")]
+use prolly_store_spanner::{SpannerBackend, SpannerBackendOptions};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::postgres::PgPoolOptions;
 
@@ -127,6 +129,67 @@ pub async fn run_mysql_service(
             .map_err(|error| format!("failed to clear MySQL table {table}: {error}"))?;
     }
     run_service_workload(backend, config).await
+}
+
+#[cfg(feature = "spanner")]
+async fn connect_spanner(config: &RunConfig, database: &str) -> Result<SpannerBackend, String> {
+    use google_cloud_spanner::client::ClientConfig;
+
+    let mut client_config = ClientConfig::default();
+    if std::env::var_os("SPANNER_EMULATOR_HOST").is_none() {
+        client_config = client_config
+            .with_auth()
+            .await
+            .map_err(|error| format!("failed to configure Spanner authentication: {error}"))?;
+    }
+    SpannerBackend::connect_with_options(
+        database,
+        client_config,
+        SpannerBackendOptions::default()
+            .with_batch_read_items(config.adapter_batch_items)
+            .with_read_parallelism(config.workload.concurrency),
+    )
+    .await
+    .map_err(|error| format!("failed to connect to Spanner: {error}"))
+}
+
+#[cfg(feature = "spanner")]
+async fn clear_spanner(backend: &SpannerBackend) -> Result<(), String> {
+    use google_cloud_spanner::key::all_keys;
+    use google_cloud_spanner::mutation::delete;
+
+    backend
+        .client()
+        .apply(vec![
+            delete("ProllyHints", all_keys()),
+            delete("ProllyRoots", all_keys()),
+            delete("ProllyNodes", all_keys()),
+        ])
+        .await
+        .map(|_| ())
+        .map_err(|error| format!("failed to clear Spanner benchmark state: {error}"))
+}
+
+#[cfg(feature = "spanner")]
+pub async fn run_spanner(config: &RunConfig, database: &str) -> Result<Vec<EvidenceRow>, String> {
+    let backend = connect_spanner(config, database).await?;
+    clear_spanner(&backend).await?;
+    let workload = Workload::generate(config.workload)?;
+    let result = run_workload(RemoteProllyStore::new(backend.clone()), config, &workload).await;
+    backend.client().clone().close().await;
+    result
+}
+
+#[cfg(feature = "spanner")]
+pub async fn run_spanner_service(
+    config: &RunConfig,
+    database: &str,
+) -> Result<Vec<ServiceEvidenceRow>, String> {
+    let backend = connect_spanner(config, database).await?;
+    clear_spanner(&backend).await?;
+    let result = run_service_workload(backend.clone(), config).await;
+    backend.client().clone().close().await;
+    result
 }
 
 #[cfg(feature = "dynamodb")]

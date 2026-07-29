@@ -49,6 +49,7 @@ fn cosmosdb_backend_satisfies_remote_backend_contract_when_env_is_set() {
         use prolly::remote_conformance::{
             assert_remote_backend_contract, assert_remote_backend_transaction_contract,
         };
+        use prolly::{RemoteManifestUpdate, RemoteStoreBackend};
         use prolly_store_cosmosdb::CosmosDbBackend;
 
         let backend = CosmosDbBackend::with_key(endpoint, &account_key, database, container)
@@ -58,6 +59,25 @@ fn cosmosdb_backend_satisfies_remote_backend_contract_when_env_is_set() {
         backend.clear_namespace().await.unwrap();
         assert_remote_backend_contract(&backend).await;
         assert_remote_backend_transaction_contract(&backend).await;
+
+        let mut contenders = tokio::task::JoinSet::new();
+        for contender in 0..16u8 {
+            let backend = backend.clone();
+            contenders.spawn(async move {
+                backend
+                    .compare_and_swap_root_manifest(b"contention/main", None, Some(&[contender]))
+                    .await
+                    .unwrap()
+            });
+        }
+        let mut applied = 0;
+        while let Some(result) = contenders.join_next().await {
+            if result.unwrap() == RemoteManifestUpdate::Applied {
+                applied += 1;
+            }
+        }
+        assert_eq!(applied, 1, "exactly one concurrent root CAS must win");
+
         backend.clear_namespace().await.unwrap();
     });
 }

@@ -19,6 +19,7 @@ pub enum ConnectionConfig {
     Postgres { url: String },
     MySql { url: String },
     DynamoDb(DynamoDbConnection),
+    Spanner { database: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +97,7 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
         Backend::Postgres => "postgres://prolly:prolly@127.0.0.1:55433/prolly",
         Backend::MySql => "mysql://prolly:prolly@127.0.0.1:53307/prolly",
         Backend::DynamoDbLocal => "",
+        Backend::Spanner => "",
     }
     .to_string();
     let mut dynamodb = DynamoDbConnection {
@@ -106,6 +108,7 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
         batch_write_parallelism: 16,
         scan_parallelism: 8,
     };
+    let mut spanner_database = String::new();
 
     let mut index = 1;
     while index < values.len() {
@@ -144,6 +147,7 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
                 dynamodb.batch_write_parallelism = number(&value(&mut index)?, flag)?
             }
             "--scan-parallelism" => dynamodb.scan_parallelism = number(&value(&mut index)?, flag)?,
+            "--database" => spanner_database = value(&mut index)?,
             "--help" | "-h" => return Err(usage(backend).to_string()),
             _ => return Err(format!("unknown option for {backend}: {flag}")),
         }
@@ -184,9 +188,17 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
             }
             ConnectionConfig::DynamoDb(dynamodb)
         }
+        Backend::Spanner => {
+            if spanner_database.is_empty() {
+                return Err("Spanner database resource name must be set".to_string());
+            }
+            ConnectionConfig::Spanner {
+                database: spanner_database,
+            }
+        }
     };
     if backend == Backend::DynamoDbLocal && suite == Suite::Service {
-        return Err("the service suite supports MySQL and PostgreSQL".to_string());
+        return Err("the service suite supports MySQL, PostgreSQL, and Spanner".to_string());
     }
     Ok(BinaryConfig {
         run,
@@ -238,6 +250,9 @@ fn usage(backend: Backend) -> &'static str {
         }
         Backend::DynamoDbLocal => {
             "usage: prolly-backend-dynamodb --output PATH --run-id ID --repetition N --revision SHA --tree-hash SHA --binary-sha256 SHA --records N --value-bytes N --changes N --samples N --concurrency N --seed N [--endpoint URL] [--table NAME] [--read-parallelism N] [--batch-get-parallelism N] [--batch-write-parallelism N] [--scan-parallelism N]"
+        }
+        Backend::Spanner => {
+            "usage: prolly-backend-spanner --output PATH --run-id ID --repetition N --revision SHA --tree-hash SHA --binary-sha256 SHA --records N --value-bytes N --changes N --samples N --concurrency N --seed N --database RESOURCE [--adapter-batch-items N]"
         }
     }
 }
@@ -315,5 +330,54 @@ mod tests {
                 url: "postgres://local".to_string()
             }
         );
+    }
+
+    #[test]
+    fn spanner_arguments_require_and_preserve_database_resource() {
+        let mut args = vec![
+            "runner".to_string(),
+            "--output".to_string(),
+            "row.csv".to_string(),
+            "--run-id".to_string(),
+            "run-1".to_string(),
+            "--repetition".to_string(),
+            "3".to_string(),
+            "--revision".to_string(),
+            "a".repeat(40),
+            "--tree-hash".to_string(),
+            "b".repeat(40),
+            "--binary-sha256".to_string(),
+            "c".repeat(64),
+            "--records".to_string(),
+            "100".to_string(),
+            "--value-bytes".to_string(),
+            "27".to_string(),
+            "--changes".to_string(),
+            "10".to_string(),
+            "--samples".to_string(),
+            "8".to_string(),
+            "--concurrency".to_string(),
+            "4".to_string(),
+            "--seed".to_string(),
+            "0x6a09e667f3bcc909".to_string(),
+        ];
+        assert!(parse_binary_args(Backend::Spanner, args.clone())
+            .unwrap_err()
+            .contains("database resource"));
+
+        args.extend([
+            "--database".to_string(),
+            "projects/p/instances/i/databases/d".to_string(),
+            "--suite".to_string(),
+            "service".to_string(),
+        ]);
+        let parsed = parse_binary_args(Backend::Spanner, args).unwrap();
+        assert_eq!(
+            parsed.connection,
+            ConnectionConfig::Spanner {
+                database: "projects/p/instances/i/databases/d".to_string()
+            }
+        );
+        assert_eq!(parsed.suite, Suite::Service);
     }
 }

@@ -1,0 +1,20 @@
+[package]
+name = "prolly-cosmos-spanner-comparison"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.81"
+publish = false
+
+[workspace]
+
+[dependencies]
+google-cloud-spanner = { package = "gcloud-spanner", version = "=1.8.1" }
+prolly = { package = "prolly-map", path = "../..", features = ["async-store"] }
+prolly-store-cosmosdb = { path = "../../stores/prolly-store-cosmosdb" }
+prolly-store-spanner = { path = "../../stores/prolly-store-spanner" }
+reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls"] }
+serde_json = "1.0"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
+
+[lints.rust]
+unsafe_code = "forbid"

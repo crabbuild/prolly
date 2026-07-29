@@ -119,8 +119,10 @@ root conditions and applies staged node/root writes atomically; if a root change
 since the transaction read it, the commit returns a conflict and Cosmos rolls the
 batch back.
 
-Cosmos DB limits one transactional batch to a single partition key and up to 100
-operations. Large transactions should be split by the caller.
+Cosmos DB limits one transactional batch to a single partition key, 100
+operations, and a 2 MiB request payload. The adapter validates strict
+transactions against both limits and automatically divides non-transactional
+node publication into valid batches.
 
 ## Diff and merge
 
@@ -171,8 +173,13 @@ async fn run(backend: CosmosDbBackend) -> Result<(), Box<dyn std::error::Error>>
 - Use `with_key_prefix` for tenant, environment, and test isolation.
 - `clear_namespace` queries each `kind` partition and deletes matching prefixed
   documents. It is intended for isolated tests, not broad production cleanup.
-- Batch methods are implemented as ordered REST calls. Size RU/s and retry
-  policy around your production workload.
+- Node publication uses native atomic transactional batches. Ordered batch
+  reads issue bounded concurrent point reads and reconstruct request order.
+- Throttled and transient responses honor `x-ms-retry-after-ms` with a bounded
+  retry budget. `CosmosDbBackendOptions` controls concurrency, query pages,
+  retries, and hint maintenance.
+- `CosmosDbBackend::metrics()` reports requests, retries, and observed request
+  charge without requiring a metrics SDK.
 - Root compare-and-swap uses document ETags.
 
 ## Running the example
@@ -201,6 +208,19 @@ cargo test --manifest-path stores/prolly-store-cosmosdb/Cargo.toml
 
 Use a dedicated container or key prefix for integration tests. The test suite
 creates isolated records but still consumes provisioned request units.
+
+For a credential-free local Cosmos/Spanner conformance and performance
+comparison, run:
+
+```bash
+scripts/run-cosmos-spanner-comparison.sh
+```
+
+The script starts the Linux vNext Cosmos emulator and the Spanner emulator,
+creates their schemas, runs transaction/contention conformance, and records the
+same Rust adapter workload for both. If the `PROLLY_STORE_COSMOS_*` and
+`PROLLY_STORE_SPANNER_DATABASE` variables are already supplied, it uses those
+managed services instead.
 
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
 async map, transaction, diff, and merge APIs used with this backend.
