@@ -34,8 +34,8 @@ The adapter stores three logical families under a configurable binary key prefix
 - `root:` named root manifests for durable branch/checkpoint names.
 - `hint:` optional traversal hints, such as the append rightmost-path hint.
 
-Redis operations used by the adapter include `GET`, `SET`, `DEL`, `MGET`,
-`SCAN`, and pipelined writes.
+Redis operations used by the adapter include `GET`, `SET`, `DEL`, bounded
+`MGET`/`MSET`, `SCAN`, `UNLINK`, and atomic pipelined writes.
 
 ## Setup
 
@@ -158,6 +158,53 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Performance and operational tuning
+
+`RedisBackend::connect` creates separate multiplexed physical connections for
+latency-sensitive roots/CAS operations and bulk node traffic. Batch reads and
+writes are bounded by both item count and approximate payload size, so large
+publishes do not become one unbounded Redis request. Multi-command writes still
+use `MULTI`/`EXEC` to preserve whole-batch atomicity.
+
+Use `RedisBackendOptions` when service latency, payload sizes, or managed Redis
+limits require explicit tuning:
+
+```rust
+use std::time::Duration;
+use prolly_store_redis::{RedisBackend, RedisBackendOptions};
+
+async fn connect() -> Result<RedisBackend, Box<dyn std::error::Error>> {
+    let options = RedisBackendOptions::default()
+        .with_max_batch_items(512)
+        .with_max_batch_bytes(4 * 1024 * 1024)
+        .with_read_parallelism(32)
+        .with_scan_count(2048)
+        .with_response_timeout(Duration::from_secs(2))
+        .with_connection_timeout(Duration::from_secs(2));
+
+    Ok(RedisBackend::connect_with_options(
+        "redis://127.0.0.1:56379/",
+        options,
+    )
+    .await?)
+}
+```
+
+The defaults cap each multi-key command at 1,024 items and approximately 8 MiB.
+They also maintain persisted rightmost-path hints, which avoid repeated remote
+path discovery for append-heavy workloads. Disable this extra hint write with
+`with_rightmost_path_hints(false)` when the workload is not append-oriented.
+
+`clear_namespace` uses incremental `SCAN` plus chunked `UNLINK`, avoiding the
+synchronous value-reclamation stalls caused by large `DEL` cleanup commands.
+It remains an administrative/test operation, not a request-path primitive.
+
+The adapter targets standalone Redis, Sentinel-backed endpoints exposed as one
+Redis URL, and compatible managed-service URLs. Redis Cluster requires all keys
+in a Lua script or multi-key command to share a hash slot; the default key
+layout does not promise that. Do not point this adapter at a sharded Redis
+Cluster endpoint until a deliberate hash-tag/partitioning strategy is chosen.
 
 ## Transactions and durability
 

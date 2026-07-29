@@ -27,7 +27,7 @@ scripts/run_redis_scale_benchmark.sh --profile full \
   --output performance-results/redis/baseline
 ```
 
-The runner chooses an unused localhost port, verifies Redis readiness, builds a release binary, records source and binary checksums, captures Docker/image/configuration/system provenance, and removes its container and volume after the run. Set `REDIS_BENCH_KEEP_CONTAINER=1` or `REDIS_BENCH_KEEP_FIXTURES=1` only for debugging.
+The runner chooses an unused localhost port, verifies Redis readiness, builds a release binary, records source and binary checksums, captures Docker/image/configuration/system provenance, and removes its container and volume after the run. It fingerprints the tracked source revision and binary diff before the build, then verifies that fingerprint after the build, dependency capture, and benchmark execution. It fails instead of publishing mixed-revision evidence if a shared checkout changes mid-run. Set `REDIS_BENCH_KEEP_CONTAINER=1` or `REDIS_BENCH_KEEP_FIXTURES=1` only for debugging.
 
 The full output belongs under `performance-results/redis/baseline`. `raw-results.csv` contains one validated row per cell and repetition, `fixture-results.csv` contains build measurements, `summary.csv` contains medians, and `report.md` is the human-readable baseline.
 

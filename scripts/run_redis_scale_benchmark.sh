@@ -90,7 +90,11 @@ fi
 REDIS_URL="redis://127.0.0.1:$REDIS_PORT/"
 
 REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf unknown)"
-if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null || true)" ]]; then
+SOURCE_DIFF_SHA256="$(
+  git -C "$REPO_ROOT" diff --binary HEAD | shasum -a 256 | awk '{print $1}'
+)"
+TRACKED_STATUS="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null || true)"
+if [[ -n "$TRACKED_STATUS" ]]; then
   DIRTY=true
   DIRTY_ARG=--dirty
 else
@@ -98,6 +102,24 @@ else
   DIRTY_ARG=--clean
 fi
 STARTED_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+assert_source_stable() {
+  local checkpoint="$1"
+  local current_revision
+  local current_diff_sha256
+  current_revision="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf unknown)"
+  current_diff_sha256="$(
+    git -C "$REPO_ROOT" diff --binary HEAD | shasum -a 256 | awk '{print $1}'
+  )"
+  if [[ "$current_revision" != "$REVISION" || "$current_diff_sha256" != "$SOURCE_DIFF_SHA256" ]]; then
+    printf 'tracked benchmark source changed during %s; refusing mixed-revision evidence\n' \
+      "$checkpoint" >&2
+    printf 'start revision=%s diff_sha256=%s\n' "$REVISION" "$SOURCE_DIFF_SHA256" >&2
+    printf 'current revision=%s diff_sha256=%s\n' \
+      "$current_revision" "$current_diff_sha256" >&2
+    exit 1
+  fi
+}
 
 {
   printf 'captured_utc=%s\n' "$STARTED_UTC"
@@ -128,8 +150,10 @@ if [[ "${REDIS_BENCH_SKIP_BUILD:-0}" != 1 ]]; then
   CARGO_INCREMENTAL=0 cargo build --release --manifest-path "$MANIFEST" \
     2>&1 | tee "$OUTPUT/build.log"
 fi
+assert_source_stable "release build"
 cargo tree --manifest-path "$MANIFEST" > "$OUTPUT/dependencies.txt"
 cargo tree --manifest-path "$MANIFEST" -e features > "$OUTPUT/dependency-features.txt"
+assert_source_stable "dependency capture"
 
 if [[ -n "${REDIS_BENCH_EXECUTABLE:-}" ]]; then
   EXECUTABLE="$REDIS_BENCH_EXECUTABLE"
@@ -177,6 +201,7 @@ fi
 } > "$OUTPUT/driver-provenance.txt"
 
 "$EXECUTABLE" "${ARGS[@]}" 2>&1 | tee "$OUTPUT/run.log"
+assert_source_stable "benchmark execution"
 docker exec "$CONTAINER_ID" redis-cli INFO memory persistence > "$OUTPUT/redis-info-after.txt"
 printf 'ended_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUTPUT/driver-provenance.txt"
 
