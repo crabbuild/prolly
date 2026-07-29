@@ -1916,6 +1916,21 @@ fn js_error(error: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&error.to_string())
 }
 
+fn index_js_error(error: prolly::Error) -> JsValue {
+    let js_error = js_sys::Error::new(&error.to_string());
+    if let Some(code) = error.index_code() {
+        let value: JsValue = js_error.clone().into();
+        let _ = js_sys::Reflect::set(&value, &"code".into(), &code.as_str().into());
+        let _ = js_sys::Reflect::set(
+            &value,
+            &"retryAdvice".into(),
+            &error.retry_advice().as_str().into(),
+        );
+        return value;
+    }
+    js_error.into()
+}
+
 fn optional_bytes(value: Option<Vec<u8>>) -> JsValue {
     value
         .map(|bytes| Uint8Array::from(bytes.as_slice()).into())

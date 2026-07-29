@@ -214,8 +214,38 @@ pub enum RetryAdvice {
     RetryAfter,
 }
 
+impl IndexErrorCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::FormatUnsupported => "format_unsupported",
+            Self::StoreProfileUnsupported => "store_profile_unsupported",
+            Self::Conflict => "conflict",
+            Self::Corruption => "corruption",
+            Self::DefinitionInvalid => "definition_invalid",
+            Self::RuntimeDefinitionMissing => "runtime_definition_missing",
+            Self::ManagedWriteRequired => "managed_write_required",
+            Self::OperationUnsupported => "operation_unsupported",
+            Self::ExtractionFailed => "extraction_failed",
+            Self::ProjectionInvalid => "projection_invalid",
+            Self::ResourceLimit => "resource_limit",
+            Self::CursorInvalid => "cursor_invalid",
+            Self::BundleInvalid => "bundle_invalid",
+            Self::SnapshotUnavailable => "snapshot_unavailable",
+        }
+    }
+}
+
+impl RetryAdvice {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Never => "never",
+            Self::RetryFreshState => "retry_fresh_state",
+            Self::RetryAfter => "retry_after",
+        }
+    }
+}
+
 /// Prolly tree errors
-#[derive(Debug)]
 pub enum Error {
     /// Node not found in store
     NotFound(Cid),
@@ -366,6 +396,17 @@ pub enum Error {
         limit: usize,
         actual: usize,
     },
+}
+
+impl std::fmt::Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Error values routinely reach generic `Debug` logging through
+        // `unwrap`, tracing, and binding adapters. Keep that path on the same
+        // redacted contract as `Display`; raw keys, terms, cursor bounds, and
+        // extractor diagnostics remain available only in explicitly matched
+        // structured variants.
+        std::fmt::Display::fmt(self, f)
+    }
 }
 
 impl Error {

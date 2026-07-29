@@ -26457,6 +26457,8 @@ public enum ProllyBindingError: Swift.Error, Equatable, Hashable, Foundation.Loc
     )
     case Serialization(reason: String
     )
+    case Index(code: String, retryAdvice: String, reason: String
+    )
     case Internal(reason: String
     )
 
@@ -26509,7 +26511,12 @@ public struct FfiConverterTypeProllyBindingError: FfiConverterRustBuffer {
         case 7: return .Serialization(
             reason: try FfiConverterString.read(from: &buf)
             )
-        case 8: return .Internal(
+        case 8: return .Index(
+            code: try FfiConverterString.read(from: &buf),
+            retryAdvice: try FfiConverterString.read(from: &buf),
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 9: return .Internal(
             reason: try FfiConverterString.read(from: &buf)
             )
 
@@ -26559,8 +26566,15 @@ public struct FfiConverterTypeProllyBindingError: FfiConverterRustBuffer {
             FfiConverterString.write(reason, into: &buf)
             
         
-        case let .Internal(reason):
+        case let .Index(code,retryAdvice,reason):
             writeInt(&buf, Int32(8))
+            FfiConverterString.write(code, into: &buf)
+            FfiConverterString.write(retryAdvice, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
+
+
+        case let .Internal(reason):
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(reason, into: &buf)
             
         }

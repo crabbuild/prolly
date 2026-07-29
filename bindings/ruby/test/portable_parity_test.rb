@@ -649,12 +649,14 @@ class PortableParityTest < Minitest::Test
         max_write_retries: defaults.max_write_retries,
         max_build_retries: defaults.max_build_retries
       )
-      assert_raises(Prolly::ProllyBindingError::Internal) do
+      error = assert_raises(Prolly::ProllyBindingError::Index) do
         indexed.replace_index(
           'by_value'.b, 2, 'value-too-small-v2', Prolly::IndexProjectionRecord::ALL,
           ->(_key, value) { [[value, nil]] }, limits: too_small
         )
       end
+      assert_equal 'resource_limit', error.code
+      assert_equal 'never', error.retry_advice
       assert_equal 1, indexed.health.active_indexes.first.generation
       replacement = indexed.replace_index(
         'by_value'.b, 2, 'value-v2', Prolly::IndexProjectionRecord::ALL,

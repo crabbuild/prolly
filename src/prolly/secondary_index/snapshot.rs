@@ -1,12 +1,11 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
-use super::super::range::ReverseCursor;
 use super::super::read::{EntryRef, ScanOutcome};
 use super::super::store::Store;
 use super::super::tree::Tree;
 use super::super::versioned_map::{MapSnapshot, MapVersionId};
 use super::super::Prolly;
-use super::budget::{Deadline, QueryBudget};
+use super::budget::{BudgetCounter, Deadline, QueryBudget};
 use super::coordinator::IndexedMap;
 use super::definition::IndexProjection;
 use super::publication::IndexedStore;
@@ -21,14 +20,6 @@ use std::ops::ControlFlow;
 
 const CURSOR_MAGIC: &[u8; 8] = b"PSICUR01";
 const CURSOR_VERSION: u32 = 1;
-const SOURCE_JOIN_BATCH_SIZE: usize = 256;
-
-struct SourceJoinMatch {
-    term: Vec<u8>,
-    primary_key: Vec<u8>,
-    projection: Option<Vec<u8>>,
-}
-
 #[derive(Clone)]
 struct SnapshotContext {
     snapshot: IndexedSnapshotId,
@@ -319,6 +310,56 @@ impl<'query, 'engine, S: Store> SecondaryIndexQuery<'query, 'engine, S> {
             &self.budget,
         )
     }
+
+    pub fn exact_reverse_page(
+        &self,
+        term: &[u8],
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Reverse,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn prefix_reverse_page(
+        &self,
+        prefix: &[u8],
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Prefix(prefix.to_vec()),
+            SecondaryIndexDirection::Reverse,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn range_reverse_page(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Range(start.to_vec(), end.map(ToOwned::to_owned)),
+            SecondaryIndexDirection::Reverse,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn records(&self, term: &[u8]) -> Result<Vec<IndexedSourceRecord>, Error> {
+        self.index.records_with_budget(term, &self.budget)
+    }
 }
 
 impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
@@ -547,25 +588,19 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
 
     /// Resolve matching primary keys with one ordered batched source read.
     pub fn records(&self, term: &[u8]) -> Result<Vec<IndexedSourceRecord>, Error> {
+        self.records_with_budget(term, &QueryBudget::default())
+    }
+
+    fn records_with_budget(
+        &self,
+        term: &[u8],
+        budget: &QueryBudget,
+    ) -> Result<Vec<IndexedSourceRecord>, Error> {
         let mut records = Vec::new();
-        let limit = QueryBudget::default().max_returned_entries;
-        let mut overflow = false;
-        self.scan_records_until(term, |record| {
-            if records.len() == limit {
-                overflow = true;
-                ControlFlow::Break(())
-            } else {
-                records.push(record.to_owned());
-                ControlFlow::Continue(())
-            }
+        self.scan_records_until_with_budget(term, budget, |record| {
+            records.push(record.to_owned());
+            ControlFlow::<()>::Continue(())
         })?;
-        if overflow {
-            return Err(Error::IndexResourceLimitExceeded {
-                resource: "query_returned_entries",
-                limit,
-                actual: limit.saturating_add(1),
-            });
-        }
         Ok(records)
     }
 
@@ -585,87 +620,102 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
     pub fn scan_records_until<B>(
         &self,
         term: &[u8],
+        visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_records_until_with_budget(term, &QueryBudget::default(), visit)
+    }
+
+    fn scan_records_until_with_budget<B>(
+        &self,
+        term: &[u8],
+        budget: &QueryBudget,
         mut visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
+        budget.validate()?;
+        let counter = BudgetCounter::new();
         let mut source = self.prolly.read(&self.source_tree)?;
-        let mut chunk = Vec::with_capacity(SOURCE_JOIN_BATCH_SIZE);
         let mut delivered = 0u64;
+        let mut source_fetches = 0usize;
+        let mut returned_bytes = 0usize;
+        let mut accounted_memory = 0usize;
         let mut terminal = None;
-        self.scan_exact_until(term, |matched| {
-            chunk.push(SourceJoinMatch {
-                term: matched.term.to_vec(),
-                primary_key: matched.primary_key.to_vec(),
-                projection: matched.projection.map(<[u8]>::to_vec),
-            });
-            if chunk.len() < SOURCE_JOIN_BATCH_SIZE {
-                return ControlFlow::Continue(());
-            }
-            match self.flush_source_join_chunk(&mut source, &mut chunk, &mut delivered, &mut visit)
-            {
-                Ok(Some(value)) => {
-                    terminal = Some(Ok(value));
-                    ControlFlow::Break(())
+        self.scan_matches_until_with_budget(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Forward,
+            budget,
+            |matched| {
+                if terminal.is_some() {
+                    return ControlFlow::Break(());
                 }
-                Ok(None) => ControlFlow::Continue(()),
-                Err(error) => {
-                    terminal = Some(Err(error));
-                    ControlFlow::Break(())
+                if source_fetches == budget.max_source_fetches {
+                    terminal = Some(Err(Error::IndexResourceLimitExceeded {
+                        resource: "query_source_fetches",
+                        limit: budget.max_source_fetches,
+                        actual: source_fetches.saturating_add(1),
+                    }));
+                    return ControlFlow::Break(());
                 }
-            }
-        })?;
-
-        if terminal.is_none() && !chunk.is_empty() {
-            terminal = self
-                .flush_source_join_chunk(&mut source, &mut chunk, &mut delivered, &mut visit)
-                .transpose();
-        }
+                source_fetches += 1;
+                let result = source.get_with(matched.primary_key, |source_value| {
+                    let retained = matched
+                        .primary_key
+                        .len()
+                        .checked_add(source_value.len())
+                        .ok_or(Error::IndexResourceLimitExceeded {
+                            resource: "query_returned_bytes",
+                            limit: budget.max_returned_bytes,
+                            actual: usize::MAX,
+                        })?;
+                    counter.charge(
+                        "query_returned_bytes",
+                        &mut returned_bytes,
+                        retained,
+                        budget.max_returned_bytes,
+                    )?;
+                    counter.charge(
+                        "query_accounted_memory_bytes",
+                        &mut accounted_memory,
+                        retained,
+                        budget.max_accounted_memory_bytes,
+                    )?;
+                    counter.check_elapsed("query_elapsed_millis", budget.max_elapsed)?;
+                    delivered = delivered.saturating_add(1);
+                    Ok(visit(IndexedSourceRecordRef {
+                        term: matched.term,
+                        primary_key: matched.primary_key,
+                        projection: matched.projection,
+                        source_value,
+                    }))
+                });
+                match result {
+                    Ok(Some(Ok(ControlFlow::Continue(())))) => ControlFlow::Continue(()),
+                    Ok(Some(Ok(ControlFlow::Break(value)))) => {
+                        terminal = Some(Ok(value));
+                        ControlFlow::Break(())
+                    }
+                    Ok(Some(Err(error))) | Err(error) => {
+                        terminal = Some(Err(error));
+                        ControlFlow::Break(())
+                    }
+                    Ok(None) => {
+                        terminal = Some(Err(Error::IndexSnapshotMismatch {
+                            name: self.descriptor.name.clone(),
+                            source_version: self.snapshot_id.source_version.clone(),
+                            reason: format!(
+                                "index references missing source primary key {:?}",
+                                matched.primary_key
+                            ),
+                        }));
+                        ControlFlow::Break(())
+                    }
+                }
+            },
+        )?;
         match terminal {
             Some(Ok(value)) => Ok(ScanOutcome::stopped(delivered, value)),
             Some(Err(error)) => Err(error),
             None => Ok(ScanOutcome::complete(delivered)),
         }
-    }
-
-    fn flush_source_join_chunk<B>(
-        &self,
-        source: &mut super::super::read::ReadSession<'_, '_, S>,
-        chunk: &mut Vec<SourceJoinMatch>,
-        delivered: &mut u64,
-        visit: &mut impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
-    ) -> Result<Option<B>, Error> {
-        let keys = chunk
-            .iter()
-            .map(|matched| matched.primary_key.as_slice())
-            .collect::<Vec<_>>();
-        let mut terminal = None;
-        source.get_many_with(&keys, |position, _, source_value| {
-            if terminal.is_some() {
-                return;
-            }
-            let matched = &chunk[position];
-            let Some(source_value) = source_value else {
-                terminal = Some(Err(Error::IndexSnapshotMismatch {
-                    name: self.descriptor.name.clone(),
-                    source_version: self.snapshot_id.source_version.clone(),
-                    reason: format!(
-                        "index references missing source primary key {:?}",
-                        matched.primary_key
-                    ),
-                }));
-                return;
-            };
-            *delivered = delivered.saturating_add(1);
-            if let ControlFlow::Break(value) = visit(IndexedSourceRecordRef {
-                term: &matched.term,
-                primary_key: &matched.primary_key,
-                projection: matched.projection.as_deref(),
-                source_value,
-            }) {
-                terminal = Some(Ok(value));
-            }
-        })?;
-        chunk.clear();
-        terminal.transpose()
     }
 
     pub fn exact_page(
@@ -764,28 +814,43 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         &self,
         logical: LogicalBounds,
         direction: SecondaryIndexDirection,
-        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
         let budget = QueryBudget::default();
+        self.scan_matches_until_with_budget(logical, direction, &budget, visit)
+    }
+
+    fn scan_matches_until_with_budget<B>(
+        &self,
+        logical: LogicalBounds,
+        direction: SecondaryIndexDirection,
+        budget: &QueryBudget,
+        mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        budget.validate()?;
         let started = Deadline::new();
         let mut scanned = 0usize;
+        let mut returned = 0usize;
         let mut returned_bytes = 0usize;
         let bounds = physical_bounds(&logical)?;
         let mut term_scratch = Vec::new();
         let mut primary_key_scratch = Vec::new();
         let mut handle = |entry: EntryRef<'_>| {
             scanned = scanned.saturating_add(1);
+            returned = returned.saturating_add(1);
             returned_bytes = returned_bytes
                 .saturating_add(entry.key().len())
                 .saturating_add(entry.value().len());
             if scanned > budget.max_scanned_entries
+                || returned > budget.max_returned_entries
                 || returned_bytes > budget.max_returned_bytes
+                || returned_bytes > budget.max_accounted_memory_bytes
                 || started.exceeded(budget.max_elapsed)
             {
                 return ControlFlow::Break(Err(Error::IndexResourceLimitExceeded {
                     resource: "query_scan_budget",
-                    limit: budget.max_scanned_entries,
-                    actual: scanned,
+                    limit: budget.max_scanned_entries.min(budget.max_returned_entries),
+                    actual: scanned.max(returned),
                 }));
             }
             let matched = match self.decode_match_ref(
@@ -832,7 +897,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         budget: &QueryBudget,
     ) -> Result<SecondaryIndexPage, Error> {
         budget.validate()?;
-        let started = Deadline::new();
+        let counter = BudgetCounter::new();
         let max_page_entries = budget.max_page_entries.min(budget.max_returned_entries);
         if limit > max_page_entries {
             return Err(Error::IndexResourceLimitExceeded {
@@ -865,71 +930,98 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             });
         }
         let bounds = physical_bounds(&logical)?;
-        let page_limit = limit.saturating_add(1);
-        let mut raw_entries = match direction {
+        let mut matches = Vec::with_capacity(limit);
+        let mut returned_bytes = 0usize;
+        let mut accounted_memory = 0usize;
+        let mut scanned = 0usize;
+        let mut has_more = false;
+        let mut raw_key = None;
+        let after = cursor.and_then(|cursor| cursor.raw_key.as_deref());
+        let mut handle = |entry: EntryRef<'_>| {
+            if direction == SecondaryIndexDirection::Forward
+                && after.is_some_and(|after| entry.key() <= after)
+            {
+                return ControlFlow::Continue(());
+            }
+            scanned = scanned.saturating_add(1);
+            if scanned > budget.max_scanned_entries {
+                return ControlFlow::Break(Err(Error::IndexResourceLimitExceeded {
+                    resource: "query_scanned_entries",
+                    limit: budget.max_scanned_entries,
+                    actual: scanned,
+                }));
+            }
+            if matches.len() == limit {
+                has_more = true;
+                return ControlFlow::Break(Ok(()));
+            }
+            let matched = match self.decode_match(entry.key(), entry.value()) {
+                Ok(matched) => matched,
+                Err(error) => return ControlFlow::Break(Err(error)),
+            };
+            let retained = matched
+                .term
+                .len()
+                .checked_add(matched.primary_key.len())
+                .and_then(|bytes| {
+                    bytes.checked_add(matched.projection.as_ref().map_or(0, Vec::len))
+                })
+                .ok_or(Error::IndexResourceLimitExceeded {
+                    resource: "query_returned_bytes",
+                    limit: budget.max_returned_bytes,
+                    actual: usize::MAX,
+                });
+            let retained = match retained {
+                Ok(retained) => retained,
+                Err(error) => return ControlFlow::Break(Err(error)),
+            };
+            if let Err(error) = counter
+                .charge(
+                    "query_returned_bytes",
+                    &mut returned_bytes,
+                    retained,
+                    budget.max_returned_bytes,
+                )
+                .and_then(|_| {
+                    counter.charge(
+                        "query_accounted_memory_bytes",
+                        &mut accounted_memory,
+                        retained,
+                        budget.max_accounted_memory_bytes,
+                    )
+                })
+                .and_then(|_| counter.check_elapsed("query_elapsed_millis", budget.max_elapsed))
+            {
+                return ControlFlow::Break(Err(error));
+            }
+            raw_key = Some(entry.key().to_vec());
+            matches.push(matched);
+            ControlFlow::Continue(())
+        };
+        let outcome = match direction {
             SecondaryIndexDirection::Forward => {
-                let mut iter = match cursor.and_then(|cursor| cursor.raw_key.as_deref()) {
-                    Some(after) => {
-                        self.prolly
-                            .range_after(self.index.tree(), after, bounds.end.as_deref())?
-                    }
-                    None => self.prolly.range(
-                        self.index.tree(),
-                        &bounds.start,
-                        bounds.end.as_deref(),
-                    )?,
-                };
-                let mut entries = Vec::with_capacity(page_limit);
-                for _ in 0..page_limit {
-                    let Some(entry) = iter.next() else { break };
-                    entries.push(entry?);
-                }
-                entries
+                let start = after.unwrap_or(&bounds.start);
+                self.prolly.scan_range_until(
+                    self.index.tree(),
+                    start,
+                    bounds.end.as_deref(),
+                    &mut handle,
+                )?
             }
             SecondaryIndexDirection::Reverse => {
-                let raw = cursor
-                    .and_then(|cursor| cursor.raw_key.clone())
-                    .map(ReverseCursor::before_key)
-                    .unwrap_or_else(ReverseCursor::end);
-                self.prolly
-                    .reverse_range_page(
-                        self.index.tree(),
-                        &raw,
-                        &bounds.start,
-                        bounds.end.as_deref(),
-                        page_limit,
-                    )?
-                    .entries
+                let end = after.or(bounds.end.as_deref());
+                self.prolly.scan_range_reverse_until(
+                    self.index.tree(),
+                    &bounds.start,
+                    end,
+                    &mut handle,
+                )?
             }
         };
-        let has_more = raw_entries.len() > limit;
-        raw_entries.truncate(limit);
-        let raw_key = has_more
-            .then(|| raw_entries.last().map(|(key, _)| key.clone()))
-            .flatten();
-        let matches = raw_entries
-            .into_iter()
-            .map(|(key, value)| self.decode_match(&key, &value))
-            .collect::<Result<Vec<_>, _>>()?;
-        let returned_bytes = matches.iter().fold(0usize, |total, matched| {
-            total
-                .saturating_add(matched.term.len())
-                .saturating_add(matched.primary_key.len())
-                .saturating_add(matched.projection.as_ref().map_or(0, Vec::len))
-        });
-        if returned_bytes > budget.max_returned_bytes
-            || returned_bytes > budget.max_accounted_memory_bytes
-            || started.exceeded(budget.max_elapsed)
-        {
-            return Err(Error::IndexResourceLimitExceeded {
-                resource: "query_returned_bytes",
-                limit: budget
-                    .max_returned_bytes
-                    .min(budget.max_accounted_memory_bytes),
-                actual: returned_bytes,
-            });
+        if let Some(Err(error)) = outcome.break_value {
+            return Err(error);
         }
-        let next_cursor = raw_key.map(|raw_key| SecondaryIndexCursor {
+        let next_cursor = has_more.then(|| SecondaryIndexCursor {
             snapshot: self.snapshot_id.snapshot.clone(),
             source_version: self.snapshot_id.source_version.clone(),
             state_version: self.snapshot_id.state_version.clone(),
@@ -939,7 +1031,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             definition_fingerprint: self.descriptor.fingerprint.clone(),
             direction,
             bounds: logical,
-            raw_key: Some(raw_key),
+            raw_key,
         });
         Ok(SecondaryIndexPage {
             matches,

@@ -10092,6 +10092,13 @@ class RustBufferStream
         )
     end
     if variant == 8
+        return ProllyBindingError::Index.new(
+            readString(),
+            readString(),
+            readString()
+        )
+    end
+    if variant == 9
         return ProllyBindingError::Internal.new(
             readString()
         )
@@ -15215,6 +15222,20 @@ module ProllyBindingError
 
     def to_s
      "#{self.class.name}(reason=#{@reason.inspect})"
+    end
+  end
+  class Index < StandardError
+    def initialize(code, retry_advice, reason)
+        @code = code
+        @retry_advice = retry_advice
+        @reason = reason
+        super()
+      end
+
+    attr_reader :code, :retry_advice, :reason
+
+    def to_s
+     "#{self.class.name}(code=#{@code.inspect}, retry_advice=#{@retry_advice.inspect}, reason=#{@reason.inspect})"
     end
   end
   class Internal < StandardError

@@ -52,14 +52,15 @@ impl IndexBuildWorkspace {
                 limit: self.budget.max_accounted_memory_bytes,
                 actual: usize::MAX,
             })?;
-        if bytes > self.budget.max_accounted_memory_bytes {
+        let in_memory_limit = self.budget.max_accounted_memory_bytes / 2;
+        if bytes > in_memory_limit {
             return Err(Error::IndexResourceLimitExceeded {
                 resource: "maintenance_entry_bytes",
-                limit: self.budget.max_accounted_memory_bytes,
+                limit: in_memory_limit,
                 actual: bytes,
             });
         }
-        if self.memory_bytes.saturating_add(bytes) > self.budget.max_accounted_memory_bytes {
+        if self.memory_bytes.saturating_add(bytes) > in_memory_limit {
             self.spill_memory()?;
         }
         match self.memory.insert(key.clone(), value.clone()) {
@@ -105,10 +106,12 @@ impl IndexBuildWorkspace {
                 }
             }
         }
+        let (max_entry_bytes, reader_buffer_bytes) =
+            merge_memory_partition(self.budget.max_accounted_memory_bytes, self.runs.len())?;
         let mut readers = self
             .runs
             .iter()
-            .map(|path| RunReader::open(path, self.budget.max_accounted_memory_bytes))
+            .map(|path| RunReader::open(path, max_entry_bytes, reader_buffer_bytes))
             .collect::<Result<Vec<_>, Error>>()?;
         let mut heap = BinaryHeap::new();
         for (position, reader) in readers.iter_mut().enumerate() {
@@ -170,9 +173,11 @@ impl IndexBuildWorkspace {
     }
 
     fn merge_to_run(&mut self, inputs: &[PathBuf], output: &Path) -> Result<(), Error> {
+        let (max_entry_bytes, reader_buffer_bytes) =
+            merge_memory_partition(self.budget.max_accounted_memory_bytes, inputs.len())?;
         let mut readers = inputs
             .iter()
-            .map(|path| RunReader::open(path, self.budget.max_accounted_memory_bytes))
+            .map(|path| RunReader::open(path, max_entry_bytes, reader_buffer_bytes))
             .collect::<Result<Vec<_>, Error>>()?;
         let mut heap = BinaryHeap::new();
         for (position, reader) in readers.iter_mut().enumerate() {
@@ -204,7 +209,8 @@ impl IndexBuildWorkspace {
             .write(true)
             .open(path)
             .map_err(store_error)?;
-        let mut writer = BufWriter::new(file);
+        let writer_capacity = (self.budget.max_accounted_memory_bytes / 4).clamp(1, 8 * 1024);
+        let mut writer = BufWriter::with_capacity(writer_capacity, file);
         for entry in entries {
             let (key, value) = entry.into_entry()?;
             let bytes = key.len().saturating_add(value.len()).saturating_add(16);
@@ -278,9 +284,12 @@ struct RunReader {
 type EncodedIndexEntry = (Vec<u8>, Vec<u8>);
 
 impl RunReader {
-    fn open(path: &Path, max_entry_bytes: usize) -> Result<Self, Error> {
+    fn open(path: &Path, max_entry_bytes: usize, buffer_capacity: usize) -> Result<Self, Error> {
         Ok(Self {
-            reader: BufReader::new(File::open(path).map_err(store_error)?),
+            reader: BufReader::with_capacity(
+                buffer_capacity,
+                File::open(path).map_err(store_error)?,
+            ),
             max_entry_bytes,
         })
     }
@@ -327,6 +336,30 @@ impl RunReader {
         self.reader.read_exact(&mut value).map_err(store_error)?;
         Ok(Some((key, value)))
     }
+}
+
+fn merge_memory_partition(
+    max_accounted_memory_bytes: usize,
+    readers: usize,
+) -> Result<(usize, usize), Error> {
+    if readers == 0 {
+        return Err(Error::InvalidVersionedMap(
+            "spill merge requires at least one run".to_string(),
+        ));
+    }
+    let buffer_capacity = (max_accounted_memory_bytes / readers.saturating_mul(8)).clamp(32, 8_192);
+    let buffer_bytes = buffer_capacity.saturating_mul(readers);
+    let remaining = max_accounted_memory_bytes.saturating_sub(buffer_bytes);
+    let live_entries = readers.saturating_add(2);
+    let max_entry_bytes = remaining / live_entries;
+    if max_entry_bytes == 0 {
+        return Err(Error::IndexResourceLimitExceeded {
+            resource: "maintenance_merge_memory_bytes",
+            limit: max_accounted_memory_bytes,
+            actual: buffer_bytes.saturating_add(live_entries),
+        });
+    }
+    Ok((max_entry_bytes, buffer_capacity))
 }
 
 fn remove_file(path: &Path) -> Result<(), Error> {

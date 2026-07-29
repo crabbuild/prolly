@@ -168,8 +168,9 @@ from `snapshots/`, and references to absent or fingerprint-mismatched
 descriptors.
 
 `CollectionIndexPolicy` stores semantic collection rules required to interpret
-the state, including `max_active_indexes`. Per-operation execution budgets are
-runtime policy and are not persisted.
+the state: maximum active indexes, retained snapshots, descriptor generations,
+and durable pins. These limits bound canonical-state decoding and publication.
+Per-operation execution budgets are runtime policy and are not persisted.
 
 The head snapshot must remain in `snapshots/`. A descriptor referenced by the
 head, a retained snapshot, or a pin must remain in `descriptors/`. Retirement

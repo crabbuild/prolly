@@ -92,7 +92,16 @@ impl IndexedSnapshotBundle {
     }
 
     pub fn inspect(bytes: &[u8]) -> Result<IndexedSnapshotBundleSummary, Error> {
-        Self::from_bytes(bytes)?.summary()
+        Self::inspect_with_budget(bytes, &TransferBudget::default())
+    }
+
+    pub fn inspect_with_budget(
+        bytes: &[u8],
+        budget: &TransferBudget,
+    ) -> Result<IndexedSnapshotBundleSummary, Error> {
+        Self::from_bytes_with_budget(bytes, budget)?
+            .verify_with_budget(budget)
+            .map(|verified| verified.summary)
     }
 
     pub fn verify(&self) -> Result<IndexedSnapshotBundleVerification, Error> {
@@ -115,6 +124,7 @@ impl IndexedSnapshotBundle {
         }
         let mut node_map = BTreeMap::<Vec<u8>, &[u8]>::new();
         let mut decoded_bytes = 0usize;
+        let mut accounted_memory = 0usize;
         for node in &self.nodes {
             if node_map.len() == budget.max_nodes {
                 return Err(Error::IndexResourceLimitExceeded {
@@ -124,16 +134,17 @@ impl IndexedSnapshotBundle {
                 });
             }
             decoded_bytes = decoded_bytes.saturating_add(node.bytes.len());
+            accounted_memory = accounted_memory
+                .saturating_add(node.bytes.len())
+                .saturating_add(96);
             if decoded_bytes > budget.max_decoded_bytes
-                || decoded_bytes > budget.max_accounted_memory_bytes
+                || accounted_memory > budget.max_accounted_memory_bytes
                 || started.exceeded(budget.max_elapsed)
             {
                 return Err(Error::IndexResourceLimitExceeded {
-                    resource: "bundle_decoded_bytes",
-                    limit: budget
-                        .max_decoded_bytes
-                        .min(budget.max_accounted_memory_bytes),
-                    actual: decoded_bytes,
+                    resource: "bundle_accounted_memory_bytes",
+                    limit: budget.max_accounted_memory_bytes,
+                    actual: accounted_memory,
                 });
             }
             verify_node_bytes(&node.cid, &node.bytes)
@@ -146,6 +157,14 @@ impl IndexedSnapshotBundle {
             }
         }
 
+        let verification_memory = accounted_memory.saturating_add(decoded_bytes);
+        if verification_memory > budget.max_accounted_memory_bytes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_verification_memory_bytes",
+                limit: budget.max_accounted_memory_bytes,
+                actual: verification_memory,
+            });
+        }
         let memory = Arc::new(MemStore::new());
         let entries = self
             .nodes
@@ -225,7 +244,22 @@ impl IndexedSnapshotBundle {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        self.verify()?;
+        self.to_bytes_with_budget(&TransferBudget::default())
+    }
+
+    pub fn to_bytes_with_budget(&self, budget: &TransferBudget) -> Result<Vec<u8>, Error> {
+        self.verify_with_budget(budget)?;
+        let encoding_memory = self
+            .byte_count()
+            .saturating_mul(2)
+            .saturating_add(self.nodes.len().saturating_mul(96));
+        if encoding_memory > budget.max_accounted_memory_bytes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_encoding_memory_bytes",
+                limit: budget.max_accounted_memory_bytes,
+                actual: encoding_memory,
+            });
+        }
         let mut nodes = self.nodes.iter().collect::<Vec<_>>();
         nodes.sort_by(|left, right| left.cid.as_bytes().cmp(right.cid.as_bytes()));
         let payload = serde_cbor::ser::to_vec_packed(&BundleWire(
@@ -254,10 +288,10 @@ impl IndexedSnapshotBundle {
         bytes.extend_from_slice(BUNDLE_MAGIC);
         bytes.extend_from_slice(&INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION.to_be_bytes());
         bytes.extend_from_slice(&payload);
-        if bytes.len() > TransferBudget::default().max_encoded_bytes {
+        if bytes.len() > budget.max_encoded_bytes {
             return Err(Error::IndexResourceLimitExceeded {
                 resource: "bundle_encoded_bytes",
-                limit: TransferBudget::default().max_encoded_bytes,
+                limit: budget.max_encoded_bytes,
                 actual: bytes.len(),
             });
         }
@@ -265,10 +299,18 @@ impl IndexedSnapshotBundle {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if bytes.len() > TransferBudget::default().max_encoded_bytes {
+        Self::from_bytes_with_budget(bytes, &TransferBudget::default())
+    }
+
+    pub fn from_bytes_with_budget(bytes: &[u8], budget: &TransferBudget) -> Result<Self, Error> {
+        budget.validate()?;
+        if bytes.len() > budget.max_encoded_bytes || bytes.len() > budget.max_accounted_memory_bytes
+        {
             return Err(Error::IndexResourceLimitExceeded {
                 resource: "bundle_encoded_bytes",
-                limit: TransferBudget::default().max_encoded_bytes,
+                limit: budget
+                    .max_encoded_bytes
+                    .min(budget.max_accounted_memory_bytes),
                 actual: bytes.len(),
             });
         }
@@ -324,7 +366,7 @@ impl IndexedSnapshotBundle {
                 })
                 .collect::<Result<Vec<_>, Error>>()?,
         };
-        bundle.verify()?;
+        bundle.verify_with_budget(budget)?;
         Ok(bundle)
     }
 }
@@ -342,13 +384,20 @@ impl<S: IndexedStore> IndexedMap<'_, S> {
         let loaded = self.load_state()?;
         let head = loaded.state.head_snapshot()?;
         let mut nodes = BTreeMap::new();
+        let mut retained_node_bytes = 0usize;
         for tree in std::iter::once(&loaded.tree).chain(loaded.state.snapshots.values().flat_map(
             |snapshot| {
                 std::iter::once(&snapshot.source.tree)
                     .chain(snapshot.indexes.iter().map(|index| &index.tree))
             },
         )) {
-            add_tree_nodes(self.prolly, tree, &mut nodes, budget)?;
+            add_tree_nodes(
+                self.prolly,
+                tree,
+                &mut nodes,
+                &mut retained_node_bytes,
+                budget,
+            )?;
         }
         let indexes = head
             .indexes
@@ -378,7 +427,7 @@ impl<S: IndexedStore> IndexedMap<'_, S> {
             indexes,
             nodes: nodes.into_values().collect(),
         };
-        bundle.verify()?;
+        bundle.verify_with_budget(budget)?;
         Ok(bundle)
     }
 
@@ -397,11 +446,11 @@ impl<S: IndexedStore> IndexedMap<'_, S> {
         budget: &TransferBudget,
     ) -> Result<IndexedVersion, Error> {
         budget.validate()?;
-        bundle.verify()?;
+        bundle.verify_with_budget(budget)?;
         if bundle.source_map_id != self.source_map_id
             || bundle.state_tree.config != *self.prolly.config()
             || bundle.node_count() > budget.max_nodes
-            || bundle.byte_count() > budget.max_encoded_bytes
+            || bundle.byte_count() > budget.max_decoded_bytes
         {
             return Err(invalid_bundle(
                 "bundle ownership, configuration, or transfer budget mismatch",
@@ -423,15 +472,17 @@ impl<S: IndexedStore> IndexedMap<'_, S> {
                 "indexed bundle import source expectation conflict".to_string(),
             ));
         }
-        let entries = bundle
-            .nodes
-            .iter()
-            .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
-            .collect::<Vec<_>>();
-        self.prolly
-            .store()
-            .batch_put(&entries)
-            .map_err(|error| Error::Store(Box::new(error)))?;
+        let max_chunk_nodes = (budget.max_accounted_memory_bytes / 32).clamp(1, 1_024);
+        for chunk in bundle.nodes.chunks(max_chunk_nodes) {
+            let entries = chunk
+                .iter()
+                .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
+                .collect::<Vec<_>>();
+            self.prolly
+                .store()
+                .batch_put(&entries)
+                .map_err(|error| Error::Store(Box::new(error)))?;
+        }
         self.prolly
             .store()
             .confirm_indexed_publication(&[&bundle.state_tree])?;
@@ -455,25 +506,63 @@ fn add_tree_nodes<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     nodes: &mut BTreeMap<Vec<u8>, SnapshotBundleNode>,
+    retained_node_bytes: &mut usize,
     budget: &TransferBudget,
 ) -> Result<(), Error> {
-    for node in prolly.export_snapshot(tree)?.nodes {
-        nodes.entry(node.cid.as_bytes().to_vec()).or_insert(node);
-        if nodes.len() > budget.max_nodes {
+    let started = Deadline::new();
+    let mut queue = VecDeque::new();
+    if let Some(root) = &tree.root {
+        queue.push_back(root.clone());
+    }
+    while let Some(cid) = queue.pop_front() {
+        if nodes.contains_key(cid.as_bytes()) {
+            continue;
+        }
+        if nodes.len() == budget.max_nodes {
             return Err(Error::IndexResourceLimitExceeded {
                 resource: "bundle_nodes",
                 limit: budget.max_nodes,
-                actual: nodes.len(),
+                actual: nodes.len().saturating_add(1),
             });
         }
-        let bytes = nodes.values().map(|node| node.bytes.len()).sum::<usize>();
-        if bytes > budget.max_encoded_bytes {
+        let bytes = prolly
+            .store()
+            .get(cid.as_bytes())
+            .map_err(|error| Error::Store(Box::new(error)))?
+            .ok_or_else(|| invalid_bundle("tree references a missing node"))?;
+        verify_node_bytes(&cid, &bytes).map_err(|error| invalid_bundle(error.to_string()))?;
+        let decoded =
+            Node::from_bytes(&bytes).map_err(|error| invalid_bundle(error.to_string()))?;
+        if !decoded.leaf {
+            for child in &decoded.vals {
+                let child: [u8; 32] = child
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| invalid_bundle("internal node has an invalid child CID"))?;
+                queue.push_back(Cid(child));
+            }
+        }
+        let next_nodes = nodes.len().saturating_add(1);
+        let retained_bytes = retained_node_bytes.saturating_add(bytes.len());
+        let accounted = retained_bytes
+            .saturating_add(next_nodes.saturating_mul(96))
+            .saturating_add(queue.len().saturating_mul(32));
+        if retained_bytes > budget.max_encoded_bytes
+            || retained_bytes > budget.max_decoded_bytes
+            || accounted > budget.max_accounted_memory_bytes
+            || started.exceeded(budget.max_elapsed)
+        {
             return Err(Error::IndexResourceLimitExceeded {
-                resource: "bundle_bytes",
-                limit: budget.max_encoded_bytes,
-                actual: bytes,
+                resource: "bundle_export_memory_bytes",
+                limit: budget
+                    .max_encoded_bytes
+                    .min(budget.max_decoded_bytes)
+                    .min(budget.max_accounted_memory_bytes),
+                actual: retained_bytes.max(accounted),
             });
         }
+        nodes.insert(cid.as_bytes().to_vec(), SnapshotBundleNode { cid, bytes });
+        *retained_node_bytes = retained_bytes;
     }
     Ok(())
 }

@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -491,15 +492,14 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
     fn publish(
         &self,
         loaded: &LoadedIndexedState,
-        candidate: &IndexedCollectionState,
+        candidate: &mut IndexedCollectionState,
     ) -> Result<bool, Error> {
-        candidate.validate_closure()?;
-        let candidate_tree = candidate.to_tree(self.prolly)?;
+        candidate.enforce_policy_limits()?;
+        let candidate_tree = candidate.to_tree_from(self.prolly, &loaded.state, &loaded.tree)?;
         let mut referenced = vec![&candidate_tree];
-        for snapshot in candidate.snapshots.values() {
-            referenced.push(&snapshot.source.tree);
-            referenced.extend(snapshot.indexes.iter().map(|index| &index.tree));
-        }
+        let head = candidate.head_snapshot()?;
+        referenced.push(&head.source.tree);
+        referenced.extend(head.indexes.iter().map(|index| &index.tree));
         self.prolly
             .store()
             .confirm_indexed_publication(&referenced)?;
@@ -604,7 +604,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             let snapshot_id = snapshot.id()?;
             candidate.snapshots.insert(snapshot_id.clone(), snapshot);
             candidate.head = snapshot_id;
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 return Ok(IndexBuildResult {
                     source_version: MapVersionId::for_tree(&head.source.tree)?,
                     index_version: MapVersionId::for_tree(&index_tree)?,
@@ -677,6 +677,15 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             if source_tree == head.source.tree {
                 return self.current_version(&loaded);
             }
+            let mut source_entry_delta = 0i64;
+            for (key, mutation) in &normalized {
+                let existed = self.prolly.contains_key(&head.source.tree, key)?;
+                match (existed, mutation) {
+                    (false, Mutation::Upsert { .. }) => source_entry_delta += 1,
+                    (true, Mutation::Delete { .. }) => source_entry_delta -= 1,
+                    _ => {}
+                }
+            }
             let mut next_indexes = Vec::with_capacity(head.indexes.len());
             let mut derived_entries = 0usize;
             let mut derived_bytes = 0usize;
@@ -705,6 +714,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                         generation: descriptor.generation,
                     })?;
                 let mut delta = BTreeMap::new();
+                let mut index_entry_delta = 0i64;
                 for (key, mutation) in &normalized {
                     let old = self.prolly.get(&head.source.tree, key)?;
                     let new = match mutation {
@@ -753,10 +763,14 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                                 },
                             );
                             physical_deletes = physical_deletes.saturating_add(1);
+                            index_entry_delta -= 1;
                         }
                     }
                     for (new_key, new_value) in new_entries {
                         if old_entries.get(&new_key) != Some(&new_value) {
+                            if !old_entries.contains_key(&new_key) {
+                                index_entry_delta += 1;
+                            }
                             counter.charge(
                                 "mutation_derived_entries",
                                 &mut derived_entries,
@@ -794,25 +808,27 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                 next_indexes.push(IndexSnapshotRef {
                     name: selected.name.clone(),
                     descriptor_fingerprint: selected.descriptor_fingerprint.clone(),
-                    entry_count: count_entries(self.prolly, &index_tree)? as u64,
+                    entry_count: apply_entry_count_delta(selected.entry_count, index_entry_delta)?,
                     tree: index_tree,
                 });
             }
             let mut candidate = loaded.state.clone();
-            let source_count = count_entries(self.prolly, &source_tree)?;
             let snapshot = IndexedSnapshotRecord {
                 source_map_id: self.source_map_id.clone(),
                 parent: Some(loaded.state.head.clone()),
                 source: SourceSnapshotRef {
                     tree: source_tree,
-                    entry_count: source_count as u64,
+                    entry_count: apply_entry_count_delta(
+                        head.source.entry_count,
+                        source_entry_delta,
+                    )?,
                 },
                 indexes: next_indexes,
             };
             let snapshot_id = snapshot.id()?;
             candidate.snapshots.insert(snapshot_id.clone(), snapshot);
             candidate.head = snapshot_id;
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 let loaded = self.load_state()?;
                 self.metrics
                     .normalized_source_mutations
@@ -902,6 +918,17 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         name: impl AsRef<[u8]>,
         source_version: &MapVersionId,
     ) -> Result<IndexVerification, Error> {
+        self.verify_index_with_budget(name, source_version, &MaintenanceBudget::default())
+    }
+
+    pub fn verify_index_with_budget(
+        &self,
+        name: impl AsRef<[u8]>,
+        source_version: &MapVersionId,
+        budget: &MaintenanceBudget,
+    ) -> Result<IndexVerification, Error> {
+        budget.validate()?;
+        let counter = BudgetCounter::new();
         let name = name.as_ref();
         let loaded = self.load_state()?;
         let snapshot = find_snapshot(&loaded.state, source_version)?;
@@ -926,13 +953,22 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                 name: name.to_vec(),
                 generation: descriptor.generation,
             })?;
-        let (expected, expected_entries) = self.build_index_tree(
-            &snapshot.source.tree,
-            &definition,
-            &MaintenanceBudget::default(),
+        let (expected, expected_entries) =
+            self.build_index_tree(&snapshot.source.tree, &definition, budget)?;
+        let actual_entries = count_entries_with_budget(
+            self.prolly,
+            &selected.tree,
+            budget.max_derived_entries,
+            budget,
+            &counter,
         )?;
-        let actual_entries = count_entries(self.prolly, &selected.tree)?;
-        let semantic_differences = self.prolly.diff(&expected, &selected.tree)?.len();
+        let semantic_differences = count_differences_with_budget(
+            self.prolly,
+            &expected,
+            &selected.tree,
+            budget,
+            &counter,
+        )?;
         self.metrics
             .verification_outcomes
             .fetch_add(1, Ordering::Relaxed);
@@ -951,13 +987,30 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         &self,
         source_version: &MapVersionId,
     ) -> Result<Vec<IndexVerification>, Error> {
+        self.verify_all_with_budget(source_version, &MaintenanceBudget::default())
+    }
+
+    pub fn verify_all_with_budget(
+        &self,
+        source_version: &MapVersionId,
+        budget: &MaintenanceBudget,
+    ) -> Result<Vec<IndexVerification>, Error> {
+        budget.validate()?;
+        let counter = BudgetCounter::new();
         let loaded = self.load_state()?;
         let snapshot = find_snapshot(&loaded.state, source_version)?;
-        snapshot
-            .indexes
-            .iter()
-            .map(|index| self.verify_index(&index.name, source_version))
-            .collect()
+        let per_index = partition_verification_budget(budget, snapshot.indexes.len())?;
+        let mut verifications = Vec::with_capacity(snapshot.indexes.len());
+        for index in &snapshot.indexes {
+            counter.check_elapsed("maintenance_elapsed_millis", budget.max_elapsed)?;
+            verifications.push(self.verify_index_with_budget(
+                &index.name,
+                source_version,
+                &per_index,
+            )?);
+        }
+        counter.check_elapsed("maintenance_elapsed_millis", budget.max_elapsed)?;
+        Ok(verifications)
     }
 
     pub fn repair_index(
@@ -965,8 +1018,20 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         name: impl AsRef<[u8]>,
         source_version: &MapVersionId,
     ) -> Result<IndexVerification, Error> {
+        self.repair_index_with_budget(name, source_version, &MaintenanceBudget::default())
+    }
+
+    pub fn repair_index_with_budget(
+        &self,
+        name: impl AsRef<[u8]>,
+        source_version: &MapVersionId,
+        budget: &MaintenanceBudget,
+    ) -> Result<IndexVerification, Error> {
+        budget.validate()?;
+        let counter = BudgetCounter::new();
         let name = name.as_ref();
-        for _ in 0..MaintenanceBudget::default().max_cas_attempts {
+        for _ in 0..budget.max_cas_attempts {
+            counter.check_elapsed("maintenance_elapsed_millis", budget.max_elapsed)?;
             let loaded = self.load_state()?;
             let snapshot = find_snapshot(&loaded.state, source_version)?.clone();
             if snapshot.id()? != loaded.state.head {
@@ -995,14 +1060,17 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                     name: name.to_vec(),
                     generation: descriptor.generation,
                 })?;
-            let (rebuilt, entries) = self.build_index_tree(
-                &snapshot.source.tree,
-                &definition,
-                &MaintenanceBudget::default(),
-            )?;
+            let (rebuilt, entries) =
+                self.build_index_tree(&snapshot.source.tree, &definition, budget)?;
             let expected_version = MapVersionId::for_tree(&rebuilt)?;
             let actual_version = MapVersionId::for_tree(&selected.tree)?;
-            let differences = self.prolly.diff(&rebuilt, &selected.tree)?.len();
+            let differences = count_differences_with_budget(
+                self.prolly,
+                &rebuilt,
+                &selected.tree,
+                budget,
+                &counter,
+            )?;
             if differences == 0 && expected_version == actual_version {
                 return Ok(IndexVerification {
                     name: name.to_vec(),
@@ -1028,7 +1096,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             let id = next_snapshot.id()?;
             candidate.snapshots.insert(id.clone(), next_snapshot);
             candidate.head = id;
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 return Ok(IndexVerification {
                     name: name.to_vec(),
                     source_version: source_version.clone(),
@@ -1042,7 +1110,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         }
         Err(Error::IndexBuildConflictLimitExceeded {
             name: name.to_vec(),
-            attempts: MaintenanceBudget::default().max_cas_attempts,
+            attempts: budget.max_cas_attempts,
         })
     }
 
@@ -1118,7 +1186,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             let id = snapshot.id()?;
             candidate.snapshots.insert(id.clone(), snapshot);
             candidate.head = id;
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 self.runtime_overrides
                     .write()
                     .expect("secondary-index runtime override lock poisoned")
@@ -1159,7 +1227,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             let id = snapshot.id()?;
             candidate.snapshots.insert(id.clone(), snapshot);
             candidate.head = id;
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 return self.current_version(&self.load_state()?);
             }
         }
@@ -1211,7 +1279,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                     snapshot: snapshot_id,
                 },
             );
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 return Ok(());
             }
         }
@@ -1230,7 +1298,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             }
             let mut candidate = loaded.state.clone();
             candidate.pins.remove(pin_id);
-            if self.publish(&loaded, &candidate)? {
+            if self.publish(&loaded, &mut candidate)? {
                 return Ok(());
             }
         }
@@ -1285,7 +1353,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         candidate
             .retired
             .retain(|identity| referenced.contains(identity));
-        if !self.publish(&loaded, &candidate)? {
+        if !self.publish(&loaded, &mut candidate)? {
             return Err(Error::IndexBuildConflictLimitExceeded {
                 name: b"retention".to_vec(),
                 attempts: 1,
@@ -1458,12 +1526,114 @@ fn normalize_mutations(mutations: &[Mutation]) -> BTreeMap<Vec<u8>, Mutation> {
     normalized
 }
 
-fn count_entries<S: Store>(prolly: &Prolly<S>, tree: &Tree) -> Result<usize, Error> {
-    prolly
-        .range(tree, b"", None)?
-        .try_fold(0usize, |count, entry| {
-            entry.map(|_| count.saturating_add(1))
-        })
+fn count_entries_with_budget<S: Store>(
+    prolly: &Prolly<S>,
+    tree: &Tree,
+    limit: usize,
+    budget: &MaintenanceBudget,
+    counter: &BudgetCounter,
+) -> Result<usize, Error> {
+    let mut count = 0usize;
+    let outcome = prolly.scan_range_until(tree, b"", None, |_| {
+        count = count.saturating_add(1);
+        if count > limit {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })?;
+    counter.check_elapsed("maintenance_elapsed_millis", budget.max_elapsed)?;
+    if outcome.break_value.is_some() {
+        return Err(Error::IndexResourceLimitExceeded {
+            resource: "maintenance_counted_entries",
+            limit,
+            actual: count,
+        });
+    }
+    Ok(count)
+}
+
+fn count_differences_with_budget<S: Store>(
+    prolly: &Prolly<S>,
+    expected: &Tree,
+    actual: &Tree,
+    budget: &MaintenanceBudget,
+    counter: &BudgetCounter,
+) -> Result<usize, Error> {
+    let mut differences = 0usize;
+    let outcome = prolly.scan_diff_until(expected, actual, |_| {
+        differences = differences.saturating_add(1);
+        if differences > budget.max_verification_findings {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })?;
+    counter.check_elapsed("maintenance_elapsed_millis", budget.max_elapsed)?;
+    if outcome.break_value.is_some() {
+        return Err(Error::IndexResourceLimitExceeded {
+            resource: "maintenance_verification_findings",
+            limit: budget.max_verification_findings,
+            actual: differences,
+        });
+    }
+    Ok(differences)
+}
+
+fn apply_entry_count_delta(current: u64, delta: i64) -> Result<u64, Error> {
+    if delta >= 0 {
+        current.checked_add(delta as u64)
+    } else {
+        current.checked_sub(delta.unsigned_abs())
+    }
+    .ok_or_else(|| {
+        Error::InvalidVersionedMap(
+            "indexed snapshot entry count overflowed or underflowed".to_string(),
+        )
+    })
+}
+
+fn partition_verification_budget(
+    budget: &MaintenanceBudget,
+    index_count: usize,
+) -> Result<MaintenanceBudget, Error> {
+    if index_count == 0 {
+        return Ok(budget.clone());
+    }
+    let partition = |resource: &'static str, value: usize| {
+        let per_index = value / index_count;
+        if per_index == 0 {
+            Err(Error::IndexResourceLimitExceeded {
+                resource,
+                limit: value,
+                actual: index_count,
+            })
+        } else {
+            Ok(per_index)
+        }
+    };
+    Ok(MaintenanceBudget {
+        max_source_entries: partition(
+            "maintenance.verify_all_source_entries",
+            budget.max_source_entries,
+        )?,
+        max_derived_entries: partition(
+            "maintenance.verify_all_derived_entries",
+            budget.max_derived_entries,
+        )?,
+        max_verification_findings: partition(
+            "maintenance.verify_all_findings",
+            budget.max_verification_findings,
+        )?,
+        // These are peak limits. Verification is sequential, so each index can
+        // safely use the full memory and merge fan-in allowance.
+        max_accounted_memory_bytes: budget.max_accounted_memory_bytes,
+        max_spill_bytes: partition("maintenance.verify_all_spill_bytes", budget.max_spill_bytes)?,
+        max_spill_runs: partition("maintenance.verify_all_spill_runs", budget.max_spill_runs)?,
+        max_merge_fan_in: budget.max_merge_fan_in,
+        max_cas_attempts: budget.max_cas_attempts,
+        max_elapsed: budget.max_elapsed,
+    })
 }
 
 fn find_snapshot<'a>(
@@ -1472,13 +1642,21 @@ fn find_snapshot<'a>(
 ) -> Result<&'a IndexedSnapshotRecord, Error> {
     let mut cursor = Some(&state.head);
     while let Some(id) = cursor {
-        let snapshot = state.snapshots.get(id).ok_or_else(|| {
-            Error::InvalidVersionedMap("snapshot ancestry is incomplete".to_string())
-        })?;
+        let Some(snapshot) = state.snapshots.get(id) else {
+            break;
+        };
         if MapVersionId::for_tree(&snapshot.source.tree)? == *source_version {
             return Ok(snapshot);
         }
         cursor = snapshot.parent.as_ref();
+    }
+    // Retention is allowed to prune an unpinned portion of the ancestry while
+    // preserving an older explicitly pinned snapshot. Such a snapshot remains
+    // addressable even when its newer parent chain is no longer retained.
+    for snapshot in state.snapshots.values() {
+        if MapVersionId::for_tree(&snapshot.source.tree)? == *source_version {
+            return Ok(snapshot);
+        }
     }
     Err(Error::InvalidVersionedMap(format!(
         "indexed source version {source_version} is not retained"

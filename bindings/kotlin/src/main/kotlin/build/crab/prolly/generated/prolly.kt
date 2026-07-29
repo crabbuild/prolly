@@ -34860,6 +34860,18 @@ sealed class ProllyBindingException: kotlin.Exception() {
             get() = "reason=${ `reason` }"
     }
 
+    class Index(
+
+        val `code`: kotlin.String,
+
+        val `retryAdvice`: kotlin.String,
+
+        val `reason`: kotlin.String
+        ) : ProllyBindingException() {
+        override val message
+            get() = "code=${ `code` }, retryAdvice=${ `retryAdvice` }, reason=${ `reason` }"
+    }
+
     class Internal(
 
         val `reason`: kotlin.String
@@ -34908,7 +34920,12 @@ public object FfiConverterTypeProllyBindingError : FfiConverterRustBuffer<Prolly
             7 -> ProllyBindingException.Serialization(
                 FfiConverterString.read(buf),
                 )
-            8 -> ProllyBindingException.Internal(
+            8 -> ProllyBindingException.Index(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            9 -> ProllyBindingException.Internal(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -34950,6 +34967,13 @@ public object FfiConverterTypeProllyBindingError : FfiConverterRustBuffer<Prolly
             is ProllyBindingException.Serialization -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
+                + FfiConverterString.allocationSize(value.`reason`)
+            )
+            is ProllyBindingException.Index -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`code`)
+                + FfiConverterString.allocationSize(value.`retryAdvice`)
                 + FfiConverterString.allocationSize(value.`reason`)
             )
             is ProllyBindingException.Internal -> (
@@ -34997,8 +35021,15 @@ public object FfiConverterTypeProllyBindingError : FfiConverterRustBuffer<Prolly
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
-            is ProllyBindingException.Internal -> {
+            is ProllyBindingException.Index -> {
                 buf.putInt(8)
+                FfiConverterString.write(value.`code`, buf)
+                FfiConverterString.write(value.`retryAdvice`, buf)
+                FfiConverterString.write(value.`reason`, buf)
+                Unit
+            }
+            is ProllyBindingException.Internal -> {
+                buf.putInt(9)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-29T20:26:46+00:00",
+  "generated_at": "2026-07-29T21:50:36+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -5823,6 +5823,39 @@
       "docs": []
     },
     {
+      "rust": "prolly::CollectionIndexPolicy::max_descriptors",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::CollectionIndexPolicy::max_durable_pins",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::CollectionIndexPolicy::max_retained_snapshots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::CollectionIndexPolicy::validate",
       "classification": "portable",
       "status": "planned",
@@ -10822,6 +10855,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::IndexErrorCode::as_str",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::IndexProjection",
       "classification": "portable",
       "status": "planned",
@@ -12240,6 +12284,17 @@
       "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
+      "rust": "prolly::IndexedMap::repair_index_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::IndexedMap::replace_index",
       "classification": "portable",
       "status": "implemented",
@@ -12502,6 +12557,17 @@
       "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
     },
     {
+      "rust": "prolly::IndexedMap::verify_all_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::IndexedMap::verify_index",
       "classification": "portable",
       "status": "implemented",
@@ -12538,6 +12604,17 @@
         "bindings/wasm/src/index.ts#WasmIndexedMap"
       ],
       "reconciliation_rationale": "The durable indexed-map operations and complete owned result records are exposed by all eight portable wrappers."
+    },
+    {
+      "rust": "prolly::IndexedMap::verify_index_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::IndexedMapEditor",
@@ -13190,6 +13267,17 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::IndexedSnapshotBundle::from_bytes_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::IndexedSnapshotBundle::indexes",
       "classification": "portable",
       "status": "planned",
@@ -13213,6 +13301,17 @@
       "audience": "application",
       "audience_rationale": "prolly::IndexedSnapshotBundle::inspect has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::IndexedSnapshotBundle::inspect_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::IndexedSnapshotBundle::node_count",
@@ -13310,6 +13409,17 @@
       "audience": "application",
       "audience_rationale": "prolly::IndexedSnapshotBundle::to_bytes has runtime behavior in the requested indexed-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::IndexedSnapshotBundle::to_bytes_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::IndexedSnapshotBundle::verify",
@@ -29868,6 +29978,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::RetryAdvice::as_str",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ReverseCursor",
       "classification": "portable",
       "status": "planned",
@@ -32236,6 +32357,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::SecondaryIndexQuery::exact_reverse_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::SecondaryIndexQuery::prefix_page",
       "classification": "portable",
       "status": "planned",
@@ -32247,7 +32379,40 @@
       "docs": []
     },
     {
+      "rust": "prolly::SecondaryIndexQuery::prefix_reverse_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::SecondaryIndexQuery::range_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::SecondaryIndexQuery::range_reverse_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::SecondaryIndexQuery::records",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",

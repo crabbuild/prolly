@@ -11902,6 +11902,21 @@ class ProllyBindingError:  # type: ignore
         def __repr__(self):
             return "ProllyBindingError.Serialization({})".format(str(self))
     _UniffiTempProllyBindingError.Serialization = Serialization # type: ignore
+    class Index(_UniffiTempProllyBindingError):
+
+        def __init__(self, code, retry_advice, reason):
+            super().__init__(", ".join([
+                "code={!r}".format(code),
+                "retry_advice={!r}".format(retry_advice),
+                "reason={!r}".format(reason),
+            ]))
+            self.code = code
+            self.retry_advice = retry_advice
+            self.reason = reason
+
+        def __repr__(self):
+            return "ProllyBindingError.Index({})".format(str(self))
+    _UniffiTempProllyBindingError.Index = Index # type: ignore
     class Internal(_UniffiTempProllyBindingError):
         
         def __init__(self, reason):
@@ -11951,6 +11966,12 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 8:
+            return ProllyBindingError.Index(
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 9:
             return ProllyBindingError.Internal(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -11977,6 +11998,11 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
             _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.Serialization):
+            _UniffiFfiConverterString.check_lower(value.reason)
+            return
+        if isinstance(value, ProllyBindingError.Index):
+            _UniffiFfiConverterString.check_lower(value.code)
+            _UniffiFfiConverterString.check_lower(value.retry_advice)
             _UniffiFfiConverterString.check_lower(value.reason)
             return
         if isinstance(value, ProllyBindingError.Internal):
@@ -12006,8 +12032,13 @@ class _UniffiFfiConverterTypeProllyBindingError(_UniffiConverterRustBuffer):
         if isinstance(value, ProllyBindingError.Serialization):
             buf.write_i32(7)
             _UniffiFfiConverterString.write(value.reason, buf)
-        if isinstance(value, ProllyBindingError.Internal):
+        if isinstance(value, ProllyBindingError.Index):
             buf.write_i32(8)
+            _UniffiFfiConverterString.write(value.code, buf)
+            _UniffiFfiConverterString.write(value.retry_advice, buf)
+            _UniffiFfiConverterString.write(value.reason, buf)
+        if isinstance(value, ProllyBindingError.Internal):
+            buf.write_i32(9)
             _UniffiFfiConverterString.write(value.reason, buf)
 
 

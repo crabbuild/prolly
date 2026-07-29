@@ -175,6 +175,42 @@ fn query_pages_are_bounded_and_cursors_are_snapshot_bound() {
 }
 
 #[test]
+fn query_budgets_reject_retained_pages_and_source_joins_before_return() {
+    let engine = engine();
+    let indexed = engine.indexed_map(b"users", registry()).unwrap();
+    indexed.put(b"u1", vec![b'x'; 256]).unwrap();
+    indexed.put(b"u2", vec![b'x'; 256]).unwrap();
+    indexed.ensure_index(b"included").unwrap();
+    let snapshot = indexed.snapshot().unwrap();
+    let index = snapshot.index(b"included").unwrap();
+    let tiny = QueryBudget {
+        max_page_entries: 2,
+        max_returned_entries: 2,
+        max_returned_bytes: 64,
+        max_scanned_entries: 4,
+        max_source_fetches: 2,
+        max_accounted_memory_bytes: 64,
+        max_elapsed: Duration::from_secs(1),
+    };
+    let query = index.query(tiny).unwrap();
+    assert!(matches!(
+        query.exact_page(&vec![b'x'; 256], None, 1),
+        Err(Error::IndexResourceLimitExceeded { .. })
+    ));
+    let source_limited = QueryBudget {
+        max_source_fetches: 1,
+        ..QueryBudget::default()
+    };
+    assert!(matches!(
+        index
+            .query(source_limited)
+            .unwrap()
+            .records(&vec![b'x'; 256]),
+        Err(Error::IndexResourceLimitExceeded { .. })
+    ));
+}
+
+#[test]
 fn concurrent_writers_publish_complete_snapshots() {
     let engine = Arc::new(engine());
     engine
@@ -301,6 +337,10 @@ fn canonical_bundle_is_bounded_verified_and_atomically_imported() {
         source.export_current_with_budget(&tiny),
         Err(Error::IndexResourceLimitExceeded { .. })
     ));
+    assert!(matches!(
+        IndexedSnapshotBundle::from_bytes_with_budget(&bytes, &tiny),
+        Err(Error::IndexResourceLimitExceeded { .. })
+    ));
     let mut corrupt = bytes;
     corrupt.push(0);
     assert!(IndexedSnapshotBundle::from_bytes(&corrupt).is_err());
@@ -342,6 +382,7 @@ fn index_errors_are_structured_and_redact_application_data() {
     };
     let rendered = error.to_string();
     assert!(!rendered.contains("secret"));
+    assert!(!format!("{error:?}").contains("secret"));
     assert_eq!(error.retry_advice(), RetryAdvice::Never);
     assert!(error.index_code().is_some());
 }

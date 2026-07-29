@@ -106,21 +106,31 @@ pub fn indexed_collection_root_name(source_map_id: &[u8]) -> Result<Vec<u8>, Err
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CollectionIndexPolicy {
     pub max_active_indexes: usize,
+    pub max_retained_snapshots: usize,
+    pub max_descriptors: usize,
+    pub max_durable_pins: usize,
 }
 
 impl Default for CollectionIndexPolicy {
     fn default() -> Self {
         Self {
             max_active_indexes: 32,
+            max_retained_snapshots: 1_024,
+            max_descriptors: 4_096,
+            max_durable_pins: 1_024,
         }
     }
 }
 
 impl CollectionIndexPolicy {
     pub fn validate(&self) -> Result<(), Error> {
-        if self.max_active_indexes == 0 {
+        if self.max_active_indexes == 0
+            || self.max_retained_snapshots == 0
+            || self.max_descriptors == 0
+            || self.max_durable_pins == 0
+        {
             return Err(Error::InvalidIndexDefinition {
-                reason: "max_active_indexes must be greater than zero".to_string(),
+                reason: "all collection index policy limits must be greater than zero".to_string(),
             });
         }
         Ok(())
@@ -364,6 +374,27 @@ impl IndexedCollectionState {
                 actual: self.active.len(),
             });
         }
+        if self.snapshots.len() > self.policy.max_retained_snapshots {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "retained_snapshots",
+                limit: self.policy.max_retained_snapshots,
+                actual: self.snapshots.len(),
+            });
+        }
+        if self.descriptors.len() > self.policy.max_descriptors {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "index_descriptors",
+                limit: self.policy.max_descriptors,
+                actual: self.descriptors.len(),
+            });
+        }
+        if self.pins.len() > self.policy.max_durable_pins {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "durable_snapshot_pins",
+                limit: self.policy.max_durable_pins,
+                actual: self.pins.len(),
+            });
+        }
         let head = self.head_snapshot()?;
         if head.source_map_id != self.source_map_id {
             return Err(Error::InvalidVersionedMap(
@@ -423,6 +454,60 @@ impl IndexedCollectionState {
         Ok(())
     }
 
+    /// Bound canonical state before publication while preserving the head and
+    /// every explicitly pinned snapshot.
+    pub(crate) fn enforce_policy_limits(&mut self) -> Result<(), Error> {
+        self.policy.validate()?;
+        let mut keep = self
+            .pins
+            .values()
+            .map(|pin| pin.snapshot.clone())
+            .collect::<BTreeSet<_>>();
+        keep.insert(self.head.clone());
+        if keep.len() > self.policy.max_retained_snapshots {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "pinned_retained_snapshots",
+                limit: self.policy.max_retained_snapshots,
+                actual: keep.len(),
+            });
+        }
+        let mut cursor = Some(self.head.clone());
+        while keep.len() < self.policy.max_retained_snapshots {
+            let Some(id) = cursor.take() else {
+                break;
+            };
+            let Some(snapshot) = self.snapshots.get(&id) else {
+                break;
+            };
+            cursor = snapshot.parent.clone();
+            if let Some(parent) = &cursor {
+                keep.insert(parent.clone());
+            }
+        }
+        self.snapshots.retain(|id, _| keep.contains(id));
+
+        let referenced = self
+            .snapshots
+            .values()
+            .flat_map(|snapshot| {
+                snapshot
+                    .indexes
+                    .iter()
+                    .map(|index| (index.name.clone(), index.descriptor_fingerprint.clone()))
+            })
+            .chain(
+                self.active
+                    .iter()
+                    .map(|(name, fingerprint)| (name.clone(), fingerprint.clone())),
+            )
+            .collect::<BTreeSet<_>>();
+        self.descriptors
+            .retain(|identity, _| referenced.contains(identity));
+        self.retired
+            .retain(|identity| referenced.contains(identity));
+        self.validate_closure()
+    }
+
     pub fn to_tree<S: Store>(&self, prolly: &Prolly<S>) -> Result<Tree, Error> {
         self.validate_closure()?;
         let mut mutations = vec![
@@ -474,6 +559,117 @@ impl IndexedCollectionState {
             });
         }
         prolly.batch(&prolly.create(), mutations)
+    }
+
+    pub(crate) fn to_tree_from<S: Store>(
+        &self,
+        prolly: &Prolly<S>,
+        previous: &Self,
+        previous_tree: &Tree,
+    ) -> Result<Tree, Error> {
+        self.validate_closure()?;
+        previous.validate_closure()?;
+        let mut mutations = Vec::new();
+        if self.source_map_id != previous.source_map_id {
+            mutations.push(Mutation::Upsert {
+                key: key(&[b"meta", META_SOURCE]),
+                val: self.source_map_id.clone(),
+            });
+        }
+        if self.policy != previous.policy {
+            mutations.push(Mutation::Upsert {
+                key: key(&[b"meta", META_POLICY]),
+                val: encode(&self.policy)?,
+            });
+        }
+        if self.head != previous.head {
+            mutations.push(Mutation::Upsert {
+                key: key(&[HEAD]),
+                val: self.head.0.as_bytes().to_vec(),
+            });
+        }
+        for (id, snapshot) in &self.snapshots {
+            if previous.snapshots.get(id) != Some(snapshot) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[SNAPSHOTS, id.0.as_bytes()]),
+                    val: encode(snapshot)?,
+                });
+            }
+        }
+        for id in previous.snapshots.keys() {
+            if !self.snapshots.contains_key(id) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[SNAPSHOTS, id.0.as_bytes()]),
+                });
+            }
+        }
+        for (identity @ (name, fingerprint), descriptor) in &self.descriptors {
+            if previous.descriptors.get(identity) != Some(descriptor) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[DESCRIPTORS, name, fingerprint.as_bytes()]),
+                    val: encode(descriptor)?,
+                });
+            }
+        }
+        for (name, fingerprint) in previous.descriptors.keys() {
+            if !self
+                .descriptors
+                .contains_key(&(name.clone(), fingerprint.clone()))
+            {
+                mutations.push(Mutation::Delete {
+                    key: key(&[DESCRIPTORS, name, fingerprint.as_bytes()]),
+                });
+            }
+        }
+        for (name, fingerprint) in &self.active {
+            if previous.active.get(name) != Some(fingerprint) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[ACTIVE, name]),
+                    val: fingerprint.as_bytes().to_vec(),
+                });
+            }
+        }
+        for name in previous.active.keys() {
+            if !self.active.contains_key(name) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[ACTIVE, name]),
+                });
+            }
+        }
+        for (name, fingerprint) in &self.retired {
+            if !previous
+                .retired
+                .contains(&(name.clone(), fingerprint.clone()))
+            {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[RETIRED, name, fingerprint.as_bytes()]),
+                    val: Vec::new(),
+                });
+            }
+        }
+        for (name, fingerprint) in &previous.retired {
+            if !self.retired.contains(&(name.clone(), fingerprint.clone())) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[RETIRED, name, fingerprint.as_bytes()]),
+                });
+            }
+        }
+        for (pin_id, pin) in &self.pins {
+            if previous.pins.get(pin_id) != Some(pin) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[PINS, pin_id]),
+                    val: encode(pin)?,
+                });
+            }
+        }
+        for pin_id in previous.pins.keys() {
+            if !self.pins.contains_key(pin_id) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[PINS, pin_id]),
+                });
+            }
+        }
+        prolly.batch(previous_tree, mutations)
     }
 
     pub fn from_tree<S: Store>(prolly: &Prolly<S>, tree: &Tree) -> Result<Self, Error> {
@@ -631,6 +827,37 @@ mod tests {
             IndexedCollectionState::from_tree(&prolly, &tree).unwrap(),
             state
         );
+    }
+
+    #[test]
+    fn state_delta_publication_matches_full_canonical_rebuild() {
+        let prolly = Prolly::new(MemStore::new(), Config::default());
+        let previous = empty_state();
+        let previous_tree = previous.to_tree(&prolly).unwrap();
+        let mut candidate = previous.clone();
+        let source = prolly
+            .put(
+                &candidate.head_snapshot().unwrap().source.tree,
+                b"u1".to_vec(),
+                b"active".to_vec(),
+            )
+            .unwrap();
+        let snapshot = IndexedSnapshotRecord {
+            source_map_id: b"users".to_vec(),
+            parent: Some(candidate.head.clone()),
+            source: SourceSnapshotRef {
+                tree: source,
+                entry_count: 1,
+            },
+            indexes: Vec::new(),
+        };
+        let id = snapshot.id().unwrap();
+        candidate.snapshots.insert(id.clone(), snapshot);
+        candidate.head = id;
+        let delta = candidate
+            .to_tree_from(&prolly, &previous, &previous_tree)
+            .unwrap();
+        assert_eq!(delta, candidate.to_tree(&prolly).unwrap());
     }
 
     #[test]

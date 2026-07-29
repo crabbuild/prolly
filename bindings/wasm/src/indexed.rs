@@ -1,4 +1,4 @@
-use super::{js_error, optional_bytes, WasmProllyEngine};
+use super::{index_js_error, optional_bytes, WasmProllyEngine};
 use crate::page::{set_bytes, set_optional_bytes};
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
@@ -144,12 +144,12 @@ impl WasmIndexRegistry {
             .projection(projection)
             .limits(secondary_index_limits(limits)?)
             .extract(move |key, value| callback.extract(key, value))
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         self.registry = self
             .registry
             .clone()
             .register(definition)
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         Ok(())
     }
 }
@@ -211,8 +211,8 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
-        let result = map.get(&key.to_vec()).map(optional_bytes).map_err(js_error);
+            .map_err(index_js_error)?;
+        let result = map.get(&key.to_vec()).map(optional_bytes).map_err(index_js_error);
         self.capture_metrics(map.metrics());
         result
     }
@@ -222,7 +222,7 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let mut callback_result = Ok(());
         let found = map
             .get_with(&key.to_vec(), |value| {
@@ -233,7 +233,7 @@ impl WasmIndexedMap {
                     .call1(&JsValue::UNDEFINED, &borrowed.into())
                     .map(|_| ());
             })
-            .map_err(js_error)?
+            .map_err(index_js_error)?
             .is_some();
         self.capture_metrics(map.metrics());
         callback_result?;
@@ -244,10 +244,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .put(key.to_vec(), value.to_vec())
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_version_object);
         self.capture_metrics(map.metrics());
         result
@@ -258,10 +258,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .apply(mutations)
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_version_object);
         self.capture_metrics(map.metrics());
         result
@@ -276,15 +276,15 @@ impl WasmIndexedMap {
         let expected = expected_source
             .map(|value| prolly::MapVersionId::from_bytes(&value.to_vec()))
             .transpose()
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let mutations = mutations_from_array(&mutations)?;
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .apply_if(expected.as_ref(), mutations)
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_update_object);
         self.capture_metrics(map.metrics());
         result
@@ -294,10 +294,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .delete(key.to_vec())
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_version_object);
         self.capture_metrics(map.metrics());
         result
@@ -308,8 +308,8 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
-        let result = map.ensure_index(name.to_vec()).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        let result = map.ensure_index(name.to_vec()).map_err(index_js_error)?;
         self.capture_metrics(map.metrics());
         let object = Object::new();
         set_bytes(
@@ -366,17 +366,17 @@ impl WasmIndexedMap {
             .projection(projection)
             .limits(secondary_index_limits(limits)?)
             .extract(move |key, value| callback.extract(key, value))
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let registry = self.registry_snapshot();
         let map = self
             .engine
             .indexed_map(&self.id, registry.clone())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .replace_index(name.to_vec(), definition.clone())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         self.capture_metrics(map.metrics());
-        *self.registry.borrow_mut() = registry.replace(definition).map_err(js_error)?;
+        *self.registry.borrow_mut() = registry.replace(definition).map_err(index_js_error)?;
 
         let object = Object::new();
         set_bytes(
@@ -421,8 +421,8 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
-        let snapshot_id = map.snapshot().map_err(js_error)?.id().clone();
+            .map_err(index_js_error)?;
+        let snapshot_id = map.snapshot().map_err(index_js_error)?.id().clone();
         self.capture_metrics(map.metrics());
         Ok(WasmIndexedSnapshot {
             engine: Arc::clone(&self.engine),
@@ -435,12 +435,12 @@ impl WasmIndexedMap {
     #[wasm_bindgen(js_name = snapshotAt)]
     pub fn snapshot_at(&self, source_version: Uint8Array) -> Result<WasmIndexedSnapshot, JsValue> {
         let version =
-            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
+            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(index_js_error)?;
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
-        let snapshot_id = map.snapshot_at(&version).map_err(js_error)?.id().clone();
+            .map_err(index_js_error)?;
+        let snapshot_id = map.snapshot_at(&version).map_err(index_js_error)?.id().clone();
         self.capture_metrics(map.metrics());
         Ok(WasmIndexedSnapshot {
             engine: Arc::clone(&self.engine),
@@ -460,8 +460,8 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
-        map.snapshot_by_id(&snapshot_id).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        map.snapshot_by_id(&snapshot_id).map_err(index_js_error)?;
         self.capture_metrics(map.metrics());
         Ok(WasmIndexedSnapshot {
             engine: Arc::clone(&self.engine),
@@ -475,10 +475,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .health()
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_health_object);
         self.capture_metrics(map.metrics());
         result
@@ -515,14 +515,14 @@ impl WasmIndexedMap {
         source_version: Uint8Array,
     ) -> Result<Object, JsValue> {
         let version =
-            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
+            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(index_js_error)?;
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .verify_index(name.to_vec(), &version)
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(index_verification_object);
         self.capture_metrics(map.metrics());
         result
@@ -531,12 +531,12 @@ impl WasmIndexedMap {
     #[wasm_bindgen(js_name = verifyAll)]
     pub fn verify_all(&self, source_version: Uint8Array) -> Result<Array, JsValue> {
         let version =
-            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
+            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(index_js_error)?;
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
-        let values = map.verify_all(&version).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        let values = map.verify_all(&version).map_err(index_js_error)?;
         self.capture_metrics(map.metrics());
         let out = Array::new();
         for value in values {
@@ -552,14 +552,14 @@ impl WasmIndexedMap {
         source_version: Uint8Array,
     ) -> Result<Object, JsValue> {
         let version =
-            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(js_error)?;
+            prolly::MapVersionId::from_bytes(&source_version.to_vec()).map_err(index_js_error)?;
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .repair_index(name.to_vec(), &version)
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(index_verification_object);
         self.capture_metrics(map.metrics());
         result
@@ -570,10 +570,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .deactivate_index(name.to_vec())
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_version_object);
         self.capture_metrics(map.metrics());
         result
@@ -583,11 +583,11 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .export_current()
             .and_then(|value| value.to_bytes())
-            .map_err(js_error);
+            .map_err(index_js_error);
         self.capture_metrics(map.metrics());
         result
     }
@@ -598,18 +598,18 @@ impl WasmIndexedMap {
         bundle: Uint8Array,
         expected_source: Option<Uint8Array>,
     ) -> Result<Object, JsValue> {
-        let bundle = IndexedSnapshotBundle::from_bytes(&bundle.to_vec()).map_err(js_error)?;
+        let bundle = IndexedSnapshotBundle::from_bytes(&bundle.to_vec()).map_err(index_js_error)?;
         let expected = expected_source
             .map(|value| prolly::MapVersionId::from_bytes(&value.to_vec()))
             .transpose()
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .import_current(&bundle, expected.as_ref())
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_version_object);
         self.capture_metrics(map.metrics());
         result
@@ -622,10 +622,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .keep_last(count)
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(indexed_retention_object);
         self.capture_metrics(map.metrics());
         result
@@ -636,10 +636,10 @@ impl WasmIndexedMap {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         let result = map
             .plan_indexed_gc()
-            .map_err(js_error)
+            .map_err(index_js_error)
             .and_then(super::domain::gc_plan_object);
         self.capture_metrics(map.metrics());
         result
@@ -664,11 +664,11 @@ impl WasmIndexedSnapshot {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry.clone())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         map.snapshot_by_id(&self.snapshot_id)
-            .map_err(js_error)?
+            .map_err(index_js_error)?
             .index(name.to_vec())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         Ok(WasmSecondaryIndex {
             engine: Arc::clone(&self.engine),
             id: self.id.clone(),
@@ -698,10 +698,10 @@ impl WasmSecondaryIndex {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry.clone())
-            .map_err(js_error)?;
-        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(js_error)?;
-        let index = snapshot.index(&self.name).map_err(js_error)?;
-        operation(index).map_err(js_error)
+            .map_err(index_js_error)?;
+        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(index_js_error)?;
+        let index = snapshot.index(&self.name).map_err(index_js_error)?;
+        operation(index).map_err(index_js_error)
     }
 }
 
@@ -715,11 +715,11 @@ impl WasmSecondaryIndex {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry.clone())
-            .map_err(js_error)?;
-        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(js_error)?;
-        let index = snapshot.index(&self.name).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(index_js_error)?;
+        let index = snapshot.index(&self.name).map_err(index_js_error)?;
         let out = Array::new();
-        for matched in index.exact(&term.to_vec()).map_err(js_error)? {
+        for matched in index.exact(&term.to_vec()).map_err(index_js_error)? {
             out.push(&index_match_object(matched)?.into());
         }
         Ok(out)
@@ -729,11 +729,11 @@ impl WasmSecondaryIndex {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry.clone())
-            .map_err(js_error)?;
-        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(js_error)?;
-        let index = snapshot.index(&self.name).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(index_js_error)?;
+        let index = snapshot.index(&self.name).map_err(index_js_error)?;
         let out = Array::new();
-        for matched in index.prefix(&prefix.to_vec()).map_err(js_error)? {
+        for matched in index.prefix(&prefix.to_vec()).map_err(index_js_error)? {
             out.push(&index_match_object(matched)?.into());
         }
         Ok(out)
@@ -744,13 +744,13 @@ impl WasmSecondaryIndex {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry.clone())
-            .map_err(js_error)?;
-        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(js_error)?;
-        let index = snapshot.index(&self.name).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(index_js_error)?;
+        let index = snapshot.index(&self.name).map_err(index_js_error)?;
         let out = Array::new();
         for matched in index
             .range(&start.to_vec(), end.as_deref())
-            .map_err(js_error)?
+            .map_err(index_js_error)?
         {
             out.push(&index_match_object(matched)?.into());
         }
@@ -762,9 +762,9 @@ impl WasmSecondaryIndex {
         let map = self
             .engine
             .indexed_map(&self.id, self.registry.clone())
-            .map_err(js_error)?;
-        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(js_error)?;
-        let index = snapshot.index(&self.name).map_err(js_error)?;
+            .map_err(index_js_error)?;
+        let snapshot = map.snapshot_by_id(&self.snapshot_id).map_err(index_js_error)?;
+        let index = snapshot.index(&self.name).map_err(index_js_error)?;
         let out = Array::new();
         let mut callback_error = None;
         index
@@ -783,7 +783,7 @@ impl WasmSecondaryIndex {
                 })();
                 callback_error = result.err();
             })
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         if let Some(error) = callback_error {
             return Err(error);
         }
@@ -901,7 +901,7 @@ impl WasmProllyEngine {
         let id = id.to_vec();
         self.inner
             .indexed_map(&id, registry.registry.clone())
-            .map_err(js_error)?;
+            .map_err(index_js_error)?;
         Ok(WasmIndexedMap {
             engine: Arc::clone(&self.inner),
             id,
@@ -1166,7 +1166,7 @@ fn index_cursor(value: Option<Uint8Array>) -> Result<Option<SecondaryIndexCursor
     value
         .map(|bytes| SecondaryIndexCursor::from_bytes(&bytes.to_vec()))
         .transpose()
-        .map_err(js_error)
+        .map_err(index_js_error)
 }
 
 fn page_limit(value: u64) -> Result<usize, JsValue> {
@@ -1184,7 +1184,7 @@ fn index_page_object(page: SecondaryIndexPage) -> Result<Object, JsValue> {
         .next_cursor
         .map(|cursor| cursor.to_bytes())
         .transpose()
-        .map_err(js_error)?;
+        .map_err(index_js_error)?;
     set_optional_bytes(&object, "nextCursor", cursor.as_deref())?;
     Ok(object)
 }

@@ -29,7 +29,10 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
+      - run: cargo check --all-targets
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all-targets
+      - run: RUSTDOCFLAGS="-D warnings" cargo test --doc
       - run: >-
           cargo test
           --test conformance_fixtures
@@ -40,6 +43,39 @@ jobs:
           --test secondary_index_fuzz_smoke
           --test secondary_index_resources
       - run: ./scripts/check-secondary-index-cutover.sh
+
+  bounded-benchmark-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: PROLLY_INDEX_BENCH_SAMPLES=3 PROLLY_INDEX_BENCH_SCALE=1000 ./scripts/run-secondary-index-bench.sh
+      - run: test -s target/secondary-index-bench.csv
+      - run: test -s target/secondary-index-bench.summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: secondary-index-benchmark-smoke
+          path: |
+            target/secondary-index-bench.csv
+            target/secondary-index-bench.summary.json
+
+  address-sanitizer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+      - run: >-
+          RUSTFLAGS="-Zsanitizer=address"
+          cargo test -Zbuild-std --target x86_64-unknown-linux-gnu
+          --test secondary_index --test secondary_index_concurrency
+          --test secondary_index_faults --test secondary_index_fuzz_smoke
+          --test secondary_index_resources
 
   production-store:
     runs-on: ubuntu-latest
