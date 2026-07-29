@@ -17,6 +17,23 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  mysql:
+    image: mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+    environment:
+      MYSQL_DATABASE: prolly
+      MYSQL_PASSWORD: prolly
+      MYSQL_ROOT_PASSWORD: prolly
+      MYSQL_USER: prolly
+    ports:
+      - "127.0.0.1:${PROLLY_BACKEND_MYSQL_PORT:-53307}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uprolly -pprolly --silent"]
+      interval: 1s
+      timeout: 2s
+      retries: 90
+    volumes:
+      - mysql-data:/var/lib/mysql
+
   dynamodb:
     image: amazon/dynamodb-local@sha256:d89f8fcc6b1a39cb35976c248ed42a28c66ae00dc043099210f5571e42648ab4
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
@@ -25,3 +42,4 @@ services:
 
 volumes:
   postgres-data:
+  mysql-data:

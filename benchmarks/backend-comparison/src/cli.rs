@@ -17,6 +17,7 @@ pub struct DynamoDbConnection {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConnectionConfig {
     Postgres { url: String },
+    MySql { url: String },
     DynamoDb(DynamoDbConnection),
 }
 
@@ -24,6 +25,14 @@ pub enum ConnectionConfig {
 pub struct BinaryConfig {
     pub run: RunConfig,
     pub connection: ConnectionConfig,
+    pub suite: Suite,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Suite {
+    #[default]
+    EndToEnd,
+    Service,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,6 +44,8 @@ pub struct RunConfig {
     pub revision: String,
     pub tree_hash: String,
     pub binary_sha256: String,
+    pub pool_size: u32,
+    pub adapter_batch_items: usize,
     pub workload: WorkloadSpec,
 }
 
@@ -58,6 +69,9 @@ impl RunConfig {
         if self.output.as_os_str().is_empty() {
             return Err("output path cannot be empty".to_string());
         }
+        if self.pool_size == 0 || self.adapter_batch_items == 0 {
+            return Err("pool size and adapter batch items must be positive".to_string());
+        }
         Ok(())
     }
 }
@@ -75,7 +89,15 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
     let mut samples = None;
     let mut concurrency = None;
     let mut seed = None;
-    let mut url = "postgres://prolly:prolly@127.0.0.1:55433/prolly".to_string();
+    let mut pool_size = 10;
+    let mut adapter_batch_items = 1_000;
+    let mut suite = Suite::EndToEnd;
+    let mut url = match backend {
+        Backend::Postgres => "postgres://prolly:prolly@127.0.0.1:55433/prolly",
+        Backend::MySql => "mysql://prolly:prolly@127.0.0.1:53307/prolly",
+        Backend::DynamoDbLocal => "",
+    }
+    .to_string();
     let mut dynamodb = DynamoDbConnection {
         endpoint: "http://127.0.0.1:58000".to_string(),
         table: "prolly_backend_comparison".to_string(),
@@ -102,6 +124,15 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
             "--samples" => samples = Some(number(&value(&mut index)?, flag)?),
             "--concurrency" => concurrency = Some(number(&value(&mut index)?, flag)?),
             "--seed" => seed = Some(parse_seed(&value(&mut index)?)?),
+            "--pool-size" => pool_size = number(&value(&mut index)?, flag)?,
+            "--adapter-batch-items" => adapter_batch_items = number(&value(&mut index)?, flag)?,
+            "--suite" => {
+                suite = match value(&mut index)?.as_str() {
+                    "end-to-end" => Suite::EndToEnd,
+                    "service" => Suite::Service,
+                    value => return Err(format!("invalid --suite: {value}")),
+                }
+            }
             "--url" => url = value(&mut index)?,
             "--endpoint" => dynamodb.endpoint = value(&mut index)?,
             "--table" => dynamodb.table = value(&mut index)?,
@@ -126,6 +157,8 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
         revision: required(revision, "--revision")?,
         tree_hash: required(tree_hash, "--tree-hash")?,
         binary_sha256: required(binary_sha256, "--binary-sha256")?,
+        pool_size,
+        adapter_batch_items,
         workload: WorkloadSpec {
             records: required(records, "--records")?,
             value_bytes: required(value_bytes, "--value-bytes")?,
@@ -138,6 +171,7 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
     run.validate()?;
     let connection = match backend {
         Backend::Postgres => ConnectionConfig::Postgres { url },
+        Backend::MySql => ConnectionConfig::MySql { url },
         Backend::DynamoDbLocal => {
             if dynamodb.endpoint.is_empty()
                 || dynamodb.table.is_empty()
@@ -151,7 +185,14 @@ pub fn parse_binary_args(backend: Backend, values: Vec<String>) -> Result<Binary
             ConnectionConfig::DynamoDb(dynamodb)
         }
     };
-    Ok(BinaryConfig { run, connection })
+    if backend == Backend::DynamoDbLocal && suite == Suite::Service {
+        return Err("the service suite supports MySQL and PostgreSQL".to_string());
+    }
+    Ok(BinaryConfig {
+        run,
+        connection,
+        suite,
+    })
 }
 
 pub(crate) fn is_hex(value: &str, length: usize) -> bool {
@@ -190,7 +231,10 @@ fn required<T>(value: Option<T>, flag: &str) -> Result<T, String> {
 fn usage(backend: Backend) -> &'static str {
     match backend {
         Backend::Postgres => {
-            "usage: prolly-backend-postgres --output PATH --run-id ID --repetition N --revision SHA --tree-hash SHA --binary-sha256 SHA --records N --value-bytes N --changes N --samples N --concurrency N --seed N [--url URL]"
+            "usage: prolly-backend-postgres --output PATH --run-id ID --repetition N --revision SHA --tree-hash SHA --binary-sha256 SHA --records N --value-bytes N --changes N --samples N --concurrency N --seed N [--pool-size N] [--adapter-batch-items N] [--url URL]"
+        }
+        Backend::MySql => {
+            "usage: prolly-backend-mysql --output PATH --run-id ID --repetition N --revision SHA --tree-hash SHA --binary-sha256 SHA --records N --value-bytes N --changes N --samples N --concurrency N --seed N [--pool-size N] [--adapter-batch-items N] [--url URL]"
         }
         Backend::DynamoDbLocal => {
             "usage: prolly-backend-dynamodb --output PATH --run-id ID --repetition N --revision SHA --tree-hash SHA --binary-sha256 SHA --records N --value-bytes N --changes N --samples N --concurrency N --seed N [--endpoint URL] [--table NAME] [--read-parallelism N] [--batch-get-parallelism N] [--batch-write-parallelism N] [--scan-parallelism N]"
@@ -213,6 +257,8 @@ mod tests {
             revision: "a".repeat(40),
             tree_hash: "b".repeat(40),
             binary_sha256: "c".repeat(64),
+            pool_size: 10,
+            adapter_batch_items: 1_000,
             workload: WorkloadSpec {
                 records: 100,
                 value_bytes: 27,
@@ -262,6 +308,7 @@ mod tests {
         let parsed = parse_binary_args(Backend::Postgres, args).unwrap();
         assert_eq!(parsed.run.repetition, 3);
         assert_eq!(parsed.run.workload.records, 100);
+        assert_eq!(parsed.run.pool_size, 10);
         assert_eq!(
             parsed.connection,
             ConnectionConfig::Postgres {

@@ -1,5 +1,6 @@
 use prolly_backend_comparison::{
-    parse_binary_args, run_postgres, write_rows_new, Backend, ConnectionConfig,
+    parse_binary_args, run_postgres, run_postgres_service, write_rows_new, write_service_rows_new,
+    Backend, ConnectionConfig, Suite,
 };
 
 #[tokio::main]
@@ -15,6 +16,14 @@ async fn run() -> Result<(), String> {
     let ConnectionConfig::Postgres { url } = &config.connection else {
         return Err("PostgreSQL binary received a non-PostgreSQL connection".to_string());
     };
-    let rows = run_postgres(&config.run, url).await?;
-    write_rows_new(&config.run.output, &rows)
+    match config.suite {
+        Suite::EndToEnd => {
+            let rows = run_postgres(&config.run, url).await?;
+            write_rows_new(&config.run.output, &rows)
+        }
+        Suite::Service => {
+            let rows = run_postgres_service(&config.run, url).await?;
+            write_service_rows_new(&config.run.output, &rows)
+        }
+    }
 }

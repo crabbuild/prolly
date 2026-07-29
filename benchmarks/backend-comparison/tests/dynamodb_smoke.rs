@@ -29,6 +29,8 @@ fn config(backend: Backend) -> RunConfig {
         revision: "a".repeat(40),
         tree_hash: "b".repeat(40),
         binary_sha256: "c".repeat(64),
+        pool_size: 4,
+        adapter_batch_items: 32,
         workload: WorkloadSpec {
             records: 100,
             value_bytes: 27,

@@ -6,6 +6,42 @@ use prolly_backend_workload_contract::{
 
 use crate::{measure, EvidenceRow, Operation, RunConfig, RESULT_SCHEMA, TIMED_SCOPE_VERSION};
 
+#[derive(Clone, Copy)]
+struct LatencyDistribution {
+    p50_ns: u128,
+    p95_ns: u128,
+    p99_ns: u128,
+    p999_ns: u128,
+    max_ns: u128,
+}
+
+impl LatencyDistribution {
+    fn total(total_ns: u128) -> Self {
+        Self {
+            p50_ns: total_ns,
+            p95_ns: total_ns,
+            p99_ns: total_ns,
+            p999_ns: total_ns,
+            max_ns: total_ns,
+        }
+    }
+
+    fn from_samples(samples: &[u128]) -> Result<Self, String> {
+        if samples.is_empty() {
+            return Err("latency distribution requires samples".to_string());
+        }
+        let mut sorted = samples.to_vec();
+        sorted.sort_unstable();
+        Ok(Self {
+            p50_ns: percentile(&sorted, 0.50),
+            p95_ns: percentile(&sorted, 0.95),
+            p99_ns: percentile(&sorted, 0.99),
+            p999_ns: percentile(&sorted, 0.999),
+            max_ns: *sorted.last().expect("nonempty samples"),
+        })
+    }
+}
+
 pub async fn run_workload<S>(
     store: S,
     config: &RunConfig,
@@ -41,6 +77,7 @@ where
         Operation::Build,
         workload.spec.records,
         measured_build.elapsed_ns,
+        LatencyDistribution::total(measured_build.elapsed_ns),
         &measured_build.value,
         base_evidence,
     )?];
@@ -64,6 +101,7 @@ where
         Operation::Batch,
         workload.spec.changes,
         measured_batch.elapsed_ns,
+        LatencyDistribution::total(measured_batch.elapsed_ns),
         &measured_batch.value,
         batch_evidence,
     )?);
@@ -80,6 +118,7 @@ where
         Operation::Query,
         workload.spec.samples,
         measured_query.elapsed_ns,
+        LatencyDistribution::total(measured_query.elapsed_ns),
         &base,
         (measured_query.value.len(), query_digest),
     )?);
@@ -91,10 +130,11 @@ where
                 let manager = &concurrent_manager;
                 let base = &base;
                 async move {
+                    let started = std::time::Instant::now();
                     manager
                         .get(base, key)
                         .await
-                        .map(|value| (position, value))
+                        .map(|value| (position, value, started.elapsed().as_nanos()))
                         .map_err(|error| error.to_string())
                 }
             })
@@ -105,10 +145,14 @@ where
     .await
     .map_err(context("concurrent query"))?;
     let mut concurrent_values = measured_concurrent.value;
-    concurrent_values.sort_by_key(|(position, _)| *position);
+    concurrent_values.sort_by_key(|(position, _, _)| *position);
+    let concurrent_latencies = concurrent_values
+        .iter()
+        .map(|(_, _, elapsed_ns)| *elapsed_ns)
+        .collect::<Vec<_>>();
     let concurrent_values = concurrent_values
         .into_iter()
-        .map(|(_, value)| value)
+        .map(|(_, value, _)| value)
         .collect::<Vec<_>>();
     let concurrent_digest = validate_query(workload, &query_keys, &concurrent_values)?;
     rows.push(make_row(
@@ -117,6 +161,7 @@ where
         Operation::ConcurrentQuery,
         workload.spec.samples,
         measured_concurrent.elapsed_ns,
+        LatencyDistribution::from_samples(&concurrent_latencies)?,
         &base,
         (concurrent_values.len(), concurrent_digest),
     )?);
@@ -137,6 +182,7 @@ where
         Operation::Diff,
         workload.spec.changes,
         measured_diff.elapsed_ns,
+        LatencyDistribution::total(measured_diff.elapsed_ns),
         &diff_target,
         (measured_diff.value.len(), diff_digest),
     )?);
@@ -167,6 +213,7 @@ where
         Operation::Merge,
         workload.spec.changes,
         measured_merge.elapsed_ns,
+        LatencyDistribution::total(measured_merge.elapsed_ns),
         &measured_merge.value,
         merge_evidence,
     )?);
@@ -315,6 +362,7 @@ fn make_row(
     operation: Operation,
     logical_operations: usize,
     total_ns: u128,
+    latency: LatencyDistribution,
     tree: &Tree,
     outcome: (usize, Digest),
 ) -> Result<EvidenceRow, String> {
@@ -338,11 +386,18 @@ fn make_row(
         changes: workload.spec.changes as u64,
         samples: workload.spec.samples as u64,
         concurrency: workload.spec.concurrency as u64,
+        pool_size: config.pool_size,
+        adapter_batch_items: config.adapter_batch_items as u64,
         seed: workload.spec.seed,
         logical_operations: logical_operations as u64,
         observed_items: outcome.0 as u64,
         total_ns,
         ops_per_sec: logical_operations as f64 * 1_000_000_000.0 / total_ns as f64,
+        latency_p50_ns: latency.p50_ns,
+        latency_p95_ns: latency.p95_ns,
+        latency_p99_ns: latency.p99_ns,
+        latency_p999_ns: latency.p999_ns,
+        latency_max_ns: latency.max_ns,
         root: hex(root.as_bytes()),
         workload_digest: workload.workload_digest.to_hex(),
         outcome_digest: outcome.1.to_hex(),
@@ -351,6 +406,11 @@ fn make_row(
     };
     row.validate()?;
     Ok(row)
+}
+
+fn percentile(sorted: &[u128], quantile: f64) -> u128 {
+    let rank = (quantile * sorted.len() as f64).ceil().max(1.0) as usize;
+    sorted[rank.saturating_sub(1).min(sorted.len() - 1)]
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -389,6 +449,8 @@ mod tests {
                 revision: "a".repeat(40),
                 tree_hash: "b".repeat(40),
                 binary_sha256: "c".repeat(64),
+                pool_size: 10,
+                adapter_batch_items: 1_000,
                 workload: spec,
             },
             Workload::generate(spec).unwrap(),

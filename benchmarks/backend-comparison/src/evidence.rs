@@ -14,6 +14,8 @@ pub const TIMED_SCOPE_VERSION: &str = "public-prolly-operation-v1";
 #[serde(rename_all = "snake_case")]
 pub enum Backend {
     Postgres,
+    #[serde(rename = "mysql")]
+    MySql,
     DynamoDbLocal,
 }
 
@@ -21,6 +23,7 @@ impl Backend {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Postgres => "postgres",
+            Self::MySql => "mysql",
             Self::DynamoDbLocal => "dynamodb_local",
         }
     }
@@ -38,6 +41,7 @@ impl FromStr for Backend {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "postgres" => Ok(Self::Postgres),
+            "mysql" => Ok(Self::MySql),
             "dynamodb_local" | "dynamodb" => Ok(Self::DynamoDbLocal),
             _ => Err(format!("unsupported backend: {value}")),
         }
@@ -100,11 +104,25 @@ pub struct EvidenceRow {
     pub changes: u64,
     pub samples: u64,
     pub concurrency: u64,
+    #[serde(default)]
+    pub pool_size: u32,
+    #[serde(default)]
+    pub adapter_batch_items: u64,
     pub seed: u64,
     pub logical_operations: u64,
     pub observed_items: u64,
     pub total_ns: u128,
     pub ops_per_sec: f64,
+    #[serde(default)]
+    pub latency_p50_ns: u128,
+    #[serde(default)]
+    pub latency_p95_ns: u128,
+    #[serde(default)]
+    pub latency_p99_ns: u128,
+    #[serde(default)]
+    pub latency_p999_ns: u128,
+    #[serde(default)]
+    pub latency_max_ns: u128,
     pub root: String,
     pub workload_digest: String,
     pub outcome_digest: String,
@@ -168,6 +186,20 @@ impl EvidenceRow {
         {
             return Err("throughput does not match elapsed time".to_string());
         }
+        let has_legacy_latency = self.latency_p50_ns == 0
+            && self.latency_p95_ns == 0
+            && self.latency_p99_ns == 0
+            && self.latency_p999_ns == 0
+            && self.latency_max_ns == 0;
+        if !has_legacy_latency
+            && (self.latency_p50_ns == 0
+                || self.latency_p50_ns > self.latency_p95_ns
+                || self.latency_p95_ns > self.latency_p99_ns
+                || self.latency_p99_ns > self.latency_p999_ns
+                || self.latency_p999_ns > self.latency_max_ns)
+        {
+            return Err("latency distribution is missing or unordered".to_string());
+        }
         Ok(())
     }
 
@@ -189,11 +221,18 @@ impl EvidenceRow {
             changes: 10,
             samples: 10,
             concurrency: 4,
+            pool_size: 10,
+            adapter_batch_items: 1_000,
             seed: 1,
             logical_operations: 100,
             observed_items: 100,
             total_ns: 1_000,
             ops_per_sec: 100_000_000.0,
+            latency_p50_ns: 1_000,
+            latency_p95_ns: 1_000,
+            latency_p99_ns: 1_000,
+            latency_p999_ns: 1_000,
+            latency_max_ns: 1_000,
             root: "d".repeat(64),
             workload_digest: "e".repeat(64),
             outcome_digest: "f".repeat(64),

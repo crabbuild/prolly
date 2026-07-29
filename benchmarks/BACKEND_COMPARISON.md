@@ -1,4 +1,58 @@
-# Reproduce the PostgreSQL and DynamoDB Local comparison
+# Reproduce backend performance comparisons
+
+## MySQL vs PostgreSQL
+
+Run the controlled local comparison with pinned MySQL 8 and PostgreSQL 16
+containers:
+
+```bash
+./scripts/run_mysql_postgres_comparison.sh
+```
+
+The command runs byte-identical public Prolly build, batch, ordered query,
+concurrent query, diff, and merge workloads. It also runs a shared adapter
+service suite covering bounded batch puts, ordered batch gets, concurrent point
+reads, and contended root compare-and-swap. Request-level p50/p95/p99/p99.9/max
+latency, throughput, conflicts, pool size, and adapter batch size are recorded.
+
+Sweep client and pool saturation cells:
+
+```bash
+BENCH_CLIENTS=1,8,32 \
+BENCH_POOL_SIZES=4,16 \
+./scripts/run_mysql_postgres_service_matrix.sh
+```
+
+Tune one comparison with `BENCH_POOL_SIZE`,
+`BENCH_ADAPTER_BATCH_ITEMS`, `BENCH_CONCURRENCY`, `BENCH_RECORDS`,
+`BENCH_CHANGES`, and `BENCH_SAMPLES`. Every publishable cell uses one excluded
+warmup, at least seven alternating measured repetitions, fresh local volumes,
+and release binaries copied into the result directory.
+
+External managed services are supported only through disposable isolated
+benchmark databases. The destructive acknowledgement and explicit server
+identities are mandatory:
+
+```bash
+BENCH_MODE=external \
+BENCH_EXTERNAL_RESET_ACK=I_UNDERSTAND_BENCHMARK_DATA_WILL_BE_DELETED \
+BENCH_EXTERNAL_POSTGRES_IDENTITY='provider/postgres/version/config' \
+BENCH_EXTERNAL_MYSQL_IDENTITY='provider/mysql/version/config' \
+PROLLY_BACKEND_POSTGRES_URL='postgres://…' \
+PROLLY_BACKEND_MYSQL_URL='mysql://…' \
+./scripts/run_mysql_postgres_comparison.sh
+```
+
+Recorded commands redact URL credentials. External evidence is labeled and
+cannot be mixed with controlled local evidence.
+
+The SQL result directory adds:
+
+- `raw-service-results.csv`: validated adapter/service samples
+- `service-comparison.csv`: paired service statistics
+- `service-report.md`: batch, concurrent-read, and root-contention comparison
+
+## PostgreSQL vs DynamoDB Local
 
 The backend comparison runs byte-identical public Prolly operations against fresh local PostgreSQL and DynamoDB Local containers. It validates complete logical outcomes after timing and refuses incomplete, dirty, resumed, or mismatched evidence.
 

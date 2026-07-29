@@ -27,17 +27,16 @@ pub struct Manifest {
     pub contract_version: String,
     pub timed_scope_version: String,
     pub result_schema: String,
+    pub environment_class: String,
+    pub backend_a: Backend,
+    pub backend_b: Backend,
     pub repetitions: usize,
     pub lockfile_sha256: String,
     pub config_sha256: String,
     pub commands_sha256: String,
-    pub postgres_binary_sha256: String,
-    pub dynamodb_binary_sha256: String,
+    pub binary_sha256: BTreeMap<Backend, String>,
     pub summarizer_binary_sha256: String,
-    pub postgres_image: String,
-    pub postgres_image_id: String,
-    pub dynamodb_image: String,
-    pub dynamodb_image_id: String,
+    pub images: BTreeMap<Backend, (String, String)>,
 }
 
 impl Manifest {
@@ -57,6 +56,35 @@ impl Manifest {
                 return Err(format!("manifest key is duplicated: {key}"));
             }
         }
+        let backend_a = values
+            .remove("backend_a")
+            .map(|value| value.parse())
+            .transpose()?
+            .unwrap_or(Backend::Postgres);
+        let backend_b = values
+            .remove("backend_b")
+            .map(|value| value.parse())
+            .transpose()?
+            .unwrap_or(Backend::DynamoDbLocal);
+        let environment_class = values
+            .remove("environment_class")
+            .unwrap_or_else(|| "controlled_local".to_string());
+        let mut binary_sha256 = BTreeMap::new();
+        let mut images = BTreeMap::new();
+        for backend in [backend_a, backend_b] {
+            let prefix = manifest_prefix(backend);
+            binary_sha256.insert(
+                backend,
+                take(&mut values, &format!("{prefix}_binary_sha256"))?,
+            );
+            images.insert(
+                backend,
+                (
+                    take(&mut values, &format!("{prefix}_image"))?,
+                    take(&mut values, &format!("{prefix}_image_id"))?,
+                ),
+            );
+        }
         let manifest = Self {
             schema: take(&mut values, "schema")?,
             status: take(&mut values, "status")?,
@@ -68,17 +96,16 @@ impl Manifest {
             contract_version: take(&mut values, "contract_version")?,
             timed_scope_version: take(&mut values, "timed_scope_version")?,
             result_schema: take(&mut values, "result_schema")?,
+            environment_class,
+            backend_a,
+            backend_b,
             repetitions: number(&take(&mut values, "repetitions")?, "repetitions")?,
             lockfile_sha256: take(&mut values, "lockfile_sha256")?,
             config_sha256: take(&mut values, "config_sha256")?,
             commands_sha256: take(&mut values, "commands_sha256")?,
-            postgres_binary_sha256: take(&mut values, "postgres_binary_sha256")?,
-            dynamodb_binary_sha256: take(&mut values, "dynamodb_binary_sha256")?,
+            binary_sha256,
             summarizer_binary_sha256: take(&mut values, "summarizer_binary_sha256")?,
-            postgres_image: take(&mut values, "postgres_image")?,
-            postgres_image_id: take(&mut values, "postgres_image_id")?,
-            dynamodb_image: take(&mut values, "dynamodb_image")?,
-            dynamodb_image_id: take(&mut values, "dynamodb_image_id")?,
+            images,
         };
         if !values.is_empty() {
             return Err(format!(
@@ -100,14 +127,36 @@ impl Manifest {
         if self.repetitions < 7 {
             return Err("publishable comparison requires at least seven repetitions".to_string());
         }
-        if self.run_id.is_empty()
-            || self.contract_version.is_empty()
-            || self.postgres_image.is_empty()
-            || self.postgres_image_id.is_empty()
-            || self.dynamodb_image.is_empty()
-            || self.dynamodb_image_id.is_empty()
-        {
+        if self.backend_a == self.backend_b {
+            return Err("comparison backends must differ".to_string());
+        }
+        if !matches!(
+            self.environment_class.as_str(),
+            "controlled_local" | "external"
+        ) {
+            return Err("environment class must be controlled_local or external".to_string());
+        }
+        if self.run_id.is_empty() || self.contract_version.is_empty() {
             return Err("manifest provenance values cannot be empty".to_string());
+        }
+        for backend in [self.backend_a, self.backend_b] {
+            let binary = self
+                .binary_sha256
+                .get(&backend)
+                .ok_or_else(|| format!("manifest lacks {backend} binary provenance"))?;
+            let (image, image_id) = self
+                .images
+                .get(&backend)
+                .ok_or_else(|| format!("manifest lacks {backend} service provenance"))?;
+            if image.is_empty() || image_id.is_empty() {
+                return Err(format!("{backend} service provenance cannot be empty"));
+            }
+            if binary.len() != 64 || !binary.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(format!(
+                    "{}_binary_sha256 is not a 64-character hexadecimal value",
+                    manifest_prefix(backend)
+                ));
+            }
         }
         if self.result_schema != RESULT_SCHEMA || self.timed_scope_version != TIMED_SCOPE_VERSION {
             return Err("manifest result or timing contract is unsupported".to_string());
@@ -118,16 +167,6 @@ impl Manifest {
             ("lockfile_sha256", self.lockfile_sha256.as_str(), 64),
             ("config_sha256", self.config_sha256.as_str(), 64),
             ("commands_sha256", self.commands_sha256.as_str(), 64),
-            (
-                "postgres_binary_sha256",
-                self.postgres_binary_sha256.as_str(),
-                64,
-            ),
-            (
-                "dynamodb_binary_sha256",
-                self.dynamodb_binary_sha256.as_str(),
-                64,
-            ),
             (
                 "summarizer_binary_sha256",
                 self.summarizer_binary_sha256.as_str(),
@@ -145,6 +184,24 @@ impl Manifest {
 
     #[cfg(test)]
     fn example() -> Self {
+        let mut binary_sha256 = BTreeMap::new();
+        binary_sha256.insert(Backend::Postgres, "1".repeat(64));
+        binary_sha256.insert(Backend::DynamoDbLocal, "2".repeat(64));
+        let mut images = BTreeMap::new();
+        images.insert(
+            Backend::Postgres,
+            (
+                "postgres@sha256:test".to_string(),
+                "sha256:postgres".to_string(),
+            ),
+        );
+        images.insert(
+            Backend::DynamoDbLocal,
+            (
+                "dynamodb@sha256:test".to_string(),
+                "sha256:dynamodb".to_string(),
+            ),
+        );
         Self {
             schema: MANIFEST_SCHEMA.to_string(),
             status: "complete".to_string(),
@@ -156,17 +213,16 @@ impl Manifest {
             contract_version: "backend-workload-v1".to_string(),
             timed_scope_version: TIMED_SCOPE_VERSION.to_string(),
             result_schema: RESULT_SCHEMA.to_string(),
+            environment_class: "controlled_local".to_string(),
+            backend_a: Backend::Postgres,
+            backend_b: Backend::DynamoDbLocal,
             repetitions: 7,
             lockfile_sha256: "c".repeat(64),
             config_sha256: "d".repeat(64),
             commands_sha256: "e".repeat(64),
-            postgres_binary_sha256: "1".repeat(64),
-            dynamodb_binary_sha256: "2".repeat(64),
+            binary_sha256,
             summarizer_binary_sha256: "3".repeat(64),
-            postgres_image: "postgres@sha256:test".to_string(),
-            postgres_image_id: "sha256:postgres".to_string(),
-            dynamodb_image: "dynamodb@sha256:test".to_string(),
-            dynamodb_image_id: "sha256:dynamodb".to_string(),
+            images,
         }
     }
 }
@@ -176,19 +232,23 @@ pub struct SummaryRow {
     pub operation: Operation,
     pub logical_operations: u64,
     pub repetitions: usize,
-    pub postgres_median_ms: f64,
-    pub postgres_ops_per_sec: f64,
-    pub postgres_min_ms: f64,
-    pub postgres_max_ms: f64,
-    pub postgres_mad_ms: f64,
-    pub postgres_cv: f64,
-    pub dynamodb_median_ms: f64,
-    pub dynamodb_ops_per_sec: f64,
-    pub dynamodb_min_ms: f64,
-    pub dynamodb_max_ms: f64,
-    pub dynamodb_mad_ms: f64,
-    pub dynamodb_cv: f64,
-    pub dynamodb_to_postgres_latency: f64,
+    pub backend_a: Backend,
+    pub backend_b: Backend,
+    pub backend_a_median_ms: f64,
+    pub backend_a_ops_per_sec: f64,
+    pub backend_a_p99_ms: f64,
+    pub backend_a_min_ms: f64,
+    pub backend_a_max_ms: f64,
+    pub backend_a_mad_ms: f64,
+    pub backend_a_cv: f64,
+    pub backend_b_median_ms: f64,
+    pub backend_b_ops_per_sec: f64,
+    pub backend_b_p99_ms: f64,
+    pub backend_b_min_ms: f64,
+    pub backend_b_max_ms: f64,
+    pub backend_b_mad_ms: f64,
+    pub backend_b_cv: f64,
+    pub backend_b_to_a_latency: f64,
     pub ratio_ci_low: f64,
     pub ratio_ci_high: f64,
     pub winner: Winner,
@@ -233,10 +293,13 @@ pub fn summarize_rows(
                 row.operation, row.repetition
             ));
         }
-        let expected_binary = match row.backend {
-            Backend::Postgres => &manifest.postgres_binary_sha256,
-            Backend::DynamoDbLocal => &manifest.dynamodb_binary_sha256,
-        };
+        if row.backend != manifest.backend_a && row.backend != manifest.backend_b {
+            return Err(format!("unexpected backend in evidence: {}", row.backend));
+        }
+        let expected_binary = manifest
+            .binary_sha256
+            .get(&row.backend)
+            .ok_or_else(|| format!("manifest lacks {} binary identity", row.backend))?;
         if &row.binary_sha256 != expected_binary {
             return Err(format!("binary provenance differs for {}", row.backend));
         }
@@ -258,41 +321,53 @@ pub fn summarize_rows(
 
     let mut summaries = Vec::with_capacity(Operation::ALL.len());
     for operation in Operation::ALL {
-        let mut postgres = Vec::with_capacity(manifest.repetitions);
-        let mut dynamodb = Vec::with_capacity(manifest.repetitions);
+        let mut backend_a = Vec::with_capacity(manifest.repetitions);
+        let mut backend_b = Vec::with_capacity(manifest.repetitions);
+        let mut backend_a_p99 = Vec::with_capacity(manifest.repetitions);
+        let mut backend_b_p99 = Vec::with_capacity(manifest.repetitions);
         let mut logical_operations = None;
         let mut identity = None;
         for repetition in 1..=manifest.repetitions as u32 {
-            let pg = indexed
-                .get(&(Backend::Postgres, operation, repetition))
-                .ok_or_else(|| format!("missing PostgreSQL {operation} repetition {repetition}"))?;
-            let ddb = indexed
-                .get(&(Backend::DynamoDbLocal, operation, repetition))
+            let first = indexed
+                .get(&(manifest.backend_a, operation, repetition))
                 .ok_or_else(|| {
-                    format!("missing DynamoDB Local {operation} repetition {repetition}")
+                    format!(
+                        "missing {} {operation} repetition {repetition}",
+                        manifest.backend_a
+                    )
                 })?;
-            require_equivalent(pg, ddb)?;
+            let second = indexed
+                .get(&(manifest.backend_b, operation, repetition))
+                .ok_or_else(|| {
+                    format!(
+                        "missing {} {operation} repetition {repetition}",
+                        manifest.backend_b
+                    )
+                })?;
+            require_equivalent(first, second)?;
             if let Some(reference) = identity {
-                require_same_workload(reference, pg)?;
+                require_same_workload(reference, first)?;
             } else {
-                identity = Some(*pg);
+                identity = Some(*first);
             }
             match logical_operations {
-                Some(expected) if expected != pg.logical_operations => {
+                Some(expected) if expected != first.logical_operations => {
                     return Err(format!("{operation} logical operation count changed"))
                 }
-                None => logical_operations = Some(pg.logical_operations),
+                None => logical_operations = Some(first.logical_operations),
                 _ => {}
             }
-            postgres.push(pg.total_ns as f64);
-            dynamodb.push(ddb.total_ns as f64);
+            backend_a.push(first.total_ns as f64);
+            backend_b.push(second.total_ns as f64);
+            backend_a_p99.push(row_p99(first) as f64);
+            backend_b_p99.push(row_p99(second) as f64);
         }
-        let pg_median = median(&postgres);
-        let ddb_median = median(&dynamodb);
-        let ratio = ddb_median / pg_median;
+        let backend_a_median = median(&backend_a);
+        let backend_b_median = median(&backend_b);
+        let ratio = backend_b_median / backend_a_median;
         let interval = paired_bootstrap_ratio_ci(
-            &postgres,
-            &dynamodb,
+            &backend_a,
+            &backend_b,
             BOOTSTRAP_RESAMPLES,
             BOOTSTRAP_SEED ^ operation as u64,
         )?;
@@ -301,19 +376,23 @@ pub fn summarize_rows(
             operation,
             logical_operations,
             repetitions: manifest.repetitions,
-            postgres_median_ms: pg_median / 1_000_000.0,
-            postgres_ops_per_sec: logical_operations as f64 * 1_000_000_000.0 / pg_median,
-            postgres_min_ms: min(&postgres) / 1_000_000.0,
-            postgres_max_ms: max(&postgres) / 1_000_000.0,
-            postgres_mad_ms: median_absolute_deviation(&postgres) / 1_000_000.0,
-            postgres_cv: coefficient_of_variation(&postgres),
-            dynamodb_median_ms: ddb_median / 1_000_000.0,
-            dynamodb_ops_per_sec: logical_operations as f64 * 1_000_000_000.0 / ddb_median,
-            dynamodb_min_ms: min(&dynamodb) / 1_000_000.0,
-            dynamodb_max_ms: max(&dynamodb) / 1_000_000.0,
-            dynamodb_mad_ms: median_absolute_deviation(&dynamodb) / 1_000_000.0,
-            dynamodb_cv: coefficient_of_variation(&dynamodb),
-            dynamodb_to_postgres_latency: ratio,
+            backend_a: manifest.backend_a,
+            backend_b: manifest.backend_b,
+            backend_a_median_ms: backend_a_median / 1_000_000.0,
+            backend_a_ops_per_sec: logical_operations as f64 * 1_000_000_000.0 / backend_a_median,
+            backend_a_p99_ms: median(&backend_a_p99) / 1_000_000.0,
+            backend_a_min_ms: min(&backend_a) / 1_000_000.0,
+            backend_a_max_ms: max(&backend_a) / 1_000_000.0,
+            backend_a_mad_ms: median_absolute_deviation(&backend_a) / 1_000_000.0,
+            backend_a_cv: coefficient_of_variation(&backend_a),
+            backend_b_median_ms: backend_b_median / 1_000_000.0,
+            backend_b_ops_per_sec: logical_operations as f64 * 1_000_000_000.0 / backend_b_median,
+            backend_b_p99_ms: median(&backend_b_p99) / 1_000_000.0,
+            backend_b_min_ms: min(&backend_b) / 1_000_000.0,
+            backend_b_max_ms: max(&backend_b) / 1_000_000.0,
+            backend_b_mad_ms: median_absolute_deviation(&backend_b) / 1_000_000.0,
+            backend_b_cv: coefficient_of_variation(&backend_b),
+            backend_b_to_a_latency: ratio,
             ratio_ci_low: interval.low,
             ratio_ci_high: interval.high,
             winner: classify_winner(ratio, interval),
@@ -328,6 +407,8 @@ fn require_same_workload(reference: &EvidenceRow, row: &EvidenceRow) -> Result<(
         || reference.changes != row.changes
         || reference.samples != row.samples
         || reference.concurrency != row.concurrency
+        || reference.pool_size != row.pool_size
+        || reference.adapter_batch_items != row.adapter_batch_items
         || reference.seed != row.seed
         || reference.logical_operations != row.logical_operations
         || reference.observed_items != row.observed_items
@@ -349,6 +430,8 @@ fn require_equivalent(postgres: &EvidenceRow, dynamodb: &EvidenceRow) -> Result<
         || postgres.changes != dynamodb.changes
         || postgres.samples != dynamodb.samples
         || postgres.concurrency != dynamodb.concurrency
+        || postgres.pool_size != dynamodb.pool_size
+        || postgres.adapter_batch_items != dynamodb.adapter_batch_items
         || postgres.seed != dynamodb.seed
         || postgres.logical_operations != dynamodb.logical_operations
         || postgres.observed_items != dynamodb.observed_items
@@ -389,50 +472,62 @@ fn render_csv(summaries: &[SummaryRow]) -> Result<Vec<u8>, String> {
 
 fn render_report(summaries: &[SummaryRow], manifest: &Manifest, rows: &[EvidenceRow]) -> String {
     let first = &rows[0];
+    let backend_a = backend_label(manifest.backend_a);
+    let backend_b = backend_label(manifest.backend_b);
     let mut lines = vec![
-        "# PostgreSQL vs DynamoDB Local".to_string(),
+        format!("# {backend_a} vs {backend_b}"),
         String::new(),
         format!(
-            "This local comparison uses {} records, {}-byte values, concurrency {}, and {} measured repetitions. Latency is lower; throughput is higher.",
-            first.records, first.value_bytes, first.concurrency, manifest.repetitions
+            "This {} comparison uses {} records, {}-byte values, concurrency {}, and {} measured repetitions. Latency is lower; throughput is higher.",
+            manifest.environment_class.replace('_', " "),
+            first.records,
+            first.value_bytes,
+            first.concurrency,
+            manifest.repetitions
         ),
         String::new(),
-        "| Operation | Logical ops | PostgreSQL median | PostgreSQL ops/s | DynamoDB Local median | DynamoDB Local ops/s | DDB/PG 95% CI | Result |".to_string(),
-        "|---|---:|---:|---:|---:|---:|---:|---|".to_string(),
+        format!(
+            "| Operation | Logical ops | {backend_a} median | {backend_a} ops/s | {backend_a} p99 | {backend_b} median | {backend_b} ops/s | {backend_b} p99 | {backend_b}/{backend_a} 95% CI | Result |"
+        ),
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|".to_string(),
     ];
     for row in summaries {
         lines.push(format!(
-            "| {} | {} | {:.2} ms | {:.2} | {:.2} ms | {:.2} | {:.3}–{:.3} | {} |",
+            "| {} | {} | {:.2} ms | {:.2} | {:.2} ms | {:.2} ms | {:.2} | {:.2} ms | {:.3}–{:.3} | {} |",
             row.operation,
             row.logical_operations,
-            row.postgres_median_ms,
-            row.postgres_ops_per_sec,
-            row.dynamodb_median_ms,
-            row.dynamodb_ops_per_sec,
+            row.backend_a_median_ms,
+            row.backend_a_ops_per_sec,
+            row.backend_a_p99_ms,
+            row.backend_b_median_ms,
+            row.backend_b_ops_per_sec,
+            row.backend_b_p99_ms,
             row.ratio_ci_low,
             row.ratio_ci_high,
-            row.winner
+            winner_label(row.winner, manifest)
         ));
     }
     lines.extend([
         String::new(),
         "## Dispersion".to_string(),
         String::new(),
-        "| Operation | PostgreSQL range | PostgreSQL MAD | PostgreSQL CV | DynamoDB Local range | DynamoDB Local MAD | DynamoDB Local CV |".to_string(),
+        format!(
+            "| Operation | {backend_a} range | {backend_a} MAD | {backend_a} CV | {backend_b} range | {backend_b} MAD | {backend_b} CV |"
+        ),
         "|---|---:|---:|---:|---:|---:|---:|".to_string(),
     ]);
     for row in summaries {
         lines.push(format!(
             "| {} | {:.2}–{:.2} ms | {:.2} ms | {:.2}% | {:.2}–{:.2} ms | {:.2} ms | {:.2}% |",
             row.operation,
-            row.postgres_min_ms,
-            row.postgres_max_ms,
-            row.postgres_mad_ms,
-            row.postgres_cv * 100.0,
-            row.dynamodb_min_ms,
-            row.dynamodb_max_ms,
-            row.dynamodb_mad_ms,
-            row.dynamodb_cv * 100.0
+            row.backend_a_min_ms,
+            row.backend_a_max_ms,
+            row.backend_a_mad_ms,
+            row.backend_a_cv * 100.0,
+            row.backend_b_min_ms,
+            row.backend_b_max_ms,
+            row.backend_b_mad_ms,
+            row.backend_b_cv * 100.0
         ));
     }
     lines.extend([
@@ -441,8 +536,18 @@ fn render_report(summaries: &[SummaryRow], manifest: &Manifest, rows: &[Evidence
         String::new(),
         "- Each row uses byte-identical workloads and complete post-timing validation.".to_string(),
         "- A winner requires a paired bootstrap 95% confidence interval that excludes parity and a median effect above 5%.".to_string(),
-        "- DynamoDB Local does not model Amazon DynamoDB network latency, throttling, partitions, capacity, or cost.".to_string(),
-        "- These measurements compare local adapter implementations, not production services.".to_string(),
+    ]);
+    let backend_a_limitation = backend_limitation(manifest.backend_a);
+    let backend_b_limitation = backend_limitation(manifest.backend_b);
+    lines.push(backend_a_limitation.to_string());
+    if backend_b_limitation != backend_a_limitation {
+        lines.push(backend_b_limitation.to_string());
+    }
+    lines.extend([
+        format!(
+            "- Environment class is `{}`; do not mix it with another environment class.",
+            manifest.environment_class
+        ),
         String::new(),
         format!("Run ID: `{}`.", manifest.run_id),
     ]);
@@ -478,6 +583,49 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
     file.sync_all()
         .map_err(|error| format!("failed to sync {}: {error}", path.display()))
+}
+
+fn manifest_prefix(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Postgres => "postgres",
+        Backend::MySql => "mysql",
+        Backend::DynamoDbLocal => "dynamodb",
+    }
+}
+
+fn row_p99(row: &EvidenceRow) -> u128 {
+    if row.latency_p99_ns == 0 {
+        row.total_ns
+    } else {
+        row.latency_p99_ns
+    }
+}
+
+fn backend_label(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Postgres => "PostgreSQL",
+        Backend::MySql => "MySQL",
+        Backend::DynamoDbLocal => "DynamoDB Local",
+    }
+}
+
+fn winner_label(winner: Winner, manifest: &Manifest) -> &'static str {
+    match winner {
+        Winner::BackendA => backend_label(manifest.backend_a),
+        Winner::BackendB => backend_label(manifest.backend_b),
+        Winner::Inconclusive => "inconclusive",
+    }
+}
+
+fn backend_limitation(backend: Backend) -> &'static str {
+    match backend {
+        Backend::DynamoDbLocal => {
+            "- DynamoDB Local does not model Amazon DynamoDB network latency, throttling, partitions, capacity, or cost."
+        }
+        Backend::Postgres | Backend::MySql => {
+            "- Local SQL container measurements compare captured adapter and service configurations, not every production deployment."
+        }
+    }
 }
 
 fn min(values: &[f64]) -> f64 {
@@ -531,10 +679,36 @@ mod tests {
         assert_eq!(summaries.len(), Operation::ALL.len());
         assert!(summaries
             .iter()
-            .all(|summary| summary.winner == Winner::Postgres));
+            .all(|summary| summary.winner == Winner::BackendA));
         let report = render_report(&summaries, &manifest, &rows);
         assert!(report.contains("PostgreSQL ops/s"));
         assert!(report.contains("PostgreSQL median"));
+    }
+
+    #[test]
+    fn mysql_postgres_pair_uses_the_same_fail_closed_summary() {
+        let mut manifest = Manifest::example();
+        manifest.backend_b = Backend::MySql;
+        manifest.binary_sha256.remove(&Backend::DynamoDbLocal);
+        manifest
+            .binary_sha256
+            .insert(Backend::MySql, "4".repeat(64));
+        manifest.images.remove(&Backend::DynamoDbLocal);
+        manifest.images.insert(
+            Backend::MySql,
+            ("mysql@sha256:test".to_string(), "sha256:mysql".to_string()),
+        );
+        let rows = fixture_rows(&manifest);
+        let summaries = summarize_rows(&rows, &manifest).unwrap();
+        let report = render_report(&summaries, &manifest, &rows);
+        assert!(report.contains("# PostgreSQL vs MySQL"));
+        assert!(report.contains("MySQL/PG") || report.contains("MySQL/PostgreSQL"));
+        assert_eq!(
+            report
+                .matches("Local SQL container measurements compare")
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -567,7 +741,7 @@ mod tests {
         for operation in Operation::ALL {
             let operation_digit = char::from_digit(operation as u32 + 3, 16).unwrap();
             for repetition in 1..=manifest.repetitions as u32 {
-                for backend in [Backend::Postgres, Backend::DynamoDbLocal] {
+                for backend in [manifest.backend_a, manifest.backend_b] {
                     let mut row = EvidenceRow::example();
                     row.run_id.clone_from(&manifest.run_id);
                     row.revision.clone_from(&manifest.revision);
@@ -577,15 +751,13 @@ mod tests {
                         .clone_from(&manifest.timed_scope_version);
                     row.schema.clone_from(&manifest.result_schema);
                     row.backend = backend;
-                    row.binary_sha256 = match backend {
-                        Backend::Postgres => manifest.postgres_binary_sha256.clone(),
-                        Backend::DynamoDbLocal => manifest.dynamodb_binary_sha256.clone(),
-                    };
+                    row.binary_sha256 = manifest.binary_sha256[&backend].clone();
                     row.operation = operation;
                     row.repetition = repetition;
-                    row.total_ns = match backend {
-                        Backend::Postgres => 1_000 + repetition as u128,
-                        Backend::DynamoDbLocal => 1_200 + repetition as u128,
+                    row.total_ns = if backend == manifest.backend_a {
+                        1_000 + repetition as u128
+                    } else {
+                        1_200 + repetition as u128
                     };
                     row.ops_per_sec =
                         row.logical_operations as f64 * 1_000_000_000.0 / row.total_ns as f64;
