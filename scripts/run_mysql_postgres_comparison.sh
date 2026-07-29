@@ -172,8 +172,10 @@ CONFIG_SHA256="$(sha256_file "$OUTPUT/config.txt")"
 } > "$OUTPUT/machine.txt"
 
 if [[ "${BENCH_SKIP_BUILD:-0}" != 1 ]]; then
-  "$CARGO_BIN" build --release --manifest-path "$MANIFEST" 2>&1 | tee "$OUTPUT/build.log"
-  "$CARGO_BIN" tree --manifest-path "$MANIFEST" > "$OUTPUT/dependencies.txt"
+  "$CARGO_BIN" build --release --no-default-features --bins \
+    --manifest-path "$MANIFEST" 2>&1 | tee "$OUTPUT/build.log"
+  "$CARGO_BIN" tree --no-default-features --manifest-path "$MANIFEST" \
+    > "$OUTPUT/dependencies.txt"
 fi
 [[ "$("$GIT_BIN" -C "$REPO_ROOT" rev-parse HEAD)" == "$REVISION" ]] \
   || fail "HEAD changed during benchmark build"

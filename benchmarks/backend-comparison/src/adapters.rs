@@ -1,17 +1,20 @@
 use std::num::NonZeroUsize;
 
+#[cfg(feature = "dynamodb")]
 use aws_sdk_dynamodb::config::{BehaviorVersion, Credentials, Region};
 use prolly::RemoteProllyStore;
 use prolly_backend_workload_contract::Workload;
+#[cfg(feature = "dynamodb")]
 use prolly_store_dynamodb::DynamoDbBackend;
 use prolly_store_mysql::{MySqlBackend, MySqlBackendOptions};
 use prolly_store_postgres::{PostgresBackend, PostgresBackendOptions};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::postgres::PgPoolOptions;
 
+#[cfg(feature = "dynamodb")]
+use crate::DynamoDbConnection;
 use crate::{
-    run_service_workload, run_workload, DynamoDbConnection, EvidenceRow, RunConfig,
-    ServiceEvidenceRow,
+    run_service_workload, run_workload, EvidenceRow, RunConfig, ServiceEvidenceRow,
 };
 
 pub async fn run_postgres(config: &RunConfig, url: &str) -> Result<Vec<EvidenceRow>, String> {
@@ -128,6 +131,7 @@ pub async fn run_mysql_service(
     run_service_workload(backend, config).await
 }
 
+#[cfg(feature = "dynamodb")]
 pub async fn run_dynamodb(
     config: &RunConfig,
     connection: &DynamoDbConnection,
