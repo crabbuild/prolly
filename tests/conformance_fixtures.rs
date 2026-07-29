@@ -1,6 +1,6 @@
 use prolly::{
-    decode_physical_index_key, index_map_id, Config, Encoding, IndexControl, IndexProjection,
-    IndexValue, MemStore, Node, Prolly, RootManifest, SecondaryIndexDescriptor, Store, ValueRef,
+    decode_physical_index_key, indexed_collection_root_name, Config, Encoding, IndexDescriptor,
+    IndexProjection, IndexValue, MemStore, Node, Prolly, RootManifest, Store, ValueRef,
     VersionedValue,
 };
 use serde_json::Value;
@@ -54,16 +54,16 @@ fn checked_in_conformance_fixtures_are_decodable() {
 
     let secondary = &fixtures["secondary_index_fixture"];
     let source_map_id = from_hex(secondary["source_map_id"].as_str().unwrap());
-    let control_bytes = from_hex(secondary["control_bytes"].as_str().unwrap());
-    let control = IndexControl::from_bytes(&control_bytes).unwrap();
-    assert_eq!(control.to_bytes().unwrap(), control_bytes);
-    assert_eq!(control.source_map_id, source_map_id);
+    assert_eq!(
+        from_hex(secondary["root_name"].as_str().unwrap()),
+        indexed_collection_root_name(&source_map_id).unwrap()
+    );
     assert_eq!(secondary["source_root"].as_str().unwrap().len(), 64);
-    assert_eq!(secondary["catalog_root"].as_str().unwrap().len(), 64);
+    assert_eq!(secondary["state_root"].as_str().unwrap().len(), 64);
 
     for fixture in secondary["indexes"].as_array().unwrap() {
         let descriptor_bytes = from_hex(fixture["descriptor_bytes"].as_str().unwrap());
-        let descriptor = SecondaryIndexDescriptor::from_bytes(&descriptor_bytes).unwrap();
+        let descriptor = IndexDescriptor::from_bytes(&descriptor_bytes).unwrap();
         assert_eq!(descriptor.to_bytes().unwrap(), descriptor_bytes);
         assert_eq!(
             descriptor.projection,
@@ -74,18 +74,7 @@ fn checked_in_conformance_fixtures_are_decodable() {
                 other => panic!("unknown index projection fixture {other}"),
             }
         );
-        let checkpoint_bytes = from_hex(fixture["checkpoint_bytes"].as_str().unwrap());
-        let checkpoint = prolly::IndexCheckpoint::from_bytes(&checkpoint_bytes).unwrap();
-        assert_eq!(checkpoint.to_bytes().unwrap(), checkpoint_bytes);
-        assert_eq!(checkpoint.source_map_id, source_map_id);
-        assert_eq!(
-            checkpoint.index_map_id,
-            index_map_id(&source_map_id, &descriptor.name, &descriptor.fingerprint)
-        );
-        assert_eq!(
-            hex(&checkpoint.index_map_id),
-            fixture["hidden_map_id"].as_str().unwrap()
-        );
+        assert_eq!(descriptor.source_map_id, source_map_id);
         let physical_key = from_hex(fixture["physical_key"].as_str().unwrap());
         let decoded = decode_physical_index_key(&physical_key).unwrap();
         assert_eq!(decoded.term, b"active");

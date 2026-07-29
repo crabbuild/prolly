@@ -1,9 +1,9 @@
 //! Shared conformance assertions for workspace store adapters.
 
 use prolly::{
-    BatchOp, Cid, Config, ManifestStore, ManifestStoreScan, ManifestUpdate, NodePublication,
-    NodeStoreScan, Prolly, PublicationOrigin, RootManifest, SecondaryIndex,
-    SecondaryIndexRegistry, Store, TransactionalStore,
+    BatchOp, Cid, Config, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
+    ManifestUpdate, NodePublication, NodeStoreScan, Prolly, PublicationOrigin, RootManifest,
+    SecondaryIndex, SecondaryIndexRegistry, Store,
 };
 
 pub fn assert_store_contract<S>(store: &S)
@@ -126,11 +126,9 @@ where
 
 pub fn assert_indexed_map_contract<S>(store: S)
 where
-    S: Store + ManifestStore + TransactionalStore + Send + Sync,
+    S: IndexedStore + Send + Sync,
 {
     let prolly = Prolly::new(std::sync::Arc::new(store), Config::default());
-    let source = prolly.versioned_map(b"indexed-contract");
-    source.put(b"user-1", b"active").unwrap();
 
     let registry = SecondaryIndexRegistry::new()
         .register(
@@ -144,6 +142,7 @@ where
         )
         .unwrap();
     let indexed = prolly.indexed_map(b"indexed-contract", registry).unwrap();
+    indexed.put(b"user-1", b"active").unwrap();
     indexed.ensure_index(b"by-status").unwrap();
     indexed.put(b"user-2", b"pending").unwrap();
 
@@ -161,8 +160,23 @@ where
         .unwrap()
         .iter()
         .all(prolly::IndexVerification::is_valid));
-    assert!(matches!(
-        source.put(b"user-3", b"active"),
-        Err(prolly::Error::IndexesRequireIndexedMap { .. })
-    ));
+}
+
+pub fn assert_verification_indexed_store<S>(store: S)
+where
+    S: IndexedStore + Send + Sync,
+{
+    assert_eq!(
+        store.indexed_store_profile(),
+        IndexedStoreProfile::Verification
+    );
+    assert_indexed_map_contract(store);
+}
+
+pub fn assert_production_indexed_store<S>(store: S)
+where
+    S: IndexedStore + Send + Sync,
+{
+    assert!(store.indexed_store_profile().is_production());
+    assert_indexed_map_contract(store);
 }

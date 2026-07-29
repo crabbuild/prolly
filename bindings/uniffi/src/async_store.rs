@@ -1776,12 +1776,11 @@ mod tests {
     #[test]
     fn foreign_publication_requires_protocol_two_and_preserves_owned_context() {
         block_on(async {
-            let legacy = ForeignRemoteBackend::new(Arc::new(
-                MemoryForeignStore::with_protocol_major(1),
-            ))
-            .await
-            .err()
-            .expect("protocol version 1 must be rejected");
+            let legacy =
+                ForeignRemoteBackend::new(Arc::new(MemoryForeignStore::with_protocol_major(1)))
+                    .await
+                    .err()
+                    .expect("protocol version 1 must be rejected");
             assert_eq!(legacy.0.code, "invalid_descriptor");
 
             let callback = Arc::new(MemoryForeignStore::default());

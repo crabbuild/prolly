@@ -3,12 +3,11 @@ use std::sync::Arc;
 
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
-    AuthenticatedProofEnvelope, BatchApplyResult,
-    BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
-    MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
-    RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
-    SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor, StructuralDiffMarker, Tree,
-    WriteStats,
+    AuthenticatedProofEnvelope, BatchApplyResult, BatchApplyStats, Cid, Config, Conflict, Diff,
+    DiffPageProof, Encoding, Error, KeyProof, MemStore, MultiKeyProof, Mutation, Node,
+    OwnedProllyTransaction, ParallelConfig, Prolly, RangeCursor, RangePageProof, RangeProof,
+    Resolver, ReverseCursor, SnapshotBundle, SnapshotBundleNode, SnapshotNamespace,
+    StructuralDiffCursor, StructuralDiffMarker, Tree, WriteStats,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;

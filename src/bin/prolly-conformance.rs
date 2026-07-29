@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use prolly::{
     debug_key, decode_segments, encode_segment, i128_key, i64_key, physical_index_key, prefix_end,
-    timestamp_millis_key, u128_key, u64_key, ActiveIndexControl, BlobRef, Cid, Config, Diff,
-    Encoding, IndexControl, IndexProjection, MemStore, Node, NodeStoreScan, Prolly, RootManifest,
-    SecondaryIndex, SecondaryIndexEntry, SecondaryIndexRegistry, Store, ValueRef, VersionedValue,
+    timestamp_millis_key, u128_key, u64_key, BlobRef, Cid, Config, Diff, Encoding, IndexProjection,
+    MemStore, Node, NodeStoreScan, Prolly, RootManifest, SecondaryIndex, SecondaryIndexEntry,
+    SecondaryIndexRegistry, Store, ValueRef, VersionedValue,
 };
 use serde::Serialize;
 
@@ -189,11 +189,11 @@ struct ManifestFixture {
 #[derive(Serialize)]
 struct SecondaryIndexFixture {
     source_map_id: String,
+    root_name: String,
     source_version: String,
     source_root: String,
-    catalog_version: String,
-    catalog_root: String,
-    control_bytes: String,
+    state_version: String,
+    state_root: String,
     indexes: Vec<SecondaryIndexGenerationFixture>,
 }
 
@@ -202,8 +202,6 @@ struct SecondaryIndexGenerationFixture {
     name: String,
     projection: &'static str,
     descriptor_bytes: String,
-    checkpoint_bytes: String,
-    hidden_map_id: String,
     physical_key: String,
     physical_value: String,
     index_root: String,
@@ -249,9 +247,6 @@ fn fixture_document() -> Result<FixtureDocument, Box<dyn std::error::Error>> {
 
 fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error::Error>> {
     let engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
-    engine
-        .versioned_map(b"fixture-users")
-        .put(b"user-1", b"active|Ada")?;
     let keys = SecondaryIndex::non_unique("keys", 1, "fixtures.keys/v1", |_, value| {
         Ok(vec![value
             .split(|byte| *byte == b'|')
@@ -282,21 +277,11 @@ fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error
         .register(include)?
         .register(all)?;
     let indexed = engine.indexed_map(b"fixture-users", registry)?;
+    indexed.put(b"user-1", b"active|Ada")?;
     indexed.ensure_index(b"keys")?;
     indexed.ensure_index(b"include")?;
     indexed.ensure_index(b"all")?;
     let snapshot = indexed.snapshot()?;
-    let control = IndexControl {
-        source_map_id: b"fixture-users".to_vec(),
-        catalog_map_id: prolly::catalog_map_id(b"fixture-users"),
-        active: snapshot
-            .indexes()
-            .map(|index| ActiveIndexControl {
-                name: index.name().to_vec(),
-                fingerprint: index.descriptor().fingerprint.clone(),
-            })
-            .collect(),
-    };
     let physical_key = physical_index_key(b"active", b"user-1")?;
     let indexes = snapshot
         .indexes()
@@ -312,8 +297,6 @@ fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error
                     IndexProjection::All => "all",
                 },
                 descriptor_bytes: hex(&index.descriptor().to_bytes()?),
-                checkpoint_bytes: hex(&index.checkpoint().to_bytes()?),
-                hidden_map_id: hex(&index.checkpoint().index_map_id),
                 physical_key: hex(&physical_key),
                 physical_value: hex(&physical_value),
                 index_root: cid_hex(index.tree().root.as_ref().ok_or("fixture index is empty")?),
@@ -322,6 +305,7 @@ fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error
         .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
     Ok(SecondaryIndexFixture {
         source_map_id: hex(b"fixture-users"),
+        root_name: hex(&prolly::indexed_collection_root_name(b"fixture-users")?),
         source_version: snapshot.id().source_version.to_string(),
         source_root: cid_hex(
             snapshot
@@ -331,16 +315,15 @@ fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error
                 .as_ref()
                 .ok_or("fixture source is empty")?,
         ),
-        catalog_version: snapshot.id().catalog_version.to_string(),
-        catalog_root: cid_hex(
+        state_version: snapshot.id().state_version.to_string(),
+        state_root: cid_hex(
             snapshot
-                .catalog()
+                .state()
                 .tree()
                 .root
                 .as_ref()
-                .ok_or("fixture catalog is empty")?,
+                .ok_or("fixture state is empty")?,
         ),
-        control_bytes: hex(&control.to_bytes()?),
         indexes,
     })
 }

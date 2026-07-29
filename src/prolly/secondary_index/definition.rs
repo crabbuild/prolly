@@ -310,7 +310,24 @@ impl SecondaryIndex {
                 primary_key: primary_key.to_vec(),
                 reason: error.to_string(),
             })?;
-        self.validate_entries(primary_key, entries)
+        let canonical = self.validate_entries(primary_key, entries)?;
+        if self.projection == IndexProjection::All {
+            let projected_bytes = canonical.len().checked_mul(source_value.len()).ok_or(
+                Error::IndexResourceLimitExceeded {
+                    resource: "projected_bytes_per_record",
+                    limit: self.limits.max_projected_bytes_per_record,
+                    actual: usize::MAX,
+                },
+            )?;
+            if projected_bytes > self.limits.max_projected_bytes_per_record {
+                return Err(Error::IndexResourceLimitExceeded {
+                    resource: "projected_bytes_per_record",
+                    limit: self.limits.max_projected_bytes_per_record,
+                    actual: projected_bytes,
+                });
+            }
+        }
+        Ok(canonical)
     }
 
     fn validate_entries(

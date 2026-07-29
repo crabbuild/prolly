@@ -748,14 +748,14 @@ function portableSecondaryIndexLimits(value: PortableSecondaryIndexLimits | unde
 
 export interface PortableIndexedVersion {
   sourceVersion: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion: Uint8Array;
   indexCount: bigint;
 }
 
 export interface PortableIndexBuildResult {
   sourceVersion: Uint8Array;
   indexVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  stateVersion: Uint8Array;
   generation: bigint;
   entries: bigint;
   attempts: bigint;
@@ -773,8 +773,9 @@ export interface PortableIndexedUpdate {
 }
 
 export interface PortableIndexedSnapshotId {
+  snapshot: Uint8Array;
   sourceVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  stateVersion: Uint8Array;
 }
 
 export interface PortableIndexVerification {
@@ -792,13 +793,16 @@ export interface PortableIndexVerification {
 export interface PortableIndexedMapHealth {
   sourceMapId: Uint8Array;
   sourceVersion?: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion?: Uint8Array;
   activeIndexes: Array<{
     name: Uint8Array; generation: bigint; fingerprint: Uint8Array;
     projection: "keys_only" | "include" | "all";
-    indexMapId: Uint8Array; indexVersion: Uint8Array;
+    indexVersion: Uint8Array;
   }>;
-  supportsTransactions: boolean;
+  productionProfile: boolean;
+  closureValid: boolean;
+  retainedSnapshots: bigint;
+  durablePins: bigint;
 }
 
 export interface PortableIndexedMapMetrics {
@@ -809,9 +813,6 @@ export interface PortableIndexedMapMetrics {
   physicalUpserts: bigint;
   physicalDeletes: bigint;
   unchangedEmissionsSkipped: bigint;
-  sourceNodesWritten: bigint;
-  indexNodesWritten: bigint;
-  catalogNodesWritten: bigint;
   retries: bigint;
   buildAttempts: bigint;
   verificationOutcomes: bigint;
@@ -2607,7 +2608,7 @@ export class WasmIndexRegistry implements Disposable {
 function portableIndexedVersion(value: any): PortableIndexedVersion {
   return {
     sourceVersion: value.sourceVersion,
-    catalogVersion: value.catalogVersion,
+    stateVersion: value.stateVersion,
     indexCount: BigInt(value.indexCount),
   };
 }
@@ -2682,7 +2683,7 @@ export class WasmIndexedMap implements Disposable {
       const value = native.ensureIndex(name);
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
-        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        stateVersion: value.stateVersion, generation: BigInt(value.generation),
         entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
       };
     });
@@ -2704,7 +2705,7 @@ export class WasmIndexedMap implements Disposable {
       );
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
-        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        stateVersion: value.stateVersion, generation: BigInt(value.generation),
         entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
       };
     });
@@ -2719,18 +2720,21 @@ export class WasmIndexedMap implements Disposable {
   }
   snapshotById(id: PortableIndexedSnapshotId, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
     const native = this.#open();
+    const snapshot = ownedPortableBytes(id.snapshot);
     const source = ownedPortableBytes(id.sourceVersion);
-    const catalog = ownedPortableBytes(id.catalogVersion);
-    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(source, catalog)));
+    const state = ownedPortableBytes(id.stateVersion);
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(snapshot, source, state)));
   }
   health(): PortableIndexedMapHealth {
     const value = this.#open().health();
     return {
       sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
-      catalogVersion: value.catalogVersion, supportsTransactions: value.supportsTransactions,
+      stateVersion: value.stateVersion, productionProfile: value.productionProfile,
+      closureValid: value.closureValid, retainedSnapshots: BigInt(value.retainedSnapshots),
+      durablePins: BigInt(value.durablePins),
       activeIndexes: value.activeIndexes.map((index: any) => ({
         name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,
-        projection: index.projection, indexMapId: index.indexMapId, indexVersion: index.indexVersion,
+        projection: index.projection, indexVersion: index.indexVersion,
       })),
     };
   }

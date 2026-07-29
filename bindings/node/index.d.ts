@@ -28,12 +28,13 @@ export interface NodePortableIndexExtractRequest {
 }
 export interface NodePortableIndexedVersion {
   sourceVersion: Buffer
-  catalogVersion?: Buffer
+  stateVersion: Buffer
   indexCount: string
 }
 export interface NodePortableIndexedSnapshotId {
+  snapshot: Buffer
   sourceVersion: Buffer
-  catalogVersion: Buffer
+  stateVersion: Buffer
 }
 export interface NodePortableIndexedUpdate {
   kind: string
@@ -43,7 +44,7 @@ export interface NodePortableIndexedUpdate {
 export interface NodePortableIndexBuildResult {
   sourceVersion: Buffer
   indexVersion: Buffer
-  catalogVersion: Buffer
+  stateVersion: Buffer
   generation: string
   entries: string
   attempts: string
@@ -54,15 +55,17 @@ export interface NodePortableActiveIndexHealth {
   generation: string
   fingerprint: Buffer
   projection: string
-  indexMapId: Buffer
   indexVersion: Buffer
 }
 export interface NodePortableIndexedMapHealth {
   sourceMapId: Buffer
   sourceVersion?: Buffer
-  catalogVersion?: Buffer
+  stateVersion?: Buffer
   activeIndexes: Array<NodePortableActiveIndexHealth>
-  supportsTransactions: boolean
+  productionProfile: boolean
+  closureValid: boolean
+  retainedSnapshots: string
+  durablePins: string
 }
 export interface NodePortableIndexVerification {
   name: Buffer
@@ -83,9 +86,6 @@ export interface NodePortableIndexedMapMetrics {
   physicalUpserts: string
   physicalDeletes: string
   unchangedEmissionsSkipped: string
-  sourceNodesWritten: string
-  indexNodesWritten: string
-  catalogNodesWritten: string
   retries: string
   buildAttempts: string
   verificationOutcomes: string

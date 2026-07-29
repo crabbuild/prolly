@@ -1042,12 +1042,6 @@ where
         super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
-    /// Stage verified content-addressed node bytes for an atomic coordinator import.
-    pub(crate) fn stage_node_bytes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
-        let future = self.inner().stage_node_bytes(entries);
-        super::engine::ready::run_ready(self.ready_store.ready(future))
-    }
-
     /// Load a named root and add it to the transaction read set.
     pub fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
         let future = self.inner().load_named_root(name);
@@ -1405,14 +1399,6 @@ where
     /// Apply a batch of logical map mutations inside the transaction.
     pub async fn batch(&self, tree: &Tree, mutations: Vec<Mutation>) -> Result<Tree, Error> {
         self.manager.batch(tree, mutations).await
-    }
-
-    pub(crate) async fn stage_node_bytes(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Error> {
-        self.manager
-            .store
-            .batch_put(entries)
-            .await
-            .map_err(|error| Error::Store(Box::new(error)))
     }
 
     /// Load a named root and add it to the transaction read set.

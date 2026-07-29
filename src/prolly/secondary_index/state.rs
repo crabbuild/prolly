@@ -7,7 +7,7 @@ use super::super::key::{decode_segments, KeyBuilder};
 use super::super::store::Store;
 use super::super::tree::Tree;
 use super::super::Prolly;
-use super::definition::IndexProjection;
+use super::definition::{IndexProjection, SecondaryIndex};
 
 /// The only secondary-index collection format accepted by this release.
 ///
@@ -151,6 +151,39 @@ pub struct IndexDescriptor {
 }
 
 impl IndexDescriptor {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        self.validate()?;
+        encode(self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let descriptor: Self = decode(bytes)?;
+        descriptor.validate()?;
+        Ok(descriptor)
+    }
+
+    pub fn from_runtime(source_map_id: &[u8], index: &SecondaryIndex) -> Result<Self, Error> {
+        let mut descriptor = Self {
+            source_map_id: source_map_id.to_vec(),
+            name: index.name().to_vec(),
+            generation: index.generation(),
+            extractor_id: index.extractor_id().to_string(),
+            projection: index.projection(),
+            limits: IndexSemanticLimits {
+                max_term_bytes: index.limits().max_term_bytes,
+                max_projection_bytes: index.limits().max_projection_bytes,
+                max_all_value_bytes: index.limits().max_all_value_bytes,
+                max_terms_per_record: index.limits().max_terms_per_record,
+                max_projected_bytes_per_record: index.limits().max_projected_bytes_per_record,
+            },
+            physical_layout: super::storage::INDEX_PHYSICAL_LAYOUT_VERSION,
+            fingerprint: Cid([0; 32]),
+        };
+        descriptor.fingerprint = descriptor.canonical_fingerprint()?;
+        descriptor.validate()?;
+        Ok(descriptor)
+    }
+
     pub fn canonical_fingerprint(&self) -> Result<Cid, Error> {
         #[derive(Serialize)]
         struct Fingerprint<'a> {

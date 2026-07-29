@@ -3,8 +3,9 @@ use crate::page::{set_bytes, set_optional_bytes};
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     IndexProjection, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedSnapshotBundle,
-    IndexedSnapshotId, Mutation, SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry,
-    SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexPage, SecondaryIndexRegistry,
+    IndexedSnapshotId, IndexedSnapshotRecordId, IndexedStoreProfile, Mutation, SecondaryIndex,
+    SecondaryIndexCursor, SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexLimits,
+    SecondaryIndexPage, SecondaryIndexRegistry,
 };
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -191,15 +192,6 @@ impl WasmIndexedMap {
         total.unchanged_emissions_skipped = total
             .unchanged_emissions_skipped
             .saturating_add(value.unchanged_emissions_skipped);
-        total.source_nodes_written = total
-            .source_nodes_written
-            .saturating_add(value.source_nodes_written);
-        total.index_nodes_written = total
-            .index_nodes_written
-            .saturating_add(value.index_nodes_written);
-        total.catalog_nodes_written = total
-            .catalog_nodes_written
-            .saturating_add(value.catalog_nodes_written);
         total.retries = total.retries.saturating_add(value.retries);
         total.build_attempts = total.build_attempts.saturating_add(value.build_attempts);
         total.verification_outcomes = total
@@ -332,8 +324,8 @@ impl WasmIndexedMap {
         )?;
         set_bytes(
             &object,
-            "catalogVersion",
-            result.catalog_version.as_cid().as_bytes(),
+            "stateVersion",
+            result.state_version.as_cid().as_bytes(),
         )?;
         Reflect::set(
             &object,
@@ -399,8 +391,8 @@ impl WasmIndexedMap {
         )?;
         set_bytes(
             &object,
-            "catalogVersion",
-            result.catalog_version.as_cid().as_bytes(),
+            "stateVersion",
+            result.state_version.as_cid().as_bytes(),
         )?;
         Reflect::set(
             &object,
@@ -461,13 +453,19 @@ impl WasmIndexedMap {
     #[wasm_bindgen(js_name = snapshotById)]
     pub fn snapshot_by_id(
         &self,
+        snapshot: Uint8Array,
         source_version: Uint8Array,
-        catalog_version: Uint8Array,
+        state_version: Uint8Array,
     ) -> Result<WasmIndexedSnapshot, JsValue> {
+        let snapshot: [u8; 32] = snapshot
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("snapshot identifier must contain 32 bytes"))?;
         let snapshot_id = IndexedSnapshotId {
+            snapshot: IndexedSnapshotRecordId(prolly::Cid(snapshot)),
             source_version: prolly::MapVersionId::from_bytes(&source_version.to_vec())
                 .map_err(js_error)?,
-            catalog_version: prolly::MapVersionId::from_bytes(&catalog_version.to_vec())
+            state_version: prolly::MapVersionId::from_bytes(&state_version.to_vec())
                 .map_err(js_error)?,
         };
         let map = self
@@ -515,9 +513,6 @@ impl WasmIndexedMap {
             "unchangedEmissionsSkipped",
             value.unchanged_emissions_skipped,
         )?;
-        set_u64_string(&object, "sourceNodesWritten", value.source_nodes_written)?;
-        set_u64_string(&object, "indexNodesWritten", value.index_nodes_written)?;
-        set_u64_string(&object, "catalogNodesWritten", value.catalog_nodes_written)?;
         set_u64_string(&object, "retries", value.retries)?;
         set_u64_string(&object, "buildAttempts", value.build_attempts)?;
         set_u64_string(&object, "verificationOutcomes", value.verification_outcomes)?;
@@ -934,13 +929,10 @@ fn indexed_version_object(version: prolly::IndexedVersion) -> Result<Object, JsV
         "sourceVersion",
         version.source.id.as_cid().as_bytes(),
     )?;
-    set_optional_bytes(
+    set_bytes(
         &object,
-        "catalogVersion",
-        version
-            .catalog
-            .as_ref()
-            .map(|version| version.id.as_cid().as_bytes()),
+        "stateVersion",
+        version.state.id.as_cid().as_bytes(),
     )?;
     Reflect::set(
         &object,
@@ -1009,6 +1001,7 @@ fn set_optional_indexed_version(
 
 fn indexed_snapshot_id_object(id: &IndexedSnapshotId) -> Result<Object, JsValue> {
     let object = Object::new();
+    set_bytes(&object, "snapshot", id.snapshot.as_cid().as_bytes())?;
     set_bytes(
         &object,
         "sourceVersion",
@@ -1016,8 +1009,8 @@ fn indexed_snapshot_id_object(id: &IndexedSnapshotId) -> Result<Object, JsValue>
     )?;
     set_bytes(
         &object,
-        "catalogVersion",
-        id.catalog_version.as_cid().as_bytes(),
+        "stateVersion",
+        id.state_version.as_cid().as_bytes(),
     )?;
     Ok(object)
 }
@@ -1035,9 +1028,9 @@ fn indexed_health_object(value: prolly::IndexedMapHealth) -> Result<Object, JsVa
     )?;
     set_optional_bytes(
         &object,
-        "catalogVersion",
+        "stateVersion",
         value
-            .catalog_version
+            .state_version
             .as_ref()
             .map(|version| version.as_cid().as_bytes()),
     )?;
@@ -1053,7 +1046,6 @@ fn indexed_health_object(value: prolly::IndexedMapHealth) -> Result<Object, JsVa
             IndexProjection::All => "all",
         };
         Reflect::set(&item, &"projection".into(), &projection.into())?;
-        set_bytes(&item, "indexMapId", &index.index_map_id)?;
         set_bytes(
             &item,
             "indexVersion",
@@ -1064,9 +1056,16 @@ fn indexed_health_object(value: prolly::IndexedMapHealth) -> Result<Object, JsVa
     Reflect::set(&object, &"activeIndexes".into(), &indexes.into())?;
     Reflect::set(
         &object,
-        &"supportsTransactions".into(),
-        &value.supports_transactions.into(),
+        &"productionProfile".into(),
+        &matches!(value.store_profile, IndexedStoreProfile::Production(_)).into(),
     )?;
+    Reflect::set(&object, &"closureValid".into(), &value.closure_valid.into())?;
+    set_u64_string(
+        &object,
+        "retainedSnapshots",
+        value.retained_snapshots as u64,
+    )?;
+    set_u64_string(&object, "durablePins", value.durable_pins as u64)?;
     Ok(object)
 }
 
@@ -1127,12 +1126,12 @@ fn indexed_retention_object(value: prolly::IndexedRetentionResult) -> Result<Obj
     set_version_array(
         &object,
         "removedCatalogVersions",
-        value.removed_catalog_versions,
+        value.removed_state_versions,
     )?;
     set_u64_string(
         &object,
         "removedCheckpointRecords",
-        value.removed_checkpoint_records as u64,
+        value.removed_snapshot_records as u64,
     )?;
     let roots = Array::new();
     for root in value.removed_named_roots {

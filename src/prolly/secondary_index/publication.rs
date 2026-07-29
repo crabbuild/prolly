@@ -2,6 +2,7 @@ use super::super::error::Error;
 use super::super::manifest::ManifestStore;
 use super::super::store::{FileNodeStore, MemStore, Store};
 use super::super::tree::Tree;
+use std::sync::Arc;
 
 /// Coordination scope proved by a production indexed-store adapter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,6 +110,16 @@ impl IndexedStore for MemStore {
 impl IndexedStore for FileNodeStore {
     fn indexed_store_profile(&self) -> IndexedStoreProfile {
         IndexedStoreProfile::Verification
+    }
+}
+
+impl<T: IndexedStore> IndexedStore for Arc<T> {
+    fn indexed_store_profile(&self) -> IndexedStoreProfile {
+        self.as_ref().indexed_store_profile()
+    }
+
+    fn confirm_indexed_publication(&self, trees: &[&Tree]) -> Result<(), Error> {
+        self.as_ref().confirm_indexed_publication(trees)
     }
 }
 
