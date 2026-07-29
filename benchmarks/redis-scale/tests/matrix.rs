@@ -6,7 +6,7 @@ fn full_matrix_has_seven_fixtures_and_complete_cells() {
     let config = RunConfig::full("results".into(), "revision".into(), false);
     let plan = enumerate_matrix(&config);
     assert_eq!(plan.fixtures.len(), 7);
-    assert_eq!(plan.cells.len(), 175);
+    assert_eq!(plan.cells.len(), 196);
 
     let cells = enumerate_cells(&config, 1_000_000, 1);
     for operation in Operation::ALL {
@@ -27,7 +27,7 @@ fn full_matrix_has_seven_fixtures_and_complete_cells() {
 fn smoke_matrix_uses_single_put_and_separate_read_and_change_counts() {
     let config = RunConfig::smoke("smoke".into());
     let cells = enumerate_cells(&config, 100, 1);
-    assert_eq!(cells.len(), 25);
+    assert_eq!(cells.len(), 28);
     for cell in cells {
         assert_eq!(cell.changes, 10);
         assert_eq!(cell.read_samples, 10);

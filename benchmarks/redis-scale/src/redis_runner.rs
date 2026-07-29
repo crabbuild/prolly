@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use prolly::{
     AsyncProlly, AsyncSortedBatchBuilder, Config, Diff, Mutation, ProllyMetricsSnapshot,
-    RemoteProllyStore, Tree, TreeStats,
+    RemoteProllyStore, RemoteStoreBackend, Tree, TreeStats,
 };
 use prolly_store_redis::redis::{RedisBackend, RedisStore};
 
@@ -105,6 +105,7 @@ pub async fn run_cell(spec: &CellSpec, layout: &FixtureLayout) -> Result<RawRow,
 
     let outcome = match spec.operation {
         Operation::Build => return Err("build is measured by build_fixture".to_string()),
+        Operation::BackendBatch => run_backend_batch(store.clone(), &base, spec).await?,
         Operation::Put => run_put(store.clone(), &base, spec).await?,
         Operation::Batch => run_batch(store.clone(), &base, spec).await?,
         Operation::GetCold | Operation::GetWarm => {
@@ -181,6 +182,67 @@ pub async fn run_cell(spec: &CellSpec, layout: &FixtureLayout) -> Result<RawRow,
         &redis,
         namespace_keys,
     ))
+}
+
+async fn run_backend_batch(
+    store: RedisStore,
+    base: &Tree,
+    spec: &CellSpec,
+) -> Result<Outcome, String> {
+    let ids = mutation_ids(spec.pattern, spec.records, spec.changes, 1);
+    let keys = ids
+        .iter()
+        .copied()
+        .map(backend_benchmark_key)
+        .collect::<Vec<_>>();
+    let values = ids
+        .iter()
+        .copied()
+        .map(|id| value(id, 1))
+        .collect::<Vec<_>>();
+    let entries = keys
+        .iter()
+        .zip(&values)
+        .map(|(key, value)| (key.as_slice(), value.as_slice()))
+        .collect::<Vec<_>>();
+
+    let started = Instant::now();
+    store
+        .backend()
+        .batch_put_nodes(&entries)
+        .await
+        .map_err(|error| format!("backend batch failed: {error}"))?;
+    let total_ns = started.elapsed().as_nanos().max(1);
+
+    let requested = keys.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    let observed = store
+        .backend()
+        .batch_get_nodes_ordered(&requested)
+        .await
+        .map_err(|error| format!("backend batch validation failed: {error}"))?;
+    for (index, (actual, expected)) in observed.into_iter().zip(values.iter()).enumerate() {
+        if actual.as_deref() != Some(expected.as_slice()) {
+            return Err(format!(
+                "backend batch validation returned the wrong value at index {index}"
+            ));
+        }
+    }
+
+    Ok(Outcome {
+        tree: base.clone(),
+        changed_values: BTreeMap::new(),
+        observed_items: entries.len(),
+        total_ns,
+        latencies: Vec::new(),
+        metrics: ProllyMetricsSnapshot::default(),
+    })
+}
+
+fn backend_benchmark_key(id: usize) -> Vec<u8> {
+    let mut key = vec![0_u8; 32];
+    key[..8].copy_from_slice(b"adapter:");
+    key[24..].copy_from_slice(&(id as u64).to_be_bytes());
+    key
 }
 
 struct Outcome {

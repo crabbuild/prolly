@@ -1,6 +1,9 @@
 # Redis prolly scale benchmark
 
-This benchmark establishes a reproducible Redis baseline for the prolly tree's build, point put, batch mutation, cold and warm point get, batched query, bounded and full scan, diff, and three-way merge operations.
+This benchmark establishes a reproducible Redis baseline for the Redis backend's
+native batch write and the prolly tree's build, point put, batch mutation, cold
+and warm point get, batched query, bounded and full scan, diff, and three-way
+merge operations.
 
 ## Baseline contract
 
@@ -8,6 +11,10 @@ This benchmark establishes a reproducible Redis baseline for the prolly tree's b
 - Append, random, and clustered key patterns are covered. Full scan runs once per repetition because its key pattern does not change the workload.
 - Keys are 24 bytes and values are 100 bytes. The random seed, change semantics, and matrix are frozen in `run-manifest.txt`.
 - Each repetition builds one source Redis namespace. Every measured cell receives a server-side `COPY` clone under a unique namespace. Clone, cleanup, branch setup, validation, publication, persistence checks, and statistics are outside the timed interval.
+- `backend_batch` times `RedisBackend::batch_put_nodes` directly with 32-byte
+  synthetic CIDs and 100-byte values, then validates every value outside the
+  timed interval. It isolates adapter command encoding and Redis durability from
+  Prolly tree computation.
 
 ## Strong durability
 

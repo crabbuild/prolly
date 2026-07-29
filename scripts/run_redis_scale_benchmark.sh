@@ -47,7 +47,7 @@ case "$PROFILE" in
     ;;
 esac
 
-OPERATIONS="${REDIS_BENCH_OPERATIONS:-put,batch,get_cold,get_warm,query,scan,full_scan,diff,merge}"
+OPERATIONS="${REDIS_BENCH_OPERATIONS:-backend_batch,put,batch,get_cold,get_warm,query,scan,full_scan,diff,merge}"
 PATTERNS="${REDIS_BENCH_PATTERNS:-append,random,clustered}"
 TOKIO_WORKERS="${REDIS_BENCH_TOKIO_WORKERS:-4}"
 PROJECT="prolly-redis-bench-$$"
