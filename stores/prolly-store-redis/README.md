@@ -164,7 +164,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 `RedisBackend::connect` creates separate multiplexed physical connections for
 latency-sensitive roots/CAS operations and bulk node traffic. Batch reads and
 writes are bounded by both item count and approximate payload size, so large
-publishes do not become one unbounded Redis request. Multi-command writes still
+publishes do not become one unbounded multi-key command. Multi-command writes still
 use `MULTI`/`EXEC` to preserve whole-batch atomicity.
 
 Use `RedisBackendOptions` when service latency, payload sizes, or managed Redis
@@ -200,11 +200,11 @@ path discovery for append-heavy workloads. Disable this extra hint write with
 synchronous value-reclamation stalls caused by large `DEL` cleanup commands.
 It remains an administrative/test operation, not a request-path primitive.
 
-The adapter targets standalone Redis, Sentinel-backed endpoints exposed as one
-Redis URL, and compatible managed-service URLs. Redis Cluster requires all keys
-in a Lua script or multi-key command to share a hash slot; the default key
-layout does not promise that. Do not point this adapter at a sharded Redis
-Cluster endpoint until a deliberate hash-tag/partitioning strategy is chosen.
+The adapter targets standalone Redis primary endpoints and compatible
+managed-service URLs. Redis Cluster requires all keys in a Lua script or
+multi-key command to share a hash slot; the default key layout does not promise
+that. Do not point this adapter at a sharded Redis Cluster endpoint until a
+deliberate hash-tag/partitioning strategy is chosen.
 
 ## Transactions and durability
 
