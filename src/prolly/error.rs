@@ -236,6 +236,12 @@ pub enum Error {
     InvalidSnapshotBundle(String),
     /// The configured store does not support strict atomic transactions.
     UnsupportedTransactions { store: &'static str },
+    /// The configured store has not proved the required indexed-store profile.
+    UnsupportedIndexedStoreProfile {
+        store: &'static str,
+        required: &'static str,
+        actual: &'static str,
+    },
     /// A transaction could not commit because a validated named root changed.
     TransactionConflict(Box<TransactionConflict>),
     /// A built-in versioned-map catalog is missing or internally inconsistent.
@@ -397,6 +403,14 @@ impl std::fmt::Display for Error {
             Error::UnsupportedTransactions { store } => {
                 write!(f, "store does not support strict transactions: {store}")
             }
+            Error::UnsupportedIndexedStoreProfile {
+                store,
+                required,
+                actual,
+            } => write!(
+                f,
+                "store {store} does not satisfy indexed-store requirement {required}: {actual}"
+            ),
             Error::TransactionConflict(conflict) => {
                 write!(
                     f,

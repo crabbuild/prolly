@@ -6,7 +6,9 @@
 mod bundle;
 mod coordinator;
 mod definition;
+mod publication;
 mod snapshot;
+mod state;
 mod storage;
 
 pub use bundle::{
@@ -23,10 +25,19 @@ pub use definition::{
     SecondaryIndexEntryRef, SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits,
     SecondaryIndexRegistry, StreamingSecondaryIndexExtractor,
 };
+pub use publication::{
+    IndexedCoordinationScope, IndexedGcSafety, IndexedStore, IndexedStoreProfile,
+    IndexedWriteVisibility, ProductionIndexedStoreCapabilities,
+};
 pub use snapshot::{
     IndexedSnapshot, IndexedSnapshotId, IndexedSourceRecord, IndexedSourceRecordRef,
     ProjectedIndexEntry, SecondaryIndexCursor, SecondaryIndexDirection, SecondaryIndexMatch,
     SecondaryIndexMatchRef, SecondaryIndexPage, SecondaryIndexSnapshot,
+};
+pub use state::{
+    indexed_collection_root_name, CollectionIndexPolicy, IndexDescriptor, IndexSemanticLimits,
+    IndexSnapshotRef, IndexedCollectionState, IndexedSnapshotRecord, IndexedSnapshotRecordId,
+    SnapshotPin, SourceSnapshotRef, INDEXED_COLLECTION_FORMAT,
 };
 pub use storage::{
     catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,
