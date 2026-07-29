@@ -7,9 +7,9 @@ use std::sync::Mutex;
 use rocksdb::{ColumnFamilyDescriptor, DBCompressionType, IteratorMode, Options, WriteBatch, DB};
 
 use prolly::{
-    BatchOp, Cid, Error, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
-    NodeStoreScan, RootCondition, RootManifest, RootWrite, Store, TransactionConflict,
-    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
+    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
+    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
 struct OrderedBatchReadPlan<'a> {
@@ -566,6 +566,12 @@ impl TransactionalStore for RocksDBStore {
             nodes_written: node_writes.len(),
             roots_written: root_writes.len(),
         })
+    }
+}
+
+impl IndexedStore for RocksDBStore {
+    fn indexed_store_profile(&self) -> IndexedStoreProfile {
+        IndexedStoreProfile::Verification
     }
 }
 

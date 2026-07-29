@@ -108,7 +108,7 @@ impl IndexBuildWorkspace {
         let mut readers = self
             .runs
             .iter()
-            .map(|path| RunReader::open(path))
+            .map(|path| RunReader::open(path, self.budget.max_accounted_memory_bytes))
             .collect::<Result<Vec<_>, Error>>()?;
         let mut heap = BinaryHeap::new();
         for (position, reader) in readers.iter_mut().enumerate() {
@@ -164,7 +164,7 @@ impl IndexBuildWorkspace {
         let path = self.next_run_path()?;
         let entries = std::mem::take(&mut self.memory);
         self.memory_bytes = 0;
-        self.write_run(&path, entries.into_iter())?;
+        self.write_run(&path, entries)?;
         self.runs.push(path);
         Ok(())
     }
@@ -172,7 +172,7 @@ impl IndexBuildWorkspace {
     fn merge_to_run(&mut self, inputs: &[PathBuf], output: &Path) -> Result<(), Error> {
         let mut readers = inputs
             .iter()
-            .map(|path| RunReader::open(path))
+            .map(|path| RunReader::open(path, self.budget.max_accounted_memory_bytes))
             .collect::<Result<Vec<_>, Error>>()?;
         let mut heap = BinaryHeap::new();
         for (position, reader) in readers.iter_mut().enumerate() {
@@ -272,20 +272,28 @@ impl IntoRunEntry for Result<(Vec<u8>, Vec<u8>), Error> {
 
 struct RunReader {
     reader: BufReader<File>,
+    max_entry_bytes: usize,
 }
 
+type EncodedIndexEntry = (Vec<u8>, Vec<u8>);
+
 impl RunReader {
-    fn open(path: &Path) -> Result<Self, Error> {
+    fn open(path: &Path, max_entry_bytes: usize) -> Result<Self, Error> {
         Ok(Self {
             reader: BufReader::new(File::open(path).map_err(store_error)?),
+            max_entry_bytes,
         })
     }
 
-    fn next_entry(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>, Error> {
+    fn next_entry(&mut self) -> Result<Option<EncodedIndexEntry>, Error> {
         let mut key_length = [0u8; 8];
-        match self.reader.read_exact(&mut key_length) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+        match self.reader.read(&mut key_length[..1]) {
+            Ok(0) => return Ok(None),
+            Ok(1) => self
+                .reader
+                .read_exact(&mut key_length[1..])
+                .map_err(store_error)?,
+            Ok(_) => unreachable!("one-byte read returned more than one byte"),
             Err(error) => return Err(store_error(error)),
         }
         let mut value_length = [0u8; 8];
@@ -298,6 +306,21 @@ impl RunReader {
         let value_length = usize::try_from(u64::from_be_bytes(value_length)).map_err(|_| {
             Error::InvalidVersionedMap("spill value length exceeds platform limits".to_string())
         })?;
+        let entry_bytes = key_length
+            .checked_add(value_length)
+            .and_then(|bytes| bytes.checked_add(16))
+            .ok_or(Error::IndexResourceLimitExceeded {
+                resource: "maintenance_spill_entry_bytes",
+                limit: self.max_entry_bytes,
+                actual: usize::MAX,
+            })?;
+        if entry_bytes > self.max_entry_bytes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "maintenance_spill_entry_bytes",
+                limit: self.max_entry_bytes,
+                actual: entry_bytes,
+            });
+        }
         let mut key = vec![0; key_length];
         let mut value = vec![0; value_length];
         self.reader.read_exact(&mut key).map_err(store_error)?;

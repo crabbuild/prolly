@@ -18,6 +18,12 @@ bench = false
 [features]
 default = ["sqlite"]
 sqlite = ["dep:prolly-store-sqlite"]
+bindgen = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
 
 [dependencies]
 async-trait = "0.1"

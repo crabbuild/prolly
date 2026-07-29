@@ -156,7 +156,7 @@ where
         vec![b"user-2".to_vec()]
     );
     assert!(indexed
-        .verify_all(&snapshot.id().source_version)
+        .verify_all(snapshot.source_version())
         .unwrap()
         .iter()
         .all(prolly::IndexVerification::is_valid));

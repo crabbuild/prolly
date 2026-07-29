@@ -689,7 +689,6 @@ test("WASM indexed maps expose batch CAS and historical snapshots", { skip: !gen
   await indexed.ensureIndex(bytes("by_value"));
   const firstSnapshot = await indexed.snapshot();
   const firstId = firstSnapshot.id();
-  assert.deepEqual(firstId.sourceVersion, first.sourceVersion);
   const applied = await indexed.applyIf(first.sourceVersion, [
     { kind: "upsert", key: bytes("u3"), value: bytes("blue") },
   ]);
@@ -699,7 +698,7 @@ test("WASM indexed maps expose batch CAS and historical snapshots", { skip: !gen
   ]);
   assert.equal(conflict.kind, "conflict");
   const historical = await indexed.snapshotAt(first.sourceVersion);
-  assert.deepEqual(historical.id().sourceVersion, firstId.sourceVersion);
+  assert.deepEqual(historical.id(), firstId);
   const reopened = await indexed.snapshotById(firstId);
   assert.deepEqual(reopened.id(), firstId);
   engine.close();

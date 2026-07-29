@@ -155,7 +155,6 @@ end
     
     RustBuffer.check_lower_TypeIndexProjectionRecord(v.projection)
     
-    
   end
 
   def self.alloc_from_TypeActiveIndexHealthRecord(v)
@@ -1429,8 +1428,11 @@ end
   def self.check_lower_TypeIndexedMapHealthRecord(v)
     
     RustBuffer.check_lower_Optionalbytes(v.source_version)
-    RustBuffer.check_lower_Optionalbytes(v.catalog_version)
+    RustBuffer.check_lower_Optionalbytes(v.state_version)
     RustBuffer.check_lower_SequenceTypeActiveIndexHealthRecord(v.active_indexes)
+
+
+
     
   end
 
@@ -1450,9 +1452,6 @@ end
   # The Record type IndexedMapMetricsRecord.
 
   def self.check_lower_TypeIndexedMapMetricsRecord(v)
-    
-    
-    
     
     
     
@@ -1486,7 +1485,7 @@ end
     RustBuffer.check_lower_Sequencebytes(v.removed_source_versions)
     RustBuffer.check_lower_Sequencebytes(v.retained_index_versions)
     RustBuffer.check_lower_Sequencebytes(v.removed_index_versions)
-    RustBuffer.check_lower_Sequencebytes(v.removed_catalog_versions)
+    RustBuffer.check_lower_Sequencebytes(v.removed_state_versions)
     
     RustBuffer.check_lower_Sequencebytes(v.removed_named_roots)
   end
@@ -1507,7 +1506,6 @@ end
   # The Record type IndexedSnapshotIdRecord.
 
   def self.check_lower_TypeIndexedSnapshotIdRecord(v)
-    
     
   end
 
@@ -1571,7 +1569,7 @@ end
 
   def self.check_lower_TypeIndexedVersionRecord(v)
     
-    RustBuffer.check_lower_Optionalbytes(v.catalog_version)
+
     
   end
 
@@ -7314,7 +7312,6 @@ class RustBufferStream
       generation: readU64,
       fingerprint: readBytes,
       projection: readTypeIndexProjectionRecord,
-      index_map_id: readBytes,
       index_version: readBytes
     )
   end
@@ -7904,7 +7901,7 @@ class RustBufferStream
     IndexBuildResultRecord.new(
       source_version: readBytes,
       index_version: readBytes,
-      catalog_version: readBytes,
+      state_version: readBytes,
       generation: readU64,
       entries: readU64,
       attempts: readU64,
@@ -7962,9 +7959,12 @@ class RustBufferStream
     IndexedMapHealthRecord.new(
       source_map_id: readBytes,
       source_version: readOptionalbytes,
-      catalog_version: readOptionalbytes,
+      state_version: readOptionalbytes,
       active_indexes: readSequenceTypeActiveIndexHealthRecord,
-      supports_transactions: readBool
+      production_profile: readBool,
+      closure_valid: readBool,
+      retained_snapshots: readU64,
+      durable_pins: readU64
     )
   end
 
@@ -7979,9 +7979,6 @@ class RustBufferStream
       physical_upserts: readU64,
       physical_deletes: readU64,
       unchanged_emissions_skipped: readU64,
-      source_nodes_written: readU64,
-      index_nodes_written: readU64,
-      catalog_nodes_written: readU64,
       retries: readU64,
       build_attempts: readU64,
       verification_outcomes: readU64,
@@ -7997,8 +7994,8 @@ class RustBufferStream
       removed_source_versions: readSequencebytes,
       retained_index_versions: readSequencebytes,
       removed_index_versions: readSequencebytes,
-      removed_catalog_versions: readSequencebytes,
-      removed_checkpoint_records: readU64,
+      removed_state_versions: readSequencebytes,
+      removed_snapshot_records: readU64,
       removed_named_roots: readSequencebytes
     )
   end
@@ -8007,8 +8004,7 @@ class RustBufferStream
 
   def readTypeIndexedSnapshotIdRecord
     IndexedSnapshotIdRecord.new(
-      source_version: readBytes,
-      catalog_version: readBytes
+      snapshot: readBytes
     )
   end
 
@@ -8038,7 +8034,7 @@ class RustBufferStream
   def readTypeIndexedVersionRecord
     IndexedVersionRecord.new(
       source_version: readBytes,
-      catalog_version: readOptionalbytes,
+      state_version: readBytes,
       index_count: readU64
     )
   end
@@ -8911,8 +8907,8 @@ class RustBufferStream
       max_all_value_bytes: readU64,
       max_terms_per_record: readU64,
       max_projected_bytes_per_record: readU64,
-      max_derived_mutations_per_transaction: readU64,
-      max_projected_bytes_per_transaction: readU64,
+      max_derived_mutations_per_write: readU64,
+      max_projected_bytes_per_write: readU64,
       max_indexes: readU64,
       build_page_size: readU64,
       max_temporary_sort_bytes: readU64,
@@ -12083,7 +12079,6 @@ class RustBufferBuilder
     self.write_U64(v.generation)
     self.write_Bytes(v.fingerprint)
     self.write_TypeIndexProjectionRecord(v.projection)
-    self.write_Bytes(v.index_map_id)
     self.write_Bytes(v.index_version)
   end
 
@@ -12569,7 +12564,7 @@ class RustBufferBuilder
   def write_TypeIndexBuildResultRecord(v)
     self.write_Bytes(v.source_version)
     self.write_Bytes(v.index_version)
-    self.write_Bytes(v.catalog_version)
+    self.write_Bytes(v.state_version)
     self.write_U64(v.generation)
     self.write_U64(v.entries)
     self.write_U64(v.attempts)
@@ -12617,9 +12612,12 @@ class RustBufferBuilder
   def write_TypeIndexedMapHealthRecord(v)
     self.write_Bytes(v.source_map_id)
     self.write_Optionalbytes(v.source_version)
-    self.write_Optionalbytes(v.catalog_version)
+    self.write_Optionalbytes(v.state_version)
     self.write_SequenceTypeActiveIndexHealthRecord(v.active_indexes)
-    self.write_Bool(v.supports_transactions)
+    self.write_Bool(v.production_profile)
+    self.write_Bool(v.closure_valid)
+    self.write_U64(v.retained_snapshots)
+    self.write_U64(v.durable_pins)
   end
 
   # The Record type IndexedMapMetricsRecord.
@@ -12632,9 +12630,6 @@ class RustBufferBuilder
     self.write_U64(v.physical_upserts)
     self.write_U64(v.physical_deletes)
     self.write_U64(v.unchanged_emissions_skipped)
-    self.write_U64(v.source_nodes_written)
-    self.write_U64(v.index_nodes_written)
-    self.write_U64(v.catalog_nodes_written)
     self.write_U64(v.retries)
     self.write_U64(v.build_attempts)
     self.write_U64(v.verification_outcomes)
@@ -12648,16 +12643,15 @@ class RustBufferBuilder
     self.write_Sequencebytes(v.removed_source_versions)
     self.write_Sequencebytes(v.retained_index_versions)
     self.write_Sequencebytes(v.removed_index_versions)
-    self.write_Sequencebytes(v.removed_catalog_versions)
-    self.write_U64(v.removed_checkpoint_records)
+    self.write_Sequencebytes(v.removed_state_versions)
+    self.write_U64(v.removed_snapshot_records)
     self.write_Sequencebytes(v.removed_named_roots)
   end
 
   # The Record type IndexedSnapshotIdRecord.
 
   def write_TypeIndexedSnapshotIdRecord(v)
-    self.write_Bytes(v.source_version)
-    self.write_Bytes(v.catalog_version)
+    self.write_Bytes(v.snapshot)
   end
 
   # The Record type IndexedSourceRecord.
@@ -12681,7 +12675,7 @@ class RustBufferBuilder
 
   def write_TypeIndexedVersionRecord(v)
     self.write_Bytes(v.source_version)
-    self.write_Optionalbytes(v.catalog_version)
+    self.write_Bytes(v.state_version)
     self.write_U64(v.index_count)
   end
 
@@ -13396,8 +13390,8 @@ class RustBufferBuilder
     self.write_U64(v.max_all_value_bytes)
     self.write_U64(v.max_terms_per_record)
     self.write_U64(v.max_projected_bytes_per_record)
-    self.write_U64(v.max_derived_mutations_per_transaction)
-    self.write_U64(v.max_projected_bytes_per_transaction)
+    self.write_U64(v.max_derived_mutations_per_write)
+    self.write_U64(v.max_projected_bytes_per_write)
     self.write_U64(v.max_indexes)
     self.write_U64(v.build_page_size)
     self.write_U64(v.max_temporary_sort_bytes)
@@ -23720,14 +23714,13 @@ end
   
   # Record type ActiveIndexHealthRecord
 class ActiveIndexHealthRecord
-  attr_reader :name, :generation, :fingerprint, :projection, :index_map_id, :index_version
+  attr_reader :name, :generation, :fingerprint, :projection, :index_version
 
-  def initialize(name:, generation:, fingerprint:, projection:, index_map_id:, index_version:)
+  def initialize(name:, generation:, fingerprint:, projection:, index_version:)
     @name = name
     @generation = generation
     @fingerprint = fingerprint
     @projection = projection
-    @index_map_id = index_map_id
     @index_version = index_version
   end
 
@@ -23744,9 +23737,6 @@ class ActiveIndexHealthRecord
     if @projection != other.projection
       return false
     end
-    if @index_map_id != other.index_map_id
-      return false
-    end
     if @index_version != other.index_version
       return false
     end
@@ -23757,12 +23747,12 @@ end
   
   # Record type IndexBuildResultRecord
 class IndexBuildResultRecord
-  attr_reader :source_version, :index_version, :catalog_version, :generation, :entries, :attempts, :activated
+  attr_reader :source_version, :index_version, :state_version, :generation, :entries, :attempts, :activated
 
-  def initialize(source_version:, index_version:, catalog_version:, generation:, entries:, attempts:, activated:)
+  def initialize(source_version:, index_version:, state_version:, generation:, entries:, attempts:, activated:)
     @source_version = source_version
     @index_version = index_version
-    @catalog_version = catalog_version
+    @state_version = state_version
     @generation = generation
     @entries = entries
     @attempts = attempts
@@ -23776,7 +23766,7 @@ class IndexBuildResultRecord
     if @index_version != other.index_version
       return false
     end
-    if @catalog_version != other.catalog_version
+    if @state_version != other.state_version
       return false
     end
     if @generation != other.generation
@@ -23914,14 +23904,17 @@ end
   
   # Record type IndexedMapHealthRecord
 class IndexedMapHealthRecord
-  attr_reader :source_map_id, :source_version, :catalog_version, :active_indexes, :supports_transactions
+  attr_reader :source_map_id, :source_version, :state_version, :active_indexes, :production_profile, :closure_valid, :retained_snapshots, :durable_pins
 
-  def initialize(source_map_id:, source_version:, catalog_version:, active_indexes:, supports_transactions:)
+  def initialize(source_map_id:, source_version:, state_version:, active_indexes:, production_profile:, closure_valid:, retained_snapshots:, durable_pins:)
     @source_map_id = source_map_id
     @source_version = source_version
-    @catalog_version = catalog_version
+    @state_version = state_version
     @active_indexes = active_indexes
-    @supports_transactions = supports_transactions
+    @production_profile = production_profile
+    @closure_valid = closure_valid
+    @retained_snapshots = retained_snapshots
+    @durable_pins = durable_pins
   end
 
   def ==(other)
@@ -23931,13 +23924,22 @@ class IndexedMapHealthRecord
     if @source_version != other.source_version
       return false
     end
-    if @catalog_version != other.catalog_version
+    if @state_version != other.state_version
       return false
     end
     if @active_indexes != other.active_indexes
       return false
     end
-    if @supports_transactions != other.supports_transactions
+    if @production_profile != other.production_profile
+      return false
+    end
+    if @closure_valid != other.closure_valid
+      return false
+    end
+    if @retained_snapshots != other.retained_snapshots
+      return false
+    end
+    if @durable_pins != other.durable_pins
       return false
     end
 
@@ -23947,9 +23949,9 @@ end
   
   # Record type IndexedMapMetricsRecord
 class IndexedMapMetricsRecord
-  attr_reader :normalized_source_mutations, :records_extracted, :terms_emitted, :projected_bytes, :physical_upserts, :physical_deletes, :unchanged_emissions_skipped, :source_nodes_written, :index_nodes_written, :catalog_nodes_written, :retries, :build_attempts, :verification_outcomes, :retained_roots
+  attr_reader :normalized_source_mutations, :records_extracted, :terms_emitted, :projected_bytes, :physical_upserts, :physical_deletes, :unchanged_emissions_skipped, :retries, :build_attempts, :verification_outcomes, :retained_roots
 
-  def initialize(normalized_source_mutations:, records_extracted:, terms_emitted:, projected_bytes:, physical_upserts:, physical_deletes:, unchanged_emissions_skipped:, source_nodes_written:, index_nodes_written:, catalog_nodes_written:, retries:, build_attempts:, verification_outcomes:, retained_roots:)
+  def initialize(normalized_source_mutations:, records_extracted:, terms_emitted:, projected_bytes:, physical_upserts:, physical_deletes:, unchanged_emissions_skipped:, retries:, build_attempts:, verification_outcomes:, retained_roots:)
     @normalized_source_mutations = normalized_source_mutations
     @records_extracted = records_extracted
     @terms_emitted = terms_emitted
@@ -23957,9 +23959,6 @@ class IndexedMapMetricsRecord
     @physical_upserts = physical_upserts
     @physical_deletes = physical_deletes
     @unchanged_emissions_skipped = unchanged_emissions_skipped
-    @source_nodes_written = source_nodes_written
-    @index_nodes_written = index_nodes_written
-    @catalog_nodes_written = catalog_nodes_written
     @retries = retries
     @build_attempts = build_attempts
     @verification_outcomes = verification_outcomes
@@ -23988,15 +23987,6 @@ class IndexedMapMetricsRecord
     if @unchanged_emissions_skipped != other.unchanged_emissions_skipped
       return false
     end
-    if @source_nodes_written != other.source_nodes_written
-      return false
-    end
-    if @index_nodes_written != other.index_nodes_written
-      return false
-    end
-    if @catalog_nodes_written != other.catalog_nodes_written
-      return false
-    end
     if @retries != other.retries
       return false
     end
@@ -24016,15 +24006,15 @@ end
   
   # Record type IndexedRetentionRecord
 class IndexedRetentionRecord
-  attr_reader :retained_source_versions, :removed_source_versions, :retained_index_versions, :removed_index_versions, :removed_catalog_versions, :removed_checkpoint_records, :removed_named_roots
+  attr_reader :retained_source_versions, :removed_source_versions, :retained_index_versions, :removed_index_versions, :removed_state_versions, :removed_snapshot_records, :removed_named_roots
 
-  def initialize(retained_source_versions:, removed_source_versions:, retained_index_versions:, removed_index_versions:, removed_catalog_versions:, removed_checkpoint_records:, removed_named_roots:)
+  def initialize(retained_source_versions:, removed_source_versions:, retained_index_versions:, removed_index_versions:, removed_state_versions:, removed_snapshot_records:, removed_named_roots:)
     @retained_source_versions = retained_source_versions
     @removed_source_versions = removed_source_versions
     @retained_index_versions = retained_index_versions
     @removed_index_versions = removed_index_versions
-    @removed_catalog_versions = removed_catalog_versions
-    @removed_checkpoint_records = removed_checkpoint_records
+    @removed_state_versions = removed_state_versions
+    @removed_snapshot_records = removed_snapshot_records
     @removed_named_roots = removed_named_roots
   end
 
@@ -24041,10 +24031,10 @@ class IndexedRetentionRecord
     if @removed_index_versions != other.removed_index_versions
       return false
     end
-    if @removed_catalog_versions != other.removed_catalog_versions
+    if @removed_state_versions != other.removed_state_versions
       return false
     end
-    if @removed_checkpoint_records != other.removed_checkpoint_records
+    if @removed_snapshot_records != other.removed_snapshot_records
       return false
     end
     if @removed_named_roots != other.removed_named_roots
@@ -24057,18 +24047,14 @@ end
   
   # Record type IndexedSnapshotIdRecord
 class IndexedSnapshotIdRecord
-  attr_reader :source_version, :catalog_version
+  attr_reader :snapshot
 
-  def initialize(source_version:, catalog_version:)
-    @source_version = source_version
-    @catalog_version = catalog_version
+  def initialize(snapshot:)
+    @snapshot = snapshot
   end
 
   def ==(other)
-    if @source_version != other.source_version
-      return false
-    end
-    if @catalog_version != other.catalog_version
+    if @snapshot != other.snapshot
       return false
     end
 
@@ -24132,11 +24118,11 @@ end
   
   # Record type IndexedVersionRecord
 class IndexedVersionRecord
-  attr_reader :source_version, :catalog_version, :index_count
+  attr_reader :source_version, :state_version, :index_count
 
-  def initialize(source_version:, catalog_version:, index_count:)
+  def initialize(source_version:, state_version:, index_count:)
     @source_version = source_version
-    @catalog_version = catalog_version
+    @state_version = state_version
     @index_count = index_count
   end
 
@@ -24144,7 +24130,7 @@ class IndexedVersionRecord
     if @source_version != other.source_version
       return false
     end
-    if @catalog_version != other.catalog_version
+    if @state_version != other.state_version
       return false
     end
     if @index_count != other.index_count
@@ -24157,16 +24143,16 @@ end
   
   # Record type SecondaryIndexLimitsRecord
 class SecondaryIndexLimitsRecord
-  attr_reader :max_term_bytes, :max_projection_bytes, :max_all_value_bytes, :max_terms_per_record, :max_projected_bytes_per_record, :max_derived_mutations_per_transaction, :max_projected_bytes_per_transaction, :max_indexes, :build_page_size, :max_temporary_sort_bytes, :max_bundle_nodes, :max_bundle_bytes, :max_verification_entries, :max_write_retries, :max_build_retries
+  attr_reader :max_term_bytes, :max_projection_bytes, :max_all_value_bytes, :max_terms_per_record, :max_projected_bytes_per_record, :max_derived_mutations_per_write, :max_projected_bytes_per_write, :max_indexes, :build_page_size, :max_temporary_sort_bytes, :max_bundle_nodes, :max_bundle_bytes, :max_verification_entries, :max_write_retries, :max_build_retries
 
-  def initialize(max_term_bytes:, max_projection_bytes:, max_all_value_bytes:, max_terms_per_record:, max_projected_bytes_per_record:, max_derived_mutations_per_transaction:, max_projected_bytes_per_transaction:, max_indexes:, build_page_size:, max_temporary_sort_bytes:, max_bundle_nodes:, max_bundle_bytes:, max_verification_entries:, max_write_retries:, max_build_retries:)
+  def initialize(max_term_bytes:, max_projection_bytes:, max_all_value_bytes:, max_terms_per_record:, max_projected_bytes_per_record:, max_derived_mutations_per_write:, max_projected_bytes_per_write:, max_indexes:, build_page_size:, max_temporary_sort_bytes:, max_bundle_nodes:, max_bundle_bytes:, max_verification_entries:, max_write_retries:, max_build_retries:)
     @max_term_bytes = max_term_bytes
     @max_projection_bytes = max_projection_bytes
     @max_all_value_bytes = max_all_value_bytes
     @max_terms_per_record = max_terms_per_record
     @max_projected_bytes_per_record = max_projected_bytes_per_record
-    @max_derived_mutations_per_transaction = max_derived_mutations_per_transaction
-    @max_projected_bytes_per_transaction = max_projected_bytes_per_transaction
+    @max_derived_mutations_per_write = max_derived_mutations_per_write
+    @max_projected_bytes_per_write = max_projected_bytes_per_write
     @max_indexes = max_indexes
     @build_page_size = build_page_size
     @max_temporary_sort_bytes = max_temporary_sort_bytes
@@ -24193,10 +24179,10 @@ class SecondaryIndexLimitsRecord
     if @max_projected_bytes_per_record != other.max_projected_bytes_per_record
       return false
     end
-    if @max_derived_mutations_per_transaction != other.max_derived_mutations_per_transaction
+    if @max_derived_mutations_per_write != other.max_derived_mutations_per_write
       return false
     end
-    if @max_projected_bytes_per_transaction != other.max_projected_bytes_per_transaction
+    if @max_projected_bytes_per_write != other.max_projected_bytes_per_write
       return false
     end
     if @max_indexes != other.max_indexes

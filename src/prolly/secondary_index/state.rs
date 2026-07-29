@@ -231,9 +231,9 @@ impl IndexDescriptor {
 
 /// Stable identifier of a canonical indexed snapshot record.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct IndexedSnapshotRecordId(pub Cid);
+pub struct IndexedSnapshotId(pub Cid);
 
-impl IndexedSnapshotRecordId {
+impl IndexedSnapshotId {
     pub fn as_cid(&self) -> &Cid {
         &self.0
     }
@@ -259,15 +259,15 @@ pub struct IndexSnapshotRef {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IndexedSnapshotRecord {
     pub source_map_id: Vec<u8>,
-    pub parent: Option<IndexedSnapshotRecordId>,
+    pub parent: Option<IndexedSnapshotId>,
     pub source: SourceSnapshotRef,
     pub indexes: Vec<IndexSnapshotRef>,
 }
 
 impl IndexedSnapshotRecord {
-    pub fn id(&self) -> Result<IndexedSnapshotRecordId, Error> {
+    pub fn id(&self) -> Result<IndexedSnapshotId, Error> {
         self.validate()?;
-        Ok(IndexedSnapshotRecordId(Cid::from_bytes(&encode(self)?)))
+        Ok(IndexedSnapshotId(Cid::from_bytes(&encode(self)?)))
     }
 
     pub fn validate(&self) -> Result<(), Error> {
@@ -297,7 +297,7 @@ impl IndexedSnapshotRecord {
 /// Explicit retention pin stored in collection state.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotPin {
-    pub snapshot: IndexedSnapshotRecordId,
+    pub snapshot: IndexedSnapshotId,
 }
 
 /// Complete authoritative state for one managed indexed collection.
@@ -305,8 +305,8 @@ pub struct SnapshotPin {
 pub struct IndexedCollectionState {
     pub source_map_id: Vec<u8>,
     pub policy: CollectionIndexPolicy,
-    pub head: IndexedSnapshotRecordId,
-    pub snapshots: BTreeMap<IndexedSnapshotRecordId, IndexedSnapshotRecord>,
+    pub head: IndexedSnapshotId,
+    pub snapshots: BTreeMap<IndexedSnapshotId, IndexedSnapshotRecord>,
     pub descriptors: BTreeMap<(Vec<u8>, Cid), IndexDescriptor>,
     pub active: BTreeMap<Vec<u8>, Cid>,
     pub retired: BTreeSet<(Vec<u8>, Cid)>,
@@ -516,7 +516,7 @@ impl IndexedCollectionState {
                 }
                 [kind] if kind.as_slice() == HEAD => {
                     if head
-                        .replace(IndexedSnapshotRecordId(cid(&value, "indexed snapshot ID")?))
+                        .replace(IndexedSnapshotId(cid(&value, "indexed snapshot ID")?))
                         .is_some()
                     {
                         return Err(Error::Deserialize(
@@ -525,7 +525,7 @@ impl IndexedCollectionState {
                     }
                 }
                 [kind, id] if kind.as_slice() == SNAPSHOTS => {
-                    let id = IndexedSnapshotRecordId(cid(id, "snapshot key")?);
+                    let id = IndexedSnapshotId(cid(id, "snapshot key")?);
                     if snapshots.insert(id, decode(&value)?).is_some() {
                         return Err(Error::Deserialize("duplicate indexed snapshot".to_string()));
                     }

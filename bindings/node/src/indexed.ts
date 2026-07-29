@@ -23,8 +23,8 @@ export interface SecondaryIndexLimits {
   maxAllValueBytes: bigint;
   maxTermsPerRecord: bigint;
   maxProjectedBytesPerRecord: bigint;
-  maxDerivedMutationsPerTransaction: bigint;
-  maxProjectedBytesPerTransaction: bigint;
+  maxDerivedMutationsPerWrite: bigint;
+  maxProjectedBytesPerWrite: bigint;
   maxIndexes: bigint;
   buildPageSize: bigint;
   maxTemporarySortBytes: bigint;
@@ -42,8 +42,8 @@ export function defaultSecondaryIndexLimits(): SecondaryIndexLimits {
     maxAllValueBytes: 1024n * 1024n,
     maxTermsPerRecord: 1024n,
     maxProjectedBytesPerRecord: 1024n * 1024n,
-    maxDerivedMutationsPerTransaction: 100_000n,
-    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxDerivedMutationsPerWrite: 100_000n,
+    maxProjectedBytesPerWrite: 64n * 1024n * 1024n,
     maxIndexes: 32n,
     buildPageSize: 4096n,
     maxTemporarySortBytes: 256n * 1024n * 1024n,
@@ -82,8 +82,6 @@ export interface IndexedUpdate {
 
 export interface IndexedSnapshotId {
   snapshot: Uint8Array;
-  sourceVersion: Uint8Array;
-  stateVersion: Uint8Array;
 }
 
 export interface IndexBuildResult {
@@ -146,8 +144,8 @@ export interface IndexedRetention {
   removedSourceVersions: Uint8Array[];
   retainedIndexVersions: Uint8Array[];
   removedIndexVersions: Uint8Array[];
-  removedCatalogVersions: Uint8Array[];
-  removedCheckpointRecords: bigint;
+  removedStateVersions: Uint8Array[];
+  removedSnapshotRecords: bigint;
   removedNamedRoots: Uint8Array[];
 }
 
@@ -193,8 +191,6 @@ interface NativeIndexedUpdate {
 
 interface NativeIndexedSnapshotId {
   snapshot: Uint8Array;
-  sourceVersion: Uint8Array;
-  stateVersion: Uint8Array;
 }
 
 interface NativeIndexBuildResult {
@@ -284,7 +280,7 @@ interface NativeIndexedMap {
   keepLast(count: string): {
     retainedSourceVersions: Uint8Array[]; removedSourceVersions: Uint8Array[];
     retainedIndexVersions: Uint8Array[]; removedIndexVersions: Uint8Array[];
-    removedCatalogVersions: Uint8Array[]; removedCheckpointRecords: string;
+    removedStateVersions: Uint8Array[]; removedSnapshotRecords: string;
     removedNamedRoots: Uint8Array[];
   };
   planGc(): any;
@@ -436,8 +432,6 @@ export class IndexedMap implements Disposable {
     const native = this.#open();
     const owned = {
       snapshot: ownedBytes(id.snapshot),
-      sourceVersion: ownedBytes(id.sourceVersion),
-      stateVersion: ownedBytes(id.stateVersion),
     };
     return nativePromise(signal, () => new IndexedSnapshot(native.snapshotById(owned)));
   }
@@ -484,8 +478,8 @@ export class IndexedMap implements Disposable {
       removedSourceVersions: value.removedSourceVersions,
       retainedIndexVersions: value.retainedIndexVersions,
       removedIndexVersions: value.removedIndexVersions,
-      removedCatalogVersions: value.removedCatalogVersions,
-      removedCheckpointRecords: BigInt(value.removedCheckpointRecords),
+      removedStateVersions: value.removedStateVersions,
+      removedSnapshotRecords: BigInt(value.removedSnapshotRecords),
       removedNamedRoots: value.removedNamedRoots,
     };
   }

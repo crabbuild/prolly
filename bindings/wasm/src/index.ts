@@ -707,8 +707,8 @@ export interface PortableSecondaryIndexLimits {
   maxAllValueBytes: bigint;
   maxTermsPerRecord: bigint;
   maxProjectedBytesPerRecord: bigint;
-  maxDerivedMutationsPerTransaction: bigint;
-  maxProjectedBytesPerTransaction: bigint;
+  maxDerivedMutationsPerWrite: bigint;
+  maxProjectedBytesPerWrite: bigint;
   maxIndexes: bigint;
   buildPageSize: bigint;
   maxTemporarySortBytes: bigint;
@@ -726,8 +726,8 @@ export function defaultSecondaryIndexLimits(): PortableSecondaryIndexLimits {
     maxAllValueBytes: 1024n * 1024n,
     maxTermsPerRecord: 1024n,
     maxProjectedBytesPerRecord: 1024n * 1024n,
-    maxDerivedMutationsPerTransaction: 100_000n,
-    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxDerivedMutationsPerWrite: 100_000n,
+    maxProjectedBytesPerWrite: 64n * 1024n * 1024n,
     maxIndexes: 32n,
     buildPageSize: 4096n,
     maxTemporarySortBytes: 256n * 1024n * 1024n,
@@ -774,8 +774,6 @@ export interface PortableIndexedUpdate {
 
 export interface PortableIndexedSnapshotId {
   snapshot: Uint8Array;
-  sourceVersion: Uint8Array;
-  stateVersion: Uint8Array;
 }
 
 export interface PortableIndexVerification {
@@ -824,8 +822,8 @@ export interface PortableIndexedRetention {
   removedSourceVersions: Uint8Array[];
   retainedIndexVersions: Uint8Array[];
   removedIndexVersions: Uint8Array[];
-  removedCatalogVersions: Uint8Array[];
-  removedCheckpointRecords: bigint;
+  removedStateVersions: Uint8Array[];
+  removedSnapshotRecords: bigint;
   removedNamedRoots: Uint8Array[];
 }
 
@@ -2721,9 +2719,7 @@ export class WasmIndexedMap implements Disposable {
   snapshotById(id: PortableIndexedSnapshotId, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
     const native = this.#open();
     const snapshot = ownedPortableBytes(id.snapshot);
-    const source = ownedPortableBytes(id.sourceVersion);
-    const state = ownedPortableBytes(id.stateVersion);
-    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(snapshot, source, state)));
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(snapshot)));
   }
   health(): PortableIndexedMapHealth {
     const value = this.#open().health();
@@ -2768,8 +2764,8 @@ export class WasmIndexedMap implements Disposable {
       removedSourceVersions: value.removedSourceVersions,
       retainedIndexVersions: value.retainedIndexVersions,
       removedIndexVersions: value.removedIndexVersions,
-      removedCatalogVersions: value.removedCatalogVersions,
-      removedCheckpointRecords: BigInt(value.removedCheckpointRecords),
+      removedStateVersions: value.removedStateVersions,
+      removedSnapshotRecords: BigInt(value.removedSnapshotRecords),
       removedNamedRoots: value.removedNamedRoots,
     };
   }

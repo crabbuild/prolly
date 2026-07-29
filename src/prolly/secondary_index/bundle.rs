@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
-use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +12,7 @@ use super::super::sync::{verify_node_bytes, SnapshotBundleNode};
 use super::super::tree::Tree;
 use super::super::versioned_map::MapVersionId;
 use super::super::Prolly;
-use super::budget::TransferBudget;
+use super::budget::{Deadline, TransferBudget};
 use super::coordinator::{IndexedMap, IndexedVersion};
 use super::publication::IndexedStore;
 use super::state::{IndexDescriptor, IndexedCollectionState};
@@ -105,7 +104,7 @@ impl IndexedSnapshotBundle {
         budget: &TransferBudget,
     ) -> Result<IndexedSnapshotBundleVerification, Error> {
         budget.validate()?;
-        let started = Instant::now();
+        let started = Deadline::new();
         if self.format_version != INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION
             || self.source_map_id.is_empty()
             || MapVersionId::for_tree(&self.state_tree)? != self.state_version
@@ -127,7 +126,7 @@ impl IndexedSnapshotBundle {
             decoded_bytes = decoded_bytes.saturating_add(node.bytes.len());
             if decoded_bytes > budget.max_decoded_bytes
                 || decoded_bytes > budget.max_accounted_memory_bytes
-                || started.elapsed() > budget.max_elapsed
+                || started.exceeded(budget.max_elapsed)
             {
                 return Err(Error::IndexResourceLimitExceeded {
                     resource: "bundle_decoded_bytes",

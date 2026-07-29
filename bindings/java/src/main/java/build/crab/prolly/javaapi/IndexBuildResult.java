@@ -5,7 +5,7 @@ import build.crab.prolly.api.JavaIndexBuildResult;
 public record IndexBuildResult(
         byte[] sourceVersion,
         byte[] indexVersion,
-        byte[] catalogVersion,
+        byte[] stateVersion,
         long generation,
         long entries,
         long attempts,
@@ -13,7 +13,7 @@ public record IndexBuildResult(
     static IndexBuildResult fromNative(JavaIndexBuildResult value) {
         return new IndexBuildResult(
                 value.getSourceVersion().clone(), value.getIndexVersion().clone(),
-                value.getCatalogVersion().clone(), value.getGeneration(), value.getEntries(),
+                value.getStateVersion().clone(), value.getGeneration(), value.getEntries(),
                 value.getAttempts(), value.getActivated());
     }
 }

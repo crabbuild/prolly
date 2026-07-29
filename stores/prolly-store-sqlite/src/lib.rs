@@ -2435,6 +2435,19 @@ mod tests {
     }
 
     #[test]
+    fn production_indexed_profile_passes_shared_contract() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = SqliteStoreConfig {
+            synchronous_normal: false,
+            background_checkpoints: false,
+            ..SqliteStoreConfig::default()
+        };
+        let store =
+            SqliteStore::open_with_config(directory.path().join("indexed.db"), config).unwrap();
+        prolly_store_test::assert_production_indexed_store(store);
+    }
+
+    #[test]
     fn sqlite_store_put_get_delete() {
         let store = SqliteStore::open_in_memory().unwrap();
 

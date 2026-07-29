@@ -6,29 +6,29 @@
   ],
   "summary": {
     "release_complete": 343,
-    "reviewed_incomplete": 402,
-    "unreviewed_runtime_candidate": 706,
-    "unreviewed_data_model": 1481,
-    "unreviewed_rust_abstraction": 7
+    "reviewed_incomplete": 395,
+    "unreviewed_runtime_candidate": 739,
+    "unreviewed_data_model": 1565,
+    "unreviewed_rust_abstraction": 10
   },
   "family_counts": {
-    "core": 1582,
-    "indexed-map": 249,
-    "maintenance": 298,
+    "core": 1633,
+    "indexed-map": 295,
+    "maintenance": 313,
     "proof": 171,
     "proximity-map": 389,
-    "session": 105,
+    "session": 106,
     "versioned-map": 145
   },
   "owner_counts": {
-    "prolly::Prolly": 144,
-    "prolly::ProllyEngine": 123,
+    "prolly::Prolly": 147,
+    "prolly::ProllyEngine": 125,
     "prolly::VersionedMap": 77,
-    "prolly::Error": 48,
+    "prolly::Error": 53,
     "prolly::MapSnapshot": 46,
     "prolly::TreeStats": 39,
-    "prolly::SecondaryIndexSnapshot": 31,
-    "prolly::IndexedMap": 26,
+    "prolly::IndexedMap": 35,
+    "prolly::SecondaryIndexSnapshot": 32,
     "prolly::Node": 25,
     "prolly::StatsDiff": 25,
     "prolly::StatsPercentageChange": 25,
@@ -38,19 +38,21 @@
     "prolly::AsyncStore": 21,
     "prolly::ProximityMap": 21,
     "prolly::Store": 20,
-    "prolly::IndexedSnapshotBundle": 19,
     "prolly::MergePolicyRegistry": 19,
     "prolly::BatchApplyStats": 18,
+    "prolly::IndexedSnapshotBundle": 17,
     "prolly::WriteStats": 17,
     "prolly::AsyncVersionedMap": 16,
     "prolly::SecondaryIndexLimits": 16,
-    "prolly::IndexedMapMetricsSnapshot": 15,
+    "prolly::IndexErrorCode": 15,
     "prolly::RootManifest": 15,
     "prolly::VersionedValue": 15,
     "prolly::WriteSession": 15,
     "prolly::AsyncMapSnapshot": 14,
     "prolly::ConfigBuilder": 14,
     "prolly::DiffPageProofVerification": 14,
+    "prolly::IndexDescriptor": 14,
+    "prolly::IndexedCollectionState": 14,
     "prolly::KeyBuilder": 14,
     "prolly::NamedRootRetention": 14,
     "prolly::NodeBuilder": 14,
@@ -68,20 +70,20 @@
     "prolly::AuthenticatedProofEnvelope": 12,
     "prolly::ChunkingSpec": 12,
     "prolly::HnswIndex": 12,
+    "prolly::IndexedMapMetricsSnapshot": 12,
     "prolly::MapComparison": 12,
     "prolly::MapMerge": 12,
     "prolly::OwnedProllyTransaction": 12,
     "prolly::ProximitySearchStats": 12,
     "prolly::SearchPlanSummary": 12,
-    "prolly::SecondaryIndexDescriptor": 12,
     "prolly::SnapshotManager": 12,
     "prolly::SnapshotNamespace": 12,
     "prolly::Tombstone": 12,
     "prolly::CompositeBuildStats": 11,
+    "prolly::MaintenanceBudget": 11,
     "prolly::ProximityVerification": 11,
     "prolly::AcceleratorCatalog": 10,
     "prolly::DiffPageProof": 10,
-    "prolly::IndexCheckpoint": 10,
     "prolly::IndexVerification": 10,
     "prolly::MutationBuffer": 10,
     "prolly::OwnedReadSession": 10,
@@ -97,13 +99,16 @@
     "prolly::CrdtConfig": 9,
     "prolly::GcPlan": 9,
     "prolly::GcReachability": 9,
+    "prolly::IndexedMapHealth": 9,
     "prolly::KeyProof": 9,
     "prolly::MergeTraceEvent": 9,
     "prolly::MultiKeyProof": 9,
     "prolly::MultiValueSet": 9,
+    "prolly::MutationBudget": 9,
     "prolly::ProofBundleVerification": 9,
     "prolly::ProximityConfig": 9,
     "prolly::ProximitySearchEvent": 9,
+    "prolly::QueryBudget": 9,
     "prolly::SearchIo": 9,
     "prolly::SearchRequest": 9,
     "prolly::SecondaryIndex": 9,
@@ -117,13 +122,14 @@
     "prolly::HnswConfig": 8,
     "prolly::IndexBuildResult": 8,
     "prolly::IndexedRetentionResult": 8,
+    "prolly::IndexedSnapshot": 8,
     "prolly::IndexedSnapshotBundleSummary": 8,
     "prolly::MissingNodePlan": 8,
     "prolly::ProximitySearchRequest": 8,
     "prolly::SecondaryIndexRegistry": 8,
+    "prolly::TransferBudget": 8,
     "prolly::TreeFormat": 8,
     "prolly::VersionedMapsTransaction": 8,
-    "prolly::ActiveIndexHealth": 7,
     "prolly::AsyncBlobStore": 7,
     "prolly::ContentGraphCopy": 7,
     "prolly::ContentRootManifest": 7,
@@ -131,8 +137,8 @@
     "prolly::FileNodeStore": 7,
     "prolly::FileNodeStoreError": 7,
     "prolly::HnswBuildStats": 7,
-    "prolly::IndexControl": 7,
     "prolly::IndexedMapEditor": 7,
+    "prolly::IndexedSnapshotRecord": 7,
     "prolly::KeyProofVerification": 7,
     "prolly::MergeDecision": 7,
     "prolly::MergeFallbackReason": 7,
@@ -161,6 +167,7 @@
     "prolly::VersionedMapEditor": 7,
     "prolly::VersionedMapUpdate": 7,
     "prolly::AcceleratorSet": 6,
+    "prolly::ActiveIndexHealth": 6,
     "prolly::AsyncHnswIndex": 6,
     "prolly::AsyncManifestStore": 6,
     "prolly::AsyncProductQuantizer": 6,
@@ -174,17 +181,17 @@
     "prolly::DiffRef": 6,
     "prolly::ExecutionConfig": 6,
     "prolly::HnswBuildLimits": 6,
+    "prolly::IndexSemanticLimits": 6,
     "prolly::IndexValue": 6,
     "prolly::IndexValueRef": 6,
-    "prolly::IndexedMapHealth": 6,
     "prolly::IndexedMapUpdate": 6,
-    "prolly::IndexedSnapshot": 6,
     "prolly::IndexedSourceRecordRef": 6,
     "prolly::ManifestStore": 6,
     "prolly::ManifestUpdate": 6,
     "prolly::NamedRootManifest": 6,
     "prolly::NamedRootUpdate": 6,
     "prolly::NodePublication": 6,
+    "prolly::ProductionIndexedStoreCapabilities": 6,
     "prolly::ProximityFilter": 6,
     "prolly::ProximityProofFilter": 6,
     "prolly::ProximityTree": 6,
@@ -209,7 +216,8 @@
     "prolly::Encoding": 5,
     "prolly::FileBlobStore": 5,
     "prolly::FullRebuildReason": 5,
-    "prolly::IndexedHeadRecord": 5,
+    "prolly::IndexSnapshotRef": 5,
+    "prolly::IndexedStoreProfile": 5,
     "prolly::MapCatalogVerification": 5,
     "prolly::MapVersion": 5,
     "prolly::MapVersionId": 5,
@@ -259,7 +267,8 @@
     "prolly::FileBlobStoreError": 4,
     "prolly::GcSweep": 4,
     "prolly::IndexProjection": 4,
-    "prolly::IndexedSnapshotBundleIndex": 4,
+    "prolly::IndexedCoordinationScope": 4,
+    "prolly::IndexedGcSafety": 4,
     "prolly::IndexedSnapshotBundleVerification": 4,
     "prolly::IndexedVersion": 4,
     "prolly::LargeValueConfig": 4,
@@ -284,11 +293,13 @@
     "prolly::QueryKernel": 4,
     "prolly::RemoteNamedRoot": 4,
     "prolly::RemoteRootCondition": 4,
+    "prolly::RetryAdvice": 4,
     "prolly::RootCondition": 4,
     "prolly::RuntimeConfig": 4,
     "prolly::SearchPolicy": 4,
     "prolly::SecondaryIndexEntry": 4,
     "prolly::SecondaryIndexMatch": 4,
+    "prolly::SecondaryIndexQuery": 4,
     "prolly::SortedBatchBuilder": 4,
     "prolly::StructuralDiffMarker": 4,
     "prolly::StructuralDiffPage": 4,
@@ -300,7 +311,6 @@
     "prolly::ValueRefView": 4,
     "prolly::VersionedCborCodec": 4,
     "prolly::VersionedJsonCodec": 4,
-    "prolly::ActiveIndexControl": 3,
     "prolly::ApproximatePreference": 3,
     "prolly::AsyncMapChangeSubscription": 3,
     "prolly::AsyncTransactionalStore": 3,
@@ -308,6 +318,7 @@
     "prolly::BatchOp": 3,
     "prolly::BoundaryInput": 3,
     "prolly::CancellationToken": 3,
+    "prolly::CollectionIndexPolicy": 3,
     "prolly::CompositeBaseKind": 3,
     "prolly::CompositeBuildOutcome": 3,
     "prolly::ContentManifestUpdate": 3,
@@ -317,7 +328,10 @@
     "prolly::DeletePolicy": 3,
     "prolly::DiffPage": 3,
     "prolly::HierarchyConfig": 3,
+    "prolly::IndexedSnapshotBundleIndex": 3,
     "prolly::IndexedSnapshotId": 3,
+    "prolly::IndexedStore": 3,
+    "prolly::IndexedWriteVisibility": 3,
     "prolly::KeyCodec": 3,
     "prolly::KeyDecodeError": 3,
     "prolly::MapChangeSubscription": 3,
@@ -345,7 +359,9 @@
     "prolly::SecondaryIndexError": 3,
     "prolly::SecondaryIndexPage": 3,
     "prolly::SnapshotBundleNode": 3,
+    "prolly::SnapshotPinGuard": 3,
     "prolly::SnapshotSelection": 3,
+    "prolly::SourceSnapshotRef": 3,
     "prolly::StructuralEdit": 3,
     "prolly::TermBounds": 3,
     "prolly::TransactionNodeWrite": 3,
@@ -371,6 +387,7 @@
     "prolly::RemoteStoreConfig": 2,
     "prolly::ScalarQuantizationConfig": 2,
     "prolly::SecondaryIndexExtractor": 2,
+    "prolly::SnapshotPin": 2,
     "prolly::StreamingSecondaryIndexExtractor": 2,
     "prolly::VectorStorageConfig": 2,
     "prolly::AsyncProlly": 1,
@@ -387,6 +404,7 @@
     "prolly::DEFAULT_MIN_CHUNK_SIZE": 1,
     "prolly::DEFAULT_VERSIONED_MAP_RETRIES": 1,
     "prolly::ExactProximityRecord": 1,
+    "prolly::INDEXED_COLLECTION_FORMAT": 1,
     "prolly::INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION": 1,
     "prolly::INDEX_PHYSICAL_LAYOUT_VERSION": 1,
     "prolly::INIT_LEVEL": 1,
@@ -401,7 +419,6 @@
     "prolly::ProjectedIndexEntry": 1,
     "prolly::Resolver": 1,
     "prolly::SEARCH_PLAN_FORMAT_VERSION": 1,
-    "prolly::SECONDARY_INDEX_FORMAT_VERSION": 1,
     "prolly::SNAPSHOT_BRANCH_PREFIX": 1,
     "prolly::SNAPSHOT_BUNDLE_FORMAT_VERSION": 1,
     "prolly::SNAPSHOT_CHECKPOINT_PREFIX": 1,
@@ -413,13 +430,6 @@
     "prolly::TransactionOverlayError": 1,
     "prolly::VERSIONED_MAP_ROOT_PREFIX": 1,
     "prolly::append_batch": 1,
-    "prolly::catalog_checkpoint_key": 1,
-    "prolly::catalog_checkpoints_prefix": 1,
-    "prolly::catalog_current_key": 1,
-    "prolly::catalog_descriptor_key": 1,
-    "prolly::catalog_format_key": 1,
-    "prolly::catalog_map_id": 1,
-    "prolly::catalog_retired_key": 1,
     "prolly::chunking": 1,
     "prolly::chunking::entry_count_key_hash": 1,
     "prolly::chunking::entry_count_key_value_hash": 1,
@@ -428,8 +438,6 @@
     "prolly::compare_and_swap_named_content_root": 1,
     "prolly::compare_and_swap_named_content_root_with_limits": 1,
     "prolly::content_references": 1,
-    "prolly::control_record_key": 1,
-    "prolly::control_root_name": 1,
     "prolly::copy_and_publish_content_graph": 1,
     "prolly::copy_content_graph": 1,
     "prolly::debug_key": 1,
@@ -438,14 +446,13 @@
     "prolly::decode_physical_index_key": 1,
     "prolly::decode_physical_index_key_ref": 1,
     "prolly::decode_segments": 1,
-    "prolly::descriptor_fingerprint": 1,
     "prolly::encode_cbor": 1,
     "prolly::encode_json": 1,
     "prolly::encode_segment": 1,
     "prolly::encode_segment_prefix": 1,
     "prolly::i128_key": 1,
     "prolly::i64_key": 1,
-    "prolly::index_map_id": 1,
+    "prolly::indexed_collection_root_name": 1,
     "prolly::inspect_proof_bundle": 1,
     "prolly::is_tombstone_value": 1,
     "prolly::load_named_content_root": 1,
@@ -690,36 +697,6 @@
       "bucket": "reviewed_incomplete"
     },
     {
-      "rust": "prolly::ActiveIndexControl",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::ActiveIndexControl::fingerprint",
-      "kind": "struct_field",
-      "owner": "prolly::ActiveIndexControl",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::ActiveIndexControl::name",
-      "kind": "struct_field",
-      "owner": "prolly::ActiveIndexControl",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
       "rust": "prolly::ActiveIndexHealth",
       "kind": "struct",
       "owner": null,
@@ -741,16 +718,6 @@
     },
     {
       "rust": "prolly::ActiveIndexHealth::generation",
-      "kind": "struct_field",
-      "owner": "prolly::ActiveIndexHealth",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::ActiveIndexHealth::index_map_id",
       "kind": "struct_field",
       "owner": "prolly::ActiveIndexHealth",
       "member_kind": "field",
@@ -4190,6 +4157,36 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
+      "rust": "prolly::CollectionIndexPolicy",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::CollectionIndexPolicy::max_active_indexes",
+      "kind": "struct_field",
+      "owner": "prolly::CollectionIndexPolicy",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::CollectionIndexPolicy::validate",
+      "kind": "function",
+      "owner": "prolly::CollectionIndexPolicy",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::CompositeAccelerator",
       "kind": "struct",
       "owner": null,
@@ -6730,16 +6727,6 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::Error::IndexCheckpointMismatch",
-      "kind": "variant",
-      "owner": "prolly::Error",
-      "member_kind": "variant",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
       "rust": "prolly::Error::IndexCursorVersionMismatch",
       "kind": "variant",
       "owner": "prolly::Error",
@@ -6765,6 +6752,26 @@
       "owner": "prolly::Error",
       "member_kind": "variant",
       "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::Error::IndexFormatUnsupported",
+      "kind": "variant",
+      "owner": "prolly::Error",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::Error::IndexGcUnsafe",
+      "kind": "variant",
+      "owner": "prolly::Error",
+      "member_kind": "variant",
+      "family": "maintenance",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
@@ -6801,6 +6808,16 @@
     },
     {
       "rust": "prolly::Error::IndexRuntimeDefinitionMissing",
+      "kind": "variant",
+      "owner": "prolly::Error",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::Error::IndexSnapshotMismatch",
       "kind": "variant",
       "owner": "prolly::Error",
       "member_kind": "variant",
@@ -7060,6 +7077,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::Error::UnsupportedIndexedStoreProfile",
+      "kind": "variant",
+      "owner": "prolly::Error",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::Error::UnsupportedProximityVersion",
       "kind": "variant",
       "owner": "prolly::Error",
@@ -7088,6 +7115,26 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::Error::index_code",
+      "kind": "function",
+      "owner": "prolly::Error",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::Error::retry_advice",
+      "kind": "function",
+      "owner": "prolly::Error",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::ExactProximityRecord",
@@ -8080,6 +8127,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::INDEXED_COLLECTION_FORMAT",
+      "kind": "constant",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION",
       "kind": "constant",
       "owner": null,
@@ -8140,16 +8197,6 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexBuildResult::catalog_version",
-      "kind": "struct_field",
-      "owner": "prolly::IndexBuildResult",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
       "rust": "prolly::IndexBuildResult::entries",
       "kind": "struct_field",
       "owner": "prolly::IndexBuildResult",
@@ -8190,7 +8237,17 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexCheckpoint",
+      "rust": "prolly::IndexBuildResult::state_version",
+      "kind": "struct_field",
+      "owner": "prolly::IndexBuildResult",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor",
       "kind": "struct",
       "owner": null,
       "member_kind": null,
@@ -8200,19 +8257,9 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexCheckpoint::definition_fingerprint",
-      "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexCheckpoint::from_bytes",
+      "rust": "prolly::IndexDescriptor::canonical_fingerprint",
       "kind": "function",
-      "owner": "prolly::IndexCheckpoint",
+      "owner": "prolly::IndexDescriptor",
       "member_kind": "inherent-item",
       "family": "core",
       "classification": "portable",
@@ -8220,9 +8267,9 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::IndexCheckpoint::generation",
+      "rust": "prolly::IndexDescriptor::extractor_id",
       "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
+      "owner": "prolly::IndexDescriptor",
       "member_kind": "field",
       "family": "core",
       "classification": "portable",
@@ -8230,9 +8277,9 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexCheckpoint::index_map_id",
+      "rust": "prolly::IndexDescriptor::fingerprint",
       "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
+      "owner": "prolly::IndexDescriptor",
       "member_kind": "field",
       "family": "core",
       "classification": "portable",
@@ -8240,49 +8287,9 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexCheckpoint::index_name",
-      "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexCheckpoint::index_version",
-      "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexCheckpoint::source_map_id",
-      "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexCheckpoint::source_version",
-      "kind": "struct_field",
-      "owner": "prolly::IndexCheckpoint",
-      "member_kind": "field",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexCheckpoint::to_bytes",
+      "rust": "prolly::IndexDescriptor::from_bytes",
       "kind": "function",
-      "owner": "prolly::IndexCheckpoint",
+      "owner": "prolly::IndexDescriptor",
       "member_kind": "inherent-item",
       "family": "core",
       "classification": "portable",
@@ -8290,8 +8297,98 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::IndexControl",
-      "kind": "struct",
+      "rust": "prolly::IndexDescriptor::from_runtime",
+      "kind": "function",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::generation",
+      "kind": "struct_field",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::limits",
+      "kind": "struct_field",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::name",
+      "kind": "struct_field",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::physical_layout",
+      "kind": "struct_field",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::projection",
+      "kind": "struct_field",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::source_map_id",
+      "kind": "struct_field",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::to_bytes",
+      "kind": "function",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexDescriptor::validate",
+      "kind": "function",
+      "owner": "prolly::IndexDescriptor",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexErrorCode",
+      "kind": "enum",
       "owner": null,
       "member_kind": null,
       "family": "core",
@@ -8300,64 +8397,144 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexControl::active",
-      "kind": "struct_field",
-      "owner": "prolly::IndexControl",
-      "member_kind": "field",
+      "rust": "prolly::IndexErrorCode::BundleInvalid",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
       "family": "core",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexControl::catalog_map_id",
-      "kind": "struct_field",
-      "owner": "prolly::IndexControl",
-      "member_kind": "field",
+      "rust": "prolly::IndexErrorCode::Conflict",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
       "family": "core",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexControl::fingerprint",
-      "kind": "function",
-      "owner": "prolly::IndexControl",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::IndexControl::from_bytes",
-      "kind": "function",
-      "owner": "prolly::IndexControl",
-      "member_kind": "inherent-item",
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::IndexControl::source_map_id",
-      "kind": "struct_field",
-      "owner": "prolly::IndexControl",
-      "member_kind": "field",
+      "rust": "prolly::IndexErrorCode::Corruption",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
       "family": "core",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexControl::to_bytes",
-      "kind": "function",
-      "owner": "prolly::IndexControl",
-      "member_kind": "inherent-item",
+      "rust": "prolly::IndexErrorCode::CursorInvalid",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "session",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::DefinitionInvalid",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
       "family": "core",
       "classification": "portable",
       "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::ExtractionFailed",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::FormatUnsupported",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::ManagedWriteRequired",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::OperationUnsupported",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::ProjectionInvalid",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::ResourceLimit",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::RuntimeDefinitionMissing",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::SnapshotUnavailable",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexErrorCode::StoreProfileUnsupported",
+      "kind": "variant",
+      "owner": "prolly::IndexErrorCode",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
     },
     {
       "rust": "prolly::IndexProjection",
@@ -8395,6 +8572,116 @@
       "owner": "prolly::IndexProjection",
       "member_kind": "variant",
       "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSemanticLimits",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSemanticLimits::max_all_value_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSemanticLimits",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSemanticLimits::max_projected_bytes_per_record",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSemanticLimits",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSemanticLimits::max_projection_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSemanticLimits",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSemanticLimits::max_term_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSemanticLimits",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSemanticLimits::max_terms_per_record",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSemanticLimits",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSnapshotRef",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSnapshotRef::descriptor_fingerprint",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSnapshotRef",
+      "member_kind": "field",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSnapshotRef::entry_count",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSnapshotRef",
+      "member_kind": "field",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSnapshotRef::name",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSnapshotRef",
+      "member_kind": "field",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexSnapshotRef::tree",
+      "kind": "struct_field",
+      "owner": "prolly::IndexSnapshotRef",
+      "member_kind": "field",
+      "family": "maintenance",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
@@ -8620,7 +8907,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedHeadRecord",
+      "rust": "prolly::IndexedCollectionState",
       "kind": "struct",
       "owner": null,
       "member_kind": null,
@@ -8630,19 +8917,9 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedHeadRecord::from_bytes",
-      "kind": "function",
-      "owner": "prolly::IndexedHeadRecord",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::IndexedHeadRecord::indexes",
+      "rust": "prolly::IndexedCollectionState::active",
       "kind": "struct_field",
-      "owner": "prolly::IndexedHeadRecord",
+      "owner": "prolly::IndexedCollectionState",
       "member_kind": "field",
       "family": "indexed-map",
       "classification": "portable",
@@ -8650,9 +8927,9 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedHeadRecord::source_version",
+      "rust": "prolly::IndexedCollectionState::descriptors",
       "kind": "struct_field",
-      "owner": "prolly::IndexedHeadRecord",
+      "owner": "prolly::IndexedCollectionState",
       "member_kind": "field",
       "family": "indexed-map",
       "classification": "portable",
@@ -8660,14 +8937,194 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedHeadRecord::to_bytes",
+      "rust": "prolly::IndexedCollectionState::from_tree",
       "kind": "function",
-      "owner": "prolly::IndexedHeadRecord",
+      "owner": "prolly::IndexedCollectionState",
       "member_kind": "inherent-item",
       "family": "indexed-map",
       "classification": "portable",
       "status": "planned",
-      "bucket": "reviewed_incomplete"
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::head",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::head_snapshot",
+      "kind": "function",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::new",
+      "kind": "function",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::pins",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::policy",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::retired",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::snapshots",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::source_map_id",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::to_tree",
+      "kind": "function",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedCollectionState::validate_closure",
+      "kind": "function",
+      "owner": "prolly::IndexedCollectionState",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedCoordinationScope",
+      "kind": "enum",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCoordinationScope::Distributed",
+      "kind": "variant",
+      "owner": "prolly::IndexedCoordinationScope",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCoordinationScope::Host",
+      "kind": "variant",
+      "owner": "prolly::IndexedCoordinationScope",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedCoordinationScope::Process",
+      "kind": "variant",
+      "owner": "prolly::IndexedCoordinationScope",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedGcSafety",
+      "kind": "enum",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedGcSafety::ExplicitQuiescence",
+      "kind": "variant",
+      "owner": "prolly::IndexedGcSafety",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedGcSafety::GracePeriod",
+      "kind": "variant",
+      "owner": "prolly::IndexedGcSafety",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedGcSafety::Leases",
+      "kind": "variant",
+      "owner": "prolly::IndexedGcSafety",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
     },
     {
       "rust": "prolly::IndexedMap",
@@ -8698,6 +9155,16 @@
       "classification": "portable",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::IndexedMap::apply_with_budget",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::IndexedMap::deactivate_index",
@@ -8740,6 +9207,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::IndexedMap::ensure_index_with_budget",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::IndexedMap::export_current",
       "kind": "function",
       "owner": "prolly::IndexedMap",
@@ -8748,6 +9225,16 @@
       "classification": "portable",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::IndexedMap::export_current_with_budget",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::IndexedMap::get",
@@ -8800,6 +9287,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::IndexedMap::import_current_with_budget",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::IndexedMap::keep_last",
       "kind": "function",
       "owner": "prolly::IndexedMap",
@@ -8818,6 +9315,16 @@
       "classification": "portable",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::IndexedMap::pin_snapshot",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::IndexedMap::plan_indexed_gc",
@@ -8850,6 +9357,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::IndexedMap::release_snapshot_pin",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::IndexedMap::repair_index",
       "kind": "function",
       "owner": "prolly::IndexedMap",
@@ -8868,6 +9385,16 @@
       "classification": "portable",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::IndexedMap::retain_snapshot_pin",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::IndexedMap::snapshot",
@@ -8908,6 +9435,26 @@
       "classification": "portable",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::IndexedMap::store_profile",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedMap::sweep_indexed_gc",
+      "kind": "function",
+      "owner": "prolly::IndexedMap",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::IndexedMap::verify_all",
@@ -9020,7 +9567,27 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedMapHealth::catalog_version",
+      "rust": "prolly::IndexedMapHealth::closure_valid",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedMapHealth",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedMapHealth::durable_pins",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedMapHealth",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedMapHealth::retained_snapshots",
       "kind": "struct_field",
       "owner": "prolly::IndexedMapHealth",
       "member_kind": "field",
@@ -9050,7 +9617,17 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedMapHealth::supports_transactions",
+      "rust": "prolly::IndexedMapHealth::state_version",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedMapHealth",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedMapHealth::store_profile",
       "kind": "struct_field",
       "owner": "prolly::IndexedMapHealth",
       "member_kind": "field",
@@ -9071,26 +9648,6 @@
     },
     {
       "rust": "prolly::IndexedMapMetricsSnapshot::build_attempts",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedMapMetricsSnapshot",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedMapMetricsSnapshot::catalog_nodes_written",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedMapMetricsSnapshot",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedMapMetricsSnapshot::index_nodes_written",
       "kind": "struct_field",
       "owner": "prolly::IndexedMapMetricsSnapshot",
       "member_kind": "field",
@@ -9161,16 +9718,6 @@
     },
     {
       "rust": "prolly::IndexedMapMetricsSnapshot::retries",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedMapMetricsSnapshot",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedMapMetricsSnapshot::source_nodes_written",
       "kind": "struct_field",
       "owner": "prolly::IndexedMapMetricsSnapshot",
       "member_kind": "field",
@@ -9280,26 +9827,6 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedRetentionResult::removed_catalog_versions",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedRetentionResult",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedRetentionResult::removed_checkpoint_records",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedRetentionResult",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
       "rust": "prolly::IndexedRetentionResult::removed_index_versions",
       "kind": "struct_field",
       "owner": "prolly::IndexedRetentionResult",
@@ -9320,7 +9847,27 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::IndexedRetentionResult::removed_snapshot_records",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedRetentionResult",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::IndexedRetentionResult::removed_source_versions",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedRetentionResult",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedRetentionResult::removed_state_versions",
       "kind": "struct_field",
       "owner": "prolly::IndexedRetentionResult",
       "member_kind": "field",
@@ -9358,16 +9905,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedSnapshot::catalog",
-      "kind": "function",
-      "owner": "prolly::IndexedSnapshot",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::IndexedSnapshot::id",
@@ -9410,6 +9947,36 @@
       "bucket": "reviewed_incomplete"
     },
     {
+      "rust": "prolly::IndexedSnapshot::source_version",
+      "kind": "function",
+      "owner": "prolly::IndexedSnapshot",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedSnapshot::state",
+      "kind": "function",
+      "owner": "prolly::IndexedSnapshot",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedSnapshot::state_version",
+      "kind": "function",
+      "owner": "prolly::IndexedSnapshot",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::IndexedSnapshotBundle",
       "kind": "struct",
       "owner": null,
@@ -9428,46 +9995,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::IndexedSnapshotBundle::catalog_map_id",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedSnapshotBundle",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedSnapshotBundle::catalog_tree",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedSnapshotBundle",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedSnapshotBundle::catalog_version",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedSnapshotBundle",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedSnapshotBundle::control",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedSnapshotBundle",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
     },
     {
       "rust": "prolly::IndexedSnapshotBundle::digest",
@@ -9550,7 +10077,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedSnapshotBundle::source_tree",
+      "rust": "prolly::IndexedSnapshotBundle::source_version",
       "kind": "struct_field",
       "owner": "prolly::IndexedSnapshotBundle",
       "member_kind": "field",
@@ -9560,7 +10087,17 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedSnapshotBundle::source_version",
+      "rust": "prolly::IndexedSnapshotBundle::state_tree",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedSnapshotBundle",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotBundle::state_version",
       "kind": "struct_field",
       "owner": "prolly::IndexedSnapshotBundle",
       "member_kind": "field",
@@ -9600,20 +10137,20 @@
       "bucket": "reviewed_incomplete"
     },
     {
+      "rust": "prolly::IndexedSnapshotBundle::verify_with_budget",
+      "kind": "function",
+      "owner": "prolly::IndexedSnapshotBundle",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::IndexedSnapshotBundleIndex",
       "kind": "struct",
       "owner": null,
       "member_kind": null,
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedSnapshotBundleIndex::checkpoint",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedSnapshotBundleIndex",
-      "member_kind": "field",
       "family": "indexed-map",
       "classification": "portable",
       "status": "planned",
@@ -9651,16 +10188,6 @@
     },
     {
       "rust": "prolly::IndexedSnapshotBundleSummary::byte_count",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedSnapshotBundleSummary",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::IndexedSnapshotBundleSummary::catalog_version",
       "kind": "struct_field",
       "owner": "prolly::IndexedSnapshotBundleSummary",
       "member_kind": "field",
@@ -9720,6 +10247,16 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::IndexedSnapshotBundleSummary::state_version",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedSnapshotBundleSummary",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::IndexedSnapshotBundleVerification",
       "kind": "struct",
       "owner": null,
@@ -9770,7 +10307,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedSnapshotId::catalog_version",
+      "rust": "prolly::IndexedSnapshotId::0",
       "kind": "struct_field",
       "owner": "prolly::IndexedSnapshotId",
       "member_kind": "field",
@@ -9780,14 +10317,84 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedSnapshotId::source_version",
-      "kind": "struct_field",
+      "rust": "prolly::IndexedSnapshotId::as_cid",
+      "kind": "function",
       "owner": "prolly::IndexedSnapshotId",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord::id",
+      "kind": "function",
+      "owner": "prolly::IndexedSnapshotRecord",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord::indexes",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedSnapshotRecord",
       "member_kind": "field",
       "family": "indexed-map",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord::parent",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedSnapshotRecord",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord::source",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedSnapshotRecord",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord::source_map_id",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedSnapshotRecord",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedSnapshotRecord::validate",
+      "kind": "function",
+      "owner": "prolly::IndexedSnapshotRecord",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::IndexedSourceRecord",
@@ -9860,8 +10467,38 @@
       "bucket": "release_complete"
     },
     {
-      "rust": "prolly::IndexedVersion",
-      "kind": "struct",
+      "rust": "prolly::IndexedStore",
+      "kind": "trait",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
+    },
+    {
+      "rust": "prolly::IndexedStore::confirm_indexed_publication",
+      "kind": "function",
+      "owner": "prolly::IndexedStore",
+      "member_kind": "trait-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
+    },
+    {
+      "rust": "prolly::IndexedStore::indexed_store_profile",
+      "kind": "function",
+      "owner": "prolly::IndexedStore",
+      "member_kind": "trait-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_rust_abstraction"
+    },
+    {
+      "rust": "prolly::IndexedStoreProfile",
+      "kind": "enum",
       "owner": null,
       "member_kind": null,
       "family": "indexed-map",
@@ -9870,10 +10507,50 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::IndexedVersion::catalog",
-      "kind": "struct_field",
-      "owner": "prolly::IndexedVersion",
-      "member_kind": "field",
+      "rust": "prolly::IndexedStoreProfile::Production",
+      "kind": "variant",
+      "owner": "prolly::IndexedStoreProfile",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedStoreProfile::Verification",
+      "kind": "variant",
+      "owner": "prolly::IndexedStoreProfile",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedStoreProfile::is_production",
+      "kind": "function",
+      "owner": "prolly::IndexedStoreProfile",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedStoreProfile::validate",
+      "kind": "function",
+      "owner": "prolly::IndexedStoreProfile",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::IndexedVersion",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
       "family": "indexed-map",
       "classification": "portable",
       "status": "planned",
@@ -9894,6 +10571,46 @@
       "kind": "struct_field",
       "owner": "prolly::IndexedVersion",
       "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedVersion::state",
+      "kind": "struct_field",
+      "owner": "prolly::IndexedVersion",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedWriteVisibility",
+      "kind": "enum",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedWriteVisibility::PublicationBarrier",
+      "kind": "variant",
+      "owner": "prolly::IndexedWriteVisibility",
+      "member_kind": "variant",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::IndexedWriteVisibility::ReadAfterWrite",
+      "kind": "variant",
+      "owner": "prolly::IndexedWriteVisibility",
+      "member_kind": "variant",
       "family": "indexed-map",
       "classification": "portable",
       "status": "planned",
@@ -10353,6 +11070,116 @@
       "rust": "prolly::LogicalPatch::key",
       "kind": "function",
       "owner": "prolly::LogicalPatch",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_accounted_memory_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_cas_attempts",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_derived_entries",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_elapsed",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_merge_fan_in",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_source_entries",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_spill_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_spill_runs",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::max_verification_findings",
+      "kind": "struct_field",
+      "owner": "prolly::MaintenanceBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MaintenanceBudget::validate",
+      "kind": "function",
+      "owner": "prolly::MaintenanceBudget",
       "member_kind": "inherent-item",
       "family": "core",
       "classification": "portable",
@@ -12730,6 +13557,96 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
+      "rust": "prolly::MutationBudget",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_accounted_memory_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_cas_attempts",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_derived_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_derived_entries",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_elapsed",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_input_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::max_input_records",
+      "kind": "struct_field",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::MutationBudget::validate",
+      "kind": "function",
+      "owner": "prolly::MutationBudget",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::MutationBuffer",
       "kind": "struct",
       "owner": null,
@@ -14780,6 +15697,66 @@
       "bucket": "reviewed_incomplete"
     },
     {
+      "rust": "prolly::ProductionIndexedStoreCapabilities",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::ProductionIndexedStoreCapabilities::coordination_scope",
+      "kind": "struct_field",
+      "owner": "prolly::ProductionIndexedStoreCapabilities",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::ProductionIndexedStoreCapabilities::durable_acknowledgement",
+      "kind": "struct_field",
+      "owner": "prolly::ProductionIndexedStoreCapabilities",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::ProductionIndexedStoreCapabilities::gc_safety",
+      "kind": "struct_field",
+      "owner": "prolly::ProductionIndexedStoreCapabilities",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::ProductionIndexedStoreCapabilities::validate",
+      "kind": "function",
+      "owner": "prolly::ProductionIndexedStoreCapabilities",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProductionIndexedStoreCapabilities::write_visibility",
+      "kind": "struct_field",
+      "owner": "prolly::ProductionIndexedStoreCapabilities",
+      "member_kind": "field",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::ProjectedIndexEntry",
       "kind": "type_alias",
       "owner": null,
@@ -14831,6 +15808,16 @@
     },
     {
       "rust": "prolly::Prolly::batch",
+      "kind": "function",
+      "owner": "prolly::Prolly",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::Prolly::batch_with_lineage",
       "kind": "function",
       "owner": "prolly::Prolly",
       "member_kind": "inherent-item",
@@ -14961,6 +15948,16 @@
     },
     {
       "rust": "prolly::Prolly::clear_cache",
+      "kind": "function",
+      "owner": "prolly::Prolly",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::Prolly::clear_unpinned_cache",
       "kind": "function",
       "owner": "prolly::Prolly",
       "member_kind": "inherent-item",
@@ -15298,6 +16295,16 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::Prolly::indexed_map_production",
+      "kind": "function",
+      "owner": "prolly::Prolly",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::Prolly::last_entry",
@@ -16250,6 +17257,16 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
+      "rust": "prolly::ProllyEngine::batch_with_lineage",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::ProllyEngine::batch_with_write_stats",
       "kind": "function",
       "owner": "prolly::ProllyEngine",
@@ -16341,6 +17358,16 @@
     },
     {
       "rust": "prolly::ProllyEngine::clear_cache",
+      "kind": "function",
+      "owner": "prolly::ProllyEngine",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::ProllyEngine::clear_unpinned_cache",
       "kind": "function",
       "owner": "prolly::ProllyEngine",
       "member_kind": "inherent-item",
@@ -20000,6 +21027,96 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::QueryBudget",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_accounted_memory_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_elapsed",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_page_entries",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_returned_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_returned_entries",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_scanned_entries",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::max_source_fetches",
+      "kind": "struct_field",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::QueryBudget::validate",
+      "kind": "function",
+      "owner": "prolly::QueryBudget",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::QueryKernel",
       "kind": "enum",
       "owner": null,
@@ -21400,6 +22517,46 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::RetryAdvice",
+      "kind": "enum",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::RetryAdvice::Never",
+      "kind": "variant",
+      "owner": "prolly::RetryAdvice",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::RetryAdvice::RetryAfter",
+      "kind": "variant",
+      "owner": "prolly::RetryAdvice",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::RetryAdvice::RetryFreshState",
+      "kind": "variant",
+      "owner": "prolly::RetryAdvice",
+      "member_kind": "variant",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
       "rust": "prolly::ReverseCursor",
       "kind": "struct",
       "owner": null,
@@ -21761,16 +22918,6 @@
     },
     {
       "rust": "prolly::SEARCH_PLAN_FORMAT_VERSION",
-      "kind": "constant",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SECONDARY_INDEX_FORMAT_VERSION",
       "kind": "constant",
       "owner": null,
       "member_kind": null,
@@ -22880,126 +24027,6 @@
       "bucket": "reviewed_incomplete"
     },
     {
-      "rust": "prolly::SecondaryIndexDescriptor",
-      "kind": "struct",
-      "owner": null,
-      "member_kind": null,
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::extractor_id",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::fingerprint",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::format_version",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::from_bytes",
-      "kind": "function",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::from_runtime",
-      "kind": "function",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::generation",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::name",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::physical_layout_version",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::projection",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::source_map_id",
-      "kind": "struct_field",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "field",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexDescriptor::to_bytes",
-      "kind": "function",
-      "owner": "prolly::SecondaryIndexDescriptor",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
-    },
-    {
       "rust": "prolly::SecondaryIndexDirection",
       "kind": "enum",
       "owner": null,
@@ -23210,7 +24237,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::SecondaryIndexLimits::max_derived_mutations_per_transaction",
+      "rust": "prolly::SecondaryIndexLimits::max_derived_mutations_per_write",
       "kind": "struct_field",
       "owner": "prolly::SecondaryIndexLimits",
       "member_kind": "field",
@@ -23240,7 +24267,7 @@
       "bucket": "unreviewed_data_model"
     },
     {
-      "rust": "prolly::SecondaryIndexLimits::max_projected_bytes_per_transaction",
+      "rust": "prolly::SecondaryIndexLimits::max_projected_bytes_per_write",
       "kind": "struct_field",
       "owner": "prolly::SecondaryIndexLimits",
       "member_kind": "field",
@@ -23430,6 +24457,46 @@
       "bucket": "unreviewed_data_model"
     },
     {
+      "rust": "prolly::SecondaryIndexQuery",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::SecondaryIndexQuery::exact_page",
+      "kind": "function",
+      "owner": "prolly::SecondaryIndexQuery",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::SecondaryIndexQuery::prefix_page",
+      "kind": "function",
+      "owner": "prolly::SecondaryIndexQuery",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::SecondaryIndexQuery::range_page",
+      "kind": "function",
+      "owner": "prolly::SecondaryIndexQuery",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::SecondaryIndexRegistry",
       "kind": "struct",
       "owner": null,
@@ -23518,16 +24585,6 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_data_model"
-    },
-    {
-      "rust": "prolly::SecondaryIndexSnapshot::checkpoint",
-      "kind": "function",
-      "owner": "prolly::SecondaryIndexSnapshot",
-      "member_kind": "inherent-item",
-      "family": "indexed-map",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "reviewed_incomplete"
     },
     {
       "rust": "prolly::SecondaryIndexSnapshot::descriptor",
@@ -23628,6 +24685,16 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::SecondaryIndexSnapshot::query",
+      "kind": "function",
+      "owner": "prolly::SecondaryIndexSnapshot",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::SecondaryIndexSnapshot::range",
@@ -23808,6 +24875,16 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "reviewed_incomplete"
+    },
+    {
+      "rust": "prolly::SecondaryIndexSnapshot::snapshot_ref",
+      "kind": "function",
+      "owner": "prolly::SecondaryIndexSnapshot",
+      "member_kind": "inherent-item",
+      "family": "indexed-map",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::SecondaryIndexSnapshot::tree",
@@ -24360,6 +25437,56 @@
       "bucket": "reviewed_incomplete"
     },
     {
+      "rust": "prolly::SnapshotPin",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::SnapshotPin::snapshot",
+      "kind": "struct_field",
+      "owner": "prolly::SnapshotPin",
+      "member_kind": "field",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::SnapshotPinGuard",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::SnapshotPinGuard::pin_id",
+      "kind": "function",
+      "owner": "prolly::SnapshotPinGuard",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::SnapshotPinGuard::release",
+      "kind": "function",
+      "owner": "prolly::SnapshotPinGuard",
+      "member_kind": "inherent-item",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
+    },
+    {
       "rust": "prolly::SnapshotRoot",
       "kind": "struct",
       "owner": null,
@@ -24488,6 +25615,36 @@
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_runtime_candidate"
+    },
+    {
+      "rust": "prolly::SourceSnapshotRef",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::SourceSnapshotRef::entry_count",
+      "kind": "struct_field",
+      "owner": "prolly::SourceSnapshotRef",
+      "member_kind": "field",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::SourceSnapshotRef::tree",
+      "kind": "struct_field",
+      "owner": "prolly::SourceSnapshotRef",
+      "member_kind": "field",
+      "family": "maintenance",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
     },
     {
       "rust": "prolly::SpliceStats",
@@ -26098,6 +27255,86 @@
       "classification": "idiomatic",
       "status": "implemented",
       "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::TransferBudget",
+      "kind": "struct",
+      "owner": null,
+      "member_kind": null,
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::max_accounted_memory_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::max_decoded_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::max_elapsed",
+      "kind": "struct_field",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::max_encoded_bytes",
+      "kind": "struct_field",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::max_nodes",
+      "kind": "struct_field",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::max_verification_work",
+      "kind": "struct_field",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "field",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_data_model"
+    },
+    {
+      "rust": "prolly::TransferBudget::validate",
+      "kind": "function",
+      "owner": "prolly::TransferBudget",
+      "member_kind": "inherent-item",
+      "family": "core",
+      "classification": "portable",
+      "status": "planned",
+      "bucket": "unreviewed_runtime_candidate"
     },
     {
       "rust": "prolly::Tree",
@@ -29140,76 +30377,6 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::catalog_checkpoint_key",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::catalog_checkpoints_prefix",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::catalog_current_key",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::catalog_descriptor_key",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::catalog_format_key",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::catalog_map_id",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::catalog_retired_key",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
       "rust": "prolly::chunking",
       "kind": "module",
       "owner": null,
@@ -29281,26 +30448,6 @@
     },
     {
       "rust": "prolly::content_references",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::control_record_key",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
-      "rust": "prolly::control_root_name",
       "kind": "function",
       "owner": null,
       "member_kind": null,
@@ -29390,16 +30537,6 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::descriptor_fingerprint",
-      "kind": "function",
-      "owner": null,
-      "member_kind": null,
-      "family": "core",
-      "classification": "portable",
-      "status": "planned",
-      "bucket": "unreviewed_runtime_candidate"
-    },
-    {
       "rust": "prolly::encode_cbor",
       "kind": "function",
       "owner": null,
@@ -29460,11 +30597,11 @@
       "bucket": "unreviewed_runtime_candidate"
     },
     {
-      "rust": "prolly::index_map_id",
+      "rust": "prolly::indexed_collection_root_name",
       "kind": "function",
       "owner": null,
       "member_kind": null,
-      "family": "core",
+      "family": "indexed-map",
       "classification": "portable",
       "status": "planned",
       "bucket": "unreviewed_runtime_candidate"

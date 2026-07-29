@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use prolly::{
     ActiveIndexHealth, IndexProjection, IndexVerification, IndexedMapHealth,
     IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshotBundle,
-    IndexedSnapshotId, IndexedSnapshotRecordId, IndexedStoreProfile, IndexedVersion,
+    IndexedSnapshotId, IndexedStoreProfile, IndexedVersion,
     SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry, SecondaryIndexError,
     SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry,
 };
@@ -51,8 +51,8 @@ pub struct SecondaryIndexLimitsRecord {
     pub max_all_value_bytes: u64,
     pub max_terms_per_record: u64,
     pub max_projected_bytes_per_record: u64,
-    pub max_derived_mutations_per_transaction: u64,
-    pub max_projected_bytes_per_transaction: u64,
+    pub max_derived_mutations_per_write: u64,
+    pub max_projected_bytes_per_write: u64,
     pub max_indexes: u64,
     pub build_page_size: u64,
     pub max_temporary_sort_bytes: u64,
@@ -71,9 +71,9 @@ impl From<SecondaryIndexLimits> for SecondaryIndexLimitsRecord {
             max_all_value_bytes: value.max_all_value_bytes as u64,
             max_terms_per_record: value.max_terms_per_record as u64,
             max_projected_bytes_per_record: value.max_projected_bytes_per_record as u64,
-            max_derived_mutations_per_transaction: value.max_derived_mutations_per_transaction
+            max_derived_mutations_per_write: value.max_derived_mutations_per_write
                 as u64,
-            max_projected_bytes_per_transaction: value.max_projected_bytes_per_transaction as u64,
+            max_projected_bytes_per_write: value.max_projected_bytes_per_write as u64,
             max_indexes: value.max_indexes as u64,
             build_page_size: value.build_page_size as u64,
             max_temporary_sort_bytes: value.max_temporary_sort_bytes as u64,
@@ -108,13 +108,13 @@ fn limits_from_record(
             value.max_projected_bytes_per_record,
             "max_projected_bytes_per_record",
         )?,
-        max_derived_mutations_per_transaction: usize_field(
-            value.max_derived_mutations_per_transaction,
-            "max_derived_mutations_per_transaction",
+        max_derived_mutations_per_write: usize_field(
+            value.max_derived_mutations_per_write,
+            "max_derived_mutations_per_write",
         )?,
-        max_projected_bytes_per_transaction: usize_field(
-            value.max_projected_bytes_per_transaction,
-            "max_projected_bytes_per_transaction",
+        max_projected_bytes_per_write: usize_field(
+            value.max_projected_bytes_per_write,
+            "max_projected_bytes_per_write",
         )?,
         max_indexes: usize_field(value.max_indexes, "max_indexes")?,
         build_page_size: usize_field(value.build_page_size, "build_page_size")?,
@@ -245,16 +245,12 @@ impl BindingIndexRegistry {
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct IndexedSnapshotIdRecord {
     pub snapshot: Vec<u8>,
-    pub source_version: Vec<u8>,
-    pub state_version: Vec<u8>,
 }
 
 impl From<IndexedSnapshotId> for IndexedSnapshotIdRecord {
     fn from(value: IndexedSnapshotId) -> Self {
         Self {
-            snapshot: value.snapshot.as_cid().as_bytes().to_vec(),
-            source_version: value.source_version.into_cid().0.to_vec(),
-            state_version: value.state_version.into_cid().0.to_vec(),
+            snapshot: value.as_cid().as_bytes().to_vec(),
         }
     }
 }
@@ -262,17 +258,13 @@ impl From<IndexedSnapshotId> for IndexedSnapshotIdRecord {
 fn snapshot_id_from_record(
     value: &IndexedSnapshotIdRecord,
 ) -> Result<IndexedSnapshotId, ProllyBindingError> {
-    Ok(IndexedSnapshotId {
-        snapshot: IndexedSnapshotRecordId(prolly::Cid(
-            <[u8; 32]>::try_from(value.snapshot.as_slice()).map_err(|_| {
-                ProllyBindingError::InvalidArgument {
-                    reason: "snapshot identifier must contain 32 bytes".to_string(),
-                }
-            })?,
-        )),
-        source_version: prolly::MapVersionId::from_bytes(&value.source_version)?,
-        state_version: prolly::MapVersionId::from_bytes(&value.state_version)?,
-    })
+    Ok(IndexedSnapshotId(prolly::Cid(
+        <[u8; 32]>::try_from(value.snapshot.as_slice()).map_err(|_| {
+            ProllyBindingError::InvalidArgument {
+                reason: "snapshot identifier must contain 32 bytes".to_string(),
+            }
+        })?,
+    )))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]

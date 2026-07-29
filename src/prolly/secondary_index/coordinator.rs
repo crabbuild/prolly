@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use super::super::cid::Cid;
 use super::super::error::{Error, Mutation};
 use super::super::gc::{GcPlan, GcSweep};
-use super::super::manifest::{ManifestStoreScan, NamedRootUpdate};
+use super::super::manifest::{ManifestStoreScan, NamedRootRetention, NamedRootUpdate};
 use super::super::store::{NodeStoreScan, Store};
 use super::super::tree::Tree;
 use super::super::versioned_map::{MapVersion, MapVersionId};
@@ -1382,7 +1382,14 @@ where
 {
     pub fn plan_indexed_gc(&self) -> Result<GcPlan, Error> {
         let loaded = self.load_state()?;
-        let mut roots = vec![loaded.tree];
+        // Node storage is shared across collections and ordinary named maps.
+        // Begin from every published root before adding the trees referenced
+        // indirectly by this collection's canonical state.
+        let mut roots = self
+            .prolly
+            .load_retained_named_roots(&NamedRootRetention::all())?
+            .trees();
+        roots.push(loaded.tree);
         for snapshot in loaded.state.snapshots.values() {
             roots.push(snapshot.source.tree.clone());
             roots.extend(snapshot.indexes.iter().map(|index| index.tree.clone()));
@@ -1400,7 +1407,11 @@ where
             return Err(Error::IndexGcUnsafe);
         }
         let loaded = self.load_state()?;
-        let mut roots = vec![loaded.tree];
+        let mut roots = self
+            .prolly
+            .load_retained_named_roots(&NamedRootRetention::all())?
+            .trees();
+        roots.push(loaded.tree);
         for snapshot in loaded.state.snapshots.values() {
             roots.push(snapshot.source.tree.clone());
             roots.extend(snapshot.indexes.iter().map(|index| index.tree.clone()));

@@ -68,10 +68,12 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
   backup/sync, typed codecs, subscriptions, multi-map transactions, bounded
   history, and scoped GC.
 - A strict `IndexedMap` coordinator for runtime-defined, non-unique secondary
-  indexes with atomic source/index commits, sparse and multi-valued terms,
-  `KeysOnly`/`Include`/`All` projections, exact historical snapshots,
-  lifecycle verification/repair/replacement, coordinated retention, and
-  verified current-snapshot transfer.
+  indexes with one-root atomic publication, finite operation budgets, sparse
+  and multi-valued terms, `KeysOnly`/`Include`/`All` projections, exact
+  historical snapshots, durable pins, safe GC, structured diagnostics, and
+  verified bounded transfer. `MemStore`, `FileNodeStore`, PGlite, redb,
+  RocksDB, and SlateDB are verification-only; production opening currently
+  requires the qualified durable SQLite adapter profile.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.

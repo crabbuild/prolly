@@ -6,11 +6,11 @@ use super::super::store::Store;
 use super::super::tree::Tree;
 use super::super::versioned_map::{MapSnapshot, MapVersionId};
 use super::super::Prolly;
-use super::budget::QueryBudget;
+use super::budget::{Deadline, QueryBudget};
 use super::coordinator::IndexedMap;
 use super::definition::IndexProjection;
 use super::publication::IndexedStore;
-use super::state::{IndexDescriptor, IndexedSnapshotRecord, IndexedSnapshotRecordId};
+use super::state::{IndexDescriptor, IndexedSnapshotId, IndexedSnapshotRecord};
 use super::storage::{
     decode_physical_index_key, decode_physical_index_key_ref, term_bounds_exact,
     term_bounds_prefix, term_bounds_range, IndexValue, IndexValueRef, TermBounds,
@@ -18,7 +18,6 @@ use super::storage::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ops::ControlFlow;
-use std::time::Instant;
 
 const CURSOR_MAGIC: &[u8; 8] = b"PSICUR01";
 const CURSOR_VERSION: u32 = 1;
@@ -30,12 +29,11 @@ struct SourceJoinMatch {
     projection: Option<Vec<u8>>,
 }
 
-/// Reproducible identity of one collection-state-selected indexed snapshot.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct IndexedSnapshotId {
-    pub snapshot: IndexedSnapshotRecordId,
-    pub source_version: MapVersionId,
-    pub state_version: MapVersionId,
+#[derive(Clone)]
+struct SnapshotContext {
+    snapshot: IndexedSnapshotId,
+    source_version: MapVersionId,
+    state_version: MapVersionId,
 }
 
 /// One decoded physical secondary-index match.
@@ -102,7 +100,7 @@ enum LogicalBounds {
 /// Snapshot- and query-bound cursor for resumable secondary-index scans.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SecondaryIndexCursor {
-    snapshot: IndexedSnapshotRecordId,
+    snapshot: IndexedSnapshotId,
     source_version: MapVersionId,
     state_version: MapVersionId,
     index_name: Vec<u8>,
@@ -115,7 +113,7 @@ pub struct SecondaryIndexCursor {
 
 #[derive(Serialize, Deserialize)]
 struct CursorWire(
-    IndexedSnapshotRecordId,
+    IndexedSnapshotId,
     MapVersionId,
     MapVersionId,
     Vec<u8>,
@@ -196,11 +194,7 @@ impl SecondaryIndexCursor {
     }
 
     pub fn snapshot_id(&self) -> IndexedSnapshotId {
-        IndexedSnapshotId {
-            snapshot: self.snapshot.clone(),
-            source_version: self.source_version.clone(),
-            state_version: self.state_version.clone(),
-        }
+        self.snapshot.clone()
     }
 
     pub fn index_version(&self) -> &MapVersionId {
@@ -232,6 +226,14 @@ impl<'a, S: Store> IndexedSnapshot<'a, S> {
         &self.id
     }
 
+    pub fn source_version(&self) -> &MapVersionId {
+        self.source.id()
+    }
+
+    pub fn state_version(&self) -> &MapVersionId {
+        self.state.id()
+    }
+
     pub fn source(&self) -> &MapSnapshot<'a, S> {
         &self.source
     }
@@ -245,7 +247,7 @@ impl<'a, S: Store> IndexedSnapshot<'a, S> {
             .get(name.as_ref())
             .ok_or_else(|| Error::IndexUnavailableAtVersion {
                 name: name.as_ref().to_vec(),
-                source_version: self.id.source_version.clone(),
+                source_version: self.source.id().clone(),
             })
     }
 
@@ -254,10 +256,10 @@ impl<'a, S: Store> IndexedSnapshot<'a, S> {
     }
 }
 
-/// Query handle for one exact hidden-index checkpoint.
+/// Query handle for one exact secondary-index snapshot.
 pub struct SecondaryIndexSnapshot<'a, S: Store> {
     prolly: &'a Prolly<S>,
-    snapshot_id: IndexedSnapshotId,
+    snapshot_id: SnapshotContext,
     descriptor: IndexDescriptor,
     selected: super::state::IndexSnapshotRef,
     source_tree: Tree,
@@ -642,7 +644,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             }
             let matched = &chunk[position];
             let Some(source_value) = source_value else {
-                terminal = Some(Err(Error::IndexCheckpointMismatch {
+                terminal = Some(Err(Error::IndexSnapshotMismatch {
                     name: self.descriptor.name.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
                     reason: format!(
@@ -765,7 +767,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
         let budget = QueryBudget::default();
-        let started = Instant::now();
+        let started = Deadline::new();
         let mut scanned = 0usize;
         let mut returned_bytes = 0usize;
         let bounds = physical_bounds(&logical)?;
@@ -778,7 +780,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
                 .saturating_add(entry.value().len());
             if scanned > budget.max_scanned_entries
                 || returned_bytes > budget.max_returned_bytes
-                || started.elapsed() > budget.max_elapsed
+                || started.exceeded(budget.max_elapsed)
             {
                 return ControlFlow::Break(Err(Error::IndexResourceLimitExceeded {
                     resource: "query_scan_budget",
@@ -830,7 +832,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         budget: &QueryBudget,
     ) -> Result<SecondaryIndexPage, Error> {
         budget.validate()?;
-        let started = Instant::now();
+        let started = Deadline::new();
         let max_page_entries = budget.max_page_entries.min(budget.max_returned_entries);
         if limit > max_page_entries {
             return Err(Error::IndexResourceLimitExceeded {
@@ -917,7 +919,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         });
         if returned_bytes > budget.max_returned_bytes
             || returned_bytes > budget.max_accounted_memory_bytes
-            || started.elapsed() > budget.max_elapsed
+            || started.exceeded(budget.max_elapsed)
         {
             return Err(Error::IndexResourceLimitExceeded {
                 resource: "query_returned_bytes",
@@ -965,20 +967,20 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             Some(raw_key) => {
                 let physical = physical_bounds(bounds)?;
                 raw_key >= physical.start.as_slice()
-                    && physical.end.as_deref().is_none_or(|end| raw_key < end)
+                    && physical.end.as_deref().map_or(true, |end| raw_key < end)
                     && decode_physical_index_key(raw_key).is_ok()
             }
         };
         if !valid || !physical_key_valid {
             Err(Error::IndexCursorVersionMismatch {
                 expected: format!(
-                    "source={}, catalog={}, index={}, direction={direction:?}, bounds={bounds:?}",
+                    "source={}, state={}, index={}, direction={direction:?}, bounds={bounds:?}",
                     self.snapshot_id.source_version,
                     self.snapshot_id.state_version,
                     MapVersionId::for_tree(&self.selected.tree).expect("validated index tree")
                 ),
                 actual: format!(
-                    "source={}, catalog={}, index={}, direction={:?}, bounds={:?}",
+                    "source={}, state={}, index={}, direction={:?}, bounds={:?}",
                     cursor.source_version,
                     cursor.state_version,
                     cursor.index_version,
@@ -1011,7 +1013,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             (IndexProjection::Include, IndexValue::Included(bytes))
             | (IndexProjection::All, IndexValue::FullSource(bytes)) => Some(bytes),
             _ => {
-                return Err(Error::IndexCheckpointMismatch {
+                return Err(Error::IndexSnapshotMismatch {
                     name: self.descriptor.name.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
                     reason: "stored projection value does not match its descriptor".to_string(),
@@ -1039,7 +1041,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             (IndexProjection::Include, IndexValueRef::Included(bytes))
             | (IndexProjection::All, IndexValueRef::FullSource(bytes)) => Some(bytes),
             _ => {
-                return Err(Error::IndexCheckpointMismatch {
+                return Err(Error::IndexSnapshotMismatch {
                     name: self.descriptor.name.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
                     reason: "stored projection value does not match its descriptor".to_string(),
@@ -1084,45 +1086,29 @@ where
         self.resolve_snapshot(loaded.tree, loaded.state, record_id, record)
     }
 
-    /// Reopen the exact retained collection-state/source pair represented by `id`.
+    /// Reopen the exact retained content-addressed snapshot represented by `id`.
     pub fn snapshot_by_id(&self, id: &IndexedSnapshotId) -> Result<IndexedSnapshot<'a, S>, Error> {
         let loaded = self.load_state()?;
-        if MapVersionId::for_tree(&loaded.tree)? != id.state_version {
-            return Err(Error::InvalidVersionedMap(format!(
-                "indexed collection state {} is no longer current",
-                id.state_version
-            )));
-        }
-        let record = loaded
-            .state
-            .snapshots
-            .get(&id.snapshot)
-            .cloned()
-            .ok_or_else(|| {
-                Error::InvalidVersionedMap(format!(
-                    "indexed snapshot {:?} is not retained",
-                    id.snapshot.as_cid()
-                ))
-            })?;
-        if MapVersionId::for_tree(&record.source.tree)? != id.source_version {
-            return Err(Error::InvalidVersionedMap(
-                "indexed snapshot source identity mismatch".to_string(),
-            ));
-        }
-        self.resolve_snapshot(loaded.tree, loaded.state, id.snapshot.clone(), record)
+        let record = loaded.state.snapshots.get(id).cloned().ok_or_else(|| {
+            Error::InvalidVersionedMap(format!(
+                "indexed snapshot {:?} is not retained",
+                id.as_cid()
+            ))
+        })?;
+        self.resolve_snapshot(loaded.tree, loaded.state, id.clone(), record)
     }
 
     fn resolve_snapshot(
         &self,
         state_tree: Tree,
         state: super::state::IndexedCollectionState,
-        record_id: IndexedSnapshotRecordId,
+        record_id: IndexedSnapshotId,
         record: IndexedSnapshotRecord,
     ) -> Result<IndexedSnapshot<'a, S>, Error> {
         let source_version = MapVersionId::for_tree(&record.source.tree)?;
         let source = MapSnapshot::from_tree(self.prolly, record.source.tree.clone(), true)?;
         let state_snapshot = MapSnapshot::from_tree(self.prolly, state_tree, true)?;
-        let snapshot_id = IndexedSnapshotId {
+        let snapshot_id = SnapshotContext {
             snapshot: record_id,
             source_version: source_version.clone(),
             state_version: state_snapshot.id().clone(),
@@ -1136,7 +1122,7 @@ where
                     selected.descriptor_fingerprint.clone(),
                 ))
                 .cloned()
-                .ok_or_else(|| Error::IndexCheckpointMismatch {
+                .ok_or_else(|| Error::IndexSnapshotMismatch {
                     name: selected.name.clone(),
                     source_version: source_version.clone(),
                     reason: "canonical descriptor is missing".to_string(),
@@ -1174,7 +1160,7 @@ where
             );
         }
         Ok(IndexedSnapshot {
-            id: snapshot_id,
+            id: snapshot_id.snapshot.clone(),
             state: state_snapshot,
             source,
             indexes,
@@ -1185,7 +1171,7 @@ where
 fn retained_snapshot_for_source(
     state: &super::state::IndexedCollectionState,
     source_version: &MapVersionId,
-) -> Result<(IndexedSnapshotRecordId, IndexedSnapshotRecord), Error> {
+) -> Result<(IndexedSnapshotId, IndexedSnapshotRecord), Error> {
     let mut cursor = Some(state.head.clone());
     while let Some(id) = cursor {
         let snapshot = state.snapshots.get(&id).ok_or_else(|| {

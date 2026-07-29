@@ -8865,19 +8865,18 @@ class _UniffiFfiConverterTypeIndexProjectionRecord(_UniffiConverterRustBuffer):
 
 @dataclass
 class ActiveIndexHealthRecord:
-    def __init__(self, *, name:bytes, generation:int, fingerprint:bytes, projection:IndexProjectionRecord, index_map_id:bytes, index_version:bytes):
+    def __init__(self, *, name:bytes, generation:int, fingerprint:bytes, projection:IndexProjectionRecord, index_version:bytes):
         self.name = name
         self.generation = generation
         self.fingerprint = fingerprint
         self.projection = projection
-        self.index_map_id = index_map_id
         self.index_version = index_version
         
         
 
     
     def __str__(self):
-        return "ActiveIndexHealthRecord(name={}, generation={}, fingerprint={}, projection={}, index_map_id={}, index_version={})".format(self.name, self.generation, self.fingerprint, self.projection, self.index_map_id, self.index_version)
+        return "ActiveIndexHealthRecord(name={}, generation={}, fingerprint={}, projection={}, index_version={})".format(self.name, self.generation, self.fingerprint, self.projection, self.index_version)
     def __eq__(self, other):
         if self.name != other.name:
             return False
@@ -8886,8 +8885,6 @@ class ActiveIndexHealthRecord:
         if self.fingerprint != other.fingerprint:
             return False
         if self.projection != other.projection:
-            return False
-        if self.index_map_id != other.index_map_id:
             return False
         if self.index_version != other.index_version:
             return False
@@ -8901,7 +8898,6 @@ class _UniffiFfiConverterTypeActiveIndexHealthRecord(_UniffiConverterRustBuffer)
             generation=_UniffiFfiConverterUInt64.read(buf),
             fingerprint=_UniffiFfiConverterBytes.read(buf),
             projection=_UniffiFfiConverterTypeIndexProjectionRecord.read(buf),
-            index_map_id=_UniffiFfiConverterBytes.read(buf),
             index_version=_UniffiFfiConverterBytes.read(buf),
         )
 
@@ -8911,7 +8907,6 @@ class _UniffiFfiConverterTypeActiveIndexHealthRecord(_UniffiConverterRustBuffer)
         _UniffiFfiConverterUInt64.check_lower(value.generation)
         _UniffiFfiConverterBytes.check_lower(value.fingerprint)
         _UniffiFfiConverterTypeIndexProjectionRecord.check_lower(value.projection)
-        _UniffiFfiConverterBytes.check_lower(value.index_map_id)
         _UniffiFfiConverterBytes.check_lower(value.index_version)
 
     @staticmethod
@@ -8920,7 +8915,6 @@ class _UniffiFfiConverterTypeActiveIndexHealthRecord(_UniffiConverterRustBuffer)
         _UniffiFfiConverterUInt64.write(value.generation, buf)
         _UniffiFfiConverterBytes.write(value.fingerprint, buf)
         _UniffiFfiConverterTypeIndexProjectionRecord.write(value.projection, buf)
-        _UniffiFfiConverterBytes.write(value.index_map_id, buf)
         _UniffiFfiConverterBytes.write(value.index_version, buf)
 
 class _UniffiFfiConverterBoolean:
@@ -17484,10 +17478,10 @@ class _UniffiFfiConverterTypeHostStoreUnitResultRecord(_UniffiConverterRustBuffe
 
 @dataclass
 class IndexBuildResultRecord:
-    def __init__(self, *, source_version:bytes, index_version:bytes, catalog_version:bytes, generation:int, entries:int, attempts:int, activated:bool):
+    def __init__(self, *, source_version:bytes, index_version:bytes, state_version:bytes, generation:int, entries:int, attempts:int, activated:bool):
         self.source_version = source_version
         self.index_version = index_version
-        self.catalog_version = catalog_version
+        self.state_version = state_version
         self.generation = generation
         self.entries = entries
         self.attempts = attempts
@@ -17497,13 +17491,13 @@ class IndexBuildResultRecord:
 
     
     def __str__(self):
-        return "IndexBuildResultRecord(source_version={}, index_version={}, catalog_version={}, generation={}, entries={}, attempts={}, activated={})".format(self.source_version, self.index_version, self.catalog_version, self.generation, self.entries, self.attempts, self.activated)
+        return "IndexBuildResultRecord(source_version={}, index_version={}, state_version={}, generation={}, entries={}, attempts={}, activated={})".format(self.source_version, self.index_version, self.state_version, self.generation, self.entries, self.attempts, self.activated)
     def __eq__(self, other):
         if self.source_version != other.source_version:
             return False
         if self.index_version != other.index_version:
             return False
-        if self.catalog_version != other.catalog_version:
+        if self.state_version != other.state_version:
             return False
         if self.generation != other.generation:
             return False
@@ -17521,7 +17515,7 @@ class _UniffiFfiConverterTypeIndexBuildResultRecord(_UniffiConverterRustBuffer):
         return IndexBuildResultRecord(
             source_version=_UniffiFfiConverterBytes.read(buf),
             index_version=_UniffiFfiConverterBytes.read(buf),
-            catalog_version=_UniffiFfiConverterBytes.read(buf),
+            state_version=_UniffiFfiConverterBytes.read(buf),
             generation=_UniffiFfiConverterUInt64.read(buf),
             entries=_UniffiFfiConverterUInt64.read(buf),
             attempts=_UniffiFfiConverterUInt64.read(buf),
@@ -17532,7 +17526,7 @@ class _UniffiFfiConverterTypeIndexBuildResultRecord(_UniffiConverterRustBuffer):
     def check_lower(value):
         _UniffiFfiConverterBytes.check_lower(value.source_version)
         _UniffiFfiConverterBytes.check_lower(value.index_version)
-        _UniffiFfiConverterBytes.check_lower(value.catalog_version)
+        _UniffiFfiConverterBytes.check_lower(value.state_version)
         _UniffiFfiConverterUInt64.check_lower(value.generation)
         _UniffiFfiConverterUInt64.check_lower(value.entries)
         _UniffiFfiConverterUInt64.check_lower(value.attempts)
@@ -17542,7 +17536,7 @@ class _UniffiFfiConverterTypeIndexBuildResultRecord(_UniffiConverterRustBuffer):
     def write(value, buf):
         _UniffiFfiConverterBytes.write(value.source_version, buf)
         _UniffiFfiConverterBytes.write(value.index_version, buf)
-        _UniffiFfiConverterBytes.write(value.catalog_version, buf)
+        _UniffiFfiConverterBytes.write(value.state_version, buf)
         _UniffiFfiConverterUInt64.write(value.generation, buf)
         _UniffiFfiConverterUInt64.write(value.entries, buf)
         _UniffiFfiConverterUInt64.write(value.attempts, buf)
@@ -17788,28 +17782,37 @@ class _UniffiFfiConverterSequenceTypeActiveIndexHealthRecord(_UniffiConverterRus
 
 @dataclass
 class IndexedMapHealthRecord:
-    def __init__(self, *, source_map_id:bytes, source_version:typing.Optional[bytes], catalog_version:typing.Optional[bytes], active_indexes:typing.List[ActiveIndexHealthRecord], supports_transactions:bool):
+    def __init__(self, *, source_map_id:bytes, source_version:typing.Optional[bytes], state_version:typing.Optional[bytes], active_indexes:typing.List[ActiveIndexHealthRecord], production_profile:bool, closure_valid:bool, retained_snapshots:int, durable_pins:int):
         self.source_map_id = source_map_id
         self.source_version = source_version
-        self.catalog_version = catalog_version
+        self.state_version = state_version
         self.active_indexes = active_indexes
-        self.supports_transactions = supports_transactions
+        self.production_profile = production_profile
+        self.closure_valid = closure_valid
+        self.retained_snapshots = retained_snapshots
+        self.durable_pins = durable_pins
         
         
 
     
     def __str__(self):
-        return "IndexedMapHealthRecord(source_map_id={}, source_version={}, catalog_version={}, active_indexes={}, supports_transactions={})".format(self.source_map_id, self.source_version, self.catalog_version, self.active_indexes, self.supports_transactions)
+        return "IndexedMapHealthRecord(source_map_id={}, source_version={}, state_version={}, active_indexes={}, production_profile={}, closure_valid={}, retained_snapshots={}, durable_pins={})".format(self.source_map_id, self.source_version, self.state_version, self.active_indexes, self.production_profile, self.closure_valid, self.retained_snapshots, self.durable_pins)
     def __eq__(self, other):
         if self.source_map_id != other.source_map_id:
             return False
         if self.source_version != other.source_version:
             return False
-        if self.catalog_version != other.catalog_version:
+        if self.state_version != other.state_version:
             return False
         if self.active_indexes != other.active_indexes:
             return False
-        if self.supports_transactions != other.supports_transactions:
+        if self.production_profile != other.production_profile:
+            return False
+        if self.closure_valid != other.closure_valid:
+            return False
+        if self.retained_snapshots != other.retained_snapshots:
+            return False
+        if self.durable_pins != other.durable_pins:
             return False
         return True
 
@@ -17819,30 +17822,39 @@ class _UniffiFfiConverterTypeIndexedMapHealthRecord(_UniffiConverterRustBuffer):
         return IndexedMapHealthRecord(
             source_map_id=_UniffiFfiConverterBytes.read(buf),
             source_version=_UniffiFfiConverterOptionalBytes.read(buf),
-            catalog_version=_UniffiFfiConverterOptionalBytes.read(buf),
+            state_version=_UniffiFfiConverterOptionalBytes.read(buf),
             active_indexes=_UniffiFfiConverterSequenceTypeActiveIndexHealthRecord.read(buf),
-            supports_transactions=_UniffiFfiConverterBoolean.read(buf),
+            production_profile=_UniffiFfiConverterBoolean.read(buf),
+            closure_valid=_UniffiFfiConverterBoolean.read(buf),
+            retained_snapshots=_UniffiFfiConverterUInt64.read(buf),
+            durable_pins=_UniffiFfiConverterUInt64.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
         _UniffiFfiConverterBytes.check_lower(value.source_map_id)
         _UniffiFfiConverterOptionalBytes.check_lower(value.source_version)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.catalog_version)
+        _UniffiFfiConverterOptionalBytes.check_lower(value.state_version)
         _UniffiFfiConverterSequenceTypeActiveIndexHealthRecord.check_lower(value.active_indexes)
-        _UniffiFfiConverterBoolean.check_lower(value.supports_transactions)
+        _UniffiFfiConverterBoolean.check_lower(value.production_profile)
+        _UniffiFfiConverterBoolean.check_lower(value.closure_valid)
+        _UniffiFfiConverterUInt64.check_lower(value.retained_snapshots)
+        _UniffiFfiConverterUInt64.check_lower(value.durable_pins)
 
     @staticmethod
     def write(value, buf):
         _UniffiFfiConverterBytes.write(value.source_map_id, buf)
         _UniffiFfiConverterOptionalBytes.write(value.source_version, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.catalog_version, buf)
+        _UniffiFfiConverterOptionalBytes.write(value.state_version, buf)
         _UniffiFfiConverterSequenceTypeActiveIndexHealthRecord.write(value.active_indexes, buf)
-        _UniffiFfiConverterBoolean.write(value.supports_transactions, buf)
+        _UniffiFfiConverterBoolean.write(value.production_profile, buf)
+        _UniffiFfiConverterBoolean.write(value.closure_valid, buf)
+        _UniffiFfiConverterUInt64.write(value.retained_snapshots, buf)
+        _UniffiFfiConverterUInt64.write(value.durable_pins, buf)
 
 @dataclass
 class IndexedMapMetricsRecord:
-    def __init__(self, *, normalized_source_mutations:int, records_extracted:int, terms_emitted:int, projected_bytes:int, physical_upserts:int, physical_deletes:int, unchanged_emissions_skipped:int, source_nodes_written:int, index_nodes_written:int, catalog_nodes_written:int, retries:int, build_attempts:int, verification_outcomes:int, retained_roots:int):
+    def __init__(self, *, normalized_source_mutations:int, records_extracted:int, terms_emitted:int, projected_bytes:int, physical_upserts:int, physical_deletes:int, unchanged_emissions_skipped:int, retries:int, build_attempts:int, verification_outcomes:int, retained_roots:int):
         self.normalized_source_mutations = normalized_source_mutations
         self.records_extracted = records_extracted
         self.terms_emitted = terms_emitted
@@ -17850,9 +17862,6 @@ class IndexedMapMetricsRecord:
         self.physical_upserts = physical_upserts
         self.physical_deletes = physical_deletes
         self.unchanged_emissions_skipped = unchanged_emissions_skipped
-        self.source_nodes_written = source_nodes_written
-        self.index_nodes_written = index_nodes_written
-        self.catalog_nodes_written = catalog_nodes_written
         self.retries = retries
         self.build_attempts = build_attempts
         self.verification_outcomes = verification_outcomes
@@ -17862,7 +17871,7 @@ class IndexedMapMetricsRecord:
 
     
     def __str__(self):
-        return "IndexedMapMetricsRecord(normalized_source_mutations={}, records_extracted={}, terms_emitted={}, projected_bytes={}, physical_upserts={}, physical_deletes={}, unchanged_emissions_skipped={}, source_nodes_written={}, index_nodes_written={}, catalog_nodes_written={}, retries={}, build_attempts={}, verification_outcomes={}, retained_roots={})".format(self.normalized_source_mutations, self.records_extracted, self.terms_emitted, self.projected_bytes, self.physical_upserts, self.physical_deletes, self.unchanged_emissions_skipped, self.source_nodes_written, self.index_nodes_written, self.catalog_nodes_written, self.retries, self.build_attempts, self.verification_outcomes, self.retained_roots)
+        return "IndexedMapMetricsRecord(normalized_source_mutations={}, records_extracted={}, terms_emitted={}, projected_bytes={}, physical_upserts={}, physical_deletes={}, unchanged_emissions_skipped={}, retries={}, build_attempts={}, verification_outcomes={}, retained_roots={})".format(self.normalized_source_mutations, self.records_extracted, self.terms_emitted, self.projected_bytes, self.physical_upserts, self.physical_deletes, self.unchanged_emissions_skipped, self.retries, self.build_attempts, self.verification_outcomes, self.retained_roots)
     def __eq__(self, other):
         if self.normalized_source_mutations != other.normalized_source_mutations:
             return False
@@ -17877,12 +17886,6 @@ class IndexedMapMetricsRecord:
         if self.physical_deletes != other.physical_deletes:
             return False
         if self.unchanged_emissions_skipped != other.unchanged_emissions_skipped:
-            return False
-        if self.source_nodes_written != other.source_nodes_written:
-            return False
-        if self.index_nodes_written != other.index_nodes_written:
-            return False
-        if self.catalog_nodes_written != other.catalog_nodes_written:
             return False
         if self.retries != other.retries:
             return False
@@ -17905,9 +17908,6 @@ class _UniffiFfiConverterTypeIndexedMapMetricsRecord(_UniffiConverterRustBuffer)
             physical_upserts=_UniffiFfiConverterUInt64.read(buf),
             physical_deletes=_UniffiFfiConverterUInt64.read(buf),
             unchanged_emissions_skipped=_UniffiFfiConverterUInt64.read(buf),
-            source_nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            index_nodes_written=_UniffiFfiConverterUInt64.read(buf),
-            catalog_nodes_written=_UniffiFfiConverterUInt64.read(buf),
             retries=_UniffiFfiConverterUInt64.read(buf),
             build_attempts=_UniffiFfiConverterUInt64.read(buf),
             verification_outcomes=_UniffiFfiConverterUInt64.read(buf),
@@ -17923,9 +17923,6 @@ class _UniffiFfiConverterTypeIndexedMapMetricsRecord(_UniffiConverterRustBuffer)
         _UniffiFfiConverterUInt64.check_lower(value.physical_upserts)
         _UniffiFfiConverterUInt64.check_lower(value.physical_deletes)
         _UniffiFfiConverterUInt64.check_lower(value.unchanged_emissions_skipped)
-        _UniffiFfiConverterUInt64.check_lower(value.source_nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.index_nodes_written)
-        _UniffiFfiConverterUInt64.check_lower(value.catalog_nodes_written)
         _UniffiFfiConverterUInt64.check_lower(value.retries)
         _UniffiFfiConverterUInt64.check_lower(value.build_attempts)
         _UniffiFfiConverterUInt64.check_lower(value.verification_outcomes)
@@ -17940,9 +17937,6 @@ class _UniffiFfiConverterTypeIndexedMapMetricsRecord(_UniffiConverterRustBuffer)
         _UniffiFfiConverterUInt64.write(value.physical_upserts, buf)
         _UniffiFfiConverterUInt64.write(value.physical_deletes, buf)
         _UniffiFfiConverterUInt64.write(value.unchanged_emissions_skipped, buf)
-        _UniffiFfiConverterUInt64.write(value.source_nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.index_nodes_written, buf)
-        _UniffiFfiConverterUInt64.write(value.catalog_nodes_written, buf)
         _UniffiFfiConverterUInt64.write(value.retries, buf)
         _UniffiFfiConverterUInt64.write(value.build_attempts, buf)
         _UniffiFfiConverterUInt64.write(value.verification_outcomes, buf)
@@ -17950,20 +17944,20 @@ class _UniffiFfiConverterTypeIndexedMapMetricsRecord(_UniffiConverterRustBuffer)
 
 @dataclass
 class IndexedRetentionRecord:
-    def __init__(self, *, retained_source_versions:typing.List[bytes], removed_source_versions:typing.List[bytes], retained_index_versions:typing.List[bytes], removed_index_versions:typing.List[bytes], removed_catalog_versions:typing.List[bytes], removed_checkpoint_records:int, removed_named_roots:typing.List[bytes]):
+    def __init__(self, *, retained_source_versions:typing.List[bytes], removed_source_versions:typing.List[bytes], retained_index_versions:typing.List[bytes], removed_index_versions:typing.List[bytes], removed_state_versions:typing.List[bytes], removed_snapshot_records:int, removed_named_roots:typing.List[bytes]):
         self.retained_source_versions = retained_source_versions
         self.removed_source_versions = removed_source_versions
         self.retained_index_versions = retained_index_versions
         self.removed_index_versions = removed_index_versions
-        self.removed_catalog_versions = removed_catalog_versions
-        self.removed_checkpoint_records = removed_checkpoint_records
+        self.removed_state_versions = removed_state_versions
+        self.removed_snapshot_records = removed_snapshot_records
         self.removed_named_roots = removed_named_roots
         
         
 
     
     def __str__(self):
-        return "IndexedRetentionRecord(retained_source_versions={}, removed_source_versions={}, retained_index_versions={}, removed_index_versions={}, removed_catalog_versions={}, removed_checkpoint_records={}, removed_named_roots={})".format(self.retained_source_versions, self.removed_source_versions, self.retained_index_versions, self.removed_index_versions, self.removed_catalog_versions, self.removed_checkpoint_records, self.removed_named_roots)
+        return "IndexedRetentionRecord(retained_source_versions={}, removed_source_versions={}, retained_index_versions={}, removed_index_versions={}, removed_state_versions={}, removed_snapshot_records={}, removed_named_roots={})".format(self.retained_source_versions, self.removed_source_versions, self.retained_index_versions, self.removed_index_versions, self.removed_state_versions, self.removed_snapshot_records, self.removed_named_roots)
     def __eq__(self, other):
         if self.retained_source_versions != other.retained_source_versions:
             return False
@@ -17973,9 +17967,9 @@ class IndexedRetentionRecord:
             return False
         if self.removed_index_versions != other.removed_index_versions:
             return False
-        if self.removed_catalog_versions != other.removed_catalog_versions:
+        if self.removed_state_versions != other.removed_state_versions:
             return False
-        if self.removed_checkpoint_records != other.removed_checkpoint_records:
+        if self.removed_snapshot_records != other.removed_snapshot_records:
             return False
         if self.removed_named_roots != other.removed_named_roots:
             return False
@@ -17989,8 +17983,8 @@ class _UniffiFfiConverterTypeIndexedRetentionRecord(_UniffiConverterRustBuffer):
             removed_source_versions=_UniffiFfiConverterSequenceBytes.read(buf),
             retained_index_versions=_UniffiFfiConverterSequenceBytes.read(buf),
             removed_index_versions=_UniffiFfiConverterSequenceBytes.read(buf),
-            removed_catalog_versions=_UniffiFfiConverterSequenceBytes.read(buf),
-            removed_checkpoint_records=_UniffiFfiConverterUInt64.read(buf),
+            removed_state_versions=_UniffiFfiConverterSequenceBytes.read(buf),
+            removed_snapshot_records=_UniffiFfiConverterUInt64.read(buf),
             removed_named_roots=_UniffiFfiConverterSequenceBytes.read(buf),
         )
 
@@ -18000,8 +17994,8 @@ class _UniffiFfiConverterTypeIndexedRetentionRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterSequenceBytes.check_lower(value.removed_source_versions)
         _UniffiFfiConverterSequenceBytes.check_lower(value.retained_index_versions)
         _UniffiFfiConverterSequenceBytes.check_lower(value.removed_index_versions)
-        _UniffiFfiConverterSequenceBytes.check_lower(value.removed_catalog_versions)
-        _UniffiFfiConverterUInt64.check_lower(value.removed_checkpoint_records)
+        _UniffiFfiConverterSequenceBytes.check_lower(value.removed_state_versions)
+        _UniffiFfiConverterUInt64.check_lower(value.removed_snapshot_records)
         _UniffiFfiConverterSequenceBytes.check_lower(value.removed_named_roots)
 
     @staticmethod
@@ -18010,25 +18004,22 @@ class _UniffiFfiConverterTypeIndexedRetentionRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterSequenceBytes.write(value.removed_source_versions, buf)
         _UniffiFfiConverterSequenceBytes.write(value.retained_index_versions, buf)
         _UniffiFfiConverterSequenceBytes.write(value.removed_index_versions, buf)
-        _UniffiFfiConverterSequenceBytes.write(value.removed_catalog_versions, buf)
-        _UniffiFfiConverterUInt64.write(value.removed_checkpoint_records, buf)
+        _UniffiFfiConverterSequenceBytes.write(value.removed_state_versions, buf)
+        _UniffiFfiConverterUInt64.write(value.removed_snapshot_records, buf)
         _UniffiFfiConverterSequenceBytes.write(value.removed_named_roots, buf)
 
 @dataclass
 class IndexedSnapshotIdRecord:
-    def __init__(self, *, source_version:bytes, catalog_version:bytes):
-        self.source_version = source_version
-        self.catalog_version = catalog_version
+    def __init__(self, *, snapshot:bytes):
+        self.snapshot = snapshot
         
         
 
     
     def __str__(self):
-        return "IndexedSnapshotIdRecord(source_version={}, catalog_version={})".format(self.source_version, self.catalog_version)
+        return "IndexedSnapshotIdRecord(snapshot={})".format(self.snapshot)
     def __eq__(self, other):
-        if self.source_version != other.source_version:
-            return False
-        if self.catalog_version != other.catalog_version:
+        if self.snapshot != other.snapshot:
             return False
         return True
 
@@ -18036,19 +18027,16 @@ class _UniffiFfiConverterTypeIndexedSnapshotIdRecord(_UniffiConverterRustBuffer)
     @staticmethod
     def read(buf):
         return IndexedSnapshotIdRecord(
-            source_version=_UniffiFfiConverterBytes.read(buf),
-            catalog_version=_UniffiFfiConverterBytes.read(buf),
+            snapshot=_UniffiFfiConverterBytes.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
-        _UniffiFfiConverterBytes.check_lower(value.source_version)
-        _UniffiFfiConverterBytes.check_lower(value.catalog_version)
+        _UniffiFfiConverterBytes.check_lower(value.snapshot)
 
     @staticmethod
     def write(value, buf):
-        _UniffiFfiConverterBytes.write(value.source_version, buf)
-        _UniffiFfiConverterBytes.write(value.catalog_version, buf)
+        _UniffiFfiConverterBytes.write(value.snapshot, buf)
 
 @dataclass
 class IndexedSourceRecord:
@@ -18148,20 +18136,20 @@ class _UniffiFfiConverterTypeIndexedUpdateKind(_UniffiConverterRustBuffer):
 
 @dataclass
 class IndexedVersionRecord:
-    def __init__(self, *, source_version:bytes, catalog_version:typing.Optional[bytes], index_count:int):
+    def __init__(self, *, source_version:bytes, state_version:bytes, index_count:int):
         self.source_version = source_version
-        self.catalog_version = catalog_version
+        self.state_version = state_version
         self.index_count = index_count
         
         
 
     
     def __str__(self):
-        return "IndexedVersionRecord(source_version={}, catalog_version={}, index_count={})".format(self.source_version, self.catalog_version, self.index_count)
+        return "IndexedVersionRecord(source_version={}, state_version={}, index_count={})".format(self.source_version, self.state_version, self.index_count)
     def __eq__(self, other):
         if self.source_version != other.source_version:
             return False
-        if self.catalog_version != other.catalog_version:
+        if self.state_version != other.state_version:
             return False
         if self.index_count != other.index_count:
             return False
@@ -18172,20 +18160,20 @@ class _UniffiFfiConverterTypeIndexedVersionRecord(_UniffiConverterRustBuffer):
     def read(buf):
         return IndexedVersionRecord(
             source_version=_UniffiFfiConverterBytes.read(buf),
-            catalog_version=_UniffiFfiConverterOptionalBytes.read(buf),
+            state_version=_UniffiFfiConverterBytes.read(buf),
             index_count=_UniffiFfiConverterUInt64.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
         _UniffiFfiConverterBytes.check_lower(value.source_version)
-        _UniffiFfiConverterOptionalBytes.check_lower(value.catalog_version)
+        _UniffiFfiConverterBytes.check_lower(value.state_version)
         _UniffiFfiConverterUInt64.check_lower(value.index_count)
 
     @staticmethod
     def write(value, buf):
         _UniffiFfiConverterBytes.write(value.source_version, buf)
-        _UniffiFfiConverterOptionalBytes.write(value.catalog_version, buf)
+        _UniffiFfiConverterBytes.write(value.state_version, buf)
         _UniffiFfiConverterUInt64.write(value.index_count, buf)
 
 class _UniffiFfiConverterOptionalTypeIndexedVersionRecord(_UniffiConverterRustBuffer):
@@ -21318,14 +21306,14 @@ class _UniffiFfiConverterTypeScanOutcomeRecord(_UniffiConverterRustBuffer):
 
 @dataclass
 class SecondaryIndexLimitsRecord:
-    def __init__(self, *, max_term_bytes:int, max_projection_bytes:int, max_all_value_bytes:int, max_terms_per_record:int, max_projected_bytes_per_record:int, max_derived_mutations_per_transaction:int, max_projected_bytes_per_transaction:int, max_indexes:int, build_page_size:int, max_temporary_sort_bytes:int, max_bundle_nodes:int, max_bundle_bytes:int, max_verification_entries:int, max_write_retries:int, max_build_retries:int):
+    def __init__(self, *, max_term_bytes:int, max_projection_bytes:int, max_all_value_bytes:int, max_terms_per_record:int, max_projected_bytes_per_record:int, max_derived_mutations_per_write:int, max_projected_bytes_per_write:int, max_indexes:int, build_page_size:int, max_temporary_sort_bytes:int, max_bundle_nodes:int, max_bundle_bytes:int, max_verification_entries:int, max_write_retries:int, max_build_retries:int):
         self.max_term_bytes = max_term_bytes
         self.max_projection_bytes = max_projection_bytes
         self.max_all_value_bytes = max_all_value_bytes
         self.max_terms_per_record = max_terms_per_record
         self.max_projected_bytes_per_record = max_projected_bytes_per_record
-        self.max_derived_mutations_per_transaction = max_derived_mutations_per_transaction
-        self.max_projected_bytes_per_transaction = max_projected_bytes_per_transaction
+        self.max_derived_mutations_per_write = max_derived_mutations_per_write
+        self.max_projected_bytes_per_write = max_projected_bytes_per_write
         self.max_indexes = max_indexes
         self.build_page_size = build_page_size
         self.max_temporary_sort_bytes = max_temporary_sort_bytes
@@ -21339,7 +21327,7 @@ class SecondaryIndexLimitsRecord:
 
     
     def __str__(self):
-        return "SecondaryIndexLimitsRecord(max_term_bytes={}, max_projection_bytes={}, max_all_value_bytes={}, max_terms_per_record={}, max_projected_bytes_per_record={}, max_derived_mutations_per_transaction={}, max_projected_bytes_per_transaction={}, max_indexes={}, build_page_size={}, max_temporary_sort_bytes={}, max_bundle_nodes={}, max_bundle_bytes={}, max_verification_entries={}, max_write_retries={}, max_build_retries={})".format(self.max_term_bytes, self.max_projection_bytes, self.max_all_value_bytes, self.max_terms_per_record, self.max_projected_bytes_per_record, self.max_derived_mutations_per_transaction, self.max_projected_bytes_per_transaction, self.max_indexes, self.build_page_size, self.max_temporary_sort_bytes, self.max_bundle_nodes, self.max_bundle_bytes, self.max_verification_entries, self.max_write_retries, self.max_build_retries)
+        return "SecondaryIndexLimitsRecord(max_term_bytes={}, max_projection_bytes={}, max_all_value_bytes={}, max_terms_per_record={}, max_projected_bytes_per_record={}, max_derived_mutations_per_write={}, max_projected_bytes_per_write={}, max_indexes={}, build_page_size={}, max_temporary_sort_bytes={}, max_bundle_nodes={}, max_bundle_bytes={}, max_verification_entries={}, max_write_retries={}, max_build_retries={})".format(self.max_term_bytes, self.max_projection_bytes, self.max_all_value_bytes, self.max_terms_per_record, self.max_projected_bytes_per_record, self.max_derived_mutations_per_write, self.max_projected_bytes_per_write, self.max_indexes, self.build_page_size, self.max_temporary_sort_bytes, self.max_bundle_nodes, self.max_bundle_bytes, self.max_verification_entries, self.max_write_retries, self.max_build_retries)
     def __eq__(self, other):
         if self.max_term_bytes != other.max_term_bytes:
             return False
@@ -21351,9 +21339,9 @@ class SecondaryIndexLimitsRecord:
             return False
         if self.max_projected_bytes_per_record != other.max_projected_bytes_per_record:
             return False
-        if self.max_derived_mutations_per_transaction != other.max_derived_mutations_per_transaction:
+        if self.max_derived_mutations_per_write != other.max_derived_mutations_per_write:
             return False
-        if self.max_projected_bytes_per_transaction != other.max_projected_bytes_per_transaction:
+        if self.max_projected_bytes_per_write != other.max_projected_bytes_per_write:
             return False
         if self.max_indexes != other.max_indexes:
             return False
@@ -21382,8 +21370,8 @@ class _UniffiFfiConverterTypeSecondaryIndexLimitsRecord(_UniffiConverterRustBuff
             max_all_value_bytes=_UniffiFfiConverterUInt64.read(buf),
             max_terms_per_record=_UniffiFfiConverterUInt64.read(buf),
             max_projected_bytes_per_record=_UniffiFfiConverterUInt64.read(buf),
-            max_derived_mutations_per_transaction=_UniffiFfiConverterUInt64.read(buf),
-            max_projected_bytes_per_transaction=_UniffiFfiConverterUInt64.read(buf),
+            max_derived_mutations_per_write=_UniffiFfiConverterUInt64.read(buf),
+            max_projected_bytes_per_write=_UniffiFfiConverterUInt64.read(buf),
             max_indexes=_UniffiFfiConverterUInt64.read(buf),
             build_page_size=_UniffiFfiConverterUInt64.read(buf),
             max_temporary_sort_bytes=_UniffiFfiConverterUInt64.read(buf),
@@ -21401,8 +21389,8 @@ class _UniffiFfiConverterTypeSecondaryIndexLimitsRecord(_UniffiConverterRustBuff
         _UniffiFfiConverterUInt64.check_lower(value.max_all_value_bytes)
         _UniffiFfiConverterUInt64.check_lower(value.max_terms_per_record)
         _UniffiFfiConverterUInt64.check_lower(value.max_projected_bytes_per_record)
-        _UniffiFfiConverterUInt64.check_lower(value.max_derived_mutations_per_transaction)
-        _UniffiFfiConverterUInt64.check_lower(value.max_projected_bytes_per_transaction)
+        _UniffiFfiConverterUInt64.check_lower(value.max_derived_mutations_per_write)
+        _UniffiFfiConverterUInt64.check_lower(value.max_projected_bytes_per_write)
         _UniffiFfiConverterUInt64.check_lower(value.max_indexes)
         _UniffiFfiConverterUInt64.check_lower(value.build_page_size)
         _UniffiFfiConverterUInt64.check_lower(value.max_temporary_sort_bytes)
@@ -21419,8 +21407,8 @@ class _UniffiFfiConverterTypeSecondaryIndexLimitsRecord(_UniffiConverterRustBuff
         _UniffiFfiConverterUInt64.write(value.max_all_value_bytes, buf)
         _UniffiFfiConverterUInt64.write(value.max_terms_per_record, buf)
         _UniffiFfiConverterUInt64.write(value.max_projected_bytes_per_record, buf)
-        _UniffiFfiConverterUInt64.write(value.max_derived_mutations_per_transaction, buf)
-        _UniffiFfiConverterUInt64.write(value.max_projected_bytes_per_transaction, buf)
+        _UniffiFfiConverterUInt64.write(value.max_derived_mutations_per_write, buf)
+        _UniffiFfiConverterUInt64.write(value.max_projected_bytes_per_write, buf)
         _UniffiFfiConverterUInt64.write(value.max_indexes, buf)
         _UniffiFfiConverterUInt64.write(value.build_page_size, buf)
         _UniffiFfiConverterUInt64.write(value.max_temporary_sort_bytes, buf)

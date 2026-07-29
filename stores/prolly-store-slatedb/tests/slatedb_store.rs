@@ -41,7 +41,7 @@ fn slatedb_store_supports_strict_indexed_maps() {
     let path = format!("indexed-map-contract-{}", std::process::id());
     let store = SlateDbStore::open(path, object_store).unwrap();
 
-    prolly_store_test::assert_indexed_map_contract(store);
+    prolly_store_test::assert_verification_indexed_store(store);
 }
 
 #[test]

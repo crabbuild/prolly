@@ -288,7 +288,7 @@ pub enum Error {
         map_id: Vec<u8>,
         active_indexes: Vec<Vec<u8>>,
     },
-    /// The requested operation has no safe indexed implementation in v1.
+    /// The requested operation has no safe canonical indexed implementation.
     IndexOperationUnsupported { operation: &'static str },
     /// An application extractor rejected one source record.
     IndexExtractionFailed {
@@ -310,13 +310,13 @@ pub enum Error {
     },
     /// Repeated source movement prevented index activation.
     IndexBuildConflictLimitExceeded { name: Vec<u8>, attempts: usize },
-    /// No exact checkpoint exists for an index at the selected source version.
+    /// No exact snapshot exists for an index at the selected source version.
     IndexUnavailableAtVersion {
         name: Vec<u8>,
         source_version: MapVersionId,
     },
-    /// A persisted checkpoint disagrees with the selected source or index root.
-    IndexCheckpointMismatch {
+    /// A persisted snapshot disagrees with the selected source or index root.
+    IndexSnapshotMismatch {
         name: Vec<u8>,
         source_version: MapVersionId,
         reason: String,
@@ -381,7 +381,7 @@ impl Error {
             Self::TransactionConflict(_) | Self::IndexBuildConflictLimitExceeded { .. } => {
                 Code::Conflict
             }
-            Self::IndexCheckpointMismatch { .. } => Code::Corruption,
+            Self::IndexSnapshotMismatch { .. } => Code::Corruption,
             Self::InvalidIndexDefinition { .. } | Self::IndexDefinitionMismatch { .. } => {
                 Code::DefinitionInvalid
             }
@@ -523,7 +523,7 @@ impl std::fmt::Display for Error {
             Error::IndexUnavailableAtVersion { .. } => {
                 write!(f, "secondary index unavailable at selected snapshot")
             }
-            Error::IndexCheckpointMismatch { .. } => {
+            Error::IndexSnapshotMismatch { .. } => {
                 write!(f, "secondary index snapshot closure is inconsistent")
             }
             Error::IndexCursorVersionMismatch { .. } => {

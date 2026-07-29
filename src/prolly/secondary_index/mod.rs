@@ -33,13 +33,13 @@ pub use publication::{
     IndexedWriteVisibility, ProductionIndexedStoreCapabilities,
 };
 pub use snapshot::{
-    IndexedSnapshot, IndexedSnapshotId, IndexedSourceRecord, IndexedSourceRecordRef,
-    ProjectedIndexEntry, SecondaryIndexCursor, SecondaryIndexDirection, SecondaryIndexMatch,
-    SecondaryIndexMatchRef, SecondaryIndexPage, SecondaryIndexQuery, SecondaryIndexSnapshot,
+    IndexedSnapshot, IndexedSourceRecord, IndexedSourceRecordRef, ProjectedIndexEntry,
+    SecondaryIndexCursor, SecondaryIndexDirection, SecondaryIndexMatch, SecondaryIndexMatchRef,
+    SecondaryIndexPage, SecondaryIndexQuery, SecondaryIndexSnapshot,
 };
 pub use state::{
     indexed_collection_root_name, CollectionIndexPolicy, IndexDescriptor, IndexSemanticLimits,
-    IndexSnapshotRef, IndexedCollectionState, IndexedSnapshotRecord, IndexedSnapshotRecordId,
+    IndexSnapshotRef, IndexedCollectionState, IndexedSnapshotId, IndexedSnapshotRecord,
     SnapshotPin, SourceSnapshotRef, INDEXED_COLLECTION_FORMAT,
 };
 pub use storage::{

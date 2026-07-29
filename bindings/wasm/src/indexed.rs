@@ -3,9 +3,9 @@ use crate::page::{set_bytes, set_optional_bytes};
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     IndexProjection, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedSnapshotBundle,
-    IndexedSnapshotId, IndexedSnapshotRecordId, IndexedStoreProfile, Mutation, SecondaryIndex,
-    SecondaryIndexCursor, SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexLimits,
-    SecondaryIndexPage, SecondaryIndexRegistry,
+    IndexedSnapshotId, IndexedStoreProfile, Mutation, SecondaryIndex, SecondaryIndexCursor,
+    SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexPage,
+    SecondaryIndexRegistry,
 };
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -102,8 +102,8 @@ fn secondary_index_limits(value: Option<JsValue>) -> Result<SecondaryIndexLimits
         max_all_value_bytes: field("maxAllValueBytes")?,
         max_terms_per_record: field("maxTermsPerRecord")?,
         max_projected_bytes_per_record: field("maxProjectedBytesPerRecord")?,
-        max_derived_mutations_per_transaction: field("maxDerivedMutationsPerTransaction")?,
-        max_projected_bytes_per_transaction: field("maxProjectedBytesPerTransaction")?,
+        max_derived_mutations_per_write: field("maxDerivedMutationsPerWrite")?,
+        max_projected_bytes_per_write: field("maxProjectedBytesPerWrite")?,
         max_indexes: field("maxIndexes")?,
         build_page_size: field("buildPageSize")?,
         max_temporary_sort_bytes: field("maxTemporarySortBytes")?,
@@ -451,23 +451,12 @@ impl WasmIndexedMap {
     }
 
     #[wasm_bindgen(js_name = snapshotById)]
-    pub fn snapshot_by_id(
-        &self,
-        snapshot: Uint8Array,
-        source_version: Uint8Array,
-        state_version: Uint8Array,
-    ) -> Result<WasmIndexedSnapshot, JsValue> {
+    pub fn snapshot_by_id(&self, snapshot: Uint8Array) -> Result<WasmIndexedSnapshot, JsValue> {
         let snapshot: [u8; 32] = snapshot
             .to_vec()
             .try_into()
             .map_err(|_| JsValue::from_str("snapshot identifier must contain 32 bytes"))?;
-        let snapshot_id = IndexedSnapshotId {
-            snapshot: IndexedSnapshotRecordId(prolly::Cid(snapshot)),
-            source_version: prolly::MapVersionId::from_bytes(&source_version.to_vec())
-                .map_err(js_error)?,
-            state_version: prolly::MapVersionId::from_bytes(&state_version.to_vec())
-                .map_err(js_error)?,
-        };
+        let snapshot_id = IndexedSnapshotId(prolly::Cid(snapshot));
         let map = self
             .engine
             .indexed_map(&self.id, self.registry_snapshot())
@@ -1001,17 +990,7 @@ fn set_optional_indexed_version(
 
 fn indexed_snapshot_id_object(id: &IndexedSnapshotId) -> Result<Object, JsValue> {
     let object = Object::new();
-    set_bytes(&object, "snapshot", id.snapshot.as_cid().as_bytes())?;
-    set_bytes(
-        &object,
-        "sourceVersion",
-        id.source_version.as_cid().as_bytes(),
-    )?;
-    set_bytes(
-        &object,
-        "stateVersion",
-        id.state_version.as_cid().as_bytes(),
-    )?;
+    set_bytes(&object, "snapshot", id.as_cid().as_bytes())?;
     Ok(object)
 }
 
@@ -1125,12 +1104,12 @@ fn indexed_retention_object(value: prolly::IndexedRetentionResult) -> Result<Obj
     )?;
     set_version_array(
         &object,
-        "removedCatalogVersions",
+        "removedStateVersions",
         value.removed_state_versions,
     )?;
     set_u64_string(
         &object,
-        "removedCheckpointRecords",
+        "removedSnapshotRecords",
         value.removed_snapshot_records as u64,
     )?;
     let roots = Array::new();

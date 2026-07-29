@@ -54,6 +54,7 @@ tree behavior.
 | Native surface | Verification files | Command |
 | --- | --- | --- |
 | Rust async store | `tests/async_store.rs`, async doctests | `cargo test --features async-store` |
+| Secondary-index hard cut | canonical fixtures, deterministic fault/concurrency/resource suites, Node/WASM/UniFFI contract checks | `.github/workflows/secondary-index-required.yml` |
 
 | Binding | Verification files | Command |
 | --- | --- | --- |

@@ -12493,17 +12493,15 @@ public struct ActiveIndexHealthRecord: Equatable, Hashable {
     public var generation: UInt64
     public var fingerprint: Data
     public var projection: IndexProjectionRecord
-    public var indexMapId: Data
     public var indexVersion: Data
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(name: Data, generation: UInt64, fingerprint: Data, projection: IndexProjectionRecord, indexMapId: Data, indexVersion: Data) {
+    public init(name: Data, generation: UInt64, fingerprint: Data, projection: IndexProjectionRecord, indexVersion: Data) {
         self.name = name
         self.generation = generation
         self.fingerprint = fingerprint
         self.projection = projection
-        self.indexMapId = indexMapId
         self.indexVersion = indexVersion
     }
 
@@ -12527,7 +12525,6 @@ public struct FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer {
                 generation: FfiConverterUInt64.read(from: &buf), 
                 fingerprint: FfiConverterData.read(from: &buf), 
                 projection: FfiConverterTypeIndexProjectionRecord.read(from: &buf), 
-                indexMapId: FfiConverterData.read(from: &buf), 
                 indexVersion: FfiConverterData.read(from: &buf)
         )
     }
@@ -12537,7 +12534,6 @@ public struct FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.generation, into: &buf)
         FfiConverterData.write(value.fingerprint, into: &buf)
         FfiConverterTypeIndexProjectionRecord.write(value.projection, into: &buf)
-        FfiConverterData.write(value.indexMapId, into: &buf)
         FfiConverterData.write(value.indexVersion, into: &buf)
     }
 }
@@ -15795,7 +15791,7 @@ public func FfiConverterTypeHostStoreUnitResultRecord_lower(_ value: HostStoreUn
 public struct IndexBuildResultRecord: Equatable, Hashable {
     public var sourceVersion: Data
     public var indexVersion: Data
-    public var catalogVersion: Data
+    public var stateVersion: Data
     public var generation: UInt64
     public var entries: UInt64
     public var attempts: UInt64
@@ -15803,10 +15799,10 @@ public struct IndexBuildResultRecord: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceVersion: Data, indexVersion: Data, catalogVersion: Data, generation: UInt64, entries: UInt64, attempts: UInt64, activated: Bool) {
+    public init(sourceVersion: Data, indexVersion: Data, stateVersion: Data, generation: UInt64, entries: UInt64, attempts: UInt64, activated: Bool) {
         self.sourceVersion = sourceVersion
         self.indexVersion = indexVersion
-        self.catalogVersion = catalogVersion
+        self.stateVersion = stateVersion
         self.generation = generation
         self.entries = entries
         self.attempts = attempts
@@ -15831,7 +15827,7 @@ public struct FfiConverterTypeIndexBuildResultRecord: FfiConverterRustBuffer {
             try IndexBuildResultRecord(
                 sourceVersion: FfiConverterData.read(from: &buf), 
                 indexVersion: FfiConverterData.read(from: &buf), 
-                catalogVersion: FfiConverterData.read(from: &buf), 
+                stateVersion: FfiConverterData.read(from: &buf),
                 generation: FfiConverterUInt64.read(from: &buf), 
                 entries: FfiConverterUInt64.read(from: &buf), 
                 attempts: FfiConverterUInt64.read(from: &buf), 
@@ -15842,7 +15838,7 @@ public struct FfiConverterTypeIndexBuildResultRecord: FfiConverterRustBuffer {
     public static func write(_ value: IndexBuildResultRecord, into buf: inout [UInt8]) {
         FfiConverterData.write(value.sourceVersion, into: &buf)
         FfiConverterData.write(value.indexVersion, into: &buf)
-        FfiConverterData.write(value.catalogVersion, into: &buf)
+        FfiConverterData.write(value.stateVersion, into: &buf)
         FfiConverterUInt64.write(value.generation, into: &buf)
         FfiConverterUInt64.write(value.entries, into: &buf)
         FfiConverterUInt64.write(value.attempts, into: &buf)
@@ -16117,18 +16113,24 @@ public func FfiConverterTypeIndexVerificationRecord_lower(_ value: IndexVerifica
 public struct IndexedMapHealthRecord: Equatable, Hashable {
     public var sourceMapId: Data
     public var sourceVersion: Data?
-    public var catalogVersion: Data?
+    public var stateVersion: Data?
     public var activeIndexes: [ActiveIndexHealthRecord]
-    public var supportsTransactions: Bool
+    public var productionProfile: Bool
+    public var closureValid: Bool
+    public var retainedSnapshots: UInt64
+    public var durablePins: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceMapId: Data, sourceVersion: Data?, catalogVersion: Data?, activeIndexes: [ActiveIndexHealthRecord], supportsTransactions: Bool) {
+    public init(sourceMapId: Data, sourceVersion: Data?, stateVersion: Data?, activeIndexes: [ActiveIndexHealthRecord], productionProfile: Bool, closureValid: Bool, retainedSnapshots: UInt64, durablePins: UInt64) {
         self.sourceMapId = sourceMapId
         self.sourceVersion = sourceVersion
-        self.catalogVersion = catalogVersion
+        self.stateVersion = stateVersion
         self.activeIndexes = activeIndexes
-        self.supportsTransactions = supportsTransactions
+        self.productionProfile = productionProfile
+        self.closureValid = closureValid
+        self.retainedSnapshots = retainedSnapshots
+        self.durablePins = durablePins
     }
 
     
@@ -16149,18 +16151,24 @@ public struct FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer {
             try IndexedMapHealthRecord(
                 sourceMapId: FfiConverterData.read(from: &buf), 
                 sourceVersion: FfiConverterOptionData.read(from: &buf), 
-                catalogVersion: FfiConverterOptionData.read(from: &buf), 
+                stateVersion: FfiConverterOptionData.read(from: &buf),
                 activeIndexes: FfiConverterSequenceTypeActiveIndexHealthRecord.read(from: &buf), 
-                supportsTransactions: FfiConverterBool.read(from: &buf)
+                productionProfile: FfiConverterBool.read(from: &buf),
+                closureValid: FfiConverterBool.read(from: &buf),
+                retainedSnapshots: FfiConverterUInt64.read(from: &buf),
+                durablePins: FfiConverterUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: IndexedMapHealthRecord, into buf: inout [UInt8]) {
         FfiConverterData.write(value.sourceMapId, into: &buf)
         FfiConverterOptionData.write(value.sourceVersion, into: &buf)
-        FfiConverterOptionData.write(value.catalogVersion, into: &buf)
+        FfiConverterOptionData.write(value.stateVersion, into: &buf)
         FfiConverterSequenceTypeActiveIndexHealthRecord.write(value.activeIndexes, into: &buf)
-        FfiConverterBool.write(value.supportsTransactions, into: &buf)
+        FfiConverterBool.write(value.productionProfile, into: &buf)
+        FfiConverterBool.write(value.closureValid, into: &buf)
+        FfiConverterUInt64.write(value.retainedSnapshots, into: &buf)
+        FfiConverterUInt64.write(value.durablePins, into: &buf)
     }
 }
 
@@ -16188,9 +16196,6 @@ public struct IndexedMapMetricsRecord: Equatable, Hashable {
     public var physicalUpserts: UInt64
     public var physicalDeletes: UInt64
     public var unchangedEmissionsSkipped: UInt64
-    public var sourceNodesWritten: UInt64
-    public var indexNodesWritten: UInt64
-    public var catalogNodesWritten: UInt64
     public var retries: UInt64
     public var buildAttempts: UInt64
     public var verificationOutcomes: UInt64
@@ -16198,7 +16203,7 @@ public struct IndexedMapMetricsRecord: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(normalizedSourceMutations: UInt64, recordsExtracted: UInt64, termsEmitted: UInt64, projectedBytes: UInt64, physicalUpserts: UInt64, physicalDeletes: UInt64, unchangedEmissionsSkipped: UInt64, sourceNodesWritten: UInt64, indexNodesWritten: UInt64, catalogNodesWritten: UInt64, retries: UInt64, buildAttempts: UInt64, verificationOutcomes: UInt64, retainedRoots: UInt64) {
+    public init(normalizedSourceMutations: UInt64, recordsExtracted: UInt64, termsEmitted: UInt64, projectedBytes: UInt64, physicalUpserts: UInt64, physicalDeletes: UInt64, unchangedEmissionsSkipped: UInt64, retries: UInt64, buildAttempts: UInt64, verificationOutcomes: UInt64, retainedRoots: UInt64) {
         self.normalizedSourceMutations = normalizedSourceMutations
         self.recordsExtracted = recordsExtracted
         self.termsEmitted = termsEmitted
@@ -16206,9 +16211,6 @@ public struct IndexedMapMetricsRecord: Equatable, Hashable {
         self.physicalUpserts = physicalUpserts
         self.physicalDeletes = physicalDeletes
         self.unchangedEmissionsSkipped = unchangedEmissionsSkipped
-        self.sourceNodesWritten = sourceNodesWritten
-        self.indexNodesWritten = indexNodesWritten
-        self.catalogNodesWritten = catalogNodesWritten
         self.retries = retries
         self.buildAttempts = buildAttempts
         self.verificationOutcomes = verificationOutcomes
@@ -16238,9 +16240,6 @@ public struct FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer {
                 physicalUpserts: FfiConverterUInt64.read(from: &buf), 
                 physicalDeletes: FfiConverterUInt64.read(from: &buf), 
                 unchangedEmissionsSkipped: FfiConverterUInt64.read(from: &buf), 
-                sourceNodesWritten: FfiConverterUInt64.read(from: &buf), 
-                indexNodesWritten: FfiConverterUInt64.read(from: &buf), 
-                catalogNodesWritten: FfiConverterUInt64.read(from: &buf), 
                 retries: FfiConverterUInt64.read(from: &buf), 
                 buildAttempts: FfiConverterUInt64.read(from: &buf), 
                 verificationOutcomes: FfiConverterUInt64.read(from: &buf), 
@@ -16256,9 +16255,6 @@ public struct FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.physicalUpserts, into: &buf)
         FfiConverterUInt64.write(value.physicalDeletes, into: &buf)
         FfiConverterUInt64.write(value.unchangedEmissionsSkipped, into: &buf)
-        FfiConverterUInt64.write(value.sourceNodesWritten, into: &buf)
-        FfiConverterUInt64.write(value.indexNodesWritten, into: &buf)
-        FfiConverterUInt64.write(value.catalogNodesWritten, into: &buf)
         FfiConverterUInt64.write(value.retries, into: &buf)
         FfiConverterUInt64.write(value.buildAttempts, into: &buf)
         FfiConverterUInt64.write(value.verificationOutcomes, into: &buf)
@@ -16287,19 +16283,19 @@ public struct IndexedRetentionRecord: Equatable, Hashable {
     public var removedSourceVersions: [Data]
     public var retainedIndexVersions: [Data]
     public var removedIndexVersions: [Data]
-    public var removedCatalogVersions: [Data]
-    public var removedCheckpointRecords: UInt64
+    public var removedStateVersions: [Data]
+    public var removedSnapshotRecords: UInt64
     public var removedNamedRoots: [Data]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(retainedSourceVersions: [Data], removedSourceVersions: [Data], retainedIndexVersions: [Data], removedIndexVersions: [Data], removedCatalogVersions: [Data], removedCheckpointRecords: UInt64, removedNamedRoots: [Data]) {
+    public init(retainedSourceVersions: [Data], removedSourceVersions: [Data], retainedIndexVersions: [Data], removedIndexVersions: [Data], removedStateVersions: [Data], removedSnapshotRecords: UInt64, removedNamedRoots: [Data]) {
         self.retainedSourceVersions = retainedSourceVersions
         self.removedSourceVersions = removedSourceVersions
         self.retainedIndexVersions = retainedIndexVersions
         self.removedIndexVersions = removedIndexVersions
-        self.removedCatalogVersions = removedCatalogVersions
-        self.removedCheckpointRecords = removedCheckpointRecords
+        self.removedStateVersions = removedStateVersions
+        self.removedSnapshotRecords = removedSnapshotRecords
         self.removedNamedRoots = removedNamedRoots
     }
 
@@ -16323,8 +16319,8 @@ public struct FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer {
                 removedSourceVersions: FfiConverterSequenceData.read(from: &buf), 
                 retainedIndexVersions: FfiConverterSequenceData.read(from: &buf), 
                 removedIndexVersions: FfiConverterSequenceData.read(from: &buf), 
-                removedCatalogVersions: FfiConverterSequenceData.read(from: &buf), 
-                removedCheckpointRecords: FfiConverterUInt64.read(from: &buf), 
+                removedStateVersions: FfiConverterSequenceData.read(from: &buf),
+                removedSnapshotRecords: FfiConverterUInt64.read(from: &buf),
                 removedNamedRoots: FfiConverterSequenceData.read(from: &buf)
         )
     }
@@ -16334,8 +16330,8 @@ public struct FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer {
         FfiConverterSequenceData.write(value.removedSourceVersions, into: &buf)
         FfiConverterSequenceData.write(value.retainedIndexVersions, into: &buf)
         FfiConverterSequenceData.write(value.removedIndexVersions, into: &buf)
-        FfiConverterSequenceData.write(value.removedCatalogVersions, into: &buf)
-        FfiConverterUInt64.write(value.removedCheckpointRecords, into: &buf)
+        FfiConverterSequenceData.write(value.removedStateVersions, into: &buf)
+        FfiConverterUInt64.write(value.removedSnapshotRecords, into: &buf)
         FfiConverterSequenceData.write(value.removedNamedRoots, into: &buf)
     }
 }
@@ -16357,14 +16353,12 @@ public func FfiConverterTypeIndexedRetentionRecord_lower(_ value: IndexedRetenti
 
 
 public struct IndexedSnapshotIdRecord: Equatable, Hashable {
-    public var sourceVersion: Data
-    public var catalogVersion: Data
+    public var snapshot: Data
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceVersion: Data, catalogVersion: Data) {
-        self.sourceVersion = sourceVersion
-        self.catalogVersion = catalogVersion
+    public init(snapshot: Data) {
+        self.snapshot = snapshot
     }
 
     
@@ -16383,14 +16377,12 @@ public struct FfiConverterTypeIndexedSnapshotIdRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IndexedSnapshotIdRecord {
         return
             try IndexedSnapshotIdRecord(
-                sourceVersion: FfiConverterData.read(from: &buf), 
-                catalogVersion: FfiConverterData.read(from: &buf)
+                snapshot: FfiConverterData.read(from: &buf)
         )
     }
 
     public static func write(_ value: IndexedSnapshotIdRecord, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.sourceVersion, into: &buf)
-        FfiConverterData.write(value.catalogVersion, into: &buf)
+        FfiConverterData.write(value.snapshot, into: &buf)
     }
 }
 
@@ -16532,14 +16524,14 @@ public func FfiConverterTypeIndexedUpdateRecord_lower(_ value: IndexedUpdateReco
 
 public struct IndexedVersionRecord: Equatable, Hashable {
     public var sourceVersion: Data
-    public var catalogVersion: Data?
+    public var stateVersion: Data
     public var indexCount: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceVersion: Data, catalogVersion: Data?, indexCount: UInt64) {
+    public init(sourceVersion: Data, stateVersion: Data, indexCount: UInt64) {
         self.sourceVersion = sourceVersion
-        self.catalogVersion = catalogVersion
+        self.stateVersion = stateVersion
         self.indexCount = indexCount
     }
 
@@ -16560,14 +16552,14 @@ public struct FfiConverterTypeIndexedVersionRecord: FfiConverterRustBuffer {
         return
             try IndexedVersionRecord(
                 sourceVersion: FfiConverterData.read(from: &buf), 
-                catalogVersion: FfiConverterOptionData.read(from: &buf), 
+                stateVersion: FfiConverterData.read(from: &buf),
                 indexCount: FfiConverterUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: IndexedVersionRecord, into buf: inout [UInt8]) {
         FfiConverterData.write(value.sourceVersion, into: &buf)
-        FfiConverterOptionData.write(value.catalogVersion, into: &buf)
+        FfiConverterData.write(value.stateVersion, into: &buf)
         FfiConverterUInt64.write(value.indexCount, into: &buf)
     }
 }
@@ -21468,8 +21460,8 @@ public struct SecondaryIndexLimitsRecord: Equatable, Hashable {
     public var maxAllValueBytes: UInt64
     public var maxTermsPerRecord: UInt64
     public var maxProjectedBytesPerRecord: UInt64
-    public var maxDerivedMutationsPerTransaction: UInt64
-    public var maxProjectedBytesPerTransaction: UInt64
+    public var maxDerivedMutationsPerWrite: UInt64
+    public var maxProjectedBytesPerWrite: UInt64
     public var maxIndexes: UInt64
     public var buildPageSize: UInt64
     public var maxTemporarySortBytes: UInt64
@@ -21481,14 +21473,14 @@ public struct SecondaryIndexLimitsRecord: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(maxTermBytes: UInt64, maxProjectionBytes: UInt64, maxAllValueBytes: UInt64, maxTermsPerRecord: UInt64, maxProjectedBytesPerRecord: UInt64, maxDerivedMutationsPerTransaction: UInt64, maxProjectedBytesPerTransaction: UInt64, maxIndexes: UInt64, buildPageSize: UInt64, maxTemporarySortBytes: UInt64, maxBundleNodes: UInt64, maxBundleBytes: UInt64, maxVerificationEntries: UInt64, maxWriteRetries: UInt64, maxBuildRetries: UInt64) {
+    public init(maxTermBytes: UInt64, maxProjectionBytes: UInt64, maxAllValueBytes: UInt64, maxTermsPerRecord: UInt64, maxProjectedBytesPerRecord: UInt64, maxDerivedMutationsPerWrite: UInt64, maxProjectedBytesPerWrite: UInt64, maxIndexes: UInt64, buildPageSize: UInt64, maxTemporarySortBytes: UInt64, maxBundleNodes: UInt64, maxBundleBytes: UInt64, maxVerificationEntries: UInt64, maxWriteRetries: UInt64, maxBuildRetries: UInt64) {
         self.maxTermBytes = maxTermBytes
         self.maxProjectionBytes = maxProjectionBytes
         self.maxAllValueBytes = maxAllValueBytes
         self.maxTermsPerRecord = maxTermsPerRecord
         self.maxProjectedBytesPerRecord = maxProjectedBytesPerRecord
-        self.maxDerivedMutationsPerTransaction = maxDerivedMutationsPerTransaction
-        self.maxProjectedBytesPerTransaction = maxProjectedBytesPerTransaction
+        self.maxDerivedMutationsPerWrite = maxDerivedMutationsPerWrite
+        self.maxProjectedBytesPerWrite = maxProjectedBytesPerWrite
         self.maxIndexes = maxIndexes
         self.buildPageSize = buildPageSize
         self.maxTemporarySortBytes = maxTemporarySortBytes
@@ -21520,8 +21512,8 @@ public struct FfiConverterTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer
                 maxAllValueBytes: FfiConverterUInt64.read(from: &buf), 
                 maxTermsPerRecord: FfiConverterUInt64.read(from: &buf), 
                 maxProjectedBytesPerRecord: FfiConverterUInt64.read(from: &buf), 
-                maxDerivedMutationsPerTransaction: FfiConverterUInt64.read(from: &buf), 
-                maxProjectedBytesPerTransaction: FfiConverterUInt64.read(from: &buf), 
+                maxDerivedMutationsPerWrite: FfiConverterUInt64.read(from: &buf),
+                maxProjectedBytesPerWrite: FfiConverterUInt64.read(from: &buf),
                 maxIndexes: FfiConverterUInt64.read(from: &buf), 
                 buildPageSize: FfiConverterUInt64.read(from: &buf), 
                 maxTemporarySortBytes: FfiConverterUInt64.read(from: &buf), 
@@ -21539,8 +21531,8 @@ public struct FfiConverterTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer
         FfiConverterUInt64.write(value.maxAllValueBytes, into: &buf)
         FfiConverterUInt64.write(value.maxTermsPerRecord, into: &buf)
         FfiConverterUInt64.write(value.maxProjectedBytesPerRecord, into: &buf)
-        FfiConverterUInt64.write(value.maxDerivedMutationsPerTransaction, into: &buf)
-        FfiConverterUInt64.write(value.maxProjectedBytesPerTransaction, into: &buf)
+        FfiConverterUInt64.write(value.maxDerivedMutationsPerWrite, into: &buf)
+        FfiConverterUInt64.write(value.maxProjectedBytesPerWrite, into: &buf)
         FfiConverterUInt64.write(value.maxIndexes, into: &buf)
         FfiConverterUInt64.write(value.buildPageSize, into: &buf)
         FfiConverterUInt64.write(value.maxTemporarySortBytes, into: &buf)

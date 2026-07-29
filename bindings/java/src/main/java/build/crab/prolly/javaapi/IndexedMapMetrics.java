@@ -10,9 +10,6 @@ public record IndexedMapMetrics(
         long physicalUpserts,
         long physicalDeletes,
         long unchangedEmissionsSkipped,
-        long sourceNodesWritten,
-        long indexNodesWritten,
-        long catalogNodesWritten,
         long retries,
         long buildAttempts,
         long verificationOutcomes,
@@ -22,8 +19,7 @@ public record IndexedMapMetrics(
                 value.getNormalizedSourceMutations(), value.getRecordsExtracted(),
                 value.getTermsEmitted(), value.getProjectedBytes(), value.getPhysicalUpserts(),
                 value.getPhysicalDeletes(), value.getUnchangedEmissionsSkipped(),
-                value.getSourceNodesWritten(), value.getIndexNodesWritten(),
-                value.getCatalogNodesWritten(), value.getRetries(), value.getBuildAttempts(),
+                value.getRetries(), value.getBuildAttempts(),
                 value.getVerificationOutcomes(), value.getRetainedRoots());
     }
 }

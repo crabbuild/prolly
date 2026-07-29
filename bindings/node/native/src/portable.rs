@@ -371,16 +371,12 @@ impl From<IndexedVersionRecord> for NodePortableIndexedVersion {
 #[napi(object)]
 pub struct NodePortableIndexedSnapshotId {
     pub snapshot: Buffer,
-    pub source_version: Buffer,
-    pub state_version: Buffer,
 }
 
 impl From<IndexedSnapshotIdRecord> for NodePortableIndexedSnapshotId {
     fn from(value: IndexedSnapshotIdRecord) -> Self {
         Self {
             snapshot: Buffer::from(value.snapshot),
-            source_version: Buffer::from(value.source_version),
-            state_version: Buffer::from(value.state_version),
         }
     }
 }
@@ -389,8 +385,6 @@ impl From<NodePortableIndexedSnapshotId> for IndexedSnapshotIdRecord {
     fn from(value: NodePortableIndexedSnapshotId) -> Self {
         Self {
             snapshot: value.snapshot.to_vec(),
-            source_version: value.source_version.to_vec(),
-            state_version: value.state_version.to_vec(),
         }
     }
 }
@@ -1613,8 +1607,8 @@ pub struct NodePortableSecondaryIndexLimits {
     pub max_all_value_bytes: String,
     pub max_terms_per_record: String,
     pub max_projected_bytes_per_record: String,
-    pub max_derived_mutations_per_transaction: String,
-    pub max_projected_bytes_per_transaction: String,
+    pub max_derived_mutations_per_write: String,
+    pub max_projected_bytes_per_write: String,
     pub max_indexes: String,
     pub build_page_size: String,
     pub max_temporary_sort_bytes: String,
@@ -1638,13 +1632,13 @@ impl TryFrom<NodePortableSecondaryIndexLimits> for SecondaryIndexLimitsRecord {
                 value.max_projected_bytes_per_record,
                 "maxProjectedBytesPerRecord",
             )?,
-            max_derived_mutations_per_transaction: parse_u64(
-                value.max_derived_mutations_per_transaction,
-                "maxDerivedMutationsPerTransaction",
+            max_derived_mutations_per_write: parse_u64(
+                value.max_derived_mutations_per_write,
+                "maxDerivedMutationsPerWrite",
             )?,
-            max_projected_bytes_per_transaction: parse_u64(
-                value.max_projected_bytes_per_transaction,
-                "maxProjectedBytesPerTransaction",
+            max_projected_bytes_per_write: parse_u64(
+                value.max_projected_bytes_per_write,
+                "maxProjectedBytesPerWrite",
             )?,
             max_indexes: parse_u64(value.max_indexes, "maxIndexes")?,
             build_page_size: parse_u64(value.build_page_size, "buildPageSize")?,

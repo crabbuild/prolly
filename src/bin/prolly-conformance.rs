@@ -306,7 +306,7 @@ fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error
     Ok(SecondaryIndexFixture {
         source_map_id: hex(b"fixture-users"),
         root_name: hex(&prolly::indexed_collection_root_name(b"fixture-users")?),
-        source_version: snapshot.id().source_version.to_string(),
+        source_version: snapshot.source_version().to_string(),
         source_root: cid_hex(
             snapshot
                 .source()
@@ -315,7 +315,7 @@ fn secondary_index_fixture() -> Result<SecondaryIndexFixture, Box<dyn std::error
                 .as_ref()
                 .ok_or("fixture source is empty")?,
         ),
-        state_version: snapshot.id().state_version.to_string(),
+        state_version: snapshot.state_version().to_string(),
         state_root: cid_hex(
             snapshot
                 .state()

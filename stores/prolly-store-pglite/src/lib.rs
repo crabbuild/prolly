@@ -9,9 +9,9 @@ use std::sync::{Mutex, MutexGuard};
 use serde_json::{json, Map, Value};
 
 use prolly::{
-    BatchOp, Cid, Error, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
-    NodeStoreScan, RootCondition, RootManifest, RootWrite, Store, TransactionConflict,
-    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
+    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
+    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
 struct OrderedBatchReadPlan<'a> {
@@ -936,6 +936,12 @@ impl TransactionalStore for PgliteStore {
         Ok(TransactionUpdate::Conflict(Box::new(
             TransactionConflict::new(name, expected, current),
         )))
+    }
+}
+
+impl IndexedStore for PgliteStore {
+    fn indexed_store_profile(&self) -> IndexedStoreProfile {
+        IndexedStoreProfile::Verification
     }
 }
 

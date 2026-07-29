@@ -12,9 +12,9 @@ use slatedb::{Db, WriteBatch};
 use tokio::runtime::{Builder, Runtime};
 
 use prolly::{
-    BatchOp, Cid, Error, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
-    NodeStoreScan, RootCondition, RootManifest, RootWrite, Store, TransactionConflict,
-    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
+    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
+    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
 struct OrderedBatchReadPlan<'a> {
@@ -685,6 +685,12 @@ impl TransactionalStore for SlateDbStore {
             nodes_written: node_writes.len(),
             roots_written: root_writes.len(),
         })
+    }
+}
+
+impl IndexedStore for SlateDbStore {
+    fn indexed_store_profile(&self) -> IndexedStoreProfile {
+        IndexedStoreProfile::Verification
     }
 }
 

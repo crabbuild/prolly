@@ -1757,6 +1757,6 @@ fn secondary_index_build_and_edit_report_truthful_publication_origins() {
         .all(|publication| publication.origin == PublicationOrigin::BatchMutation));
 
     let snapshot = indexed.snapshot().unwrap();
-    let verification = indexed.verify_all(&snapshot.id().source_version).unwrap();
+    let verification = indexed.verify_all(snapshot.source_version()).unwrap();
     assert!(verification.iter().all(|result| result.is_valid()));
 }

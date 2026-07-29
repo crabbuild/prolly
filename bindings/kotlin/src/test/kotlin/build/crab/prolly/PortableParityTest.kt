@@ -499,8 +499,7 @@ class PortableParityTest {
                     }
                     indexed.snapshot().use { current ->
                         indexed.snapshotById(current.id).use { reopened ->
-                            assertArrayEquals(current.id.sourceVersion, reopened.id.sourceVersion)
-                            assertArrayEquals(current.id.catalogVersion, reopened.id.catalogVersion)
+                            assertArrayEquals(current.id.snapshot, reopened.id.snapshot)
                         }
                     }
                 }

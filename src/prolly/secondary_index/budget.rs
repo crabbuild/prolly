@@ -1,4 +1,6 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+use std::time::Instant;
 
 use super::super::error::Error;
 
@@ -72,7 +74,7 @@ impl Default for MaintenanceBudget {
             max_derived_entries: 10_000_000,
             max_verification_findings: 10_000,
             max_accounted_memory_bytes: 256 * 1024 * 1024,
-            max_spill_bytes: 4 * 1024 * 1024 * 1024,
+            max_spill_bytes: 2 * 1024 * 1024 * 1024,
             max_spill_runs: 4_096,
             max_merge_fan_in: 64,
             max_cas_attempts: 8,
@@ -200,14 +202,47 @@ impl TransferBudget {
 
 #[allow(dead_code)]
 pub(crate) struct BudgetCounter {
+    started: Deadline,
+}
+
+pub(crate) struct Deadline {
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     started: Instant,
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    started_millis: f64,
+}
+
+impl Deadline {
+    pub(crate) fn new() -> Self {
+        Self {
+            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+            started: Instant::now(),
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            started_millis: js_sys::Date::now(),
+        }
+    }
+
+    pub(crate) fn elapsed_millis(&self) -> u128 {
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        {
+            self.started.elapsed().as_millis()
+        }
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            (js_sys::Date::now() - self.started_millis).max(0.0) as u128
+        }
+    }
+
+    pub(crate) fn exceeded(&self, limit: Duration) -> bool {
+        self.elapsed_millis() > limit.as_millis()
+    }
 }
 
 #[allow(dead_code)]
 impl BudgetCounter {
     pub(crate) fn new() -> Self {
         Self {
-            started: Instant::now(),
+            started: Deadline::new(),
         }
     }
 
@@ -241,11 +276,11 @@ impl BudgetCounter {
         resource: &'static str,
         limit: Duration,
     ) -> Result<(), Error> {
-        if self.started.elapsed() > limit {
+        if self.started.exceeded(limit) {
             return Err(Error::IndexResourceLimitExceeded {
                 resource,
                 limit: usize::try_from(limit.as_millis()).unwrap_or(usize::MAX),
-                actual: usize::try_from(self.started.elapsed().as_millis()).unwrap_or(usize::MAX),
+                actual: usize::try_from(self.started.elapsed_millis()).unwrap_or(usize::MAX),
             });
         }
         Ok(())

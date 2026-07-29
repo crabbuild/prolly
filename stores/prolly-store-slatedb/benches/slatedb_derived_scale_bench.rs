@@ -168,7 +168,7 @@ fn run_index_workload(
 
         timed(&context, "verify_all", records, || {
             let snapshot = indexed.snapshot().unwrap();
-            let checks = indexed.verify_all(&snapshot.id().source_version).unwrap();
+            let checks = indexed.verify_all(snapshot.source_version()).unwrap();
             checks.len() == 1 && checks.iter().all(prolly::IndexVerification::is_valid)
         });
 
@@ -183,7 +183,7 @@ fn run_index_workload(
             let indexed = reopened.indexed_map(b"users", registry).unwrap();
             let health = indexed.health().unwrap();
             let snapshot = indexed.snapshot().unwrap();
-            let checks = indexed.verify_all(&snapshot.id().source_version).unwrap();
+            let checks = indexed.verify_all(snapshot.source_version()).unwrap();
             health.active_indexes.len() == 1
                 && checks.len() == 1
                 && checks.iter().all(prolly::IndexVerification::is_valid)

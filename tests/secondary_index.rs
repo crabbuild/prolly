@@ -80,10 +80,16 @@ fn canonical_mutation_build_query_and_history_are_coherent() {
 
     let before = snapshot.id().clone();
     indexed.put(b"u1", b"inactive").unwrap();
-    assert!(matches!(
-        indexed.snapshot_by_id(&before),
-        Err(Error::InvalidVersionedMap(_))
-    ));
+    assert_eq!(
+        indexed
+            .snapshot_by_id(&before)
+            .unwrap()
+            .index(b"by-value")
+            .unwrap()
+            .primary_keys(b"active")
+            .unwrap(),
+        vec![b"u1".to_vec(), b"u2".to_vec()]
+    );
     let current = indexed.snapshot().unwrap();
     assert_eq!(
         current
@@ -241,17 +247,14 @@ fn replacement_retention_and_verification_keep_exact_generations() {
     let indexed = engine.indexed_map(b"users", registry()).unwrap();
     indexed.put(b"u1", b"active").unwrap();
     indexed.ensure_index(b"by-value").unwrap();
-    let old = indexed.snapshot().unwrap().id().source_version.clone();
+    let old = indexed.snapshot().unwrap().source_version().clone();
     let replacement = SecondaryIndex::non_unique("by-value", 2, "test.by-value/2", |key, _| {
         Ok(vec![key.to_vec()])
     })
     .unwrap();
     indexed.replace_index(b"by-value", replacement).unwrap();
     let verification = indexed
-        .verify_index(
-            b"by-value",
-            &indexed.snapshot().unwrap().id().source_version,
-        )
+        .verify_index(b"by-value", indexed.snapshot().unwrap().source_version())
         .unwrap();
     assert!(verification.is_valid());
     let retained = indexed.keep_last(2).unwrap();
@@ -319,7 +322,7 @@ fn durable_pins_protect_history_until_released() {
     let indexed = engine.indexed_map(b"users", registry()).unwrap();
     indexed.put(b"u1", b"first").unwrap();
     indexed.ensure_index(b"by-value").unwrap();
-    let old = indexed.snapshot().unwrap().id().source_version.clone();
+    let old = indexed.snapshot().unwrap().source_version().clone();
     let pin = indexed.pin_snapshot(b"reader-1", &old).unwrap();
     indexed.put(b"u1", b"second").unwrap();
     indexed.keep_last(1).unwrap();

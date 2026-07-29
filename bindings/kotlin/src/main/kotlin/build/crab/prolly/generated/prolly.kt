@@ -24367,8 +24367,6 @@ data class ActiveIndexHealthRecord (
     ,
     var `projection`: IndexProjectionRecord
     ,
-    var `indexMapId`: kotlin.ByteArray
-    ,
     var `indexVersion`: kotlin.ByteArray
 
 ){
@@ -24391,7 +24389,6 @@ public object FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer<Ac
             FfiConverterByteArray.read(buf),
             FfiConverterTypeIndexProjectionRecord.read(buf),
             FfiConverterByteArray.read(buf),
-            FfiConverterByteArray.read(buf),
         )
     }
 
@@ -24400,7 +24397,6 @@ public object FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer<Ac
             FfiConverterULong.allocationSize(value.`generation`) +
             FfiConverterByteArray.allocationSize(value.`fingerprint`) +
             FfiConverterTypeIndexProjectionRecord.allocationSize(value.`projection`) +
-            FfiConverterByteArray.allocationSize(value.`indexMapId`) +
             FfiConverterByteArray.allocationSize(value.`indexVersion`)
     )
 
@@ -24409,7 +24405,6 @@ public object FfiConverterTypeActiveIndexHealthRecord: FfiConverterRustBuffer<Ac
             FfiConverterULong.write(value.`generation`, buf)
             FfiConverterByteArray.write(value.`fingerprint`, buf)
             FfiConverterTypeIndexProjectionRecord.write(value.`projection`, buf)
-            FfiConverterByteArray.write(value.`indexMapId`, buf)
             FfiConverterByteArray.write(value.`indexVersion`, buf)
     }
 }
@@ -26993,7 +26988,7 @@ data class IndexBuildResultRecord (
     ,
     var `indexVersion`: kotlin.ByteArray
     ,
-    var `catalogVersion`: kotlin.ByteArray
+    var `stateVersion`: kotlin.ByteArray
     ,
     var `generation`: kotlin.ULong
     ,
@@ -27031,7 +27026,7 @@ public object FfiConverterTypeIndexBuildResultRecord: FfiConverterRustBuffer<Ind
     override fun allocationSize(value: IndexBuildResultRecord) = (
             FfiConverterByteArray.allocationSize(value.`sourceVersion`) +
             FfiConverterByteArray.allocationSize(value.`indexVersion`) +
-            FfiConverterByteArray.allocationSize(value.`catalogVersion`) +
+            FfiConverterByteArray.allocationSize(value.`stateVersion`) +
             FfiConverterULong.allocationSize(value.`generation`) +
             FfiConverterULong.allocationSize(value.`entries`) +
             FfiConverterULong.allocationSize(value.`attempts`) +
@@ -27041,7 +27036,7 @@ public object FfiConverterTypeIndexBuildResultRecord: FfiConverterRustBuffer<Ind
     override fun write(value: IndexBuildResultRecord, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`sourceVersion`, buf)
             FfiConverterByteArray.write(value.`indexVersion`, buf)
-            FfiConverterByteArray.write(value.`catalogVersion`, buf)
+            FfiConverterByteArray.write(value.`stateVersion`, buf)
             FfiConverterULong.write(value.`generation`, buf)
             FfiConverterULong.write(value.`entries`, buf)
             FfiConverterULong.write(value.`attempts`, buf)
@@ -27248,11 +27243,17 @@ data class IndexedMapHealthRecord (
     ,
     var `sourceVersion`: kotlin.ByteArray?
     ,
-    var `catalogVersion`: kotlin.ByteArray?
+    var `stateVersion`: kotlin.ByteArray?
     ,
     var `activeIndexes`: List<ActiveIndexHealthRecord>
     ,
-    var `supportsTransactions`: kotlin.Boolean
+    var `productionProfile`: kotlin.Boolean
+    ,
+    var `closureValid`: kotlin.Boolean
+    ,
+    var `retainedSnapshots`: kotlin.ULong
+    ,
+    var `durablePins`: kotlin.ULong
 
 ){
 
@@ -27274,23 +27275,32 @@ public object FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer<Ind
             FfiConverterOptionalByteArray.read(buf),
             FfiConverterSequenceTypeActiveIndexHealthRecord.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
     override fun allocationSize(value: IndexedMapHealthRecord) = (
             FfiConverterByteArray.allocationSize(value.`sourceMapId`) +
             FfiConverterOptionalByteArray.allocationSize(value.`sourceVersion`) +
-            FfiConverterOptionalByteArray.allocationSize(value.`catalogVersion`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`stateVersion`) +
             FfiConverterSequenceTypeActiveIndexHealthRecord.allocationSize(value.`activeIndexes`) +
-            FfiConverterBoolean.allocationSize(value.`supportsTransactions`)
+            FfiConverterBoolean.allocationSize(value.`productionProfile`) +
+            FfiConverterBoolean.allocationSize(value.`closureValid`) +
+            FfiConverterULong.allocationSize(value.`retainedSnapshots`) +
+            FfiConverterULong.allocationSize(value.`durablePins`)
     )
 
     override fun write(value: IndexedMapHealthRecord, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`sourceMapId`, buf)
             FfiConverterOptionalByteArray.write(value.`sourceVersion`, buf)
-            FfiConverterOptionalByteArray.write(value.`catalogVersion`, buf)
+            FfiConverterOptionalByteArray.write(value.`stateVersion`, buf)
             FfiConverterSequenceTypeActiveIndexHealthRecord.write(value.`activeIndexes`, buf)
-            FfiConverterBoolean.write(value.`supportsTransactions`, buf)
+            FfiConverterBoolean.write(value.`productionProfile`, buf)
+            FfiConverterBoolean.write(value.`closureValid`, buf)
+            FfiConverterULong.write(value.`retainedSnapshots`, buf)
+            FfiConverterULong.write(value.`durablePins`, buf)
     }
 }
 
@@ -27310,12 +27320,6 @@ data class IndexedMapMetricsRecord (
     var `physicalDeletes`: kotlin.ULong
     ,
     var `unchangedEmissionsSkipped`: kotlin.ULong
-    ,
-    var `sourceNodesWritten`: kotlin.ULong
-    ,
-    var `indexNodesWritten`: kotlin.ULong
-    ,
-    var `catalogNodesWritten`: kotlin.ULong
     ,
     var `retries`: kotlin.ULong
     ,
@@ -27351,9 +27355,6 @@ public object FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer<In
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
-            FfiConverterULong.read(buf),
-            FfiConverterULong.read(buf),
-            FfiConverterULong.read(buf),
         )
     }
 
@@ -27365,9 +27366,6 @@ public object FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer<In
             FfiConverterULong.allocationSize(value.`physicalUpserts`) +
             FfiConverterULong.allocationSize(value.`physicalDeletes`) +
             FfiConverterULong.allocationSize(value.`unchangedEmissionsSkipped`) +
-            FfiConverterULong.allocationSize(value.`sourceNodesWritten`) +
-            FfiConverterULong.allocationSize(value.`indexNodesWritten`) +
-            FfiConverterULong.allocationSize(value.`catalogNodesWritten`) +
             FfiConverterULong.allocationSize(value.`retries`) +
             FfiConverterULong.allocationSize(value.`buildAttempts`) +
             FfiConverterULong.allocationSize(value.`verificationOutcomes`) +
@@ -27382,9 +27380,6 @@ public object FfiConverterTypeIndexedMapMetricsRecord: FfiConverterRustBuffer<In
             FfiConverterULong.write(value.`physicalUpserts`, buf)
             FfiConverterULong.write(value.`physicalDeletes`, buf)
             FfiConverterULong.write(value.`unchangedEmissionsSkipped`, buf)
-            FfiConverterULong.write(value.`sourceNodesWritten`, buf)
-            FfiConverterULong.write(value.`indexNodesWritten`, buf)
-            FfiConverterULong.write(value.`catalogNodesWritten`, buf)
             FfiConverterULong.write(value.`retries`, buf)
             FfiConverterULong.write(value.`buildAttempts`, buf)
             FfiConverterULong.write(value.`verificationOutcomes`, buf)
@@ -27403,9 +27398,9 @@ data class IndexedRetentionRecord (
     ,
     var `removedIndexVersions`: List<kotlin.ByteArray>
     ,
-    var `removedCatalogVersions`: List<kotlin.ByteArray>
+    var `removedStateVersions`: List<kotlin.ByteArray>
     ,
-    var `removedCheckpointRecords`: kotlin.ULong
+    var `removedSnapshotRecords`: kotlin.ULong
     ,
     var `removedNamedRoots`: List<kotlin.ByteArray>
 
@@ -27439,8 +27434,8 @@ public object FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer<Ind
             FfiConverterSequenceByteArray.allocationSize(value.`removedSourceVersions`) +
             FfiConverterSequenceByteArray.allocationSize(value.`retainedIndexVersions`) +
             FfiConverterSequenceByteArray.allocationSize(value.`removedIndexVersions`) +
-            FfiConverterSequenceByteArray.allocationSize(value.`removedCatalogVersions`) +
-            FfiConverterULong.allocationSize(value.`removedCheckpointRecords`) +
+            FfiConverterSequenceByteArray.allocationSize(value.`removedStateVersions`) +
+            FfiConverterULong.allocationSize(value.`removedSnapshotRecords`) +
             FfiConverterSequenceByteArray.allocationSize(value.`removedNamedRoots`)
     )
 
@@ -27449,8 +27444,8 @@ public object FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer<Ind
             FfiConverterSequenceByteArray.write(value.`removedSourceVersions`, buf)
             FfiConverterSequenceByteArray.write(value.`retainedIndexVersions`, buf)
             FfiConverterSequenceByteArray.write(value.`removedIndexVersions`, buf)
-            FfiConverterSequenceByteArray.write(value.`removedCatalogVersions`, buf)
-            FfiConverterULong.write(value.`removedCheckpointRecords`, buf)
+            FfiConverterSequenceByteArray.write(value.`removedStateVersions`, buf)
+            FfiConverterULong.write(value.`removedSnapshotRecords`, buf)
             FfiConverterSequenceByteArray.write(value.`removedNamedRoots`, buf)
     }
 }
@@ -27458,9 +27453,7 @@ public object FfiConverterTypeIndexedRetentionRecord: FfiConverterRustBuffer<Ind
 
 
 data class IndexedSnapshotIdRecord (
-    var `sourceVersion`: kotlin.ByteArray
-    ,
-    var `catalogVersion`: kotlin.ByteArray
+    var `snapshot`: kotlin.ByteArray
 
 ){
 
@@ -27478,18 +27471,15 @@ public object FfiConverterTypeIndexedSnapshotIdRecord: FfiConverterRustBuffer<In
     override fun read(buf: ByteBuffer): IndexedSnapshotIdRecord {
         return IndexedSnapshotIdRecord(
             FfiConverterByteArray.read(buf),
-            FfiConverterByteArray.read(buf),
         )
     }
 
     override fun allocationSize(value: IndexedSnapshotIdRecord) = (
-            FfiConverterByteArray.allocationSize(value.`sourceVersion`) +
-            FfiConverterByteArray.allocationSize(value.`catalogVersion`)
+            FfiConverterByteArray.allocationSize(value.`snapshot`)
     )
 
     override fun write(value: IndexedSnapshotIdRecord, buf: ByteBuffer) {
-            FfiConverterByteArray.write(value.`sourceVersion`, buf)
-            FfiConverterByteArray.write(value.`catalogVersion`, buf)
+            FfiConverterByteArray.write(value.`snapshot`, buf)
     }
 }
 
@@ -27589,7 +27579,7 @@ public object FfiConverterTypeIndexedUpdateRecord: FfiConverterRustBuffer<Indexe
 data class IndexedVersionRecord (
     var `sourceVersion`: kotlin.ByteArray
     ,
-    var `catalogVersion`: kotlin.ByteArray?
+    var `stateVersion`: kotlin.ByteArray
     ,
     var `indexCount`: kotlin.ULong
 
@@ -27609,20 +27599,20 @@ public object FfiConverterTypeIndexedVersionRecord: FfiConverterRustBuffer<Index
     override fun read(buf: ByteBuffer): IndexedVersionRecord {
         return IndexedVersionRecord(
             FfiConverterByteArray.read(buf),
-            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
             FfiConverterULong.read(buf),
         )
     }
 
     override fun allocationSize(value: IndexedVersionRecord) = (
             FfiConverterByteArray.allocationSize(value.`sourceVersion`) +
-            FfiConverterOptionalByteArray.allocationSize(value.`catalogVersion`) +
+            FfiConverterByteArray.allocationSize(value.`stateVersion`) +
             FfiConverterULong.allocationSize(value.`indexCount`)
     )
 
     override fun write(value: IndexedVersionRecord, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`sourceVersion`, buf)
-            FfiConverterOptionalByteArray.write(value.`catalogVersion`, buf)
+            FfiConverterByteArray.write(value.`stateVersion`, buf)
             FfiConverterULong.write(value.`indexCount`, buf)
     }
 }
@@ -31429,9 +31419,9 @@ data class SecondaryIndexLimitsRecord (
     ,
     var `maxProjectedBytesPerRecord`: kotlin.ULong
     ,
-    var `maxDerivedMutationsPerTransaction`: kotlin.ULong
+    var `maxDerivedMutationsPerWrite`: kotlin.ULong
     ,
-    var `maxProjectedBytesPerTransaction`: kotlin.ULong
+    var `maxProjectedBytesPerWrite`: kotlin.ULong
     ,
     var `maxIndexes`: kotlin.ULong
     ,
@@ -31488,8 +31478,8 @@ public object FfiConverterTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer
             FfiConverterULong.allocationSize(value.`maxAllValueBytes`) +
             FfiConverterULong.allocationSize(value.`maxTermsPerRecord`) +
             FfiConverterULong.allocationSize(value.`maxProjectedBytesPerRecord`) +
-            FfiConverterULong.allocationSize(value.`maxDerivedMutationsPerTransaction`) +
-            FfiConverterULong.allocationSize(value.`maxProjectedBytesPerTransaction`) +
+            FfiConverterULong.allocationSize(value.`maxDerivedMutationsPerWrite`) +
+            FfiConverterULong.allocationSize(value.`maxProjectedBytesPerWrite`) +
             FfiConverterULong.allocationSize(value.`maxIndexes`) +
             FfiConverterULong.allocationSize(value.`buildPageSize`) +
             FfiConverterULong.allocationSize(value.`maxTemporarySortBytes`) +
@@ -31506,8 +31496,8 @@ public object FfiConverterTypeSecondaryIndexLimitsRecord: FfiConverterRustBuffer
             FfiConverterULong.write(value.`maxAllValueBytes`, buf)
             FfiConverterULong.write(value.`maxTermsPerRecord`, buf)
             FfiConverterULong.write(value.`maxProjectedBytesPerRecord`, buf)
-            FfiConverterULong.write(value.`maxDerivedMutationsPerTransaction`, buf)
-            FfiConverterULong.write(value.`maxProjectedBytesPerTransaction`, buf)
+            FfiConverterULong.write(value.`maxDerivedMutationsPerWrite`, buf)
+            FfiConverterULong.write(value.`maxProjectedBytesPerWrite`, buf)
             FfiConverterULong.write(value.`maxIndexes`, buf)
             FfiConverterULong.write(value.`buildPageSize`, buf)
             FfiConverterULong.write(value.`maxTemporarySortBytes`, buf)

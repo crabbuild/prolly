@@ -33,8 +33,6 @@ export interface NodePortableIndexedVersion {
 }
 export interface NodePortableIndexedSnapshotId {
   snapshot: Buffer
-  sourceVersion: Buffer
-  stateVersion: Buffer
 }
 export interface NodePortableIndexedUpdate {
   kind: string
@@ -96,8 +94,8 @@ export interface NodePortableIndexedRetention {
   removedSourceVersions: Array<Buffer>
   retainedIndexVersions: Array<Buffer>
   removedIndexVersions: Array<Buffer>
-  removedCatalogVersions: Array<Buffer>
-  removedCheckpointRecords: string
+  removedStateVersions: Array<Buffer>
+  removedSnapshotRecords: string
   removedNamedRoots: Array<Buffer>
 }
 export interface NodePortableIndexMatch {
@@ -373,8 +371,8 @@ export interface NodePortableSecondaryIndexLimits {
   maxAllValueBytes: string
   maxTermsPerRecord: string
   maxProjectedBytesPerRecord: string
-  maxDerivedMutationsPerTransaction: string
-  maxProjectedBytesPerTransaction: string
+  maxDerivedMutationsPerWrite: string
+  maxProjectedBytesPerWrite: string
   maxIndexes: string
   buildPageSize: string
   maxTemporarySortBytes: string

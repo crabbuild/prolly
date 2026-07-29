@@ -2126,7 +2126,7 @@ remain owned, snapshot-bound serialized values.
 2. issue an ordered batched read against the exact source snapshot;
 3. invoke a callback with primary key, optional projection, and borrowed source
    value;
-4. fail on a missing source record as `IndexCheckpointMismatch`;
+4. fail on a missing source record as `IndexSnapshotMismatch`;
 5. release the batch before continuing.
 
 Batch size and retained bytes obey `QueryBudget`. Exact posting lists preserve
