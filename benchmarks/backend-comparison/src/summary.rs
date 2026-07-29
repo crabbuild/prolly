@@ -536,8 +536,14 @@ fn render_report(summaries: &[SummaryRow], manifest: &Manifest, rows: &[Evidence
         String::new(),
         "- Each row uses byte-identical workloads and complete post-timing validation.".to_string(),
         "- A winner requires a paired bootstrap 95% confidence interval that excludes parity and a median effect above 5%.".to_string(),
-        backend_limitation(manifest.backend_a).to_string(),
-        backend_limitation(manifest.backend_b).to_string(),
+    ]);
+    let backend_a_limitation = backend_limitation(manifest.backend_a);
+    let backend_b_limitation = backend_limitation(manifest.backend_b);
+    lines.push(backend_a_limitation.to_string());
+    if backend_b_limitation != backend_a_limitation {
+        lines.push(backend_b_limitation.to_string());
+    }
+    lines.extend([
         format!(
             "- Environment class is `{}`; do not mix it with another environment class.",
             manifest.environment_class
@@ -697,6 +703,12 @@ mod tests {
         let report = render_report(&summaries, &manifest, &rows);
         assert!(report.contains("# PostgreSQL vs MySQL"));
         assert!(report.contains("MySQL/PG") || report.contains("MySQL/PostgreSQL"));
+        assert_eq!(
+            report
+                .matches("Local SQL container measurements compare")
+                .count(),
+            1
+        );
     }
 
     #[test]
