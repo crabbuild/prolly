@@ -32,7 +32,9 @@ fn redis_backend_satisfies_remote_backend_contract_when_url_is_set() {
     };
 
     runtime().block_on(async {
-        use prolly::remote_conformance::assert_remote_backend_contract;
+        use prolly::remote_conformance::{
+            assert_remote_backend_contract, assert_remote_backend_transaction_contract,
+        };
         use prolly_store_redis::RedisBackend;
 
         let backend = RedisBackend::connect(&redis_url)
@@ -42,6 +44,7 @@ fn redis_backend_satisfies_remote_backend_contract_when_url_is_set() {
 
         backend.clear_namespace().await.unwrap();
         assert_remote_backend_contract(&backend).await;
+        assert_remote_backend_transaction_contract(&backend).await;
         backend.clear_namespace().await.unwrap();
     });
 }
@@ -55,7 +58,10 @@ fn redis_backend_bounds_bulk_commands_and_preserves_semantics_when_url_is_set() 
     runtime().block_on(async {
         use std::time::Duration;
 
-        use prolly::{RemoteBatchOp, RemoteRootWrite, RemoteStoreBackend, RemoteTransactionUpdate};
+        use prolly::{
+            RemoteBatchOp, RemoteManifestUpdate, RemoteRootWrite, RemoteStoreBackend,
+            RemoteTransactionUpdate,
+        };
         use prolly_store_redis::{RedisBackend, RedisBackendOptions};
 
         let options = RedisBackendOptions::default()
@@ -159,6 +165,32 @@ fn redis_backend_bounds_bulk_commands_and_preserves_semantics_when_url_is_set() 
                 b"root-4".as_slice(),
             ]
         );
+
+        let mut contenders = Vec::new();
+        for index in 0..32 {
+            let contender = backend.clone();
+            contenders.push(tokio::spawn(async move {
+                contender
+                    .compare_and_swap_root_manifest(
+                        b"contended-root",
+                        None,
+                        Some(format!("contender-{index}").as_bytes()),
+                    )
+                    .await
+                    .unwrap()
+            }));
+        }
+        let mut applied = 0;
+        let mut conflicts = 0;
+        for contender in contenders {
+            match contender.await.unwrap() {
+                RemoteManifestUpdate::Applied => applied += 1,
+                RemoteManifestUpdate::Conflict { current: Some(_) } => conflicts += 1,
+                other => panic!("unexpected contended CAS result: {other:?}"),
+            }
+        }
+        assert_eq!(applied, 1);
+        assert_eq!(conflicts, 31);
 
         assert_eq!(
             backend
