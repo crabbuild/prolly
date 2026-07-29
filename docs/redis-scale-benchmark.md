@@ -1,13 +1,20 @@
 # Redis prolly scale benchmark
 
-This benchmark establishes a reproducible Redis baseline for the prolly tree's build, point put, batch mutation, cold and warm point get, batched query, bounded and full scan, diff, and three-way merge operations.
+This benchmark establishes a reproducible Redis baseline for the Redis backend's
+native batch write and the prolly tree's build, point put, batch mutation, cold
+and warm point get, batched query, bounded and full scan, diff, and three-way
+merge operations.
 
 ## Baseline contract
 
-- The default full profile builds 1,000,000 deterministic records, applies 300,000 changes (30%), performs 10,000 reads or bounded-scan rows, and runs three independent repetitions.
+- The default full profile builds 1,000,000 deterministic records, applies 300,000 changes (30%), performs 10,000 reads or bounded-scan rows, and runs seven independent repetitions.
 - Append, random, and clustered key patterns are covered. Full scan runs once per repetition because its key pattern does not change the workload.
 - Keys are 24 bytes and values are 100 bytes. The random seed, change semantics, and matrix are frozen in `run-manifest.txt`.
 - Each repetition builds one source Redis namespace. Every measured cell receives a server-side `COPY` clone under a unique namespace. Clone, cleanup, branch setup, validation, publication, persistence checks, and statistics are outside the timed interval.
+- `backend_batch` times `RedisBackend::batch_put_nodes` directly with 32-byte
+  synthetic CIDs and 100-byte values, then validates every value outside the
+  timed interval. It isolates adapter command encoding and Redis durability from
+  Prolly tree computation.
 
 ## Strong durability
 
@@ -27,7 +34,7 @@ scripts/run_redis_scale_benchmark.sh --profile full \
   --output performance-results/redis/baseline
 ```
 
-The runner chooses an unused localhost port, verifies Redis readiness, builds a release binary, records source and binary checksums, captures Docker/image/configuration/system provenance, and removes its container and volume after the run. Set `REDIS_BENCH_KEEP_CONTAINER=1` or `REDIS_BENCH_KEEP_FIXTURES=1` only for debugging.
+The runner chooses an unused localhost port, verifies Redis readiness, builds a release binary, records source and binary checksums, captures Docker/image/configuration/system provenance, and removes its container and volume after the run. It fingerprints the tracked source revision and binary diff before the build, then verifies that fingerprint after the build, dependency capture, and benchmark execution. It fails instead of publishing mixed-revision evidence if a shared checkout changes mid-run. Set `REDIS_BENCH_KEEP_CONTAINER=1` or `REDIS_BENCH_KEEP_FIXTURES=1` only for debugging.
 
 The full output belongs under `performance-results/redis/baseline`. `raw-results.csv` contains one validated row per cell and repetition, `fixture-results.csv` contains build measurements, `summary.csv` contains medians, and `report.md` is the human-readable baseline.
 

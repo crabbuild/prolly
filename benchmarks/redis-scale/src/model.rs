@@ -11,6 +11,7 @@ pub const FULL_SIZES: &[usize] = &[1_000_000];
 #[serde(rename_all = "snake_case")]
 pub enum Operation {
     Build,
+    BackendBatch,
     Put,
     Batch,
     GetCold,
@@ -23,7 +24,8 @@ pub enum Operation {
 }
 
 impl Operation {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
+        Self::BackendBatch,
         Self::Put,
         Self::Batch,
         Self::GetCold,
@@ -38,6 +40,7 @@ impl Operation {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Build => "build",
+            Self::BackendBatch => "backend_batch",
             Self::Put => "put",
             Self::Batch => "batch",
             Self::GetCold => "get_cold",
@@ -57,6 +60,7 @@ impl FromStr for Operation {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "build" => Ok(Self::Build),
+            "backend_batch" => Ok(Self::BackendBatch),
             "put" => Ok(Self::Put),
             "batch" => Ok(Self::Batch),
             "get_cold" => Ok(Self::GetCold),
@@ -147,7 +151,7 @@ impl RunConfig {
             revision,
             dirty,
             sizes: FULL_SIZES.to_vec(),
-            runs: 3,
+            runs: 7,
             operations: Operation::ALL.to_vec(),
             patterns: Pattern::ALL.to_vec(),
             changes: None,
@@ -265,7 +269,9 @@ impl CellSpec {
     pub fn logical_operations(&self) -> usize {
         match self.operation {
             Operation::Put => 1,
-            Operation::Batch | Operation::Diff | Operation::Merge => self.changes,
+            Operation::BackendBatch | Operation::Batch | Operation::Diff | Operation::Merge => {
+                self.changes
+            }
             Operation::GetCold | Operation::GetWarm | Operation::Query | Operation::Scan => {
                 self.read_samples
             }

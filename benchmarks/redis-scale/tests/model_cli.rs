@@ -14,7 +14,7 @@ fn full_profile_freezes_the_one_million_baseline() {
     );
     assert_eq!(config.redis_url, "redis://127.0.0.1:6379/");
     assert_eq!(config.sizes, vec![1_000_000]);
-    assert_eq!(config.runs, 3);
+    assert_eq!(config.runs, 7);
     assert_eq!(config.changes, None);
     assert_eq!(config.read_samples, 10_000);
     assert_eq!(config.operations, Operation::ALL);
