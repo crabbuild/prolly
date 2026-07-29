@@ -12,11 +12,18 @@ fn env_var(primary: &str, legacy: &str) -> Option<String> {
         .ok()
 }
 
+fn database_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    MYSQL_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn mysql_backend_satisfies_remote_backend_contract_when_url_is_set() {
     let Some(database_url) = env_var("PROLLY_STORE_MYSQL_URL", "PROLLY_ADAPTERS_MYSQL_URL") else {
         return;
     };
+    let _database_guard = database_test_guard();
 
     runtime().block_on(async {
         use prolly::remote_conformance::assert_remote_backend_contract;
@@ -40,6 +47,7 @@ fn mysql_set_based_batches_and_root_locking_work_when_url_is_set() {
     let Some(database_url) = env_var("PROLLY_STORE_MYSQL_URL", "PROLLY_ADAPTERS_MYSQL_URL") else {
         return;
     };
+    let _database_guard = database_test_guard();
 
     runtime().block_on(async {
         let pool = MySqlPoolOptions::new()
@@ -118,6 +126,7 @@ fn mysql_multichunk_batch_rolls_back_when_a_later_chunk_fails() {
     let Some(database_url) = env_var("PROLLY_STORE_MYSQL_URL", "PROLLY_ADAPTERS_MYSQL_URL") else {
         return;
     };
+    let _database_guard = database_test_guard();
 
     runtime().block_on(async {
         let backend = MySqlBackend::connect_with_options(
@@ -186,3 +195,5 @@ use prolly_store_mysql::{
     MySqlBackend, MySqlBackendOptions, RemoteManifestUpdate, RemoteStoreBackend,
 };
 use sqlx::{mysql::MySqlPoolOptions, Row};
+
+static MYSQL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
