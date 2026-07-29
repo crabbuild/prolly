@@ -1,7 +1,7 @@
 # Secondary Index Industrial Foundation Release Evidence
 
 Evidence date: 2026-07-29  
-Implementation revision: `2e7142bb883686955df35ecf811129bb4e8be0f6`  
+Implementation revision: `f059c34ecddcffa6ca826152189c7c857ed83cec`
 Branch: `codex/secondary-index-industrial-foundation`
 
 This document covers the hard-cutover industrial foundation only: atomic
@@ -11,10 +11,12 @@ no compatibility reader and no suffix-named replacement API.
 
 ## Release status
 
-The local required matrix is green for the secondary-index surface. Merge and
-production release remain blocked until the required GitHub workflow passes on
-the exact PR head. The scheduled workflow supplies release-mode stress,
-sanitizer, and 100,000-record performance evidence after the branch is pushed.
+The local required matrix is green for the secondary-index surface. The final
+audit materially strengthened boundedness, state locality, diagnostics, and
+release automation, but this document does **not** certify production release.
+Release remains blocked by the exact-head GitHub workflow and the unresolved
+industrial gates listed below. The scheduled workflow now supplies 1,000,000-
+and 10,000,000-record release-mode stress evidence.
 
 SQLite is the only production-qualified store. Its profile requires a
 file-backed database, full synchronous acknowledgement, foreground
@@ -31,13 +33,13 @@ coordinator.
 | Complete old-or-new observations | barrier-controlled two-writer test and injected confirmation/CAS failures |
 | Exact production-store contract | SQLite shared production contract plus separate-handle CAS test |
 | File store is verification-only | profile unit test and production-open rejection |
-| Bounded query memory and cursor integrity | bounded page/cursor tests, maximum-size rejection, query-bound cursor validation |
-| Bounded build and spill | spill/canonical-root equivalence and spill-exhaustion atomicity tests |
+| Bounded query memory and cursor integrity | incremental page lookahead, callback-scoped source joins, forward/reverse page tests, maximum-size rejection, query-bound cursor validation |
+| Bounded build and spill | aggregate reader/writer/heap memory partitions, spill/canonical-root equivalence, and spill-exhaustion atomicity tests |
 | Preallocation amplification checks | mutation and transfer budget boundary cases |
 | Historical extractor identity | three-generation replacement, retention, and verification case |
-| Finite work, memory, retry, and time | typed mutation, query, maintenance, and transfer budgets with finite defaults |
+| Finite work, memory, retry, and time | typed mutation, query, maintenance, and transfer budgets with finite defaults; aggregate `verify_all` partitioning |
 | Stable redacted diagnostics | structured error-code, retry-advice, and sensitive-sentinel tests |
-| Measured work | builder/store-fed publication and indexed-operation counters |
+| Measured logical work | builder/store-fed publication and indexed-operation counters; operation-local physical I/O remains a release blocker |
 | Safe retention and GC | durable-pin tests and global named-root GC regression test |
 | Malformed-input resilience | deterministic 10,000-case descriptor/cursor/bundle parser fuzz smoke |
 | No old or suffix architecture | `scripts/check-secondary-index-cutover.sh` |
@@ -54,7 +56,7 @@ RUSTDOCFLAGS='-D warnings' cargo doc --no-deps
 cargo run --example secondary_index
 ```
 
-Outcome: clean formatting and Clippy; 500 library tests, all integration tests,
+Outcome: clean formatting and Clippy; 501 library tests, all integration tests,
 and 74 documentation tests passed; rustdoc completed with warnings denied; the
 example verified three active indexes and a five-node bundle.
 
@@ -68,7 +70,7 @@ cargo test --test conformance_fixtures --test gc --test node_publication \
 ./scripts/check-secondary-index-cutover.sh
 ```
 
-Outcome: 41 focused tests passed, including deterministic atomicity,
+Outcome: 42 focused tests passed, including deterministic atomicity,
 concurrency, GC, bounded-resource, malformed-input, and hard-cutover checks.
 
 Store profiles:
@@ -100,9 +102,9 @@ cargo +nightly rustdoc --lib --features async-store -- \
 python3 scripts/binding_api_inventory.py check
 ```
 
-Outcome: UniFFI 77/77, Node 60/60, WASM 34/34, Python 23/23, Ruby
+Outcome: UniFFI 78/78, Node 60/60, WASM 34/34, Python 23/23, Ruby
 22/22, and targeted JVM portable parity passed. The API inventory matched
-3,052 operations. Generated Ruby source also passed `ruby -c`.
+3,067 operations. Generated Ruby source also passed `ruby -c`.
 
 Performance smoke, run twice:
 
@@ -118,7 +120,31 @@ for an exact query, 0.595–0.690 ms for logical verification, and 1.897–2.510
 ms for the barrier-free two-writer retry fixture. These numbers are smoke
 provenance, not a cross-machine performance baseline.
 
-## Known limitations and release follow-up
+## Final-audit implementation delta
+
+- Ordinary indexed mutations now update source and index cardinalities from
+  checked local deltas instead of scanning the complete source and every
+  physical index.
+- Canonical state publication mutates the previous state tree instead of
+  rebuilding state from an empty tree. Persisted policy caps active indexes,
+  retained snapshots, descriptors, and durable pins.
+- Query pages charge scan, returned-byte, source-fetch, elapsed, and retained
+  memory limits before retaining data. Reverse pages and query-session record
+  joins have the same bounded contract.
+- Verification counts and diffs stream under finite budgets. `verify_all`
+  partitions cumulative work and spill allowances across its indexes while
+  retaining full sequential peak-memory and merge-fan-in allowances.
+- Bundle export traverses nodes incrementally, verifies CIDs, and charges
+  nodes, bytes, work, memory, and elapsed time. Import uploads bounded chunks.
+- Spill runs partition aggregate reader buffers, heap/live-entry memory, and
+  writer buffers instead of applying a nominal per-reader allowance.
+- Core `Debug` output follows the redacted `Display` contract. UniFFI, Kotlin,
+  Python, Ruby, Swift, and WASM expose stable index error and retry metadata.
+- The required workflow now includes all-target tests, documentation tests,
+  bounded benchmark artifacts, and AddressSanitizer. Scheduled stress covers
+  1,000,000 and 10,000,000 records.
+
+## Release blockers and follow-up
 
 - The local Swift parity run was unavailable because the installed macOS
   command-line tools do not contain XCTest. Generated Swift source remains in
@@ -129,8 +155,21 @@ provenance, not a cross-machine performance baseline.
   hint from a host store that does not opt into rightmost-path hints. The
   secondary-index `PortableParityTest` passes. This PR does not weaken that
   unrelated assertion.
-- Sanitizer and extended 100,000-record evidence are intentionally generated
-  by `.github/workflows/secondary-index-scheduled.yml`; attach the workflow
-  links to the release record before declaring a production release.
+- Bundle CBOR decoding still materializes wire vectors before semantic
+  verification. Replace it with bounded streaming deserialization that charges
+  allocations before ownership; the current preflight and post-decode budgets
+  are defense in depth, not a hostile-input memory proof.
+- Indexed observability exposes useful logical counters, but it does not yet
+  attribute operation-local physical node/byte reads and writes, CAS
+  contention, query budget consumption, or spill high-water marks. The
+  evidence must not label global manager deltas as exact per-operation cost.
+- SQLite is the only eligible production adapter, but the shared suite still
+  needs independent-process publication/reopen, forced-termination durability,
+  and store-enumeration/GC evidence before industrial certification.
+- GC plan/sweep still needs a typed aggregate work, memory, and elapsed budget.
+- Benchmark workflows produce artifacts but do not yet enforce a reviewed
+  baseline, backend/hardware provenance, or regression classifier.
+- Required AddressSanitizer and 1,000,000/10,000,000-record workflow results
+  must be attached to the exact PR revision before release.
 - Benchmark artifacts live under `target/` and are CI artifacts rather than
   source-controlled machine-specific baselines.
