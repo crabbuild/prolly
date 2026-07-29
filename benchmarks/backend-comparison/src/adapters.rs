@@ -13,9 +13,7 @@ use sqlx::postgres::PgPoolOptions;
 
 #[cfg(feature = "dynamodb")]
 use crate::DynamoDbConnection;
-use crate::{
-    run_service_workload, run_workload, EvidenceRow, RunConfig, ServiceEvidenceRow,
-};
+use crate::{run_service_workload, run_workload, EvidenceRow, RunConfig, ServiceEvidenceRow};
 
 pub async fn run_postgres(config: &RunConfig, url: &str) -> Result<Vec<EvidenceRow>, String> {
     let pool = PgPoolOptions::new()
