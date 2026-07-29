@@ -1,15 +1,30 @@
+use std::num::NonZeroUsize;
+
 use aws_sdk_dynamodb::config::{BehaviorVersion, Credentials, Region};
 use prolly::RemoteProllyStore;
 use prolly_backend_workload_contract::Workload;
 use prolly_store_dynamodb::DynamoDbBackend;
-use prolly_store_postgres::PostgresBackend;
+use prolly_store_mysql::{MySqlBackend, MySqlBackendOptions};
+use prolly_store_postgres::{PostgresBackend, PostgresBackendOptions};
+use sqlx::mysql::MySqlPoolOptions;
+use sqlx::postgres::PgPoolOptions;
 
-use crate::{run_workload, DynamoDbConnection, EvidenceRow, RunConfig};
+use crate::{
+    run_service_workload, run_workload, DynamoDbConnection, EvidenceRow, RunConfig,
+    ServiceEvidenceRow,
+};
 
 pub async fn run_postgres(config: &RunConfig, url: &str) -> Result<Vec<EvidenceRow>, String> {
-    let backend = PostgresBackend::connect(url)
+    let pool = PgPoolOptions::new()
+        .max_connections(config.pool_size)
+        .connect(url)
         .await
         .map_err(|error| format!("failed to connect to PostgreSQL: {error}"))?;
+    let options = PostgresBackendOptions::new(
+        NonZeroUsize::new(config.adapter_batch_items)
+            .ok_or_else(|| "adapter batch items must be positive".to_string())?,
+    );
+    let backend = PostgresBackend::new_with_options(pool, options);
     backend
         .initialize_schema()
         .await
@@ -20,6 +35,97 @@ pub async fn run_postgres(config: &RunConfig, url: &str) -> Result<Vec<EvidenceR
         .map_err(|error| format!("failed to clear PostgreSQL benchmark state: {error}"))?;
     let workload = Workload::generate(config.workload)?;
     run_workload(RemoteProllyStore::new(backend), config, &workload).await
+}
+
+pub async fn run_mysql(config: &RunConfig, url: &str) -> Result<Vec<EvidenceRow>, String> {
+    let pool = MySqlPoolOptions::new()
+        .max_connections(config.pool_size)
+        .connect(url)
+        .await
+        .map_err(|error| format!("failed to connect to MySQL: {error}"))?;
+    let options = MySqlBackendOptions::new(
+        NonZeroUsize::new(config.adapter_batch_items)
+            .ok_or_else(|| "adapter batch items must be positive".to_string())?,
+    );
+    let backend = MySqlBackend::new_with_options(pool, options);
+    backend
+        .initialize_schema()
+        .await
+        .map_err(|error| format!("failed to initialize MySQL schema: {error}"))?;
+    for table in [
+        "prolly_hints",
+        "prolly_roots",
+        "prolly_nodes",
+        "prolly_root_locks",
+    ] {
+        sqlx::query(&format!("TRUNCATE TABLE {table}"))
+            .execute(backend.pool())
+            .await
+            .map_err(|error| format!("failed to clear MySQL table {table}: {error}"))?;
+    }
+    let workload = Workload::generate(config.workload)?;
+    run_workload(RemoteProllyStore::new(backend), config, &workload).await
+}
+
+pub async fn run_postgres_service(
+    config: &RunConfig,
+    url: &str,
+) -> Result<Vec<ServiceEvidenceRow>, String> {
+    let pool = PgPoolOptions::new()
+        .max_connections(config.pool_size)
+        .connect(url)
+        .await
+        .map_err(|error| format!("failed to connect to PostgreSQL: {error}"))?;
+    let backend = PostgresBackend::new_with_options(
+        pool,
+        PostgresBackendOptions::new(
+            NonZeroUsize::new(config.adapter_batch_items)
+                .ok_or_else(|| "adapter batch items must be positive".to_string())?,
+        ),
+    );
+    backend
+        .initialize_schema()
+        .await
+        .map_err(|error| format!("failed to initialize PostgreSQL schema: {error}"))?;
+    sqlx::query("TRUNCATE TABLE prolly_nodes, prolly_hints, prolly_roots")
+        .execute(backend.pool())
+        .await
+        .map_err(|error| format!("failed to clear PostgreSQL service state: {error}"))?;
+    run_service_workload(backend, config).await
+}
+
+pub async fn run_mysql_service(
+    config: &RunConfig,
+    url: &str,
+) -> Result<Vec<ServiceEvidenceRow>, String> {
+    let pool = MySqlPoolOptions::new()
+        .max_connections(config.pool_size)
+        .connect(url)
+        .await
+        .map_err(|error| format!("failed to connect to MySQL: {error}"))?;
+    let backend = MySqlBackend::new_with_options(
+        pool,
+        MySqlBackendOptions::new(
+            NonZeroUsize::new(config.adapter_batch_items)
+                .ok_or_else(|| "adapter batch items must be positive".to_string())?,
+        ),
+    );
+    backend
+        .initialize_schema()
+        .await
+        .map_err(|error| format!("failed to initialize MySQL schema: {error}"))?;
+    for table in [
+        "prolly_hints",
+        "prolly_roots",
+        "prolly_nodes",
+        "prolly_root_locks",
+    ] {
+        sqlx::query(&format!("TRUNCATE TABLE {table}"))
+            .execute(backend.pool())
+            .await
+            .map_err(|error| format!("failed to clear MySQL table {table}: {error}"))?;
+    }
+    run_service_workload(backend, config).await
 }
 
 pub async fn run_dynamodb(

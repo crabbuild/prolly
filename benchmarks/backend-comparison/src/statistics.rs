@@ -11,16 +11,16 @@ pub struct ConfidenceInterval {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Winner {
-    Postgres,
-    DynamoDbLocal,
+    BackendA,
+    BackendB,
     Inconclusive,
 }
 
 impl fmt::Display for Winner {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::Postgres => "PostgreSQL",
-            Self::DynamoDbLocal => "DynamoDB Local",
+            Self::BackendA => "backend A",
+            Self::BackendB => "backend B",
             Self::Inconclusive => "inconclusive",
         })
     }
@@ -64,38 +64,38 @@ pub fn coefficient_of_variation(values: &[f64]) -> f64 {
 }
 
 pub fn paired_bootstrap_ratio_ci(
-    postgres: &[f64],
-    dynamodb: &[f64],
+    backend_a: &[f64],
+    backend_b: &[f64],
     resamples: usize,
     seed: u64,
 ) -> Result<ConfidenceInterval, String> {
-    if postgres.len() != dynamodb.len() || postgres.len() < 2 {
+    if backend_a.len() != backend_b.len() || backend_a.len() < 2 {
         return Err("paired bootstrap requires equal samples with at least two pairs".to_string());
     }
     if resamples < 100 {
         return Err("paired bootstrap requires at least 100 resamples".to_string());
     }
-    if postgres
+    if backend_a
         .iter()
-        .chain(dynamodb)
+        .chain(backend_b)
         .any(|value| !value.is_finite() || *value <= 0.0)
     {
         return Err("paired bootstrap samples must be finite and positive".to_string());
     }
     let mut state = seed;
     let mut ratios = Vec::with_capacity(resamples);
-    let mut postgres_sample = Vec::with_capacity(postgres.len());
-    let mut dynamodb_sample = Vec::with_capacity(dynamodb.len());
+    let mut backend_a_sample = Vec::with_capacity(backend_a.len());
+    let mut backend_b_sample = Vec::with_capacity(backend_b.len());
     for _ in 0..resamples {
-        postgres_sample.clear();
-        dynamodb_sample.clear();
-        for _ in 0..postgres.len() {
+        backend_a_sample.clear();
+        backend_b_sample.clear();
+        for _ in 0..backend_a.len() {
             state = splitmix64(state);
-            let index = (state as usize) % postgres.len();
-            postgres_sample.push(postgres[index]);
-            dynamodb_sample.push(dynamodb[index]);
+            let index = (state as usize) % backend_a.len();
+            backend_a_sample.push(backend_a[index]);
+            backend_b_sample.push(backend_b[index]);
         }
-        ratios.push(median(&dynamodb_sample) / median(&postgres_sample));
+        ratios.push(median(&backend_b_sample) / median(&backend_a_sample));
     }
     ratios.sort_by(f64::total_cmp);
     Ok(ConfidenceInterval {
@@ -106,9 +106,9 @@ pub fn paired_bootstrap_ratio_ci(
 
 pub fn classify_winner(ratio: f64, interval: ConfidenceInterval) -> Winner {
     if interval.low > 1.0 && ratio > 1.05 {
-        Winner::Postgres
+        Winner::BackendA
     } else if interval.high < 1.0 && ratio < 1.0 / 1.05 {
-        Winner::DynamoDbLocal
+        Winner::BackendB
     } else {
         Winner::Inconclusive
     }
@@ -141,11 +141,11 @@ mod tests {
 
     #[test]
     fn winner_requires_confidence_and_five_percent_effect() {
-        let postgres = [100.0, 101.0, 99.0, 102.0, 98.0, 100.0, 101.0];
-        let dynamodb = [120.0, 121.0, 119.0, 122.0, 118.0, 120.0, 121.0];
-        let interval = paired_bootstrap_ratio_ci(&postgres, &dynamodb, 10_000, 7).unwrap();
+        let backend_a = [100.0, 101.0, 99.0, 102.0, 98.0, 100.0, 101.0];
+        let backend_b = [120.0, 121.0, 119.0, 122.0, 118.0, 120.0, 121.0];
+        let interval = paired_bootstrap_ratio_ci(&backend_a, &backend_b, 10_000, 7).unwrap();
         assert!(interval.low > 1.0);
-        assert_eq!(classify_winner(1.2, interval), Winner::Postgres);
+        assert_eq!(classify_winner(1.2, interval), Winner::BackendA);
 
         assert_eq!(
             classify_winner(

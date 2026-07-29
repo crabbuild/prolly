@@ -14,9 +14,10 @@ futures-util = "0.3"
 prolly = { package = "prolly-map", path = "../..", features = ["async-store"] }
 prolly-backend-workload-contract = { path = "../backend-workload-contract" }
 prolly-store-dynamodb = { path = "../../stores/prolly-store-dynamodb" }
+prolly-store-mysql = { path = "../../stores/prolly-store-mysql" }
 prolly-store-postgres = { path = "../../stores/prolly-store-postgres" }
 serde = { version = "1.0", features = ["derive"] }
-sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }
+sqlx = { version = "0.8", default-features = false, features = ["mysql", "postgres", "runtime-tokio"] }
 tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
@@ -28,6 +29,10 @@ unsafe_code = "forbid"
 [[bin]]
 name = "prolly-backend-postgres"
 path = "src/bin/postgres.rs"
+
+[[bin]]
+name = "prolly-backend-mysql"
+path = "src/bin/mysql.rs"
 
 [[bin]]
 name = "prolly-backend-dynamodb"

@@ -33,10 +33,43 @@ state and DynamoDB/Cosmos/Spanner for cloud-native managed scale.
 - `prolly_nodes(cid VARBINARY(32) PRIMARY KEY, node LONGBLOB NOT NULL)`
 - `prolly_hints(namespace VARBINARY(255), key VARBINARY(255), value LONGBLOB)`
 - `prolly_roots(name VARBINARY(255) PRIMARY KEY, manifest LONGBLOB NOT NULL)`
+- `prolly_root_locks(name VARBINARY(255) PRIMARY KEY)`
 
 Nodes are content-addressed by CID. Named roots store serialized root manifests
 and are the stable durable handles for branches, checkpoints, and application
-heads.
+heads. The lock table contains no application data; it makes both absent and
+existing root names safely lockable during concurrent publication.
+
+## Performance tuning
+
+Batch reads, writes, deletes, and transactional publications use bounded
+set-based SQL. Ordered reads reconstruct the requested order, including
+duplicates and missing CIDs. A multi-chunk public batch uses one transaction and
+rolls back completely if any chunk fails.
+
+The adapter defaults to 1,000 items per SQL batch. Configure it independently
+from the SQLx connection-pool size:
+
+```rust
+use std::num::NonZeroUsize;
+
+use prolly_store_mysql::{MySqlBackend, MySqlBackendOptions};
+use sqlx::mysql::MySqlPoolOptions;
+
+async fn tuned_backend(url: &str) -> Result<MySqlBackend, sqlx::Error> {
+    let pool = MySqlPoolOptions::new()
+        .max_connections(32)
+        .connect(url)
+        .await?;
+    let options = MySqlBackendOptions::new(NonZeroUsize::new(2_000).unwrap());
+    Ok(MySqlBackend::new_with_options(pool, options))
+}
+```
+
+Larger batches reduce round trips but increase statement size and transaction
+work. Pool size controls concurrent requests; it does not change the batch
+limit. Benchmark both together for the deployment workload instead of assuming
+that the largest values are fastest.
 
 ## Setup
 
@@ -164,6 +197,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 - `initialize_schema` is idempotent.
 - Strict commits validate named-root preconditions and apply node and root
   writes in one MySQL transaction.
+- Root mutations acquire persistent lock identities in lexical order, preventing
+  absent-root races and reducing multi-root deadlock risk.
 - MySQL key length limits matter for named roots and hint keys; use compact
   binary or slash-separated names rather than large serialized metadata in the
   name itself.
@@ -194,6 +229,14 @@ cargo test --manifest-path stores/prolly-store-mysql/Cargo.toml
 
 Run it against a disposable database or schema. The adapter tables are shared by
 every client using that database.
+
+The repository also provides reproducible MySQL/PostgreSQL end-to-end and
+service comparisons:
+
+```bash
+scripts/run_mysql_postgres_comparison.sh
+scripts/run_mysql_postgres_service_matrix.sh
+```
 
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
 async map, transaction, diff, and merge APIs used with this backend.
