@@ -1,6 +1,6 @@
 # Secondary Index Industrial Foundation Hard-Cutover Design
 
-**Status:** Approved in design review; pending written-spec review
+**Status:** Approved
 
 **Date:** 2026-07-28
 
