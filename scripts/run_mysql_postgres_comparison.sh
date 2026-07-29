@@ -74,11 +74,19 @@ redact_url() {
 }
 
 record_command() {
-  {
-    printf '%q ' "$@"
-    printf '\n'
-  } >> "$MEASUREMENT_COMMANDS"
+  write_shell_command "$@" >> "$MEASUREMENT_COMMANDS"
   "$@"
+}
+
+write_shell_command() {
+  local separator=""
+  local value
+  for value in "$@"; do
+    printf '%s' "$separator"
+    printf '%q' "$value"
+    separator=" "
+  done
+  printf '\n'
 }
 
 record_runner_command() {
@@ -95,10 +103,7 @@ record_runner_command() {
       [[ "$value" == --url ]] && redact_next=true
     fi
   done
-  {
-    printf '%q ' "${redacted[@]}"
-    printf '\n'
-  } >> "$MEASUREMENT_COMMANDS"
+  write_shell_command "${redacted[@]}" >> "$MEASUREMENT_COMMANDS"
   "${actual[@]}"
 }
 

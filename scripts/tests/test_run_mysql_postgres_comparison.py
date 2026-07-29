@@ -77,6 +77,8 @@ class SqlComparisonDriverTests(unittest.TestCase):
         self.assertIn("environment_class=controlled_local\n", manifest)
         self.assertIn("backend_a=postgres\n", manifest)
         self.assertIn("backend_b=mysql\n", manifest)
+        commands = (self.root / "result" / "measurement-commands.txt").read_text()
+        self.assertTrue(all(line == line.rstrip() for line in commands.splitlines()))
 
     def test_external_mode_requires_acknowledgement(self):
         result = self.run_driver(BENCH_MODE="external")

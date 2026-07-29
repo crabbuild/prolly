@@ -85,7 +85,9 @@ def main() -> None:
     if output.exists() or (args.output / "report.md").exists():
         raise ValueError("refusing to overwrite service matrix summary")
     with output.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+        writer = csv.DictWriter(
+            handle, fieldnames=rows[0].keys(), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
     (args.output / "report.md").write_text(report)

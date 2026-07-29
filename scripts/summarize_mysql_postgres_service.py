@@ -207,7 +207,9 @@ def main() -> None:
     if csv_path.exists() or report_path.exists():
         raise ValueError("refusing to overwrite service comparison output")
     with csv_path.open("x", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=summaries[0].keys())
+        writer = csv.DictWriter(
+            handle, fieldnames=summaries[0].keys(), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(summaries)
     report_path.write_text(report(summaries, values))
