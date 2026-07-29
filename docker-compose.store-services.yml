@@ -1,8 +1,21 @@
 name: prolly-store-services
 
 services:
+  cosmosdb:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:a8b93e25520e999d867ed3949e7de7f4ff3ddab23ca95fa6f90230de5dd9729b
+    environment:
+      ENABLE_EXPLORER: "false"
+      ENABLE_INIT_DATA: "true"
+      ENABLE_TELEMETRY: "false"
+      PROTOCOL: "http"
+    ports:
+      - "${PROLLY_STORE_COSMOS_PORT:-58081}:8081"
+      - "${PROLLY_STORE_COSMOS_HEALTH_PORT:-58080}:8080"
+    volumes:
+      - "./stores/prolly-store-cosmosdb/tests/emulator-init:/init:ro"
+
   spanner:
-    image: gcr.io/cloud-spanner-emulator/emulator:latest
+    image: gcr.io/cloud-spanner-emulator/emulator@sha256:ad54472fe7b161b9214f7f816f304b649a4779e348229c375ac067f5ed5a6422
     ports:
       - "${PROLLY_STORE_SPANNER_GRPC_PORT:-9010}:9010"
       - "${PROLLY_STORE_SPANNER_REST_PORT:-9020}:9020"

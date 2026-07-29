@@ -17,6 +17,7 @@ pub enum Backend {
     #[serde(rename = "mysql")]
     MySql,
     DynamoDbLocal,
+    Spanner,
 }
 
 impl Backend {
@@ -25,6 +26,7 @@ impl Backend {
             Self::Postgres => "postgres",
             Self::MySql => "mysql",
             Self::DynamoDbLocal => "dynamodb_local",
+            Self::Spanner => "spanner",
         }
     }
 }
@@ -43,6 +45,7 @@ impl FromStr for Backend {
             "postgres" => Ok(Self::Postgres),
             "mysql" => Ok(Self::MySql),
             "dynamodb_local" | "dynamodb" => Ok(Self::DynamoDbLocal),
+            "spanner" => Ok(Self::Spanner),
             _ => Err(format!("unsupported backend: {value}")),
         }
     }

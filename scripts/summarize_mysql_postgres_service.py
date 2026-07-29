@@ -22,14 +22,16 @@ def manifest(path: pathlib.Path) -> dict[str, str]:
         "status": "complete",
         "resumed": "false",
         "dirty": "false",
-        "backend_a": "postgres",
-        "backend_b": "mysql",
     }
     for key, expected in required.items():
         if values.get(key) != expected:
             raise ValueError(f"manifest {key} must be {expected}")
     if int(values["repetitions"]) < 7:
         raise ValueError("service comparison requires at least seven repetitions")
+    if not values.get("backend_a") or not values.get("backend_b"):
+        raise ValueError("service comparison requires two declared backends")
+    if values["backend_a"] == values["backend_b"]:
+        raise ValueError("service comparison backends must differ")
     return values
 
 
@@ -51,7 +53,7 @@ def load(path: pathlib.Path, values: dict[str, str]) -> list[dict[str, str]]:
         ):
             raise ValueError("service row provenance or validation differs")
         backend = row["backend"]
-        if backend not in ("postgres", "mysql"):
+        if backend not in (values["backend_a"], values["backend_b"]):
             raise ValueError(f"unexpected service backend: {backend}")
         if row["binary_sha256"] != values[f"{backend}_binary_sha256"]:
             raise ValueError(f"{backend} service binary identity differs")
@@ -95,20 +97,22 @@ def bootstrap_ratio(first: list[float], second: list[float], seed: int) -> tuple
     return percentile(ratios, 0.025), percentile(ratios, 0.975)
 
 
-def summarize(rows: list[dict[str, str]], repetitions: int) -> list[dict[str, str]]:
+def summarize(
+    rows: list[dict[str, str]], repetitions: int, backend_a: str, backend_b: str
+) -> list[dict[str, str]]:
     indexed = {
         (row["backend"], row["operation"], int(row["repetition"])): row for row in rows
     }
     summaries = []
     for operation_index, operation in enumerate(OPERATIONS):
-        postgres = []
-        mysql = []
-        postgres_p99 = []
-        mysql_p99 = []
+        first_samples = []
+        second_samples = []
+        first_p99 = []
+        second_p99 = []
         reference = None
         for repetition in range(1, repetitions + 1):
-            pg = indexed[("postgres", operation, repetition)]
-            my = indexed[("mysql", operation, repetition)]
+            first = indexed[(backend_a, operation, repetition)]
+            second = indexed[(backend_b, operation, repetition)]
             identity_fields = (
                 "clients",
                 "pool_size",
@@ -117,24 +121,24 @@ def summarize(rows: list[dict[str, str]], repetitions: int) -> list[dict[str, st
                 "applied",
                 "conflicts",
             )
-            if any(pg[field] != my[field] for field in identity_fields):
+            if any(first[field] != second[field] for field in identity_fields):
                 raise ValueError(f"{operation} repetition {repetition} differs between backends")
-            identity = tuple(pg[field] for field in identity_fields)
+            identity = tuple(first[field] for field in identity_fields)
             if reference is not None and identity != reference:
                 raise ValueError(f"{operation} configuration changed between repetitions")
             reference = identity
-            postgres.append(float(pg["total_ns"]))
-            mysql.append(float(my["total_ns"]))
-            postgres_p99.append(float(pg["p99_ns"]))
-            mysql_p99.append(float(my["p99_ns"]))
-        pg_median = statistics.median(postgres)
-        my_median = statistics.median(mysql)
-        ratio = my_median / pg_median
-        low, high = bootstrap_ratio(postgres, mysql, SEED ^ operation_index)
+            first_samples.append(float(first["total_ns"]))
+            second_samples.append(float(second["total_ns"]))
+            first_p99.append(float(first["p99_ns"]))
+            second_p99.append(float(second["p99_ns"]))
+        first_median = statistics.median(first_samples)
+        second_median = statistics.median(second_samples)
+        ratio = second_median / first_median
+        low, high = bootstrap_ratio(first_samples, second_samples, SEED ^ operation_index)
         if low > 1 and ratio > 1.05:
-            winner = "postgres"
+            winner = backend_a
         elif high < 1 and ratio < 1 / 1.05:
-            winner = "mysql"
+            winner = backend_b
         else:
             winner = "inconclusive"
         summaries.append(
@@ -144,13 +148,13 @@ def summarize(rows: list[dict[str, str]], repetitions: int) -> list[dict[str, st
                 "pool_size": reference[1],
                 "adapter_batch_items": reference[2],
                 "logical_operations": reference[3],
-                "postgres_median_ms": f"{pg_median / 1_000_000:.6f}",
-                "postgres_ops_per_sec": f"{float(reference[3]) * 1_000_000_000 / pg_median:.6f}",
-                "postgres_p99_ms": f"{statistics.median(postgres_p99) / 1_000_000:.6f}",
-                "mysql_median_ms": f"{my_median / 1_000_000:.6f}",
-                "mysql_ops_per_sec": f"{float(reference[3]) * 1_000_000_000 / my_median:.6f}",
-                "mysql_p99_ms": f"{statistics.median(mysql_p99) / 1_000_000:.6f}",
-                "mysql_to_postgres_latency": f"{ratio:.9f}",
+                f"{backend_a}_median_ms": f"{first_median / 1_000_000:.6f}",
+                f"{backend_a}_ops_per_sec": f"{float(reference[3]) * 1_000_000_000 / first_median:.6f}",
+                f"{backend_a}_p99_ms": f"{statistics.median(first_p99) / 1_000_000:.6f}",
+                f"{backend_b}_median_ms": f"{second_median / 1_000_000:.6f}",
+                f"{backend_b}_ops_per_sec": f"{float(reference[3]) * 1_000_000_000 / second_median:.6f}",
+                f"{backend_b}_p99_ms": f"{statistics.median(second_p99) / 1_000_000:.6f}",
+                f"{backend_b}_to_{backend_a}_latency": f"{ratio:.9f}",
                 "ratio_ci_low": f"{low:.9f}",
                 "ratio_ci_high": f"{high:.9f}",
                 "winner": winner,
@@ -160,23 +164,41 @@ def summarize(rows: list[dict[str, str]], repetitions: int) -> list[dict[str, st
 
 
 def report(rows: list[dict[str, str]], values: dict[str, str]) -> str:
+    backend_a = values["backend_a"]
+    backend_b = values["backend_b"]
+    labels = {
+        "postgres": "PostgreSQL",
+        "mysql": "MySQL",
+        "spanner": "Spanner",
+        "dynamodb_local": "DynamoDB Local",
+    }
+    first_label = labels.get(backend_a, backend_a)
+    second_label = labels.get(backend_b, backend_b)
     lines = [
-        "# PostgreSQL vs MySQL adapter service comparison",
+        f"# {first_label} vs {second_label} adapter service comparison",
         "",
         f"Environment class: `{values.get('environment_class', 'controlled_local')}`. "
         f"Results use {values['repetitions']} measured repetitions.",
         "",
-        "| Operation | Logical ops | PostgreSQL median | PostgreSQL ops/s | "
-        "PostgreSQL p99 | MySQL median | MySQL ops/s | MySQL p99 | "
-        "MySQL/PG 95% CI | Result |",
+        f"| Operation | Logical ops | {first_label} median | {first_label} ops/s | "
+        f"{first_label} p99 | {second_label} median | {second_label} ops/s | "
+        f"{second_label} p99 | {second_label}/{first_label} 95% CI | Result |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         lines.append(
-            "| {operation} | {logical_operations} | {postgres_median_ms} ms | "
-            "{postgres_ops_per_sec} | {postgres_p99_ms} ms | {mysql_median_ms} ms | "
-            "{mysql_ops_per_sec} | {mysql_p99_ms} ms | {ratio_ci_low}–"
-            "{ratio_ci_high} | {winner} |".format(**row)
+            "| {operation} | {logical_operations} | {first_median_ms} ms | "
+            "{first_ops_per_sec} | {first_p99_ms} ms | {second_median_ms} ms | "
+            "{second_ops_per_sec} | {second_p99_ms} ms | {ratio_ci_low}–"
+            "{ratio_ci_high} | {winner} |".format(
+                first_median_ms=row[f"{backend_a}_median_ms"],
+                first_ops_per_sec=row[f"{backend_a}_ops_per_sec"],
+                first_p99_ms=row[f"{backend_a}_p99_ms"],
+                second_median_ms=row[f"{backend_b}_median_ms"],
+                second_ops_per_sec=row[f"{backend_b}_ops_per_sec"],
+                second_p99_ms=row[f"{backend_b}_p99_ms"],
+                **row,
+            )
         )
     lines.extend(
         [
@@ -201,7 +223,12 @@ def main() -> None:
     args = parser.parse_args()
     values = manifest(args.manifest)
     rows = load(args.input, values)
-    summaries = summarize(rows, int(values["repetitions"]))
+    summaries = summarize(
+        rows,
+        int(values["repetitions"]),
+        values["backend_a"],
+        values["backend_b"],
+    )
     csv_path = args.output_dir / "service-comparison.csv"
     report_path = args.output_dir / "service-report.md"
     if csv_path.exists() or report_path.exists():
