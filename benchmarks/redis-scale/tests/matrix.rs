@@ -2,11 +2,11 @@ use prolly_redis_scale_bench::harness::enumerate_matrix;
 use prolly_redis_scale_bench::model::{enumerate_cells, Operation, Pattern, RunConfig};
 
 #[test]
-fn full_matrix_has_three_fixtures_and_complete_cells() {
+fn full_matrix_has_seven_fixtures_and_complete_cells() {
     let config = RunConfig::full("results".into(), "revision".into(), false);
     let plan = enumerate_matrix(&config);
-    assert_eq!(plan.fixtures.len(), 3);
-    assert_eq!(plan.cells.len(), 75);
+    assert_eq!(plan.fixtures.len(), 7);
+    assert_eq!(plan.cells.len(), 175);
 
     let cells = enumerate_cells(&config, 1_000_000, 1);
     for operation in Operation::ALL {

@@ -36,7 +36,7 @@ case "$PROFILE" in
     ;;
   full)
     SIZES="${REDIS_BENCH_SIZES:-1000000}"
-    RUNS="${REDIS_BENCH_RUNS:-3}"
+    RUNS="${REDIS_BENCH_RUNS:-7}"
     CHANGES="${REDIS_BENCH_CHANGES:-auto}"
     READ_SAMPLES="${REDIS_BENCH_READ_SAMPLES:-10000}"
     MIN_FREE_GB="${REDIS_BENCH_MIN_FREE_GB:-3}"
@@ -90,7 +90,7 @@ fi
 REDIS_URL="redis://127.0.0.1:$REDIS_PORT/"
 
 REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf unknown)"
-if [[ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)" ]]; then
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null || true)" ]]; then
   DIRTY=true
   DIRTY_ARG=--dirty
 else

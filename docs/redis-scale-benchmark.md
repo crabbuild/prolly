@@ -4,7 +4,7 @@ This benchmark establishes a reproducible Redis baseline for the prolly tree's b
 
 ## Baseline contract
 
-- The default full profile builds 1,000,000 deterministic records, applies 300,000 changes (30%), performs 10,000 reads or bounded-scan rows, and runs three independent repetitions.
+- The default full profile builds 1,000,000 deterministic records, applies 300,000 changes (30%), performs 10,000 reads or bounded-scan rows, and runs seven independent repetitions.
 - Append, random, and clustered key patterns are covered. Full scan runs once per repetition because its key pattern does not change the workload.
 - Keys are 24 bytes and values are 100 bytes. The random seed, change semantics, and matrix are frozen in `run-manifest.txt`.
 - Each repetition builds one source Redis namespace. Every measured cell receives a server-side `COPY` clone under a unique namespace. Clone, cleanup, branch setup, validation, publication, persistence checks, and statistics are outside the timed interval.

@@ -147,7 +147,7 @@ impl RunConfig {
             revision,
             dirty,
             sizes: FULL_SIZES.to_vec(),
-            runs: 3,
+            runs: 7,
             operations: Operation::ALL.to_vec(),
             patterns: Pattern::ALL.to_vec(),
             changes: None,
