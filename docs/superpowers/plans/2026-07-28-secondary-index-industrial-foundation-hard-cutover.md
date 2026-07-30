@@ -702,8 +702,8 @@ surface and release claim.
 |---|---|
 | One authoritative root and CAS | 1, 3 |
 | Old-or-new concurrency/crash behavior | 3, 10 |
-| Exact production store contract | 2 |
-| `FileNodeStore` verification-only | 2, 9 |
+| One synchronous indexed-store contract | 2 |
+| Application-owned store deployment qualification | 2, 9 |
 | Bounded queries and cursor integrity | 5 |
 | Bounded maintenance and spill | 6 |
 | Preallocation mutation amplification | 4 |

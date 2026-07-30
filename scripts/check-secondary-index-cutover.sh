@@ -4,8 +4,9 @@ set -euo pipefail
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repository_root"
 
-obsolete='INDEX_(CATALOG|CONTROL)|index_(catalog|control|checkpoint)_root|SecondaryIndexCatalog|IndexCheckpoint|component_head|catalogVersion|indexMapId|supportsTransactions|indexed_map_production|IndexedStoreProfile|ProductionIndexedStoreCapabilities|productionProfile|production_profile'
+obsolete='INDEX_(CATALOG|CONTROL)|index_(catalog|control|checkpoint)_root|SecondaryIndexCatalog|IndexCheckpoint|component_head|catalogVersion|indexMapId|supportsTransactions|indexed_map_production|IndexedStoreProfile|ProductionIndexedStoreCapabilities|productionProfile|production_profile|production-store|indexed_profile_'
 scope=(
+  .github/workflows/secondary-index-required.yml
   src/prolly/secondary_index
   src/prolly/error.rs
   src/lib.rs
