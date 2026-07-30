@@ -10,8 +10,8 @@ on MySQL and you want durable Prolly nodes, hints, and named roots in SQL.
 
 ```toml
 [dependencies]
-prolly-map = "0.6.0"
-prolly-store-mysql = "0.4.0"
+prolly-map = "0.7.0"
+prolly-store-mysql = "0.5.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

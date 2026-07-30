@@ -10,8 +10,8 @@ hints, and named root manifests in PostgreSQL.
 
 ```toml
 [dependencies]
-prolly-map = "0.6.0"
-prolly-store-postgres = "0.5.0"
+prolly-map = "0.7.0"
+prolly-store-postgres = "0.6.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

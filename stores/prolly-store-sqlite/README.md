@@ -16,8 +16,8 @@ same store.
 
 ```toml
 [dependencies]
-prolly-map = "0.6.0"
-prolly-store-sqlite = "0.4.0"
+prolly-map = "0.7.0"
+prolly-store-sqlite = "0.5.0"
 ```
 
 The crate enables `rusqlite`'s bundled SQLite build, so a system SQLite library
