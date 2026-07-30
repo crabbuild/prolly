@@ -3,7 +3,7 @@ name = "prolly-store-turso"
 description = "Native Turso Database store adapter for prolly-map."
 edition = "2021"
 rust-version = "1.90"
-version = "0.2.0"
+version = "0.3.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
@@ -21,7 +21,7 @@ default = []
 turso-cloud-sync = ["turso/sync"]
 
 [dependencies]
-prolly = { package = "prolly-map", path = "../..", version = "0.6.0", features = ["async-store"] }
+prolly = { package = "prolly-map", path = "../..", version = "0.7.0", features = ["async-store"] }
 turso = { version = "0.7", default-features = false }
 
 [dev-dependencies]

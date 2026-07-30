@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-07-30
 
 ### Changed
 
@@ -9,6 +9,7 @@
   synchronous stores now use `indexed_map(...)`.
 - Removed the derived production-profile flag from indexed-map health records
   in Rust and portable bindings.
+- Updated every published store adapter to depend on `prolly-map 0.7.0`.
 
 ## 0.6.0 — 2026-07-29
 
