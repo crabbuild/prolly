@@ -12,8 +12,8 @@ use slatedb::{Db, WriteBatch};
 use tokio::runtime::{Builder, Runtime};
 
 use prolly::{
-    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
-    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    BatchOp, Cid, Error, IndexedStore, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
     TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
@@ -688,11 +688,7 @@ impl TransactionalStore for SlateDbStore {
     }
 }
 
-impl IndexedStore for SlateDbStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-}
+impl IndexedStore for SlateDbStore {}
 
 fn node_key(key: &[u8]) -> Vec<u8> {
     let mut storage_key = Vec::with_capacity(NODE_PREFIX.len() + key.len());

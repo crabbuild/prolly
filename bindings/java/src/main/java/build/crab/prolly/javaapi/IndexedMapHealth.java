@@ -9,7 +9,6 @@ public record IndexedMapHealth(
         Optional<byte[]> sourceVersion,
         Optional<byte[]> stateVersion,
         List<ActiveIndexHealth> activeIndexes,
-        boolean productionProfile,
         boolean closureValid,
         long retainedSnapshots,
         long durablePins) {
@@ -19,7 +18,6 @@ public record IndexedMapHealth(
                 Optional.ofNullable(value.getSourceVersion()).map(byte[]::clone),
                 Optional.ofNullable(value.getStateVersion()).map(byte[]::clone),
                 value.getActiveIndexes().stream().map(ActiveIndexHealth::fromNative).toList(),
-                value.getProductionProfile(), value.getClosureValid(),
-                value.getRetainedSnapshots(), value.getDurablePins());
+                value.getClosureValid(), value.getRetainedSnapshots(), value.getDurablePins());
     }
 }

@@ -32,8 +32,8 @@ release-blocking invariant.
   the existing `KeysOnly`, `Include`, and `All` semantics.
 - Every production operation has finite memory, work, retry, and elapsed
   limits.
-- `FileNodeStore` and `MemStore` are verification-profile stores, not
-  production-profile stores.
+- Expose one indexed-map constructor. Store configuration and deployment
+  qualification belong to the application, not to a profile taxonomy.
 - Default errors, metrics, and traces contain no indexed application data.
 - Physical work metrics must originate at the builder, workspace, iterator, or
   store boundary.
@@ -145,11 +145,12 @@ collection state. Build this representation before changing publication.
 
 ---
 
-### Task 2: Exact indexed-store profiles and shared conformance
+### Task 2: One indexed-store contract and shared conformance
 
-**Context:** `supports_transactions() -> bool` is not an adequate production
+**Context:** `supports_transactions() -> bool` is not the indexed-map
 contract. Secondary indexes need immutable writes, one root CAS, visibility
-confirmation, and GC safety; they no longer need a multi-root transaction.
+confirmation, and GC safety; they do not need a multi-root transaction or a
+second production-only constructor.
 
 **Files:**
 
@@ -165,43 +166,33 @@ confirmation, and GC safety; they no longer need a multi-root transaction.
 
 **Interfaces produced:**
 
-- `IndexedStoreProfile::{Verification, Production(ProductionCapabilities)}`
-- `ProductionCapabilities` with coordination scope, visibility, durable
-  acknowledgement, GC enumeration, and lease/quiescence declarations
 - `IndexedStore: Store + ManifestStore`
-- `IndexedStore::indexed_store_profile`
 - `IndexedStore::confirm_indexed_publication`
-- Shared `assert_verification_indexed_store` and
-  `assert_production_indexed_store` conformance entry points in
+- One shared `assert_indexed_store` conformance entry point in
   `prolly-store-test`
 
 **Implementation:**
 
-- [ ] Add the exact profile and capability types without changing the general
+- [ ] Add the indexed publication contract without changing the general
   `TransactionalStore` contract used by unrelated multi-map APIs.
-- [ ] Implement verification profiles for `MemStore` and `FileNodeStore`.
-  `FileNodeStore` must never construct a production capability value.
+- [ ] Implement the same indexed-store contract for every supported
+  synchronous adapter.
 - [ ] Add the publication confirmation hook used after immutable writes and
-  before root CAS; verification stores may perform deterministic read-back.
-- [ ] Audit each currently transactional adapter. Implement a production
-  profile only when its native CAS, visibility, reopen, and durability
-  semantics are explicit and testable; otherwise implement verification or
-  leave secondary indexes unsupported.
-- [ ] Make conformance results name the tested profile so a verification run
-  cannot be presented as production certification.
+  before root CAS.
+- [ ] Audit each synchronous adapter for native CAS, visibility, reopen, and
+  durability semantics without encoding deployment policy in the constructor.
+- [ ] Keep durability and topology choices explicit in adapter configuration
+  and deployment documentation.
 
 **Verification:**
 
-- [ ] Exercise CAS success/conflict across separate handles for every declared
-  production adapter.
+- [ ] Exercise CAS success/conflict across separate handles where an adapter
+  supports multiple handles.
 - [ ] Add an independent-process CAS case for at least SQLite or redb.
-- [ ] Assert that `FileNodeStore` and `MemStore` are rejected when
-  `IndexedMap::open_production` is requested.
 - [ ] Run `cargo test --test store_conformance --test file_node_store`.
-- [ ] Run the conformance suites in each adapter that declares production
-  support.
+- [ ] Run the conformance suites in each synchronous indexed-store adapter.
 
-**Commit:** `feat(index): require exact store publication profiles`
+**Commit:** `feat(index): require one indexed store publication contract`
 
 ---
 
@@ -454,8 +445,7 @@ materialize untrusted or complete datasets before budget checks.
 - Streaming bundle encoder/decoder and verifier
 - `SnapshotPinGuard` plus explicit durable pin operations
 - State-rooted retention, GC planning, and health results
-- Health fields for store profile, closure status, pin/lease safety, and
-  consumed budget
+- Health fields for closure status, pin/lease safety, and consumed budget
 
 **Implementation:**
 
@@ -576,10 +566,10 @@ paths remain callable or documented.
 - [ ] Remove unbounded eager query APIs, inert limits, old health transaction
   flags, misleading metrics, and generic binding fallbacks.
 - [ ] Rename retained canonical types without compatibility aliases.
-- [ ] Update the example and documentation to show one-root publication,
-  verification/production profiles, budgets, pins, and spill workspace.
-- [ ] Document `FileNodeStore` as verification-only and list the adapters that
-  actually passed production conformance.
+- [ ] Update the example and documentation to show one-root publication, the
+  single indexed-map API, budgets, pins, and spill workspace.
+- [ ] Document application ownership of store durability, topology, backup,
+  and GC-safety configuration.
 - [ ] Add repository checks that reject old root-name constants and suffix
   replacement terminology in the secondary-index implementation.
 
@@ -668,7 +658,7 @@ on individual task tests.
 - [ ] Run `cargo clippy --all-targets -- -D warnings`.
 - [ ] Run the complete core test and documentation suite.
 - [ ] Run canonical fixtures, deterministic concurrency/fault/resource suites,
-  and every declared production store-conformance suite.
+  and every synchronous indexed-store conformance suite.
 - [ ] Run portable binding generation and parity suites.
 - [ ] Run sanitizer and bounded fuzz smoke campaigns.
 - [ ] Run the secondary-index benchmark smoke and retain its provenance and
@@ -677,7 +667,7 @@ on individual task tests.
 - [ ] Audit default error and metric output with sensitive sentinel data.
 - [ ] Audit the repository for obsolete layout readers, roots, aliases,
   misleading metrics, and suffix-named replacement architecture.
-- [ ] Record exact commands, revisions, adapter profiles, outcomes, known
+- [ ] Record exact commands, revisions, adapter configurations, outcomes, known
   limitations, and scheduled evidence links in
   `docs/secondary-index-release-evidence.md`.
 - [ ] Stop and fix any failed criterion; do not mark a partial matrix as
@@ -689,7 +679,7 @@ on individual task tests.
 
 ```text
 Task 1 canonical format
-  -> Task 2 store profiles
+  -> Task 2 indexed-store contract
   -> Task 3 publication engine
   -> Task 4 mutation
   -> Task 5 query

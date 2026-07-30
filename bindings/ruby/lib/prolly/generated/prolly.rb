@@ -7961,7 +7961,6 @@ class RustBufferStream
       source_version: readOptionalbytes,
       state_version: readOptionalbytes,
       active_indexes: readSequenceTypeActiveIndexHealthRecord,
-      production_profile: readBool,
       closure_valid: readBool,
       retained_snapshots: readU64,
       durable_pins: readU64
@@ -12621,7 +12620,6 @@ class RustBufferBuilder
     self.write_Optionalbytes(v.source_version)
     self.write_Optionalbytes(v.state_version)
     self.write_SequenceTypeActiveIndexHealthRecord(v.active_indexes)
-    self.write_Bool(v.production_profile)
     self.write_Bool(v.closure_valid)
     self.write_U64(v.retained_snapshots)
     self.write_U64(v.durable_pins)
@@ -23925,14 +23923,13 @@ end
   
   # Record type IndexedMapHealthRecord
 class IndexedMapHealthRecord
-  attr_reader :source_map_id, :source_version, :state_version, :active_indexes, :production_profile, :closure_valid, :retained_snapshots, :durable_pins
+  attr_reader :source_map_id, :source_version, :state_version, :active_indexes, :closure_valid, :retained_snapshots, :durable_pins
 
-  def initialize(source_map_id:, source_version:, state_version:, active_indexes:, production_profile:, closure_valid:, retained_snapshots:, durable_pins:)
+  def initialize(source_map_id:, source_version:, state_version:, active_indexes:, closure_valid:, retained_snapshots:, durable_pins:)
     @source_map_id = source_map_id
     @source_version = source_version
     @state_version = state_version
     @active_indexes = active_indexes
-    @production_profile = production_profile
     @closure_valid = closure_valid
     @retained_snapshots = retained_snapshots
     @durable_pins = durable_pins
@@ -23949,9 +23946,6 @@ class IndexedMapHealthRecord
       return false
     end
     if @active_indexes != other.active_indexes
-      return false
-    end
-    if @production_profile != other.production_profile
       return false
     end
     if @closure_valid != other.closure_valid

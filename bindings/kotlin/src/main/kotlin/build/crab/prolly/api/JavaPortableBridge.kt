@@ -543,7 +543,6 @@ data class JavaIndexedMapHealth(
     val sourceVersion: ByteArray?,
     val stateVersion: ByteArray?,
     val activeIndexes: List<JavaActiveIndexHealth>,
-    val productionProfile: Boolean,
     val closureValid: Boolean,
     val retainedSnapshots: Long,
     val durablePins: Long,
@@ -669,7 +668,7 @@ private fun IndexedMapHealthRecord.toJava() = JavaIndexedMapHealth(
             it.indexVersion,
         )
     },
-    productionProfile, closureValid, retainedSnapshots.toLong(), durablePins.toLong(),
+    closureValid, retainedSnapshots.toLong(), durablePins.toLong(),
 )
 
 private fun IndexVerificationRecord.toJava() = JavaIndexVerification(

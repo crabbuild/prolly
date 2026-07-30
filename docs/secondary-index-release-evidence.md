@@ -18,12 +18,11 @@ Release remains blocked by the exact-head GitHub workflow and the unresolved
 industrial gates listed below. The scheduled workflow now supplies 1,000,000-
 and 10,000,000-record release-mode stress evidence.
 
-SQLite is the only production-qualified store. Its profile requires a
-file-backed database, full synchronous acknowledgement, foreground
-checkpoints, cross-handle root CAS, read-after-write visibility, and explicit
-quiescence for GC. `MemStore`, `FileNodeStore`, PGlite, redb, RocksDB, and
-SlateDB are verification-profile stores and cannot open a production indexed
-coordinator.
+The later hard cutover removed the production/verification store taxonomy and
+the alternate production constructor. All supported synchronous adapters use
+the same `indexed_map` API. Store configuration and deployment qualification
+remain application responsibilities; this evidence does not turn every
+configuration into a durability guarantee.
 
 ## Acceptance evidence
 
@@ -31,8 +30,7 @@ coordinator.
 |---|---|
 | One visibility root and one CAS | `only_the_canonical_root_controls_visibility`; publication-origin audit; obsolete-layout absence gate |
 | Complete old-or-new observations | barrier-controlled two-writer test and injected confirmation/CAS failures |
-| Exact production-store contract | SQLite shared production contract plus separate-handle CAS test |
-| File store is verification-only | profile unit test and production-open rejection |
+| Shared indexed-store contract | Adapter conformance suite plus SQLite separate-handle CAS test |
 | Bounded query memory and cursor integrity | incremental page lookahead, callback-scoped source joins, forward/reverse page tests, maximum-size rejection, query-bound cursor validation |
 | Bounded build and spill | aggregate reader/writer/heap memory partitions, spill/canonical-root equivalence, and spill-exhaustion atomicity tests |
 | Preallocation amplification checks | mutation and transfer budget boundary cases |
@@ -73,19 +71,19 @@ cargo test --test conformance_fixtures --test gc --test node_publication \
 Outcome: 42 focused tests passed, including deterministic atomicity,
 concurrency, GC, bounded-resource, malformed-input, and hard-cutover checks.
 
-Store profiles:
+Synchronous indexed stores:
 
 ```text
-cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml indexed_profile_
+cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml indexed_store_
 cargo check --manifest-path stores/prolly-store-pglite/Cargo.toml --all-targets
 cargo check --manifest-path stores/prolly-store-redb/Cargo.toml --all-targets
 cargo check --manifest-path stores/prolly-store-rocksdb/Cargo.toml --all-targets
 cargo check --manifest-path stores/prolly-store-slatedb/Cargo.toml --all-targets
 ```
 
-Outcome: all commands passed. SQLite passed profile selection, separate-handle
-CAS coordination, and the shared production indexed-map contract. Every other
-listed adapter compiled with an explicit verification profile.
+Outcome: all commands passed. SQLite passed separate-handle CAS coordination
+and the shared indexed-map contract. Every other listed synchronous adapter
+compiled against the same indexed-map API.
 
 Portable contracts:
 
@@ -163,9 +161,9 @@ provenance, not a cross-machine performance baseline.
   attribute operation-local physical node/byte reads and writes, CAS
   contention, query budget consumption, or spill high-water marks. The
   evidence must not label global manager deltas as exact per-operation cost.
-- SQLite is the only eligible production adapter, but the shared suite still
-  needs independent-process publication/reopen, forced-termination durability,
-  and store-enumeration/GC evidence before industrial certification.
+- SQLite still needs independent-process publication/reopen,
+  forced-termination durability, and store-enumeration/GC evidence before its
+  durable configurations receive industrial qualification evidence.
 - GC plan/sweep still needs a typed aggregate work, memory, and elapsed budget.
 - Benchmark workflows produce artifacts but do not yet enforce a reviewed
   baseline, backend/hardware provenance, or regression classifier.

@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 use prolly::{
     ActiveIndexHealth, IndexProjection, IndexVerification, IndexedMapHealth,
     IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshotBundle,
-    IndexedSnapshotId, IndexedStoreProfile, IndexedVersion,
-    SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry, SecondaryIndexError,
-    SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry,
+    IndexedSnapshotId, IndexedVersion, SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry,
+    SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage,
+    SecondaryIndexRegistry,
 };
 
 use crate::{BindingEngine, GcPlanRecord, MutationRecord, ProllyBindingError, ProllyEngine};
@@ -414,7 +414,6 @@ pub struct IndexedMapHealthRecord {
     pub source_version: Option<Vec<u8>>,
     pub state_version: Option<Vec<u8>>,
     pub active_indexes: Vec<ActiveIndexHealthRecord>,
-    pub production_profile: bool,
     pub closure_valid: bool,
     pub retained_snapshots: u64,
     pub durable_pins: u64,
@@ -431,7 +430,6 @@ impl From<IndexedMapHealth> for IndexedMapHealthRecord {
                 .state_version
                 .map(|version| version.into_cid().0.to_vec()),
             active_indexes: value.active_indexes.into_iter().map(Into::into).collect(),
-            production_profile: matches!(value.store_profile, IndexedStoreProfile::Production(_)),
             closure_valid: value.closure_valid,
             retained_snapshots: value.retained_snapshots as u64,
             durable_pins: value.durable_pins as u64,

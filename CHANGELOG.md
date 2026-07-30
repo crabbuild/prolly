@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Removed the production/verification indexed-store profile taxonomy and the
+  alternate `indexed_map_production(...)` constructor. All supported
+  synchronous stores now use `indexed_map(...)`.
+- Removed the derived production-profile flag from indexed-map health records
+  in Rust and portable bindings.
+
 ## 0.6.0 — 2026-07-29
 
 This is a hard-cutover release. It does not provide compatibility readers,

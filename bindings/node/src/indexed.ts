@@ -107,7 +107,6 @@ export interface IndexedMapHealth {
   sourceVersion?: Uint8Array;
   stateVersion?: Uint8Array;
   activeIndexes: ActiveIndexHealth[];
-  productionProfile: boolean;
   closureValid: boolean;
   retainedSnapshots: bigint;
   durablePins: bigint;
@@ -259,7 +258,7 @@ interface NativeIndexedMap {
   health(): {
     sourceMapId: Uint8Array; sourceVersion?: Uint8Array; stateVersion?: Uint8Array;
     activeIndexes: { name: Uint8Array; generation: string; fingerprint: Uint8Array; projection: IndexProjection; indexVersion: Uint8Array }[];
-    productionProfile: boolean; closureValid: boolean;
+    closureValid: boolean;
     retainedSnapshots: string; durablePins: string;
   };
   metrics(): Record<keyof IndexedMapMetrics, string>;
@@ -439,8 +438,8 @@ export class IndexedMap implements Disposable {
     const value = this.#open().health();
     return {
       sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
-      stateVersion: value.stateVersion, productionProfile: value.productionProfile,
-      closureValid: value.closureValid, retainedSnapshots: BigInt(value.retainedSnapshots),
+      stateVersion: value.stateVersion, closureValid: value.closureValid,
+      retainedSnapshots: BigInt(value.retainedSnapshots),
       durablePins: BigInt(value.durablePins),
       activeIndexes: value.activeIndexes.map((index) => ({
         name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,

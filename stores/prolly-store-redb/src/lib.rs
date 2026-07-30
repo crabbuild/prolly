@@ -14,8 +14,8 @@ use redb::{
 };
 
 use prolly::{
-    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
-    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    BatchOp, Cid, Error, IndexedStore, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
     TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
@@ -1139,11 +1139,7 @@ impl TransactionalStore for RedbStore {
     }
 }
 
-impl IndexedStore for RedbStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-}
+impl IndexedStore for RedbStore {}
 
 fn cid_from_store_key(key: &[u8]) -> Result<Cid, RedbStoreError> {
     let bytes: [u8; 32] = key.try_into().map_err(|_| {

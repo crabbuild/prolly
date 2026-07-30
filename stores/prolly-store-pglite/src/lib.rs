@@ -9,8 +9,8 @@ use std::sync::{Mutex, MutexGuard};
 use serde_json::{json, Map, Value};
 
 use prolly::{
-    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
-    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    BatchOp, Cid, Error, IndexedStore, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
     TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
@@ -939,11 +939,7 @@ impl TransactionalStore for PgliteStore {
     }
 }
 
-impl IndexedStore for PgliteStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-}
+impl IndexedStore for PgliteStore {}
 
 fn map_with_key(key: &[u8]) -> Map<String, Value> {
     let mut fields = Map::new();

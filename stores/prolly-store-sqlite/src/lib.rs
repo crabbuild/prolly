@@ -15,11 +15,10 @@ use rusqlite::OpenFlags;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 
 use prolly::{
-    BatchOp, Cid, Error, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
-    IndexedCoordinationScope, IndexedGcSafety, IndexedStore, IndexedStoreProfile,
-    IndexedWriteVisibility, NodePublication, NodeStoreScan, ProductionIndexedStoreCapabilities,
-    PublicationOrigin, RootCondition, RootManifest, RootWrite, Store, TransactionConflict,
-    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
+    BatchOp, Cid, Error, IndexedStore, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NamedRootManifest, NodePublication, NodeStoreScan, PublicationOrigin, RootCondition,
+    RootManifest, RootWrite, Store, TransactionConflict, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore,
 };
 
 const DEFAULT_NODE_CACHE_SHARDS: usize = 16;
@@ -602,7 +601,6 @@ pub struct SqliteStore {
     checkpoint_worker: Option<CheckpointWorker>,
     group_commit: Option<PublicationGroupCommit>,
     wal_path: Option<PathBuf>,
-    indexed_production: bool,
 }
 
 /// Identity obtained from SQLite's actual open main-database file descriptor.
@@ -773,7 +771,6 @@ impl SqliteStore {
                 state: Mutex::new(PublicationGroupState::default()),
             }),
             wal_path: None,
-            indexed_production: false,
         })
     }
 
@@ -804,7 +801,6 @@ impl SqliteStore {
                 state: Mutex::new(PublicationGroupState::default()),
             }),
             wal_path: None,
-            indexed_production: false,
         })
     }
 
@@ -868,7 +864,6 @@ impl SqliteStore {
         }
         self.readers = readers.into_boxed_slice();
         self.wal_path = Some(wal_path_for(&path));
-        self.indexed_production = !config.synchronous_normal;
         if config.enable_wal && config.background_checkpoints {
             self.writer
                 .lock()
@@ -1278,20 +1273,7 @@ impl SqliteStore {
     }
 }
 
-impl IndexedStore for SqliteStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        if self.indexed_production {
-            IndexedStoreProfile::Production(ProductionIndexedStoreCapabilities {
-                coordination_scope: IndexedCoordinationScope::Host,
-                write_visibility: IndexedWriteVisibility::ReadAfterWrite,
-                durable_acknowledgement: true,
-                gc_safety: IndexedGcSafety::ExplicitQuiescence,
-            })
-        } else {
-            IndexedStoreProfile::Verification
-        }
-    }
-}
+impl IndexedStore for SqliteStore {}
 
 #[derive(Default)]
 struct SqlitePagerMetrics {
@@ -2386,31 +2368,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn indexed_profile_requires_file_backing_and_full_synchronous_acknowledgement() {
-        assert_eq!(
-            SqliteStore::open_in_memory()
-                .unwrap()
-                .indexed_store_profile(),
-            IndexedStoreProfile::Verification
-        );
-        let directory = tempfile::tempdir().unwrap();
-        let default_store = SqliteStore::open(directory.path().join("normal.db")).unwrap();
-        assert_eq!(
-            default_store.indexed_store_profile(),
-            IndexedStoreProfile::Verification
-        );
-        let config = SqliteStoreConfig {
-            synchronous_normal: false,
-            background_checkpoints: false,
-            ..SqliteStoreConfig::default()
-        };
-        let production =
-            SqliteStore::open_with_config(directory.path().join("full.db"), config).unwrap();
-        assert!(production.indexed_store_profile().is_production());
-    }
-
-    #[test]
-    fn production_indexed_profile_cas_coordinates_separate_handles() {
+    fn indexed_map_cas_coordinates_separate_handles() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("coordinated.db");
         let config = SqliteStoreConfig {
@@ -2435,7 +2393,7 @@ mod tests {
     }
 
     #[test]
-    fn production_indexed_profile_passes_shared_contract() {
+    fn indexed_store_passes_shared_contract() {
         let directory = tempfile::tempdir().unwrap();
         let config = SqliteStoreConfig {
             synchronous_normal: false,
@@ -2444,7 +2402,7 @@ mod tests {
         };
         let store =
             SqliteStore::open_with_config(directory.path().join("indexed.db"), config).unwrap();
-        prolly_store_test::assert_production_indexed_store(store);
+        prolly_store_test::assert_indexed_store(store);
     }
 
     #[test]

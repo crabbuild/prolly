@@ -797,7 +797,6 @@ export interface PortableIndexedMapHealth {
     projection: "keys_only" | "include" | "all";
     indexVersion: Uint8Array;
   }>;
-  productionProfile: boolean;
   closureValid: boolean;
   retainedSnapshots: bigint;
   durablePins: bigint;
@@ -2725,8 +2724,8 @@ export class WasmIndexedMap implements Disposable {
     const value = this.#open().health();
     return {
       sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
-      stateVersion: value.stateVersion, productionProfile: value.productionProfile,
-      closureValid: value.closureValid, retainedSnapshots: BigInt(value.retainedSnapshots),
+      stateVersion: value.stateVersion, closureValid: value.closureValid,
+      retainedSnapshots: BigInt(value.retainedSnapshots),
       durablePins: BigInt(value.durablePins),
       activeIndexes: value.activeIndexes.map((index: any) => ({
         name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,

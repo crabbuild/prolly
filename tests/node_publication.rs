@@ -9,9 +9,9 @@ use std::task::{Context, Poll};
 
 use prolly::{
     AsyncManifestStore, AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp,
-    Cid, Config, DistanceMetric, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestUpdate,
-    MemStore, MemStoreError, MergeTraceEvent, Mutation, NodePublication, NodePublicationHint,
-    Prolly, ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord, PublicationOrigin,
+    Cid, Config, DistanceMetric, IndexedStore, ManifestStore, ManifestUpdate, MemStore,
+    MemStoreError, MergeTraceEvent, Mutation, NodePublication, NodePublicationHint, Prolly,
+    ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord, PublicationOrigin,
     Resolution, RootCondition, RootManifest, RootWrite, SearchIo, SearchRuntime, SecondaryIndex,
     SecondaryIndexRegistry, Store, SyncStoreAsAsync, TransactionNodeWrite, TransactionUpdate,
     TransactionalStore, Tree,
@@ -118,11 +118,7 @@ impl RecordingSyncStore {
     }
 }
 
-impl IndexedStore for RecordingSyncStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-}
+impl IndexedStore for RecordingSyncStore {}
 
 impl Store for RecordingSyncStore {
     type Error = MemStoreError;
