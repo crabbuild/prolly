@@ -255,7 +255,7 @@ fn sequential_value_updates_match_a_full_canonical_rebuild() {
 }
 
 #[test]
-fn scattered_value_updates_use_batched_canonical_rewrite() {
+fn scattered_value_updates_use_bounded_canonical_rewrite() {
     let store = Arc::new(MemStore::new());
     let manager = Prolly::new(store.clone(), Config::default());
     let mut base = BatchBuilder::new(store.clone(), Config::default());
@@ -285,7 +285,19 @@ fn scattered_value_updates_use_batched_canonical_rewrite() {
         .unwrap();
 
     assert!(stats.used_key_stable_fast_path, "{stats:?}");
-    assert!(stats.used_batched_value_update_path, "{stats:?}");
+    assert!(
+        stats.entries_streamed < SCATTERED_RECORDS as u64,
+        "{stats:?}"
+    );
+    if stats.used_batched_value_update_path {
+        assert!(stats.parallel_tasks > 0, "{stats:?}");
+    } else {
+        // The process-wide caller-saturation guard may select the canonical
+        // width-one fallback when other tests are writing concurrently.
+        assert!(stats.nodes_reused > 0, "{stats:?}");
+        assert_eq!(stats.parallel_width, 1, "{stats:?}");
+        assert_eq!(stats.parallel_tasks, 0, "{stats:?}");
+    }
 
     let mut rebuilt = BatchBuilder::new(store, Config::default());
     for index in 0..SCATTERED_RECORDS {
