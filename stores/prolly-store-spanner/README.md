@@ -13,8 +13,8 @@ The client dependency is listed explicitly because applications construct the
 
 ```toml
 [dependencies]
-prolly-map = "0.5.1"
-prolly-store-spanner = "0.3.0"
+prolly-map = "0.6.0"
+prolly-store-spanner = "0.4.0"
 google-cloud-spanner = { package = "gcloud-spanner", version = "=1.8.1" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```

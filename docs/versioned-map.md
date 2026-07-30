@@ -64,7 +64,7 @@ the Rust library import is named `prolly`:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.6.0"
 ```
 
 Here is a complete introductory example:
@@ -1375,7 +1375,7 @@ async-native stores:
 
 ```toml
 [dependencies]
-prolly-map = "0.4"
+prolly-map = "0.6.0"
 ```
 
 The Rust import name remains `prolly`.

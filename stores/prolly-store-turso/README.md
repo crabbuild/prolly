@@ -9,8 +9,7 @@ your application decides when to call `push()` or `pull()`.
 
 ## Requirements
 
-- Rust 1.88 or newer. Turso 0.7's required dependency graph sets this floor;
-  the core `prolly-map` crate itself continues to support Rust 1.81.
+- Rust 1.89 or newer, matching the `prolly-map` hard-cutover release line.
 - Tokio or another executor capable of polling Turso and prolly's async APIs.
 - The `turso-cloud-sync` feature only when Turso Cloud push/pull is needed.
 
@@ -21,8 +20,8 @@ backups for production data and follow Turso's release notes when upgrading.
 
 ```toml
 [dependencies]
-prolly-map = "0.5.1"
-prolly-store-turso = "0.1"
+prolly-map = "0.6.0"
+prolly-store-turso = "0.2.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -56,7 +55,7 @@ cargo run --manifest-path stores/prolly-store-turso/Cargo.toml \
 Enable the adapter feature, which enables `turso/sync`:
 
 ```toml
-prolly-store-turso = { version = "0.1", features = ["turso-cloud-sync"] }
+prolly-store-turso = { version = "0.2.0", features = ["turso-cloud-sync"] }
 ```
 
 ```rust

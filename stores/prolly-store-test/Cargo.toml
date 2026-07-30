@@ -2,10 +2,10 @@
 name = "prolly-store-test"
 description = "Shared conformance tests for prolly-map store adapters."
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.89"
 version = "0.1.0"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-prolly = { package = "prolly-map", path = "../..", version = "0.5.0" }
+prolly = { package = "prolly-map", path = "../..", version = "0.6.0" }

@@ -2,8 +2,11 @@ use prolly::{
     Config, IndexProjection, MemStore, Prolly, SecondaryIndex, SecondaryIndexEntry,
     SecondaryIndexRegistry,
 };
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::time::Instant;
+
+const QUERY_PAGE_LIMIT: usize = 4_096;
 
 fn main() {
     let scale = env_usize("PROLLY_INDEX_BENCH_SCALE", 10_000).max(100);
@@ -100,29 +103,50 @@ fn main() {
     let snapshot = indexed.snapshot().unwrap();
     let keys = snapshot.index(b"keys").unwrap();
     let start = Instant::now();
-    let exact = keys.exact(b"status-01").unwrap();
-    row("query_exact", scale, exact.len(), start, !exact.is_empty());
+    let exact = keys
+        .exact_page(b"status-01", None, QUERY_PAGE_LIMIT)
+        .unwrap();
+    row(
+        "query_exact",
+        scale,
+        exact.matches.len(),
+        start,
+        !exact.matches.is_empty(),
+    );
     let start = Instant::now();
-    let prefix = keys.prefix(b"status-0").unwrap();
+    let prefix = keys
+        .prefix_page(b"status-0", None, QUERY_PAGE_LIMIT)
+        .unwrap();
     row(
         "query_prefix",
         scale,
-        prefix.len(),
+        prefix.matches.len(),
         start,
-        !prefix.is_empty(),
+        !prefix.matches.is_empty(),
     );
     let start = Instant::now();
-    let range = keys.range(b"status-01", Some(b"status-05")).unwrap();
-    row("query_range", scale, range.len(), start, !range.is_empty());
-    let start = Instant::now();
-    let records = keys.records(b"status-01").unwrap();
+    let range = keys
+        .range_page(b"status-01", Some(b"status-05"), None, QUERY_PAGE_LIMIT)
+        .unwrap();
     row(
-        "query_records_batch",
+        "query_range",
         scale,
-        records.len(),
+        range.matches.len(),
         start,
-        !records.is_empty(),
+        !range.matches.is_empty(),
     );
+    let start = Instant::now();
+    let mut records = 0usize;
+    keys.scan_records_until(b"status-01", |_| {
+        records += 1;
+        if records == QUERY_PAGE_LIMIT {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .unwrap();
+    row("query_records_batch", scale, records, start, records > 0);
 
     let start = Instant::now();
     let verification_snapshot = indexed.snapshot().unwrap();

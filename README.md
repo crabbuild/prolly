@@ -38,6 +38,8 @@ implementation notes, roadmap, and language-porting guidance. The canonical
 cookbook is [`docs/cookbook.md`](docs/cookbook.md).
 Native approximate nearest-neighbor indexing is documented in
 [`docs/proximity-map.md`](docs/proximity-map.md).
+Breaking changes and release qualification are recorded in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 For application builders who want a Git-like repository layer on top of prolly
 trees, see the proposed [`prolly-vcs` design](docs/prolly-vcs-design.md). It
