@@ -16115,19 +16115,17 @@ public struct IndexedMapHealthRecord: Equatable, Hashable {
     public var sourceVersion: Data?
     public var stateVersion: Data?
     public var activeIndexes: [ActiveIndexHealthRecord]
-    public var productionProfile: Bool
     public var closureValid: Bool
     public var retainedSnapshots: UInt64
     public var durablePins: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceMapId: Data, sourceVersion: Data?, stateVersion: Data?, activeIndexes: [ActiveIndexHealthRecord], productionProfile: Bool, closureValid: Bool, retainedSnapshots: UInt64, durablePins: UInt64) {
+    public init(sourceMapId: Data, sourceVersion: Data?, stateVersion: Data?, activeIndexes: [ActiveIndexHealthRecord], closureValid: Bool, retainedSnapshots: UInt64, durablePins: UInt64) {
         self.sourceMapId = sourceMapId
         self.sourceVersion = sourceVersion
         self.stateVersion = stateVersion
         self.activeIndexes = activeIndexes
-        self.productionProfile = productionProfile
         self.closureValid = closureValid
         self.retainedSnapshots = retainedSnapshots
         self.durablePins = durablePins
@@ -16153,7 +16151,6 @@ public struct FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer {
                 sourceVersion: FfiConverterOptionData.read(from: &buf), 
                 stateVersion: FfiConverterOptionData.read(from: &buf),
                 activeIndexes: FfiConverterSequenceTypeActiveIndexHealthRecord.read(from: &buf), 
-                productionProfile: FfiConverterBool.read(from: &buf),
                 closureValid: FfiConverterBool.read(from: &buf),
                 retainedSnapshots: FfiConverterUInt64.read(from: &buf),
                 durablePins: FfiConverterUInt64.read(from: &buf)
@@ -16165,7 +16162,6 @@ public struct FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer {
         FfiConverterOptionData.write(value.sourceVersion, into: &buf)
         FfiConverterOptionData.write(value.stateVersion, into: &buf)
         FfiConverterSequenceTypeActiveIndexHealthRecord.write(value.activeIndexes, into: &buf)
-        FfiConverterBool.write(value.productionProfile, into: &buf)
         FfiConverterBool.write(value.closureValid, into: &buf)
         FfiConverterUInt64.write(value.retainedSnapshots, into: &buf)
         FfiConverterUInt64.write(value.durablePins, into: &buf)

@@ -1,9 +1,9 @@
 //! Shared conformance assertions for workspace store adapters.
 
 use prolly::{
-    BatchOp, Cid, Config, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
-    ManifestUpdate, NodePublication, NodeStoreScan, Prolly, PublicationOrigin, RootManifest,
-    SecondaryIndex, SecondaryIndexRegistry, Store,
+    BatchOp, Cid, Config, IndexedStore, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NodePublication, NodeStoreScan, Prolly, PublicationOrigin, RootManifest, SecondaryIndex,
+    SecondaryIndexRegistry, Store,
 };
 
 pub fn assert_store_contract<S>(store: &S)
@@ -162,21 +162,9 @@ where
         .all(prolly::IndexVerification::is_valid));
 }
 
-pub fn assert_verification_indexed_store<S>(store: S)
+pub fn assert_indexed_store<S>(store: S)
 where
     S: IndexedStore + Send + Sync,
 {
-    assert_eq!(
-        store.indexed_store_profile(),
-        IndexedStoreProfile::Verification
-    );
-    assert_indexed_map_contract(store);
-}
-
-pub fn assert_production_indexed_store<S>(store: S)
-where
-    S: IndexedStore + Send + Sync,
-{
-    assert!(store.indexed_store_profile().is_production());
     assert_indexed_map_contract(store);
 }

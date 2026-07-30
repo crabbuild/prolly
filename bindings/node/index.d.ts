@@ -60,7 +60,6 @@ export interface NodePortableIndexedMapHealth {
   sourceVersion?: Buffer
   stateVersion?: Buffer
   activeIndexes: Array<NodePortableActiveIndexHealth>
-  productionProfile: boolean
   closureValid: boolean
   retainedSnapshots: string
   durablePins: string

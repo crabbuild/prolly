@@ -38,18 +38,20 @@ Raw head-changing `VersionedMap` operations are fenced once a canonical
 indexed-collection root exists. Reads remain possible, while mutations must go
 through `IndexedMap`.
 
-## Store profiles
+## Store contract
 
-`IndexedStoreProfile::Verification` is for correctness tests and local
-experiments. `MemStore`, `FileNodeStore`, PGlite, redb, RocksDB, and SlateDB
-deliberately have this profile; it is not a production durability claim.
+There is one indexed-map API:
+`engine.indexed_map(source_map_id, registry)`. It accepts synchronous stores
+implementing `Store`, `ManifestStore`, and `IndexedStore`; there is no
+production/verification profile or alternate production constructor.
 
-`IndexedStoreProfile::Production` is accepted only when an adapter declares
-and validates cross-handle coordination, immutable-write visibility, durable
-acknowledgement, and a GC-safety mechanism. The file-backed SQLite adapter is
-the currently qualified production adapter when durable synchronous writes are
-enabled. Opening a production coordinator on a verification store fails
-closed.
+The application owns deployment choices such as persistence mode, durability
+settings, process topology, backup policy, and GC quiescence. The coordinator
+always uses immutable node publication followed by one manifest compare-and-
+swap, and confirms candidate roots are readable before that visibility change.
+An adapter must implement those store contracts correctly for its deployment.
+The library does not infer operational safety from an adapter name or attach a
+blanket production label to a configuration.
 
 ## Runtime definitions
 
@@ -135,10 +137,9 @@ reader lease.
 
 ## Health and observability
 
-`health()` reports store profile, selected source/state versions, active
-descriptors and roots, structural closure validity, retained snapshot count,
-and durable pin count. Complete semantic verification remains an explicit
-bounded operation.
+`health()` reports selected source/state versions, active descriptors and
+roots, structural closure validity, retained snapshot count, and durable pin
+count. Complete semantic verification remains an explicit bounded operation.
 
 Metrics report measured logical work—admitted source mutations, extracted
 records, emitted terms, projected bytes, physical entry upserts/deletes,
@@ -147,6 +148,6 @@ They do not label estimates as physical node writes. Error codes and retry
 advice are structured; default messages redact application keys, terms,
 values, bounds, and extractor text.
 
-Run `cargo run --example secondary_index` for an end-to-end verification-store
-example. Production services should use a qualified production adapter and
-must keep the release-gate workflows green.
+Run `cargo run --example secondary_index` for an end-to-end example.
+Deployments must select and configure a store for their durability and
+coordination requirements and keep the release-gate workflows green.

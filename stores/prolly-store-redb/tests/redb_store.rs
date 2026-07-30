@@ -36,7 +36,7 @@ fn redb_store_satisfies_node_store_scan_contract() {
 fn redb_store_supports_strict_indexed_maps() {
     let path = temp_db_path("indexed-map");
     remove_db(&path);
-    prolly_store_test::assert_verification_indexed_store(RedbStore::open(&path).unwrap());
+    prolly_store_test::assert_indexed_store(RedbStore::open(&path).unwrap());
     remove_db(&path);
 }
 

@@ -128,14 +128,13 @@ jobs:
           --test secondary_index_faults --test secondary_index_fuzz_smoke
           --test secondary_index_resources
 
-  production-store:
+  indexed-store:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml indexed_profile_
-      - run: cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml production_indexed_profile_
+      - run: cargo test --manifest-path stores/prolly-store-sqlite/Cargo.toml
 
   binding-contracts:
     runs-on: ubuntu-latest

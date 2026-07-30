@@ -3,9 +3,9 @@ use std::thread;
 use std::time::Duration;
 
 use prolly::{
-    indexed_collection_root_name, Config, Error, IndexProjection, IndexedSnapshotBundle,
-    IndexedStoreProfile, MemStore, Mutation, MutationBudget, Prolly, QueryBudget, RetryAdvice,
-    SecondaryIndex, SecondaryIndexEntry, SecondaryIndexRegistry, TransferBudget,
+    indexed_collection_root_name, Config, Error, IndexProjection, IndexedSnapshotBundle, MemStore,
+    Mutation, MutationBudget, Prolly, QueryBudget, RetryAdvice, SecondaryIndex,
+    SecondaryIndexEntry, SecondaryIndexRegistry, TransferBudget,
 };
 
 fn registry() -> SecondaryIndexRegistry {
@@ -40,17 +40,6 @@ fn hard_cutover_rejects_an_obsolete_versioned_source() {
     assert!(matches!(
         engine.indexed_map(b"users", registry()),
         Err(Error::IndexFormatUnsupported)
-    ));
-}
-
-#[test]
-fn verification_store_cannot_be_opened_as_production() {
-    let engine = engine();
-    let indexed = engine.indexed_map(b"users", registry()).unwrap();
-    assert_eq!(indexed.store_profile(), IndexedStoreProfile::Verification);
-    assert!(matches!(
-        engine.indexed_map_production(b"other", registry()),
-        Err(Error::UnsupportedIndexedStoreProfile { .. })
     ));
 }
 

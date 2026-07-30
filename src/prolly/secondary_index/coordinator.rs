@@ -13,7 +13,7 @@ use super::super::versioned_map::{MapVersion, MapVersionId};
 use super::super::Prolly;
 use super::budget::{BudgetCounter, MaintenanceBudget, MutationBudget};
 use super::definition::{IndexProjection, SecondaryIndex, SecondaryIndexRegistry};
-use super::publication::{IndexedStore, IndexedStoreProfile};
+use super::publication::IndexedStore;
 use super::state::{
     indexed_collection_root_name, CollectionIndexPolicy, IndexDescriptor, IndexSnapshotRef,
     IndexedCollectionState, IndexedSnapshotRecord, SnapshotPin, SourceSnapshotRef,
@@ -36,7 +36,6 @@ pub struct IndexedMapHealth {
     pub source_version: Option<MapVersionId>,
     pub state_version: Option<MapVersionId>,
     pub active_indexes: Vec<ActiveIndexHealth>,
-    pub store_profile: IndexedStoreProfile,
     pub closure_valid: bool,
     pub retained_snapshots: usize,
     pub durable_pins: usize,
@@ -262,27 +261,9 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         source_map_id: impl AsRef<[u8]>,
         registry: SecondaryIndexRegistry,
     ) -> Result<Self, Error> {
-        Self::open_with_profile(prolly, source_map_id, registry, false)
-    }
-
-    fn open_with_profile(
-        prolly: &'a Prolly<S>,
-        source_map_id: impl AsRef<[u8]>,
-        registry: SecondaryIndexRegistry,
-        require_production: bool,
-    ) -> Result<Self, Error> {
         if source_map_id.as_ref().is_empty() {
             return Err(Error::InvalidIndexDefinition {
                 reason: "indexed source map ID must not be empty".to_string(),
-            });
-        }
-        let profile = prolly.store().indexed_store_profile();
-        profile.validate()?;
-        if require_production && !profile.is_production() {
-            return Err(Error::UnsupportedIndexedStoreProfile {
-                store: std::any::type_name::<S>(),
-                required: "production indexed-store profile",
-                actual: "verification-only profile",
             });
         }
         let indexed = Self {
@@ -302,10 +283,6 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
 
     pub fn registry(&self) -> &SecondaryIndexRegistry {
         &self.registry
-    }
-
-    pub fn store_profile(&self) -> IndexedStoreProfile {
-        self.prolly.store().indexed_store_profile()
     }
 
     pub fn source(&self) -> IndexedSourceView<'_, 'a, S> {
@@ -363,7 +340,6 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             source_version: Some(source_version),
             state_version: Some(state_version),
             active_indexes,
-            store_profile: self.store_profile(),
             closure_valid: true,
             retained_snapshots: loaded.state.snapshots.len(),
             durable_pins: loaded.state.pins.len(),
@@ -1499,14 +1475,6 @@ impl<S: IndexedStore> Prolly<S> {
         registry: SecondaryIndexRegistry,
     ) -> Result<IndexedMap<'_, S>, Error> {
         IndexedMap::open(self, source_map_id, registry)
-    }
-
-    pub fn indexed_map_production(
-        &self,
-        source_map_id: impl AsRef<[u8]>,
-        registry: SecondaryIndexRegistry,
-    ) -> Result<IndexedMap<'_, S>, Error> {
-        IndexedMap::open_with_profile(self, source_map_id, registry, true)
     }
 }
 

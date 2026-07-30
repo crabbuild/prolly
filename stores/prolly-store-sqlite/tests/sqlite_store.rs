@@ -32,8 +32,8 @@ fn sqlite_store_supports_node_scan_contract_operations() {
 }
 
 #[test]
-fn sqlite_in_memory_store_supports_verification_indexed_maps() {
-    prolly_store_test::assert_verification_indexed_store(SqliteStore::open_in_memory().unwrap());
+fn sqlite_in_memory_store_supports_indexed_maps() {
+    prolly_store_test::assert_indexed_store(SqliteStore::open_in_memory().unwrap());
 }
 
 #[test]

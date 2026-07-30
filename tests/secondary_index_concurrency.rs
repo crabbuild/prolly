@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 
 use prolly::{
-    BatchOp, Config, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestUpdate, MemStore,
-    Prolly, RootManifest, SecondaryIndex, SecondaryIndexRegistry, Store,
+    BatchOp, Config, IndexedStore, ManifestStore, ManifestUpdate, MemStore, Prolly, RootManifest,
+    SecondaryIndex, SecondaryIndexRegistry, Store,
 };
 
 #[derive(Debug)]
@@ -93,11 +93,7 @@ impl ManifestStore for BarrierStore {
     }
 }
 
-impl IndexedStore for BarrierStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-}
+impl IndexedStore for BarrierStore {}
 
 fn registry() -> SecondaryIndexRegistry {
     SecondaryIndexRegistry::new()

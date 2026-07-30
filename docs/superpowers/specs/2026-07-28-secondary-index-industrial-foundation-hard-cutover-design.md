@@ -68,8 +68,8 @@ directions in that document remain proposals, not part of this delivery.
    secondary-index state change.
 2. Guarantee that a reader observes a complete old or complete new indexed
    snapshot, never mixed source, index, descriptor, or retention state.
-3. Require only immutable content writes, declared visibility semantics, and
-   one atomic named-root CAS from a production store.
+3. Require only immutable content writes, readable publication, and one atomic
+   named-root CAS from a synchronous indexed store.
 4. Bound memory, result size, scans, source fetches, spill space, retries, and
    elapsed time for every production operation.
 5. Preserve canonical, deterministic source and index roots.
@@ -93,7 +93,7 @@ This delivery does not add:
 - deferred or asynchronously maintained indexes;
 - resumable online builds or build catch-up under concurrent writes;
 - indexed merge, rollback, or portable query proofs;
-- a production-grade `FileNodeStore`;
+- deployment qualification for any particular store configuration;
 - an old-format migration reader;
 - compatibility aliases for removed APIs or record types.
 
@@ -107,8 +107,8 @@ continuous write rate.
    indexed collection.
 2. A visible state references exactly one source tree and exactly one tree and
    descriptor for every active index.
-3. All objects referenced by a candidate state are readable under the active
-   store profile before its root CAS is attempted.
+3. All objects referenced by a candidate state are readable before its root
+   CAS is attempted.
 4. Failed and conflicting CAS operations do not change visible collection
    state.
 5. An indexed snapshot ID changes when its source root, any index root, any
@@ -232,38 +232,23 @@ Changing extractor behavior requires a new extractor identity and descriptor
 fingerprint. The engine cannot prove arbitrary callback determinism, but it
 fails closed when persisted and runtime identity differ.
 
-## Store Capability Contract
+## Store Contract
 
-Store support is described by an exact profile rather than
-`supports_transactions() -> bool`.
-
-### Production Profile
-
-A production store must provide and pass conformance for:
+There is one `indexed_map(...)` constructor and one `IndexedStore` contract,
+independent of `supports_transactions() -> bool`. A synchronous indexed store
+provides:
 
 1. Idempotent content-addressed immutable writes with CID validation.
-2. Declared read-after-write or publication-barrier semantics.
+2. Readable immutable publication before root visibility changes.
 3. Atomic compare-and-swap for one named collection root.
-4. CAS correctness across independent handles and processes.
-5. Durable acknowledgement semantics documented by the adapter.
-6. Consistent root reopen after an acknowledged CAS.
-7. Enumerability or an adapter-specific mechanism required for safe GC.
-8. Lease, pin, or operational-quiescence integration required by its GC
-   profile.
+4. The enumeration or adapter mechanism needed by requested GC operations.
 
-Runtime probes can disprove these properties. Claims about physical power-loss
-durability also require the underlying database or provider contract.
-
-### Verification Profile
-
-A verification store may exercise tree construction, query semantics, CAS
-conflicts, fixtures, and local reopen behavior without claiming production
-durability or coordination.
-
-`FileNodeStore` belongs to this profile. Its current local transaction behavior
-may remain for verification, but it cannot satisfy or report the production
-profile. The secondary-index documentation and capability API state this
-directly.
+The application selects persistence mode, durability settings, process
+topology, backup policy, and GC quiescence. Conformance exercises the shared
+contract without encoding those deployment choices in a production/
+verification profile or a second constructor. Physical power-loss claims
+require evidence for the selected adapter configuration and underlying
+database or provider.
 
 ## Publication Protocol
 
@@ -373,9 +358,9 @@ operation budget:
 | Derived projection bytes per source record | 1 MiB |
 | Active indexes per collection | 32 |
 
-Operational default values are centralized in one production profile and one
-verification profile. A default cannot be unbounded. Benchmarks may override
-budgets explicitly but do not alter production defaults.
+Operational default values are centralized in the typed budget defaults. A
+default cannot be unbounded. Benchmarks may override budgets explicitly but do
+not alter library defaults.
 
 ### Mutation
 
@@ -541,7 +526,7 @@ closure. It does not combine roots observed at different times.
 
 Unpublished objects and objects removed by retention are swept only after the
 configured grace interval. Long-lived readers must hold a collection pin or a
-store-provided lease. A production GC operation fails with `index.gc_unsafe`
+store-provided lease. A GC operation fails with `index.gc_unsafe`
 when the adapter cannot prove a safe lease, pin, grace-period, or explicit
 quiescence policy.
 
@@ -549,7 +534,7 @@ quiescence policy.
 
 `health()` is a bounded structural check. It loads one collection state and
 verifies format, ownership, snapshot closure, descriptors, referenced roots,
-counts that can be checked without a full scan, store profile, and GC safety.
+counts that can be checked without a full scan, and GC safety.
 
 `verify_index()` is a bounded logical rederivation against one immutable source
 snapshot. It reports:
@@ -614,10 +599,9 @@ a mixed source/index snapshot or a root referencing unavailable content.
 
 ### Store Conformance
 
-Every production adapter runs one shared suite proving the production-profile
-properties. At least one test uses independent handles and one uses independent
-processes. Verification-profile stores run a separately named suite that
-cannot produce a production capability result.
+Every synchronous indexed-store adapter runs one shared suite proving the
+single-root publication properties. Relevant adapters add independent-handle
+and independent-process cases for the deployment configurations they support.
 
 ### Resource Tests
 
@@ -649,8 +633,8 @@ Required fixtures cover:
 - retention and GC;
 - conflict-free and contended publication.
 
-Tracked CI runs a bounded smoke profile. Scheduled CI runs declared production
-adapters at 1 million and 10 million source records. A performance gate uses
+Tracked CI runs a bounded smoke workload. Scheduled CI runs selected adapter
+configurations at 1 million and 10 million source records. A performance gate uses
 both relative and absolute thresholds, a minimum sample count, and stored
 baseline provenance. One-shot measurements and logical node estimates cannot
 pass or fail a release.
@@ -665,7 +649,7 @@ The tracked required workflow runs:
 - unit, integration, and documentation tests;
 - canonical fixture verification;
 - deterministic concurrency and failure matrices;
-- production and verification store-conformance suites;
+- synchronous indexed-store conformance suites;
 - portable binding error, budget, cursor, and metrics parity;
 - sanitizer and bounded fuzz smoke jobs;
 - benchmark smoke and regression classification.
@@ -680,7 +664,7 @@ in dependency order:
 
 1. **Canonical format and store contract**
    - introduce the canonical state/snapshot/descriptor records;
-   - introduce production and verification store profiles;
+   - introduce the single synchronous indexed-store contract;
    - add conformance and canonical-format fixtures.
 2. **Single-root coordinator**
    - implement state loading, reads, publication, retries, retention, pins, and
@@ -720,9 +704,10 @@ proved:
    linearization point.
 2. Concurrent and crash/reopen tests expose a complete old or new indexed
    snapshot, never a mixed state.
-3. A production adapter needs no multi-root transaction and passes the exact
-   single-root conformance suite.
-4. `FileNodeStore` is classified and documented as verification-only.
+3. A synchronous indexed-store adapter needs no multi-root transaction and
+   passes the exact single-root conformance suite.
+4. Store durability and deployment qualification are not inferred by the
+   indexed-map constructor.
 5. Query memory is bounded by declared work and result budgets regardless of
    total matches.
 6. Build, replace, repair, and verification memory is bounded independently of

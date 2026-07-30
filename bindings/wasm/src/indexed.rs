@@ -3,9 +3,8 @@ use crate::page::{set_bytes, set_optional_bytes};
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
     IndexProjection, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedSnapshotBundle,
-    IndexedSnapshotId, IndexedStoreProfile, Mutation, SecondaryIndex, SecondaryIndexCursor,
-    SecondaryIndexEntry, SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexPage,
-    SecondaryIndexRegistry,
+    IndexedSnapshotId, Mutation, SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry,
+    SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexPage, SecondaryIndexRegistry,
 };
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -1033,11 +1032,6 @@ fn indexed_health_object(value: prolly::IndexedMapHealth) -> Result<Object, JsVa
         indexes.push(&item.into());
     }
     Reflect::set(&object, &"activeIndexes".into(), &indexes.into())?;
-    Reflect::set(
-        &object,
-        &"productionProfile".into(),
-        &matches!(value.store_profile, IndexedStoreProfile::Production(_)).into(),
-    )?;
     Reflect::set(&object, &"closureValid".into(), &value.closure_valid.into())?;
     set_u64_string(
         &object,

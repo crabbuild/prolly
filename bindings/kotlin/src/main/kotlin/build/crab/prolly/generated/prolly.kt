@@ -27247,8 +27247,6 @@ data class IndexedMapHealthRecord (
     ,
     var `activeIndexes`: List<ActiveIndexHealthRecord>
     ,
-    var `productionProfile`: kotlin.Boolean
-    ,
     var `closureValid`: kotlin.Boolean
     ,
     var `retainedSnapshots`: kotlin.ULong
@@ -27275,7 +27273,6 @@ public object FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer<Ind
             FfiConverterOptionalByteArray.read(buf),
             FfiConverterSequenceTypeActiveIndexHealthRecord.read(buf),
             FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
         )
@@ -27286,7 +27283,6 @@ public object FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer<Ind
             FfiConverterOptionalByteArray.allocationSize(value.`sourceVersion`) +
             FfiConverterOptionalByteArray.allocationSize(value.`stateVersion`) +
             FfiConverterSequenceTypeActiveIndexHealthRecord.allocationSize(value.`activeIndexes`) +
-            FfiConverterBoolean.allocationSize(value.`productionProfile`) +
             FfiConverterBoolean.allocationSize(value.`closureValid`) +
             FfiConverterULong.allocationSize(value.`retainedSnapshots`) +
             FfiConverterULong.allocationSize(value.`durablePins`)
@@ -27297,7 +27293,6 @@ public object FfiConverterTypeIndexedMapHealthRecord: FfiConverterRustBuffer<Ind
             FfiConverterOptionalByteArray.write(value.`sourceVersion`, buf)
             FfiConverterOptionalByteArray.write(value.`stateVersion`, buf)
             FfiConverterSequenceTypeActiveIndexHealthRecord.write(value.`activeIndexes`, buf)
-            FfiConverterBoolean.write(value.`productionProfile`, buf)
             FfiConverterBoolean.write(value.`closureValid`, buf)
             FfiConverterULong.write(value.`retainedSnapshots`, buf)
             FfiConverterULong.write(value.`durablePins`, buf)

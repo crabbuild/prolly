@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use rocksdb::{ColumnFamilyDescriptor, DBCompressionType, IteratorMode, Options, WriteBatch, DB};
 
 use prolly::{
-    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
-    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    BatchOp, Cid, Error, IndexedStore, ManifestStore, ManifestStoreScan, ManifestUpdate,
+    NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
     TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
@@ -569,11 +569,7 @@ impl TransactionalStore for RocksDBStore {
     }
 }
 
-impl IndexedStore for RocksDBStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-}
+impl IndexedStore for RocksDBStore {}
 
 fn encode_root_manifest(manifest: &RootManifest) -> Result<Vec<u8>, RocksDBStoreError> {
     manifest

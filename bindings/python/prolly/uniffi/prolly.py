@@ -17813,12 +17813,11 @@ class _UniffiFfiConverterSequenceTypeActiveIndexHealthRecord(_UniffiConverterRus
 
 @dataclass
 class IndexedMapHealthRecord:
-    def __init__(self, *, source_map_id:bytes, source_version:typing.Optional[bytes], state_version:typing.Optional[bytes], active_indexes:typing.List[ActiveIndexHealthRecord], production_profile:bool, closure_valid:bool, retained_snapshots:int, durable_pins:int):
+    def __init__(self, *, source_map_id:bytes, source_version:typing.Optional[bytes], state_version:typing.Optional[bytes], active_indexes:typing.List[ActiveIndexHealthRecord], closure_valid:bool, retained_snapshots:int, durable_pins:int):
         self.source_map_id = source_map_id
         self.source_version = source_version
         self.state_version = state_version
         self.active_indexes = active_indexes
-        self.production_profile = production_profile
         self.closure_valid = closure_valid
         self.retained_snapshots = retained_snapshots
         self.durable_pins = durable_pins
@@ -17827,7 +17826,7 @@ class IndexedMapHealthRecord:
 
     
     def __str__(self):
-        return "IndexedMapHealthRecord(source_map_id={}, source_version={}, state_version={}, active_indexes={}, production_profile={}, closure_valid={}, retained_snapshots={}, durable_pins={})".format(self.source_map_id, self.source_version, self.state_version, self.active_indexes, self.production_profile, self.closure_valid, self.retained_snapshots, self.durable_pins)
+        return "IndexedMapHealthRecord(source_map_id={}, source_version={}, state_version={}, active_indexes={}, closure_valid={}, retained_snapshots={}, durable_pins={})".format(self.source_map_id, self.source_version, self.state_version, self.active_indexes, self.closure_valid, self.retained_snapshots, self.durable_pins)
     def __eq__(self, other):
         if self.source_map_id != other.source_map_id:
             return False
@@ -17836,8 +17835,6 @@ class IndexedMapHealthRecord:
         if self.state_version != other.state_version:
             return False
         if self.active_indexes != other.active_indexes:
-            return False
-        if self.production_profile != other.production_profile:
             return False
         if self.closure_valid != other.closure_valid:
             return False
@@ -17855,7 +17852,6 @@ class _UniffiFfiConverterTypeIndexedMapHealthRecord(_UniffiConverterRustBuffer):
             source_version=_UniffiFfiConverterOptionalBytes.read(buf),
             state_version=_UniffiFfiConverterOptionalBytes.read(buf),
             active_indexes=_UniffiFfiConverterSequenceTypeActiveIndexHealthRecord.read(buf),
-            production_profile=_UniffiFfiConverterBoolean.read(buf),
             closure_valid=_UniffiFfiConverterBoolean.read(buf),
             retained_snapshots=_UniffiFfiConverterUInt64.read(buf),
             durable_pins=_UniffiFfiConverterUInt64.read(buf),
@@ -17867,7 +17863,6 @@ class _UniffiFfiConverterTypeIndexedMapHealthRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalBytes.check_lower(value.source_version)
         _UniffiFfiConverterOptionalBytes.check_lower(value.state_version)
         _UniffiFfiConverterSequenceTypeActiveIndexHealthRecord.check_lower(value.active_indexes)
-        _UniffiFfiConverterBoolean.check_lower(value.production_profile)
         _UniffiFfiConverterBoolean.check_lower(value.closure_valid)
         _UniffiFfiConverterUInt64.check_lower(value.retained_snapshots)
         _UniffiFfiConverterUInt64.check_lower(value.durable_pins)
@@ -17878,7 +17873,6 @@ class _UniffiFfiConverterTypeIndexedMapHealthRecord(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalBytes.write(value.source_version, buf)
         _UniffiFfiConverterOptionalBytes.write(value.state_version, buf)
         _UniffiFfiConverterSequenceTypeActiveIndexHealthRecord.write(value.active_indexes, buf)
-        _UniffiFfiConverterBoolean.write(value.production_profile, buf)
         _UniffiFfiConverterBoolean.write(value.closure_valid, buf)
         _UniffiFfiConverterUInt64.write(value.retained_snapshots, buf)
         _UniffiFfiConverterUInt64.write(value.durable_pins, buf)

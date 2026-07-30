@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use prolly::{
-    BatchOp, Config, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestUpdate,
-    MemStore, Prolly, RootManifest, SecondaryIndex, SecondaryIndexRegistry, Store, Tree,
+    BatchOp, Config, Error, IndexedStore, ManifestStore, ManifestUpdate, MemStore, Prolly,
+    RootManifest, SecondaryIndex, SecondaryIndexRegistry, Store, Tree,
 };
 
 #[derive(Debug)]
@@ -94,10 +94,6 @@ impl ManifestStore for FaultStore {
 }
 
 impl IndexedStore for FaultStore {
-    fn indexed_store_profile(&self) -> IndexedStoreProfile {
-        IndexedStoreProfile::Verification
-    }
-
     fn confirm_indexed_publication(&self, trees: &[&Tree]) -> Result<(), Error> {
         if self.fail_confirmation.swap(false, Ordering::SeqCst) {
             return Err(Error::Store(Box::new(FaultError(

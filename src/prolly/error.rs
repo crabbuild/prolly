@@ -192,7 +192,6 @@ use super::versioned_map::MapVersionId;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IndexErrorCode {
     FormatUnsupported,
-    StoreProfileUnsupported,
     Conflict,
     Corruption,
     DefinitionInvalid,
@@ -218,7 +217,6 @@ impl IndexErrorCode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::FormatUnsupported => "format_unsupported",
-            Self::StoreProfileUnsupported => "store_profile_unsupported",
             Self::Conflict => "conflict",
             Self::Corruption => "corruption",
             Self::DefinitionInvalid => "definition_invalid",
@@ -291,12 +289,6 @@ pub enum Error {
     InvalidSnapshotBundle(String),
     /// The configured store does not support strict atomic transactions.
     UnsupportedTransactions { store: &'static str },
-    /// The configured store has not proved the required indexed-store profile.
-    UnsupportedIndexedStoreProfile {
-        store: &'static str,
-        required: &'static str,
-        actual: &'static str,
-    },
     /// A named root from an obsolete secondary-index architecture was found.
     IndexFormatUnsupported,
     /// A transaction could not commit because a validated named root changed.
@@ -418,7 +410,6 @@ impl Error {
         use IndexErrorCode as Code;
         Some(match self {
             Self::IndexFormatUnsupported => Code::FormatUnsupported,
-            Self::UnsupportedIndexedStoreProfile { .. } => Code::StoreProfileUnsupported,
             Self::TransactionConflict(_) | Self::IndexBuildConflictLimitExceeded { .. } => {
                 Code::Conflict
             }
@@ -511,14 +502,6 @@ impl std::fmt::Display for Error {
             Error::UnsupportedTransactions { store } => {
                 write!(f, "store does not support strict transactions: {store}")
             }
-            Error::UnsupportedIndexedStoreProfile {
-                store,
-                required,
-                actual,
-            } => write!(
-                f,
-                "store {store} does not satisfy indexed-store requirement {required}: {actual}"
-            ),
             Error::TransactionConflict(conflict) => {
                 write!(
                     f,

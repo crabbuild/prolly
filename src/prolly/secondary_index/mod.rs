@@ -28,10 +28,7 @@ pub use definition::{
     SecondaryIndexEntryRef, SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits,
     SecondaryIndexRegistry, StreamingSecondaryIndexExtractor,
 };
-pub use publication::{
-    IndexedCoordinationScope, IndexedGcSafety, IndexedStore, IndexedStoreProfile,
-    IndexedWriteVisibility, ProductionIndexedStoreCapabilities,
-};
+pub use publication::IndexedStore;
 pub use snapshot::{
     IndexedSnapshot, IndexedSourceRecord, IndexedSourceRecordRef, ProjectedIndexEntry,
     SecondaryIndexCursor, SecondaryIndexDirection, SecondaryIndexMatch, SecondaryIndexMatchRef,
