@@ -88,11 +88,12 @@ jobs:
             toolchain: 1.90.0
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install "${{ matrix.toolchain }}" --profile minimal
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.manifest }}
-      - run: cargo test --manifest-path "${{ matrix.manifest }}"
+          shared-key: ${{ matrix.toolchain }}-${{ matrix.manifest }}
+      - run: cargo +"${{ matrix.toolchain }}" test --manifest-path "${{ matrix.manifest }}"
 
   bounded-benchmark-smoke:
     runs-on: ubuntu-latest
