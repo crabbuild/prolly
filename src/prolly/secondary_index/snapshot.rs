@@ -1059,7 +1059,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             Some(raw_key) => {
                 let physical = physical_bounds(bounds)?;
                 raw_key >= physical.start.as_slice()
-                    && physical.end.as_deref().map_or(true, |end| raw_key < end)
+                    && physical.end.as_deref().is_none_or(|end| raw_key < end)
                     && decode_physical_index_key(raw_key).is_ok()
             }
         };

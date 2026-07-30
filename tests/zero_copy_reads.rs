@@ -589,7 +589,7 @@ fn borrowed_structural_diff_matches_owned_diff_and_range_filtering() {
         let end = Some(b"key/001500".as_slice());
         let expected_range = expected
             .iter()
-            .filter(|diff| diff.key() >= start && end.map_or(true, |end| diff.key() < end))
+            .filter(|diff| diff.key() >= start && end.is_none_or(|end| diff.key() < end))
             .cloned()
             .collect::<Vec<_>>();
         let mut actual_range = Vec::new();

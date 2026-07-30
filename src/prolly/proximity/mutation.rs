@@ -237,7 +237,7 @@ impl<S: Store> Context<'_, S> {
         for (index, entry) in entries.iter().enumerate() {
             self.stats.distance_evaluations += 1;
             let distance = score(self.config.metric, vector, entry.vector.inline()?);
-            if best.map_or(true, |(best_index, best_distance)| {
+            if best.is_none_or(|(best_index, best_distance)| {
                 distance
                     .total_cmp(&best_distance)
                     .then_with(|| entry.key.cmp(&entries[best_index].key))

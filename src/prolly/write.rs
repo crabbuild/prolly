@@ -1744,7 +1744,7 @@ fn try_append<M: CanonicalWriteManager>(
     };
     if mutations
         .first()
-        .map_or(true, |(key, _)| key.as_slice() <= max_key.as_slice())
+        .is_none_or(|(key, _)| key.as_slice() <= max_key.as_slice())
     {
         return Ok(None);
     }

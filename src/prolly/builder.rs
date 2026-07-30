@@ -732,7 +732,7 @@ fn chunk_ranges_for_entries_impl(
         if child_counts.is_some() {
             return Err(Error::InvalidNode);
         }
-    } else if child_counts.map_or(true, |counts| counts.len() != entries.len()) {
+    } else if child_counts.is_none_or(|counts| counts.len() != entries.len()) {
         return Err(Error::InvalidNode);
     }
     let mut detector = BoundaryDetector::new(config.format.chunking.clone(), level.into())?;

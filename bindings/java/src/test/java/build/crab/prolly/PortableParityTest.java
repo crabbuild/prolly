@@ -589,10 +589,12 @@ class PortableParityTest {
                     try (var oldSnapshot = indexed.snapshot()) {
                         oldSnapshotId = oldSnapshot.id();
                     }
-                    assertThrows(ProllyBindingException.Internal.class, () -> indexed.replaceIndex(
+                    var resourceLimit = assertThrows(ProllyBindingException.Index.class, () -> indexed.replaceIndex(
                             bytes("by_value"), 2, "value-too-small-v2", IndexProjection.ALL,
                             SecondaryIndexLimits.defaults().withMaxTermBytes(3),
                             (key, value) -> List.of(new IndexEntry(value, null))));
+                    assertEquals("resource_limit", resourceLimit.getCode());
+                    assertEquals("never", resourceLimit.getRetryAdvice());
                     assertEquals(1, indexed.health().activeIndexes().get(0).generation());
                     var replacement = indexed.replaceIndex(
                             bytes("by_value"), 2, "value-v2", IndexProjection.ALL,

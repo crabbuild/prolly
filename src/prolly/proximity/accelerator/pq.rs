@@ -823,7 +823,7 @@ impl Manifest {
                 .ok_or_else(|| reader.invalid("PQ codebook length overflow"))?;
             if count
                 .checked_mul(4)
-                .map_or(true, |len| len > reader.remaining())
+                .is_none_or(|len| len > reader.remaining())
             {
                 return Err(reader.invalid("impossible PQ codebook length"));
             }

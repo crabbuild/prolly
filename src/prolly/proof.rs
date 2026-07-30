@@ -2352,7 +2352,7 @@ fn key_in_range(key: &[u8], start: &[u8], end: Option<&[u8]>) -> bool {
 }
 
 fn key_in_page_range(key: &[u8], after: Option<&[u8]>, end: Option<&[u8]>) -> bool {
-    after.map_or(true, |after| key > after)
+    after.is_none_or(|after| key > after)
         && match end {
             Some(end) => key < end,
             None => true,

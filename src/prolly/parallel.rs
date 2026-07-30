@@ -253,7 +253,10 @@ mod tests {
 
         let nearly_one_per_partition =
             ExecutionPolicy::from_config(&ParallelConfig::new(12, 1), 13, 13);
-        assert_eq!(nearly_one_per_partition.ranges(13).len(), 12);
+        assert_eq!(
+            nearly_one_per_partition.ranges(13).len(),
+            12.min(rayon::current_num_threads().max(1))
+        );
     }
 
     #[test]

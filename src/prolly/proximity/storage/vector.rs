@@ -47,7 +47,7 @@ impl ExternalVector {
         let dimensions = reader.bounded_usize(super::codec::MAX_OBJECT_ENTRIES)?;
         if dimensions
             .checked_mul(4)
-            .map_or(true, |len| len > reader.remaining())
+            .is_none_or(|len| len > reader.remaining())
         {
             return Err(reader.invalid("impossible vector length"));
         }

@@ -9,8 +9,8 @@ This crate implements `RemoteStoreBackend` for Redis and is intended for async
 
 ```toml
 [dependencies]
-prolly-map = "0.5.1"
-prolly-store-redis = "0.3.0"
+prolly-map = "0.6.0"
+prolly-store-redis = "0.4.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

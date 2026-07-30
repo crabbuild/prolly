@@ -291,7 +291,7 @@ RocksDB-like backends. Use async storage when reads or writes may wait on:
 Enable it:
 
 ```toml
-prolly-map = "0.4"
+prolly-map = "0.6.0"
 ```
 
 If you have a sync store:
@@ -308,7 +308,7 @@ async fn build_manager() {
 If you use Tokio and a blocking sync backend, prefer the Tokio adapter:
 
 ```toml
-prolly-map = { version = "0.4", features = ["tokio"] }
+prolly-map = { version = "0.6.0", features = ["tokio"] }
 ```
 
 Async is not automatically faster. It improves throughput when work is I/O

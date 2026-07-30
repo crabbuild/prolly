@@ -76,8 +76,8 @@ impl ProximityProofFilter {
         match self {
             Self::All => true,
             Self::KeyRange { start, end } => {
-                start.as_ref().map_or(true, |start| key >= start.as_slice())
-                    && end.as_ref().map_or(true, |end| key < end.as_slice())
+                start.as_ref().is_none_or(|start| key >= start.as_slice())
+                    && end.as_ref().is_none_or(|end| key < end.as_slice())
             }
             Self::Prefix(prefix) => key.starts_with(prefix),
             Self::EligibleKeys(keys) | Self::SecondaryEligible { keys, .. } => keys

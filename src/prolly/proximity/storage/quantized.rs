@@ -107,7 +107,7 @@ impl ScalarQuantized {
         let scale_count = reader.bounded_usize(MAX_OBJECT_ENTRIES)?;
         if scale_count
             .checked_mul(4)
-            .map_or(true, |len| len > reader.remaining())
+            .is_none_or(|len| len > reader.remaining())
         {
             return Err(reader.invalid("impossible scale length"));
         }

@@ -3,8 +3,8 @@ name = "prolly-map"
 description = "Content-addressed versioned map storage primitives."
 readme = "README.md"
 edition = "2021"
-rust-version = "1.81"
-version = "0.5.1"
+rust-version = "1.89"
+version = "0.6.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 homepage = "https://github.com/crabbuild/prolly"
@@ -19,6 +19,7 @@ keywords = [
 categories = ["data-structures", "database-implementations"]
 include = [
     "/Cargo.toml",
+    "/CHANGELOG.md",
     "/LICENSE",
     "/README.md",
     "benches/**",

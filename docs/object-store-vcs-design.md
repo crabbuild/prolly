@@ -146,7 +146,7 @@ Making it a direct optional dependency gives `prolly-map` access to:
 
 Important MSRV decision:
 
-- The workspace currently declares Rust 1.81.
+- The workspace currently declares Rust 1.89.
 - Newer `object_store` releases may require newer Rust.
 - The project must either align the direct dependency with the resolved SlateDB
   compatible version and verify MSRV, or deliberately raise MSRV when enabling

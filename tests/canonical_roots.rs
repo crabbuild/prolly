@@ -154,7 +154,7 @@ fn randomized_mixed_api_histories_match_bulk_for_every_policy() {
                 let random = next_random(&mut state);
                 let key_index = random as usize % 96;
                 let key = format!("key-{key_index:04}").into_bytes();
-                let mutation = if random % 5 == 0 {
+                let mutation = if random.is_multiple_of(5) {
                     expected.remove(&key);
                     Mutation::Delete { key }
                 } else {

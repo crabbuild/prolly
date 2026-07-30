@@ -9,11 +9,12 @@ content-addressed Prolly tree storage.
 ## Installation
 
 The AWS versions below match the adapter's SDK line:
+This dependency graph requires Rust 1.91.1 or newer.
 
 ```toml
 [dependencies]
-prolly-map = "0.5.1"
-prolly-store-dynamodb = "0.4.0"
+prolly-map = "0.6.0"
+prolly-store-dynamodb = "0.5.0"
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "=1.73.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -196,6 +196,7 @@ pub struct IndexedSourceView<'map, 'engine, S: IndexedStore> {
 pub struct SnapshotPinGuard<'map, 'engine, S: IndexedStore> {
     map: &'map IndexedMap<'engine, S>,
     pin_id: Vec<u8>,
+    released: bool,
 }
 
 impl<S: IndexedStore> SnapshotPinGuard<'_, '_, S> {
@@ -203,10 +204,10 @@ impl<S: IndexedStore> SnapshotPinGuard<'_, '_, S> {
         &self.pin_id
     }
 
-    pub fn release(self) -> Result<(), Error> {
+    pub fn release(mut self) -> Result<(), Error> {
         match self.map.release_snapshot_pin(&self.pin_id) {
             Ok(()) => {
-                std::mem::forget(self);
+                self.released = true;
                 Ok(())
             }
             Err(error) => Err(error),
@@ -216,7 +217,9 @@ impl<S: IndexedStore> SnapshotPinGuard<'_, '_, S> {
 
 impl<S: IndexedStore> Drop for SnapshotPinGuard<'_, '_, S> {
     fn drop(&mut self) {
-        let _ = self.map.release_snapshot_pin(&self.pin_id);
+        if !self.released {
+            let _ = self.map.release_snapshot_pin(&self.pin_id);
+        }
     }
 }
 
@@ -1246,6 +1249,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         Ok(SnapshotPinGuard {
             map: self,
             pin_id: pin_id.as_ref().to_vec(),
+            released: false,
         })
     }
 
