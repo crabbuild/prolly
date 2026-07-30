@@ -115,7 +115,7 @@ impl<'a, S: Store> WriteSession<'a, S> {
         let mut overlay = self
             .overlay
             .range::<[u8], _>((Bound::Included(start), Bound::Unbounded))
-            .take_while(|(key, _)| end.map_or(true, |end| key.as_slice() < end))
+            .take_while(|(key, _)| end.is_none_or(|end| key.as_slice() < end))
             .peekable();
         let mut visited = 0u64;
         let mut stopped = None;

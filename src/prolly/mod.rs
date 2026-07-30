@@ -565,7 +565,7 @@ impl NodeCache {
                 pinned,
             },
         );
-        let newly_pinned = pinned && previous.as_ref().map_or(true, |entry| !entry.pinned);
+        let newly_pinned = pinned && previous.as_ref().is_none_or(|entry| !entry.pinned);
         if let Some(previous) = previous {
             self.read_nodes = self
                 .read_nodes
@@ -614,7 +614,7 @@ impl NodeCache {
                 pinned,
             },
         );
-        let newly_pinned = pinned && previous.as_ref().map_or(true, |entry| !entry.pinned);
+        let newly_pinned = pinned && previous.as_ref().is_none_or(|entry| !entry.pinned);
         if let Some(previous) = previous {
             if previous.read.get().is_none() {
                 self.read_nodes = self.read_nodes.saturating_add(1);
@@ -1574,9 +1574,10 @@ impl<S: Store> Prolly<S> {
             .read()
             .map_or(true, |cache| cache.is_disabled())
             || node.is_empty()
-            || self.recent_leaf_misses.fetch_add(1, Ordering::Relaxed)
-                % RECENT_LEAF_MISS_SAMPLE_INTERVAL
-                != 0
+            || !self
+                .recent_leaf_misses
+                .fetch_add(1, Ordering::Relaxed)
+                .is_multiple_of(RECENT_LEAF_MISS_SAMPLE_INTERVAL)
         {
             return;
         }
@@ -7396,11 +7397,11 @@ where
 fn changed_span_is_valid(span: &ChangedSpan) -> bool {
     span.end
         .as_ref()
-        .map_or(true, |end| end.as_slice() > span.start.as_slice())
+        .is_none_or(|end| end.as_slice() > span.start.as_slice())
 }
 
 fn span_starts_before_or_at_end(start: &[u8], end: &Option<Vec<u8>>) -> bool {
-    end.as_ref().map_or(true, |end| start <= end.as_slice())
+    end.as_ref().is_none_or(|end| start <= end.as_slice())
 }
 
 fn max_span_end(left: Option<Vec<u8>>, right: Option<Vec<u8>>) -> Option<Vec<u8>> {

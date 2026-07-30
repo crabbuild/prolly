@@ -9,7 +9,8 @@ your application decides when to call `push()` or `pull()`.
 
 ## Requirements
 
-- Rust 1.89 or newer, matching the `prolly-map` hard-cutover release line.
+- Rust 1.90 or newer. The core `prolly-map` hard-cutover release line supports
+  Rust 1.89, while Turso's dependency graph sets the adapter's higher floor.
 - Tokio or another executor capable of polling Turso and prolly's async APIs.
 - The `turso-cloud-sync` feature only when Turso Cloud push/pull is needed.
 

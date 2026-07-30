@@ -73,7 +73,7 @@ struct Args {
 fn main() {
     let args = parse_args();
     assert!(
-        args.records >= CLUSTER_SIZE && args.records % CLUSTER_SIZE == 0,
+        args.records >= CLUSTER_SIZE && args.records.is_multiple_of(CLUSTER_SIZE),
         "records must be a positive multiple of {CLUSTER_SIZE}"
     );
 
@@ -332,7 +332,7 @@ fn mutation_position(workload: Workload, index: usize, records: usize, writes: u
         Workload::Append => records * 2 + index,
         Workload::Random => {
             let ordinal = index / 2;
-            if index % 2 == 0 {
+            if index.is_multiple_of(2) {
                 permute(ordinal, records, RANDOM_SEED ^ 0xa11c_e001) * 2
             } else {
                 permute(ordinal, records, RANDOM_SEED ^ 0x1a5e_2701) * 2 + 1
@@ -344,7 +344,7 @@ fn mutation_position(workload: Workload, index: usize, records: usize, writes: u
             let width = updates.max(inserts);
             let start = (records - width) / 2;
             let ordinal = index / 2;
-            if index % 2 == 0 {
+            if index.is_multiple_of(2) {
                 (start + ordinal) * 2
             } else {
                 (start + ordinal) * 2 + 1
@@ -389,7 +389,7 @@ fn mutation_read_target(
 ) -> (usize, u64) {
     match workload {
         Workload::Append => {
-            if index % 2 == 0 {
+            if index.is_multiple_of(2) {
                 let id = (index / 2) % records;
                 (id * 2, 0)
             } else {

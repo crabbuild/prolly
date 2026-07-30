@@ -446,22 +446,20 @@ fn budget_admissible(plan: &SearchPlan, request: &SearchRequest<'_>) -> bool {
             request
                 .budget
                 .max_nodes
-                .map_or(true, |limit| *expansion_target <= limit)
+                .is_none_or(|limit| *expansion_target <= limit)
                 && request
                     .budget
                     .max_distance_evaluations
-                    .map_or(true, |limit| {
-                        expansion_target.saturating_add(*rerank_target) <= limit
-                    })
+                    .is_none_or(|limit| expansion_target.saturating_add(*rerank_target) <= limit)
                 && request
                     .budget
                     .max_frontier_entries
-                    .map_or(true, |limit| request.k <= limit)
+                    .is_none_or(|limit| request.k <= limit)
         }
         SearchPlan::ProductQuantized { rerank_target, .. } => request
             .budget
             .max_distance_evaluations
-            .map_or(true, |limit| *rerank_target <= limit),
+            .is_none_or(|limit| *rerank_target <= limit),
         SearchPlan::Composite {
             base,
             delta_records,
@@ -476,11 +474,11 @@ fn budget_admissible(plan: &SearchPlan, request: &SearchRequest<'_>) -> bool {
                 && request
                     .budget
                     .max_nodes
-                    .map_or(true, |limit| node_work <= limit)
+                    .is_none_or(|limit| node_work <= limit)
                 && request
                     .budget
                     .max_distance_evaluations
-                    .map_or(true, |limit| distance_work <= limit)
+                    .is_none_or(|limit| distance_work <= limit)
         }
         SearchPlan::Native | SearchPlan::EligibleExact { .. } => true,
     }

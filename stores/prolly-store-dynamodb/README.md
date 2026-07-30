@@ -9,6 +9,7 @@ content-addressed Prolly tree storage.
 ## Installation
 
 The AWS versions below match the adapter's SDK line:
+This dependency graph requires Rust 1.91.1 or newer.
 
 ```toml
 [dependencies]

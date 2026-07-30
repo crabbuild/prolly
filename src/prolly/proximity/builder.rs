@@ -157,7 +157,7 @@ fn compute_path(
                 &records[id].vector,
                 &records[candidate].vector,
             );
-            if closest.map_or(true, |(best, best_distance)| {
+            if closest.is_none_or(|(best, best_distance)| {
                 distance
                     .total_cmp(&best_distance)
                     .then_with(|| records[candidate].key.cmp(&records[best].key))

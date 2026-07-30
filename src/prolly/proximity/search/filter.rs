@@ -63,7 +63,7 @@ impl<'a> PreparedEligibility<'a> {
         match self {
             Self::All => true,
             Self::Range { start, end } => {
-                start.map_or(true, |start| key >= start) && end.map_or(true, |end| key < end)
+                start.is_none_or(|start| key >= start) && end.is_none_or(|end| key < end)
             }
             Self::Prefix(prefix) => key.starts_with(prefix),
             Self::SortedKeys { keys, .. } => keys
@@ -76,12 +76,11 @@ impl<'a> PreparedEligibility<'a> {
         match self {
             Self::All => true,
             Self::Range { start, end } => {
-                start.map_or(true, |start| maximum >= start)
-                    && end.map_or(true, |end| minimum < end)
+                start.is_none_or(|start| maximum >= start) && end.is_none_or(|end| minimum < end)
             }
             Self::Prefix(prefix) => {
                 let end = prefix_end(prefix);
-                maximum >= *prefix && end.as_deref().map_or(true, |end| minimum < end)
+                maximum >= *prefix && end.as_deref().is_none_or(|end| minimum < end)
             }
             Self::SortedKeys { keys, .. } => {
                 let index = keys.partition_point(|key| key.as_slice() < minimum);

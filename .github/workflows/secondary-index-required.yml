@@ -61,22 +61,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        manifest:
-          - stores/prolly-store-cosmosdb/Cargo.toml
-          - stores/prolly-store-dynamodb/Cargo.toml
-          - stores/prolly-store-mysql/Cargo.toml
-          - stores/prolly-store-pglite/Cargo.toml
-          - stores/prolly-store-postgres/Cargo.toml
-          - stores/prolly-store-redb/Cargo.toml
-          - stores/prolly-store-redis/Cargo.toml
-          - stores/prolly-store-rocksdb/Cargo.toml
-          - stores/prolly-store-slatedb/Cargo.toml
-          - stores/prolly-store-spanner/Cargo.toml
-          - stores/prolly-store-sqlite/Cargo.toml
-          - stores/prolly-store-turso/Cargo.toml
+        include:
+          - manifest: stores/prolly-store-cosmosdb/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-dynamodb/Cargo.toml
+            toolchain: 1.91.1
+          - manifest: stores/prolly-store-mysql/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-pglite/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-postgres/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-redb/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-redis/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-rocksdb/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-slatedb/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-spanner/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-sqlite/Cargo.toml
+            toolchain: 1.89.0
+          - manifest: stores/prolly-store-turso/Cargo.toml
+            toolchain: 1.90.0
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: dtolnay/rust-toolchain@${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.manifest }}

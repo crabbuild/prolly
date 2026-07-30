@@ -1425,10 +1425,10 @@ where
     while !visitor.done {
         let base_entry = base
             .current()?
-            .filter(|(key, _)| end.map_or(true, |end| *key < end));
+            .filter(|(key, _)| end.is_none_or(|end| *key < end));
         let other_entry = other
             .current()?
-            .filter(|(key, _)| end.map_or(true, |end| *key < end));
+            .filter(|(key, _)| end.is_none_or(|end| *key < end));
         match (base_entry, other_entry) {
             (Some((base_key, base_value)), Some((other_key, other_value))) => {
                 match base_key.cmp(other_key) {
@@ -1576,10 +1576,10 @@ where
         let advance = {
             let base_entry = base
                 .current()?
-                .filter(|(key, _)| end.map_or(true, |end| *key < end));
+                .filter(|(key, _)| end.is_none_or(|end| *key < end));
             let other_entry = other
                 .current()?
-                .filter(|(key, _)| end.map_or(true, |end| *key < end));
+                .filter(|(key, _)| end.is_none_or(|end| *key < end));
             match (base_entry, other_entry) {
                 (Some((base_key, base_value)), Some((other_key, other_value))) => {
                     match base_key.cmp(other_key) {
@@ -2603,7 +2603,7 @@ where
             && self
                 .append_lineage
                 .as_ref()
-                .map_or(true, |changes| self.lineage_index >= changes.len())
+                .is_none_or(|changes| self.lineage_index >= changes.len())
         {
             return None;
         }
@@ -5998,7 +5998,7 @@ fn add_tree_segment<S: Store>(
     for index in first..stop {
         let leaf_start = leaves[index].first_key.as_slice();
         let leaf_end = leaves.get(index + 1).map(|leaf| leaf.first_key.as_slice());
-        let whole_leaf = start.map_or(true, |start| start <= leaf_start)
+        let whole_leaf = start.is_none_or(|start| start <= leaf_start)
             && match (end, leaf_end) {
                 (None, None) => true,
                 (Some(end), Some(leaf_end)) => leaf_end <= end,
@@ -6013,8 +6013,8 @@ fn add_tree_segment<S: Store>(
             return Err(Error::InvalidNode);
         }
         for (key, value) in leaf.keys.iter().zip(&leaf.vals) {
-            if start.map_or(true, |start| key.as_slice() >= start)
-                && end.map_or(true, |end| key.as_slice() < end)
+            if start.is_none_or(|start| key.as_slice() >= start)
+                && end.is_none_or(|end| key.as_slice() < end)
             {
                 builder.add(key.clone(), value.clone())?;
             }
@@ -7227,7 +7227,7 @@ fn key_is_after_tree<S: Store>(prolly: &Prolly<S>, key: &[u8], tree: &Tree) -> R
     Ok(prolly
         .last_entry(tree)?
         .as_ref()
-        .map_or(true, |(max_key, _)| key > max_key))
+        .is_none_or(|(max_key, _)| key > max_key))
 }
 
 /// Build a change map from a list of diffs.

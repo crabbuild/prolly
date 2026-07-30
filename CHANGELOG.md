@@ -19,7 +19,8 @@ dual publication, migration shims, or suffix-versioned secondary-index APIs.
 
 - Secondary indexes now use the canonical hard-cutover state architecture.
 - Indexed writes update cardinalities and canonical state through local deltas.
-- The minimum supported Rust version is now 1.89.
+- The minimum supported Rust version is now 1.89 for the core and most
+  adapters, 1.90 for Turso, and 1.91.1 for DynamoDB's pinned AWS graph.
 - `FileNodeStore`, memory, PGlite, redb, RocksDB, and SlateDB are explicitly
   verification-profile stores for indexed collections.
 - Store adapters depend on `prolly-map 0.6.0`.

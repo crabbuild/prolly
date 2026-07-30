@@ -855,7 +855,9 @@ fn bytes_hex(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(input: &str) -> Option<Vec<u8>> {
-    if input.len() % 2 != 0 || !input.as_bytes().iter().all(|byte| is_lower_hex_byte(*byte)) {
+    if !input.len().is_multiple_of(2)
+        || !input.as_bytes().iter().all(|byte| is_lower_hex_byte(*byte))
+    {
         return None;
     }
     input

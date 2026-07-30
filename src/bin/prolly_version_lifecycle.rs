@@ -108,7 +108,7 @@ fn parse_args() -> Args {
         density,
         locality,
     };
-    assert!(result.records >= 1_000 && result.records % 1_000 == 0);
+    assert!(result.records >= 1_000 && result.records.is_multiple_of(1_000));
     if result.scenario == Scenario::Publish {
         assert!(matches!(result.density, 1 | 30));
         assert!(result.locality != Locality::None);

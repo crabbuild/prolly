@@ -1741,10 +1741,10 @@ where
                         reason: "subtree count overflow".to_owned(),
                     }
                 })?;
-                if minimum.as_ref().map_or(true, |key| entry.min_key < *key) {
+                if minimum.as_ref().is_none_or(|key| entry.min_key < *key) {
                     minimum = Some(entry.min_key.clone());
                 }
-                if maximum.as_ref().map_or(true, |key| entry.max_key > *key) {
+                if maximum.as_ref().is_none_or(|key| entry.max_key > *key) {
                     maximum = Some(entry.max_key.clone());
                 }
                 points.extend(child_verified.points);

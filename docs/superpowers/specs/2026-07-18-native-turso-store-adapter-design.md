@@ -15,9 +15,10 @@ synchronize, or provide direct stateless access to a remote libSQL database.
 
 The initial adapter uses Turso `0.7` with default features disabled. Its own
 `turso-cloud-sync` feature enables `turso/sync`. Turso 0.7's required dependency
-graph originally set a Rust 1.88 floor. The 0.6 hard-cutover release line now
-declares Rust 1.89 for both the adapter and core `prolly-map` crate. The adapter
-must compile in both default and cloud-sync-enabled configurations.
+graph originally set a Rust 1.88 floor. The 0.6 hard-cutover release line
+declares Rust 1.90 for the adapter and Rust 1.89 for the core `prolly-map`
+crate. The adapter must compile in both default and cloud-sync-enabled
+configurations.
 
 ## Architecture
 

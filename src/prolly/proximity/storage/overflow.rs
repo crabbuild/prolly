@@ -87,10 +87,10 @@ pub(crate) fn summarize(
         let vector = entry.vector.inline()?;
         let distance = score(DistanceMetric::L2Squared, representative_vector, vector);
         radius = radius.max(euclidean_radius_up(distance, entry.covering_radius));
-        if min_key.as_ref().map_or(true, |key| entry.min_key < *key) {
+        if min_key.as_ref().is_none_or(|key| entry.min_key < *key) {
             min_key = Some(entry.min_key.clone());
         }
-        if max_key.as_ref().map_or(true, |key| entry.max_key > *key) {
+        if max_key.as_ref().is_none_or(|key| entry.max_key > *key) {
             max_key = Some(entry.max_key.clone());
         }
     }
