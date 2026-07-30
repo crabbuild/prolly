@@ -638,8 +638,8 @@ class PortableParityTest < Minitest::Test
         max_all_value_bytes: defaults.max_all_value_bytes,
         max_terms_per_record: defaults.max_terms_per_record,
         max_projected_bytes_per_record: defaults.max_projected_bytes_per_record,
-        max_derived_mutations_per_transaction: defaults.max_derived_mutations_per_transaction,
-        max_projected_bytes_per_transaction: defaults.max_projected_bytes_per_transaction,
+        max_derived_mutations_per_write: defaults.max_derived_mutations_per_write,
+        max_projected_bytes_per_write: defaults.max_projected_bytes_per_write,
         max_indexes: defaults.max_indexes,
         build_page_size: defaults.build_page_size,
         max_temporary_sort_bytes: defaults.max_temporary_sort_bytes,
@@ -649,12 +649,14 @@ class PortableParityTest < Minitest::Test
         max_write_retries: defaults.max_write_retries,
         max_build_retries: defaults.max_build_retries
       )
-      assert_raises(Prolly::ProllyBindingError::Internal) do
+      error = assert_raises(Prolly::ProllyBindingError::Index) do
         indexed.replace_index(
           'by_value'.b, 2, 'value-too-small-v2', Prolly::IndexProjectionRecord::ALL,
           ->(_key, value) { [[value, nil]] }, limits: too_small
         )
       end
+      assert_equal 'resource_limit', error.code
+      assert_equal 'never', error.retry_advice
       assert_equal 1, indexed.health.active_indexes.first.generation
       replacement = indexed.replace_index(
         'by_value'.b, 2, 'value-v2', Prolly::IndexProjectionRecord::ALL,

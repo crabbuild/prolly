@@ -23,8 +23,8 @@ export interface SecondaryIndexLimits {
   maxAllValueBytes: bigint;
   maxTermsPerRecord: bigint;
   maxProjectedBytesPerRecord: bigint;
-  maxDerivedMutationsPerTransaction: bigint;
-  maxProjectedBytesPerTransaction: bigint;
+  maxDerivedMutationsPerWrite: bigint;
+  maxProjectedBytesPerWrite: bigint;
   maxIndexes: bigint;
   buildPageSize: bigint;
   maxTemporarySortBytes: bigint;
@@ -42,8 +42,8 @@ export function defaultSecondaryIndexLimits(): SecondaryIndexLimits {
     maxAllValueBytes: 1024n * 1024n,
     maxTermsPerRecord: 1024n,
     maxProjectedBytesPerRecord: 1024n * 1024n,
-    maxDerivedMutationsPerTransaction: 100_000n,
-    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxDerivedMutationsPerWrite: 100_000n,
+    maxProjectedBytesPerWrite: 64n * 1024n * 1024n,
     maxIndexes: 32n,
     buildPageSize: 4096n,
     maxTemporarySortBytes: 256n * 1024n * 1024n,
@@ -66,7 +66,7 @@ function nativeSecondaryIndexLimits(value: SecondaryIndexLimits | undefined): Na
 
 export interface IndexedVersion {
   sourceVersion: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion: Uint8Array;
   indexCount: bigint;
 }
 
@@ -81,14 +81,13 @@ export interface IndexedUpdate {
 }
 
 export interface IndexedSnapshotId {
-  sourceVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  snapshot: Uint8Array;
 }
 
 export interface IndexBuildResult {
   sourceVersion: Uint8Array;
   indexVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  stateVersion: Uint8Array;
   generation: bigint;
   entries: bigint;
   attempts: bigint;
@@ -100,16 +99,18 @@ export interface ActiveIndexHealth {
   generation: bigint;
   fingerprint: Uint8Array;
   projection: IndexProjection;
-  indexMapId: Uint8Array;
   indexVersion: Uint8Array;
 }
 
 export interface IndexedMapHealth {
   sourceMapId: Uint8Array;
   sourceVersion?: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion?: Uint8Array;
   activeIndexes: ActiveIndexHealth[];
-  supportsTransactions: boolean;
+  productionProfile: boolean;
+  closureValid: boolean;
+  retainedSnapshots: bigint;
+  durablePins: bigint;
 }
 
 export interface IndexVerification {
@@ -132,9 +133,6 @@ export interface IndexedMapMetrics {
   physicalUpserts: bigint;
   physicalDeletes: bigint;
   unchangedEmissionsSkipped: bigint;
-  sourceNodesWritten: bigint;
-  indexNodesWritten: bigint;
-  catalogNodesWritten: bigint;
   retries: bigint;
   buildAttempts: bigint;
   verificationOutcomes: bigint;
@@ -146,8 +144,8 @@ export interface IndexedRetention {
   removedSourceVersions: Uint8Array[];
   retainedIndexVersions: Uint8Array[];
   removedIndexVersions: Uint8Array[];
-  removedCatalogVersions: Uint8Array[];
-  removedCheckpointRecords: bigint;
+  removedStateVersions: Uint8Array[];
+  removedSnapshotRecords: bigint;
   removedNamedRoots: Uint8Array[];
 }
 
@@ -181,7 +179,7 @@ interface NativeIndexRegistry {
 
 interface NativeIndexedVersion {
   sourceVersion: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion: Uint8Array;
   indexCount: string;
 }
 
@@ -192,14 +190,13 @@ interface NativeIndexedUpdate {
 }
 
 interface NativeIndexedSnapshotId {
-  sourceVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  snapshot: Uint8Array;
 }
 
 interface NativeIndexBuildResult {
   sourceVersion: Uint8Array;
   indexVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  stateVersion: Uint8Array;
   generation: string;
   entries: string;
   attempts: string;
@@ -260,9 +257,10 @@ interface NativeIndexedMap {
   snapshotAt(sourceVersion: Uint8Array): NativeIndexedSnapshot;
   snapshotById(id: NativeIndexedSnapshotId): NativeIndexedSnapshot;
   health(): {
-    sourceMapId: Uint8Array; sourceVersion?: Uint8Array; catalogVersion?: Uint8Array;
-    activeIndexes: { name: Uint8Array; generation: string; fingerprint: Uint8Array; projection: IndexProjection; indexMapId: Uint8Array; indexVersion: Uint8Array }[];
-    supportsTransactions: boolean;
+    sourceMapId: Uint8Array; sourceVersion?: Uint8Array; stateVersion?: Uint8Array;
+    activeIndexes: { name: Uint8Array; generation: string; fingerprint: Uint8Array; projection: IndexProjection; indexVersion: Uint8Array }[];
+    productionProfile: boolean; closureValid: boolean;
+    retainedSnapshots: string; durablePins: string;
   };
   metrics(): Record<keyof IndexedMapMetrics, string>;
   verifyIndex(name: Uint8Array, sourceVersion: Uint8Array): NativeIndexVerification;
@@ -282,7 +280,7 @@ interface NativeIndexedMap {
   keepLast(count: string): {
     retainedSourceVersions: Uint8Array[]; removedSourceVersions: Uint8Array[];
     retainedIndexVersions: Uint8Array[]; removedIndexVersions: Uint8Array[];
-    removedCatalogVersions: Uint8Array[]; removedCheckpointRecords: string;
+    removedStateVersions: Uint8Array[]; removedSnapshotRecords: string;
     removedNamedRoots: Uint8Array[];
   };
   planGc(): any;
@@ -321,7 +319,7 @@ interface NativeSecondaryIndex {
 function indexedVersion(value: NativeIndexedVersion): IndexedVersion {
   return {
     sourceVersion: value.sourceVersion,
-    catalogVersion: value.catalogVersion,
+    stateVersion: value.stateVersion,
     indexCount: BigInt(value.indexCount),
   };
 }
@@ -395,7 +393,7 @@ export class IndexedMap implements Disposable {
       const value = native.ensureIndex(name);
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
-        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        stateVersion: value.stateVersion, generation: BigInt(value.generation),
         entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
       };
     });
@@ -417,7 +415,7 @@ export class IndexedMap implements Disposable {
       );
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
-        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        stateVersion: value.stateVersion, generation: BigInt(value.generation),
         entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
       };
     });
@@ -432,17 +430,21 @@ export class IndexedMap implements Disposable {
   }
   snapshotById(id: IndexedSnapshotId, signal?: AbortSignal): Promise<IndexedSnapshot> {
     const native = this.#open();
-    const owned = { sourceVersion: ownedBytes(id.sourceVersion), catalogVersion: ownedBytes(id.catalogVersion) };
+    const owned = {
+      snapshot: ownedBytes(id.snapshot),
+    };
     return nativePromise(signal, () => new IndexedSnapshot(native.snapshotById(owned)));
   }
   health(): IndexedMapHealth {
     const value = this.#open().health();
     return {
       sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
-      catalogVersion: value.catalogVersion, supportsTransactions: value.supportsTransactions,
+      stateVersion: value.stateVersion, productionProfile: value.productionProfile,
+      closureValid: value.closureValid, retainedSnapshots: BigInt(value.retainedSnapshots),
+      durablePins: BigInt(value.durablePins),
       activeIndexes: value.activeIndexes.map((index) => ({
         name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,
-        projection: index.projection, indexMapId: index.indexMapId, indexVersion: index.indexVersion,
+        projection: index.projection, indexVersion: index.indexVersion,
       })),
     };
   }
@@ -476,8 +478,8 @@ export class IndexedMap implements Disposable {
       removedSourceVersions: value.removedSourceVersions,
       retainedIndexVersions: value.retainedIndexVersions,
       removedIndexVersions: value.removedIndexVersions,
-      removedCatalogVersions: value.removedCatalogVersions,
-      removedCheckpointRecords: BigInt(value.removedCheckpointRecords),
+      removedStateVersions: value.removedStateVersions,
+      removedSnapshotRecords: BigInt(value.removedSnapshotRecords),
       removedNamedRoots: value.removedNamedRoots,
     };
   }

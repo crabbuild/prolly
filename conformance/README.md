@@ -17,5 +17,5 @@ these cases as required before claiming compatibility with a tier:
 - logical diffs over Rust-generated tree roots
 - value and blob envelope decoding
 - manifest bytes for implementations that support named roots
-- secondary-index descriptor, control, checkpoint, hidden-map ID, physical
-  key/value, and source/index/catalog root fixtures for all projection modes
+- canonical indexed-collection root name, state/descriptor records, physical
+  key/value, and source/index/state roots for all projection modes

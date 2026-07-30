@@ -8,8 +8,8 @@ public record IndexedRetention(
         List<byte[]> removedSourceVersions,
         List<byte[]> retainedIndexVersions,
         List<byte[]> removedIndexVersions,
-        List<byte[]> removedCatalogVersions,
-        long removedCheckpointRecords,
+        List<byte[]> removedStateVersions,
+        long removedSnapshotRecords,
         List<byte[]> removedNamedRoots) {
     private static List<byte[]> copy(List<byte[]> values) {
         return values.stream().map(byte[]::clone).toList();
@@ -19,7 +19,7 @@ public record IndexedRetention(
         return new IndexedRetention(
                 copy(value.getRetainedSourceVersions()), copy(value.getRemovedSourceVersions()),
                 copy(value.getRetainedIndexVersions()), copy(value.getRemovedIndexVersions()),
-                copy(value.getRemovedCatalogVersions()), value.getRemovedCheckpointRecords(),
+                copy(value.getRemovedStateVersions()), value.getRemovedSnapshotRecords(),
                 copy(value.getRemovedNamedRoots()));
     }
 }

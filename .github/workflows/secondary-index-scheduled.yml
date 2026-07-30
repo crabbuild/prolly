@@ -1,0 +1,54 @@
+name: Secondary index scheduled
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extended:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        scale: [1000000, 10000000]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: >-
+          cargo test --release
+          --test secondary_index
+          --test secondary_index_concurrency
+          --test secondary_index_faults
+          --test secondary_index_fuzz_smoke
+          --test secondary_index_resources
+      - run: PROLLY_INDEX_BENCH_SAMPLES=7 PROLLY_INDEX_BENCH_SCALE=${{ matrix.scale }} ./scripts/run-secondary-index-bench.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: secondary-index-benchmark-${{ matrix.scale }}
+          path: |
+            target/secondary-index-bench.csv
+            target/secondary-index-bench.summary.json
+
+  address-sanitizer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+      - run: >-
+          RUSTFLAGS="-Zsanitizer=address"
+          cargo test -Zbuild-std --target x86_64-unknown-linux-gnu
+          --test secondary_index --test secondary_index_concurrency
+          --test secondary_index_faults --test secondary_index_fuzz_smoke
+          --test secondary_index_resources

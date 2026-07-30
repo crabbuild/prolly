@@ -3,12 +3,11 @@ use std::sync::Arc;
 
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
 use prolly::{
-    AuthenticatedProofEnvelope, BatchApplyResult,
-    BatchApplyStats, Cid, Config, Conflict, Diff, DiffPageProof, Encoding, Error, KeyProof,
-    MemStore, MultiKeyProof, Mutation, Node, OwnedProllyTransaction, ParallelConfig, Prolly,
-    RangeCursor, RangePageProof, RangeProof, Resolver, ReverseCursor, SnapshotBundle,
-    SnapshotBundleNode, SnapshotNamespace, StructuralDiffCursor, StructuralDiffMarker, Tree,
-    WriteStats,
+    AuthenticatedProofEnvelope, BatchApplyResult, BatchApplyStats, Cid, Config, Conflict, Diff,
+    DiffPageProof, Encoding, Error, KeyProof, MemStore, MultiKeyProof, Mutation, Node,
+    OwnedProllyTransaction, ParallelConfig, Prolly, RangeCursor, RangePageProof, RangeProof,
+    Resolver, ReverseCursor, SnapshotBundle, SnapshotBundleNode, SnapshotNamespace,
+    StructuralDiffCursor, StructuralDiffMarker, Tree, WriteStats,
 };
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -1915,6 +1914,21 @@ fn config_from_json(json: &str) -> Result<Config, JsValue> {
 
 fn js_error(error: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&error.to_string())
+}
+
+fn index_js_error(error: prolly::Error) -> JsValue {
+    let js_error = js_sys::Error::new(&error.to_string());
+    if let Some(code) = error.index_code() {
+        let value: JsValue = js_error.clone().into();
+        let _ = js_sys::Reflect::set(&value, &"code".into(), &code.as_str().into());
+        let _ = js_sys::Reflect::set(
+            &value,
+            &"retryAdvice".into(),
+            &error.retry_advice().as_str().into(),
+        );
+        return value;
+    }
+    js_error.into()
 }
 
 fn optional_bytes(value: Option<Vec<u8>>) -> JsValue {

@@ -2,11 +2,11 @@ package build.crab.prolly.javaapi;
 
 import build.crab.prolly.api.JavaIndexedVersion;
 
-public record IndexedVersion(byte[] sourceVersion, byte[] catalogVersion, long indexCount) {
+public record IndexedVersion(byte[] sourceVersion, byte[] stateVersion, long indexCount) {
     static IndexedVersion fromNative(JavaIndexedVersion value) {
         return new IndexedVersion(
                 value.getSourceVersion().clone(),
-                value.getCatalogVersion() == null ? null : value.getCatalogVersion().clone(),
+                value.getStateVersion().clone(),
                 value.getIndexCount());
     }
 }

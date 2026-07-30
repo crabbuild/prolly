@@ -488,14 +488,14 @@ data class JavaBlobGcSweep(
 
 data class JavaIndexedVersion(
     val sourceVersion: ByteArray,
-    val catalogVersion: ByteArray?,
+    val stateVersion: ByteArray,
     val indexCount: Long,
 )
 
 data class JavaIndexBuildResult(
     val sourceVersion: ByteArray,
     val indexVersion: ByteArray,
-    val catalogVersion: ByteArray,
+    val stateVersion: ByteArray,
     val generation: Long,
     val entries: Long,
     val attempts: Long,
@@ -508,8 +508,8 @@ data class JavaSecondaryIndexLimits(
     val maxAllValueBytes: Long,
     val maxTermsPerRecord: Long,
     val maxProjectedBytesPerRecord: Long,
-    val maxDerivedMutationsPerTransaction: Long,
-    val maxProjectedBytesPerTransaction: Long,
+    val maxDerivedMutationsPerWrite: Long,
+    val maxProjectedBytesPerWrite: Long,
     val maxIndexes: Long,
     val buildPageSize: Long,
     val maxTemporarySortBytes: Long,
@@ -527,8 +527,7 @@ data class JavaIndexedUpdate(
 )
 
 data class JavaIndexedSnapshotId(
-    val sourceVersion: ByteArray,
-    val catalogVersion: ByteArray,
+    val snapshot: ByteArray,
 )
 
 data class JavaActiveIndexHealth(
@@ -536,16 +535,18 @@ data class JavaActiveIndexHealth(
     val generation: Long,
     val fingerprint: ByteArray,
     val projection: String,
-    val indexMapId: ByteArray,
     val indexVersion: ByteArray,
 )
 
 data class JavaIndexedMapHealth(
     val sourceMapId: ByteArray,
     val sourceVersion: ByteArray?,
-    val catalogVersion: ByteArray?,
+    val stateVersion: ByteArray?,
     val activeIndexes: List<JavaActiveIndexHealth>,
-    val supportsTransactions: Boolean,
+    val productionProfile: Boolean,
+    val closureValid: Boolean,
+    val retainedSnapshots: Long,
+    val durablePins: Long,
 )
 
 data class JavaIndexVerification(
@@ -568,9 +569,6 @@ data class JavaIndexedMapMetrics(
     val physicalUpserts: Long,
     val physicalDeletes: Long,
     val unchangedEmissionsSkipped: Long,
-    val sourceNodesWritten: Long,
-    val indexNodesWritten: Long,
-    val catalogNodesWritten: Long,
     val retries: Long,
     val buildAttempts: Long,
     val verificationOutcomes: Long,
@@ -582,8 +580,8 @@ data class JavaIndexedRetention(
     val removedSourceVersions: List<ByteArray>,
     val retainedIndexVersions: List<ByteArray>,
     val removedIndexVersions: List<ByteArray>,
-    val removedCatalogVersions: List<ByteArray>,
-    val removedCheckpointRecords: Long,
+    val removedStateVersions: List<ByteArray>,
+    val removedSnapshotRecords: Long,
     val removedNamedRoots: List<ByteArray>,
 )
 
@@ -606,7 +604,7 @@ data class JavaIndexedSource(
 )
 
 private fun IndexedVersionRecord.toJava() = JavaIndexedVersion(
-    sourceVersion, catalogVersion, indexCount.toLong(),
+    sourceVersion, stateVersion, indexCount.toLong(),
 )
 
 private fun MapUpdateRecord.toJava() = JavaMapUpdate(
@@ -644,14 +642,14 @@ private fun build.crab.prolly.BlobGcSweepRecord.toJava() = JavaBlobGcSweep(
 )
 
 private fun IndexBuildResultRecord.toJava() = JavaIndexBuildResult(
-    sourceVersion, indexVersion, catalogVersion, generation.toLong(), entries.toLong(),
+    sourceVersion, indexVersion, stateVersion, generation.toLong(), entries.toLong(),
     attempts.toLong(), activated,
 )
 
 private fun SecondaryIndexLimitsRecord.toJava() = JavaSecondaryIndexLimits(
     maxTermBytes.toLong(), maxProjectionBytes.toLong(), maxAllValueBytes.toLong(),
     maxTermsPerRecord.toLong(), maxProjectedBytesPerRecord.toLong(),
-    maxDerivedMutationsPerTransaction.toLong(), maxProjectedBytesPerTransaction.toLong(),
+    maxDerivedMutationsPerWrite.toLong(), maxProjectedBytesPerWrite.toLong(),
     maxIndexes.toLong(), buildPageSize.toLong(), maxTemporarySortBytes.toLong(),
     maxBundleNodes.toLong(), maxBundleBytes.toLong(), maxVerificationEntries.toLong(),
     maxWriteRetries.toLong(), maxBuildRetries.toLong(),
@@ -661,17 +659,17 @@ private fun IndexedUpdateRecord.toJava() = JavaIndexedUpdate(
     kind.name.lowercase(), previousSourceVersion, current?.toJava(),
 )
 
-private fun IndexedSnapshotIdRecord.toJava() = JavaIndexedSnapshotId(sourceVersion, catalogVersion)
+private fun IndexedSnapshotIdRecord.toJava() = JavaIndexedSnapshotId(snapshot)
 
 private fun IndexedMapHealthRecord.toJava() = JavaIndexedMapHealth(
-    sourceMapId, sourceVersion, catalogVersion,
+    sourceMapId, sourceVersion, stateVersion,
     activeIndexes.map {
         JavaActiveIndexHealth(
             it.name, it.generation.toLong(), it.fingerprint, it.projection.name.lowercase(),
-            it.indexMapId, it.indexVersion,
+            it.indexVersion,
         )
     },
-    supportsTransactions,
+    productionProfile, closureValid, retainedSnapshots.toLong(), durablePins.toLong(),
 )
 
 private fun IndexVerificationRecord.toJava() = JavaIndexVerification(
@@ -682,14 +680,13 @@ private fun IndexVerificationRecord.toJava() = JavaIndexVerification(
 private fun IndexedMapMetricsRecord.toJava() = JavaIndexedMapMetrics(
     normalizedSourceMutations.toLong(), recordsExtracted.toLong(), termsEmitted.toLong(),
     projectedBytes.toLong(), physicalUpserts.toLong(), physicalDeletes.toLong(),
-    unchangedEmissionsSkipped.toLong(), sourceNodesWritten.toLong(), indexNodesWritten.toLong(),
-    catalogNodesWritten.toLong(), retries.toLong(), buildAttempts.toLong(),
+    unchangedEmissionsSkipped.toLong(), retries.toLong(), buildAttempts.toLong(),
     verificationOutcomes.toLong(), retainedRoots.toLong(),
 )
 
 private fun IndexedRetentionRecord.toJava() = JavaIndexedRetention(
     retainedSourceVersions, removedSourceVersions, retainedIndexVersions, removedIndexVersions,
-    removedCatalogVersions, removedCheckpointRecords.toLong(), removedNamedRoots,
+    removedStateVersions, removedSnapshotRecords.toLong(), removedNamedRoots,
 )
 
 private fun IndexMatchRecord.toJava() = JavaIndexMatch(term, primaryKey, projection)
@@ -1122,8 +1119,8 @@ object JavaPortableBridge {
         maxAllValueBytes: Long,
         maxTermsPerRecord: Long,
         maxProjectedBytesPerRecord: Long,
-        maxDerivedMutationsPerTransaction: Long,
-        maxProjectedBytesPerTransaction: Long,
+        maxDerivedMutationsPerWrite: Long,
+        maxProjectedBytesPerWrite: Long,
         maxIndexes: Long,
         buildPageSize: Long,
         maxTemporarySortBytes: Long,
@@ -1135,7 +1132,7 @@ object JavaPortableBridge {
     ) = SecondaryIndexLimitsRecord(
         maxTermBytes.toULong(), maxProjectionBytes.toULong(), maxAllValueBytes.toULong(),
         maxTermsPerRecord.toULong(), maxProjectedBytesPerRecord.toULong(),
-        maxDerivedMutationsPerTransaction.toULong(), maxProjectedBytesPerTransaction.toULong(),
+        maxDerivedMutationsPerWrite.toULong(), maxProjectedBytesPerWrite.toULong(),
         maxIndexes.toULong(), buildPageSize.toULong(), maxTemporarySortBytes.toULong(),
         maxBundleNodes.toULong(), maxBundleBytes.toULong(), maxVerificationEntries.toULong(),
         maxWriteRetries.toULong(), maxBuildRetries.toULong(),
@@ -1602,7 +1599,7 @@ object JavaPortableBridge {
 
     @JvmStatic
     fun snapshotById(map: IndexedMap, id: JavaIndexedSnapshotId): IndexedSnapshot =
-        map.snapshotById(IndexedSnapshotIdRecord(id.sourceVersion.copyOf(), id.catalogVersion.copyOf()))
+        map.snapshotById(IndexedSnapshotIdRecord(id.snapshot.copyOf()))
 
     @JvmStatic
     fun indexedHealth(map: IndexedMap): JavaIndexedMapHealth = map.health().toJava()

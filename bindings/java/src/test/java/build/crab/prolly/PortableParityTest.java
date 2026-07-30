@@ -651,7 +651,6 @@ class PortableParityTest {
                 indexed.ensureIndex(bytes("by_value"));
                 try (var firstSnapshot = indexed.snapshot()) {
                     var firstId = firstSnapshot.id();
-                    assertArrayEquals(first.sourceVersion(), firstId.sourceVersion());
                     var applied = indexed.applyIf(first.sourceVersion(), List.of(
                             IndexedMutation.upsert(bytes("u3"), bytes("blue"))));
                     assertEquals(IndexedUpdateKind.APPLIED, applied.kind());
@@ -661,8 +660,8 @@ class PortableParityTest {
                     assertEquals(IndexedUpdateKind.CONFLICT, conflict.kind());
                     try (var historical = indexed.snapshotAt(first.sourceVersion());
                          var reopened = indexed.snapshotById(firstId)) {
-                        assertArrayEquals(firstId.sourceVersion(), historical.id().sourceVersion());
-                        assertArrayEquals(firstId.catalogVersion(), reopened.id().catalogVersion());
+                        assertArrayEquals(firstId.snapshot(), historical.id().snapshot());
+                        assertArrayEquals(firstId.snapshot(), reopened.id().snapshot());
                     }
                 }
             }

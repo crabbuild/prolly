@@ -37,7 +37,7 @@ fn pglite_store_supports_strict_indexed_maps_when_enabled() {
         return;
     }
 
-    prolly_store_test::assert_indexed_map_contract(PgliteStore::open_in_memory().unwrap());
+    prolly_store_test::assert_verification_indexed_store(PgliteStore::open_in_memory().unwrap());
 }
 
 #[test]

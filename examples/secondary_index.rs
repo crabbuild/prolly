@@ -50,16 +50,17 @@ fn registry(status_generation: u64) -> Result<SecondaryIndexRegistry, Error> {
 fn main() -> Result<(), Error> {
     let engine = Prolly::new(Arc::new(MemStore::new()), Config::default());
 
-    // Indexes may be added after the source map is populated.
-    let raw_users = engine.versioned_map(b"users");
-    raw_users.put(b"user-1", b"active|Ada")?;
-    raw_users.put(b"user-2", b"invited|Grace")?;
+    // Initialize the canonical collection before loading data. Older managed
+    // layouts are intentionally rejected instead of migrated in place.
     let users = engine.indexed_map(b"users", registry(1)?)?;
+    users.put(b"user-1", b"active|Ada")?;
+    users.put(b"user-2", b"invited|Grace")?;
     users.ensure_index(b"by-status")?;
     users.ensure_index(b"by-status-name")?;
     users.ensure_index(b"by-status-all")?;
 
-    // Source and every active index advance in one strict transaction.
+    // Immutable source/index/state nodes are staged first. One collection-root
+    // CAS is the only visibility transition.
     users.edit(|edit| {
         edit.put(b"user-2", b"active|Grace");
         edit.put(b"user-3", b"active|Lin");
@@ -79,7 +80,7 @@ fn main() -> Result<(), Error> {
     );
     assert_eq!(snapshot.index(b"by-status")?.records(b"active")?.len(), 3);
     assert!(users
-        .verify_index(b"by-status", &snapshot.id().source_version)?
+        .verify_index(b"by-status", snapshot.source_version())?
         .is_valid());
 
     // A greater generation shadow-builds and atomically replaces the old one.

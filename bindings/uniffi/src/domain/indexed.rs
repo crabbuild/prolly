@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 use prolly::{
     ActiveIndexHealth, IndexProjection, IndexVerification, IndexedMapHealth,
     IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshotBundle,
-    IndexedSnapshotId, IndexedVersion, SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry,
-    SecondaryIndexError, SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage,
-    SecondaryIndexRegistry,
+    IndexedSnapshotId, IndexedStoreProfile, IndexedVersion,
+    SecondaryIndex, SecondaryIndexCursor, SecondaryIndexEntry, SecondaryIndexError,
+    SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexPage, SecondaryIndexRegistry,
 };
 
 use crate::{BindingEngine, GcPlanRecord, MutationRecord, ProllyBindingError, ProllyEngine};
@@ -51,8 +51,8 @@ pub struct SecondaryIndexLimitsRecord {
     pub max_all_value_bytes: u64,
     pub max_terms_per_record: u64,
     pub max_projected_bytes_per_record: u64,
-    pub max_derived_mutations_per_transaction: u64,
-    pub max_projected_bytes_per_transaction: u64,
+    pub max_derived_mutations_per_write: u64,
+    pub max_projected_bytes_per_write: u64,
     pub max_indexes: u64,
     pub build_page_size: u64,
     pub max_temporary_sort_bytes: u64,
@@ -71,9 +71,9 @@ impl From<SecondaryIndexLimits> for SecondaryIndexLimitsRecord {
             max_all_value_bytes: value.max_all_value_bytes as u64,
             max_terms_per_record: value.max_terms_per_record as u64,
             max_projected_bytes_per_record: value.max_projected_bytes_per_record as u64,
-            max_derived_mutations_per_transaction: value.max_derived_mutations_per_transaction
+            max_derived_mutations_per_write: value.max_derived_mutations_per_write
                 as u64,
-            max_projected_bytes_per_transaction: value.max_projected_bytes_per_transaction as u64,
+            max_projected_bytes_per_write: value.max_projected_bytes_per_write as u64,
             max_indexes: value.max_indexes as u64,
             build_page_size: value.build_page_size as u64,
             max_temporary_sort_bytes: value.max_temporary_sort_bytes as u64,
@@ -108,13 +108,13 @@ fn limits_from_record(
             value.max_projected_bytes_per_record,
             "max_projected_bytes_per_record",
         )?,
-        max_derived_mutations_per_transaction: usize_field(
-            value.max_derived_mutations_per_transaction,
-            "max_derived_mutations_per_transaction",
+        max_derived_mutations_per_write: usize_field(
+            value.max_derived_mutations_per_write,
+            "max_derived_mutations_per_write",
         )?,
-        max_projected_bytes_per_transaction: usize_field(
-            value.max_projected_bytes_per_transaction,
-            "max_projected_bytes_per_transaction",
+        max_projected_bytes_per_write: usize_field(
+            value.max_projected_bytes_per_write,
+            "max_projected_bytes_per_write",
         )?,
         max_indexes: usize_field(value.max_indexes, "max_indexes")?,
         build_page_size: usize_field(value.build_page_size, "build_page_size")?,
@@ -244,15 +244,13 @@ impl BindingIndexRegistry {
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct IndexedSnapshotIdRecord {
-    pub source_version: Vec<u8>,
-    pub catalog_version: Vec<u8>,
+    pub snapshot: Vec<u8>,
 }
 
 impl From<IndexedSnapshotId> for IndexedSnapshotIdRecord {
     fn from(value: IndexedSnapshotId) -> Self {
         Self {
-            source_version: value.source_version.into_cid().0.to_vec(),
-            catalog_version: value.catalog_version.into_cid().0.to_vec(),
+            snapshot: value.as_cid().as_bytes().to_vec(),
         }
     }
 }
@@ -260,16 +258,19 @@ impl From<IndexedSnapshotId> for IndexedSnapshotIdRecord {
 fn snapshot_id_from_record(
     value: &IndexedSnapshotIdRecord,
 ) -> Result<IndexedSnapshotId, ProllyBindingError> {
-    Ok(IndexedSnapshotId {
-        source_version: prolly::MapVersionId::from_bytes(&value.source_version)?,
-        catalog_version: prolly::MapVersionId::from_bytes(&value.catalog_version)?,
-    })
+    Ok(IndexedSnapshotId(prolly::Cid(
+        <[u8; 32]>::try_from(value.snapshot.as_slice()).map_err(|_| {
+            ProllyBindingError::InvalidArgument {
+                reason: "snapshot identifier must contain 32 bytes".to_string(),
+            }
+        })?,
+    )))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct IndexedVersionRecord {
     pub source_version: Vec<u8>,
-    pub catalog_version: Option<Vec<u8>>,
+    pub state_version: Vec<u8>,
     pub index_count: u64,
 }
 
@@ -277,9 +278,7 @@ impl From<IndexedVersion> for IndexedVersionRecord {
     fn from(value: IndexedVersion) -> Self {
         Self {
             source_version: value.source.id.into_cid().0.to_vec(),
-            catalog_version: value
-                .catalog
-                .map(|version| version.id.into_cid().0.to_vec()),
+            state_version: value.state.id.into_cid().0.to_vec(),
             index_count: value.indexes.len() as u64,
         }
     }
@@ -325,7 +324,7 @@ impl From<IndexedMapUpdate> for IndexedUpdateRecord {
 pub struct IndexBuildResultRecord {
     pub source_version: Vec<u8>,
     pub index_version: Vec<u8>,
-    pub catalog_version: Vec<u8>,
+    pub state_version: Vec<u8>,
     pub generation: u64,
     pub entries: u64,
     pub attempts: u64,
@@ -394,7 +393,6 @@ pub struct ActiveIndexHealthRecord {
     pub generation: u64,
     pub fingerprint: Vec<u8>,
     pub projection: IndexProjectionRecord,
-    pub index_map_id: Vec<u8>,
     pub index_version: Vec<u8>,
 }
 
@@ -405,7 +403,6 @@ impl From<ActiveIndexHealth> for ActiveIndexHealthRecord {
             generation: value.generation,
             fingerprint: value.fingerprint.as_bytes().to_vec(),
             projection: value.projection.into(),
-            index_map_id: value.index_map_id,
             index_version: value.index_version.into_cid().0.to_vec(),
         }
     }
@@ -415,9 +412,12 @@ impl From<ActiveIndexHealth> for ActiveIndexHealthRecord {
 pub struct IndexedMapHealthRecord {
     pub source_map_id: Vec<u8>,
     pub source_version: Option<Vec<u8>>,
-    pub catalog_version: Option<Vec<u8>>,
+    pub state_version: Option<Vec<u8>>,
     pub active_indexes: Vec<ActiveIndexHealthRecord>,
-    pub supports_transactions: bool,
+    pub production_profile: bool,
+    pub closure_valid: bool,
+    pub retained_snapshots: u64,
+    pub durable_pins: u64,
 }
 
 impl From<IndexedMapHealth> for IndexedMapHealthRecord {
@@ -427,11 +427,14 @@ impl From<IndexedMapHealth> for IndexedMapHealthRecord {
             source_version: value
                 .source_version
                 .map(|version| version.into_cid().0.to_vec()),
-            catalog_version: value
-                .catalog_version
+            state_version: value
+                .state_version
                 .map(|version| version.into_cid().0.to_vec()),
             active_indexes: value.active_indexes.into_iter().map(Into::into).collect(),
-            supports_transactions: value.supports_transactions,
+            production_profile: matches!(value.store_profile, IndexedStoreProfile::Production(_)),
+            closure_valid: value.closure_valid,
+            retained_snapshots: value.retained_snapshots as u64,
+            durable_pins: value.durable_pins as u64,
         }
     }
 }
@@ -476,9 +479,6 @@ pub struct IndexedMapMetricsRecord {
     pub physical_upserts: u64,
     pub physical_deletes: u64,
     pub unchanged_emissions_skipped: u64,
-    pub source_nodes_written: u64,
-    pub index_nodes_written: u64,
-    pub catalog_nodes_written: u64,
     pub retries: u64,
     pub build_attempts: u64,
     pub verification_outcomes: u64,
@@ -495,9 +495,6 @@ impl From<IndexedMapMetricsSnapshot> for IndexedMapMetricsRecord {
             physical_upserts: value.physical_upserts,
             physical_deletes: value.physical_deletes,
             unchanged_emissions_skipped: value.unchanged_emissions_skipped,
-            source_nodes_written: value.source_nodes_written,
-            index_nodes_written: value.index_nodes_written,
-            catalog_nodes_written: value.catalog_nodes_written,
             retries: value.retries,
             build_attempts: value.build_attempts,
             verification_outcomes: value.verification_outcomes,
@@ -515,9 +512,6 @@ impl IndexedMapMetricsRecord {
         self.physical_upserts += value.physical_upserts;
         self.physical_deletes += value.physical_deletes;
         self.unchanged_emissions_skipped += value.unchanged_emissions_skipped;
-        self.source_nodes_written += value.source_nodes_written;
-        self.index_nodes_written += value.index_nodes_written;
-        self.catalog_nodes_written += value.catalog_nodes_written;
         self.retries += value.retries;
         self.build_attempts += value.build_attempts;
         self.verification_outcomes += value.verification_outcomes;
@@ -531,8 +525,8 @@ pub struct IndexedRetentionRecord {
     pub removed_source_versions: Vec<Vec<u8>>,
     pub retained_index_versions: Vec<Vec<u8>>,
     pub removed_index_versions: Vec<Vec<u8>>,
-    pub removed_catalog_versions: Vec<Vec<u8>>,
-    pub removed_checkpoint_records: u64,
+    pub removed_state_versions: Vec<Vec<u8>>,
+    pub removed_snapshot_records: u64,
     pub removed_named_roots: Vec<Vec<u8>>,
 }
 
@@ -549,8 +543,8 @@ impl From<IndexedRetentionResult> for IndexedRetentionRecord {
             removed_source_versions: versions(value.removed_source_versions),
             retained_index_versions: versions(value.retained_index_versions),
             removed_index_versions: versions(value.removed_index_versions),
-            removed_catalog_versions: versions(value.removed_catalog_versions),
-            removed_checkpoint_records: value.removed_checkpoint_records as u64,
+            removed_state_versions: versions(value.removed_state_versions),
+            removed_snapshot_records: value.removed_snapshot_records as u64,
             removed_named_roots: value.removed_named_roots,
         }
     }
@@ -747,7 +741,7 @@ impl BindingIndexedMap {
             Ok(IndexBuildResultRecord {
                 source_version: result.source_version.into_cid().0.to_vec(),
                 index_version: result.index_version.into_cid().0.to_vec(),
-                catalog_version: result.catalog_version.into_cid().0.to_vec(),
+                state_version: result.state_version.into_cid().0.to_vec(),
                 generation: result.generation,
                 entries: result.entries as u64,
                 attempts: result.attempts as u64,
@@ -886,7 +880,7 @@ impl BindingIndexedMap {
             Ok(IndexBuildResultRecord {
                 source_version: result.source_version.into_cid().0.to_vec(),
                 index_version: result.index_version.into_cid().0.to_vec(),
-                catalog_version: result.catalog_version.into_cid().0.to_vec(),
+                state_version: result.state_version.into_cid().0.to_vec(),
                 generation: result.generation,
                 entries: result.entries as u64,
                 attempts: result.attempts as u64,

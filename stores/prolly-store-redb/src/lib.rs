@@ -14,9 +14,9 @@ use redb::{
 };
 
 use prolly::{
-    BatchOp, Cid, Error, ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRootManifest,
-    NodeStoreScan, RootCondition, RootManifest, RootWrite, Store, TransactionConflict,
-    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
+    BatchOp, Cid, Error, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestStoreScan,
+    ManifestUpdate, NamedRootManifest, NodeStoreScan, RootCondition, RootManifest, RootWrite, Store,
+    TransactionConflict, TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
 pub use redb::Durability;
@@ -1136,6 +1136,12 @@ impl TransactionalStore for RedbStore {
             nodes_written: node_writes.len(),
             roots_written: root_writes.len(),
         })
+    }
+}
+
+impl IndexedStore for RedbStore {
+    fn indexed_store_profile(&self) -> IndexedStoreProfile {
+        IndexedStoreProfile::Verification
     }
 }
 

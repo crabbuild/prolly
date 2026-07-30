@@ -2,17 +2,16 @@ package build.crab.prolly.javaapi;
 
 import build.crab.prolly.api.JavaIndexedSnapshotId;
 
-public record IndexedSnapshotId(byte[] sourceVersion, byte[] catalogVersion) {
+public record IndexedSnapshotId(byte[] snapshot) {
     public IndexedSnapshotId {
-        sourceVersion = sourceVersion.clone();
-        catalogVersion = catalogVersion.clone();
+        snapshot = snapshot.clone();
     }
 
     static IndexedSnapshotId fromNative(JavaIndexedSnapshotId value) {
-        return new IndexedSnapshotId(value.getSourceVersion(), value.getCatalogVersion());
+        return new IndexedSnapshotId(value.getSnapshot());
     }
 
     JavaIndexedSnapshotId toNative() {
-        return new JavaIndexedSnapshotId(sourceVersion.clone(), catalogVersion.clone());
+        return new JavaIndexedSnapshotId(snapshot.clone());
     }
 }

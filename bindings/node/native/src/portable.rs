@@ -354,7 +354,7 @@ pub struct NodePortableIndexExtractRequest {
 #[napi(object)]
 pub struct NodePortableIndexedVersion {
     pub source_version: Buffer,
-    pub catalog_version: Option<Buffer>,
+    pub state_version: Buffer,
     pub index_count: String,
 }
 
@@ -362,7 +362,7 @@ impl From<IndexedVersionRecord> for NodePortableIndexedVersion {
     fn from(value: IndexedVersionRecord) -> Self {
         Self {
             source_version: Buffer::from(value.source_version),
-            catalog_version: value.catalog_version.map(Buffer::from),
+            state_version: Buffer::from(value.state_version),
             index_count: value.index_count.to_string(),
         }
     }
@@ -370,15 +370,13 @@ impl From<IndexedVersionRecord> for NodePortableIndexedVersion {
 
 #[napi(object)]
 pub struct NodePortableIndexedSnapshotId {
-    pub source_version: Buffer,
-    pub catalog_version: Buffer,
+    pub snapshot: Buffer,
 }
 
 impl From<IndexedSnapshotIdRecord> for NodePortableIndexedSnapshotId {
     fn from(value: IndexedSnapshotIdRecord) -> Self {
         Self {
-            source_version: Buffer::from(value.source_version),
-            catalog_version: Buffer::from(value.catalog_version),
+            snapshot: Buffer::from(value.snapshot),
         }
     }
 }
@@ -386,8 +384,7 @@ impl From<IndexedSnapshotIdRecord> for NodePortableIndexedSnapshotId {
 impl From<NodePortableIndexedSnapshotId> for IndexedSnapshotIdRecord {
     fn from(value: NodePortableIndexedSnapshotId) -> Self {
         Self {
-            source_version: value.source_version.to_vec(),
-            catalog_version: value.catalog_version.to_vec(),
+            snapshot: value.snapshot.to_vec(),
         }
     }
 }
@@ -418,7 +415,7 @@ impl From<IndexedUpdateRecord> for NodePortableIndexedUpdate {
 pub struct NodePortableIndexBuildResult {
     pub source_version: Buffer,
     pub index_version: Buffer,
-    pub catalog_version: Buffer,
+    pub state_version: Buffer,
     pub generation: String,
     pub entries: String,
     pub attempts: String,
@@ -430,7 +427,7 @@ impl From<IndexBuildResultRecord> for NodePortableIndexBuildResult {
         Self {
             source_version: Buffer::from(value.source_version),
             index_version: Buffer::from(value.index_version),
-            catalog_version: Buffer::from(value.catalog_version),
+            state_version: Buffer::from(value.state_version),
             generation: value.generation.to_string(),
             entries: value.entries.to_string(),
             attempts: value.attempts.to_string(),
@@ -454,7 +451,6 @@ pub struct NodePortableActiveIndexHealth {
     pub generation: String,
     pub fingerprint: Buffer,
     pub projection: String,
-    pub index_map_id: Buffer,
     pub index_version: Buffer,
 }
 
@@ -465,7 +461,6 @@ impl From<ActiveIndexHealthRecord> for NodePortableActiveIndexHealth {
             generation: value.generation.to_string(),
             fingerprint: Buffer::from(value.fingerprint),
             projection: index_projection_name(value.projection),
-            index_map_id: Buffer::from(value.index_map_id),
             index_version: Buffer::from(value.index_version),
         }
     }
@@ -475,9 +470,12 @@ impl From<ActiveIndexHealthRecord> for NodePortableActiveIndexHealth {
 pub struct NodePortableIndexedMapHealth {
     pub source_map_id: Buffer,
     pub source_version: Option<Buffer>,
-    pub catalog_version: Option<Buffer>,
+    pub state_version: Option<Buffer>,
     pub active_indexes: Vec<NodePortableActiveIndexHealth>,
-    pub supports_transactions: bool,
+    pub production_profile: bool,
+    pub closure_valid: bool,
+    pub retained_snapshots: String,
+    pub durable_pins: String,
 }
 
 impl From<IndexedMapHealthRecord> for NodePortableIndexedMapHealth {
@@ -485,9 +483,12 @@ impl From<IndexedMapHealthRecord> for NodePortableIndexedMapHealth {
         Self {
             source_map_id: Buffer::from(value.source_map_id),
             source_version: value.source_version.map(Buffer::from),
-            catalog_version: value.catalog_version.map(Buffer::from),
+            state_version: value.state_version.map(Buffer::from),
             active_indexes: value.active_indexes.into_iter().map(Into::into).collect(),
-            supports_transactions: value.supports_transactions,
+            production_profile: value.production_profile,
+            closure_valid: value.closure_valid,
+            retained_snapshots: value.retained_snapshots.to_string(),
+            durable_pins: value.durable_pins.to_string(),
         }
     }
 }
@@ -530,9 +531,6 @@ pub struct NodePortableIndexedMapMetrics {
     pub physical_upserts: String,
     pub physical_deletes: String,
     pub unchanged_emissions_skipped: String,
-    pub source_nodes_written: String,
-    pub index_nodes_written: String,
-    pub catalog_nodes_written: String,
     pub retries: String,
     pub build_attempts: String,
     pub verification_outcomes: String,
@@ -549,9 +547,6 @@ impl From<IndexedMapMetricsRecord> for NodePortableIndexedMapMetrics {
             physical_upserts: value.physical_upserts.to_string(),
             physical_deletes: value.physical_deletes.to_string(),
             unchanged_emissions_skipped: value.unchanged_emissions_skipped.to_string(),
-            source_nodes_written: value.source_nodes_written.to_string(),
-            index_nodes_written: value.index_nodes_written.to_string(),
-            catalog_nodes_written: value.catalog_nodes_written.to_string(),
             retries: value.retries.to_string(),
             build_attempts: value.build_attempts.to_string(),
             verification_outcomes: value.verification_outcomes.to_string(),
@@ -566,8 +561,8 @@ pub struct NodePortableIndexedRetention {
     pub removed_source_versions: Vec<Buffer>,
     pub retained_index_versions: Vec<Buffer>,
     pub removed_index_versions: Vec<Buffer>,
-    pub removed_catalog_versions: Vec<Buffer>,
-    pub removed_checkpoint_records: String,
+    pub removed_state_versions: Vec<Buffer>,
+    pub removed_snapshot_records: String,
     pub removed_named_roots: Vec<Buffer>,
 }
 
@@ -579,8 +574,8 @@ impl From<IndexedRetentionRecord> for NodePortableIndexedRetention {
             removed_source_versions: buffers(value.removed_source_versions),
             retained_index_versions: buffers(value.retained_index_versions),
             removed_index_versions: buffers(value.removed_index_versions),
-            removed_catalog_versions: buffers(value.removed_catalog_versions),
-            removed_checkpoint_records: value.removed_checkpoint_records.to_string(),
+            removed_state_versions: buffers(value.removed_state_versions),
+            removed_snapshot_records: value.removed_snapshot_records.to_string(),
             removed_named_roots: buffers(value.removed_named_roots),
         }
     }
@@ -1612,8 +1607,8 @@ pub struct NodePortableSecondaryIndexLimits {
     pub max_all_value_bytes: String,
     pub max_terms_per_record: String,
     pub max_projected_bytes_per_record: String,
-    pub max_derived_mutations_per_transaction: String,
-    pub max_projected_bytes_per_transaction: String,
+    pub max_derived_mutations_per_write: String,
+    pub max_projected_bytes_per_write: String,
     pub max_indexes: String,
     pub build_page_size: String,
     pub max_temporary_sort_bytes: String,
@@ -1637,13 +1632,13 @@ impl TryFrom<NodePortableSecondaryIndexLimits> for SecondaryIndexLimitsRecord {
                 value.max_projected_bytes_per_record,
                 "maxProjectedBytesPerRecord",
             )?,
-            max_derived_mutations_per_transaction: parse_u64(
-                value.max_derived_mutations_per_transaction,
-                "maxDerivedMutationsPerTransaction",
+            max_derived_mutations_per_write: parse_u64(
+                value.max_derived_mutations_per_write,
+                "maxDerivedMutationsPerWrite",
             )?,
-            max_projected_bytes_per_transaction: parse_u64(
-                value.max_projected_bytes_per_transaction,
-                "maxProjectedBytesPerTransaction",
+            max_projected_bytes_per_write: parse_u64(
+                value.max_projected_bytes_per_write,
+                "maxProjectedBytesPerWrite",
             )?,
             max_indexes: parse_u64(value.max_indexes, "maxIndexes")?,
             build_page_size: parse_u64(value.build_page_size, "buildPageSize")?,

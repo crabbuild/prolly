@@ -685,7 +685,6 @@ test("indexed maps expose batch CAS and historical snapshot lifecycle", async ()
     await indexed.ensureIndex(bytes("by_value"));
     const firstSnapshot = await indexed.snapshot();
     const firstSnapshotId = firstSnapshot.id();
-    assert.deepEqual(firstSnapshotId.sourceVersion, first.sourceVersion);
 
     const applied = await indexed.applyIf(first.sourceVersion, [
       { kind: "upsert", key: bytes("u3"), value: bytes("blue") },
@@ -698,7 +697,7 @@ test("indexed maps expose batch CAS and historical snapshot lifecycle", async ()
     assert.equal(conflict.kind, "conflict");
 
     const historical = await indexed.snapshotAt(first.sourceVersion);
-    assert.deepEqual(historical.id().sourceVersion, firstSnapshotId.sourceVersion);
+    assert.deepEqual(historical.id(), firstSnapshotId);
     const reopened = await indexed.snapshotById(firstSnapshotId);
     assert.deepEqual(reopened.id(), firstSnapshotId);
   } finally {

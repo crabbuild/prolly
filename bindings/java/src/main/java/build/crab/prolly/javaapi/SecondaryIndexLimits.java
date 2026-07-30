@@ -10,8 +10,8 @@ public record SecondaryIndexLimits(
         long maxAllValueBytes,
         long maxTermsPerRecord,
         long maxProjectedBytesPerRecord,
-        long maxDerivedMutationsPerTransaction,
-        long maxProjectedBytesPerTransaction,
+        long maxDerivedMutationsPerWrite,
+        long maxProjectedBytesPerWrite,
         long maxIndexes,
         long buildPageSize,
         long maxTemporarySortBytes,
@@ -28,8 +28,8 @@ public record SecondaryIndexLimits(
     public SecondaryIndexLimits withMaxTermBytes(long value) {
         return new SecondaryIndexLimits(
                 value, maxProjectionBytes, maxAllValueBytes, maxTermsPerRecord,
-                maxProjectedBytesPerRecord, maxDerivedMutationsPerTransaction,
-                maxProjectedBytesPerTransaction, maxIndexes, buildPageSize,
+                maxProjectedBytesPerRecord, maxDerivedMutationsPerWrite,
+                maxProjectedBytesPerWrite, maxIndexes, buildPageSize,
                 maxTemporarySortBytes, maxBundleNodes, maxBundleBytes,
                 maxVerificationEntries, maxWriteRetries, maxBuildRetries);
     }
@@ -39,8 +39,8 @@ public record SecondaryIndexLimits(
                 value.getMaxTermBytes(), value.getMaxProjectionBytes(),
                 value.getMaxAllValueBytes(), value.getMaxTermsPerRecord(),
                 value.getMaxProjectedBytesPerRecord(),
-                value.getMaxDerivedMutationsPerTransaction(),
-                value.getMaxProjectedBytesPerTransaction(), value.getMaxIndexes(),
+                value.getMaxDerivedMutationsPerWrite(),
+                value.getMaxProjectedBytesPerWrite(), value.getMaxIndexes(),
                 value.getBuildPageSize(), value.getMaxTemporarySortBytes(),
                 value.getMaxBundleNodes(), value.getMaxBundleBytes(),
                 value.getMaxVerificationEntries(), value.getMaxWriteRetries(),
@@ -50,8 +50,8 @@ public record SecondaryIndexLimits(
     SecondaryIndexLimitsRecord toNative() {
         return JavaPortableBridge.secondaryIndexLimits(
                 maxTermBytes, maxProjectionBytes, maxAllValueBytes, maxTermsPerRecord,
-                maxProjectedBytesPerRecord, maxDerivedMutationsPerTransaction,
-                maxProjectedBytesPerTransaction, maxIndexes, buildPageSize,
+                maxProjectedBytesPerRecord, maxDerivedMutationsPerWrite,
+                maxProjectedBytesPerWrite, maxIndexes, buildPageSize,
                 maxTemporarySortBytes, maxBundleNodes, maxBundleBytes,
                 maxVerificationEntries, maxWriteRetries, maxBuildRetries);
     }

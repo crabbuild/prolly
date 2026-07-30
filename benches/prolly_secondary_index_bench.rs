@@ -8,26 +8,26 @@ use std::time::Instant;
 fn main() {
     let scale = env_usize("PROLLY_INDEX_BENCH_SCALE", 10_000).max(100);
     let batch = env_usize("PROLLY_INDEX_BENCH_BATCH", 256).clamp(1, scale);
-    println!("operation,scale,batch,total_ms,items_per_sec,verified");
+    println!("operation,scale,work_items,total_ms,items_per_sec,verified");
 
     let engine = Arc::new(Prolly::new(Arc::new(MemStore::new()), Config::default()));
-    let raw = engine.versioned_map(b"users");
+    let indexed = engine.indexed_map(b"users", registry()).unwrap();
     let start = Instant::now();
-    raw.edit(|edit| {
-        for id in 0..scale {
-            edit.put(key(id), value(id, "name"));
-        }
-    })
-    .unwrap();
+    indexed
+        .edit(|edit| {
+            for id in 0..scale {
+                edit.put(key(id), value(id, "name"));
+            }
+        })
+        .unwrap();
     row(
         "source_build",
         scale,
-        batch,
+        scale,
         start,
-        raw.get(&key(scale - 1)).unwrap().is_some(),
+        indexed.get(&key(scale - 1)).unwrap().is_some(),
     );
 
-    let indexed = engine.indexed_map(b"users", registry()).unwrap();
     let start = Instant::now();
     indexed.ensure_index(b"keys").unwrap();
     indexed.ensure_index(b"include").unwrap();
@@ -35,7 +35,7 @@ fn main() {
     row(
         "index_build_all_projections",
         scale,
-        batch,
+        scale.saturating_mul(3),
         start,
         indexed.health().unwrap().active_indexes.len() == 3,
     );
@@ -127,7 +127,7 @@ fn main() {
     let start = Instant::now();
     let verification_snapshot = indexed.snapshot().unwrap();
     let verifications = indexed
-        .verify_all(&verification_snapshot.id().source_version)
+        .verify_all(verification_snapshot.source_version())
         .unwrap();
     let verified = verifications
         .iter()
@@ -135,7 +135,13 @@ fn main() {
     if !verified {
         eprintln!("verification mismatch: {verifications:#?}");
     }
-    row("verify", scale, 3, start, verified);
+    row(
+        "verify",
+        scale,
+        scale.saturating_mul(verifications.len()),
+        start,
+        verified,
+    );
 
     let start = Instant::now();
     let bundle = indexed.export_current().unwrap();
@@ -226,13 +232,13 @@ fn env_usize(name: &str, default: usize) -> usize {
         .unwrap_or(default)
 }
 
-fn row(operation: &str, scale: usize, batch: usize, start: Instant, verified: bool) {
+fn row(operation: &str, scale: usize, work_items: usize, start: Instant, verified: bool) {
     let elapsed = start.elapsed();
     let seconds = elapsed.as_secs_f64().max(f64::EPSILON);
     println!(
-        "{operation},{scale},{batch},{:.3},{:.0},{verified}",
+        "{operation},{scale},{work_items},{:.3},{:.0},{verified}",
         elapsed.as_secs_f64() * 1000.0,
-        batch as f64 / seconds
+        work_items as f64 / seconds
     );
     assert!(verified, "benchmark verification failed for {operation}");
 }

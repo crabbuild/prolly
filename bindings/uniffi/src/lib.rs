@@ -4,14 +4,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use prolly::{
-    self, AuthenticatedProofBundleVerification,
-    AuthenticatedProofEnvelope, AuthenticatedProofEnvelopeVerification, BatchApplyResult,
-    BatchApplyStats, BatchOp, BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobRef, BlobStore,
-    BlobStoreScan, ChangedSpan, ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow,
-    DeletePolicy, Diff, DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding,
-    FileBlobStore, FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof,
-    KeyProofVerification, LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate,
-    MemBlobStore, MemStore, MergeFallbackReason, MergeFastPath, MergePolicyFn,
+    self, AuthenticatedProofBundleVerification, AuthenticatedProofEnvelope,
+    AuthenticatedProofEnvelopeVerification, BatchApplyResult, BatchApplyStats, BatchOp, BlobGcPlan,
+    BlobGcReachability, BlobGcSweep, BlobRef, BlobStore, BlobStoreScan, ChangedSpan,
+    ChangedSpanHint, Cid, Config, Conflict, CrdtConfig, CursorWindow, DeletePolicy, Diff,
+    DiffPageProof, DiffPageProofVerification, DiffTraversalStats, Encoding, FileBlobStore,
+    FileNodeStore, GcPlan, GcReachability, GcSweep, KeyBuilder, KeyProof, KeyProofVerification,
+    LargeValueConfig, ManifestStore, ManifestStoreScan, ManifestUpdate, MemBlobStore, MemStore,
+    MergeFallbackReason, MergeFastPath, MergePolicyFn,
     MergePolicyRegistry as CoreMergePolicyRegistry, MergeResolutionKind as CoreMergeResolutionKind,
     MergeReuseReason, MergeTrace, MergeTraceEvent, MergeTraceStage, MissingNodeCopy,
     MissingNodePlan, MultiKeyProof, MultiKeyProofVerification, MultiValueSet, Mutation,
@@ -1360,11 +1360,24 @@ pub enum ProllyBindingError {
     #[error("{reason}")]
     Serialization { reason: String },
     #[error("{reason}")]
+    Index {
+        code: String,
+        retry_advice: String,
+        reason: String,
+    },
+    #[error("{reason}")]
     Internal { reason: String },
 }
 
 impl From<prolly::Error> for ProllyBindingError {
     fn from(error: prolly::Error) -> Self {
+        if let Some(code) = error.index_code() {
+            return Self::Index {
+                code: code.as_str().to_string(),
+                retry_advice: error.retry_advice().as_str().to_string(),
+                reason: error.to_string(),
+            };
+        }
         match error {
             prolly::Error::NotFound(cid) => Self::NotFound {
                 reason: format!("node not found: {}", hex_bytes(cid.as_bytes())),
@@ -10356,6 +10369,25 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(path.with_extension("db-wal"));
         let _ = std::fs::remove_file(path.with_extension("db-shm"));
+    }
+
+    #[test]
+    fn secondary_index_errors_keep_portable_code_and_retry_advice() {
+        let converted = ProllyBindingError::from(prolly::Error::IndexResourceLimitExceeded {
+            resource: "query_returned_bytes",
+            limit: 4,
+            actual: 5,
+        });
+        assert!(matches!(
+            converted,
+            ProllyBindingError::Index {
+                code,
+                retry_advice,
+                reason,
+            } if code == "resource_limit"
+                && retry_advice == "never"
+                && !reason.contains("primary")
+        ));
     }
 
     fn small_config() -> ConfigRecord {

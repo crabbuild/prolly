@@ -294,7 +294,9 @@ pub use prolly::diff::{
 pub use prolly::encoding::Encoding;
 pub use prolly::engine::execution::ExecutionConfig;
 pub use prolly::engine::ProllyEngine;
-pub use prolly::error::{resolver, Conflict, Diff, Error, Mutation, Resolution, Resolver};
+pub use prolly::error::{
+    resolver, Conflict, Diff, Error, IndexErrorCode, Mutation, Resolution, Resolver, RetryAdvice,
+};
 pub use prolly::format::{
     BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, HashAlgorithm, NodeLayoutSpec,
     TreeFormat,
@@ -367,23 +369,24 @@ pub use prolly::remote::{
     RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 pub use prolly::secondary_index::{
-    catalog_checkpoint_key, catalog_checkpoints_prefix, catalog_current_key,
-    catalog_descriptor_key, catalog_format_key, catalog_map_id, catalog_retired_key,
-    control_record_key, control_root_name, decode_physical_index_key,
-    decode_physical_index_key_ref, descriptor_fingerprint, index_map_id, physical_index_key,
-    term_bounds_exact, term_bounds_prefix, term_bounds_range, ActiveIndexControl,
-    ActiveIndexHealth, DecodedPhysicalIndexKey, DecodedPhysicalIndexKeyRef, IndexBuildResult,
-    IndexCheckpoint, IndexControl, IndexProjection, IndexValue, IndexValueRef, IndexVerification,
-    IndexedHeadRecord, IndexedMap, IndexedMapEditor, IndexedMapHealth, IndexedMapMetricsSnapshot,
+    decode_physical_index_key, decode_physical_index_key_ref, indexed_collection_root_name,
+    physical_index_key, term_bounds_exact, term_bounds_prefix, term_bounds_range,
+    ActiveIndexHealth, CollectionIndexPolicy, DecodedPhysicalIndexKey, DecodedPhysicalIndexKeyRef,
+    IndexBuildResult, IndexDescriptor, IndexProjection, IndexSemanticLimits, IndexSnapshotRef,
+    IndexValue, IndexValueRef, IndexVerification, IndexedCollectionState, IndexedCoordinationScope,
+    IndexedGcSafety, IndexedMap, IndexedMapEditor, IndexedMapHealth, IndexedMapMetricsSnapshot,
     IndexedMapUpdate, IndexedRetentionResult, IndexedSnapshot, IndexedSnapshotBundle,
     IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary, IndexedSnapshotBundleVerification,
-    IndexedSnapshotId, IndexedSourceRecord, IndexedSourceRecordRef, IndexedVersion,
-    ProjectedIndexEntry, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor,
-    SecondaryIndexDescriptor, SecondaryIndexDirection, SecondaryIndexEntry, SecondaryIndexEntryRef,
-    SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexMatch,
-    SecondaryIndexMatchRef, SecondaryIndexPage, SecondaryIndexRegistry, SecondaryIndexSnapshot,
-    StreamingSecondaryIndexExtractor, TermBounds, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION,
-    INDEX_PHYSICAL_LAYOUT_VERSION, SECONDARY_INDEX_FORMAT_VERSION,
+    IndexedSnapshotId, IndexedSnapshotRecord, IndexedSourceRecord, IndexedSourceRecordRef,
+    IndexedStore, IndexedStoreProfile, IndexedVersion, IndexedWriteVisibility, MaintenanceBudget,
+    MutationBudget, ProductionIndexedStoreCapabilities, ProjectedIndexEntry, QueryBudget,
+    SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor, SecondaryIndexDirection,
+    SecondaryIndexEntry, SecondaryIndexEntryRef, SecondaryIndexError, SecondaryIndexExtractor,
+    SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexMatchRef, SecondaryIndexPage,
+    SecondaryIndexQuery, SecondaryIndexRegistry, SecondaryIndexSnapshot, SnapshotPin,
+    SnapshotPinGuard, SourceSnapshotRef, StreamingSecondaryIndexExtractor, TermBounds,
+    TransferBudget, INDEXED_COLLECTION_FORMAT, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION,
+    INDEX_PHYSICAL_LAYOUT_VERSION,
 };
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,

@@ -671,7 +671,7 @@ IndexProjectionMismatch { name, mode, primary_key }
 ConflictingIndexProjection { name, primary_key, term }
 IndexBuildConflictLimitExceeded { name, attempts }
 IndexUnavailableAtVersion { name, source_version }
-IndexCheckpointMismatch { name, source_version, reason }
+IndexSnapshotMismatch { name, source_version, reason }
 IndexCursorVersionMismatch { expected, actual }
 IndexResourceLimitExceeded { resource, limit, actual }
 InvalidIndexedSnapshotBundle { reason }

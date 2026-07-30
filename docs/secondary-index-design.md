@@ -1,35 +1,60 @@
 # IndexedMap Secondary Indexes
 
-`IndexedMap` is the strict synchronous secondary-index layer for a
-`VersionedMap`. It is available in the Rust core API and supports non-unique,
-sparse, multi-valued indexes with `KeysOnly`, `Include`, and `All` projections.
+`IndexedMap` is the synchronous secondary-index coordinator for one
+authoritative ordered collection. It supports sparse, non-unique and
+multi-valued indexes with `KeysOnly`, `Include`, and `All` projections.
 
-The source map remains authoritative. Each active index is a hidden immutable
-prolly tree, and a versioned catalog associates one exact source version with
-the exact index versions derived from it.
+This document describes the only supported persisted layout. There is no
+compatibility reader or suffix-named replacement format. A deployment using an
+older indexed layout must rebuild or import into an empty destination and cut
+over.
 
-## Consistency model
+## Atomic state model
 
-Source changes, index changes, catalog checkpoints, immutable version roots,
-and mutable heads commit in one `TransactionalStore` transaction. A successful
-write exposes all of them; a conflict or extractor error exposes none.
+One named root owns the complete visible collection state:
 
-Reads begin by pinning one catalog version. The resulting `IndexedSnapshot`
-then opens only the source and index versions named by that catalog. Concurrent
-writes cannot produce a torn source/index read.
+```text
+\0prolly/indexed-collection/<hex-source-map-id>/state
+```
 
-Once an index is active, head-changing raw `VersionedMap` operations return
-`Error::IndexesRequireIndexedMap`. This includes ordinary writes, rebuilds,
-imports, restores, rollbacks, merge publication, multi-map publication, and raw
-version pruning. Read-only access remains available. Operations without an
-index-aware implementation return `IndexOperationUnsupported`.
+The immutable tree selected by that root contains the source ID, policy,
+current snapshot record, retained snapshot records, descriptors, active and
+retired generations, and durable pins. Each snapshot record names one exact
+source tree and the exact index trees derived from it.
 
-Strict indexing requires a backend with real `TransactionalStore` support.
+A mutation or maintenance operation:
+
+1. loads that one state root;
+2. derives immutable source, index, snapshot, and state objects;
+3. writes every immutable node;
+4. confirms that every candidate root is readable;
+5. performs one compare-and-swap of the collection root.
+
+Only the last step changes visibility. Readers therefore observe the complete
+old state or the complete new state, never a mix. Conflicts reload the entire
+state and retry under a finite operation budget.
+
+Raw head-changing `VersionedMap` operations are fenced once a canonical
+indexed-collection root exists. Reads remain possible, while mutations must go
+through `IndexedMap`.
+
+## Store profiles
+
+`IndexedStoreProfile::Verification` is for correctness tests and local
+experiments. `MemStore`, `FileNodeStore`, PGlite, redb, RocksDB, and SlateDB
+deliberately have this profile; it is not a production durability claim.
+
+`IndexedStoreProfile::Production` is accepted only when an adapter declares
+and validates cross-handle coordination, immutable-write visibility, durable
+acknowledgement, and a GC-safety mechanism. The file-backed SQLite adapter is
+the currently qualified production adapter when durable synchronous writes are
+enabled. Opening a production coordinator on a verification store fails
+closed.
 
 ## Runtime definitions
 
-Definitions use deterministic Rust callbacks. An extractor receives the
-primary key and exact stored source bytes and emits zero or more terms:
+An extractor receives the primary key and exact stored source bytes and emits
+zero or more entries:
 
 ```rust
 use prolly::{SecondaryIndex, SecondaryIndexRegistry};
@@ -37,7 +62,7 @@ use prolly::{SecondaryIndex, SecondaryIndexRegistry};
 let by_tag = SecondaryIndex::non_unique(
     "by-tag",
     1,
-    "app.users.by-tag/v1",
+    "app.users.by-tag/1",
     |_primary_key, value| {
         Ok(value
             .split(|byte| *byte == b',')
@@ -46,152 +71,82 @@ let by_tag = SecondaryIndex::non_unique(
             .collect())
     },
 )?;
-
 let registry = SecondaryIndexRegistry::new().register(by_tag)?;
 # Ok::<(), prolly::Error>(())
 ```
 
-Zero terms make an index sparse. Multiple terms support fields such as tags.
-Exact duplicate emissions are deduplicated. Conflicting projected values for
-one physical `(term, primary_key)` entry are rejected.
+The descriptor fingerprint commits the source ID, index name, generation,
+extractor identity, projection, per-record semantic limits, and physical
+layout. Callback code is not serialized. Every process must register the exact
+definition needed by the snapshot it opens, including retained generations.
+Extractors must be deterministic, side-effect free, and retry safe.
 
-The extractor ID and generation are persisted as semantic identity. Callback
-code is not serialized. Every process opening an active index must register an
-exact matching definition.
+## Bounded operation model
 
-Extractors must be deterministic, side-effect free, and retry safe. Optimistic
-write and build conflicts may execute them more than once. Panics are not an
-error protocol; return `SecondaryIndexError` for invalid records.
+All production paths have finite typed budgets:
 
-## Projection modes
+- `MutationBudget` bounds admitted input, derived entries and bytes, accounted
+  memory, CAS attempts, and elapsed time.
+- `QueryBudget` bounds page size, returned and scanned entries, returned bytes,
+  source fetches, accounted memory, and elapsed time.
+- `MaintenanceBudget` bounds source and derived work, findings, memory, spills,
+  merge fan-in, CAS attempts, and elapsed time.
+- `TransferBudget` bounds encoded and decoded bytes, nodes, verification work,
+  memory, and elapsed time.
 
-| Mode | Physical value | Read behavior | Cost |
-| --- | --- | --- | --- |
-| `KeysOnly` | Empty | Returns primary keys; `records` batch-loads source | Lowest write/storage amplification |
-| `Include` | Extractor-supplied bytes | `projected` is index-only | Application-controlled covering data |
-| `All` | Exact source value bytes | `projected` returns full stored record | Highest amplification; bounded by limits |
+Convenience query methods use finite defaults. Call `query(budget)` for an
+explicit query session. Oversized page requests are rejected before
+allocation. Build, replacement, repair, and verification share a spillable
+sorted-run engine; exceeding memory, run, spill-byte, fan-in, work, or time
+limits publishes nothing.
 
-`All` copies the raw source-tree bytes. It does not resolve or duplicate an
-external blob payload. Projection-only changes rewrite `Include` or `All`
-entries even when their terms stay unchanged. `KeysOnly` skips physical index
-writes when old and new emissions are identical.
+## Query identity
 
-## Creating indexes after population
+`IndexedSnapshotId` is the content ID of the canonical immutable snapshot
+record. This distinguishes multiple generations derived from the same source
+tree without coupling historical lookup to a later collection-state version.
 
-Opening a coordinator does not require an empty source:
+Serialized cursors bind all of:
 
-```rust,ignore
-let users = engine.indexed_map(b"users", registry)?;
-users.ensure_index(b"by-tag")?;
-```
+- snapshot-record, source, collection-state, and index versions;
+- index name and descriptor fingerprint;
+- direction and logical bounds;
+- a validated physical continuation key.
 
-`ensure_index` pins the source, shadow-builds a sorted hidden tree, and then
-atomically activates it only if the source/catalog/control selection is still
-current. A conflict discards the unpublished root selection and retries from a
-fresh snapshot up to `max_build_retries`. Content-addressed nodes written by a
-failed build are unreferenced and safe for later GC.
+Changing any field or moving the key outside the physical bounds returns a
+typed cursor error. Forward scans resume strictly after the continuation key;
+reverse scans resume strictly before it.
 
-The operation is idempotent for an already-active exact generation. Use
-`replace_index` for a new generation.
+## Retention, transfer, and GC
 
-## Writes and queries
+Retention is a new canonical state followed by the same one-root CAS. Durable
+snapshot pins prevent retained records from being removed. A pin guard releases
+its pin explicitly or on drop.
 
-Use `put`, `delete`, `apply`, `apply_if`, or `edit` on `IndexedMap`. Mutation
-batches are normalized by primary key, old source values are batch-read once,
-and only changed physical emissions are applied.
+Bundles contain one canonical state closure and a globally deduplicated,
+content-address-ordered node set. Export and import are bounded; import checks
+the encoded envelope before decode, verifies hashes, canonical records,
+reachability, ownership, definitions, and the selected snapshot, stages
+immutable nodes, then publishes one root.
 
-```rust,ignore
-users.edit(|edit| {
-    edit.put(b"user-1", encoded_user);
-    edit.delete(b"user-2");
-})?;
+GC marks from one pinned canonical state closure. Sweeping is refused unless
+the caller supplies the required quiescence proof. Cache residency is not a
+reader lease.
 
-let snapshot = users.snapshot()?;
-let by_tag = snapshot.index(b"by-tag")?;
-let matches = by_tag.exact(b"database")?;
-let keys = by_tag.primary_keys(b"database")?;
-let records = by_tag.records(b"database")?;
-let projected = by_tag.projected(b"database")?;
-```
+## Health and observability
 
-Indexes support exact terms, arbitrary-byte term prefixes, half-open term
-ranges, and forward/reverse pages. A serialized cursor is bound to source,
-catalog, index version, definition fingerprint, direction, and logical bounds.
-Using it with another snapshot or query returns
-`IndexCursorVersionMismatch`.
+`health()` reports store profile, selected source/state versions, active
+descriptors and roots, structural closure validity, retained snapshot count,
+and durable pin count. Complete semantic verification remains an explicit
+bounded operation.
 
-`records` performs one ordered `get_many` against the pinned source and treats
-a missing primary key as checkpoint corruption. `projected` never reads the
-source.
+Metrics report measured logical work—admitted source mutations, extracted
+records, emitted terms, projected bytes, physical entry upserts/deletes,
+skipped emissions, retries, builds, verification outcomes, and retained roots.
+They do not label estimates as physical node writes. Error codes and retry
+advice are structured; default messages redact application keys, terms,
+values, bounds, and extractor text.
 
-Historical reads use `snapshot_at(source_version)` with current generations or
-`snapshot_by_id(IndexedSnapshotId)` for an exact source/catalog pair. They never
-substitute a different index version or scan the source as a fallback.
-
-## Lifecycle
-
-- `health` performs bounded structural validation at open time.
-- `verify_index` and `verify_all` rebuild from retained source data, compare
-  every logical entry, and report expected/actual roots and entry counts
-  without changing named roots. `is_valid` means semantic equality;
-  `is_canonical` additionally means structural identity with the sorted rebuild.
-- `repair_index` publishes a deterministic rebuilt root and corrected
-  checkpoint atomically. Queries never repair implicitly.
-- `replace_index` requires a greater generation and different fingerprint. It
-  shadow-builds while the old generation remains readable, then atomically
-  swaps catalog/control selection and marks the old descriptor retired.
-- `deactivate_index` removes only the active selection. Historical records and
-  roots remain until retention. Deactivating the final index removes the write
-  fence.
-
-All extraction, projection, build, verification, temporary-memory, retry, and
-bundle work is bounded by `SecondaryIndexLimits`. Exceeding a bound returns
-`IndexResourceLimitExceeded` before publication.
-
-## Retention, GC, and transfer
-
-`keep_last(n)` always keeps the current source, even for `n == 0`. Every kept
-source checkpoint transitively retains its exact index version, including a
-retired generation still referenced by retained history. Checkpoint records
-and unreferenced immutable root names are removed in one transaction.
-
-Root pruning does not delete content-addressed nodes. `plan_indexed_gc` plans
-from every remaining named root in the shared store. GC must be operationally
-serialized with readers or use an external live-root lease; cache pinning alone
-is not a GC lease.
-
-`export_current` creates one deterministic, verified bundle with the current
-source, catalog, control, descriptors, checkpoints, index trees, and a globally
-deduplicated CID-sorted node set. `import_current` validates the whole bundle
-and runtime definitions before atomically staging nodes and publishing roots,
-conditioned on the expected destination source version.
-
-## DynamoDB GSI/LSI analogy
-
-The analogy is conceptual; the Rust API deliberately does not expose GSI or
-LSI types.
-
-- A DynamoDB global secondary index can use a different partition key and has
-  independent distributed capacity/placement. A prolly secondary index is
-  similar in allowing an arbitrary derived term, but it is local to the same
-  transactional store and is strictly synchronous.
-- A DynamoDB local secondary index shares the table partition key and changes
-  the sort key, with creation and item-collection constraints. A prolly index
-  can model a composite term such as `(tenant, status)`, but it has no special
-  shared-partition primitive and can be added after population with
-  `ensure_index`.
-
-Therefore an index over a global attribute is GSI-like, while an index whose
-term begins with a tenant/partition component is LSI-like. Both use the same
-`SecondaryIndex` and `IndexedMap` implementation.
-
-## Deliberate v1 exclusions
-
-V1 excludes unique indexes, asynchronous/deferred maintenance, derive macros,
-FFI bindings, online guaranteed-progress builds, independent index dropping,
-definition upgrades in place, indexed merge/rollback publication, and
-policy-rich historical backup/restore. Unsupported raw paths fail closed.
-
-See [the complete design specification](superpowers/specs/2026-07-13-indexed-map-secondary-index-design.md)
-for persisted layouts, algorithms, and acceptance criteria, and run
-`cargo run --example secondary_index` for an end-to-end example.
+Run `cargo run --example secondary_index` for an end-to-end verification-store
+example. Production services should use a qualified production adapter and
+must keep the release-gate workflows green.

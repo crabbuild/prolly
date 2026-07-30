@@ -9,11 +9,12 @@ use std::task::{Context, Poll};
 
 use prolly::{
     AsyncManifestStore, AsyncProlly, AsyncSortedBatchBuilder, AsyncStore, BatchBuilder, BatchOp,
-    Cid, Config, DistanceMetric, ManifestStore, ManifestUpdate, MemStore, MemStoreError,
-    MergeTraceEvent, Mutation, NodePublication, NodePublicationHint, Prolly, ProximityConfig,
-    ProximityMap, ProximityMutation, ProximityRecord, PublicationOrigin, Resolution, RootCondition,
-    RootManifest, RootWrite, SearchIo, SearchRuntime, SecondaryIndex, SecondaryIndexRegistry,
-    Store, SyncStoreAsAsync, TransactionNodeWrite, TransactionUpdate, TransactionalStore, Tree,
+    Cid, Config, DistanceMetric, IndexedStore, IndexedStoreProfile, ManifestStore, ManifestUpdate,
+    MemStore, MemStoreError, MergeTraceEvent, Mutation, NodePublication, NodePublicationHint,
+    Prolly, ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord, PublicationOrigin,
+    Resolution, RootCondition, RootManifest, RootWrite, SearchIo, SearchRuntime, SecondaryIndex,
+    SecondaryIndexRegistry, Store, SyncStoreAsAsync, TransactionNodeWrite, TransactionUpdate,
+    TransactionalStore, Tree,
 };
 
 struct ThreadCountingAllocator;
@@ -114,6 +115,12 @@ impl RecordingSyncStore {
 
     fn take_publications(&self) -> Vec<RecordedPublication> {
         std::mem::take(&mut *self.publications.lock().unwrap())
+    }
+}
+
+impl IndexedStore for RecordingSyncStore {
+    fn indexed_store_profile(&self) -> IndexedStoreProfile {
+        IndexedStoreProfile::Verification
     }
 }
 
@@ -1716,13 +1723,9 @@ fn proximity_build_and_mutation_publish_only_maintenance_nodes() {
 }
 
 #[test]
-fn secondary_index_build_and_edit_publish_only_maintenance_nodes() {
+fn secondary_index_build_and_edit_report_truthful_publication_origins() {
     let store = RecordingSyncStore::default();
     let prolly = Prolly::new(store.clone(), Config::default());
-    let source = prolly.versioned_map(b"users");
-    source.put(b"user-1", b"active").unwrap();
-    store.take_publications();
-
     let by_status =
         SecondaryIndex::non_unique("by-status", 1, "tests.users.by-status/v1", |_, value| {
             Ok(vec![value.to_vec()])
@@ -1730,11 +1733,17 @@ fn secondary_index_build_and_edit_publish_only_maintenance_nodes() {
         .unwrap();
     let registry = SecondaryIndexRegistry::new().register(by_status).unwrap();
     let indexed = prolly.indexed_map(b"users", registry).unwrap();
+    indexed.put(b"user-1", b"active").unwrap();
+    store.take_publications();
     indexed.ensure_index(b"by-status").unwrap();
     let publications = store.take_publications();
     assert!(!publications.is_empty());
-    let expected = vec![PublicationOrigin::Maintenance; publications.len()];
-    assert_publications(publications, &expected);
+    assert!(publications
+        .iter()
+        .any(|publication| publication.origin == PublicationOrigin::Maintenance));
+    assert!(publications
+        .iter()
+        .any(|publication| publication.origin == PublicationOrigin::BatchMutation));
 
     indexed
         .edit(|edit| {
@@ -1743,10 +1752,11 @@ fn secondary_index_build_and_edit_publish_only_maintenance_nodes() {
         .unwrap();
     let publications = store.take_publications();
     assert!(!publications.is_empty());
-    let expected = vec![PublicationOrigin::Maintenance; publications.len()];
-    assert_publications(publications, &expected);
+    assert!(publications
+        .iter()
+        .all(|publication| publication.origin == PublicationOrigin::BatchMutation));
 
     let snapshot = indexed.snapshot().unwrap();
-    let verification = indexed.verify_all(&snapshot.id().source_version).unwrap();
+    let verification = indexed.verify_all(snapshot.source_version()).unwrap();
     assert!(verification.iter().all(|result| result.is_valid()));
 }

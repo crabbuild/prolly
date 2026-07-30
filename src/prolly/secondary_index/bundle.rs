@@ -1,62 +1,55 @@
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
 use super::super::cid::Cid;
 use super::super::error::Error;
-use super::super::manifest::ManifestStore;
+use super::super::manifest::NamedRootUpdate;
 use super::super::node::Node;
 use super::super::store::{MemStore, Store};
 use super::super::sync::{verify_node_bytes, SnapshotBundleNode};
-use super::super::transaction::{TransactionConflict, TransactionalStore};
 use super::super::tree::Tree;
-use super::super::versioned_map::{IndexMaintenancePermit, MapVersionId};
+use super::super::versioned_map::MapVersionId;
 use super::super::Prolly;
-use super::coordinator::{require_non_conflict, IndexedMap, IndexedVersion};
-use super::storage::{
-    catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_map_id,
-    control_record_key, control_root_name, ActiveIndexControl, IndexCheckpoint, IndexControl,
-    IndexedHeadRecord, SecondaryIndexDescriptor,
-};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::Arc;
+use super::budget::{Deadline, TransferBudget};
+use super::coordinator::{IndexedMap, IndexedVersion};
+use super::publication::IndexedStore;
+use super::state::{IndexDescriptor, IndexedCollectionState};
 
 pub const INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION: u32 = 1;
 const BUNDLE_MAGIC: &[u8; 8] = b"PIBNDL01";
 
-/// One descriptor/checkpoint/tree selection carried by an indexed bundle.
+/// One active descriptor/tree selection carried by a canonical collection bundle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexedSnapshotBundleIndex {
-    pub descriptor: SecondaryIndexDescriptor,
-    pub checkpoint: IndexCheckpoint,
+    pub descriptor: IndexDescriptor,
     pub tree: Tree,
 }
 
-/// Self-contained, canonical transport for one current coordinated snapshot.
+/// Self-contained transport for one canonical indexed-collection state closure.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexedSnapshotBundle {
     pub format_version: u32,
     pub source_map_id: Vec<u8>,
     pub source_version: MapVersionId,
-    pub catalog_map_id: Vec<u8>,
-    pub catalog_version: MapVersionId,
-    pub source_tree: Tree,
-    pub catalog_tree: Tree,
-    pub control: Option<IndexControl>,
+    pub state_version: MapVersionId,
+    pub state_tree: Tree,
     pub indexes: Vec<IndexedSnapshotBundleIndex>,
     pub nodes: Vec<SnapshotBundleNode>,
 }
 
-/// Compact validated metadata for an indexed snapshot bundle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IndexedSnapshotBundleSummary {
     pub format_version: u32,
     pub source_map_id: Vec<u8>,
     pub source_version: MapVersionId,
-    pub catalog_version: MapVersionId,
+    pub state_version: MapVersionId,
     pub index_count: usize,
     pub node_count: usize,
     pub byte_count: usize,
 }
 
-/// Complete reachability result for a verified indexed snapshot bundle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IndexedSnapshotBundleVerification {
     pub valid: bool,
@@ -69,17 +62,14 @@ struct BundleWire(
     u32,
     Vec<u8>,
     MapVersionId,
-    Vec<u8>,
     MapVersionId,
     Tree,
-    Tree,
-    Option<Vec<u8>>,
     Vec<IndexWire>,
     Vec<NodeWire>,
 );
 
 #[derive(Serialize, Deserialize)]
-struct IndexWire(Vec<u8>, Vec<u8>, Tree);
+struct IndexWire(Vec<u8>, Tree);
 
 #[derive(Serialize, Deserialize)]
 struct NodeWire(Vec<u8>, Vec<u8>);
@@ -98,110 +88,83 @@ impl IndexedSnapshotBundle {
     }
 
     pub fn summary(&self) -> Result<IndexedSnapshotBundleSummary, Error> {
-        self.verify().map(|verification| verification.summary)
+        self.verify().map(|verified| verified.summary)
     }
 
-    /// Decode, fully verify, and return only compact bundle metadata.
     pub fn inspect(bytes: &[u8]) -> Result<IndexedSnapshotBundleSummary, Error> {
-        Self::from_bytes(bytes)?.summary()
+        Self::inspect_with_budget(bytes, &TransferBudget::default())
     }
 
-    /// Verify hashes, exact reachability, ownership, persisted records, and tree IDs.
+    pub fn inspect_with_budget(
+        bytes: &[u8],
+        budget: &TransferBudget,
+    ) -> Result<IndexedSnapshotBundleSummary, Error> {
+        Self::from_bytes_with_budget(bytes, budget)?
+            .verify_with_budget(budget)
+            .map(|verified| verified.summary)
+    }
+
     pub fn verify(&self) -> Result<IndexedSnapshotBundleVerification, Error> {
-        if self.format_version != INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION {
-            return Err(invalid_bundle(format!(
-                "unsupported indexed bundle format {}",
-                self.format_version
-            )));
-        }
-        if self.source_map_id.is_empty()
-            || self.catalog_map_id != catalog_map_id(&self.source_map_id)
-        {
-            return Err(invalid_bundle("invalid source or catalog ownership"));
-        }
-        if MapVersionId::for_tree(&self.source_tree)? != self.source_version
-            || MapVersionId::for_tree(&self.catalog_tree)? != self.catalog_version
-        {
-            return Err(invalid_bundle("source or catalog tree version mismatch"));
-        }
-        if self.source_tree.config != self.catalog_tree.config
-            || self
-                .indexes
-                .iter()
-                .any(|index| index.tree.config != self.source_tree.config)
-        {
-            return Err(invalid_bundle("bundle tree configurations disagree"));
-        }
+        self.verify_with_budget(&TransferBudget::default())
+    }
 
-        let mut previous_name: Option<&[u8]> = None;
-        let mut expected_control = Vec::with_capacity(self.indexes.len());
-        let mut checkpoints = Vec::with_capacity(self.indexes.len());
-        for index in &self.indexes {
-            if previous_name.is_some_and(|previous| previous >= index.descriptor.name.as_slice()) {
-                return Err(invalid_bundle(
-                    "bundle indexes must be strictly sorted by name",
-                ));
-            }
-            previous_name = Some(&index.descriptor.name);
-            index.descriptor.validate()?;
-            let checkpoint = &index.checkpoint;
-            if checkpoint.source_map_id != self.source_map_id
-                || checkpoint.source_version != self.source_version
-                || checkpoint.index_name != index.descriptor.name
-                || checkpoint.generation != index.descriptor.generation
-                || checkpoint.definition_fingerprint != index.descriptor.fingerprint
-                || MapVersionId::for_tree(&index.tree)? != checkpoint.index_version
-            {
-                return Err(invalid_bundle(
-                    "descriptor, checkpoint, source, or index tree mismatch",
-                ));
-            }
-            expected_control.push(ActiveIndexControl {
-                name: checkpoint.index_name.clone(),
-                fingerprint: checkpoint.definition_fingerprint.clone(),
-            });
-            checkpoints.push(checkpoint.clone());
+    pub fn verify_with_budget(
+        &self,
+        budget: &TransferBudget,
+    ) -> Result<IndexedSnapshotBundleVerification, Error> {
+        budget.validate()?;
+        let started = Deadline::new();
+        if self.format_version != INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION
+            || self.source_map_id.is_empty()
+            || MapVersionId::for_tree(&self.state_tree)? != self.state_version
+        {
+            return Err(invalid_bundle(
+                "invalid format, source, or state-tree identity",
+            ));
         }
-        match (&self.control, self.indexes.is_empty()) {
-            (None, true) => {}
-            (Some(control), false)
-                if control.source_map_id == self.source_map_id
-                    && control.catalog_map_id == self.catalog_map_id
-                    && control.active == expected_control => {}
-            _ => {
-                return Err(invalid_bundle(
-                    "control state does not match active indexes",
-                ))
-            }
-        }
-
         let mut node_map = BTreeMap::<Vec<u8>, &[u8]>::new();
+        let mut decoded_bytes = 0usize;
+        let mut accounted_memory = 0usize;
         for node in &self.nodes {
+            if node_map.len() == budget.max_nodes {
+                return Err(Error::IndexResourceLimitExceeded {
+                    resource: "bundle_nodes",
+                    limit: budget.max_nodes,
+                    actual: node_map.len().saturating_add(1),
+                });
+            }
+            decoded_bytes = decoded_bytes.saturating_add(node.bytes.len());
+            accounted_memory = accounted_memory
+                .saturating_add(node.bytes.len())
+                .saturating_add(96);
+            if decoded_bytes > budget.max_decoded_bytes
+                || accounted_memory > budget.max_accounted_memory_bytes
+                || started.exceeded(budget.max_elapsed)
+            {
+                return Err(Error::IndexResourceLimitExceeded {
+                    resource: "bundle_accounted_memory_bytes",
+                    limit: budget.max_accounted_memory_bytes,
+                    actual: accounted_memory,
+                });
+            }
             verify_node_bytes(&node.cid, &node.bytes)
                 .map_err(|error| invalid_bundle(error.to_string()))?;
             if node_map
-                .insert(node.cid.as_bytes().to_vec(), &node.bytes)
+                .insert(node.cid.as_bytes().to_vec(), node.bytes.as_slice())
                 .is_some()
             {
-                return Err(invalid_bundle("bundle contains duplicate node CIDs"));
+                return Err(invalid_bundle("bundle contains a duplicate node CID"));
             }
         }
-        let mut reachable = BTreeSet::<Vec<u8>>::new();
-        for tree in std::iter::once(&self.source_tree)
-            .chain(std::iter::once(&self.catalog_tree))
-            .chain(self.indexes.iter().map(|index| &index.tree))
-        {
-            collect_reachable(tree, &node_map, &mut reachable)?;
-        }
-        let provided = node_map.keys().cloned().collect::<BTreeSet<_>>();
-        if reachable != provided {
-            let missing = reachable.difference(&provided).count();
-            let extra = provided.difference(&reachable).count();
-            return Err(invalid_bundle(format!(
-                "bundle node closure mismatch: {missing} missing, {extra} extra"
-            )));
-        }
 
+        let verification_memory = accounted_memory.saturating_add(decoded_bytes);
+        if verification_memory > budget.max_accounted_memory_bytes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_verification_memory_bytes",
+                limit: budget.max_accounted_memory_bytes,
+                actual: verification_memory,
+            });
+        }
         let memory = Arc::new(MemStore::new());
         let entries = self
             .nodes
@@ -211,48 +174,106 @@ impl IndexedSnapshotBundle {
         memory
             .batch_put(&entries)
             .map_err(|error| invalid_bundle(error.to_string()))?;
-        let reader = Prolly::new(memory, self.source_tree.config.clone());
-        validate_catalog_tree(&reader, self, &checkpoints)?;
+        let reader = Prolly::new(memory, self.state_tree.config.clone());
+        let state = IndexedCollectionState::from_tree(&reader, &self.state_tree)
+            .map_err(|error| invalid_bundle(error.to_string()))?;
+        if state.source_map_id != self.source_map_id {
+            return Err(invalid_bundle("state belongs to a different source"));
+        }
+        let head = state
+            .head_snapshot()
+            .map_err(|error| invalid_bundle(error.to_string()))?;
+        if MapVersionId::for_tree(&head.source.tree)? != self.source_version {
+            return Err(invalid_bundle("head source version does not match bundle"));
+        }
 
-        let summary = IndexedSnapshotBundleSummary {
-            format_version: self.format_version,
-            source_map_id: self.source_map_id.clone(),
-            source_version: self.source_version.clone(),
-            catalog_version: self.catalog_version.clone(),
-            index_count: self.indexes.len(),
-            node_count: self.nodes.len(),
-            byte_count: self.byte_count(),
-        };
+        let mut expected_indexes = Vec::with_capacity(head.indexes.len());
+        for selected in &head.indexes {
+            let descriptor = state
+                .descriptors
+                .get(&(
+                    selected.name.clone(),
+                    selected.descriptor_fingerprint.clone(),
+                ))
+                .ok_or_else(|| invalid_bundle("head index descriptor is missing"))?;
+            expected_indexes.push(IndexedSnapshotBundleIndex {
+                descriptor: descriptor.clone(),
+                tree: selected.tree.clone(),
+            });
+        }
+        if expected_indexes != self.indexes {
+            return Err(invalid_bundle("head index metadata does not match state"));
+        }
+
+        let mut reachable = BTreeSet::new();
+        let mut verification_work = 0usize;
+        for tree in
+            std::iter::once(&self.state_tree).chain(state.snapshots.values().flat_map(|snapshot| {
+                std::iter::once(&snapshot.source.tree)
+                    .chain(snapshot.indexes.iter().map(|index| &index.tree))
+            }))
+        {
+            collect_reachable(tree, &node_map, &mut reachable)?;
+            verification_work = verification_work.saturating_add(reachable.len());
+            if verification_work > budget.max_verification_work {
+                return Err(Error::IndexResourceLimitExceeded {
+                    resource: "bundle_verification_work",
+                    limit: budget.max_verification_work,
+                    actual: verification_work,
+                });
+            }
+        }
+        if reachable != node_map.keys().cloned().collect() {
+            return Err(invalid_bundle(
+                "bundle node closure has missing or unreferenced nodes",
+            ));
+        }
         Ok(IndexedSnapshotBundleVerification {
             valid: true,
-            summary,
+            summary: IndexedSnapshotBundleSummary {
+                format_version: self.format_version,
+                source_map_id: self.source_map_id.clone(),
+                source_version: self.source_version.clone(),
+                state_version: self.state_version.clone(),
+                index_count: self.indexes.len(),
+                node_count: self.node_count(),
+                byte_count: self.byte_count(),
+            },
             reachable_nodes: reachable.len(),
         })
     }
 
-    /// Encode deterministic bytes with fixed field positions and canonical ordering.
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        self.verify()?;
+        self.to_bytes_with_budget(&TransferBudget::default())
+    }
+
+    pub fn to_bytes_with_budget(&self, budget: &TransferBudget) -> Result<Vec<u8>, Error> {
+        self.verify_with_budget(budget)?;
+        let encoding_memory = self
+            .byte_count()
+            .saturating_mul(2)
+            .saturating_add(self.nodes.len().saturating_mul(96));
+        if encoding_memory > budget.max_accounted_memory_bytes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_encoding_memory_bytes",
+                limit: budget.max_accounted_memory_bytes,
+                actual: encoding_memory,
+            });
+        }
         let mut nodes = self.nodes.iter().collect::<Vec<_>>();
         nodes.sort_by(|left, right| left.cid.as_bytes().cmp(right.cid.as_bytes()));
         let payload = serde_cbor::ser::to_vec_packed(&BundleWire(
             self.format_version,
             self.source_map_id.clone(),
             self.source_version.clone(),
-            self.catalog_map_id.clone(),
-            self.catalog_version.clone(),
-            self.source_tree.clone(),
-            self.catalog_tree.clone(),
-            self.control
-                .as_ref()
-                .map(IndexControl::to_bytes)
-                .transpose()?,
+            self.state_version.clone(),
+            self.state_tree.clone(),
             self.indexes
                 .iter()
                 .map(|index| {
                     Ok(IndexWire(
-                        index.descriptor.to_bytes()?,
-                        index.checkpoint.to_bytes()?,
+                        serde_cbor::to_vec(&index.descriptor)
+                            .map_err(|error| Error::Serialize(error.to_string()))?,
                         index.tree.clone(),
                     ))
                 })
@@ -267,56 +288,69 @@ impl IndexedSnapshotBundle {
         bytes.extend_from_slice(BUNDLE_MAGIC);
         bytes.extend_from_slice(&INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION.to_be_bytes());
         bytes.extend_from_slice(&payload);
+        if bytes.len() > budget.max_encoded_bytes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_encoded_bytes",
+                limit: budget.max_encoded_bytes,
+                actual: bytes.len(),
+            });
+        }
         Ok(bytes)
     }
 
-    /// Decode canonical bytes and reject unsupported versions or trailing data.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        Self::from_bytes_with_budget(bytes, &TransferBudget::default())
+    }
+
+    pub fn from_bytes_with_budget(bytes: &[u8], budget: &TransferBudget) -> Result<Self, Error> {
+        budget.validate()?;
+        if bytes.len() > budget.max_encoded_bytes || bytes.len() > budget.max_accounted_memory_bytes
+        {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_encoded_bytes",
+                limit: budget
+                    .max_encoded_bytes
+                    .min(budget.max_accounted_memory_bytes),
+                actual: bytes.len(),
+            });
+        }
         if bytes.len() < 12 || &bytes[..8] != BUNDLE_MAGIC {
             return Err(invalid_bundle("invalid indexed bundle envelope"));
         }
-        let version = u32::from_be_bytes(bytes[8..12].try_into().expect("fixed bundle header"));
+        let version = u32::from_be_bytes(bytes[8..12].try_into().expect("fixed header"));
         if version != INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION {
-            return Err(invalid_bundle(format!(
-                "unsupported indexed bundle bytes version {version}"
-            )));
+            return Err(invalid_bundle("unsupported indexed bundle format"));
         }
-        let mut deserializer = serde_cbor::Deserializer::from_slice(&bytes[12..]);
+        let mut decoder = serde_cbor::Deserializer::from_slice(&bytes[12..]);
         let BundleWire(
             format_version,
             source_map_id,
             source_version,
-            catalog_map_id,
-            catalog_version,
-            source_tree,
-            catalog_tree,
-            control,
+            state_version,
+            state_tree,
             indexes,
             nodes,
-        ) = BundleWire::deserialize(&mut deserializer)
+        ) = BundleWire::deserialize(&mut decoder)
             .map_err(|error| invalid_bundle(error.to_string()))?;
-        deserializer
+        decoder
             .end()
-            .map_err(|error| invalid_bundle(format!("trailing bundle bytes: {error}")))?;
+            .map_err(|error| invalid_bundle(error.to_string()))?;
         let bundle = Self {
             format_version,
             source_map_id,
             source_version,
-            catalog_map_id,
-            catalog_version,
-            source_tree,
-            catalog_tree,
-            control: control
-                .map(|bytes| IndexControl::from_bytes(&bytes))
-                .transpose()?,
+            state_version,
+            state_tree,
             indexes: indexes
                 .into_iter()
-                .map(|IndexWire(descriptor, checkpoint, tree)| {
-                    Ok(IndexedSnapshotBundleIndex {
-                        descriptor: SecondaryIndexDescriptor::from_bytes(&descriptor)?,
-                        checkpoint: IndexCheckpoint::from_bytes(&checkpoint)?,
-                        tree,
-                    })
+                .map(|IndexWire(bytes, tree)| {
+                    let mut decoder = serde_cbor::Deserializer::from_slice(&bytes);
+                    let descriptor = IndexDescriptor::deserialize(&mut decoder)
+                        .map_err(|error| invalid_bundle(error.to_string()))?;
+                    decoder
+                        .end()
+                        .map_err(|error| invalid_bundle(error.to_string()))?;
+                    Ok(IndexedSnapshotBundleIndex { descriptor, tree })
                 })
                 .collect::<Result<Vec<_>, Error>>()?,
             nodes: nodes
@@ -324,7 +358,7 @@ impl IndexedSnapshotBundle {
                 .map(|NodeWire(cid, bytes)| {
                     let cid: [u8; 32] = cid
                         .try_into()
-                        .map_err(|_| invalid_bundle("bundle node CID is not 32 bytes"))?;
+                        .map_err(|_| invalid_bundle("invalid node CID length"))?;
                     Ok(SnapshotBundleNode {
                         cid: Cid(cid),
                         bytes,
@@ -332,184 +366,139 @@ impl IndexedSnapshotBundle {
                 })
                 .collect::<Result<Vec<_>, Error>>()?,
         };
-        bundle.verify()?;
+        bundle.verify_with_budget(budget)?;
         Ok(bundle)
     }
 }
 
-impl<S> IndexedMap<'_, S>
-where
-    S: Store + ManifestStore + TransactionalStore,
-{
-    /// Export the exact catalog-selected current source and all active index trees.
+impl<S: IndexedStore> IndexedMap<'_, S> {
     pub fn export_current(&self) -> Result<IndexedSnapshotBundle, Error> {
-        let snapshot = self.snapshot()?;
-        let mut indexes = Vec::new();
-        let mut nodes = BTreeMap::<Vec<u8>, SnapshotBundleNode>::new();
-        add_tree_nodes(self.prolly, snapshot.source().tree(), &mut nodes)?;
-        add_tree_nodes(self.prolly, snapshot.catalog().tree(), &mut nodes)?;
-        for index in snapshot.indexes() {
-            add_tree_nodes(self.prolly, index.tree(), &mut nodes)?;
-            indexes.push(IndexedSnapshotBundleIndex {
-                descriptor: index.descriptor().clone(),
-                checkpoint: index.checkpoint().clone(),
-                tree: index.tree().clone(),
-            });
+        self.export_current_with_budget(&TransferBudget::default())
+    }
+
+    pub fn export_current_with_budget(
+        &self,
+        budget: &TransferBudget,
+    ) -> Result<IndexedSnapshotBundle, Error> {
+        budget.validate()?;
+        let loaded = self.load_state()?;
+        let head = loaded.state.head_snapshot()?;
+        let mut nodes = BTreeMap::new();
+        let mut retained_node_bytes = 0usize;
+        for tree in std::iter::once(&loaded.tree).chain(loaded.state.snapshots.values().flat_map(
+            |snapshot| {
+                std::iter::once(&snapshot.source.tree)
+                    .chain(snapshot.indexes.iter().map(|index| &index.tree))
+            },
+        )) {
+            add_tree_nodes(
+                self.prolly,
+                tree,
+                &mut nodes,
+                &mut retained_node_bytes,
+                budget,
+            )?;
         }
+        let indexes = head
+            .indexes
+            .iter()
+            .map(|selected| {
+                let descriptor = loaded
+                    .state
+                    .descriptors
+                    .get(&(
+                        selected.name.clone(),
+                        selected.descriptor_fingerprint.clone(),
+                    ))
+                    .cloned()
+                    .ok_or_else(|| invalid_bundle("head descriptor is missing"))?;
+                Ok(IndexedSnapshotBundleIndex {
+                    descriptor,
+                    tree: selected.tree.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
         let bundle = IndexedSnapshotBundle {
             format_version: INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION,
             source_map_id: self.source_map_id.clone(),
-            source_version: snapshot.id().source_version.clone(),
-            catalog_map_id: catalog_map_id(&self.source_map_id),
-            catalog_version: snapshot.id().catalog_version.clone(),
-            source_tree: snapshot.source().tree().clone(),
-            catalog_tree: snapshot.catalog().tree().clone(),
-            control: self.load_control()?,
+            source_version: MapVersionId::for_tree(&head.source.tree)?,
+            state_version: MapVersionId::for_tree(&loaded.tree)?,
+            state_tree: loaded.tree,
             indexes,
             nodes: nodes.into_values().collect(),
         };
-        enforce_bundle_limits(self, &bundle)?;
-        bundle.verify()?;
+        bundle.verify_with_budget(budget)?;
         Ok(bundle)
     }
 
-    /// Verify and atomically install a current indexed snapshot for this exact source ID.
-    ///
-    /// `expected_source == None` means the destination source must be absent.
     pub fn import_current(
         &self,
         bundle: &IndexedSnapshotBundle,
         expected_source: Option<&MapVersionId>,
     ) -> Result<IndexedVersion, Error> {
-        bundle.verify()?;
-        if bundle.source_map_id != self.source_map_id {
+        self.import_current_with_budget(bundle, expected_source, &TransferBudget::default())
+    }
+
+    pub fn import_current_with_budget(
+        &self,
+        bundle: &IndexedSnapshotBundle,
+        expected_source: Option<&MapVersionId>,
+        budget: &TransferBudget,
+    ) -> Result<IndexedVersion, Error> {
+        budget.validate()?;
+        bundle.verify_with_budget(budget)?;
+        if bundle.source_map_id != self.source_map_id
+            || bundle.state_tree.config != *self.prolly.config()
+            || bundle.node_count() > budget.max_nodes
+            || bundle.byte_count() > budget.max_decoded_bytes
+        {
             return Err(invalid_bundle(
-                "bundle belongs to a different source map ID",
-            ));
-        }
-        if bundle.source_tree.config != *self.prolly.config() {
-            return Err(invalid_bundle(
-                "bundle tree configuration does not match destination engine",
+                "bundle ownership, configuration, or transfer budget mismatch",
             ));
         }
         for index in &bundle.indexes {
-            let runtime = self
-                .runtime_definition_for_descriptor(&index.descriptor)?
-                .ok_or_else(|| {
-                    if let Some(runtime) = self.runtime_definition(&index.descriptor.name) {
-                        let runtime_descriptor =
-                            SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &runtime)
-                                .expect("validated runtime descriptor");
-                        Error::IndexDefinitionMismatch {
-                            name: index.descriptor.name.clone(),
-                            persisted: index.descriptor.fingerprint.clone(),
-                            runtime: runtime_descriptor.fingerprint,
-                        }
-                    } else {
-                        Error::IndexRuntimeDefinitionMissing {
-                            name: index.descriptor.name.clone(),
-                            generation: index.descriptor.generation,
-                        }
-                    }
+            self.runtime_definition_for_descriptor(&index.descriptor)?
+                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
+                    name: index.descriptor.name.clone(),
+                    generation: index.descriptor.generation,
                 })?;
-            let _ = runtime;
         }
-        enforce_bundle_limits(self, bundle)?;
-
-        let current_source = self.source().head()?;
-        if current_source.as_ref().map(|version| &version.id) != expected_source {
-            return Err(Error::transaction_conflict(TransactionConflict::new(
-                self.source().head_name().to_vec(),
-                None,
-                None,
-            )));
+        let loaded = self.load_state()?;
+        let current = MapVersionId::for_tree(&loaded.state.head_snapshot()?.source.tree)?;
+        let logically_absent =
+            loaded.state.head_snapshot()?.source.entry_count == 0 && loaded.state.active.is_empty();
+        if expected_source.map_or(!logically_absent, |expected| expected != &current) {
+            return Err(Error::InvalidVersionedMap(
+                "indexed bundle import source expectation conflict".to_string(),
+            ));
         }
-        let catalog_id = catalog_map_id(&self.source_map_id);
-        let catalog_head = self.prolly.versioned_map(&catalog_id).head()?;
-        let hidden_heads = bundle
-            .indexes
-            .iter()
-            .map(|index| {
-                self.prolly
-                    .versioned_map(&index.checkpoint.index_map_id)
-                    .head()
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-        let permit_fingerprint = self
-            .load_control()?
-            .map(|control| control.fingerprint())
-            .transpose()?
-            .or_else(|| {
-                bundle
-                    .control
-                    .as_ref()
-                    .and_then(|control| control.fingerprint().ok())
-            })
-            .unwrap_or_else(|| Cid::from_bytes(b"inactive-indexed-import"));
-        let node_entries = bundle
-            .nodes
-            .iter()
-            .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
-            .collect::<Vec<_>>();
-        let (source, catalog, _) = self.prolly.versioned_maps_transaction(|maps| {
-            maps.stage_index_nodes(&node_entries)?;
-            let source_permit =
-                IndexMaintenancePermit::new(self.source_map_id.clone(), permit_fingerprint.clone());
-            let source_update = maps.publish_tree_index_maintenance(
-                &source_permit,
-                expected_source,
-                &bundle.source_tree,
-            )?;
-            let source = require_non_conflict(source_update, self.source().head_name())?;
-            let mut published_indexes = Vec::with_capacity(bundle.indexes.len());
-            for (index, existing) in bundle.indexes.iter().zip(&hidden_heads) {
-                let permit = IndexMaintenancePermit::new(
-                    index.checkpoint.index_map_id.clone(),
-                    permit_fingerprint.clone(),
-                );
-                let update = maps.publish_tree_index_maintenance(
-                    &permit,
-                    existing.as_ref().map(|version| &version.id),
-                    &index.tree,
-                )?;
-                published_indexes.push(require_non_conflict(
-                    update,
-                    &index.checkpoint.index_map_id,
-                )?);
-            }
-            let catalog_permit =
-                IndexMaintenancePermit::new(catalog_id.clone(), permit_fingerprint.clone());
-            let catalog_update = maps.publish_tree_index_maintenance(
-                &catalog_permit,
-                catalog_head.as_ref().map(|version| &version.id),
-                &bundle.catalog_tree,
-            )?;
-            let catalog = require_non_conflict(catalog_update, &catalog_id)?;
-            match &bundle.control {
-                Some(control) => {
-                    let tree = maps.raw_transaction().put(
-                        &maps.raw_transaction().create(),
-                        control_record_key(),
-                        control.to_bytes()?,
-                    )?;
-                    maps.raw_transaction()
-                        .publish_named_root(&control_root_name(&self.source_map_id), &tree)?;
-                }
-                None => maps
-                    .raw_transaction()
-                    .delete_named_root(&control_root_name(&self.source_map_id))?,
-            }
-            Ok((source, catalog, published_indexes))
-        })?;
-        Ok(IndexedVersion {
-            source,
-            catalog: Some(catalog),
-            indexes: bundle
-                .indexes
+        let max_chunk_nodes = (budget.max_accounted_memory_bytes / 32).clamp(1, 1_024);
+        for chunk in bundle.nodes.chunks(max_chunk_nodes) {
+            let entries = chunk
                 .iter()
-                .map(|index| index.checkpoint.clone())
-                .collect(),
-        })
+                .map(|node| (node.cid.as_bytes(), node.bytes.as_slice()))
+                .collect::<Vec<_>>();
+            self.prolly
+                .store()
+                .batch_put(&entries)
+                .map_err(|error| Error::Store(Box::new(error)))?;
+        }
+        self.prolly
+            .store()
+            .confirm_indexed_publication(&[&bundle.state_tree])?;
+        match self.prolly.compare_and_swap_named_root(
+            &super::state::indexed_collection_root_name(&self.source_map_id)?,
+            Some(&loaded.tree),
+            Some(&bundle.state_tree),
+        )? {
+            NamedRootUpdate::Applied => {
+                let imported = self.load_state()?;
+                self.current_version(&imported)
+            }
+            NamedRootUpdate::Conflict { .. } => Err(Error::InvalidVersionedMap(
+                "indexed bundle import CAS conflict".to_string(),
+            )),
+        }
     }
 }
 
@@ -517,17 +506,63 @@ fn add_tree_nodes<S: Store>(
     prolly: &Prolly<S>,
     tree: &Tree,
     nodes: &mut BTreeMap<Vec<u8>, SnapshotBundleNode>,
+    retained_node_bytes: &mut usize,
+    budget: &TransferBudget,
 ) -> Result<(), Error> {
-    for node in prolly.export_snapshot(tree)?.nodes {
-        match nodes.get(node.cid.as_bytes()) {
-            Some(existing) if existing.bytes != node.bytes => {
-                return Err(invalid_bundle("same CID has conflicting node bytes"));
-            }
-            Some(_) => {}
-            None => {
-                nodes.insert(node.cid.as_bytes().to_vec(), node);
+    let started = Deadline::new();
+    let mut queue = VecDeque::new();
+    if let Some(root) = &tree.root {
+        queue.push_back(root.clone());
+    }
+    while let Some(cid) = queue.pop_front() {
+        if nodes.contains_key(cid.as_bytes()) {
+            continue;
+        }
+        if nodes.len() == budget.max_nodes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_nodes",
+                limit: budget.max_nodes,
+                actual: nodes.len().saturating_add(1),
+            });
+        }
+        let bytes = prolly
+            .store()
+            .get(cid.as_bytes())
+            .map_err(|error| Error::Store(Box::new(error)))?
+            .ok_or_else(|| invalid_bundle("tree references a missing node"))?;
+        verify_node_bytes(&cid, &bytes).map_err(|error| invalid_bundle(error.to_string()))?;
+        let decoded =
+            Node::from_bytes(&bytes).map_err(|error| invalid_bundle(error.to_string()))?;
+        if !decoded.leaf {
+            for child in &decoded.vals {
+                let child: [u8; 32] = child
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| invalid_bundle("internal node has an invalid child CID"))?;
+                queue.push_back(Cid(child));
             }
         }
+        let next_nodes = nodes.len().saturating_add(1);
+        let retained_bytes = retained_node_bytes.saturating_add(bytes.len());
+        let accounted = retained_bytes
+            .saturating_add(next_nodes.saturating_mul(96))
+            .saturating_add(queue.len().saturating_mul(32));
+        if retained_bytes > budget.max_encoded_bytes
+            || retained_bytes > budget.max_decoded_bytes
+            || accounted > budget.max_accounted_memory_bytes
+            || started.exceeded(budget.max_elapsed)
+        {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "bundle_export_memory_bytes",
+                limit: budget
+                    .max_encoded_bytes
+                    .min(budget.max_decoded_bytes)
+                    .min(budget.max_accounted_memory_bytes),
+                actual: retained_bytes.max(accounted),
+            });
+        }
+        nodes.insert(cid.as_bytes().to_vec(), SnapshotBundleNode { cid, bytes });
+        *retained_node_bytes = retained_bytes;
     }
     Ok(())
 }
@@ -557,87 +592,6 @@ fn collect_reachable(
                 queue.push_back(child.to_vec());
             }
         }
-    }
-    Ok(())
-}
-
-fn validate_catalog_tree<S: Store>(
-    reader: &Prolly<S>,
-    bundle: &IndexedSnapshotBundle,
-    checkpoints: &[IndexCheckpoint],
-) -> Result<(), Error> {
-    // Use direct immutable reads: no named roots are installed in this verifier.
-    let format = reader
-        .get(&bundle.catalog_tree, &super::storage::catalog_format_key())?
-        .ok_or_else(|| invalid_bundle("catalog format record is missing"))?;
-    if format != super::storage::SECONDARY_INDEX_FORMAT_VERSION.to_be_bytes() {
-        return Err(invalid_bundle("catalog format record is unsupported"));
-    }
-    let expected_current = IndexedHeadRecord {
-        source_version: bundle.source_version.clone(),
-        indexes: checkpoints.to_vec(),
-    }
-    .to_bytes()?;
-    if reader.get(&bundle.catalog_tree, &catalog_current_key())? != Some(expected_current) {
-        return Err(invalid_bundle(
-            "catalog current record does not match bundle",
-        ));
-    }
-    for index in &bundle.indexes {
-        if reader.get(
-            &bundle.catalog_tree,
-            &catalog_descriptor_key(&index.descriptor.name, index.descriptor.generation),
-        )? != Some(index.descriptor.to_bytes()?)
-        {
-            return Err(invalid_bundle("catalog descriptor record mismatch"));
-        }
-        if reader.get(
-            &bundle.catalog_tree,
-            &catalog_checkpoint_key(
-                &bundle.source_version,
-                &index.checkpoint.index_name,
-                index.checkpoint.generation,
-            ),
-        )? != Some(index.checkpoint.to_bytes()?)
-        {
-            return Err(invalid_bundle("catalog checkpoint record mismatch"));
-        }
-    }
-    Ok(())
-}
-
-fn enforce_bundle_limits<S>(
-    indexed: &IndexedMap<'_, S>,
-    bundle: &IndexedSnapshotBundle,
-) -> Result<(), Error>
-where
-    S: Store + ManifestStore + TransactionalStore,
-{
-    let mut max_nodes = usize::MAX;
-    let mut max_bytes = usize::MAX;
-    for index in &bundle.indexes {
-        let definition = indexed
-            .runtime_definition_for_descriptor(&index.descriptor)?
-            .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
-                name: index.descriptor.name.clone(),
-                generation: index.descriptor.generation,
-            })?;
-        max_nodes = max_nodes.min(definition.limits().max_bundle_nodes);
-        max_bytes = max_bytes.min(definition.limits().max_bundle_bytes);
-    }
-    if bundle.node_count() > max_nodes {
-        return Err(Error::IndexResourceLimitExceeded {
-            resource: "bundle_nodes",
-            limit: max_nodes,
-            actual: bundle.node_count(),
-        });
-    }
-    if bundle.byte_count() > max_bytes {
-        return Err(Error::IndexResourceLimitExceeded {
-            resource: "bundle_bytes",
-            limit: max_bytes,
-            actual: bundle.byte_count(),
-        });
     }
     Ok(())
 }

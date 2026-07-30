@@ -707,8 +707,8 @@ export interface PortableSecondaryIndexLimits {
   maxAllValueBytes: bigint;
   maxTermsPerRecord: bigint;
   maxProjectedBytesPerRecord: bigint;
-  maxDerivedMutationsPerTransaction: bigint;
-  maxProjectedBytesPerTransaction: bigint;
+  maxDerivedMutationsPerWrite: bigint;
+  maxProjectedBytesPerWrite: bigint;
   maxIndexes: bigint;
   buildPageSize: bigint;
   maxTemporarySortBytes: bigint;
@@ -726,8 +726,8 @@ export function defaultSecondaryIndexLimits(): PortableSecondaryIndexLimits {
     maxAllValueBytes: 1024n * 1024n,
     maxTermsPerRecord: 1024n,
     maxProjectedBytesPerRecord: 1024n * 1024n,
-    maxDerivedMutationsPerTransaction: 100_000n,
-    maxProjectedBytesPerTransaction: 64n * 1024n * 1024n,
+    maxDerivedMutationsPerWrite: 100_000n,
+    maxProjectedBytesPerWrite: 64n * 1024n * 1024n,
     maxIndexes: 32n,
     buildPageSize: 4096n,
     maxTemporarySortBytes: 256n * 1024n * 1024n,
@@ -748,14 +748,14 @@ function portableSecondaryIndexLimits(value: PortableSecondaryIndexLimits | unde
 
 export interface PortableIndexedVersion {
   sourceVersion: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion: Uint8Array;
   indexCount: bigint;
 }
 
 export interface PortableIndexBuildResult {
   sourceVersion: Uint8Array;
   indexVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  stateVersion: Uint8Array;
   generation: bigint;
   entries: bigint;
   attempts: bigint;
@@ -773,8 +773,7 @@ export interface PortableIndexedUpdate {
 }
 
 export interface PortableIndexedSnapshotId {
-  sourceVersion: Uint8Array;
-  catalogVersion: Uint8Array;
+  snapshot: Uint8Array;
 }
 
 export interface PortableIndexVerification {
@@ -792,13 +791,16 @@ export interface PortableIndexVerification {
 export interface PortableIndexedMapHealth {
   sourceMapId: Uint8Array;
   sourceVersion?: Uint8Array;
-  catalogVersion?: Uint8Array;
+  stateVersion?: Uint8Array;
   activeIndexes: Array<{
     name: Uint8Array; generation: bigint; fingerprint: Uint8Array;
     projection: "keys_only" | "include" | "all";
-    indexMapId: Uint8Array; indexVersion: Uint8Array;
+    indexVersion: Uint8Array;
   }>;
-  supportsTransactions: boolean;
+  productionProfile: boolean;
+  closureValid: boolean;
+  retainedSnapshots: bigint;
+  durablePins: bigint;
 }
 
 export interface PortableIndexedMapMetrics {
@@ -809,9 +811,6 @@ export interface PortableIndexedMapMetrics {
   physicalUpserts: bigint;
   physicalDeletes: bigint;
   unchangedEmissionsSkipped: bigint;
-  sourceNodesWritten: bigint;
-  indexNodesWritten: bigint;
-  catalogNodesWritten: bigint;
   retries: bigint;
   buildAttempts: bigint;
   verificationOutcomes: bigint;
@@ -823,8 +822,8 @@ export interface PortableIndexedRetention {
   removedSourceVersions: Uint8Array[];
   retainedIndexVersions: Uint8Array[];
   removedIndexVersions: Uint8Array[];
-  removedCatalogVersions: Uint8Array[];
-  removedCheckpointRecords: bigint;
+  removedStateVersions: Uint8Array[];
+  removedSnapshotRecords: bigint;
   removedNamedRoots: Uint8Array[];
 }
 
@@ -2607,7 +2606,7 @@ export class WasmIndexRegistry implements Disposable {
 function portableIndexedVersion(value: any): PortableIndexedVersion {
   return {
     sourceVersion: value.sourceVersion,
-    catalogVersion: value.catalogVersion,
+    stateVersion: value.stateVersion,
     indexCount: BigInt(value.indexCount),
   };
 }
@@ -2682,7 +2681,7 @@ export class WasmIndexedMap implements Disposable {
       const value = native.ensureIndex(name);
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
-        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        stateVersion: value.stateVersion, generation: BigInt(value.generation),
         entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
       };
     });
@@ -2704,7 +2703,7 @@ export class WasmIndexedMap implements Disposable {
       );
       return {
         sourceVersion: value.sourceVersion, indexVersion: value.indexVersion,
-        catalogVersion: value.catalogVersion, generation: BigInt(value.generation),
+        stateVersion: value.stateVersion, generation: BigInt(value.generation),
         entries: BigInt(value.entries), attempts: BigInt(value.attempts), activated: value.activated,
       };
     });
@@ -2719,18 +2718,19 @@ export class WasmIndexedMap implements Disposable {
   }
   snapshotById(id: PortableIndexedSnapshotId, signal?: AbortSignal): Promise<WasmIndexedSnapshot> {
     const native = this.#open();
-    const source = ownedPortableBytes(id.sourceVersion);
-    const catalog = ownedPortableBytes(id.catalogVersion);
-    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(source, catalog)));
+    const snapshot = ownedPortableBytes(id.snapshot);
+    return portablePromise(signal, () => new WasmIndexedSnapshot(native.snapshotById(snapshot)));
   }
   health(): PortableIndexedMapHealth {
     const value = this.#open().health();
     return {
       sourceMapId: value.sourceMapId, sourceVersion: value.sourceVersion,
-      catalogVersion: value.catalogVersion, supportsTransactions: value.supportsTransactions,
+      stateVersion: value.stateVersion, productionProfile: value.productionProfile,
+      closureValid: value.closureValid, retainedSnapshots: BigInt(value.retainedSnapshots),
+      durablePins: BigInt(value.durablePins),
       activeIndexes: value.activeIndexes.map((index: any) => ({
         name: index.name, generation: BigInt(index.generation), fingerprint: index.fingerprint,
-        projection: index.projection, indexMapId: index.indexMapId, indexVersion: index.indexVersion,
+        projection: index.projection, indexVersion: index.indexVersion,
       })),
     };
   }
@@ -2764,8 +2764,8 @@ export class WasmIndexedMap implements Disposable {
       removedSourceVersions: value.removedSourceVersions,
       retainedIndexVersions: value.retainedIndexVersions,
       removedIndexVersions: value.removedIndexVersions,
-      removedCatalogVersions: value.removedCatalogVersions,
-      removedCheckpointRecords: BigInt(value.removedCheckpointRecords),
+      removedStateVersions: value.removedStateVersions,
+      removedSnapshotRecords: BigInt(value.removedSnapshotRecords),
       removedNamedRoots: value.removedNamedRoots,
     };
   }

@@ -1,20 +1,18 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
-use super::super::manifest::ManifestStore;
-use super::super::range::ReverseCursor;
 use super::super::read::{EntryRef, ScanOutcome};
 use super::super::store::Store;
-use super::super::transaction::TransactionalStore;
 use super::super::tree::Tree;
-use super::super::versioned_map::{MapSnapshot, MapVersionId, VersionedMap};
+use super::super::versioned_map::{MapSnapshot, MapVersionId};
 use super::super::Prolly;
-use super::coordinator::{validate_catalog_format, IndexedMap};
+use super::budget::{BudgetCounter, Deadline, QueryBudget};
+use super::coordinator::IndexedMap;
 use super::definition::IndexProjection;
+use super::publication::IndexedStore;
+use super::state::{IndexDescriptor, IndexedSnapshotId, IndexedSnapshotRecord};
 use super::storage::{
-    catalog_checkpoint_key, catalog_current_key, catalog_descriptor_key, catalog_map_id,
     decode_physical_index_key, decode_physical_index_key_ref, term_bounds_exact,
-    term_bounds_prefix, term_bounds_range, IndexCheckpoint, IndexValue, IndexValueRef,
-    IndexedHeadRecord, SecondaryIndexDescriptor, TermBounds,
+    term_bounds_prefix, term_bounds_range, IndexValue, IndexValueRef, TermBounds,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -22,19 +20,11 @@ use std::ops::ControlFlow;
 
 const CURSOR_MAGIC: &[u8; 8] = b"PSICUR01";
 const CURSOR_VERSION: u32 = 1;
-const SOURCE_JOIN_BATCH_SIZE: usize = 256;
-
-struct SourceJoinMatch {
-    term: Vec<u8>,
-    primary_key: Vec<u8>,
-    projection: Option<Vec<u8>>,
-}
-
-/// Reproducible identity of one catalog-selected indexed snapshot.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct IndexedSnapshotId {
-    pub source_version: MapVersionId,
-    pub catalog_version: MapVersionId,
+#[derive(Clone)]
+struct SnapshotContext {
+    snapshot: IndexedSnapshotId,
+    source_version: MapVersionId,
+    state_version: MapVersionId,
 }
 
 /// One decoded physical secondary-index match.
@@ -101,8 +91,9 @@ enum LogicalBounds {
 /// Snapshot- and query-bound cursor for resumable secondary-index scans.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SecondaryIndexCursor {
+    snapshot: IndexedSnapshotId,
     source_version: MapVersionId,
-    catalog_version: MapVersionId,
+    state_version: MapVersionId,
     index_name: Vec<u8>,
     index_version: MapVersionId,
     definition_fingerprint: Cid,
@@ -113,6 +104,7 @@ pub struct SecondaryIndexCursor {
 
 #[derive(Serialize, Deserialize)]
 struct CursorWire(
+    IndexedSnapshotId,
     MapVersionId,
     MapVersionId,
     Vec<u8>,
@@ -127,8 +119,9 @@ impl SecondaryIndexCursor {
     /// Encode this cursor into a stable, versioned binary envelope.
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         let payload = serde_cbor::to_vec(&CursorWire(
+            self.snapshot.clone(),
             self.source_version.clone(),
-            self.catalog_version.clone(),
+            self.state_version.clone(),
             self.index_name.clone(),
             self.index_version.clone(),
             self.definition_fingerprint.clone(),
@@ -158,8 +151,9 @@ impl SecondaryIndexCursor {
             )));
         }
         let CursorWire(
+            snapshot,
             source_version,
-            catalog_version,
+            state_version,
             index_name,
             index_version,
             definition_fingerprint,
@@ -174,8 +168,9 @@ impl SecondaryIndexCursor {
             ));
         }
         Ok(Self {
+            snapshot,
             source_version,
-            catalog_version,
+            state_version,
             index_name,
             index_version,
             definition_fingerprint,
@@ -190,10 +185,7 @@ impl SecondaryIndexCursor {
     }
 
     pub fn snapshot_id(&self) -> IndexedSnapshotId {
-        IndexedSnapshotId {
-            source_version: self.source_version.clone(),
-            catalog_version: self.catalog_version.clone(),
-        }
+        self.snapshot.clone()
     }
 
     pub fn index_version(&self) -> &MapVersionId {
@@ -212,10 +204,10 @@ pub struct SecondaryIndexPage {
     pub next_cursor: Option<SecondaryIndexCursor>,
 }
 
-/// Immutable catalog-selected source and index view.
+/// Immutable collection-state-selected source and index view.
 pub struct IndexedSnapshot<'a, S: Store> {
     id: IndexedSnapshotId,
-    catalog: MapSnapshot<'a, S>,
+    state: MapSnapshot<'a, S>,
     source: MapSnapshot<'a, S>,
     indexes: BTreeMap<Vec<u8>, SecondaryIndexSnapshot<'a, S>>,
 }
@@ -225,12 +217,20 @@ impl<'a, S: Store> IndexedSnapshot<'a, S> {
         &self.id
     }
 
+    pub fn source_version(&self) -> &MapVersionId {
+        self.source.id()
+    }
+
+    pub fn state_version(&self) -> &MapVersionId {
+        self.state.id()
+    }
+
     pub fn source(&self) -> &MapSnapshot<'a, S> {
         &self.source
     }
 
-    pub fn catalog(&self) -> &MapSnapshot<'a, S> {
-        &self.catalog
+    pub fn state(&self) -> &MapSnapshot<'a, S> {
+        &self.state
     }
 
     pub fn index(&self, name: impl AsRef<[u8]>) -> Result<&SecondaryIndexSnapshot<'a, S>, Error> {
@@ -238,7 +238,7 @@ impl<'a, S: Store> IndexedSnapshot<'a, S> {
             .get(name.as_ref())
             .ok_or_else(|| Error::IndexUnavailableAtVersion {
                 name: name.as_ref().to_vec(),
-                source_version: self.id.source_version.clone(),
+                source_version: self.source.id().clone(),
             })
     }
 
@@ -247,28 +247,140 @@ impl<'a, S: Store> IndexedSnapshot<'a, S> {
     }
 }
 
-/// Query handle for one exact hidden-index checkpoint.
+/// Query handle for one exact secondary-index snapshot.
 pub struct SecondaryIndexSnapshot<'a, S: Store> {
     prolly: &'a Prolly<S>,
-    snapshot_id: IndexedSnapshotId,
-    descriptor: SecondaryIndexDescriptor,
-    checkpoint: IndexCheckpoint,
+    snapshot_id: SnapshotContext,
+    descriptor: IndexDescriptor,
+    selected: super::state::IndexSnapshotRef,
     source_tree: Tree,
     index: MapSnapshot<'a, S>,
     max_projection_bytes: usize,
 }
 
+/// A finite-budget query session over one immutable secondary-index snapshot.
+pub struct SecondaryIndexQuery<'query, 'engine, S: Store> {
+    index: &'query SecondaryIndexSnapshot<'engine, S>,
+    budget: QueryBudget,
+}
+
+impl<'query, 'engine, S: Store> SecondaryIndexQuery<'query, 'engine, S> {
+    pub fn exact_page(
+        &self,
+        term: &[u8],
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Forward,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn prefix_page(
+        &self,
+        prefix: &[u8],
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Prefix(prefix.to_vec()),
+            SecondaryIndexDirection::Forward,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn range_page(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Range(start.to_vec(), end.map(ToOwned::to_owned)),
+            SecondaryIndexDirection::Forward,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn exact_reverse_page(
+        &self,
+        term: &[u8],
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Reverse,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn prefix_reverse_page(
+        &self,
+        prefix: &[u8],
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Prefix(prefix.to_vec()),
+            SecondaryIndexDirection::Reverse,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn range_reverse_page(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        cursor: Option<&SecondaryIndexCursor>,
+        limit: usize,
+    ) -> Result<SecondaryIndexPage, Error> {
+        self.index.page(
+            LogicalBounds::Range(start.to_vec(), end.map(ToOwned::to_owned)),
+            SecondaryIndexDirection::Reverse,
+            cursor,
+            limit,
+            &self.budget,
+        )
+    }
+
+    pub fn records(&self, term: &[u8]) -> Result<Vec<IndexedSourceRecord>, Error> {
+        self.index.records_with_budget(term, &self.budget)
+    }
+}
+
 impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
+    pub fn query(&self, budget: QueryBudget) -> Result<SecondaryIndexQuery<'_, 'a, S>, Error> {
+        budget.validate()?;
+        Ok(SecondaryIndexQuery {
+            index: self,
+            budget,
+        })
+    }
+
     pub fn name(&self) -> &[u8] {
         &self.descriptor.name
     }
 
-    pub fn descriptor(&self) -> &SecondaryIndexDescriptor {
+    pub fn descriptor(&self) -> &IndexDescriptor {
         &self.descriptor
     }
 
-    pub fn checkpoint(&self) -> &IndexCheckpoint {
-        &self.checkpoint
+    pub fn snapshot_ref(&self) -> &super::state::IndexSnapshotRef {
+        &self.selected
     }
 
     pub fn tree(&self) -> &Tree {
@@ -276,15 +388,19 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
     }
 
     pub fn exact(&self, term: &[u8]) -> Result<Vec<SecondaryIndexMatch>, Error> {
-        let mut matches = Vec::new();
-        self.scan_exact(term, |matched| matches.push(matched.to_owned()))?;
-        Ok(matches)
+        self.collect_page(self.exact_page(
+            term,
+            None,
+            QueryBudget::default().max_returned_entries,
+        )?)
     }
 
     pub fn prefix(&self, prefix: &[u8]) -> Result<Vec<SecondaryIndexMatch>, Error> {
-        let mut matches = Vec::new();
-        self.scan_prefix(prefix, |matched| matches.push(matched.to_owned()))?;
-        Ok(matches)
+        self.collect_page(self.prefix_page(
+            prefix,
+            None,
+            QueryBudget::default().max_returned_entries,
+        )?)
     }
 
     pub fn range(
@@ -292,11 +408,12 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         start_term: &[u8],
         end_term: Option<&[u8]>,
     ) -> Result<Vec<SecondaryIndexMatch>, Error> {
-        let mut matches = Vec::new();
-        self.scan_range(start_term, end_term, |matched| {
-            matches.push(matched.to_owned())
-        })?;
-        Ok(matches)
+        self.collect_page(self.range_page(
+            start_term,
+            end_term,
+            None,
+            QueryBudget::default().max_returned_entries,
+        )?)
     }
 
     pub fn scan_exact(
@@ -471,8 +588,19 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
 
     /// Resolve matching primary keys with one ordered batched source read.
     pub fn records(&self, term: &[u8]) -> Result<Vec<IndexedSourceRecord>, Error> {
+        self.records_with_budget(term, &QueryBudget::default())
+    }
+
+    fn records_with_budget(
+        &self,
+        term: &[u8],
+        budget: &QueryBudget,
+    ) -> Result<Vec<IndexedSourceRecord>, Error> {
         let mut records = Vec::new();
-        self.scan_records(term, |record| records.push(record.to_owned()))?;
+        self.scan_records_until_with_budget(term, budget, |record| {
+            records.push(record.to_owned());
+            ControlFlow::<()>::Continue(())
+        })?;
         Ok(records)
     }
 
@@ -492,87 +620,102 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
     pub fn scan_records_until<B>(
         &self,
         term: &[u8],
+        visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        self.scan_records_until_with_budget(term, &QueryBudget::default(), visit)
+    }
+
+    fn scan_records_until_with_budget<B>(
+        &self,
+        term: &[u8],
+        budget: &QueryBudget,
         mut visit: impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
+        budget.validate()?;
+        let counter = BudgetCounter::new();
         let mut source = self.prolly.read(&self.source_tree)?;
-        let mut chunk = Vec::with_capacity(SOURCE_JOIN_BATCH_SIZE);
         let mut delivered = 0u64;
+        let mut source_fetches = 0usize;
+        let mut returned_bytes = 0usize;
+        let mut accounted_memory = 0usize;
         let mut terminal = None;
-        self.scan_exact_until(term, |matched| {
-            chunk.push(SourceJoinMatch {
-                term: matched.term.to_vec(),
-                primary_key: matched.primary_key.to_vec(),
-                projection: matched.projection.map(<[u8]>::to_vec),
-            });
-            if chunk.len() < SOURCE_JOIN_BATCH_SIZE {
-                return ControlFlow::Continue(());
-            }
-            match self.flush_source_join_chunk(&mut source, &mut chunk, &mut delivered, &mut visit)
-            {
-                Ok(Some(value)) => {
-                    terminal = Some(Ok(value));
-                    ControlFlow::Break(())
+        self.scan_matches_until_with_budget(
+            LogicalBounds::Exact(term.to_vec()),
+            SecondaryIndexDirection::Forward,
+            budget,
+            |matched| {
+                if terminal.is_some() {
+                    return ControlFlow::Break(());
                 }
-                Ok(None) => ControlFlow::Continue(()),
-                Err(error) => {
-                    terminal = Some(Err(error));
-                    ControlFlow::Break(())
+                if source_fetches == budget.max_source_fetches {
+                    terminal = Some(Err(Error::IndexResourceLimitExceeded {
+                        resource: "query_source_fetches",
+                        limit: budget.max_source_fetches,
+                        actual: source_fetches.saturating_add(1),
+                    }));
+                    return ControlFlow::Break(());
                 }
-            }
-        })?;
-
-        if terminal.is_none() && !chunk.is_empty() {
-            terminal = self
-                .flush_source_join_chunk(&mut source, &mut chunk, &mut delivered, &mut visit)
-                .transpose();
-        }
+                source_fetches += 1;
+                let result = source.get_with(matched.primary_key, |source_value| {
+                    let retained = matched
+                        .primary_key
+                        .len()
+                        .checked_add(source_value.len())
+                        .ok_or(Error::IndexResourceLimitExceeded {
+                            resource: "query_returned_bytes",
+                            limit: budget.max_returned_bytes,
+                            actual: usize::MAX,
+                        })?;
+                    counter.charge(
+                        "query_returned_bytes",
+                        &mut returned_bytes,
+                        retained,
+                        budget.max_returned_bytes,
+                    )?;
+                    counter.charge(
+                        "query_accounted_memory_bytes",
+                        &mut accounted_memory,
+                        retained,
+                        budget.max_accounted_memory_bytes,
+                    )?;
+                    counter.check_elapsed("query_elapsed_millis", budget.max_elapsed)?;
+                    delivered = delivered.saturating_add(1);
+                    Ok(visit(IndexedSourceRecordRef {
+                        term: matched.term,
+                        primary_key: matched.primary_key,
+                        projection: matched.projection,
+                        source_value,
+                    }))
+                });
+                match result {
+                    Ok(Some(Ok(ControlFlow::Continue(())))) => ControlFlow::Continue(()),
+                    Ok(Some(Ok(ControlFlow::Break(value)))) => {
+                        terminal = Some(Ok(value));
+                        ControlFlow::Break(())
+                    }
+                    Ok(Some(Err(error))) | Err(error) => {
+                        terminal = Some(Err(error));
+                        ControlFlow::Break(())
+                    }
+                    Ok(None) => {
+                        terminal = Some(Err(Error::IndexSnapshotMismatch {
+                            name: self.descriptor.name.clone(),
+                            source_version: self.snapshot_id.source_version.clone(),
+                            reason: format!(
+                                "index references missing source primary key {:?}",
+                                matched.primary_key
+                            ),
+                        }));
+                        ControlFlow::Break(())
+                    }
+                }
+            },
+        )?;
         match terminal {
             Some(Ok(value)) => Ok(ScanOutcome::stopped(delivered, value)),
             Some(Err(error)) => Err(error),
             None => Ok(ScanOutcome::complete(delivered)),
         }
-    }
-
-    fn flush_source_join_chunk<B>(
-        &self,
-        source: &mut super::super::read::ReadSession<'_, '_, S>,
-        chunk: &mut Vec<SourceJoinMatch>,
-        delivered: &mut u64,
-        visit: &mut impl for<'row> FnMut(IndexedSourceRecordRef<'row>) -> ControlFlow<B>,
-    ) -> Result<Option<B>, Error> {
-        let keys = chunk
-            .iter()
-            .map(|matched| matched.primary_key.as_slice())
-            .collect::<Vec<_>>();
-        let mut terminal = None;
-        source.get_many_with(&keys, |position, _, source_value| {
-            if terminal.is_some() {
-                return;
-            }
-            let matched = &chunk[position];
-            let Some(source_value) = source_value else {
-                terminal = Some(Err(Error::IndexCheckpointMismatch {
-                    name: self.descriptor.name.clone(),
-                    source_version: self.snapshot_id.source_version.clone(),
-                    reason: format!(
-                        "index references missing source primary key {:?}",
-                        matched.primary_key
-                    ),
-                }));
-                return;
-            };
-            *delivered = delivered.saturating_add(1);
-            if let ControlFlow::Break(value) = visit(IndexedSourceRecordRef {
-                term: &matched.term,
-                primary_key: &matched.primary_key,
-                projection: matched.projection.as_deref(),
-                source_value,
-            }) {
-                terminal = Some(Ok(value));
-            }
-        })?;
-        chunk.clear();
-        terminal.transpose()
     }
 
     pub fn exact_page(
@@ -586,6 +729,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             SecondaryIndexDirection::Forward,
             cursor,
             limit,
+            &QueryBudget::default(),
         )
     }
 
@@ -600,6 +744,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             SecondaryIndexDirection::Reverse,
             cursor,
             limit,
+            &QueryBudget::default(),
         )
     }
 
@@ -614,6 +759,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             SecondaryIndexDirection::Forward,
             cursor,
             limit,
+            &QueryBudget::default(),
         )
     }
 
@@ -628,6 +774,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             SecondaryIndexDirection::Reverse,
             cursor,
             limit,
+            &QueryBudget::default(),
         )
     }
 
@@ -643,6 +790,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             SecondaryIndexDirection::Forward,
             cursor,
             limit,
+            &QueryBudget::default(),
         )
     }
 
@@ -658,6 +806,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             SecondaryIndexDirection::Reverse,
             cursor,
             limit,
+            &QueryBudget::default(),
         )
     }
 
@@ -665,12 +814,45 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         &self,
         logical: LogicalBounds,
         direction: SecondaryIndexDirection,
+        visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
+    ) -> Result<ScanOutcome<B>, Error> {
+        let budget = QueryBudget::default();
+        self.scan_matches_until_with_budget(logical, direction, &budget, visit)
+    }
+
+    fn scan_matches_until_with_budget<B>(
+        &self,
+        logical: LogicalBounds,
+        direction: SecondaryIndexDirection,
+        budget: &QueryBudget,
         mut visit: impl for<'row> FnMut(SecondaryIndexMatchRef<'row>) -> ControlFlow<B>,
     ) -> Result<ScanOutcome<B>, Error> {
+        budget.validate()?;
+        let started = Deadline::new();
+        let mut scanned = 0usize;
+        let mut returned = 0usize;
+        let mut returned_bytes = 0usize;
         let bounds = physical_bounds(&logical)?;
         let mut term_scratch = Vec::new();
         let mut primary_key_scratch = Vec::new();
         let mut handle = |entry: EntryRef<'_>| {
+            scanned = scanned.saturating_add(1);
+            returned = returned.saturating_add(1);
+            returned_bytes = returned_bytes
+                .saturating_add(entry.key().len())
+                .saturating_add(entry.value().len());
+            if scanned > budget.max_scanned_entries
+                || returned > budget.max_returned_entries
+                || returned_bytes > budget.max_returned_bytes
+                || returned_bytes > budget.max_accounted_memory_bytes
+                || started.exceeded(budget.max_elapsed)
+            {
+                return ControlFlow::Break(Err(Error::IndexResourceLimitExceeded {
+                    resource: "query_scan_budget",
+                    limit: budget.max_scanned_entries.min(budget.max_returned_entries),
+                    actual: scanned.max(returned),
+                }));
+            }
             let matched = match self.decode_match_ref(
                 entry.key(),
                 entry.value(),
@@ -712,17 +894,30 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         direction: SecondaryIndexDirection,
         cursor: Option<&SecondaryIndexCursor>,
         limit: usize,
+        budget: &QueryBudget,
     ) -> Result<SecondaryIndexPage, Error> {
+        budget.validate()?;
+        let counter = BudgetCounter::new();
+        let max_page_entries = budget.max_page_entries.min(budget.max_returned_entries);
+        if limit > max_page_entries {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "query_page_entries",
+                limit: max_page_entries,
+                actual: limit,
+            });
+        }
         if let Some(cursor) = cursor {
             self.validate_cursor(cursor, &logical, direction)?;
         }
         if limit == 0 {
             let next_cursor = cursor.cloned().or_else(|| {
                 Some(SecondaryIndexCursor {
+                    snapshot: self.snapshot_id.snapshot.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
-                    catalog_version: self.snapshot_id.catalog_version.clone(),
+                    state_version: self.snapshot_id.state_version.clone(),
                     index_name: self.descriptor.name.clone(),
-                    index_version: self.checkpoint.index_version.clone(),
+                    index_version: MapVersionId::for_tree(&self.selected.tree)
+                        .expect("validated index tree"),
                     definition_fingerprint: self.descriptor.fingerprint.clone(),
                     direction,
                     bounds: logical,
@@ -735,61 +930,108 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             });
         }
         let bounds = physical_bounds(&logical)?;
-        let page_limit = limit.saturating_add(1);
-        let mut raw_entries = match direction {
+        let mut matches = Vec::with_capacity(limit);
+        let mut returned_bytes = 0usize;
+        let mut accounted_memory = 0usize;
+        let mut scanned = 0usize;
+        let mut has_more = false;
+        let mut raw_key = None;
+        let after = cursor.and_then(|cursor| cursor.raw_key.as_deref());
+        let mut handle = |entry: EntryRef<'_>| {
+            if direction == SecondaryIndexDirection::Forward
+                && after.is_some_and(|after| entry.key() <= after)
+            {
+                return ControlFlow::Continue(());
+            }
+            scanned = scanned.saturating_add(1);
+            if scanned > budget.max_scanned_entries {
+                return ControlFlow::Break(Err(Error::IndexResourceLimitExceeded {
+                    resource: "query_scanned_entries",
+                    limit: budget.max_scanned_entries,
+                    actual: scanned,
+                }));
+            }
+            if matches.len() == limit {
+                has_more = true;
+                return ControlFlow::Break(Ok(()));
+            }
+            let matched = match self.decode_match(entry.key(), entry.value()) {
+                Ok(matched) => matched,
+                Err(error) => return ControlFlow::Break(Err(error)),
+            };
+            let retained = matched
+                .term
+                .len()
+                .checked_add(matched.primary_key.len())
+                .and_then(|bytes| {
+                    bytes.checked_add(matched.projection.as_ref().map_or(0, Vec::len))
+                })
+                .ok_or(Error::IndexResourceLimitExceeded {
+                    resource: "query_returned_bytes",
+                    limit: budget.max_returned_bytes,
+                    actual: usize::MAX,
+                });
+            let retained = match retained {
+                Ok(retained) => retained,
+                Err(error) => return ControlFlow::Break(Err(error)),
+            };
+            if let Err(error) = counter
+                .charge(
+                    "query_returned_bytes",
+                    &mut returned_bytes,
+                    retained,
+                    budget.max_returned_bytes,
+                )
+                .and_then(|_| {
+                    counter.charge(
+                        "query_accounted_memory_bytes",
+                        &mut accounted_memory,
+                        retained,
+                        budget.max_accounted_memory_bytes,
+                    )
+                })
+                .and_then(|_| counter.check_elapsed("query_elapsed_millis", budget.max_elapsed))
+            {
+                return ControlFlow::Break(Err(error));
+            }
+            raw_key = Some(entry.key().to_vec());
+            matches.push(matched);
+            ControlFlow::Continue(())
+        };
+        let outcome = match direction {
             SecondaryIndexDirection::Forward => {
-                let mut iter = match cursor.and_then(|cursor| cursor.raw_key.as_deref()) {
-                    Some(after) => {
-                        self.prolly
-                            .range_after(self.index.tree(), after, bounds.end.as_deref())?
-                    }
-                    None => self.prolly.range(
-                        self.index.tree(),
-                        &bounds.start,
-                        bounds.end.as_deref(),
-                    )?,
-                };
-                let mut entries = Vec::with_capacity(page_limit);
-                for _ in 0..page_limit {
-                    let Some(entry) = iter.next() else { break };
-                    entries.push(entry?);
-                }
-                entries
+                let start = after.unwrap_or(&bounds.start);
+                self.prolly.scan_range_until(
+                    self.index.tree(),
+                    start,
+                    bounds.end.as_deref(),
+                    &mut handle,
+                )?
             }
             SecondaryIndexDirection::Reverse => {
-                let raw = cursor
-                    .and_then(|cursor| cursor.raw_key.clone())
-                    .map(ReverseCursor::before_key)
-                    .unwrap_or_else(ReverseCursor::end);
-                self.prolly
-                    .reverse_range_page(
-                        self.index.tree(),
-                        &raw,
-                        &bounds.start,
-                        bounds.end.as_deref(),
-                        page_limit,
-                    )?
-                    .entries
+                let end = after.or(bounds.end.as_deref());
+                self.prolly.scan_range_reverse_until(
+                    self.index.tree(),
+                    &bounds.start,
+                    end,
+                    &mut handle,
+                )?
             }
         };
-        let has_more = raw_entries.len() > limit;
-        raw_entries.truncate(limit);
-        let raw_key = has_more
-            .then(|| raw_entries.last().map(|(key, _)| key.clone()))
-            .flatten();
-        let matches = raw_entries
-            .into_iter()
-            .map(|(key, value)| self.decode_match(&key, &value))
-            .collect::<Result<Vec<_>, _>>()?;
-        let next_cursor = raw_key.map(|raw_key| SecondaryIndexCursor {
+        if let Some(Err(error)) = outcome.break_value {
+            return Err(error);
+        }
+        let next_cursor = has_more.then(|| SecondaryIndexCursor {
+            snapshot: self.snapshot_id.snapshot.clone(),
             source_version: self.snapshot_id.source_version.clone(),
-            catalog_version: self.snapshot_id.catalog_version.clone(),
+            state_version: self.snapshot_id.state_version.clone(),
             index_name: self.descriptor.name.clone(),
-            index_version: self.checkpoint.index_version.clone(),
+            index_version: MapVersionId::for_tree(&self.selected.tree)
+                .expect("validated index tree"),
             definition_fingerprint: self.descriptor.fingerprint.clone(),
             direction,
             bounds: logical,
-            raw_key: Some(raw_key),
+            raw_key,
         });
         Ok(SecondaryIndexPage {
             matches,
@@ -803,33 +1045,56 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
         bounds: &LogicalBounds,
         direction: SecondaryIndexDirection,
     ) -> Result<(), Error> {
-        let valid = cursor.source_version == self.snapshot_id.source_version
-            && cursor.catalog_version == self.snapshot_id.catalog_version
+        let valid = cursor.snapshot == self.snapshot_id.snapshot
+            && cursor.source_version == self.snapshot_id.source_version
+            && cursor.state_version == self.snapshot_id.state_version
             && cursor.index_name == self.descriptor.name
-            && cursor.index_version == self.checkpoint.index_version
+            && cursor.index_version
+                == MapVersionId::for_tree(&self.selected.tree).expect("validated index tree")
             && cursor.definition_fingerprint == self.descriptor.fingerprint
             && cursor.direction == direction
             && &cursor.bounds == bounds;
-        if valid {
-            Ok(())
-        } else {
+        let physical_key_valid = match cursor.raw_key.as_deref() {
+            None => true,
+            Some(raw_key) => {
+                let physical = physical_bounds(bounds)?;
+                raw_key >= physical.start.as_slice()
+                    && physical.end.as_deref().map_or(true, |end| raw_key < end)
+                    && decode_physical_index_key(raw_key).is_ok()
+            }
+        };
+        if !valid || !physical_key_valid {
             Err(Error::IndexCursorVersionMismatch {
                 expected: format!(
-                    "source={}, catalog={}, index={}, direction={direction:?}, bounds={bounds:?}",
+                    "source={}, state={}, index={}, direction={direction:?}, bounds={bounds:?}",
                     self.snapshot_id.source_version,
-                    self.snapshot_id.catalog_version,
-                    self.checkpoint.index_version
+                    self.snapshot_id.state_version,
+                    MapVersionId::for_tree(&self.selected.tree).expect("validated index tree")
                 ),
                 actual: format!(
-                    "source={}, catalog={}, index={}, direction={:?}, bounds={:?}",
+                    "source={}, state={}, index={}, direction={:?}, bounds={:?}",
                     cursor.source_version,
-                    cursor.catalog_version,
+                    cursor.state_version,
                     cursor.index_version,
                     cursor.direction,
                     cursor.bounds
                 ),
             })
+        } else {
+            Ok(())
         }
+    }
+
+    fn collect_page(&self, page: SecondaryIndexPage) -> Result<Vec<SecondaryIndexMatch>, Error> {
+        if page.next_cursor.is_some() {
+            let limit = QueryBudget::default().max_returned_entries;
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "query_returned_entries",
+                limit,
+                actual: limit.saturating_add(1),
+            });
+        }
+        Ok(page.matches)
     }
 
     fn decode_match(&self, key: &[u8], value: &[u8]) -> Result<SecondaryIndexMatch, Error> {
@@ -840,7 +1105,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             (IndexProjection::Include, IndexValue::Included(bytes))
             | (IndexProjection::All, IndexValue::FullSource(bytes)) => Some(bytes),
             _ => {
-                return Err(Error::IndexCheckpointMismatch {
+                return Err(Error::IndexSnapshotMismatch {
                     name: self.descriptor.name.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
                     reason: "stored projection value does not match its descriptor".to_string(),
@@ -868,7 +1133,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
             (IndexProjection::Include, IndexValueRef::Included(bytes))
             | (IndexProjection::All, IndexValueRef::FullSource(bytes)) => Some(bytes),
             _ => {
-                return Err(Error::IndexCheckpointMismatch {
+                return Err(Error::IndexSnapshotMismatch {
                     name: self.descriptor.name.clone(),
                     source_version: self.snapshot_id.source_version.clone(),
                     reason: "stored projection value does not match its descriptor".to_string(),
@@ -893,132 +1158,89 @@ fn physical_bounds(bounds: &LogicalBounds) -> Result<TermBounds, Error> {
 
 impl<'a, S> IndexedMap<'a, S>
 where
-    S: Store + ManifestStore + TransactionalStore,
+    S: IndexedStore,
 {
-    /// Pin the current catalog first, then reopen every selected immutable root.
+    /// Pin one canonical collection-state root and all immutable trees it names.
     pub fn snapshot(&self) -> Result<IndexedSnapshot<'a, S>, Error> {
-        let catalog_map = VersionedMap::new(self.prolly, catalog_map_id(&self.source_map_id));
-        let catalog = catalog_map.snapshot()?.ok_or_else(|| {
-            Error::InvalidVersionedMap("secondary-index catalog is absent".to_string())
-        })?;
-        let current = load_current(&catalog)?;
-        self.resolve_snapshot(catalog, &current.source_version)
+        let loaded = self.load_state()?;
+        let record = loaded.state.head_snapshot()?.clone();
+        let record_id = loaded.state.head.clone();
+        self.resolve_snapshot(loaded.tree, loaded.state, record_id, record)
     }
 
-    /// Reopen exact checkpoints for a retained source using current generations.
+    /// Reopen the retained canonical snapshot containing this source tree.
     pub fn snapshot_at(
         &self,
         source_version: &MapVersionId,
     ) -> Result<IndexedSnapshot<'a, S>, Error> {
-        let catalog_map = VersionedMap::new(self.prolly, catalog_map_id(&self.source_map_id));
-        let catalog = catalog_map.snapshot()?.ok_or_else(|| {
-            Error::InvalidVersionedMap("secondary-index catalog is absent".to_string())
-        })?;
-        self.resolve_snapshot(catalog, source_version)
+        let loaded = self.load_state()?;
+        let (record_id, record) = retained_snapshot_for_source(&loaded.state, source_version)?;
+        self.resolve_snapshot(loaded.tree, loaded.state, record_id, record)
     }
 
-    /// Reopen the exact retained catalog/source pair represented by `id`.
+    /// Reopen the exact retained content-addressed snapshot represented by `id`.
     pub fn snapshot_by_id(&self, id: &IndexedSnapshotId) -> Result<IndexedSnapshot<'a, S>, Error> {
-        let catalog = VersionedMap::new(self.prolly, catalog_map_id(&self.source_map_id))
-            .snapshot_at(&id.catalog_version)?
-            .ok_or_else(|| {
-                Error::InvalidVersionedMap(format!(
-                    "indexed catalog version {} is unavailable",
-                    id.catalog_version
-                ))
-            })?;
-        self.resolve_snapshot(catalog, &id.source_version)
+        let loaded = self.load_state()?;
+        let record = loaded.state.snapshots.get(id).cloned().ok_or_else(|| {
+            Error::InvalidVersionedMap(format!(
+                "indexed snapshot {:?} is not retained",
+                id.as_cid()
+            ))
+        })?;
+        self.resolve_snapshot(loaded.tree, loaded.state, id.clone(), record)
     }
 
     fn resolve_snapshot(
         &self,
-        catalog: MapSnapshot<'a, S>,
-        source_version: &MapVersionId,
+        state_tree: Tree,
+        state: super::state::IndexedCollectionState,
+        record_id: IndexedSnapshotId,
+        record: IndexedSnapshotRecord,
     ) -> Result<IndexedSnapshot<'a, S>, Error> {
-        validate_catalog_format(&catalog)?;
-        let current = load_current(&catalog)?;
-        let source = VersionedMap::new(self.prolly, &self.source_map_id)
-            .snapshot_at(source_version)?
-            .ok_or_else(|| {
-                Error::InvalidVersionedMap(format!(
-                    "indexed source version {source_version} is unavailable"
-                ))
-            })?;
-        let snapshot_id = IndexedSnapshotId {
+        let source_version = MapVersionId::for_tree(&record.source.tree)?;
+        let source = MapSnapshot::from_tree(self.prolly, record.source.tree.clone(), true)?;
+        let state_snapshot = MapSnapshot::from_tree(self.prolly, state_tree, true)?;
+        let snapshot_id = SnapshotContext {
+            snapshot: record_id,
             source_version: source_version.clone(),
-            catalog_version: catalog.id().clone(),
+            state_version: state_snapshot.id().clone(),
         };
         let mut indexes = BTreeMap::new();
-        for active in current.indexes {
-            let checkpoint = if active.source_version == *source_version {
-                active
-            } else {
-                let key =
-                    catalog_checkpoint_key(source_version, &active.index_name, active.generation);
-                let bytes = catalog
-                    .get(&key)?
-                    .ok_or_else(|| Error::IndexUnavailableAtVersion {
-                        name: active.index_name.clone(),
-                        source_version: source_version.clone(),
-                    })?;
-                IndexCheckpoint::from_bytes(&bytes)?
-            };
-            if checkpoint.source_map_id != self.source_map_id
-                || checkpoint.source_version != *source_version
-            {
-                return Err(Error::IndexCheckpointMismatch {
-                    name: checkpoint.index_name.clone(),
+        for selected in record.indexes {
+            let descriptor = state
+                .descriptors
+                .get(&(
+                    selected.name.clone(),
+                    selected.descriptor_fingerprint.clone(),
+                ))
+                .cloned()
+                .ok_or_else(|| Error::IndexSnapshotMismatch {
+                    name: selected.name.clone(),
                     source_version: source_version.clone(),
-                    reason: "checkpoint source ownership does not match snapshot".to_string(),
-                });
-            }
-            let descriptor_bytes = catalog
-                .get(&catalog_descriptor_key(
-                    &checkpoint.index_name,
-                    checkpoint.generation,
-                ))?
-                .ok_or_else(|| Error::IndexCheckpointMismatch {
-                    name: checkpoint.index_name.clone(),
-                    source_version: source_version.clone(),
-                    reason: "checkpoint descriptor is missing".to_string(),
+                    reason: "canonical descriptor is missing".to_string(),
                 })?;
-            let descriptor = SecondaryIndexDescriptor::from_bytes(&descriptor_bytes)?;
-            if descriptor.fingerprint != checkpoint.definition_fingerprint {
-                return Err(Error::IndexCheckpointMismatch {
-                    name: checkpoint.index_name.clone(),
-                    source_version: source_version.clone(),
-                    reason: "checkpoint fingerprint does not match descriptor".to_string(),
-                });
-            }
             let runtime = self
                 .runtime_definition_for_descriptor(&descriptor)?
                 .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
-                    name: checkpoint.index_name.clone(),
-                    generation: checkpoint.generation,
+                    name: descriptor.name.clone(),
+                    generation: descriptor.generation,
                 })?;
-            let runtime_descriptor =
-                SecondaryIndexDescriptor::from_runtime(&self.source_map_id, &runtime)?;
+            let runtime_descriptor = IndexDescriptor::from_runtime(&self.source_map_id, &runtime)?;
             if runtime_descriptor.fingerprint != descriptor.fingerprint {
                 return Err(Error::IndexDefinitionMismatch {
-                    name: checkpoint.index_name.clone(),
-                    persisted: descriptor.fingerprint,
+                    name: descriptor.name.clone(),
+                    persisted: descriptor.fingerprint.clone(),
                     runtime: runtime_descriptor.fingerprint,
                 });
             }
-            let index = VersionedMap::new(self.prolly, &checkpoint.index_map_id)
-                .snapshot_at(&checkpoint.index_version)?
-                .ok_or_else(|| Error::IndexCheckpointMismatch {
-                    name: checkpoint.index_name.clone(),
-                    source_version: source_version.clone(),
-                    reason: "hidden index version is unavailable".to_string(),
-                })?;
+            let index = MapSnapshot::from_tree(self.prolly, selected.tree.clone(), true)?;
             indexes.insert(
-                checkpoint.index_name.clone(),
+                selected.name.clone(),
                 SecondaryIndexSnapshot {
                     prolly: self.prolly,
                     snapshot_id: snapshot_id.clone(),
                     descriptor,
-                    checkpoint,
+                    selected,
                     source_tree: source.tree().clone(),
                     index,
                     max_projection_bytes: match runtime.projection() {
@@ -1030,22 +1252,29 @@ where
             );
         }
         Ok(IndexedSnapshot {
-            id: snapshot_id,
-            catalog,
+            id: snapshot_id.snapshot.clone(),
+            state: state_snapshot,
             source,
             indexes,
         })
     }
 }
 
-fn load_current<S: Store>(catalog: &MapSnapshot<'_, S>) -> Result<IndexedHeadRecord, Error> {
-    validate_catalog_format(catalog)?;
-    catalog
-        .get(&catalog_current_key())?
-        .ok_or_else(|| {
-            Error::InvalidVersionedMap(
-                "secondary-index catalog is missing current selection".to_string(),
-            )
-        })
-        .and_then(|bytes| IndexedHeadRecord::from_bytes(&bytes))
+fn retained_snapshot_for_source(
+    state: &super::state::IndexedCollectionState,
+    source_version: &MapVersionId,
+) -> Result<(IndexedSnapshotId, IndexedSnapshotRecord), Error> {
+    let mut cursor = Some(state.head.clone());
+    while let Some(id) = cursor {
+        let snapshot = state.snapshots.get(&id).ok_or_else(|| {
+            Error::InvalidVersionedMap("snapshot ancestry is incomplete".to_string())
+        })?;
+        if MapVersionId::for_tree(&snapshot.source.tree)? == *source_version {
+            return Ok((id, snapshot.clone()));
+        }
+        cursor = snapshot.parent.clone();
+    }
+    Err(Error::InvalidVersionedMap(format!(
+        "indexed source version {source_version} is not retained"
+    )))
 }
