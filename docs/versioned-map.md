@@ -135,7 +135,8 @@ other ordered key/value state. “Versioned map” describes lifecycle and histo
 
 When the engine must maintain derived indexes synchronously and prevent writes
 from bypassing maintenance, use `IndexedMap` rather than manually coordinating
-separate `VersionedMap` heads. See [IndexedMap Secondary Indexes](secondary-index-design.md).
+separate `VersionedMap` heads. See [Build and operate secondary indexes with
+`IndexedMap`](secondary-indexes.md).
 
 For example:
 

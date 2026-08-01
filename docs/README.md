@@ -31,9 +31,12 @@ tests described here.
 - [Object-Store VCS Design](object-store-vcs-design.md): technical design for
   direct object-store node/blob storage, distributed ref CAS, publish protocol,
   and GC for Git-like version-control systems.
-- [Versioned Secondary Indexes](secondary-index-design.md): technical design for
-  strict derived `VersionedMap`s, atomic source/index publication, historical
-  queries, lifecycle management, retention, backup, sync, and bindings.
+- [Build and Operate Secondary Indexes](secondary-indexes.md): comprehensive
+  `IndexedMap` guide with typed definitions, query shapes, projections,
+  resource budgets, lifecycle operations, and 14 real-world patterns.
+- [IndexedMap Secondary-Index Semantics](secondary-index-design.md): canonical
+  atomic-state, persisted-layout, cursor, retention, transfer, and
+  observability reference.
 - [prolly-vcs Design](prolly-vcs-design.md): proposed neutral high-level
   repository crate with a general backend-neutral `KvStore` substrate, commits,
   refs, reflogs, patches, merge orchestration, sync planning, GC policy, and an
