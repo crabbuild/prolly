@@ -1,8 +1,12 @@
-# IndexedMap Secondary Indexes
+# `IndexedMap` secondary-index semantics
 
 `IndexedMap` is the synchronous secondary-index coordinator for one
 authoritative ordered collection. It supports sparse, non-unique and
 multi-valued indexes with `KeysOnly`, `Include`, and `All` projections.
+
+Start with [Build and operate secondary indexes with `IndexedMap`](secondary-indexes.md)
+for a self-contained application guide and 14 runnable real-world patterns.
+This page defines the lower-level persisted and operational semantics.
 
 This document describes the only supported persisted layout. There is no
 compatibility reader or suffix-named replacement format. A deployment using an
