@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use prolly::{
     BatchOp, Config, Error, IndexedStore, ManifestStore, ManifestUpdate, MemStore, Prolly,
-    RootManifest, SecondaryIndex, SecondaryIndexRegistry, Store, Tree,
+    RootCondition, RootManifest, RootWrite, SecondaryIndex, SecondaryIndexRegistry, Store,
+    TransactionNodeWrite, TransactionUpdate, TransactionalStore, Tree,
 };
 
 #[derive(Debug)]
@@ -22,7 +23,7 @@ impl std::error::Error for FaultError {}
 struct FaultStore {
     inner: MemStore,
     fail_confirmation: AtomicBool,
-    fail_cas: AtomicBool,
+    fail_commit: AtomicBool,
 }
 
 impl FaultStore {
@@ -30,8 +31,8 @@ impl FaultStore {
         self.fail_confirmation.store(true, Ordering::SeqCst);
     }
 
-    fn fail_next_cas(&self) {
-        self.fail_cas.store(true, Ordering::SeqCst);
+    fn fail_next_commit(&self) {
+        self.fail_commit.store(true, Ordering::SeqCst);
     }
 }
 
@@ -85,11 +86,33 @@ impl ManifestStore for FaultStore {
         expected: Option<&RootManifest>,
         new: Option<&RootManifest>,
     ) -> Result<ManifestUpdate, Self::Error> {
-        if self.fail_cas.swap(false, Ordering::SeqCst) {
-            return Err(FaultError("injected root CAS failure"));
-        }
         ManifestStore::compare_and_swap_root(&self.inner, name, expected, new)
             .map_err(|_| FaultError("root CAS failed"))
+    }
+}
+
+impl TransactionalStore for FaultStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        if self.fail_commit.swap(false, Ordering::SeqCst) {
+            return Err(Error::Store(Box::new(FaultError(
+                "injected transaction commit failure",
+            ))));
+        }
+        TransactionalStore::commit_transaction(
+            &self.inner,
+            node_writes,
+            root_conditions,
+            root_writes,
+        )
     }
 }
 
@@ -127,7 +150,7 @@ fn registry() -> SecondaryIndexRegistry {
 }
 
 #[test]
-fn failures_before_the_single_root_cas_leave_the_old_state_visible() {
+fn failures_before_or_during_the_root_transaction_leave_the_old_state_visible() {
     let store = Arc::new(FaultStore::default());
     let engine = Prolly::new(store.clone(), Config::default());
     let indexed = engine.indexed_map(b"users", registry()).unwrap();
@@ -140,10 +163,10 @@ fn failures_before_the_single_root_cas_leave_the_old_state_visible() {
     assert_eq!(indexed.health().unwrap().state_version, old_state);
     assert_eq!(indexed.get(b"confirmation").unwrap(), None);
 
-    store.fail_next_cas();
-    assert!(indexed.put(b"cas", b"not-visible").is_err());
+    store.fail_next_commit();
+    assert!(indexed.put(b"commit", b"not-visible").is_err());
     assert_eq!(indexed.health().unwrap().state_version, old_state);
-    assert_eq!(indexed.get(b"cas").unwrap(), None);
+    assert_eq!(indexed.get(b"commit").unwrap(), None);
 
     indexed.put(b"published", b"new").unwrap();
     let snapshot = indexed.snapshot().unwrap();

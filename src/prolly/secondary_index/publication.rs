@@ -1,15 +1,18 @@
 use super::super::error::Error;
 use super::super::manifest::ManifestStore;
 use super::super::store::{FileNodeStore, MemStore, Store};
+use super::super::transaction::TransactionalStore;
 use super::super::tree::Tree;
 use std::sync::Arc;
 
 /// Store contract used by the canonical single-root index coordinator.
 ///
-/// General multi-map transactions are deliberately not part of this trait.
-/// Immutable nodes are published first; one manifest CAS is the visibility
+/// Immutable nodes may be published before the visibility transition because
+/// they are content addressed and unreachable nodes are safe to reclaim. The
+/// canonical collection root is always validated and advanced through a strict
+/// store transaction, so a successful transaction is the only visibility
 /// transition.
-pub trait IndexedStore: Store + ManifestStore {
+pub trait IndexedStore: Store + ManifestStore + TransactionalStore {
     /// Confirm every non-empty candidate tree root is readable before CAS.
     fn confirm_indexed_publication(&self, trees: &[&Tree]) -> Result<(), Error> {
         for tree in trees {

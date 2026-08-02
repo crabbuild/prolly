@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use super::super::cid::Cid;
 use super::super::error::Error;
-use super::super::manifest::NamedRootUpdate;
 use super::super::node::Node;
 use super::super::store::{MemStore, Store};
 use super::super::sync::{verify_node_bytes, SnapshotBundleNode};
@@ -486,18 +485,13 @@ impl<S: IndexedStore> IndexedMap<'_, S> {
         self.prolly
             .store()
             .confirm_indexed_publication(&[&bundle.state_tree])?;
-        match self.prolly.compare_and_swap_named_root(
-            &super::state::indexed_collection_root_name(&self.source_map_id)?,
-            Some(&loaded.tree),
-            Some(&bundle.state_tree),
-        )? {
-            NamedRootUpdate::Applied => {
-                let imported = self.load_state()?;
-                self.current_version(&imported)
-            }
-            NamedRootUpdate::Conflict { .. } => Err(Error::InvalidVersionedMap(
-                "indexed bundle import CAS conflict".to_string(),
-            )),
+        if self.commit_collection_root(Some(&loaded.tree), &bundle.state_tree)? {
+            let imported = self.load_state()?;
+            self.current_version(&imported)
+        } else {
+            Err(Error::InvalidVersionedMap(
+                "indexed bundle import transaction conflict".to_string(),
+            ))
         }
     }
 }

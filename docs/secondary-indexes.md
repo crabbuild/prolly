@@ -36,7 +36,7 @@ Each visible snapshot selects:
 - The descriptor fingerprint for each selected index generation
 - The parent snapshot used by retention and historical traversal
 
-A write stages every new immutable source, index, snapshot, and state node. One compare-and-swap (CAS) of the collection root makes the complete candidate visible. Readers observe the previous collection state or the next collection state, never a partially published mixture.
+A write publishes new immutable source, index, snapshot, and state nodes, confirms the candidate roots are readable, and then transactionally validates and advances the collection root. The successful transaction makes the complete candidate visible. Readers observe the previous collection state or the next collection state, never a partially published mixture. Nodes left unreachable by a conflict are safe to reclaim during quiescent garbage collection.
 
 The public constructor is:
 
@@ -57,7 +57,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-`indexed_map` requires a synchronous store that implements `Store`, `ManifestStore`, and `IndexedStore`. `MemStore` works for tests and examples. Use a durable adapter and configure its durability guarantees for persistent deployments.
+`indexed_map` requires a synchronous `IndexedStore`, which includes `Store`, `ManifestStore`, and strict `TransactionalStore`. The constructor fails closed if strict transactions are disabled. `MemStore` works for tests and examples. Use a durable adapter whose transaction implementation is linearizable across every process and handle sharing the store and configure durable acknowledgements for persistent deployments.
 
 ```rust
 use prolly::{Config, MemStore, Prolly};
@@ -867,7 +867,7 @@ An adapter type alone does not prove that every deployment configuration is safe
 Verify these properties:
 
 - Immutable node writes are durable before manifest publication
-- Manifest compare-and-swap is atomic under concurrency
+- Transactional root validation and commit are linearizable under concurrency
 - Candidate roots are readable before visibility changes
 - Multiple processes agree on one manifest coordination domain
 - Restart and forced-termination tests preserve the old or new complete state
@@ -892,7 +892,7 @@ Cover at least:
 - Projection encoding and size limits
 - Insert, update, term removal, and delete maintenance
 - Exact, prefix, range, reverse, page, and cursor behavior
-- Concurrent writers and bounded CAS conflicts
+- Concurrent writers, stale conditional writes, and bounded transaction conflicts
 - Current and historical snapshot consistency
 - Definition replacement with retained generations
 - Verification, repair, export, import, retention, pins, and GC planning
