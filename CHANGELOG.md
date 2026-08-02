@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Require strict `TransactionalStore` support for the sole `IndexedMap`
+  constructor and route every canonical collection-root transition, including
+  bundle import, through the engine transaction layer.
+- Make `IndexedMap::apply_if` validate its expected source version inside the
+  publication retry loop so a concurrent writer can never turn a stale
+  conditional mutation into an unconditional write.
+- Coordinate `FileNodeStore` manifest writes with an operating-system file lock
+  so independently opened handles and processes serialize root transactions.
+
 ## 0.7.0 — 2026-07-30
 
 ### Changed

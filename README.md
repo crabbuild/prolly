@@ -75,8 +75,8 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
   and multi-valued terms, `KeysOnly`/`Include`/`All` projections, exact
   historical snapshots, durable pins, safe GC, structured diagnostics, and
   verified bounded transfer. Applications open it through one
-  `engine.indexed_map(...)` API and choose a synchronous store implementing
-  `Store`, `ManifestStore`, and `IndexedStore`.
+  `engine.indexed_map(...)` API and choose a synchronous `IndexedStore` with
+  strict transactional root publication.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.

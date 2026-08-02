@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use prolly::{
@@ -259,4 +259,53 @@ fn file_store_supports_strict_root_transactions() {
     with_file_prolly(assert_manual_commit_reports_applied_counts);
     with_file_prolly(assert_manual_commit_reports_conflict_without_applying_writes);
     with_file_prolly(assert_owned_transaction_commits);
+}
+
+#[test]
+fn independently_opened_file_stores_serialize_transaction_commits() {
+    let path = temp_store_path("prolly-file-transaction-coordination");
+    let seed = Prolly::new(
+        Arc::new(FileNodeStore::open(&path).unwrap()),
+        Config::default(),
+    );
+    let candidate = seed
+        .put(&seed.create(), b"winner".to_vec(), b"one".to_vec())
+        .unwrap();
+    let ready = Arc::new(Barrier::new(3));
+
+    let handles = (0..2)
+        .map(|_| {
+            let engine = Prolly::new(
+                Arc::new(FileNodeStore::open(&path).unwrap()),
+                Config::default(),
+            );
+            let candidate = candidate.clone();
+            let ready = ready.clone();
+            std::thread::spawn(move || {
+                let transaction = engine.begin_transaction().unwrap();
+                assert!(transaction
+                    .compare_and_swap_named_root(b"coordinated", None, Some(&candidate))
+                    .unwrap()
+                    .is_applied());
+                ready.wait();
+                transaction.commit().unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+
+    ready.wait();
+    let results = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        results.iter().filter(|result| result.is_applied()).count(),
+        1
+    );
+    assert_eq!(
+        results.iter().filter(|result| result.is_conflict()).count(),
+        1
+    );
+
+    let _ = std::fs::remove_dir_all(path);
 }

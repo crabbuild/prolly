@@ -32,7 +32,7 @@ A mutation or maintenance operation:
 2. derives immutable source, index, snapshot, and state objects;
 3. writes every immutable node;
 4. confirms that every candidate root is readable;
-5. performs one compare-and-swap of the collection root.
+5. transactionally validates and advances the collection root.
 
 Only the last step changes visibility. Readers therefore observe the complete
 old state or the complete new state, never a mix. Conflicts reload the entire
@@ -46,16 +46,25 @@ through `IndexedMap`.
 
 There is one indexed-map API:
 `engine.indexed_map(source_map_id, registry)`. It accepts synchronous stores
-implementing `Store`, `ManifestStore`, and `IndexedStore`; there is no
-production/verification profile or alternate production constructor.
+implementing `IndexedStore`, whose contract includes `Store`, `ManifestStore`,
+and strict `TransactionalStore`; there is no production/verification profile or
+alternate production constructor. Opening fails with
+`UnsupportedTransactions` when the backend does not enable strict transactions.
 
 The application owns deployment choices such as persistence mode, durability
-settings, process topology, backup policy, and GC quiescence. The coordinator
-always uses immutable node publication followed by one manifest compare-and-
-swap, and confirms candidate roots are readable before that visibility change.
-An adapter must implement those store contracts correctly for its deployment.
-The library does not infer operational safety from an adapter name or attach a
-blanket production label to a configuration.
+settings, backup policy, and GC quiescence. The coordinator publishes immutable
+candidate nodes, confirms candidate roots are readable, then advances the one
+canonical root through the engine transaction layer. The transaction validates
+the previously loaded root and makes a successful commit the only visibility
+transition. A conflict exposes no candidate root and retries from a complete new
+state. Unreachable candidate nodes left by a conflict or pre-commit failure are
+safe content-addressed garbage and are reclaimed by quiescent GC.
+
+An adapter that reports transaction support must provide linearizable
+cross-thread, cross-handle, and cross-process root validation; atomic root-write
+visibility; durable acknowledgement; and immediate readability of nodes named
+by an applied root. The library fails closed when transaction support is absent,
+but cannot compensate for an adapter that falsely claims these guarantees.
 
 ## Runtime definitions
 
@@ -125,9 +134,9 @@ reverse scans resume strictly before it.
 
 ## Retention, transfer, and GC
 
-Retention is a new canonical state followed by the same one-root CAS. Durable
-snapshot pins prevent retained records from being removed. A pin guard releases
-its pin explicitly or on drop.
+Retention is a new canonical state followed by the same transactional one-root
+commit. Durable snapshot pins prevent retained records from being removed. A
+pin guard releases its pin explicitly or on drop.
 
 Bundles contain one canonical state closure and a globally deduplicated,
 content-address-ordered node set. Export and import are bounded; import checks

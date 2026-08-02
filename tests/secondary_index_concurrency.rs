@@ -3,8 +3,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 
 use prolly::{
-    BatchOp, Config, IndexedStore, ManifestStore, ManifestUpdate, MemStore, Prolly, RootManifest,
-    SecondaryIndex, SecondaryIndexRegistry, Store,
+    BatchOp, Config, Error, IndexedStore, ManifestStore, ManifestUpdate, MemStore, Prolly,
+    RootCondition, RootManifest, RootWrite, SecondaryIndex, SecondaryIndexRegistry, Store,
+    TransactionNodeWrite, TransactionUpdate, TransactionalStore,
 };
 
 #[derive(Debug)]
@@ -90,6 +91,30 @@ impl ManifestStore for BarrierStore {
         }
         ManifestStore::compare_and_swap_root(&self.inner, name, expected, new)
             .map_err(|_| BarrierStoreError)
+    }
+}
+
+impl TransactionalStore for BarrierStore {
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        if self.enabled.load(Ordering::SeqCst) && self.arrivals.fetch_add(1, Ordering::SeqCst) < 2 {
+            self.arrived.wait();
+            self.release.wait();
+        }
+        TransactionalStore::commit_transaction(
+            &self.inner,
+            node_writes,
+            root_conditions,
+            root_writes,
+        )
     }
 }
 

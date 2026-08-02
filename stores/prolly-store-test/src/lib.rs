@@ -128,6 +128,7 @@ pub fn assert_indexed_map_contract<S>(store: S)
 where
     S: IndexedStore + Send + Sync,
 {
+    assert!(store.supports_transactions());
     let prolly = Prolly::new(std::sync::Arc::new(store), Config::default());
 
     let registry = SecondaryIndexRegistry::new()
@@ -160,6 +161,20 @@ where
         .unwrap()
         .iter()
         .all(prolly::IndexVerification::is_valid));
+
+    let stale = snapshot.source_version().clone();
+    indexed.put(b"user-3", b"active").unwrap();
+    let update = indexed
+        .apply_if(
+            Some(&stale),
+            vec![prolly::Mutation::Upsert {
+                key: b"must-not-publish".to_vec(),
+                val: b"active".to_vec(),
+            }],
+        )
+        .unwrap();
+    assert!(matches!(update, prolly::IndexedMapUpdate::Conflict { .. }));
+    assert_eq!(indexed.get(b"must-not-publish").unwrap(), None);
 }
 
 pub fn assert_indexed_store<S>(store: S)

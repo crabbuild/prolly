@@ -8,6 +8,7 @@ use super::super::error::{Error, Mutation};
 use super::super::gc::{GcPlan, GcSweep};
 use super::super::manifest::{ManifestStoreScan, NamedRootRetention, NamedRootUpdate};
 use super::super::store::{NodeStoreScan, Store};
+use super::super::transaction::TransactionUpdate;
 use super::super::tree::Tree;
 use super::super::versioned_map::{MapVersion, MapVersionId};
 use super::super::Prolly;
@@ -261,6 +262,11 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         source_map_id: impl AsRef<[u8]>,
         registry: SecondaryIndexRegistry,
     ) -> Result<Self, Error> {
+        if !prolly.store().supports_transactions() {
+            return Err(Error::UnsupportedTransactions {
+                store: std::any::type_name::<S>(),
+            });
+        }
         if source_map_id.as_ref().is_empty() {
             return Err(Error::InvalidIndexDefinition {
                 reason: "indexed source map ID must not be empty".to_string(),
@@ -408,6 +414,28 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         indexed_collection_root_name(&self.source_map_id)
     }
 
+    pub(crate) fn commit_collection_root(
+        &self,
+        expected: Option<&Tree>,
+        candidate: &Tree,
+    ) -> Result<bool, Error> {
+        let transaction = self.prolly.begin_transaction()?;
+        match transaction.compare_and_swap_named_root(
+            &self.root_name()?,
+            expected,
+            Some(candidate),
+        )? {
+            NamedRootUpdate::Conflict { .. } => {
+                transaction.rollback();
+                Ok(false)
+            }
+            NamedRootUpdate::Applied => match transaction.commit()? {
+                TransactionUpdate::Applied { .. } => Ok(true),
+                TransactionUpdate::Conflict(_) => Ok(false),
+            },
+        }
+    }
+
     fn initialize_or_load(&self) -> Result<(), Error> {
         if self.prolly.load_named_root(&self.root_name()?)?.is_some() {
             self.load_state()?;
@@ -439,17 +467,11 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         self.prolly
             .store()
             .confirm_indexed_publication(&[&source, &state_tree])?;
-        match self.prolly.compare_and_swap_named_root(
-            &self.root_name()?,
-            None,
-            Some(&state_tree),
-        )? {
-            NamedRootUpdate::Applied => Ok(()),
-            NamedRootUpdate::Conflict { .. } => {
-                self.load_state()?;
-                Ok(())
-            }
+        if self.commit_collection_root(None, &state_tree)? {
+            return Ok(());
         }
+        self.load_state()?;
+        Ok(())
     }
 
     pub(crate) fn load_state(&self) -> Result<LoadedIndexedState, Error> {
@@ -482,14 +504,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         self.prolly
             .store()
             .confirm_indexed_publication(&referenced)?;
-        match self.prolly.compare_and_swap_named_root(
-            &self.root_name()?,
-            Some(&loaded.tree),
-            Some(&candidate_tree),
-        )? {
-            NamedRootUpdate::Applied => Ok(true),
-            NamedRootUpdate::Conflict { .. } => Ok(false),
-        }
+        self.commit_collection_root(Some(&loaded.tree), &candidate_tree)
     }
 
     pub(crate) fn current_version(
@@ -611,6 +626,26 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         mutations: Vec<Mutation>,
         budget: &MutationBudget,
     ) -> Result<IndexedVersion, Error> {
+        match self.apply_with_budget_internal(mutations, budget, None)? {
+            IndexedMapUpdate::Applied { current, .. }
+            | IndexedMapUpdate::Unchanged {
+                current: Some(current),
+            } => Ok(current),
+            IndexedMapUpdate::Unchanged { current: None } => Err(Error::InvalidVersionedMap(
+                "initialized indexed map has no current version".to_string(),
+            )),
+            IndexedMapUpdate::Conflict { .. } => Err(Error::InvalidVersionedMap(
+                "unconditional indexed mutation returned a conflict".to_string(),
+            )),
+        }
+    }
+
+    fn apply_with_budget_internal(
+        &self,
+        mutations: Vec<Mutation>,
+        budget: &MutationBudget,
+        expected: Option<Option<&MapVersionId>>,
+    ) -> Result<IndexedMapUpdate, Error> {
         budget.validate()?;
         let counter = BudgetCounter::new();
         if mutations.len() > budget.max_input_records {
@@ -651,10 +686,19 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
             let loaded = self.load_state()?;
             let head = loaded.state.head_snapshot()?;
             let previous = MapVersionId::for_tree(&head.source.tree)?;
+            if let Some(expected) = expected {
+                if expected != Some(&previous) {
+                    return Ok(IndexedMapUpdate::Conflict {
+                        current: Some(self.current_version(&loaded)?),
+                    });
+                }
+            }
             let source_mutations = normalized.values().cloned().collect::<Vec<_>>();
             let source_tree = self.prolly.batch(&head.source.tree, source_mutations)?;
             if source_tree == head.source.tree {
-                return self.current_version(&loaded);
+                return Ok(IndexedMapUpdate::Unchanged {
+                    current: Some(self.current_version(&loaded)?),
+                });
             }
             let mut source_entry_delta = 0i64;
             for (key, mutation) in &normalized {
@@ -830,15 +874,12 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
                 self.metrics
                     .unchanged_emissions_skipped
                     .fetch_add(unchanged_skipped, Ordering::Relaxed);
-                return self.current_version(&loaded);
+                return Ok(IndexedMapUpdate::Applied {
+                    previous: Some(previous),
+                    current: self.current_version(&loaded)?,
+                });
             }
             self.metrics.retries.fetch_add(1, Ordering::Relaxed);
-            let current = self.load_state()?;
-            if MapVersionId::for_tree(&current.state.head_snapshot()?.source.tree)? == previous {
-                return Err(Error::InvalidVersionedMap(
-                    "collection CAS conflicted without advancing source".to_string(),
-                ));
-            }
         }
         Err(Error::IndexBuildConflictLimitExceeded {
             name: b"mutation".to_vec(),
@@ -851,24 +892,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         expected: Option<&MapVersionId>,
         mutations: Vec<Mutation>,
     ) -> Result<IndexedMapUpdate, Error> {
-        let loaded = self.load_state()?;
-        let current_id = MapVersionId::for_tree(&loaded.state.head_snapshot()?.source.tree)?;
-        if expected != Some(&current_id) {
-            return Ok(IndexedMapUpdate::Conflict {
-                current: Some(self.current_version(&loaded)?),
-            });
-        }
-        let current = self.apply(mutations)?;
-        if current.source.id == current_id {
-            Ok(IndexedMapUpdate::Unchanged {
-                current: Some(current),
-            })
-        } else {
-            Ok(IndexedMapUpdate::Applied {
-                previous: Some(current_id),
-                current,
-            })
-        }
+        self.apply_with_budget_internal(mutations, &MutationBudget::default(), Some(expected))
     }
 
     pub fn put(

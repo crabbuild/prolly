@@ -147,12 +147,24 @@ impl TransactionUpdate {
 
 /// Store support for strict atomic transaction commits.
 pub trait TransactionalStore: Store + ManifestStore {
-    /// Whether this backend can atomically commit staged nodes and roots.
+    /// Whether this backend satisfies the strict transaction contract.
+    ///
+    /// Returning `true` promises that root conditions are evaluated against one
+    /// linearizable backend state across threads, handles, and processes that
+    /// share the store; conflicting commits expose no root writes; all root
+    /// writes in an applied commit become visible atomically; and every node
+    /// referenced by an applied root is durably readable before success is
+    /// acknowledged. Implementations may retain unreachable content-addressed
+    /// node writes after an error because those nodes do not affect visibility.
     fn supports_transactions(&self) -> bool {
         false
     }
 
-    /// Atomically validate root conditions, write nodes, and apply root writes.
+    /// Validate root conditions, write nodes, and atomically apply root writes.
+    ///
+    /// `Conflict` must leave every root unchanged. `Applied` must be returned
+    /// only after the complete root-write set and all referenced node bytes meet
+    /// the durability and visibility guarantees of [`Self::supports_transactions`].
     fn commit_transaction(
         &self,
         _node_writes: &[TransactionNodeWrite],

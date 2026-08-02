@@ -5,7 +5,7 @@
 //! manifests live under separate namespaces. It is useful as a local durable
 //! store and as a reference layout for S3/R2/GCS-style adapters.
 
-use std::fs::{self, DirEntry, OpenOptions};
+use std::fs::{self, DirEntry, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -98,6 +98,23 @@ impl FileNodeStore {
 
     fn root_path(&self, name: &[u8]) -> PathBuf {
         self.root_namespace_dir().join(hex_label(name))
+    }
+
+    fn lock_manifest_file(&self) -> Result<File, FileNodeStoreError> {
+        let path = self.root.join(".prolly-manifest.lock");
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map_err(|source| FileNodeStoreError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        file.lock()
+            .map_err(|source| FileNodeStoreError::Io { path, source })?;
+        Ok(file)
     }
 
     fn read_node_path(
@@ -336,6 +353,11 @@ impl ManifestStore for FileNodeStore {
     type Error = FileNodeStoreError;
 
     fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        let _guard = self
+            .manifest_lock
+            .lock()
+            .map_err(|err| FileNodeStoreError::LockPoisoned(err.to_string()))?;
+        let _file_guard = self.lock_manifest_file()?;
         self.read_root_path(&self.root_path(name))
     }
 
@@ -344,6 +366,7 @@ impl ManifestStore for FileNodeStore {
             .manifest_lock
             .lock()
             .map_err(|err| FileNodeStoreError::LockPoisoned(err.to_string()))?;
+        let _file_guard = self.lock_manifest_file()?;
         self.write_root_path(&self.root_path(name), manifest)
     }
 
@@ -352,6 +375,7 @@ impl ManifestStore for FileNodeStore {
             .manifest_lock
             .lock()
             .map_err(|err| FileNodeStoreError::LockPoisoned(err.to_string()))?;
+        let _file_guard = self.lock_manifest_file()?;
         let path = self.root_path(name);
         match fs::remove_file(&path) {
             Ok(()) => Ok(()),
@@ -370,6 +394,7 @@ impl ManifestStore for FileNodeStore {
             .manifest_lock
             .lock()
             .map_err(|err| FileNodeStoreError::LockPoisoned(err.to_string()))?;
+        let _file_guard = self.lock_manifest_file()?;
         let path = self.root_path(name);
         let current = self.read_root_path(&path)?;
         if current.as_ref() != expected {
@@ -391,6 +416,11 @@ impl ManifestStore for FileNodeStore {
 
 impl ManifestStoreScan for FileNodeStore {
     fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
+        let _guard = self
+            .manifest_lock
+            .lock()
+            .map_err(|err| FileNodeStoreError::LockPoisoned(err.to_string()))?;
+        let _file_guard = self.lock_manifest_file()?;
         let namespace = self.root_namespace_dir();
         if !namespace.exists() {
             return Ok(Vec::new());
@@ -461,6 +491,9 @@ impl TransactionalStore for FileNodeStore {
         let _guard = self.manifest_lock.lock().map_err(|err| {
             Error::Store(Box::new(FileNodeStoreError::LockPoisoned(err.to_string())))
         })?;
+        let _file_guard = self
+            .lock_manifest_file()
+            .map_err(|err| Error::Store(Box::new(err)))?;
 
         for condition in root_conditions {
             let current = self
