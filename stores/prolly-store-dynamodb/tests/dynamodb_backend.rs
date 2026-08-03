@@ -35,7 +35,10 @@ fn dynamodb_backend_satisfies_remote_backend_contract_when_table_is_set() {
     };
 
     runtime().block_on(async {
-        use prolly::remote_conformance::assert_remote_backend_contract;
+        use prolly::remote_conformance::{
+            assert_remote_backend_contract, assert_remote_backend_indexed_map_contract,
+            assert_remote_backend_transaction_contract,
+        };
         use prolly_store_dynamodb::DynamoDbBackend;
 
         let client = dynamodb_client().await;
@@ -45,6 +48,9 @@ fn dynamodb_backend_satisfies_remote_backend_contract_when_table_is_set() {
         backend.initialize_schema().await.unwrap();
         backend.clear_namespace().await.unwrap();
         assert_remote_backend_contract(&backend).await;
+        assert_remote_backend_transaction_contract(&backend).await;
+        backend.clear_namespace().await.unwrap();
+        assert_remote_backend_indexed_map_contract(backend.clone());
         backend.clear_namespace().await.unwrap();
     });
 }

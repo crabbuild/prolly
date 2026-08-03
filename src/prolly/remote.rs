@@ -21,6 +21,11 @@ use super::transaction::{
     AsyncTransactionalStore, RootCondition, RootWrite, TransactionConflict, TransactionNodeWrite,
     TransactionUpdate,
 };
+#[cfg(feature = "tokio")]
+use super::{
+    manifest::{ManifestStore, ManifestStoreScan},
+    store::{NodeStoreScan, Store},
+};
 
 /// Batch operation passed to a remote backend.
 #[derive(Debug, Clone, Copy)]
@@ -456,6 +461,554 @@ impl<B> RemoteProllyStore<B> {
     pub fn into_backend(self) -> B {
         self.backend
     }
+}
+
+/// Synchronous facade for a Tokio-based [`RemoteProllyStore`].
+///
+/// The facade owns a multi-thread Tokio runtime shared by all clones and
+/// forwards native remote batches, hints, manifest operations, scans, and
+/// strict transactions without changing their semantics. Calls made from an
+/// existing Tokio runtime are executed on a scoped helper thread, avoiding
+/// nested-runtime panics while preserving the synchronous API contract.
+///
+/// Provider crates expose concrete aliases such as `SyncPostgresStore` and
+/// `SyncDynamoDbStore`. Construct the provider backend normally, wrap it here,
+/// and pass the result to [`crate::Prolly::new`] before calling
+/// [`crate::Prolly::indexed_map`].
+#[cfg(feature = "tokio")]
+#[derive(Clone, Debug)]
+pub struct BlockingRemoteProllyStore<B> {
+    inner: RemoteProllyStore<B>,
+    runtime: Arc<BlockingRemoteRuntime>,
+}
+
+#[cfg(feature = "tokio")]
+impl<B> BlockingRemoteProllyStore<B> {
+    /// Create a synchronous remote store with default remote configuration.
+    pub fn new(backend: B) -> Result<Self, std::io::Error> {
+        Self::with_config(backend, RemoteStoreConfig::default())
+    }
+
+    /// Create a synchronous remote store with explicit remote configuration.
+    pub fn with_config(backend: B, config: RemoteStoreConfig) -> Result<Self, std::io::Error> {
+        let runtime = create_blocking_remote_runtime()?;
+        Ok(Self {
+            inner: RemoteProllyStore::with_config(backend, config),
+            runtime: Arc::new(BlockingRemoteRuntime::new(runtime)),
+        })
+    }
+
+    /// Build a provider backend on the facade's owned runtime.
+    ///
+    /// Prefer this constructor when the provider's connection or client setup
+    /// is asynchronous. Runtime-owned background tasks then remain alive for
+    /// exactly as long as the synchronous store and all of its clones.
+    pub fn build<E, F, Fut>(builder: F) -> Result<Self, BlockingRemoteBuildError<E>>
+    where
+        E: StdError + Send + Sync + 'static,
+        F: FnOnce() -> Fut + Send,
+        Fut: std::future::Future<Output = Result<B, E>>,
+        B: Send,
+    {
+        Self::build_with_config(builder, RemoteStoreConfig::default())
+    }
+
+    /// Build a provider backend on the owned runtime with explicit remote
+    /// configuration.
+    pub fn build_with_config<E, F, Fut>(
+        builder: F,
+        config: RemoteStoreConfig,
+    ) -> Result<Self, BlockingRemoteBuildError<E>>
+    where
+        E: StdError + Send + Sync + 'static,
+        F: FnOnce() -> Fut + Send,
+        Fut: std::future::Future<Output = Result<B, E>>,
+        B: Send,
+    {
+        let runtime = Arc::new(BlockingRemoteRuntime::new(
+            create_blocking_remote_runtime().map_err(BlockingRemoteBuildError::Runtime)?,
+        ));
+        let backend = if tokio::runtime::Handle::try_current().is_ok() {
+            std::thread::scope(|scope| {
+                scope
+                    .spawn(|| runtime.block_on(builder()))
+                    .join()
+                    .map_err(|_| BlockingRemoteBuildError::RuntimeBridgePanicked)?
+                    .map_err(BlockingRemoteBuildError::Backend)
+            })?
+        } else {
+            runtime
+                .block_on(builder())
+                .map_err(BlockingRemoteBuildError::Backend)?
+        };
+        Ok(Self {
+            inner: RemoteProllyStore::with_config(backend, config),
+            runtime,
+        })
+    }
+
+    /// Borrow the wrapped asynchronous store.
+    pub fn async_store(&self) -> &RemoteProllyStore<B> {
+        &self.inner
+    }
+
+    /// Borrow the provider backend.
+    pub fn backend(&self) -> &B {
+        self.inner.backend()
+    }
+}
+
+#[cfg(feature = "tokio")]
+fn create_blocking_remote_runtime() -> Result<tokio::runtime::Runtime, std::io::Error> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+}
+
+#[cfg(feature = "tokio")]
+#[derive(Debug)]
+struct BlockingRemoteRuntime {
+    runtime: Option<tokio::runtime::Runtime>,
+}
+
+#[cfg(feature = "tokio")]
+impl BlockingRemoteRuntime {
+    fn new(runtime: tokio::runtime::Runtime) -> Self {
+        Self {
+            runtime: Some(runtime),
+        }
+    }
+
+    fn block_on<F: std::future::Future>(&self, future: F) -> F::Output {
+        self.runtime
+            .as_ref()
+            .expect("blocking remote runtime is active")
+            .block_on(future)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Drop for BlockingRemoteRuntime {
+    fn drop(&mut self) {
+        let Some(runtime) = self.runtime.take() else {
+            return;
+        };
+        if tokio::runtime::Handle::try_current().is_ok() {
+            // Tokio forbids dropping a runtime from one of its async contexts
+            // because shutdown may block. Move the final drop to a scoped OS
+            // thread so provider tasks are cancelled and joined instead of
+            // being leaked through `shutdown_background`.
+            let _ = std::thread::scope(|scope| scope.spawn(move || drop(runtime)).join());
+        } else {
+            drop(runtime);
+        }
+    }
+}
+
+/// Error returned while constructing a synchronous remote store.
+#[cfg(feature = "tokio")]
+#[derive(Debug)]
+pub enum BlockingRemoteBuildError<E> {
+    /// The owned Tokio runtime could not be created.
+    Runtime(std::io::Error),
+    /// Provider-specific asynchronous initialization failed.
+    Backend(E),
+    /// A scoped runtime bridge thread panicked during initialization.
+    RuntimeBridgePanicked,
+}
+
+#[cfg(feature = "tokio")]
+impl<E: fmt::Display> fmt::Display for BlockingRemoteBuildError<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Runtime(err) => write!(formatter, "failed to create remote runtime: {err}"),
+            Self::Backend(err) => write!(formatter, "remote backend initialization failed: {err}"),
+            Self::RuntimeBridgePanicked => {
+                formatter.write_str("synchronous remote initialization bridge panicked")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<E: StdError + 'static> StdError for BlockingRemoteBuildError<E> {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Self::Runtime(err) => Some(err),
+            Self::Backend(err) => Some(err),
+            Self::RuntimeBridgePanicked => None,
+        }
+    }
+}
+
+/// Error returned by synchronous remote-store operations.
+#[cfg(feature = "tokio")]
+#[derive(Debug)]
+pub enum BlockingRemoteStoreError<E> {
+    /// The shared asynchronous adapter rejected or failed the operation.
+    Remote(RemoteAdapterError<E>),
+    /// A scoped runtime bridge thread panicked.
+    RuntimeBridgePanicked,
+}
+
+#[cfg(feature = "tokio")]
+impl<E: fmt::Display> fmt::Display for BlockingRemoteStoreError<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Remote(err) => write!(formatter, "{err}"),
+            Self::RuntimeBridgePanicked => {
+                formatter.write_str("synchronous remote runtime bridge panicked")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<E: StdError + 'static> StdError for BlockingRemoteStoreError<E> {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Self::Remote(err) => Some(err),
+            Self::RuntimeBridgePanicked => None,
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B> BlockingRemoteProllyStore<B>
+where
+    B: RemoteStoreBackend + Clone + 'static,
+{
+    fn run<T, F, Fut>(&self, operation: F) -> Result<T, BlockingRemoteStoreError<B::Error>>
+    where
+        T: Send,
+        F: FnOnce(RemoteProllyStore<B>) -> Fut + Send,
+        Fut: std::future::Future<Output = Result<T, RemoteAdapterError<B::Error>>>,
+    {
+        let store = self.inner.clone();
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return std::thread::scope(|scope| {
+                scope
+                    .spawn(|| self.runtime.block_on(operation(store)))
+                    .join()
+                    .map_err(|_| BlockingRemoteStoreError::RuntimeBridgePanicked)?
+                    .map_err(BlockingRemoteStoreError::Remote)
+            });
+        }
+        self.runtime
+            .block_on(operation(store))
+            .map_err(BlockingRemoteStoreError::Remote)
+    }
+
+    fn run_transaction<T, F, Fut>(&self, operation: F) -> Result<T, Error>
+    where
+        T: Send,
+        F: FnOnce(RemoteProllyStore<B>) -> Fut + Send,
+        Fut: std::future::Future<Output = Result<T, Error>>,
+    {
+        let store = self.inner.clone();
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return std::thread::scope(|scope| {
+                scope
+                    .spawn(|| self.runtime.block_on(operation(store)))
+                    .join()
+                    .map_err(|_| {
+                        Error::Store(Box::new(
+                            BlockingRemoteStoreError::<B::Error>::RuntimeBridgePanicked,
+                        ))
+                    })?
+            });
+        }
+        self.runtime.block_on(operation(store))
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[derive(Clone)]
+enum OwnedBatchOp {
+    Upsert { key: Vec<u8>, value: Vec<u8> },
+    Delete { key: Vec<u8> },
+}
+
+#[cfg(feature = "tokio")]
+impl<B> Store for BlockingRemoteProllyStore<B>
+where
+    B: RemoteStoreBackend + Clone + 'static,
+{
+    type Error = BlockingRemoteStoreError<B::Error>;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        let key = key.to_vec();
+        self.run(move |store| async move { AsyncStore::get(&store, &key).await })
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        let key = key.to_vec();
+        let value = value.to_vec();
+        self.run(move |store| async move { AsyncStore::put(&store, &key, &value).await })
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        let key = key.to_vec();
+        self.run(move |store| async move { AsyncStore::delete(&store, &key).await })
+    }
+
+    fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        let ops = ops
+            .iter()
+            .map(|op| match op {
+                BatchOp::Upsert { key, value } => OwnedBatchOp::Upsert {
+                    key: key.to_vec(),
+                    value: value.to_vec(),
+                },
+                BatchOp::Delete { key } => OwnedBatchOp::Delete { key: key.to_vec() },
+            })
+            .collect::<Vec<_>>();
+        self.run(move |store| async move {
+            let borrowed = ops
+                .iter()
+                .map(|op| match op {
+                    OwnedBatchOp::Upsert { key, value } => BatchOp::Upsert { key, value },
+                    OwnedBatchOp::Delete { key } => BatchOp::Delete { key },
+                })
+                .collect::<Vec<_>>();
+            AsyncStore::batch(&store, &borrowed).await
+        })
+    }
+
+    fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        let keys = keys.iter().map(|key| key.to_vec()).collect::<Vec<_>>();
+        self.run(move |store| async move {
+            let borrowed = keys.iter().map(Vec::as_slice).collect::<Vec<_>>();
+            AsyncStore::batch_get_ordered(&store, &borrowed).await
+        })
+    }
+
+    fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        let keys = keys.iter().map(|key| key.to_vec()).collect::<Vec<_>>();
+        self.run(move |store| async move {
+            let borrowed = keys.iter().map(Vec::as_slice).collect::<Vec<_>>();
+            AsyncStore::batch_get_ordered_unique(&store, &borrowed).await
+        })
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        AsyncStore::prefers_batch_reads(&self.inner)
+    }
+
+    fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {
+        let entries = entries
+            .iter()
+            .map(|(key, value)| (key.to_vec(), value.to_vec()))
+            .collect::<Vec<_>>();
+        self.run(move |store| async move {
+            let borrowed = entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.as_slice()))
+                .collect::<Vec<_>>();
+            AsyncStore::batch_put(&store, &borrowed).await
+        })
+    }
+
+    fn supports_hints(&self) -> bool {
+        AsyncStore::supports_hints(&self.inner)
+    }
+
+    fn prefers_rightmost_path_hints(&self) -> bool {
+        AsyncStore::prefers_rightmost_path_hints(&self.inner)
+    }
+
+    fn get_hint(&self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        let namespace = namespace.to_vec();
+        let key = key.to_vec();
+        self.run(move |store| async move { AsyncStore::get_hint(&store, &namespace, &key).await })
+    }
+
+    fn put_hint(&self, namespace: &[u8], key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        let namespace = namespace.to_vec();
+        let key = key.to_vec();
+        let value = value.to_vec();
+        self.run(move |store| async move {
+            AsyncStore::put_hint(&store, &namespace, &key, &value).await
+        })
+    }
+
+    fn batch_put_with_hint(
+        &self,
+        entries: &[(&[u8], &[u8])],
+        namespace: &[u8],
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), Self::Error> {
+        let entries = entries
+            .iter()
+            .map(|(key, value)| (key.to_vec(), value.to_vec()))
+            .collect::<Vec<_>>();
+        let namespace = namespace.to_vec();
+        let key = key.to_vec();
+        let value = value.to_vec();
+        self.run(move |store| async move {
+            let borrowed = entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.as_slice()))
+                .collect::<Vec<_>>();
+            AsyncStore::batch_put_with_hint(&store, &borrowed, &namespace, &key, &value).await
+        })
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        let entries = publication
+            .entries()
+            .iter()
+            .map(|(key, value)| (key.to_vec(), value.to_vec()))
+            .collect::<Vec<_>>();
+        let hint = publication.hint().map(|hint| {
+            (
+                hint.namespace().to_vec(),
+                hint.key().to_vec(),
+                hint.value().to_vec(),
+            )
+        });
+        let origin = publication.origin();
+        self.run(move |store| async move {
+            let borrowed = entries
+                .iter()
+                .map(|(key, value)| (key.as_slice(), value.as_slice()))
+                .collect::<Vec<_>>();
+            let publication = match hint.as_ref() {
+                Some((namespace, key, value)) => NodePublication::with_hint(
+                    &borrowed,
+                    NodePublicationHint::new(namespace, key, value),
+                    origin,
+                ),
+                None => NodePublication::new(&borrowed, origin),
+            };
+            AsyncStore::publish_nodes(&store, publication).await
+        })
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B> ManifestStore for BlockingRemoteProllyStore<B>
+where
+    B: RemoteStoreBackend + Clone + 'static,
+{
+    type Error = BlockingRemoteStoreError<B::Error>;
+
+    fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+        let name = name.to_vec();
+        self.run(move |store| async move { AsyncManifestStore::get_root(&store, &name).await })
+    }
+
+    fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+        let name = name.to_vec();
+        let manifest = manifest.clone();
+        self.run(move |store| async move {
+            AsyncManifestStore::put_root(&store, &name, &manifest).await
+        })
+    }
+
+    fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+        let name = name.to_vec();
+        self.run(move |store| async move { AsyncManifestStore::delete_root(&store, &name).await })
+    }
+
+    fn compare_and_swap_root(
+        &self,
+        name: &[u8],
+        expected: Option<&RootManifest>,
+        new: Option<&RootManifest>,
+    ) -> Result<ManifestUpdate, Self::Error> {
+        let name = name.to_vec();
+        let expected = expected.cloned();
+        let new = new.cloned();
+        self.run(move |store| async move {
+            AsyncManifestStore::compare_and_swap_root(
+                &store,
+                &name,
+                expected.as_ref(),
+                new.as_ref(),
+            )
+            .await
+        })
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B> ManifestStoreScan for BlockingRemoteProllyStore<B>
+where
+    B: RemoteStoreBackend + Clone + 'static,
+{
+    fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
+        self.run(move |store| async move { AsyncManifestStoreScan::list_roots(&store).await })
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B> NodeStoreScan for BlockingRemoteProllyStore<B>
+where
+    B: RemoteStoreBackend + Clone + 'static,
+{
+    type Error = BlockingRemoteStoreError<B::Error>;
+
+    fn list_node_cids(&self) -> Result<Vec<Cid>, Self::Error> {
+        let mut cids = self.run(move |store| async move {
+            store
+                .backend()
+                .list_node_cids()
+                .await
+                .map_err(RemoteAdapterError::Backend)
+        })?;
+        let mut decoded = Vec::with_capacity(cids.len());
+        for key in cids.drain(..) {
+            let bytes: [u8; 32] = key.as_slice().try_into().map_err(|_| {
+                BlockingRemoteStoreError::Remote(RemoteAdapterError::InvalidCidLength {
+                    len: key.len(),
+                })
+            })?;
+            decoded.push(Cid(bytes));
+        }
+        decoded.sort_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        Ok(decoded)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B> super::transaction::TransactionalStore for BlockingRemoteProllyStore<B>
+where
+    B: RemoteStoreBackend + Clone + 'static,
+{
+    fn supports_transactions(&self) -> bool {
+        AsyncTransactionalStore::supports_transactions(&self.inner)
+    }
+
+    fn commit_transaction(
+        &self,
+        node_writes: &[TransactionNodeWrite],
+        root_conditions: &[RootCondition],
+        root_writes: &[RootWrite],
+    ) -> Result<TransactionUpdate, Error> {
+        let node_writes = node_writes.to_vec();
+        let root_conditions = root_conditions.to_vec();
+        let root_writes = root_writes.to_vec();
+        self.run_transaction(move |store| async move {
+            AsyncTransactionalStore::commit_transaction(
+                &store,
+                &node_writes,
+                &root_conditions,
+                &root_writes,
+            )
+            .await
+        })
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B> super::secondary_index::IndexedStore for BlockingRemoteProllyStore<B> where
+    B: RemoteStoreBackend + Clone + 'static
+{
 }
 
 impl<B: RemoteStoreBackend> AsyncStore for RemoteProllyStore<B> {
@@ -1132,6 +1685,66 @@ pub mod conformance {
             Some(main_v1)
         );
     }
+
+    /// Assert that a transaction-capable remote backend supports the complete
+    /// synchronous `Prolly::indexed_map` API through the shared blocking facade.
+    #[cfg(feature = "tokio")]
+    pub fn assert_remote_backend_indexed_map_contract<B>(backend: B)
+    where
+        B: RemoteStoreBackend + Clone + 'static,
+        B::Error: Debug,
+    {
+        use crate::{IndexedMapUpdate, Mutation, Prolly, SecondaryIndex, SecondaryIndexRegistry};
+
+        let store = BlockingRemoteProllyStore::new(backend).unwrap();
+        assert!(super::super::transaction::TransactionalStore::supports_transactions(&store));
+        let engine = Prolly::new(store, Config::default());
+        let registry = SecondaryIndexRegistry::new()
+            .register(
+                SecondaryIndex::non_unique(
+                    "by-status",
+                    1,
+                    "remote-contract.by-status/v1",
+                    |_, value| Ok(vec![value.to_vec()]),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let indexed = engine
+            .indexed_map(b"remote-indexed-contract", registry)
+            .unwrap();
+        indexed.put(b"user-1", b"active").unwrap();
+        indexed.ensure_index(b"by-status").unwrap();
+        let stale = indexed.put(b"user-2", b"pending").unwrap().source.id;
+        assert_eq!(
+            indexed
+                .snapshot()
+                .unwrap()
+                .index(b"by-status")
+                .unwrap()
+                .primary_keys(b"pending")
+                .unwrap(),
+            vec![b"user-2".to_vec()]
+        );
+
+        indexed.put(b"user-3", b"active").unwrap();
+        let update = indexed
+            .apply_if(
+                Some(&stale),
+                vec![Mutation::Upsert {
+                    key: b"must-not-publish".to_vec(),
+                    val: b"active".to_vec(),
+                }],
+            )
+            .unwrap();
+        assert!(matches!(update, IndexedMapUpdate::Conflict { .. }));
+        assert_eq!(indexed.get(b"must-not-publish").unwrap(), None);
+        assert!(indexed
+            .verify_all(indexed.snapshot().unwrap().source_version())
+            .unwrap()
+            .iter()
+            .all(super::super::secondary_index::IndexVerification::is_valid));
+    }
 }
 
 #[cfg(test)]
@@ -1460,6 +2073,33 @@ mod tests {
                 .unwrap_err();
             assert!(matches!(error, RemoteAdapterError::CidMismatch { .. }));
             assert!(unchecked_backend.publications.lock().unwrap().is_empty());
+        });
+    }
+
+    #[cfg(feature = "tokio")]
+    #[test]
+    fn blocking_remote_store_supports_indexed_map_inside_and_outside_tokio() {
+        use crate::{Prolly, SecondaryIndexRegistry};
+
+        let backend = Arc::new(MemoryBackend::default());
+        let store = BlockingRemoteProllyStore::new(backend).unwrap();
+        let engine = Prolly::new(store, Config::default());
+        let indexed = engine
+            .indexed_map(b"remote-users", SecondaryIndexRegistry::new())
+            .unwrap();
+        indexed.put(b"outside", b"runtime").unwrap();
+        assert_eq!(indexed.get(b"outside").unwrap(), Some(b"runtime".to_vec()));
+
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            indexed.put(b"inside", b"runtime").unwrap();
+            assert_eq!(indexed.get(b"inside").unwrap(), Some(b"runtime".to_vec()));
+
+            let nested = BlockingRemoteProllyStore::build(|| async {
+                Ok::<_, MemoryBackendError>(Arc::new(MemoryBackend::default()))
+            })
+            .unwrap();
+            drop(nested);
         });
     }
 

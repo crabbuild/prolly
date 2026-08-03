@@ -1873,7 +1873,10 @@ pub(crate) fn append_tree_suffix<M: CanonicalWriteManager>(
     let Some(max_key) = last_leaf.keys.last() else {
         return Err(Error::InvalidNode);
     };
-    if !last_leaf.leaf || last_leaf.keys.len() != last_leaf.vals.len() || start_key <= max_key {
+    if !last_leaf.leaf
+        || last_leaf.keys.len() != last_leaf.vals.len()
+        || start_key <= max_key.as_slice()
+    {
         return Ok(None);
     }
 

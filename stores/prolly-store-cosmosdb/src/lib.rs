@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
-    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Cosmos DB adapter entry point.
@@ -30,6 +31,9 @@ pub mod cosmosdb {
 
     /// Store adapter for Cosmos DB-backed prolly nodes and roots.
     pub type CosmosDbStore = crate::RemoteProllyStore<CosmosDbBackend>;
+
+    /// Synchronous Cosmos DB store supporting `Prolly::indexed_map`.
+    pub type SyncCosmosDbStore = crate::BlockingRemoteProllyStore<CosmosDbBackend>;
 
     /// Cosmos DB REST-backed backend.
     ///
@@ -1345,7 +1349,7 @@ pub mod cosmosdb {
                             .batch_upsert_operations(NODE_KIND, &[(logical_key.as_slice(), value)])
                             .await?;
                         operation_conditions
-                            .extend(std::iter::repeat(None).take(node_operations.len()));
+                                .extend(std::iter::repeat_n(None, node_operations.len()));
                         operations.extend(node_operations);
                     }
                     RemoteBatchOp::Delete { key } => {

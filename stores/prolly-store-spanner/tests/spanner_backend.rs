@@ -24,7 +24,8 @@ fn spanner_backend_satisfies_remote_backend_contract_when_database_is_set() {
     runtime().block_on(async {
         use google_cloud_spanner::client::ClientConfig;
         use prolly::remote_conformance::{
-            assert_remote_backend_contract, assert_remote_backend_transaction_contract,
+            assert_remote_backend_contract, assert_remote_backend_indexed_map_contract,
+            assert_remote_backend_transaction_contract,
         };
         use prolly::{RemoteManifestUpdate, RemoteStoreBackend};
         use prolly_store_spanner::{SpannerBackend, SpannerBackendOptions};
@@ -38,6 +39,9 @@ fn spanner_backend_satisfies_remote_backend_contract_when_database_is_set() {
         clear_spanner(backend.client()).await.unwrap();
         assert_remote_backend_contract(&backend).await;
         assert_remote_backend_transaction_contract(&backend).await;
+        clear_spanner(backend.client()).await.unwrap();
+        assert_remote_backend_indexed_map_contract(backend.clone());
+        clear_spanner(backend.client()).await.unwrap();
 
         let mut contenders = tokio::task::JoinSet::new();
         for contender in 0..32u8 {

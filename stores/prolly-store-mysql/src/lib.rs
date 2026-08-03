@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
-    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// MySQL adapter entry point.
@@ -19,6 +20,9 @@ pub mod mysql {
 
     /// Store adapter for MySQL-backed prolly nodes and roots.
     pub type MySqlStore = crate::RemoteProllyStore<MySqlBackend>;
+
+    /// Synchronous MySQL store supporting `Prolly::indexed_map`.
+    pub type SyncMySqlStore = crate::BlockingRemoteProllyStore<MySqlBackend>;
 
     /// MySQL adapter tuning that does not change stored data.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -2,8 +2,26 @@
 
 Redis-backed remote store adapter for `prolly-map`.
 
-This crate implements `RemoteStoreBackend` for Redis and is intended for async
-`prolly-map` use through `RemoteProllyStore` and `AsyncProlly`.
+This crate implements `RemoteStoreBackend` for Redis. It supports both
+`RemoteProllyStore` with `AsyncProlly` and the first-class `SyncRedisStore`
+facade with synchronous `Prolly::indexed_map`.
+
+## Synchronous IndexedMap
+
+```rust,no_run
+use prolly::{Config, Prolly, SecondaryIndexRegistry};
+use prolly_store_redis::{RedisBackend, SyncRedisStore};
+
+fn open(backend: RedisBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let engine = Prolly::new(SyncRedisStore::new(backend)?, Config::default());
+    let _users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
+    Ok(())
+}
+```
+
+Use `SyncRedisStore::build` to create Redis connections on the store-owned
+runtime. Production IndexedMap deployments must configure Redis persistence,
+replication, backups, and a non-evicting policy.
 
 ## Installation
 

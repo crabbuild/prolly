@@ -26,11 +26,17 @@ fn mysql_backend_satisfies_remote_backend_contract_when_url_is_set() {
     let _database_guard = database_test_guard();
 
     runtime().block_on(async {
-        use prolly::remote_conformance::assert_remote_backend_contract;
+        use prolly::remote_conformance::{
+            assert_remote_backend_contract, assert_remote_backend_indexed_map_contract,
+            assert_remote_backend_transaction_contract,
+        };
         let backend = MySqlBackend::connect(&database_url).await.unwrap();
         backend.initialize_schema().await.unwrap();
         clear_mysql(backend.pool()).await.unwrap();
         assert_remote_backend_contract(&backend).await;
+        assert_remote_backend_transaction_contract(&backend).await;
+        clear_mysql(backend.pool()).await.unwrap();
+        assert_remote_backend_indexed_map_contract(backend.clone());
         clear_mysql(backend.pool()).await.unwrap();
     });
 }

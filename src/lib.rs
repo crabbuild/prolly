@@ -368,6 +368,10 @@ pub use prolly::remote::{
     RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
     RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
+#[cfg(feature = "tokio")]
+pub use prolly::remote::{
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError,
+};
 pub use prolly::secondary_index::{
     decode_physical_index_key, decode_physical_index_key_ref, indexed_collection_root_name,
     physical_index_key, term_bounds_exact, term_bounds_prefix, term_bounds_range,

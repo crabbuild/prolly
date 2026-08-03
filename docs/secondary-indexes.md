@@ -70,6 +70,41 @@ let engine = Prolly::new(store, Config::default());
 
 You remain responsible for store credentials, durability mode, backups, multi-process coordination, and safe garbage-collection windows.
 
+Remote-first adapters expose synchronous IndexedMap facades backed by their
+existing native async transaction implementations:
+
+- `SyncPostgresStore`
+- `SyncMySqlStore`
+- `SyncRedisStore`
+- `SyncTursoStore`
+- `SyncDynamoDbStore`
+- `SyncCosmosDbStore`
+- `SyncSpannerStore`
+
+Use `build` when provider initialization is asynchronous. It creates the
+backend on a runtime owned by the store, keeping driver background tasks alive
+for the complete store lifetime:
+
+```rust,no_run
+use prolly::{Config, Prolly, SecondaryIndexRegistry};
+use prolly_store_postgres::{PostgresBackend, SyncPostgresStore};
+
+let database_url = std::env::var("DATABASE_URL")?;
+let store = SyncPostgresStore::build(move || async move {
+    let backend = PostgresBackend::connect(&database_url).await?;
+    backend.initialize_schema().await?;
+    Ok::<_, sqlx::Error>(backend)
+})?;
+let engine = Prolly::new(store, Config::default());
+let users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`Sync*Store::new(existing_backend)` is also available for caller-configured
+clients. Synchronous calls are safe when invoked from a Tokio context, but they
+still block the calling task; latency-sensitive async services should execute
+the synchronous IndexedMap workflow on their blocking-work pool.
+
 ## Define the source schema
 
 `IndexedMap` stores raw byte keys and values. Typed applications should choose one deterministic encoding and reject malformed records in every extractor.

@@ -10,6 +10,9 @@
   conditional mutation into an unconditional write.
 - Coordinate `FileNodeStore` manifest writes with an operating-system file lock
   so independently opened handles and processes serialize root transactions.
+- Add a shared Tokio-backed synchronous remote-store facade and first-class
+  IndexedMap store aliases for PostgreSQL, MySQL, Redis, Turso, DynamoDB,
+  Cosmos DB, and Spanner.
 
 ## 0.7.0 — 2026-07-30
 
