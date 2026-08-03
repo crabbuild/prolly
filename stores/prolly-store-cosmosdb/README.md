@@ -3,9 +3,28 @@
 Azure Cosmos DB-backed remote store adapter for `prolly-map`.
 
 This crate implements `RemoteStoreBackend` using the Cosmos DB SQL API REST
-surface with key authentication. It supports `RemoteProllyStore` with
-`AsyncProlly` and the first-class `SyncCosmosDbStore` facade with synchronous
-`Prolly::indexed_map`.
+surface with key authentication. It supports native
+`AsyncProlly::indexed_map(...).await` through `CosmosDbStore` and the
+first-class `SyncCosmosDbStore` facade with synchronous `Prolly::indexed_map`.
+
+## Native asynchronous IndexedMap
+
+```rust,no_run
+use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
+use prolly_store_cosmosdb::{CosmosDbBackend, CosmosDbStore};
+
+# async fn open(backend: CosmosDbBackend) -> Result<(), prolly::Error> {
+let engine = AsyncProlly::new(CosmosDbStore::new(backend), Config::default());
+let _users = engine
+    .indexed_map(b"users", SecondaryIndexRegistry::new())
+    .await?;
+# Ok(())
+# }
+```
+
+Prefer this native path for async services. It preserves cancellation and HTTP
+request backpressure without blocking workers. The indexed collection must stay
+within one Cosmos logical partition so its root transaction remains atomic.
 
 ## Synchronous IndexedMap
 

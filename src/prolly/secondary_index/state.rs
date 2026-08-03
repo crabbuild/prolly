@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::super::cid::Cid;
 use super::super::error::{Error, Mutation};
 use super::super::key::{decode_segments, KeyBuilder};
-use super::super::store::Store;
+use super::super::store::{AsyncStore, Store};
 use super::super::tree::Tree;
-use super::super::Prolly;
+use super::super::{AsyncProlly, Prolly};
 use super::definition::{IndexProjection, SecondaryIndex};
 
 /// The only secondary-index collection format accepted by this release.
@@ -684,6 +684,311 @@ impl IndexedCollectionState {
         let mut saw_format = false;
 
         for entry in prolly.range(tree, b"", None)? {
+            let (entry_key, value) = entry?;
+            let segments = decode_segments(&entry_key)
+                .map_err(|error| Error::Deserialize(error.to_string()))?;
+            match segments.as_slice() {
+                [kind, field] if kind.as_slice() == b"meta" && field == META_FORMAT => {
+                    if saw_format || value.as_slice() != INDEXED_COLLECTION_FORMAT.to_be_bytes() {
+                        return Err(Error::Deserialize(
+                            "unsupported or duplicate indexed collection format".to_string(),
+                        ));
+                    }
+                    saw_format = true;
+                }
+                [kind, field] if kind.as_slice() == b"meta" && field == META_SOURCE => {
+                    if source_map_id.replace(value).is_some() {
+                        return Err(Error::Deserialize(
+                            "duplicate indexed collection source ID".to_string(),
+                        ));
+                    }
+                }
+                [kind, field] if kind.as_slice() == b"meta" && field == META_POLICY => {
+                    if policy.replace(decode(&value)?).is_some() {
+                        return Err(Error::Deserialize(
+                            "duplicate indexed collection policy".to_string(),
+                        ));
+                    }
+                }
+                [kind] if kind.as_slice() == HEAD => {
+                    if head
+                        .replace(IndexedSnapshotId(cid(&value, "indexed snapshot ID")?))
+                        .is_some()
+                    {
+                        return Err(Error::Deserialize(
+                            "duplicate indexed collection head".to_string(),
+                        ));
+                    }
+                }
+                [kind, id] if kind.as_slice() == SNAPSHOTS => {
+                    let id = IndexedSnapshotId(cid(id, "snapshot key")?);
+                    if snapshots.insert(id, decode(&value)?).is_some() {
+                        return Err(Error::Deserialize("duplicate indexed snapshot".to_string()));
+                    }
+                }
+                [kind, name, fingerprint] if kind.as_slice() == DESCRIPTORS => {
+                    let fingerprint = cid(fingerprint, "descriptor key")?;
+                    if descriptors
+                        .insert((name.clone(), fingerprint), decode(&value)?)
+                        .is_some()
+                    {
+                        return Err(Error::Deserialize(
+                            "duplicate indexed descriptor".to_string(),
+                        ));
+                    }
+                }
+                [kind, name] if kind.as_slice() == ACTIVE => {
+                    if active
+                        .insert(name.clone(), cid(&value, "active descriptor")?)
+                        .is_some()
+                    {
+                        return Err(Error::Deserialize("duplicate active index".to_string()));
+                    }
+                }
+                [kind, name, fingerprint] if kind.as_slice() == RETIRED => {
+                    if !value.is_empty() {
+                        return Err(Error::Deserialize(
+                            "retired descriptor marker must be empty".to_string(),
+                        ));
+                    }
+                    if !retired.insert((name.clone(), cid(fingerprint, "retired descriptor")?)) {
+                        return Err(Error::Deserialize(
+                            "duplicate retired descriptor".to_string(),
+                        ));
+                    }
+                }
+                [kind, pin_id] if kind.as_slice() == PINS => {
+                    if pins.insert(pin_id.clone(), decode(&value)?).is_some() {
+                        return Err(Error::Deserialize("duplicate snapshot pin".to_string()));
+                    }
+                }
+                _ => {
+                    return Err(Error::Deserialize(
+                        "unknown indexed collection state key".to_string(),
+                    ));
+                }
+            }
+        }
+
+        if !saw_format {
+            return Err(Error::Deserialize(
+                "indexed collection state is missing format".to_string(),
+            ));
+        }
+        let state = Self {
+            source_map_id: source_map_id.ok_or_else(|| {
+                Error::Deserialize("indexed collection state is missing source ID".to_string())
+            })?,
+            policy: policy.ok_or_else(|| {
+                Error::Deserialize("indexed collection state is missing policy".to_string())
+            })?,
+            head: head.ok_or_else(|| {
+                Error::Deserialize("indexed collection state is missing head".to_string())
+            })?,
+            snapshots,
+            descriptors,
+            active,
+            retired,
+            pins,
+        };
+        state.validate_closure()?;
+        Ok(state)
+    }
+}
+
+impl IndexedCollectionState {
+    /// Encode canonical collection state through the native async engine.
+    pub async fn to_async_tree<S>(&self, prolly: &AsyncProlly<S>) -> Result<Tree, Error>
+    where
+        S: AsyncStore,
+        S::Error: Send + Sync,
+    {
+        self.validate_closure()?;
+        let mut mutations = vec![
+            Mutation::Upsert {
+                key: key(&[b"meta", META_FORMAT]),
+                val: INDEXED_COLLECTION_FORMAT.to_be_bytes().to_vec(),
+            },
+            Mutation::Upsert {
+                key: key(&[b"meta", META_SOURCE]),
+                val: self.source_map_id.clone(),
+            },
+            Mutation::Upsert {
+                key: key(&[b"meta", META_POLICY]),
+                val: encode(&self.policy)?,
+            },
+            Mutation::Upsert {
+                key: key(&[HEAD]),
+                val: self.head.0.as_bytes().to_vec(),
+            },
+        ];
+        for (id, snapshot) in &self.snapshots {
+            mutations.push(Mutation::Upsert {
+                key: key(&[SNAPSHOTS, id.0.as_bytes()]),
+                val: encode(snapshot)?,
+            });
+        }
+        for ((name, fingerprint), descriptor) in &self.descriptors {
+            mutations.push(Mutation::Upsert {
+                key: key(&[DESCRIPTORS, name, fingerprint.as_bytes()]),
+                val: encode(descriptor)?,
+            });
+        }
+        for (name, fingerprint) in &self.active {
+            mutations.push(Mutation::Upsert {
+                key: key(&[ACTIVE, name]),
+                val: fingerprint.as_bytes().to_vec(),
+            });
+        }
+        for (name, fingerprint) in &self.retired {
+            mutations.push(Mutation::Upsert {
+                key: key(&[RETIRED, name, fingerprint.as_bytes()]),
+                val: Vec::new(),
+            });
+        }
+        for (pin_id, pin) in &self.pins {
+            mutations.push(Mutation::Upsert {
+                key: key(&[PINS, pin_id]),
+                val: encode(pin)?,
+            });
+        }
+        prolly.batch(&prolly.create(), mutations).await
+    }
+
+    /// Apply a canonical state delta through the native async engine.
+    pub(crate) async fn to_async_tree_from<S>(
+        &self,
+        prolly: &AsyncProlly<S>,
+        previous: &Self,
+        previous_tree: &Tree,
+    ) -> Result<Tree, Error>
+    where
+        S: AsyncStore,
+        S::Error: Send + Sync,
+    {
+        self.validate_closure()?;
+        previous.validate_closure()?;
+        let mut mutations = Vec::new();
+        if self.source_map_id != previous.source_map_id {
+            mutations.push(Mutation::Upsert {
+                key: key(&[b"meta", META_SOURCE]),
+                val: self.source_map_id.clone(),
+            });
+        }
+        if self.policy != previous.policy {
+            mutations.push(Mutation::Upsert {
+                key: key(&[b"meta", META_POLICY]),
+                val: encode(&self.policy)?,
+            });
+        }
+        if self.head != previous.head {
+            mutations.push(Mutation::Upsert {
+                key: key(&[HEAD]),
+                val: self.head.0.as_bytes().to_vec(),
+            });
+        }
+        for (id, snapshot) in &self.snapshots {
+            if previous.snapshots.get(id) != Some(snapshot) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[SNAPSHOTS, id.0.as_bytes()]),
+                    val: encode(snapshot)?,
+                });
+            }
+        }
+        for id in previous.snapshots.keys() {
+            if !self.snapshots.contains_key(id) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[SNAPSHOTS, id.0.as_bytes()]),
+                });
+            }
+        }
+        for (identity @ (name, fingerprint), descriptor) in &self.descriptors {
+            if previous.descriptors.get(identity) != Some(descriptor) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[DESCRIPTORS, name, fingerprint.as_bytes()]),
+                    val: encode(descriptor)?,
+                });
+            }
+        }
+        for (name, fingerprint) in previous.descriptors.keys() {
+            if !self
+                .descriptors
+                .contains_key(&(name.clone(), fingerprint.clone()))
+            {
+                mutations.push(Mutation::Delete {
+                    key: key(&[DESCRIPTORS, name, fingerprint.as_bytes()]),
+                });
+            }
+        }
+        for (name, fingerprint) in &self.active {
+            if previous.active.get(name) != Some(fingerprint) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[ACTIVE, name]),
+                    val: fingerprint.as_bytes().to_vec(),
+                });
+            }
+        }
+        for name in previous.active.keys() {
+            if !self.active.contains_key(name) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[ACTIVE, name]),
+                });
+            }
+        }
+        for (name, fingerprint) in &self.retired {
+            if !previous
+                .retired
+                .contains(&(name.clone(), fingerprint.clone()))
+            {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[RETIRED, name, fingerprint.as_bytes()]),
+                    val: Vec::new(),
+                });
+            }
+        }
+        for (name, fingerprint) in &previous.retired {
+            if !self.retired.contains(&(name.clone(), fingerprint.clone())) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[RETIRED, name, fingerprint.as_bytes()]),
+                });
+            }
+        }
+        for (pin_id, pin) in &self.pins {
+            if previous.pins.get(pin_id) != Some(pin) {
+                mutations.push(Mutation::Upsert {
+                    key: key(&[PINS, pin_id]),
+                    val: encode(pin)?,
+                });
+            }
+        }
+        for pin_id in previous.pins.keys() {
+            if !self.pins.contains_key(pin_id) {
+                mutations.push(Mutation::Delete {
+                    key: key(&[PINS, pin_id]),
+                });
+            }
+        }
+        prolly.batch(previous_tree, mutations).await
+    }
+
+    /// Decode canonical collection state through the native async engine.
+    pub async fn from_async_tree<S>(prolly: &AsyncProlly<S>, tree: &Tree) -> Result<Self, Error>
+    where
+        S: AsyncStore,
+        S::Error: Send + Sync,
+    {
+        let mut source_map_id = None;
+        let mut policy = None;
+        let mut head = None;
+        let mut snapshots = BTreeMap::new();
+        let mut descriptors = BTreeMap::new();
+        let mut active = BTreeMap::new();
+        let mut retired = BTreeSet::new();
+        let mut pins = BTreeMap::new();
+        let mut saw_format = false;
+        let mut entries = prolly.range(tree, b"", None).await?;
+
+        while let Some(entry) = entries.next().await {
             let (entry_key, value) = entry?;
             let segments = decode_segments(&entry_key)
                 .map_err(|error| Error::Deserialize(error.to_string()))?;

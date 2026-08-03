@@ -74,11 +74,12 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
   indexes with one-root atomic publication, finite operation budgets, sparse
   and multi-valued terms, `KeysOnly`/`Include`/`All` projections, exact
   historical snapshots, durable pins, safe GC, structured diagnostics, and
-  verified bounded transfer. Applications open it through one
-  `engine.indexed_map(...)` API and choose a synchronous `IndexedStore` with
-  strict transactional root publication. First-class synchronous facades are
-  available for PostgreSQL, MySQL, Redis, Turso, DynamoDB, Cosmos DB, and
-  Spanner in addition to the embedded adapters.
+  verified bounded transfer. Applications open it through the same
+  `engine.indexed_map(...)` shape on `Prolly` or `AsyncProlly`; both paths use
+  the same canonical state format and strict transactional root publication.
+  Native async support is first class for PostgreSQL, MySQL, Redis, Turso,
+  DynamoDB, Cosmos DB, and Spanner, with synchronous facades available when a
+  blocking application needs them.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.

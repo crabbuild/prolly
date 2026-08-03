@@ -3,8 +3,26 @@
 MySQL-backed remote store adapter for `prolly-map`.
 
 This crate implements `RemoteStoreBackend` using `sqlx::MySqlPool`. It supports
-both `RemoteProllyStore` with `AsyncProlly` and the first-class
-`SyncMySqlStore` facade with synchronous `Prolly::indexed_map`.
+both native `AsyncProlly::indexed_map(...).await` through `MySqlStore` and the
+first-class `SyncMySqlStore` facade with synchronous `Prolly::indexed_map`.
+
+## Native asynchronous IndexedMap
+
+```rust,no_run
+use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
+use prolly_store_mysql::{MySqlBackend, MySqlStore};
+
+# async fn open(backend: MySqlBackend) -> Result<(), prolly::Error> {
+let engine = AsyncProlly::new(MySqlStore::new(backend), Config::default());
+let _users = engine
+    .indexed_map(b"users", SecondaryIndexRegistry::new())
+    .await?;
+# Ok(())
+# }
+```
+
+Prefer this native path for async services. It preserves executor cancellation,
+timeouts, and SQLx connection-pool backpressure without blocking workers.
 
 ## Synchronous IndexedMap
 

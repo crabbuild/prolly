@@ -3,6 +3,8 @@
 //! The low-level tree remains index-agnostic. This module defines the runtime
 //! contracts used by the `IndexedMap` coordinator and canonical collection state.
 
+mod async_coordinator;
+mod async_snapshot;
 mod budget;
 mod bundle;
 mod coordinator;
@@ -13,6 +15,10 @@ mod state;
 mod storage;
 mod workspace;
 
+pub use async_coordinator::{AsyncIndexedMap, AsyncIndexedSourceView};
+pub use async_snapshot::{
+    AsyncIndexedSnapshot, AsyncSecondaryIndexQuery, AsyncSecondaryIndexSnapshot,
+};
 pub use budget::{MaintenanceBudget, MutationBudget, QueryBudget, TransferBudget};
 pub use bundle::{
     IndexedSnapshotBundle, IndexedSnapshotBundleIndex, IndexedSnapshotBundleSummary,
@@ -28,7 +34,7 @@ pub use definition::{
     SecondaryIndexEntryRef, SecondaryIndexError, SecondaryIndexExtractor, SecondaryIndexLimits,
     SecondaryIndexRegistry, StreamingSecondaryIndexExtractor,
 };
-pub use publication::IndexedStore;
+pub use publication::{AsyncIndexedStore, IndexedStore};
 pub use snapshot::{
     IndexedSnapshot, IndexedSourceRecord, IndexedSourceRecordRef, ProjectedIndexEntry,
     SecondaryIndexCursor, SecondaryIndexDirection, SecondaryIndexMatch, SecondaryIndexMatchRef,

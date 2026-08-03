@@ -38,10 +38,14 @@ Each visible snapshot selects:
 
 A write publishes new immutable source, index, snapshot, and state nodes, confirms the candidate roots are readable, and then transactionally validates and advances the collection root. The successful transaction makes the complete candidate visible. Readers observe the previous collection state or the next collection state, never a partially published mixture. Nodes left unreachable by a conflict are safe to reclaim during quiescent garbage collection.
 
-The public constructor is:
+The public constructor has the same shape for synchronous and asynchronous
+engines:
 
 ```rust
 let users = engine.indexed_map(b"users", index_registry()?)?;
+
+// With AsyncProlly:
+let users = engine.indexed_map(b"users", index_registry()?).await?;
 ```
 
 There is no separate production constructor. The store and its deployment configuration determine durability, coordination, backup, and process-topology properties.
@@ -57,7 +61,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-`indexed_map` requires a synchronous `IndexedStore`, which includes `Store`, `ManifestStore`, and strict `TransactionalStore`. The constructor fails closed if strict transactions are disabled. `MemStore` works for tests and examples. Use a durable adapter whose transaction implementation is linearizable across every process and handle sharing the store and configure durable acknowledgements for persistent deployments.
+Synchronous `indexed_map` requires `IndexedStore`; asynchronous `indexed_map`
+requires `AsyncIndexedStore`. Both contracts include node storage, named
+manifests, and strict transactions. The constructor fails closed if strict
+transactions are disabled. `MemStore` works for tests and examples. Use a
+durable adapter whose transaction implementation is linearizable across every
+process and handle sharing the store and configure durable acknowledgements for
+persistent deployments.
 
 ```rust
 use prolly::{Config, MemStore, Prolly};
@@ -70,8 +80,44 @@ let engine = Prolly::new(store, Config::default());
 
 You remain responsible for store credentials, durability mode, backups, multi-process coordination, and safe garbage-collection windows.
 
-Remote-first adapters expose synchronous IndexedMap facades backed by their
-existing native async transaction implementations:
+Remote-first adapters expose native async stores:
+
+- `PostgresStore`
+- `MySqlStore`
+- `RedisStore`
+- `TursoStore`
+- `DynamoDbStore`
+- `CosmosDbStore`
+- `SpannerStore`
+
+For an async service, construct the provider backend on the application's
+runtime and pass the store directly to `AsyncProlly`:
+
+```rust,no_run
+use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
+use prolly_store_postgres::{PostgresBackend, PostgresStore};
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let database_url = std::env::var("DATABASE_URL")?;
+let backend = PostgresBackend::connect(&database_url).await?;
+backend.initialize_schema().await?;
+let engine = AsyncProlly::new(PostgresStore::new(backend), Config::default());
+let users = engine
+    .indexed_map(b"users", SecondaryIndexRegistry::new())
+    .await?;
+users.put(b"user:1", br#"{"status":"active"}"#).await?;
+# Ok(())
+# }
+```
+
+This path performs native async node batches, manifest reads, and strict root
+transactions. It does not create a private runtime or block an executor worker,
+so application cancellation, timeout, and connection-pool backpressure remain
+effective. The synchronous and async APIs use the same canonical bytes and may
+open the same collection, but applications should not mix uncoordinated raw
+source-map writes with either coordinator.
+
+Blocking applications can instead use the synchronous facades:
 
 - `SyncPostgresStore`
 - `SyncMySqlStore`
@@ -102,8 +148,9 @@ let users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
 
 `Sync*Store::new(existing_backend)` is also available for caller-configured
 clients. Synchronous calls are safe when invoked from a Tokio context, but they
-still block the calling task; latency-sensitive async services should execute
-the synchronous IndexedMap workflow on their blocking-work pool.
+still block the calling task. Prefer `AsyncProlly::indexed_map(...).await` for
+latency-sensitive services; use a blocking-work pool when a server must call the
+synchronous facade.
 
 ## Define the source schema
 

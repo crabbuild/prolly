@@ -3,8 +3,27 @@
 DynamoDB-backed remote store adapter for `prolly-map`.
 
 This crate implements `RemoteStoreBackend` with the AWS SDK for DynamoDB. Use it
-through `RemoteProllyStore` and `AsyncProlly`, or through the first-class
-`SyncDynamoDbStore` facade with synchronous `Prolly::indexed_map`.
+through native `AsyncProlly::indexed_map(...).await` with `DynamoDbStore`, or
+through the first-class `SyncDynamoDbStore` facade with synchronous
+`Prolly::indexed_map`.
+
+## Native asynchronous IndexedMap
+
+```rust,no_run
+use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
+use prolly_store_dynamodb::{DynamoDbBackend, DynamoDbStore};
+
+# async fn open(backend: DynamoDbBackend) -> Result<(), prolly::Error> {
+let engine = AsyncProlly::new(DynamoDbStore::new(backend), Config::default());
+let _users = engine
+    .indexed_map(b"users", SecondaryIndexRegistry::new())
+    .await?;
+# Ok(())
+# }
+```
+
+Prefer this native path for async services. It preserves task cancellation and
+AWS SDK request backpressure without blocking workers.
 
 ## Synchronous IndexedMap
 
