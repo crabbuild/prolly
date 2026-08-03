@@ -21,10 +21,10 @@ use std::ops::ControlFlow;
 const CURSOR_MAGIC: &[u8; 8] = b"PSICUR01";
 const CURSOR_VERSION: u32 = 1;
 #[derive(Clone)]
-struct SnapshotContext {
-    snapshot: IndexedSnapshotId,
-    source_version: MapVersionId,
-    state_version: MapVersionId,
+pub(crate) struct SnapshotContext {
+    pub(crate) snapshot: IndexedSnapshotId,
+    pub(crate) source_version: MapVersionId,
+    pub(crate) state_version: MapVersionId,
 }
 
 /// One decoded physical secondary-index match.
@@ -82,7 +82,7 @@ pub enum SecondaryIndexDirection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-enum LogicalBounds {
+pub(crate) enum LogicalBounds {
     Exact(Vec<u8>),
     Prefix(Vec<u8>),
     Range(Vec<u8>, Option<Vec<u8>>),
@@ -91,15 +91,15 @@ enum LogicalBounds {
 /// Snapshot- and query-bound cursor for resumable secondary-index scans.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SecondaryIndexCursor {
-    snapshot: IndexedSnapshotId,
-    source_version: MapVersionId,
-    state_version: MapVersionId,
-    index_name: Vec<u8>,
-    index_version: MapVersionId,
-    definition_fingerprint: Cid,
-    direction: SecondaryIndexDirection,
-    bounds: LogicalBounds,
-    raw_key: Option<Vec<u8>>,
+    pub(crate) snapshot: IndexedSnapshotId,
+    pub(crate) source_version: MapVersionId,
+    pub(crate) state_version: MapVersionId,
+    pub(crate) index_name: Vec<u8>,
+    pub(crate) index_version: MapVersionId,
+    pub(crate) definition_fingerprint: Cid,
+    pub(crate) direction: SecondaryIndexDirection,
+    pub(crate) bounds: LogicalBounds,
+    pub(crate) raw_key: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1148,7 +1148,7 @@ impl<'a, S: Store> SecondaryIndexSnapshot<'a, S> {
     }
 }
 
-fn physical_bounds(bounds: &LogicalBounds) -> Result<TermBounds, Error> {
+pub(crate) fn physical_bounds(bounds: &LogicalBounds) -> Result<TermBounds, Error> {
     match bounds {
         LogicalBounds::Exact(term) => Ok(term_bounds_exact(term)),
         LogicalBounds::Prefix(prefix) => Ok(term_bounds_prefix(prefix)),

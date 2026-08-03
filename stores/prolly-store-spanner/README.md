@@ -3,8 +3,27 @@
 Cloud Spanner-backed remote store adapter for `prolly-map`.
 
 This crate implements `RemoteStoreBackend` using `gcloud-spanner`. Use it
-through `RemoteProllyStore` and `AsyncProlly`, or through the first-class
-`SyncSpannerStore` facade with synchronous `Prolly::indexed_map`.
+through native `AsyncProlly::indexed_map(...).await` with `SpannerStore`, or
+through the first-class `SyncSpannerStore` facade with synchronous
+`Prolly::indexed_map`.
+
+## Native asynchronous IndexedMap
+
+```rust,no_run
+use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
+use prolly_store_spanner::{SpannerBackend, SpannerStore};
+
+async fn open(backend: SpannerBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(SpannerStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
+```
+
+Prefer this native path for async services. It preserves task cancellation and
+Spanner session-pool backpressure without blocking workers.
 
 ## Synchronous IndexedMap
 

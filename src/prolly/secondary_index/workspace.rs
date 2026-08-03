@@ -5,9 +5,9 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::super::builder::SortedBatchBuilder;
+use super::super::builder::{AsyncSortedBatchBuilder, SortedBatchBuilder};
 use super::super::error::Error;
-use super::super::store::{PublicationOrigin, Store};
+use super::super::store::{AsyncStore, PublicationOrigin, Store};
 use super::super::tree::Tree;
 use super::super::Config;
 use super::budget::{BudgetCounter, MaintenanceBudget};
@@ -151,6 +151,86 @@ impl IndexBuildWorkspace {
             count = count.saturating_add(1);
         }
         Ok((builder.build()?, count))
+    }
+
+    pub(crate) async fn finish_async<S>(
+        mut self,
+        store: S,
+        config: Config,
+    ) -> Result<(Tree, usize), Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        if self.runs.is_empty() {
+            let count = self.memory.len();
+            let mut builder = AsyncSortedBatchBuilder::new_with_origin(
+                store,
+                config,
+                PublicationOrigin::Maintenance,
+            );
+            for (key, value) in std::mem::take(&mut self.memory) {
+                builder.add(key, value).await?;
+            }
+            return Ok((builder.build().await?, count));
+        }
+        self.spill_memory()?;
+        while self.runs.len() > self.budget.max_merge_fan_in {
+            let old = std::mem::take(&mut self.runs);
+            for group in old.chunks(self.budget.max_merge_fan_in) {
+                let output = self.next_run_path()?;
+                self.merge_to_run(group, &output)?;
+                self.runs.push(output);
+                for path in group {
+                    remove_file(path)?;
+                }
+            }
+        }
+        let (max_entry_bytes, reader_buffer_bytes) =
+            merge_memory_partition(self.budget.max_accounted_memory_bytes, self.runs.len())?;
+        let mut readers = self
+            .runs
+            .iter()
+            .map(|path| RunReader::open(path, max_entry_bytes, reader_buffer_bytes))
+            .collect::<Result<Vec<_>, Error>>()?;
+        let mut heap = BinaryHeap::new();
+        for (position, reader) in readers.iter_mut().enumerate() {
+            if let Some((key, value)) = reader.next_entry()? {
+                heap.push(Reverse((key, position, value)));
+            }
+        }
+        let mut builder =
+            AsyncSortedBatchBuilder::new_with_origin(store, config, PublicationOrigin::Maintenance);
+        let mut count = 0usize;
+        let mut pending: Option<(Vec<u8>, Vec<u8>)> = None;
+        while let Some(Reverse((key, position, value))) = heap.pop() {
+            self.counter
+                .check_elapsed("maintenance_elapsed_millis", self.budget.max_elapsed)?;
+            if let Some((previous_key, previous_value)) = pending.take() {
+                if previous_key == key {
+                    if previous_value != value {
+                        return Err(Error::InvalidVersionedMap(
+                            "spilled runs disagree for one physical key".to_string(),
+                        ));
+                    }
+                    pending = Some((key, value));
+                } else {
+                    builder.add(previous_key, previous_value).await?;
+                    count = count.saturating_add(1);
+                    pending = Some((key, value));
+                }
+            } else {
+                pending = Some((key, value));
+            }
+            if let Some((next_key, next_value)) = readers[position].next_entry()? {
+                heap.push(Reverse((next_key, position, next_value)));
+            }
+        }
+        if let Some((key, value)) = pending {
+            builder.add(key, value).await?;
+            count = count.saturating_add(1);
+        }
+        Ok((builder.build().await?, count))
     }
 
     fn spill_memory(&mut self) -> Result<(), Error> {
