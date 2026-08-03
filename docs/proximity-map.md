@@ -82,22 +82,26 @@ selection remain identical.
 
 ```rust
 use prolly::{
-    AdaptiveQuality, ProximityFilter, QueryKernel, SearchPolicy, SearchRequest,
+    AdaptiveQuality, ProximityFilter, ProximityMap, QueryKernel, SearchPolicy,
+    SearchRequest, Store,
 };
 
-# fn run<S>(map: &prolly::ProximityMap<S>) -> Result<(), prolly::Error>
-# where S: prolly::Store + Clone + Send + Sync, S::Error: Send + Sync {
-let query = [0.1, 0.9, 0.0];
-let exact = map.search(SearchRequest::exact(&query, 10))?;
+fn run<S>(map: &ProximityMap<S>) -> Result<(), prolly::Error>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let query = [0.1, 0.9, 0.0];
+    let exact = map.search(SearchRequest::exact(&query, 10))?;
 
-let mut filtered = SearchRequest::exact(&query, 10);
-filtered.policy = SearchPolicy::Adaptive(AdaptiveQuality::HighRecall);
-filtered.filter = ProximityFilter::Prefix(b"doc/");
-filtered.kernel = QueryKernel::AutoDeterministic;
-let approximate = map.search(filtered)?;
-println!("{:?}", approximate.completion);
-# let _ = exact;
-# Ok(()) }
+    let mut filtered = SearchRequest::exact(&query, 10);
+    filtered.policy = SearchPolicy::Adaptive(AdaptiveQuality::HighRecall);
+    filtered.filter = ProximityFilter::Prefix(b"doc/");
+    filtered.kernel = QueryKernel::AutoDeterministic;
+    let approximate = map.search(filtered)?;
+    println!("exact: {exact:?}; approximate: {approximate:?}");
+    Ok(())
+}
 ```
 
 Filters are `All`, half-open `KeyRange`, `Prefix`, sorted-unique
@@ -179,16 +183,21 @@ untrusted opens retain full typed-graph validation.
 ## Localized copy-on-write mutation
 
 ```rust
-# use prolly::{ProximityMap, ProximityMutation, Store};
-# fn update<S>(map: &ProximityMap<S>) -> Result<(), prolly::Error>
-# where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
-let (next, stats) = map.mutate_batch([ProximityMutation {
-    key: b"doc/b".to_vec(),
-    value: Some((vec![0.2, 0.8, 0.0], b"updated".to_vec())),
-}])?;
-assert!(!stats.full_proximity_rebuild || stats.records_rebuilt > 0);
-next.verify()?;
-# Ok(()) }
+use prolly::{ProximityMap, ProximityMutation, Store};
+
+fn update<S>(map: &ProximityMap<S>) -> Result<(), prolly::Error>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let (next, stats) = map.mutate_batch([ProximityMutation {
+        key: b"doc/b".to_vec(),
+        value: Some((vec![0.2, 0.8, 0.0], b"updated".to_vec())),
+    }])?;
+    assert!(!stats.full_proximity_rebuild || stats.records_rebuilt > 0);
+    next.verify()?;
+    Ok(())
+}
 ```
 
 The exact directory uses a canonical boundary-resynchronizing splice writer.
@@ -215,33 +224,38 @@ Node-local SQ8 is enabled in `ProximityConfig`. It influences approximate
 routing only; leaf candidates are resolved and reranked from full vectors.
 
 ```rust,no_run
-# use prolly::*;
-# fn sidecars<S>(store: S, map: &ProximityMap<S>) -> Result<(), Error>
-# where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
-let (pq, _) = ProductQuantizer::build(
-    map,
-    ProductQuantizationConfig {
-        subquantizers: 4,
-        centroids_per_subquantizer: 16,
-        training_iterations: 8,
-        rerank_multiplier: 8,
-        seed: 7,
-        max_training_vectors: 65_536,
-    },
-    BuildParallelism::new(4)?,
-)?;
-let (hnsw, _) = HnswIndex::build(map, HnswConfig::default())?;
-let accelerators = AcceleratorSet::try_new(map.tree(), Some(hnsw), Some(pq))?;
-let runtime = std::sync::Arc::new(SearchRuntime::default());
-let search_io = SearchIo::new(store, runtime);
+use prolly::*;
 
-let query = vec![0.0; map.tree().config.dimensions as usize];
-let mut request = SearchRequest::exact(&query, 10);
-request.policy = SearchPolicy::FixedBudget;
-// Auto deterministically prefers HNSW. Cache warmth and store type are not inputs.
-let result = map.search_with(&accelerators, &search_io, request)?;
-assert_eq!(result.plan.backend, SearchBackend::Hnsw);
-# Ok(()) }
+fn sidecars<S>(store: S, map: &ProximityMap<S>) -> Result<(), Error>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let (pq, _) = ProductQuantizer::build(
+        map,
+        ProductQuantizationConfig {
+            subquantizers: 4,
+            centroids_per_subquantizer: 16,
+            training_iterations: 8,
+            rerank_multiplier: 8,
+            seed: 7,
+            max_training_vectors: 65_536,
+        },
+        BuildParallelism::new(4)?,
+    )?;
+    let (hnsw, _) = HnswIndex::build(map, HnswConfig::default())?;
+    let accelerators = AcceleratorSet::try_new(map.tree(), Some(hnsw), Some(pq))?;
+    let runtime = std::sync::Arc::new(SearchRuntime::default());
+    let search_io = SearchIo::new(store, runtime);
+
+    let query = vec![0.0; map.tree().config.dimensions as usize];
+    let mut request = SearchRequest::exact(&query, 10);
+    request.policy = SearchPolicy::FixedBudget;
+    // Auto deterministically prefers HNSW. Cache warmth and store type are not inputs.
+    let result = map.search_with(&accelerators, &search_io, request)?;
+    assert_eq!(result.plan.backend, SearchBackend::Hnsw);
+    Ok(())
+}
 ```
 
 PQ uses deterministic bounded training samples and streams its code pass.
@@ -280,35 +294,39 @@ stores deleted and vector-updated keys in a shadow tree. Value-only changes use
 the current authoritative directory and add nothing to either tree.
 
 ```rust,no_run
-# use prolly::*;
-# fn composite<S>(store: S, base: &ProximityMap<S>, current: &ProximityMap<S>)
-#     -> Result<(), Error>
-# where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
-let (base_hnsw, _) = HnswIndex::build(base, HnswConfig::default())?;
-let composite = match CompositeAccelerator::build(
-    base,
-    current,
-    CompositeBase::Hnsw(base_hnsw),
-    CompositeAcceleratorConfig::default(),
-    CompositeBuildLimits::default(),
-)? {
-    CompositeBuildOutcome::Composite { accelerator, .. } => accelerator,
-    CompositeBuildOutcome::FullRebuildRequired { .. } => unreachable!("schedule rebuild"),
-};
-let accelerators = AcceleratorSet::empty()
-    .with_composite(current.tree(), *composite)?;
-let catalog = AcceleratorCatalog::build(store.clone(), current.tree(), accelerators)?;
+use prolly::*;
 
-let mut request = SearchRequest::exact(&vec![0.0; current.tree().config.dimensions as usize], 10);
-request.policy = SearchPolicy::FixedBudget;
-request.options.backend = SearchBackend::Composite;
-let result = current.search_with(
-    catalog.accelerators(),
-    &SearchIo::new(store, std::sync::Arc::new(SearchRuntime::default())),
-    request,
-)?;
-assert_eq!(result.plan.backend, SearchBackend::Composite);
-# Ok(()) }
+fn composite<S>(store: S, base: &ProximityMap<S>, current: &ProximityMap<S>) -> Result<(), Error>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let (base_hnsw, _) = HnswIndex::build(base, HnswConfig::default())?;
+    let composite = match CompositeAccelerator::build(
+        base,
+        current,
+        CompositeBase::Hnsw(base_hnsw),
+        CompositeAcceleratorConfig::default(),
+        CompositeBuildLimits::default(),
+    )? {
+        CompositeBuildOutcome::Composite { accelerator, .. } => accelerator,
+        CompositeBuildOutcome::FullRebuildRequired { .. } => unreachable!("schedule rebuild"),
+    };
+    let accelerators = AcceleratorSet::empty().with_composite(current.tree(), *composite)?;
+    let catalog = AcceleratorCatalog::build(store.clone(), current.tree(), accelerators)?;
+
+    let query = vec![0.0; current.tree().config.dimensions as usize];
+    let mut request = SearchRequest::exact(&query, 10);
+    request.policy = SearchPolicy::FixedBudget;
+    request.options.backend = SearchBackend::Composite;
+    let result = current.search_with(
+        catalog.accelerators(),
+        &SearchIo::new(store, std::sync::Arc::new(SearchRuntime::default())),
+        request,
+    )?;
+    assert_eq!(result.plan.backend, SearchBackend::Composite);
+    Ok(())
+}
 ```
 
 Construction limits diff entries, retained bytes, encoded output, and distance
@@ -345,23 +363,24 @@ use prolly::{
 };
 use std::collections::BTreeMap;
 
-# fn publish(source: &MemStore, descriptor: prolly::Cid) -> Result<(), prolly::Error> {
-let destination = MemStore::new();
-let root = TypedContentRoot::proximity_descriptor(descriptor);
-let manifest = ContentRootManifest {
-    root,
-    logical_version: 1,
-    created_at_millis: 0,
-    metadata: BTreeMap::new(),
-};
-copy_and_publish_content_graph(
-    source,
-    &destination,
-    b"indexes/main",
-    manifest,
-    &ContentGraphLimits::default(),
-)?;
-# Ok(()) }
+fn publish(source: &MemStore, descriptor: prolly::Cid) -> Result<(), prolly::Error> {
+    let destination = MemStore::new();
+    let root = TypedContentRoot::proximity_descriptor(descriptor);
+    let manifest = ContentRootManifest {
+        root,
+        logical_version: 1,
+        created_at_millis: 0,
+        metadata: BTreeMap::new(),
+    };
+    copy_and_publish_content_graph(
+        source,
+        &destination,
+        b"indexes/main",
+        manifest,
+        &ContentGraphLimits::default(),
+    )?;
+    Ok(())
+}
 ```
 
 Typed walking verifies CIDs before decoding, carries codec context, suppresses
@@ -378,20 +397,25 @@ are explicit; the invalidator lets applications evict swept process caches.
 ## Proofs
 
 ```rust
-# use prolly::{ContentGraphLimits, ProximityMap, SearchRequest, Store};
-# fn prove<S>(map: &ProximityMap<S>) -> Result<(), prolly::Error>
-# where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
-let membership = map.prove_membership(b"doc/a")?;
-membership.verify_for(&map.tree().descriptor)?;
+use prolly::{ContentGraphLimits, ProximityMap, SearchRequest, Store};
 
-let limits = ContentGraphLimits::default();
-map.prove_structure(&limits)?
-    .verify_for(&map.tree().descriptor, &limits)?;
+fn prove<S>(map: &ProximityMap<S>) -> Result<(), prolly::Error>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let membership = map.prove_membership(b"doc/a")?;
+    membership.verify_for(&map.tree().descriptor)?;
 
-let query = vec![0.0; map.tree().config.dimensions as usize];
-map.prove_search(SearchRequest::exact(&query, 5), &limits)?
-    .verify_for_source(&map.tree().descriptor, &limits)?;
-# Ok(()) }
+    let limits = ContentGraphLimits::default();
+    map.prove_structure(&limits)?
+        .verify_for(&map.tree().descriptor, &limits)?;
+
+    let query = vec![0.0; map.tree().config.dimensions as usize];
+    map.prove_search(SearchRequest::exact(&query, 5), &limits)?
+        .verify_for_source(&map.tree().descriptor, &limits)?;
+    Ok(())
+}
 ```
 
 Membership proofs bind PRXI bytes, the ordered path, and exact PRVR bytes.

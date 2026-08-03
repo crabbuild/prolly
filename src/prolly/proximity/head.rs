@@ -51,7 +51,7 @@ where
     S::Error: Send + Sync,
 {
     Applied {
-        snapshot: AsyncProximitySnapshot<S>,
+        snapshot: Box<AsyncProximitySnapshot<S>>,
         stats: T,
         attempts: usize,
     },
@@ -169,8 +169,52 @@ where
             ContentManifestUpdate::Applied(publication) => {
                 self.remember(&publication);
                 Ok(AsyncProximityHeadCommit::Applied {
-                    snapshot: AsyncProximitySnapshot { publication, map },
+                    snapshot: Box::new(AsyncProximitySnapshot { publication, map }),
                     stats,
+                    attempts: 1,
+                })
+            }
+            ContentManifestUpdate::Conflict {
+                current_manifest_cid,
+            } => Ok(AsyncProximityHeadCommit::Conflict {
+                current_manifest_cid,
+                attempts: 1,
+            }),
+        }
+    }
+
+    /// Validate and install an already-published proximity descriptor when the
+    /// named head is absent. This is useful when construction and durable head
+    /// publication are separate application stages.
+    pub async fn publish_descriptor_if_absent(
+        &self,
+        descriptor: Cid,
+        logical_version: u64,
+        created_at_millis: u64,
+        metadata: BTreeMap<Vec<u8>, Vec<u8>>,
+    ) -> Result<AsyncProximityHeadCommit<S, ()>, Error> {
+        let manifest = ContentRootManifest {
+            root: TypedContentRoot::proximity_descriptor(descriptor.clone()),
+            logical_version,
+            created_at_millis,
+            metadata,
+        };
+        match compare_and_swap_named_content_root_with_limits_async(
+            &self.store,
+            &self.name,
+            None,
+            manifest,
+            &self.limits,
+        )
+        .await?
+        {
+            ContentManifestUpdate::Applied(publication) => {
+                let map =
+                    AsyncProximityMap::load_with_search_io(self.io.clone(), descriptor).await?;
+                self.remember(&publication);
+                Ok(AsyncProximityHeadCommit::Applied {
+                    snapshot: Box::new(AsyncProximitySnapshot { publication, map }),
+                    stats: (),
                     attempts: 1,
                 })
             }
@@ -201,7 +245,7 @@ where
             };
             if mutations.is_empty() {
                 return Ok(AsyncProximityHeadCommit::Applied {
-                    snapshot: current,
+                    snapshot: Box::new(current),
                     stats: ProximityMutationStats::default(),
                     attempts: 0,
                 });
@@ -226,7 +270,7 @@ where
                 ContentManifestUpdate::Applied(publication) => {
                     self.remember(&publication);
                     return Ok(AsyncProximityHeadCommit::Applied {
-                        snapshot: AsyncProximitySnapshot { publication, map },
+                        snapshot: Box::new(AsyncProximitySnapshot { publication, map }),
                         stats,
                         attempts: attempt,
                     });

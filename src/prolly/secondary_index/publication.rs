@@ -1,7 +1,7 @@
 use super::super::error::Error;
-use super::super::manifest::ManifestStore;
-use super::super::store::{FileNodeStore, MemStore, Store};
-use super::super::transaction::TransactionalStore;
+use super::super::manifest::{AsyncManifestStore, ManifestStore};
+use super::super::store::{AsyncStore, FileNodeStore, MemStore, Store};
+use super::super::transaction::{AsyncTransactionalStore, TransactionalStore};
 use super::super::tree::Tree;
 use std::sync::Arc;
 
@@ -39,6 +39,36 @@ impl<T: IndexedStore> IndexedStore for Arc<T> {
         self.as_ref().confirm_indexed_publication(trees)
     }
 }
+
+/// Native asynchronous store contract used by [`AsyncIndexedMap`](
+/// super::AsyncIndexedMap).
+///
+/// The visibility and durability requirements are identical to [`IndexedStore`]:
+/// immutable nodes may be published before the canonical collection root, but
+/// that root may advance only through a strict transaction.
+#[allow(async_fn_in_trait)]
+pub trait AsyncIndexedStore: AsyncStore + AsyncManifestStore + AsyncTransactionalStore {
+    /// Confirm every non-empty candidate tree root is readable before CAS.
+    async fn confirm_async_indexed_publication(&self, trees: &[&Tree]) -> Result<(), Error>
+    where
+        <Self as AsyncStore>::Error: Send + Sync,
+    {
+        for tree in trees {
+            let Some(root) = &tree.root else {
+                continue;
+            };
+            let present = AsyncStore::get(self, root.as_bytes())
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+            if present.is_none() {
+                return Err(Error::NotFound(root.clone()));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<T> AsyncIndexedStore for T where T: AsyncStore + AsyncManifestStore + AsyncTransactionalStore {}
 
 #[cfg(test)]
 mod tests {

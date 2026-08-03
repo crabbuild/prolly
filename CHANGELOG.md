@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add native `AsyncProlly::indexed_map(...).await` support with asynchronous
+  source/index mutation, snapshot queries, bounded maintenance, retention, and
+  strict one-root publication. The synchronous and async coordinators share one
+  canonical persisted format and cursor protocol. Qualify PostgreSQL, MySQL,
+  Redis, Turso, DynamoDB, Cosmos DB, and Spanner through the async IndexedMap
+  conformance suite.
 - Require strict `TransactionalStore` support for the sole `IndexedMap`
   constructor and route every canonical collection-root transition, including
   bundle import, through the engine transaction layer.

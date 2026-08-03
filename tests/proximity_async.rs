@@ -554,7 +554,7 @@ fn async_only_store_builds_composite_for_mutated_snapshot() {
             panic!("one-record delta unexpectedly required a full rebuild");
         };
         let accelerators = AsyncAcceleratorSet::empty()
-            .with_composite(current.tree(), accelerator)
+            .with_composite(current.tree(), *accelerator)
             .unwrap();
         let serving = AsyncProximityMap::load_with_runtime(
             store,

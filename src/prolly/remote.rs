@@ -1686,6 +1686,73 @@ pub mod conformance {
         );
     }
 
+    /// Assert that a transaction-capable backend supports the complete native
+    /// asynchronous `AsyncProlly::indexed_map` workflow.
+    pub async fn assert_remote_backend_async_indexed_map_contract<B>(backend: B)
+    where
+        B: RemoteStoreBackend + Clone,
+        B::Error: Debug,
+    {
+        use crate::{
+            AsyncProlly, IndexedMapUpdate, Mutation, SecondaryIndex, SecondaryIndexRegistry,
+        };
+
+        let store = RemoteProllyStore::new(backend);
+        assert!(AsyncTransactionalStore::supports_transactions(&store));
+        let engine = AsyncProlly::new(store, Config::default());
+        let registry = SecondaryIndexRegistry::new()
+            .register(
+                SecondaryIndex::non_unique(
+                    "by-status",
+                    1,
+                    "remote-async-contract.by-status/v1",
+                    |_, value| Ok(vec![value.to_vec()]),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let indexed = engine
+            .indexed_map(b"remote-async-indexed-contract", registry)
+            .await
+            .unwrap();
+        indexed.put(b"user-1", b"active").await.unwrap();
+        indexed.ensure_index(b"by-status").await.unwrap();
+        let stale = indexed.put(b"user-2", b"pending").await.unwrap().source.id;
+        assert_eq!(
+            indexed
+                .snapshot()
+                .await
+                .unwrap()
+                .index(b"by-status")
+                .unwrap()
+                .primary_keys(b"pending")
+                .await
+                .unwrap(),
+            vec![b"user-2".to_vec()]
+        );
+
+        indexed.put(b"user-3", b"active").await.unwrap();
+        let update = indexed
+            .apply_if(
+                Some(&stale),
+                vec![Mutation::Upsert {
+                    key: b"must-not-publish".to_vec(),
+                    val: b"active".to_vec(),
+                }],
+            )
+            .await
+            .unwrap();
+        assert!(matches!(update, IndexedMapUpdate::Conflict { .. }));
+        assert_eq!(indexed.get(b"must-not-publish").await.unwrap(), None);
+        let snapshot = indexed.snapshot().await.unwrap();
+        assert!(indexed
+            .verify_all(snapshot.source_version())
+            .await
+            .unwrap()
+            .iter()
+            .all(super::super::secondary_index::IndexVerification::is_valid));
+    }
+
     /// Assert that a transaction-capable remote backend supports the complete
     /// synchronous `Prolly::indexed_map` API through the shared blocking facade.
     #[cfg(feature = "tokio")]
@@ -2116,6 +2183,14 @@ mod tests {
         block_on(async {
             let backend = MemoryBackend::default();
             conformance::assert_remote_backend_transaction_contract(&backend).await;
+        });
+    }
+
+    #[test]
+    fn memory_backend_satisfies_async_indexed_map_contract() {
+        block_on(async {
+            let backend = Arc::new(MemoryBackend::default());
+            conformance::assert_remote_backend_async_indexed_map_contract(backend).await;
         });
     }
 

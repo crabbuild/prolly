@@ -5,10 +5,11 @@ use std::time::{Duration, Instant};
 
 use prolly::{
     compare_and_swap_named_content_root_async, load_named_content_root_async,
-    put_named_content_root_async, AsyncProximityMap, AsyncSearchControl, BuildParallelism,
-    ContentGraphLimits, ContentManifestUpdate, ContentObjectKind, ContentRootManifest,
-    ProximityConfig, ProximityMap, ProximityMutation, ProximityRecord, ScalarQuantizationConfig,
-    SearchIo, SearchRequest, SearchRuntime, TypedContentRoot,
+    put_named_content_root_async, AsyncProximityHead, AsyncProximityHeadCommit, AsyncProximityMap,
+    AsyncSearchControl, BuildParallelism, ContentGraphLimits, ContentManifestUpdate,
+    ContentObjectKind, ContentRootManifest, ProximityConfig, ProximityMap, ProximityMutation,
+    ProximityRecord, ScalarQuantizationConfig, SearchIo, SearchRequest, SearchRuntime,
+    TypedContentRoot,
 };
 use prolly_store_postgres::{PostgresBackend, PostgresStore};
 use sqlx::Row;
@@ -187,9 +188,8 @@ fn postgres_async_proximity_1836_end_to_end_and_performance() {
 
         let query = vector(record_count / 3);
         let expected = oracle.search(SearchRequest::exact(&query, 10)).unwrap();
-        let runtime_store = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()))
-            .with_proximity_dimensions(DIMENSIONS as u32);
-        let runtime_map = AsyncProximityMap::load(runtime_store, descriptor.clone())
+        let runtime_store = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+        let runtime_map = AsyncProximityMap::load_with_search_io(runtime_store, descriptor.clone())
             .await
             .unwrap();
         let cold = measured(
@@ -307,6 +307,45 @@ fn postgres_async_proximity_1836_end_to_end_and_performance() {
             ContentManifestUpdate::Applied(_)
         ));
 
+        let managed = AsyncProximityHead::new(store.clone(), b"proximity/managed".to_vec());
+        let managed_publication = measured(
+            &backend,
+            "managed_head_publish",
+            1,
+            managed.publish_descriptor_if_absent(descriptor.clone(), 1, 2, BTreeMap::new()),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            managed_publication,
+            AsyncProximityHeadCommit::Applied { .. }
+        ));
+        let managed_snapshot = measured(&backend, "managed_head_open_cached", 1, managed.open())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(managed_snapshot.map().tree().descriptor, descriptor);
+        let managed_key = format!("embedding-{:08}", record_count / 2).into_bytes();
+        let managed_update = measured(
+            &backend,
+            "managed_head_mutate_vector",
+            1,
+            managed.mutate_with_retry(
+                [ProximityMutation {
+                    key: managed_key,
+                    value: Some((vector(record_count + 11), b"managed-vector-update".to_vec())),
+                }],
+                3,
+                BTreeMap::new(),
+            ),
+        )
+        .await
+        .unwrap();
+        let AsyncProximityHeadCommit::Applied { stats, .. } = managed_update else {
+            panic!("uncontended managed PostgreSQL mutation conflicted");
+        };
+        assert!(!stats.full_proximity_rebuild);
+
         let same_vector = vector(record_count / 3);
         let (value_map, value_stats) = measured(
             &backend,
@@ -335,7 +374,8 @@ fn postgres_async_proximity_1836_end_to_end_and_performance() {
         )
         .await
         .unwrap();
-        assert!(mutation_stats.full_proximity_rebuild);
+        assert!(!mutation_stats.full_proximity_rebuild);
+        assert!(mutation_stats.records_rebuilt < record_count);
         let rebuilt = measured(
             &backend,
             "rebuild_oracle",

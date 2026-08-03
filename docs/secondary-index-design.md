@@ -1,8 +1,9 @@
 # `IndexedMap` secondary-index semantics
 
-`IndexedMap` is the synchronous secondary-index coordinator for one
-authoritative ordered collection. It supports sparse, non-unique and
-multi-valued indexes with `KeysOnly`, `Include`, and `All` projections.
+`IndexedMap` and `AsyncIndexedMap` are the synchronous and native asynchronous
+secondary-index coordinators for one authoritative ordered collection. They
+support sparse, non-unique and multi-valued indexes with `KeysOnly`, `Include`,
+and `All` projections.
 
 Start with [Build and operate secondary indexes with `IndexedMap`](secondary-indexes.md)
 for a self-contained application guide and 14 runnable real-world patterns.
@@ -40,16 +41,25 @@ state and retry under a finite operation budget.
 
 Raw head-changing `VersionedMap` operations are fenced once a canonical
 indexed-collection root exists. Reads remain possible, while mutations must go
-through `IndexedMap`.
+through `IndexedMap` or `AsyncIndexedMap`.
 
 ## Store contract
 
-There is one indexed-map API:
-`engine.indexed_map(source_map_id, registry)`. It accepts synchronous stores
-implementing `IndexedStore`, whose contract includes `Store`, `ManifestStore`,
-and strict `TransactionalStore`; there is no production/verification profile or
-alternate production constructor. Opening fails with
-`UnsupportedTransactions` when the backend does not enable strict transactions.
+There is one indexed-map API shape:
+`engine.indexed_map(source_map_id, registry)`. `Prolly` accepts synchronous
+stores implementing `IndexedStore`; `AsyncProlly` accepts asynchronous stores
+implementing `AsyncIndexedStore` and awaits the constructor. Each contract
+combines node storage, named manifests, and strict transactions. There is no
+production/verification profile or alternate production constructor. Opening
+fails with `UnsupportedTransactions` when the backend does not enable strict
+transactions.
+
+The two coordinators share one byte-for-byte state encoding, snapshot identity,
+cursor format, mutation normalization, and one-root publication protocol. A
+collection written through either API can be opened immediately through the
+other API. Async mutations use native ordered multi-read and multi-write store
+operations and await the strict root transaction; they do not create a runtime
+or bridge through a blocking facade.
 
 The application owns deployment choices such as persistence mode, durability
 settings, backup policy, and GC quiescence. The coordinator publishes immutable
@@ -66,12 +76,13 @@ visibility; durable acknowledgement; and immediate readability of nodes named
 by an applied root. The library fails closed when transaction support is absent,
 but cannot compensate for an adapter that falsely claims these guarantees.
 
-Remote provider crates expose `Sync*Store` aliases backed by the common
-`BlockingRemoteProllyStore`. The facade preserves provider-native batch,
-manifest, scan, hint, and transaction operations and owns a Tokio runtime for
-driver lifecycle. It detects calls from an existing Tokio runtime and bridges
-them without nesting runtimes; applications should still schedule synchronous
-IndexedMap work on blocking workers when running inside an async server.
+Remote provider crates expose their native `*Store` aliases for
+`AsyncProlly::indexed_map(...).await`, plus `Sync*Store` aliases backed by the
+common `BlockingRemoteProllyStore`. Async services should use the native path
+so cancellation, scheduling, connection-pool backpressure, and timeouts remain
+under their executor. The synchronous facade owns a Tokio runtime for driver
+lifecycle and is intended for blocking applications; when used inside an async
+server, schedule its work on blocking workers.
 
 ## Runtime definitions
 

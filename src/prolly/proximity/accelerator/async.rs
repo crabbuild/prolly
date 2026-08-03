@@ -98,7 +98,7 @@ impl Default for AsyncCompositeBuildOptions {
 
 pub enum AsyncCompositeBuildOutcome {
     Composite {
-        accelerator: AsyncCompositeAccelerator,
+        accelerator: Box<AsyncCompositeAccelerator>,
         stats: CompositeBuildStats,
         objects_published: usize,
         bytes_published: usize,
@@ -552,7 +552,7 @@ impl AsyncAcceleratorCatalog {
                 manifest: index.manifest_cid().clone(),
             });
         }
-        entries.sort_by(|left, right| left.kind.cmp(&right.kind));
+        entries.sort_by_key(|entry| entry.kind);
         if entries.is_empty() {
             return Err(invalid("accelerator catalog must not be empty"));
         }
@@ -793,7 +793,7 @@ where
             }
             let loaded = AsyncCompositeAccelerator::load(&store, manifest).await?;
             Ok(AsyncCompositeBuildOutcome::Composite {
-                accelerator: loaded,
+                accelerator: Box::new(loaded),
                 stats,
                 objects_published: walk.objects.len(),
                 bytes_published: walk.total_bytes,
