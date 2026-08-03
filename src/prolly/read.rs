@@ -2645,6 +2645,13 @@ where
         }
     }
 
+    /// Retain one packed async leaf after all required I/O completes.
+    pub async fn get_lease(&mut self, key: &[u8]) -> Result<Option<OwnedValueLease>, Error> {
+        self.get_handle(key)
+            .await
+            .map(|handle| handle.map(|handle| OwnedValueLease { handle }))
+    }
+
     /// Inspect an async-store large-value envelope without copying inline data.
     pub async fn get_value_ref_with<R>(
         &mut self,

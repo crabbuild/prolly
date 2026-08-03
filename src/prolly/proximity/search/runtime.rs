@@ -339,15 +339,61 @@ where
         self.store.batch(ops).await
     }
 
+    async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        let cids = keys
+            .iter()
+            .map(|key| <[u8; 32]>::try_from(*key).map(Cid))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(cids) = cids else {
+            return self.store.batch_get_ordered(keys).await;
+        };
+        match self
+            .runtime
+            .load_batch_async(self, &cids, self.kind, 2)
+            .await
+        {
+            Ok(values) => Ok(values
+                .into_iter()
+                .map(|value| value.map(|bytes| bytes.as_ref().to_vec()))
+                .collect()),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.batch_get_ordered(keys).await,
+            },
+            Err(_) => self.store.batch_get_ordered(keys).await,
+        }
+    }
+
+    async fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        self.batch_get_ordered(keys).await
+    }
+
     async fn batch_get_shared_ordered_unique(
         &self,
         keys: &[&[u8]],
     ) -> Result<Vec<Option<Arc<[u8]>>>, Self::Error> {
-        let mut values = Vec::with_capacity(keys.len());
-        for key in keys {
-            values.push(self.get_shared(key).await?);
+        let cids = keys
+            .iter()
+            .map(|key| <[u8; 32]>::try_from(*key).map(Cid))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(cids) = cids else {
+            return self.store.batch_get_shared_ordered_unique(keys).await;
+        };
+        match self
+            .runtime
+            .load_batch_async(self, &cids, self.kind, 2)
+            .await
+        {
+            Ok(values) => Ok(values),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.batch_get_shared_ordered_unique(keys).await,
+            },
+            Err(_) => self.store.batch_get_shared_ordered_unique(keys).await,
         }
-        Ok(values)
     }
 
     fn has_native_shared_reads(&self) -> bool {
@@ -723,6 +769,130 @@ impl SearchRuntime {
         result
     }
 
+    async fn load_batch_async<S: AsyncStore>(
+        &self,
+        io: &SearchIo<S>,
+        cids: &[Cid],
+        kind: ContentObjectKind,
+        decoder_version: u8,
+    ) -> Result<Vec<Option<Arc<[u8]>>>, Error>
+    where
+        S::Error: Send + Sync,
+    {
+        let keys = cids
+            .iter()
+            .cloned()
+            .map(|cid| CacheKey {
+                namespace: io.namespace,
+                kind,
+                cid,
+                decoder_version,
+            })
+            .collect::<Vec<_>>();
+        let mut results = vec![None; keys.len()];
+        let mut leaders = Vec::<usize>::new();
+        let mut waiters = Vec::<usize>::new();
+        {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            for (index, key) in keys.iter().enumerate() {
+                let generation = state.generation.wrapping_add(1);
+                state.generation = generation;
+                if let Some(entry) = state.entries.get_mut(key) {
+                    entry.generation = generation;
+                    results[index] = Some(entry.bytes.clone());
+                    state.access_log.push_back((key.clone(), generation));
+                    compact_access_log(&mut state);
+                } else if state.in_flight.insert(key.clone()) {
+                    leaders.push(index);
+                } else {
+                    waiters.push(index);
+                }
+            }
+        }
+
+        if !leaders.is_empty() {
+            let mut in_flight_guard = AsyncBatchInFlightGuard {
+                runtime: self,
+                keys: leaders.iter().map(|index| keys[*index].clone()).collect(),
+                armed: true,
+            };
+            let store_keys = leaders
+                .iter()
+                .map(|index| cids[*index].as_bytes() as &[u8])
+                .collect::<Vec<_>>();
+            let loaded = io
+                .store
+                .batch_get_ordered_unique(&store_keys)
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+            if loaded.len() != leaders.len() {
+                return Err(Error::InvalidProximityObject {
+                    kind: "runtime cache",
+                    reason: "ordered batch read returned the wrong result count".to_owned(),
+                });
+            }
+            let mut loaded_bytes = 0usize;
+            for (index, bytes) in leaders.iter().copied().zip(&loaded) {
+                if let Some(bytes) = bytes {
+                    let actual = Cid::from_bytes(bytes);
+                    if actual != keys[index].cid {
+                        return Err(Error::CidMismatch {
+                            expected: keys[index].cid.clone(),
+                            actual,
+                        });
+                    }
+                    validate_cached_object(bytes, io.dimensions)?;
+                    loaded_bytes = loaded_bytes.saturating_add(bytes.len());
+                }
+            }
+
+            io.physical_reads.fetch_add(1, Ordering::Relaxed);
+            io.physical_bytes_read
+                .fetch_add(loaded_bytes, Ordering::Relaxed);
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            let mut async_wakers = Vec::new();
+            for index in &leaders {
+                state.in_flight.remove(&keys[*index]);
+                if let Some(waiters) = state.async_waiters.remove(&keys[*index]) {
+                    async_wakers.extend(waiters);
+                }
+            }
+            for (index, bytes) in leaders.iter().copied().zip(loaded) {
+                if let Some(bytes) = bytes {
+                    let bytes = Arc::<[u8]>::from(bytes.into_boxed_slice());
+                    self.insert(&mut state, keys[index].clone(), bytes.clone());
+                    results[index] = Some(bytes);
+                }
+            }
+            in_flight_guard.armed = false;
+            self.wake.notify_all();
+            drop(state);
+            for waiter in async_wakers {
+                waiter.wake();
+            }
+        }
+
+        for index in waiters {
+            results[index] = match self
+                .load_async(io, kind, &cids[index], decoder_version, |bytes| {
+                    validate_cached_object(bytes, io.dimensions)
+                })
+                .await
+            {
+                Ok(loaded) => Some(loaded.bytes),
+                Err(Error::NotFound(_)) => None,
+                Err(error) => return Err(error),
+            };
+        }
+        Ok(results)
+    }
+
     fn insert(&self, state: &mut RuntimeState, key: CacheKey, bytes: Arc<[u8]>) {
         let partition = partition(key.kind);
         let partition_limit = self.partition_limit(partition);
@@ -779,6 +949,37 @@ struct AsyncInFlightGuard<'a> {
     runtime: &'a SearchRuntime,
     key: CacheKey,
     armed: bool,
+}
+
+struct AsyncBatchInFlightGuard<'a> {
+    runtime: &'a SearchRuntime,
+    keys: Vec<CacheKey>,
+    armed: bool,
+}
+
+impl Drop for AsyncBatchInFlightGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let mut state = self
+            .runtime
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let mut waiters = Vec::new();
+        for key in &self.keys {
+            state.in_flight.remove(key);
+            if let Some(key_waiters) = state.async_waiters.remove(key) {
+                waiters.extend(key_waiters);
+            }
+        }
+        self.runtime.wake.notify_all();
+        drop(state);
+        for waiter in waiters {
+            waiter.wake();
+        }
+    }
 }
 impl Drop for AsyncInFlightGuard<'_> {
     fn drop(&mut self) {

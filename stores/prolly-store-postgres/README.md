@@ -265,5 +265,21 @@ cargo test --manifest-path stores/prolly-store-postgres/Cargo.toml
 Run it against a disposable database or schema. The adapter tables are shared by
 every client using that database.
 
+The async proximity E2E test uses 1,836-dimensional vectors, checks canonical
+builds against the synchronous implementation, and exercises cold/warm reads,
+search, proofs, named-root CAS, mutations, rebuild, verification, and reopen. It
+prints client latency, PostgreSQL execution time, and SQL call counts:
+
+```bash
+PROLLY_POSTGRES_PROXIMITY_RECORDS=1000 \
+PROLLY_POSTGRES_PROXIMITY_SEARCH_SAMPLES=20 \
+cargo test --release \
+  --manifest-path stores/prolly-store-postgres/Cargo.toml \
+  --test proximity_async -- --nocapture
+```
+
+This test truncates the adapter tables and enables `pg_stat_statements`, so run
+it only against a dedicated benchmark database.
+
 See the [`prolly-map` API documentation](https://docs.rs/prolly-map) for the
 async map, transaction, diff, and merge APIs used with this backend.

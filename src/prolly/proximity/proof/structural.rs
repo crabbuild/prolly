@@ -52,7 +52,7 @@ impl ProximityStructuralProof {
         })
     }
 
-    pub(super) fn verified_map(
+    pub(crate) fn verified_map(
         &self,
         limits: &ContentGraphLimits,
     ) -> Result<(ProximityMap<Arc<MemStore>>, usize), Error> {

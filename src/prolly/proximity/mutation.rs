@@ -1,12 +1,13 @@
 use super::super::cid::Cid;
 use super::super::error::Error;
-use super::super::store::Store;
+use super::super::store::{AsyncStore, Store};
 use super::builder::{build_hierarchy_at_level, IndexedRecord};
 use super::distance::score;
 use super::storage::overflow::{persist_empty_leaf, persist_logical_node, summarize};
 use super::storage::vector::ExternalVector;
 use super::storage::{PhysicalNodeKind, ProximityEntry, ProximityNode, VectorRef};
 use super::{ProximityConfig, ProximityMutationStats};
+use futures_util::future::LocalBoxFuture;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(Clone, Debug)]
@@ -44,6 +45,339 @@ pub(crate) fn mutate_hierarchy<S: Store>(
         nodes,
         stats: context.stats,
     })
+}
+
+pub(crate) async fn mutate_hierarchy_async<S: AsyncStore>(
+    store: &S,
+    root: &Cid,
+    config: &ProximityConfig,
+    edits: &[LogicalEdit],
+) -> Result<LocalMutation, Error>
+where
+    S::Error: Send + Sync,
+{
+    let mut context = AsyncContext {
+        store,
+        config,
+        pending: HashMap::new(),
+        stats: ProximityMutationStats::default(),
+    };
+    let (node, _) = context.load_logical_node(root).await?;
+    let (root, _) = context.visit(root, &node, edits).await?;
+    let mut nodes: Vec<_> = context.pending.into_iter().collect();
+    nodes.sort_by(|(left, _), (right, _)| left.as_bytes().cmp(right.as_bytes()));
+    Ok(LocalMutation {
+        root,
+        nodes,
+        stats: context.stats,
+    })
+}
+
+struct AsyncContext<'a, S> {
+    store: &'a S,
+    config: &'a ProximityConfig,
+    pending: HashMap<Cid, Vec<u8>>,
+    stats: ProximityMutationStats,
+}
+
+impl<S> AsyncContext<'_, S>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    fn visit<'a>(
+        &'a mut self,
+        old_cid: &'a Cid,
+        node: &'a ProximityNode,
+        edits: &'a [LogicalEdit],
+    ) -> LocalBoxFuture<'a, Result<(Cid, u64), Error>> {
+        Box::pin(async move {
+            if node.level == 0 {
+                let mut entries: BTreeMap<Vec<u8>, Vec<f32>> = node
+                    .entries
+                    .iter()
+                    .map(|entry| Ok((entry.key.clone(), entry.vector.inline()?.to_vec())))
+                    .collect::<Result<_, Error>>()?;
+                for edit in edits {
+                    if edit.old.is_some() {
+                        entries.remove(&edit.key);
+                    }
+                    if let Some(vector) = &edit.new {
+                        entries.insert(edit.key.clone(), vector.clone());
+                    }
+                }
+                let replacement = ProximityNode {
+                    kind: PhysicalNodeKind::Leaf,
+                    level: 0,
+                    subtree_count: entries.len() as u64,
+                    quantizer: None,
+                    entries: entries
+                        .into_iter()
+                        .map(|(key, vector)| ProximityEntry::inline_leaf(key, vector))
+                        .collect(),
+                };
+                return self.finish_node(old_cid, replacement);
+            }
+
+            let (mut grouped, must_rebuild) =
+                route_edits(self.config, &mut self.stats, node, edits)?;
+            let mut entries = Vec::with_capacity(node.entries.len());
+            let mut subtree_count = 0u64;
+            for (index, entry) in node.entries.iter().enumerate() {
+                let old_child = entry
+                    .child
+                    .as_ref()
+                    .ok_or_else(|| invalid_mutation("internal entry has no child"))?;
+                let Some(child_edits) = grouped.remove(&index) else {
+                    entries.push(entry.clone());
+                    subtree_count = subtree_count
+                        .checked_add(entry.child_count)
+                        .ok_or_else(|| invalid_mutation("subtree count overflow"))?;
+                    self.stats.nodes_reused += 1;
+                    continue;
+                };
+                let child_edits: Vec<_> = child_edits.into_values().collect();
+                let (old_child_node, _) = self.load_logical_node(old_child).await?;
+                let (new_child, child_count) = if must_rebuild.contains(&index) {
+                    let mut records = BTreeMap::new();
+                    self.collect_leaf_records(old_child, &mut records).await?;
+                    for edit in &child_edits {
+                        if edit.old.is_some() {
+                            records.remove(&edit.key);
+                        }
+                        if let Some(vector) = &edit.new {
+                            records.insert(edit.key.clone(), vector.clone());
+                        }
+                    }
+                    let indexed: Vec<_> = records
+                        .into_iter()
+                        .map(|(key, vector)| IndexedRecord { key, vector })
+                        .collect();
+                    self.stats.records_rebuilt += indexed.len();
+                    let built = build_hierarchy_at_level(
+                        &indexed,
+                        self.config,
+                        Some(old_child_node.level),
+                    )?;
+                    self.stats.distance_evaluations += built.distance_evaluations;
+                    let count = indexed.len() as u64;
+                    for (cid, bytes) in built.nodes {
+                        self.pending.insert(cid, bytes);
+                    }
+                    (built.root, count)
+                } else {
+                    self.visit(old_child, &old_child_node, &child_edits).await?
+                };
+                subtree_count = subtree_count
+                    .checked_add(child_count)
+                    .ok_or_else(|| invalid_mutation("subtree count overflow"))?;
+                let representative = entry.vector.inline()?.to_vec();
+                let summary = self
+                    .summarize_child(new_child, old_child_node.level, &entry.key, &representative)
+                    .await?;
+                debug_assert_eq!(summary.count, child_count);
+                entries.push(summary.into_entry());
+            }
+            let replacement = ProximityNode {
+                kind: PhysicalNodeKind::Route,
+                level: node.level,
+                subtree_count,
+                quantizer: None,
+                entries,
+            };
+            self.finish_node(old_cid, replacement)
+        })
+    }
+
+    fn finish_node(&mut self, old_cid: &Cid, node: ProximityNode) -> Result<(Cid, u64), Error> {
+        let count = node.subtree_count;
+        let cid = if node.entries.is_empty() {
+            persist_empty_leaf(self.config, &mut self.pending)?
+        } else {
+            persist_logical_node(
+                node.kind,
+                node.level,
+                node.entries,
+                self.config,
+                &mut self.pending,
+            )?
+            .cid
+        };
+        if cid == *old_cid {
+            self.stats.nodes_reused += 1;
+        }
+        Ok((cid, count))
+    }
+
+    async fn summarize_child(
+        &mut self,
+        cid: Cid,
+        level: u8,
+        representative_key: &[u8],
+        representative_vector: &[f32],
+    ) -> Result<super::storage::overflow::NodeSummary, Error> {
+        let mut entries = Vec::new();
+        self.collect_logical_entries(&cid, level, &mut entries)
+            .await?;
+        summarize(cid, &entries, representative_key, representative_vector)
+    }
+
+    fn collect_logical_entries<'a>(
+        &'a mut self,
+        cid: &'a Cid,
+        level: u8,
+        entries: &'a mut Vec<ProximityEntry>,
+    ) -> LocalBoxFuture<'a, Result<(), Error>> {
+        Box::pin(async move {
+            let (node, _) = self.load_node(cid).await?;
+            if node.kind == PhysicalNodeKind::OverflowDirectory {
+                for child in node.entries.into_iter().filter_map(|entry| entry.child) {
+                    self.collect_logical_entries(&child, level, entries).await?;
+                }
+            } else if node.level == level {
+                entries.extend(node.entries);
+            } else {
+                return Err(invalid_mutation(
+                    "overflow child has an unexpected logical level",
+                ));
+            }
+            Ok(())
+        })
+    }
+
+    fn collect_leaf_records<'a>(
+        &'a mut self,
+        cid: &'a Cid,
+        records: &'a mut BTreeMap<Vec<u8>, Vec<f32>>,
+    ) -> LocalBoxFuture<'a, Result<(), Error>> {
+        Box::pin(async move {
+            let (node, _) = self.load_logical_node(cid).await?;
+            if node.level == 0 {
+                for entry in node.entries {
+                    if records
+                        .insert(entry.key, entry.vector.into_inline()?)
+                        .is_some()
+                    {
+                        return Err(invalid_mutation(
+                            "duplicate leaf identity while rebuilding cluster",
+                        ));
+                    }
+                }
+                return Ok(());
+            }
+            for child in node.entries.into_iter().filter_map(|entry| entry.child) {
+                self.collect_leaf_records(&child, records).await?;
+            }
+            Ok(())
+        })
+    }
+
+    async fn load_node(&mut self, cid: &Cid) -> Result<(ProximityNode, usize), Error> {
+        let (bytes, stored) = if let Some(bytes) = self.pending.get(cid) {
+            (bytes.clone(), false)
+        } else {
+            (
+                self.store
+                    .get(cid.as_bytes())
+                    .await
+                    .map_err(|error| Error::Store(Box::new(error)))?
+                    .ok_or_else(|| Error::NotFound(cid.clone()))?,
+                true,
+            )
+        };
+        authenticate(cid, &bytes)?;
+        if bytes.len() > self.config.overflow.max_page_bytes as usize {
+            return Err(invalid_mutation("node exceeds descriptor max_node_bytes"));
+        }
+        if stored {
+            self.stats.nodes_read += 1;
+        }
+        let mut node = ProximityNode::decode(&bytes, self.config.dimensions)?;
+        self.resolve_external_vectors(&mut node).await?;
+        Ok((node, bytes.len()))
+    }
+
+    async fn resolve_external_vectors(&mut self, node: &mut ProximityNode) -> Result<(), Error> {
+        let mut positions = BTreeMap::<Cid, Vec<usize>>::new();
+        for (index, entry) in node.entries.iter().enumerate() {
+            if let VectorRef::External(cid) = &entry.vector {
+                positions.entry(cid.clone()).or_default().push(index);
+            }
+        }
+        let mut resolved = BTreeMap::<Cid, Vec<f32>>::new();
+        let mut remote = Vec::new();
+        for cid in positions.keys() {
+            if let Some(bytes) = self.pending.get(cid) {
+                authenticate(cid, bytes)?;
+                let vector = ExternalVector::decode(bytes)?;
+                validate_vector_dimensions(&vector, self.config)?;
+                resolved.insert(cid.clone(), vector.vector);
+            } else {
+                remote.push(cid.clone());
+            }
+        }
+        if !remote.is_empty() {
+            let keys: Vec<_> = remote.iter().map(Cid::as_bytes).collect();
+            let values = self
+                .store
+                .batch_get_ordered_unique(&keys)
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+            if values.len() != remote.len() {
+                return Err(invalid_mutation(
+                    "ordered batch read returned the wrong result count",
+                ));
+            }
+            for (cid, bytes) in remote.into_iter().zip(values) {
+                let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
+                authenticate(&cid, &bytes)?;
+                let vector = ExternalVector::decode(&bytes)?;
+                validate_vector_dimensions(&vector, self.config)?;
+                resolved.insert(cid, vector.vector);
+            }
+        }
+        for (cid, indexes) in positions {
+            let vector = resolved
+                .remove(&cid)
+                .ok_or_else(|| Error::NotFound(cid.clone()))?;
+            for index in indexes {
+                node.entries[index].vector = VectorRef::Inline(vector.clone());
+            }
+        }
+        Ok(())
+    }
+
+    async fn load_logical_node(&mut self, cid: &Cid) -> Result<(ProximityNode, usize), Error> {
+        let (node, bytes) = self.load_node(cid).await?;
+        if node.kind != PhysicalNodeKind::OverflowDirectory {
+            return Ok((node, bytes));
+        }
+        let level = node.level;
+        let mut entries = Vec::new();
+        for child in node.entries.into_iter().filter_map(|entry| entry.child) {
+            self.collect_logical_entries(&child, level, &mut entries)
+                .await?;
+        }
+        let subtree_count = entries.iter().try_fold(0u64, |count, entry| {
+            count
+                .checked_add(entry.child_count)
+                .ok_or_else(|| invalid_mutation("subtree count overflow"))
+        })?;
+        Ok((
+            ProximityNode {
+                kind: if level == 0 {
+                    PhysicalNodeKind::Leaf
+                } else {
+                    PhysicalNodeKind::Route
+                },
+                level,
+                subtree_count,
+                quantizer: None,
+                entries,
+            },
+            bytes,
+        ))
+    }
 }
 
 struct Context<'a, S> {
@@ -87,24 +421,7 @@ impl<S: Store> Context<'_, S> {
             return self.finish_node(old_cid, replacement);
         }
 
-        let mut grouped: BTreeMap<usize, BTreeMap<Vec<u8>, LogicalEdit>> = BTreeMap::new();
-        let mut must_rebuild = HashSet::new();
-        for edit in edits {
-            if let Some(vector) = &edit.old {
-                let index = self.closest(&node.entries, vector)?;
-                merge_side(&mut grouped, index, edit, true);
-                if edit.level == node.level - 1 {
-                    must_rebuild.insert(index);
-                }
-            }
-            if let Some(vector) = &edit.new {
-                let index = self.closest(&node.entries, vector)?;
-                merge_side(&mut grouped, index, edit, false);
-                if edit.level == node.level - 1 {
-                    must_rebuild.insert(index);
-                }
-            }
-        }
+        let (mut grouped, must_rebuild) = route_edits(self.config, &mut self.stats, node, edits)?;
 
         let mut entries = Vec::with_capacity(node.entries.len());
         let mut subtree_count = 0u64;
@@ -232,27 +549,6 @@ impl<S: Store> Context<'_, S> {
         Ok(())
     }
 
-    fn closest(&mut self, entries: &[ProximityEntry], vector: &[f32]) -> Result<usize, Error> {
-        let mut best: Option<(usize, f64)> = None;
-        for (index, entry) in entries.iter().enumerate() {
-            self.stats.distance_evaluations += 1;
-            let distance = score(self.config.metric, vector, entry.vector.inline()?);
-            if best.is_none_or(|(best_index, best_distance)| {
-                distance
-                    .total_cmp(&best_distance)
-                    .then_with(|| entry.key.cmp(&entries[best_index].key))
-                    .is_lt()
-            }) {
-                best = Some((index, distance));
-            }
-        }
-        best.map(|(index, _)| index)
-            .ok_or_else(|| Error::InvalidProximityObject {
-                kind: "mutation",
-                reason: "cannot route through an empty internal node".to_owned(),
-            })
-    }
-
     fn collect_leaf_records(
         &mut self,
         cid: &Cid,
@@ -371,6 +667,92 @@ impl<S: Store> Context<'_, S> {
             },
             bytes,
         ))
+    }
+}
+
+type RoutedEdits = (
+    BTreeMap<usize, BTreeMap<Vec<u8>, LogicalEdit>>,
+    HashSet<usize>,
+);
+
+fn route_edits(
+    config: &ProximityConfig,
+    stats: &mut ProximityMutationStats,
+    node: &ProximityNode,
+    edits: &[LogicalEdit],
+) -> Result<RoutedEdits, Error> {
+    let mut grouped = BTreeMap::new();
+    let mut must_rebuild = HashSet::new();
+    for edit in edits {
+        if let Some(vector) = &edit.old {
+            let index = closest(config, stats, &node.entries, vector)?;
+            merge_side(&mut grouped, index, edit, true);
+            if edit.level == node.level - 1 {
+                must_rebuild.insert(index);
+            }
+        }
+        if let Some(vector) = &edit.new {
+            let index = closest(config, stats, &node.entries, vector)?;
+            merge_side(&mut grouped, index, edit, false);
+            if edit.level == node.level - 1 {
+                must_rebuild.insert(index);
+            }
+        }
+    }
+    Ok((grouped, must_rebuild))
+}
+
+fn closest(
+    config: &ProximityConfig,
+    stats: &mut ProximityMutationStats,
+    entries: &[ProximityEntry],
+    vector: &[f32],
+) -> Result<usize, Error> {
+    let mut best: Option<(usize, f64)> = None;
+    for (index, entry) in entries.iter().enumerate() {
+        stats.distance_evaluations += 1;
+        let distance = score(config.metric, vector, entry.vector.inline()?);
+        if best.is_none_or(|(best_index, best_distance)| {
+            distance
+                .total_cmp(&best_distance)
+                .then_with(|| entry.key.cmp(&entries[best_index].key))
+                .is_lt()
+        }) {
+            best = Some((index, distance));
+        }
+    }
+    best.map(|(index, _)| index)
+        .ok_or_else(|| invalid_mutation("cannot route through an empty internal node"))
+}
+
+fn authenticate(expected: &Cid, bytes: &[u8]) -> Result<(), Error> {
+    let actual = Cid::from_bytes(bytes);
+    if actual != *expected {
+        return Err(Error::CidMismatch {
+            expected: expected.clone(),
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn validate_vector_dimensions(
+    vector: &ExternalVector,
+    config: &ProximityConfig,
+) -> Result<(), Error> {
+    if vector.vector.len() != config.dimensions as usize {
+        return Err(Error::InvalidProximityObject {
+            kind: "vector",
+            reason: "external vector dimension mismatch".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn invalid_mutation(reason: impl Into<String>) -> Error {
+    Error::InvalidProximityObject {
+        kind: "mutation",
+        reason: reason.into(),
     }
 }
 

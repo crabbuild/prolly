@@ -375,8 +375,7 @@ pub mod postgres {
                 }
             }
 
-            let mut final_nodes =
-                HashMap::<&[u8], Option<&[u8]>>::with_capacity(node_writes.len());
+            let mut final_nodes = HashMap::<&[u8], Option<&[u8]>>::with_capacity(node_writes.len());
             for write in node_writes {
                 match write {
                     RemoteBatchOp::Upsert { key, value } => {

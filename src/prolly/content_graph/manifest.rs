@@ -1,13 +1,16 @@
-use super::{walk_content_graph, ContentGraphLimits, ContentObjectKind, TypedContentRoot};
+use super::{
+    walk_content_graph, walk_content_graph_async, ContentGraphLimits, ContentObjectKind,
+    TypedContentRoot,
+};
 use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
 use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
-use crate::prolly::manifest::{ManifestStore, ManifestUpdate, RootManifest};
+use crate::prolly::manifest::{AsyncManifestStore, ManifestStore, ManifestUpdate, RootManifest};
 use crate::prolly::proximity::storage::codec::{
     put_bytes, put_cid, put_varint, Reader, MAX_KEY_BYTES,
 };
-use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
+use crate::prolly::store::{AsyncStore, NodePublication, PublicationOrigin, Store};
 use std::collections::BTreeMap;
 
 const MAGIC: &[u8; 4] = b"CRMF";
@@ -207,6 +210,177 @@ where
     }
 }
 
+/// Validate and publish a named typed content root through async storage.
+pub async fn put_named_content_root_async<S>(
+    store: &S,
+    name: &[u8],
+    manifest: ContentRootManifest,
+) -> Result<ContentRootPublication, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    put_named_content_root_with_limits_async(store, name, manifest, &ContentGraphLimits::default())
+        .await
+}
+
+pub async fn put_named_content_root_with_limits_async<S>(
+    store: &S,
+    name: &[u8],
+    manifest: ContentRootManifest,
+    limits: &ContentGraphLimits,
+) -> Result<ContentRootPublication, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    walk_content_graph_async(store, std::slice::from_ref(&manifest.root), limits).await?;
+    let publication = persist_manifest_async(store, manifest).await?;
+    AsyncManifestStore::put_root(store, name, &named_pointer(&publication))
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?;
+    Ok(publication)
+}
+
+/// Load and validate a named typed content root through async storage.
+pub async fn load_named_content_root_async<S>(
+    store: &S,
+    name: &[u8],
+) -> Result<Option<ContentRootPublication>, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    load_named_content_root_with_limits_async(store, name, &ContentGraphLimits::default()).await
+}
+
+pub async fn load_named_content_root_with_limits_async<S>(
+    store: &S,
+    name: &[u8],
+    limits: &ContentGraphLimits,
+) -> Result<Option<ContentRootPublication>, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    load_named_content_root_with_cached_validation_async(store, name, limits, None).await
+}
+
+pub(crate) async fn load_named_content_root_with_cached_validation_async<S>(
+    store: &S,
+    name: &[u8],
+    limits: &ContentGraphLimits,
+    cached: Option<&ContentRootPublication>,
+) -> Result<Option<ContentRootPublication>, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    let Some(pointer) = AsyncManifestStore::get_root(store, name)
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?
+    else {
+        return Ok(None);
+    };
+    validate_pointer(&pointer)?;
+    let cid = pointer.root.expect("validated content manifest pointer");
+    if let Some(cached) = cached.filter(|cached| cached.manifest_cid == cid) {
+        return Ok(Some(cached.clone()));
+    }
+    let publication = load_manifest_async(store, cid).await?;
+    walk_content_graph_async(
+        store,
+        std::slice::from_ref(&publication.manifest.root),
+        limits,
+    )
+    .await?;
+    Ok(Some(publication))
+}
+
+/// Atomically compare-and-swap a named typed content root through async storage.
+pub async fn compare_and_swap_named_content_root_async<S>(
+    store: &S,
+    name: &[u8],
+    expected_manifest_cid: Option<&Cid>,
+    manifest: ContentRootManifest,
+) -> Result<ContentManifestUpdate, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    compare_and_swap_named_content_root_with_limits_async(
+        store,
+        name,
+        expected_manifest_cid,
+        manifest,
+        &ContentGraphLimits::default(),
+    )
+    .await
+}
+
+pub async fn compare_and_swap_named_content_root_with_limits_async<S>(
+    store: &S,
+    name: &[u8],
+    expected_manifest_cid: Option<&Cid>,
+    manifest: ContentRootManifest,
+    limits: &ContentGraphLimits,
+) -> Result<ContentManifestUpdate, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    walk_content_graph_async(store, std::slice::from_ref(&manifest.root), limits).await?;
+    let publication = persist_manifest_async(store, manifest).await?;
+    let expected = expected_manifest_cid.map(pointer_for_cid);
+    let new = named_pointer(&publication);
+    match AsyncManifestStore::compare_and_swap_root(store, name, expected.as_ref(), Some(&new))
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?
+    {
+        ManifestUpdate::Applied => Ok(ContentManifestUpdate::Applied(publication)),
+        ManifestUpdate::Conflict { current } => Ok(ContentManifestUpdate::Conflict {
+            current_manifest_cid: current.and_then(|manifest| manifest.root),
+        }),
+    }
+}
+
+/// Publish a root whose typed closure was validated by a managed operation.
+///
+/// This is crate-private because skipping a closure walk is safe only when the
+/// caller carries validation forward from the exact prior head and constructs
+/// the new immutable closure through authenticated engine operations.
+pub(crate) async fn compare_and_swap_prevalidated_content_root_async<S>(
+    store: &S,
+    name: &[u8],
+    expected_manifest_cid: Option<&Cid>,
+    manifest: ContentRootManifest,
+) -> Result<ContentManifestUpdate, Error>
+where
+    S: AsyncStore + AsyncManifestStore,
+    <S as AsyncStore>::Error: Send + Sync,
+    <S as AsyncManifestStore>::Error: Send + Sync,
+{
+    let publication = persist_manifest_async(store, manifest).await?;
+    let expected = expected_manifest_cid.map(pointer_for_cid);
+    let new = named_pointer(&publication);
+    match AsyncManifestStore::compare_and_swap_root(store, name, expected.as_ref(), Some(&new))
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?
+    {
+        ManifestUpdate::Applied => Ok(ContentManifestUpdate::Applied(publication)),
+        ManifestUpdate::Conflict { current } => Ok(ContentManifestUpdate::Conflict {
+            current_manifest_cid: current.and_then(|manifest| manifest.root),
+        }),
+    }
+}
+
 fn persist_manifest<S: Store>(
     store: &S,
     manifest: ContentRootManifest,
@@ -238,9 +412,67 @@ fn persist_manifest<S: Store>(
     })
 }
 
+async fn persist_manifest_async<S: AsyncStore>(
+    store: &S,
+    manifest: ContentRootManifest,
+) -> Result<ContentRootPublication, Error>
+where
+    S::Error: Send + Sync,
+{
+    let bytes = manifest.to_bytes()?;
+    let cid = Cid::from_bytes(&bytes);
+    if let Some(existing) = AsyncStore::get(store, cid.as_bytes())
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?
+    {
+        if Cid::from_bytes(&existing) != cid {
+            return Err(Error::CidMismatch {
+                expected: cid,
+                actual: Cid::from_bytes(&existing),
+            });
+        }
+    } else {
+        let entries = [(cid.as_bytes(), bytes.as_slice())];
+        AsyncStore::publish_nodes(
+            store,
+            NodePublication::new(&entries, PublicationOrigin::Maintenance),
+        )
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?;
+    }
+    Ok(ContentRootPublication {
+        manifest_cid: cid,
+        manifest,
+    })
+}
+
 fn load_manifest<S: Store>(store: &S, cid: Cid) -> Result<ContentRootPublication, Error> {
     let bytes = store
         .get(cid.as_bytes())
+        .map_err(|error| Error::Store(Box::new(error)))?
+        .ok_or_else(|| Error::NotFound(cid.clone()))?;
+    let actual = Cid::from_bytes(&bytes);
+    if actual != cid {
+        return Err(Error::CidMismatch {
+            expected: cid,
+            actual,
+        });
+    }
+    Ok(ContentRootPublication {
+        manifest_cid: cid,
+        manifest: ContentRootManifest::from_bytes(&bytes)?,
+    })
+}
+
+async fn load_manifest_async<S: AsyncStore>(
+    store: &S,
+    cid: Cid,
+) -> Result<ContentRootPublication, Error>
+where
+    S::Error: Send + Sync,
+{
+    let bytes = AsyncStore::get(store, cid.as_bytes())
+        .await
         .map_err(|error| Error::Store(Box::new(error)))?
         .ok_or_else(|| Error::NotFound(cid.clone()))?;
     let actual = Cid::from_bytes(&bytes);

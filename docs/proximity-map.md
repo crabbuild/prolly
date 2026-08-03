@@ -118,10 +118,67 @@ Stale secondary candidates are rejected.
 Results are ordered by `(score, key)`. Scalar, SIMD, and auto query kernels are
 bit-identical; construction and mutation always use canonical scalar math.
 
-With the `async-store` feature, `AsyncProximityMap` performs the same logical
-best-first search over `AsyncStore`. `AsyncSearchControl` bounds in-flight
+`AsyncProximityMap` provides the complete immutable-map lifecycle directly over
+`AsyncStore`: canonical build and reopen, retained exact reads and ordered
+scans, canonical mutation and rebuild, membership and structural proofs,
+deterministic native search proofs, verification, and best-first search.
+`AsyncSearchControl` bounds in-flight
 reads, prefetch width, and speculative bytes and supports cancellation and
 deadlines. Read completion order cannot change committed visitation or results.
+
+```rust,no_run
+# use prolly::*;
+# async fn run<S>(store: S) -> Result<(), Error>
+# where S: AsyncStore + Clone, S::Error: Send + Sync {
+let map = AsyncProximityMap::build(
+    store.clone(),
+    ProximityConfig::new(3),
+    [ProximityRecord {
+        key: b"doc/a".to_vec(),
+        vector: vec![0.0, 1.0, 0.0],
+        value: b"alpha".to_vec(),
+    }],
+).await?;
+let descriptor = map.tree().descriptor.clone();
+let record = map.get(b"doc/a").await?;
+let (next, _) = map.mutate_batch([ProximityMutation {
+    key: b"doc/a".to_vec(),
+    value: Some((vec![0.1, 0.9, 0.0], b"updated".to_vec())),
+}]).await?;
+next.verify().await?;
+let limits = ContentGraphLimits::default();
+let query = [0.1, 0.9, 0.0];
+next.prove_search(SearchRequest::exact(&query, 1), &limits).await?
+    .verify_for_source(&next.tree().descriptor, &limits)?;
+let reopened = AsyncProximityMap::load(store, descriptor).await?;
+# let _ = (record, reopened);
+# Ok(()) }
+```
+
+The async canonical writer uses the same promotion, routing, overflow, and
+cluster-reconstruction rules as the synchronous copy-on-write writer.
+Value-only mutations reuse the entire PRXN hierarchy. Vector inserts, updates,
+and deletes normally rewrite only affected paths and clusters; promotion above
+the current root is the explicit full-rebuild case. Every result remains
+byte-identical to a clean async or synchronous rebuild.
+
+`AsyncProximityBuildOptions` bounds input records, retained source bytes, CPU
+parallelism, and provider publication batch size. The exact directory is
+published through the memory-bounded `AsyncSortedBatchBuilder` after canonical
+key ordering; proximity construction retains the vectors required by canonical
+clustering and fails with `ProximityResourceLimitExceeded` before crossing an
+explicit application bound.
+
+Remote services can retain the descriptor closure atomically through
+`put_named_content_root_async`, `load_named_content_root_async`, and
+`compare_and_swap_named_content_root_async`. These validate the complete typed
+content graph before publishing a mutable name through `AsyncManifestStore`.
+`AsyncProximityHead` combines those primitives into a durable service-facing
+lifecycle: build-if-absent, validated open, shared search runtime, localized
+mutation, expected-head CAS, and bounded conflict retry. A head reuses closure
+validation only while its named manifest CID is unchanged. Managed mutations
+carry that validation through authenticated copy-on-write construction; raw
+untrusted opens retain full typed-graph validation.
 
 ## Localized copy-on-write mutation
 
@@ -216,15 +273,17 @@ not expose parallel generation types, compatibility aliases, or legacy
 accelerator readers.
 
 `SearchIo` implements both `Store` and, with the `async-store` feature,
-`AsyncStore`. For async proximity reads, bind decoder context with
-`search_io.with_proximity_dimensions(dimensions)`, load
-`AsyncProximityMap<SearchIo<_>>`, and call `search_with_runtime` so physical
-byte statistics reflect actual cache misses rather than logical object use.
-Async-only object stores load sidecars with `AsyncHnswIndex::load` and
-`AsyncProductQuantizer::load`, validate them into an `AsyncAcceleratorSet`, and
-call `search_with_accelerators`. That entry point uses the same planner and
-plan summaries as `ProximityMap::search_with`; only I/O scheduling and physical
-read statistics differ.
+`AsyncStore`. `AsyncProximityMap::load_with_runtime` and
+`load_with_search_io` authenticate the descriptor and derive PRXN decoder
+context automatically, avoiding a cache-configuration footgun. Call
+`search_with_runtime` so physical-byte statistics reflect actual cache misses
+rather than logical object use. Async-only object stores can construct and
+publish canonical HNSW/PQ catalogs with `AsyncAcceleratorCatalog::build`, load
+individual sidecars, validate them into an `AsyncAcceleratorSet`, and call
+`search_with_accelerators`. Construction stages deterministic CPU work away
+from the remote adapter, then publishes the authenticated closure in bounded
+provider batches. The planner and plan summaries are identical to
+`ProximityMap::search_with`; only I/O scheduling and physical statistics differ.
 
 ## Composite accelerators and catalogs
 
@@ -283,7 +342,11 @@ Publish `catalog.typed_root()` with `put_named_content_root` or
 `compare_and_swap_named_content_root`; replacement is atomic and independent
 of PRXI publication. `AsyncAcceleratorCatalog::load` and
 `AsyncCompositeAccelerator::load` provide the same validation and planner
-capabilities for async-only stores.
+capabilities for async-only stores. `AsyncCompositeAccelerator::build_from_hnsw`
+and `build_from_product_quantizer` construct and publish bounded delta/shadow
+sidecars from async-only base and current snapshots.
+`AsyncAcceleratorCatalog::publish` binds already-validated async sidecars to the
+current descriptor.
 
 Composite execution filters and shadows before authoritative lookup, scans the
 bounded full-precision delta, and merges in `(distance, key)` order. Missing or

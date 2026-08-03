@@ -39,6 +39,42 @@ where
     S: AsyncStore + Clone,
     S::Error: Send + Sync,
 {
+    /// Load a proximity map with a shared authenticated I/O runtime.
+    ///
+    /// Decoder context is derived from the authenticated descriptor so callers
+    /// cannot accidentally disable validated PRXN cache admission.
+    pub async fn load_with_runtime(
+        store: S,
+        descriptor: Cid,
+        runtime: Arc<super::SearchRuntime>,
+    ) -> Result<Self, Error> {
+        Self::load_with_search_io(super::SearchIo::new(store, runtime), descriptor).await
+    }
+
+    /// Load through an existing shared-runtime binding while preserving its
+    /// cache namespace and counters across map reopen operations.
+    pub async fn load_with_search_io(
+        io: super::SearchIo<S>,
+        descriptor: Cid,
+    ) -> Result<Self, Error> {
+        let descriptor_bytes = io
+            .store()
+            .get(descriptor.as_bytes())
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+            .ok_or_else(|| Error::NotFound(descriptor.clone()))?;
+        let actual = Cid::from_bytes(&descriptor_bytes);
+        if actual != descriptor {
+            return Err(Error::CidMismatch {
+                expected: descriptor,
+                actual,
+            });
+        }
+        let dimensions = Descriptor::decode(&descriptor_bytes)?.config.dimensions;
+        let io = io.with_proximity_dimensions(dimensions);
+        Self::load(io, actual).await
+    }
+
     /// Execute native async search with physical I/O derived from the shared
     /// runtime rather than from logical object consumption.
     pub async fn search_with_runtime(
@@ -295,9 +331,9 @@ pub struct AsyncSearchControl {
 }
 
 pub struct AsyncProximityMap<S: AsyncStore> {
-    store: S,
-    directory: AsyncProlly<S>,
-    tree: ProximityTree,
+    pub(crate) store: S,
+    pub(crate) directory: AsyncProlly<S>,
+    pub(crate) tree: ProximityTree,
 }
 
 impl<S> AsyncProximityMap<S>
@@ -309,6 +345,12 @@ where
         let descriptor_bytes = load_content(&store, &descriptor_cid).await?;
         let descriptor = Descriptor::decode(&descriptor_bytes)?;
         let root_bytes = load_content(&store, &descriptor.proximity_root).await?;
+        if root_bytes.len() > descriptor.config.overflow.max_page_bytes as usize {
+            return Err(Error::InvalidProximityObject {
+                kind: "node",
+                reason: "root exceeds descriptor max_node_bytes".to_owned(),
+            });
+        }
         let root = ProximityNode::decode(&root_bytes, descriptor.config.dimensions)?;
         if root.subtree_count != descriptor.count {
             return Err(Error::InvalidProximityObject {
@@ -339,6 +381,15 @@ where
         request: SearchRequest<'_>,
         control: AsyncSearchControl,
     ) -> Result<SearchResult, Error> {
+        self.search_with_trace(request, control, None).await
+    }
+
+    pub(crate) async fn search_with_trace(
+        &self,
+        request: SearchRequest<'_>,
+        control: AsyncSearchControl,
+        mut trace: Option<&mut Vec<super::super::proof::ProximitySearchEvent>>,
+    ) -> Result<SearchResult, Error> {
         request.validate()?;
         control.io.validate()?;
         if matches!(
@@ -366,6 +417,12 @@ where
             cid: self.tree.proximity_root.clone(),
             expected_level: None,
         });
+        if let Some(trace) = trace.as_deref_mut() {
+            trace.push(super::super::proof::ProximitySearchEvent::FrontierPushed {
+                cid: self.tree.proximity_root.clone(),
+                bound_bits: 0.0f64.to_bits(),
+            });
+        }
         let mut candidates = Vec::<SearchCandidate>::new();
         let mut score_cache = BTreeMap::<Vec<u8>, f64>::new();
         let mut visited = HashSet::new();
@@ -434,6 +491,12 @@ where
                 break;
             }
             let next = frontier.pop().expect("peeked frontier");
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.push(super::super::proof::ProximitySearchEvent::FrontierPopped {
+                    cid: next.cid.clone(),
+                    bound_bits: next.bound.to_bits(),
+                });
+            }
             if !visited.insert(next.cid.clone()) {
                 return Err(Error::InvalidProximityObject {
                     kind: "node",
@@ -451,31 +514,35 @@ where
                     bytes
                 }
             };
+            if bytes.len() > self.tree.config.overflow.max_page_bytes as usize {
+                return Err(Error::InvalidProximityObject {
+                    kind: "node",
+                    reason: "node exceeds descriptor max_node_bytes".to_owned(),
+                });
+            }
             if let Some(stopped) = stop_reason(&control) {
                 completion = stopped;
                 break;
             }
             let mut node = ProximityNode::decode(&bytes, self.tree.config.dimensions)?;
             let mut committed = bytes.len();
-            for entry in &mut node.entries {
-                let VectorRef::External(cid) = &entry.vector else {
-                    continue;
-                };
-                let bytes = load_content(&self.store, cid).await?;
-                if let Some(stopped) = stop_reason(&control) {
-                    completion = stopped;
-                    break;
-                }
-                stats.physical_bytes_read += bytes.len();
-                committed += bytes.len();
-                let external = ExternalVector::decode(&bytes)?;
-                if external.vector.len() != self.tree.config.dimensions as usize {
-                    return Err(Error::InvalidProximityObject {
-                        kind: "vector",
-                        reason: "external vector dimension mismatch".to_owned(),
-                    });
-                }
-                entry.vector = VectorRef::Inline(external.vector);
+            let (vector_bytes, physical_vector_bytes) = resolve_external_vectors_batched(
+                &self.store,
+                &mut node,
+                self.tree.config.dimensions,
+            )
+            .await?;
+            committed = committed.saturating_add(vector_bytes);
+            stats.physical_bytes_read = stats
+                .physical_bytes_read
+                .saturating_add(physical_vector_bytes);
+            if let Some(stopped) = stop_reason(&control) {
+                completion = stopped;
+            }
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.push(super::super::proof::ProximitySearchEvent::VisitedObject(
+                    next.cid.clone(),
+                ));
             }
             let node = Arc::new(node);
             let quantizer = if use_scalar_quantization && node.kind.has_children(node.level) {
@@ -600,13 +667,19 @@ where
                         bound,
                         score: representative_score,
                         key: entry.key.clone(),
-                        cid: child,
+                        cid: child.clone(),
                         expected_level: Some(if node.kind == PhysicalNodeKind::OverflowDirectory {
                             node.level
                         } else {
                             node.level - 1
                         }),
                     });
+                    if let Some(trace) = trace.as_deref_mut() {
+                        trace.push(super::super::proof::ProximitySearchEvent::FrontierPushed {
+                            cid: child,
+                            bound_bits: bound.to_bits(),
+                        });
+                    }
                     stats.frontier_peak = stats.frontier_peak.max(frontier.len());
                 } else if filter.contains(&entry.key) {
                     let leaf_score = match score_cache.get(&entry.key) {
@@ -627,6 +700,12 @@ where
                             value
                         }
                     };
+                    if let Some(trace) = trace.as_deref_mut() {
+                        trace.push(super::super::proof::ProximitySearchEvent::CandidateScored {
+                            key: entry.key.clone(),
+                            distance_bits: leaf_score.to_bits(),
+                        });
+                    }
                     insert_top_k(
                         &mut candidates,
                         SearchCandidate::new(node.clone(), entry_index, leaf_score),
@@ -673,6 +752,11 @@ where
                 value: record.value.to_vec(),
                 distance: candidate.score,
             });
+        }
+        if let Some(trace) = trace {
+            trace.push(super::super::proof::ProximitySearchEvent::Completed(
+                completion,
+            ));
         }
         Ok(SearchResult {
             neighbors,
@@ -731,6 +815,66 @@ where
         }
     }
     Ok(())
+}
+
+async fn resolve_external_vectors_batched<S>(
+    store: &S,
+    node: &mut ProximityNode,
+    dimensions: u32,
+) -> Result<(usize, usize), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    let mut positions = BTreeMap::<Cid, Vec<usize>>::new();
+    for (index, entry) in node.entries.iter().enumerate() {
+        if let VectorRef::External(cid) = &entry.vector {
+            positions.entry(cid.clone()).or_default().push(index);
+        }
+    }
+    if positions.is_empty() {
+        return Ok((0, 0));
+    }
+
+    let cids: Vec<_> = positions.keys().cloned().collect();
+    let keys: Vec<_> = cids.iter().map(Cid::as_bytes).collect();
+    let values = store
+        .batch_get_ordered_unique(&keys)
+        .await
+        .map_err(|error| Error::Store(Box::new(error)))?;
+    if values.len() != cids.len() {
+        return Err(Error::InvalidProximityObject {
+            kind: "vector",
+            reason: "ordered batch read returned the wrong result count".to_owned(),
+        });
+    }
+
+    let mut logical_bytes = 0usize;
+    let mut physical_bytes = 0usize;
+    for ((cid, entry_positions), value) in positions.into_iter().zip(values) {
+        let bytes = value.ok_or_else(|| Error::NotFound(cid.clone()))?;
+        let actual = Cid::from_bytes(&bytes);
+        if actual != cid {
+            return Err(Error::CidMismatch {
+                expected: cid,
+                actual,
+            });
+        }
+        let external = ExternalVector::decode(&bytes)?;
+        if external.vector.len() != dimensions as usize {
+            return Err(Error::InvalidProximityObject {
+                kind: "vector",
+                reason: "external vector dimension mismatch".to_owned(),
+            });
+        }
+        physical_bytes = physical_bytes.saturating_add(bytes.len());
+        logical_bytes =
+            logical_bytes.saturating_add(bytes.len().saturating_mul(entry_positions.len()));
+        for index in entry_positions {
+            node.entries[index].vector = VectorRef::Inline(external.vector.clone());
+        }
+    }
+    Ok((logical_bytes, physical_bytes))
 }
 
 fn stop_reason(control: &AsyncSearchControl) -> Option<SearchCompletion> {

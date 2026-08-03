@@ -1958,7 +1958,7 @@ fn apply_directory_stats(target: &mut ProximityMutationStats, source: SpliceStat
     target.directory_right_edge_rebuilt = source.right_edge_rebuilt;
 }
 
-fn validate_mutations(
+pub(super) fn validate_mutations(
     mutations: impl IntoIterator<Item = ProximityMutation>,
 ) -> Result<Vec<ProximityMutation>, Error> {
     let mut mutations: Vec<_> = mutations.into_iter().collect();
@@ -1973,7 +1973,7 @@ fn validate_mutations(
     Ok(mutations)
 }
 
-fn apply_mutations(
+pub(super) fn apply_mutations(
     records: &mut BTreeMap<Vec<u8>, ProximityRecord>,
     mutations: &[ProximityMutation],
     config: &ProximityConfig,

@@ -13,8 +13,10 @@ use crate::prolly::error::Error;
 use crate::prolly::store::Store;
 pub(crate) use r#async::AsyncCompositeBase;
 pub use r#async::{
-    AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
-    AsyncProductQuantizer,
+    AsyncAcceleratorBuildOptions, AsyncAcceleratorBuildStats, AsyncAcceleratorCatalog,
+    AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncCompositeBuildOptions,
+    AsyncCompositeBuildOutcome, AsyncHnswBuild, AsyncHnswIndex, AsyncProductQuantizer,
+    AsyncProductQuantizerBuild,
 };
 
 /// Validated source-bound derived accelerators available to one search.

@@ -4787,6 +4787,15 @@ where
             .await
     }
 
+    pub(crate) async fn batch_with_write_stats_origin(
+        &self,
+        tree: &Tree,
+        mutations: Vec<Mutation>,
+        origin: PublicationOrigin,
+    ) -> Result<(Tree, write::WriteStats), Error> {
+        self.canonical_batch(tree, mutations, origin).await
+    }
+
     fn cached_rightmost_path(&self, root: &Cid) -> Option<Vec<CachedRightmostPathEntry>> {
         self.rightmost_path_cache
             .read()

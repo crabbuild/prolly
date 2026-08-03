@@ -3,6 +3,7 @@ mod search;
 mod structural;
 
 pub use membership::{ProximityMembershipProof, ProximityMembershipVerification};
+pub(crate) use search::build_native_proof_from_source;
 pub use search::{
     ProximityProofFilter, ProximitySearchClaim, ProximitySearchEvent, ProximitySearchProof,
     ProximitySearchRequest, ProximitySearchVerification,
