@@ -2,9 +2,25 @@
 
 MySQL-backed remote store adapter for `prolly-map`.
 
-This crate implements `RemoteStoreBackend` using `sqlx::MySqlPool`. Use it
-through `RemoteProllyStore` and `AsyncProlly` when your deployment standardizes
-on MySQL and you want durable Prolly nodes, hints, and named roots in SQL.
+This crate implements `RemoteStoreBackend` using `sqlx::MySqlPool`. It supports
+both `RemoteProllyStore` with `AsyncProlly` and the first-class
+`SyncMySqlStore` facade with synchronous `Prolly::indexed_map`.
+
+## Synchronous IndexedMap
+
+```rust,no_run
+use prolly::{Config, Prolly, SecondaryIndexRegistry};
+use prolly_store_mysql::{MySqlBackend, SyncMySqlStore};
+
+fn open(backend: MySqlBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let engine = Prolly::new(SyncMySqlStore::new(backend)?, Config::default());
+    let _users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
+    Ok(())
+}
+```
+
+Use `SyncMySqlStore::build` to run asynchronous connection and schema setup on
+the store-owned runtime.
 
 ## Installation
 

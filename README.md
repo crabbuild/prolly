@@ -76,7 +76,9 @@ reflogs, patches, merge orchestration, sync planning, and repository-level GC.
   historical snapshots, durable pins, safe GC, structured diagnostics, and
   verified bounded transfer. Applications open it through one
   `engine.indexed_map(...)` API and choose a synchronous `IndexedStore` with
-  strict transactional root publication.
+  strict transactional root publication. First-class synchronous facades are
+  available for PostgreSQL, MySQL, Redis, Turso, DynamoDB, Cosmos DB, and
+  Spanner in addition to the embedded adapters.
 - Store-independent single-key, shared multi-key, complete range, cursor-page,
   and diff-page proofs for a tree root.
 - Tree statistics for inspecting shape, fill factor, fanout, and serialized size.

@@ -5,17 +5,20 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use prolly::{
-    NodePublication, NodePublicationHint, PublicationOrigin, RemoteBatchOp, RemoteManifestUpdate,
-    RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
-    RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteProllyStore, NodePublication, NodePublicationHint, PublicationOrigin,
+    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 use turso::transaction::TransactionBehavior;
 use turso::{Connection, Database, IntoParams};
 
-pub use prolly::RemoteProllyStore;
+pub use prolly::{BlockingRemoteBuildError, BlockingRemoteStoreError, RemoteProllyStore};
 
 /// A complete async prolly store backed by native Turso Database.
 pub type TursoStore = RemoteProllyStore<TursoBackend>;
+
+/// Synchronous Turso store supporting `Prolly::indexed_map`.
+pub type SyncTursoStore = BlockingRemoteProllyStore<TursoBackend>;
 
 /// Native Turso backend used by [`TursoStore`].
 #[derive(Clone)]

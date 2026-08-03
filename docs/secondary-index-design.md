@@ -66,6 +66,13 @@ visibility; durable acknowledgement; and immediate readability of nodes named
 by an applied root. The library fails closed when transaction support is absent,
 but cannot compensate for an adapter that falsely claims these guarantees.
 
+Remote provider crates expose `Sync*Store` aliases backed by the common
+`BlockingRemoteProllyStore`. The facade preserves provider-native batch,
+manifest, scan, hint, and transaction operations and owns a Tokio runtime for
+driver lifecycle. It detects calls from an existing Tokio runtime and bridges
+them without nesting runtimes; applications should still schedule synchronous
+IndexedMap work on blocking workers when running inside an async server.
+
 ## Runtime definitions
 
 An extractor receives the primary key and exact stored source bytes and emits

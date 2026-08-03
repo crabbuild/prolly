@@ -55,6 +55,16 @@ async fn local_backend_satisfies_transaction_contract() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn local_backend_supports_synchronous_indexed_maps() {
+    let temp = tempfile::tempdir().unwrap();
+    let backend = TursoBackend::open(temp.path().join("indexed-map.db"))
+        .await
+        .unwrap();
+
+    prolly::remote_conformance::assert_remote_backend_indexed_map_contract(backend);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn concurrent_root_cas_has_one_winner_and_one_conflict() {
     async fn cas_with_busy_retry(
         backend: &TursoBackend,

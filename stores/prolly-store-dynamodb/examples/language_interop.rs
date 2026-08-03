@@ -75,7 +75,7 @@ fn required(args: &mut impl Iterator<Item = String>, name: &str) -> io::Result<S
 }
 
 fn decode_hex(value: &str) -> io::Result<Vec<u8>> {
-    if value.len() % 2 != 0 {
+    if !value.len().is_multiple_of(2) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "key prefix hex must have an even length",

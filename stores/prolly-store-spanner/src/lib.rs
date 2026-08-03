@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
-    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Spanner adapter entry point.
@@ -26,6 +27,9 @@ pub mod spanner {
 
     /// Store adapter for Spanner-backed prolly nodes and roots.
     pub type SpannerStore = crate::RemoteProllyStore<SpannerBackend>;
+
+    /// Synchronous Spanner store supporting `Prolly::indexed_map`.
+    pub type SyncSpannerStore = crate::BlockingRemoteProllyStore<SpannerBackend>;
 
     /// Google Cloud Spanner-backed backend.
     #[derive(Clone)]

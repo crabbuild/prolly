@@ -3,8 +3,24 @@
 Cloud Spanner-backed remote store adapter for `prolly-map`.
 
 This crate implements `RemoteStoreBackend` using `gcloud-spanner`. Use it
-through `RemoteProllyStore` and `AsyncProlly` when you need globally consistent
-SQL-backed Prolly tree storage on Google Cloud Spanner.
+through `RemoteProllyStore` and `AsyncProlly`, or through the first-class
+`SyncSpannerStore` facade with synchronous `Prolly::indexed_map`.
+
+## Synchronous IndexedMap
+
+```rust,no_run
+use prolly::{Config, Prolly, SecondaryIndexRegistry};
+use prolly_store_spanner::{SpannerBackend, SyncSpannerStore};
+
+fn open(backend: SpannerBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let engine = Prolly::new(SyncSpannerStore::new(backend)?, Config::default());
+    let _users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
+    Ok(())
+}
+```
+
+Use `SyncSpannerStore::build` when client connection and authentication should
+run on the store-owned runtime.
 
 ## Installation
 

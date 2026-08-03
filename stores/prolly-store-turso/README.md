@@ -7,6 +7,25 @@ The default build embeds Turso locally. Optional Turso Cloud synchronization is
 local-first and explicit: prolly reads and writes never perform network I/O;
 your application decides when to call `push()` or `pull()`.
 
+## Synchronous IndexedMap
+
+`SyncTursoStore` forwards the native Turso transaction implementation to the
+synchronous engine:
+
+```rust,no_run
+use prolly::{Config, Prolly, SecondaryIndexRegistry};
+use prolly_store_turso::{SyncTursoStore, TursoBackend};
+
+fn open(backend: TursoBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let engine = Prolly::new(SyncTursoStore::new(backend)?, Config::default());
+    let _users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
+    Ok(())
+}
+```
+
+Use `SyncTursoStore::build` when opening the database asynchronously so its
+runtime-owned work remains alive for the complete store lifetime.
+
 ## Requirements
 
 - Rust 1.90 or newer. The core `prolly-map` hard-cutover release line supports

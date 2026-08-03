@@ -2,9 +2,25 @@
 
 PostgreSQL-backed remote store adapter for `prolly-map`.
 
-This crate implements `RemoteStoreBackend` using `sqlx::PgPool`. Use it through
-`RemoteProllyStore` and `AsyncProlly` when you want Prolly tree nodes, traversal
-hints, and named root manifests in PostgreSQL.
+This crate implements `RemoteStoreBackend` using `sqlx::PgPool`. It supports
+both `RemoteProllyStore` with `AsyncProlly` and the first-class
+`SyncPostgresStore` facade with synchronous `Prolly::indexed_map`.
+
+## Synchronous IndexedMap
+
+```rust,no_run
+use prolly::{Config, Prolly, SecondaryIndexRegistry};
+use prolly_store_postgres::{PostgresBackend, SyncPostgresStore};
+
+fn open(backend: PostgresBackend) -> Result<(), Box<dyn std::error::Error>> {
+    let engine = Prolly::new(SyncPostgresStore::new(backend)?, Config::default());
+    let _users = engine.indexed_map(b"users", SecondaryIndexRegistry::new())?;
+    Ok(())
+}
+```
+
+Use `SyncPostgresStore::build` to run asynchronous connection and schema setup
+on the store-owned runtime.
 
 ## Installation
 

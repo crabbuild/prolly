@@ -35,12 +35,18 @@ fn postgres_backend_satisfies_remote_backend_contract_when_url_is_set() {
     };
 
     runtime().block_on(async {
-        use prolly::remote_conformance::assert_remote_backend_contract;
+        use prolly::remote_conformance::{
+            assert_remote_backend_contract, assert_remote_backend_indexed_map_contract,
+            assert_remote_backend_transaction_contract,
+        };
 
         let backend = PostgresBackend::connect(&database_url).await.unwrap();
         backend.initialize_schema().await.unwrap();
         clear_postgres(backend.pool()).await.unwrap();
         assert_remote_backend_contract(&backend).await;
+        assert_remote_backend_transaction_contract(&backend).await;
+        clear_postgres(backend.pool()).await.unwrap();
+        assert_remote_backend_indexed_map_contract(backend.clone());
         clear_postgres(backend.pool()).await.unwrap();
         assert_set_based_batches(&backend).await;
         clear_postgres(backend.pool()).await.unwrap();

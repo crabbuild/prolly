@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
-    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Postgres adapter entry point.
@@ -19,6 +20,9 @@ pub mod postgres {
 
     /// Store adapter for PostgreSQL-backed prolly nodes and roots.
     pub type PostgresStore = crate::RemoteProllyStore<PostgresBackend>;
+
+    /// Synchronous PostgreSQL store supporting `Prolly::indexed_map`.
+    pub type SyncPostgresStore = crate::BlockingRemoteProllyStore<PostgresBackend>;
 
     /// PostgreSQL adapter tuning that does not change stored data.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]

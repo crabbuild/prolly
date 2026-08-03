@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
-    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// Redis adapter entry point.
@@ -21,6 +22,9 @@ pub mod redis {
     /// Redis should be treated as a cache or edge store unless persistence and
     /// durability are explicitly configured for the Redis deployment.
     pub type RedisStore = crate::RemoteProllyStore<RedisBackend>;
+
+    /// Synchronous Redis store supporting `Prolly::indexed_map`.
+    pub type SyncRedisStore = crate::BlockingRemoteProllyStore<RedisBackend>;
 
     /// Redis-backed prolly node/root backend.
     #[derive(Clone)]

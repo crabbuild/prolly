@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 pub use prolly::{
-    RemoteBatchOp, RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition,
-    RemoteRootWrite, RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
+    BlockingRemoteBuildError, BlockingRemoteProllyStore, BlockingRemoteStoreError, RemoteBatchOp,
+    RemoteManifestUpdate, RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 
 /// DynamoDB adapter entry point.
@@ -33,6 +34,9 @@ pub mod dynamodb {
 
     /// Store adapter for DynamoDB-backed prolly nodes and roots.
     pub type DynamoDbStore = crate::RemoteProllyStore<DynamoDbBackend>;
+
+    /// Synchronous DynamoDB store supporting `Prolly::indexed_map`.
+    pub type SyncDynamoDbStore = crate::BlockingRemoteProllyStore<DynamoDbBackend>;
 
     /// AWS SDK-backed DynamoDB backend.
     ///
