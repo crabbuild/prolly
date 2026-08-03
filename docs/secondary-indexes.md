@@ -97,17 +97,17 @@ runtime and pass the store directly to `AsyncProlly`:
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_postgres::{PostgresBackend, PostgresStore};
 
-# async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let database_url = std::env::var("DATABASE_URL")?;
-let backend = PostgresBackend::connect(&database_url).await?;
-backend.initialize_schema().await?;
-let engine = AsyncProlly::new(PostgresStore::new(backend), Config::default());
-let users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-users.put(b"user:1", br#"{"status":"active"}"#).await?;
-# Ok(())
-# }
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let database_url = std::env::var("DATABASE_URL")?;
+    let backend = PostgresBackend::connect(&database_url).await?;
+    backend.initialize_schema().await?;
+    let engine = AsyncProlly::new(PostgresStore::new(backend), Config::default());
+    let users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    users.put(b"user:1", br#"{"status":"active"}"#).await?;
+    Ok(())
+}
 ```
 
 This path performs native async node batches, manifest reads, and strict root

@@ -13,13 +13,13 @@ through the first-class `SyncSpannerStore` facade with synchronous
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_spanner::{SpannerBackend, SpannerStore};
 
-# async fn open(backend: SpannerBackend) -> Result<(), prolly::Error> {
-let engine = AsyncProlly::new(SpannerStore::new(backend), Config::default());
-let _users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-# Ok(())
-# }
+async fn open(backend: SpannerBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(SpannerStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
 ```
 
 Prefer this native path for async services. It preserves task cancellation and

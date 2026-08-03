@@ -12,13 +12,13 @@ first-class `SyncRedisStore` facade with synchronous `Prolly::indexed_map`.
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_redis::{RedisBackend, RedisStore};
 
-# async fn open(backend: RedisBackend) -> Result<(), prolly::Error> {
-let engine = AsyncProlly::new(RedisStore::new(backend), Config::default());
-let _users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-# Ok(())
-# }
+async fn open(backend: RedisBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(RedisStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
 ```
 
 Prefer this native path for async services. It preserves executor cancellation

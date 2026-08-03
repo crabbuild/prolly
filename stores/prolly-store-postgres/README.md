@@ -13,13 +13,13 @@ the first-class `SyncPostgresStore` facade with synchronous
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_postgres::{PostgresBackend, PostgresStore};
 
-# async fn open(backend: PostgresBackend) -> Result<(), prolly::Error> {
-let engine = AsyncProlly::new(PostgresStore::new(backend), Config::default());
-let _users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-# Ok(())
-# }
+async fn open(backend: PostgresBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(PostgresStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
 ```
 
 Prefer this native path for async services. It preserves executor cancellation,

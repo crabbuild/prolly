@@ -12,13 +12,13 @@ first-class `SyncMySqlStore` facade with synchronous `Prolly::indexed_map`.
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_mysql::{MySqlBackend, MySqlStore};
 
-# async fn open(backend: MySqlBackend) -> Result<(), prolly::Error> {
-let engine = AsyncProlly::new(MySqlStore::new(backend), Config::default());
-let _users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-# Ok(())
-# }
+async fn open(backend: MySqlBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(MySqlStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
 ```
 
 Prefer this native path for async services. It preserves executor cancellation,

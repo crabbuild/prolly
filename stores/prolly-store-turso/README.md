@@ -13,13 +13,13 @@ your application decides when to call `push()` or `pull()`.
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_turso::{TursoBackend, TursoStore};
 
-# async fn open(backend: TursoBackend) -> Result<(), prolly::Error> {
-let engine = AsyncProlly::new(TursoStore::new(backend), Config::default());
-let _users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-# Ok(())
-# }
+async fn open(backend: TursoBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(TursoStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
 ```
 
 Prefer this native path for async applications. It uses Turso's transaction

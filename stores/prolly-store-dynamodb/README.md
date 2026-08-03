@@ -13,13 +13,13 @@ through the first-class `SyncDynamoDbStore` facade with synchronous
 use prolly::{AsyncProlly, Config, SecondaryIndexRegistry};
 use prolly_store_dynamodb::{DynamoDbBackend, DynamoDbStore};
 
-# async fn open(backend: DynamoDbBackend) -> Result<(), prolly::Error> {
-let engine = AsyncProlly::new(DynamoDbStore::new(backend), Config::default());
-let _users = engine
-    .indexed_map(b"users", SecondaryIndexRegistry::new())
-    .await?;
-# Ok(())
-# }
+async fn open(backend: DynamoDbBackend) -> Result<(), prolly::Error> {
+    let engine = AsyncProlly::new(DynamoDbStore::new(backend), Config::default());
+    let _users = engine
+        .indexed_map(b"users", SecondaryIndexRegistry::new())
+        .await?;
+    Ok(())
+}
 ```
 
 Prefer this native path for async services. It preserves task cancellation and
