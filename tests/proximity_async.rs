@@ -1,16 +1,19 @@
 #![cfg(feature = "async-store")]
 
 use prolly::{
-    AcceleratorCatalog, AcceleratorSet, AsyncAcceleratorCatalog, AsyncAcceleratorSet,
-    AsyncCompositeAccelerator, AsyncHnswIndex, AsyncIoConfig, AsyncProductQuantizer,
-    AsyncProximityMap, AsyncSearchControl, AsyncStore, BatchOp, BuildParallelism,
-    CancellationToken, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase,
-    CompositeBuildLimits, CompositeBuildOutcome, HnswConfig, HnswIndex, MemStore, MemStoreError,
-    ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityMap, ProximityMutation,
-    ProximityRecord, ScalarQuantizationConfig, SearchBackend, SearchCompletion, SearchIo,
-    SearchPolicy, SearchRequest, SearchRuntime, Store,
+    AcceleratorCatalog, AcceleratorSet, AsyncAcceleratorBuildOptions, AsyncAcceleratorCatalog,
+    AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncCompositeBuildOptions,
+    AsyncCompositeBuildOutcome, AsyncHnswBuild, AsyncHnswIndex, AsyncIoConfig,
+    AsyncProductQuantizer, AsyncProductQuantizerBuild, AsyncProximityMap, AsyncSearchControl,
+    AsyncStore, BatchOp, BuildParallelism, CancellationToken, CatalogAcceleratorKind,
+    CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
+    CompositeBuildOutcome, HnswBuildLimits, HnswConfig, HnswIndex, MemStore, MemStoreError,
+    ProductQuantizationBuildLimits, ProductQuantizationConfig, ProductQuantizer, ProximityConfig,
+    ProximityMap, ProximityMutation, ProximityRecord, ScalarQuantizationConfig, SearchBackend,
+    SearchCompletion, SearchIo, SearchPolicy, SearchRequest, SearchRuntime, Store,
 };
 use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
@@ -67,6 +70,65 @@ impl AsyncStore for ReverseCompletionStore {
     }
 }
 
+#[derive(Clone)]
+struct ExternalVectorCountingStore {
+    inner: Arc<MemStore>,
+    vector_point_reads: Arc<AtomicUsize>,
+    vector_batch_reads: Arc<AtomicUsize>,
+}
+
+impl ExternalVectorCountingStore {
+    fn new(inner: Arc<MemStore>) -> Self {
+        Self {
+            inner,
+            vector_point_reads: Arc::new(AtomicUsize::new(0)),
+            vector_batch_reads: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl AsyncStore for ExternalVectorCountingStore {
+    type Error = MemStoreError;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        let value = Store::get(&self.inner, key)?;
+        if value
+            .as_deref()
+            .is_some_and(|bytes| bytes.starts_with(b"PRXV"))
+        {
+            self.vector_point_reads.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(value)
+    }
+
+    async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        Store::put(&self.inner, key, value)
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        Store::delete(&self.inner, key)
+    }
+
+    async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        Store::batch(&self.inner, ops)
+    }
+
+    async fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        let values = Store::batch_get_ordered_unique(&self.inner, keys)?;
+        if values.iter().any(|value| {
+            value
+                .as_deref()
+                .is_some_and(|bytes| bytes.starts_with(b"PRXV"))
+        }) {
+            self.vector_batch_reads.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(values)
+    }
+}
+
 fn records() -> Vec<ProximityRecord> {
     (0usize..256)
         .map(|index| ProximityRecord {
@@ -78,6 +140,42 @@ fn records() -> Vec<ProximityRecord> {
 }
 
 #[test]
+fn async_search_batches_external_vector_reads_per_node() {
+    block_on(async {
+        let inner = Arc::new(MemStore::new());
+        let mut config = ProximityConfig::new(64);
+        config.hierarchy.log_chunk_size = 3;
+        config.vector_storage.inline_threshold_bytes = 32;
+        let source = (0usize..128).map(|index| ProximityRecord {
+            key: format!("external-{index:04}").into_bytes(),
+            vector: (0..64)
+                .map(|component| (index * 101 + component * 17) as f32)
+                .collect(),
+            value: index.to_le_bytes().to_vec(),
+        });
+        let sync = ProximityMap::build(inner.clone(), config, source).unwrap();
+        let store = ExternalVectorCountingStore::new(inner);
+        let io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+        let map = AsyncProximityMap::load_with_search_io(io, sync.tree().descriptor.clone())
+            .await
+            .unwrap();
+        let query = vec![1.0; 64];
+        let expected = sync.search(SearchRequest::exact(&query, 10)).unwrap();
+        let actual = map
+            .search(
+                SearchRequest::exact(&query, 10),
+                AsyncSearchControl::default(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(actual.neighbors, expected.neighbors);
+        assert_eq!(store.vector_point_reads.load(Ordering::Relaxed), 0);
+        assert!(store.vector_batch_reads.load(Ordering::Relaxed) > 0);
+    });
+}
+
+#[test]
 fn async_search_io_shares_validated_cache_and_reports_actual_physical_bytes() {
     block_on(async {
         let store = Arc::new(MemStore::new());
@@ -86,11 +184,10 @@ fn async_search_io_shares_validated_cache_and_reports_actual_physical_bytes() {
         let io = SearchIo::new(
             ReverseCompletionStore(store),
             Arc::new(SearchRuntime::default()),
-        )
-        .with_proximity_dimensions(3);
+        );
         let query = [21.25, 4.0, 1.0];
 
-        let first_map = AsyncProximityMap::load(io.clone(), descriptor.clone())
+        let first_map = AsyncProximityMap::load_with_search_io(io.clone(), descriptor.clone())
             .await
             .unwrap();
         let first = first_map
@@ -102,7 +199,7 @@ fn async_search_io_shares_validated_cache_and_reports_actual_physical_bytes() {
             .unwrap();
         assert!(first.stats.physical_bytes_read > 0);
 
-        let second_map = AsyncProximityMap::load(io.clone(), descriptor)
+        let second_map = AsyncProximityMap::load_with_search_io(io.clone(), descriptor)
             .await
             .unwrap();
         let second = second_map
@@ -338,6 +435,144 @@ fn async_only_hnsw_and_pq_use_the_sync_plan_and_logical_execution() {
             );
             assert_eq!(actual.stats.committed_bytes, expected.stats.committed_bytes);
         }
+    });
+}
+
+#[test]
+fn async_only_store_builds_and_publishes_hnsw_and_pq_catalog() {
+    block_on(async {
+        let store = ReverseCompletionStore(Arc::new(MemStore::new()));
+        let map = AsyncProximityMap::build(store.clone(), ProximityConfig::new(3), records())
+            .await
+            .unwrap();
+        let pq_config = ProductQuantizationConfig {
+            subquantizers: 3,
+            centroids_per_subquantizer: 16,
+            training_iterations: 2,
+            max_training_vectors: 128,
+            ..ProductQuantizationConfig::default()
+        };
+        let (catalog, stats) = AsyncAcceleratorCatalog::build(
+            &map,
+            AsyncAcceleratorBuildOptions {
+                hnsw: Some(AsyncHnswBuild {
+                    config: HnswConfig::default(),
+                    limits: HnswBuildLimits::default(),
+                }),
+                product_quantizer: Some(AsyncProductQuantizerBuild {
+                    config: pq_config,
+                    parallelism: BuildParallelism::new(2).unwrap(),
+                    limits: ProductQuantizationBuildLimits::default(),
+                }),
+                publication_batch_items: 2,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(catalog.source_descriptor(), &map.tree().descriptor);
+        assert_eq!(catalog.entries().len(), 2);
+        assert!(stats.hnsw.is_some());
+        assert!(stats.product_quantizer.is_some());
+        assert!(stats.objects_published > 2);
+        let serving = AsyncProximityMap::load_with_runtime(
+            store,
+            map.tree().descriptor.clone(),
+            Arc::new(SearchRuntime::default()),
+        )
+        .await
+        .unwrap();
+
+        let query = [21.25, 4.0, 1.0];
+        for backend in [SearchBackend::Hnsw, SearchBackend::ProductQuantized] {
+            let mut request = SearchRequest::exact(&query, 12);
+            request.policy = SearchPolicy::FixedBudget;
+            request.options.backend = backend;
+            let result = serving
+                .search_with_accelerators(
+                    catalog.accelerators(),
+                    request,
+                    AsyncSearchControl::default(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(result.neighbors.len(), 12);
+            assert_eq!(result.plan.backend, backend);
+        }
+    });
+}
+
+#[test]
+fn async_only_store_builds_composite_for_mutated_snapshot() {
+    block_on(async {
+        let store = ReverseCompletionStore(Arc::new(MemStore::new()));
+        let base = AsyncProximityMap::build(store.clone(), ProximityConfig::new(3), records())
+            .await
+            .unwrap();
+        let (catalog, _) = AsyncAcceleratorCatalog::build(
+            &base,
+            AsyncAcceleratorBuildOptions {
+                hnsw: Some(AsyncHnswBuild {
+                    config: HnswConfig::default(),
+                    limits: HnswBuildLimits::default(),
+                }),
+                publication_batch_items: 4,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let hnsw_manifest = catalog
+            .entries()
+            .iter()
+            .find(|entry| entry.kind == CatalogAcceleratorKind::Hnsw)
+            .unwrap()
+            .manifest
+            .clone();
+        let hnsw = AsyncHnswIndex::load(&store, hnsw_manifest).await.unwrap();
+        let (current, mutation_stats) = base
+            .mutate_batch([ProximityMutation {
+                key: b"async-0017".to_vec(),
+                value: Some((vec![0.25, 0.5, 0.75], b"composite".to_vec())),
+            }])
+            .await
+            .unwrap();
+        assert!(!mutation_stats.full_proximity_rebuild);
+
+        let outcome = AsyncCompositeAccelerator::build_from_hnsw(
+            &base,
+            &current,
+            &hnsw,
+            AsyncCompositeBuildOptions {
+                publication_batch_items: 4,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let AsyncCompositeBuildOutcome::Composite { accelerator, .. } = outcome else {
+            panic!("one-record delta unexpectedly required a full rebuild");
+        };
+        let accelerators = AsyncAcceleratorSet::empty()
+            .with_composite(current.tree(), accelerator)
+            .unwrap();
+        let serving = AsyncProximityMap::load_with_runtime(
+            store,
+            current.tree().descriptor.clone(),
+            Arc::new(SearchRuntime::default()),
+        )
+        .await
+        .unwrap();
+        let query = [0.25, 0.5, 0.75];
+        let mut request = SearchRequest::exact(&query, 8);
+        request.options.backend = SearchBackend::Composite;
+        request.policy = SearchPolicy::FixedBudget;
+        let result = serving
+            .search_with_accelerators(&accelerators, request, AsyncSearchControl::default())
+            .await
+            .unwrap();
+        assert_eq!(result.plan.backend, SearchBackend::Composite);
+        assert_eq!(result.neighbors.len(), 8);
     });
 }
 

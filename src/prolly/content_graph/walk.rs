@@ -11,7 +11,7 @@ use crate::prolly::proximity::accelerator::pq::Manifest as PqManifest;
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, PhysicalNodeKind, ProximityNode, VectorRef};
-use crate::prolly::store::Store;
+use crate::prolly::store::{AsyncStore, Store};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Hard limits for untrusted typed graph traversal.
@@ -134,6 +134,189 @@ pub fn walk_content_graph<S: Store>(
     Ok(walk)
 }
 
+/// Deterministically traverse a typed content graph through AsyncStore.
+pub async fn walk_content_graph_async<S: AsyncStore>(
+    store: &S,
+    roots: &[TypedContentRoot],
+    limits: &ContentGraphLimits,
+) -> Result<ContentGraphWalk, Error>
+where
+    S::Error: Send + Sync,
+{
+    validate_limits(limits)?;
+    let mut ordered_roots = roots.to_vec();
+    ordered_roots.sort_by(compare_root);
+    ordered_roots.dedup();
+    let mut stack: Vec<_> = ordered_roots
+        .into_iter()
+        .rev()
+        .map(|root| Frame::Enter(root, 0))
+        .collect();
+    let mut visiting = HashSet::<Cid>::new();
+    let mut seen = HashSet::<Cid>::new();
+    let mut contexts = HashMap::<Cid, (ContentObjectKind, Option<u32>)>::new();
+    let mut pending = HashMap::<Cid, TypedContentObject>::new();
+    let mut prefetched = HashMap::<Cid, Vec<u8>>::new();
+    let mut walk = ContentGraphWalk::default();
+    let mut loaded_bytes = 0usize;
+    let mut prefetched_bytes = 0usize;
+
+    while let Some(frame) = stack.pop() {
+        match frame {
+            Frame::Enter(root, depth) => {
+                if let Some((kind, dimensions)) = contexts.get(&root.cid) {
+                    if *dimensions != root.dimensions || !compatible_kinds(*kind, root.kind) {
+                        return Err(invalid(
+                            "the same CID was referenced with conflicting type context",
+                        ));
+                    }
+                } else {
+                    contexts.insert(root.cid.clone(), (root.kind, root.dimensions));
+                    if contexts.len() > limits.max_objects {
+                        return Err(limit("objects", limits.max_objects, contexts.len()));
+                    }
+                }
+                if seen.contains(&root.cid) {
+                    continue;
+                }
+                if !visiting.insert(root.cid.clone()) {
+                    return Err(invalid("cycle detected in typed content graph"));
+                }
+                if depth > limits.max_depth {
+                    return Err(limit("depth", limits.max_depth, depth));
+                }
+                let bytes = match prefetched.remove(&root.cid) {
+                    Some(bytes) => {
+                        prefetched_bytes = prefetched_bytes.saturating_sub(bytes.len());
+                        bytes
+                    }
+                    None => load_content_async(store, &root.cid).await?,
+                };
+                let next_bytes = loaded_bytes.saturating_add(bytes.len());
+                let reserved_bytes = next_bytes.saturating_add(prefetched_bytes);
+                if reserved_bytes > limits.max_bytes {
+                    return Err(limit("bytes", limits.max_bytes, reserved_bytes));
+                }
+                loaded_bytes = next_bytes;
+                let (actual_kind, mut references) = references(&root, &bytes)?;
+                if references.len() > limits.max_references_per_object {
+                    return Err(limit(
+                        "references",
+                        limits.max_references_per_object,
+                        references.len(),
+                    ));
+                }
+                references.sort_by(compare_root);
+                references.dedup();
+                prefetch_references_async(
+                    store,
+                    &references,
+                    &seen,
+                    &visiting,
+                    &contexts,
+                    &mut prefetched,
+                    &mut prefetched_bytes,
+                    loaded_bytes,
+                    limits,
+                )
+                .await?;
+                pending.insert(
+                    root.cid.clone(),
+                    TypedContentObject {
+                        root: TypedContentRoot {
+                            kind: actual_kind,
+                            cid: root.cid.clone(),
+                            dimensions: root.dimensions,
+                        },
+                        bytes,
+                        depth,
+                    },
+                );
+                stack.push(Frame::Exit(root.cid));
+                for reference in references.into_iter().rev() {
+                    stack.push(Frame::Enter(reference, depth + 1));
+                }
+            }
+            Frame::Exit(cid) => {
+                visiting.remove(&cid);
+                if seen.insert(cid.clone()) {
+                    let object = pending.remove(&cid).expect("entered content object");
+                    walk.total_bytes = walk.total_bytes.saturating_add(object.bytes.len());
+                    walk.maximum_depth = walk.maximum_depth.max(object.depth);
+                    *walk.objects_by_kind.entry(object.root.kind).or_default() += 1;
+                    walk.objects.push(object);
+                }
+            }
+        }
+    }
+    Ok(walk)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn prefetch_references_async<S: AsyncStore>(
+    store: &S,
+    references: &[TypedContentRoot],
+    seen: &HashSet<Cid>,
+    visiting: &HashSet<Cid>,
+    contexts: &HashMap<Cid, (ContentObjectKind, Option<u32>)>,
+    prefetched: &mut HashMap<Cid, Vec<u8>>,
+    prefetched_bytes: &mut usize,
+    loaded_bytes: usize,
+    limits: &ContentGraphLimits,
+) -> Result<(), Error>
+where
+    S::Error: Send + Sync,
+{
+    let mut candidates = BTreeMap::<Cid, ()>::new();
+    for reference in references {
+        if !seen.contains(&reference.cid)
+            && !visiting.contains(&reference.cid)
+            && !contexts.contains_key(&reference.cid)
+            && !prefetched.contains_key(&reference.cid)
+        {
+            candidates.insert(reference.cid.clone(), ());
+        }
+    }
+    let projected_objects = contexts
+        .len()
+        .saturating_add(prefetched.len())
+        .saturating_add(candidates.len());
+    if projected_objects > limits.max_objects {
+        return Err(limit("objects", limits.max_objects, projected_objects));
+    }
+
+    let cids: Vec<_> = candidates.into_keys().collect();
+    for chunk in cids.chunks(1_024) {
+        let keys: Vec<_> = chunk.iter().map(Cid::as_bytes).collect();
+        let values = store
+            .batch_get_ordered_unique(&keys)
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        if values.len() != chunk.len() {
+            return Err(invalid(
+                "ordered batch read returned the wrong result count",
+            ));
+        }
+        for (cid, value) in chunk.iter().zip(values) {
+            let bytes = value.ok_or_else(|| Error::NotFound(cid.clone()))?;
+            let actual = Cid::from_bytes(&bytes);
+            if actual != *cid {
+                return Err(Error::CidMismatch {
+                    expected: cid.clone(),
+                    actual,
+                });
+            }
+            *prefetched_bytes = prefetched_bytes.saturating_add(bytes.len());
+            let reserved_bytes = loaded_bytes.saturating_add(*prefetched_bytes);
+            if reserved_bytes > limits.max_bytes {
+                return Err(limit("bytes", limits.max_bytes, reserved_bytes));
+            }
+            prefetched.insert(cid.clone(), bytes);
+        }
+    }
+    Ok(())
+}
+
 /// Load one authenticated object and return its exact, deterministic typed
 /// reference list without recursively walking descendants.
 pub fn content_references<S: Store>(
@@ -141,6 +324,21 @@ pub fn content_references<S: Store>(
     root: &TypedContentRoot,
 ) -> Result<Vec<TypedContentRoot>, Error> {
     let bytes = load_content(store, &root.cid)?;
+    let (_, mut output) = references(root, &bytes)?;
+    output.sort_by(compare_root);
+    output.dedup();
+    Ok(output)
+}
+
+/// Load one authenticated object and return its typed references through AsyncStore.
+pub async fn content_references_async<S: AsyncStore>(
+    store: &S,
+    root: &TypedContentRoot,
+) -> Result<Vec<TypedContentRoot>, Error>
+where
+    S::Error: Send + Sync,
+{
+    let bytes = load_content_async(store, &root.cid).await?;
     let (_, mut output) = references(root, &bytes)?;
     output.sort_by(compare_root);
     output.dedup();
@@ -339,6 +537,25 @@ fn compare_root(left: &TypedContentRoot, right: &TypedContentRoot) -> std::cmp::
 fn load_content<S: Store>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error> {
     let bytes = store
         .get(cid.as_bytes())
+        .map_err(|error| Error::Store(Box::new(error)))?
+        .ok_or_else(|| Error::NotFound(cid.clone()))?;
+    let actual = Cid::from_bytes(&bytes);
+    if actual != *cid {
+        return Err(Error::CidMismatch {
+            expected: cid.clone(),
+            actual,
+        });
+    }
+    Ok(bytes)
+}
+
+async fn load_content_async<S: AsyncStore>(store: &S, cid: &Cid) -> Result<Vec<u8>, Error>
+where
+    S::Error: Send + Sync,
+{
+    let bytes = store
+        .get(cid.as_bytes())
+        .await
         .map_err(|error| Error::Store(Box::new(error)))?
         .ok_or_else(|| Error::NotFound(cid.clone()))?;
     let actual = Cid::from_bytes(&bytes);

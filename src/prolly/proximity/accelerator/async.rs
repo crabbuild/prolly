@@ -3,22 +3,111 @@ use super::catalog::{
 };
 use super::composite::config_fingerprint as composite_fingerprint;
 use super::composite::{
-    composite_tree_config, CompositeAcceleratorConfig, CompositeBaseKind,
-    Manifest as CompositeManifest,
+    composite_tree_config, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase,
+    CompositeBaseKind, CompositeBuildLimits, CompositeBuildOutcome, CompositeBuildStats,
+    FullRebuildReason, Manifest as CompositeManifest,
 };
 use super::hnsw::storage::config_fingerprint as hnsw_fingerprint;
 use super::hnsw::storage::{graph_config, GraphNode, Manifest as HnswManifest};
-use super::hnsw::HnswConfig;
+use super::hnsw::{HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex};
 use super::pq::config_fingerprint as pq_fingerprint;
-use super::pq::{code_tree_config, Manifest as PqManifest, ProductQuantizationConfig};
+use super::pq::{
+    code_tree_config, Manifest as PqManifest, ProductQuantizationBuildLimits,
+    ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizer,
+};
 use super::validate_binding;
 use crate::prolly::cid::Cid;
-use crate::prolly::content_graph::{ContentObjectKind, TypedContentRoot};
+use crate::prolly::content_graph::{
+    walk_content_graph, ContentGraphLimits, ContentObjectKind, TypedContentRoot,
+};
 use crate::prolly::error::Error;
-use crate::prolly::proximity::{DistanceMetric, ProductQuantizationQuality, ProximityTree};
-use crate::prolly::store::AsyncStore;
+use crate::prolly::proximity::{
+    AcceleratorCatalog, AcceleratorSet, BuildParallelism, DistanceMetric,
+    ProductQuantizationQuality, ProximityMap, ProximityTree,
+};
+use crate::prolly::store::{AsyncStore, MemStore, NodePublication, PublicationOrigin};
 use crate::prolly::tree::Tree;
 use crate::prolly::AsyncProlly;
+use std::sync::Arc;
+
+#[derive(Clone, Debug)]
+pub struct AsyncHnswBuild {
+    pub config: HnswConfig,
+    pub limits: HnswBuildLimits,
+}
+
+#[derive(Clone, Debug)]
+pub struct AsyncProductQuantizerBuild {
+    pub config: ProductQuantizationConfig,
+    pub parallelism: BuildParallelism,
+    pub limits: ProductQuantizationBuildLimits,
+}
+
+/// Async-store publication plan for canonical accelerator sidecars.
+#[derive(Clone, Debug)]
+pub struct AsyncAcceleratorBuildOptions {
+    pub hnsw: Option<AsyncHnswBuild>,
+    pub product_quantizer: Option<AsyncProductQuantizerBuild>,
+    pub publication_batch_items: usize,
+    pub graph_limits: ContentGraphLimits,
+}
+
+impl Default for AsyncAcceleratorBuildOptions {
+    fn default() -> Self {
+        Self {
+            hnsw: None,
+            product_quantizer: None,
+            publication_batch_items: 1_024,
+            graph_limits: ContentGraphLimits::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AsyncAcceleratorBuildStats {
+    pub hnsw: Option<HnswBuildStats>,
+    pub product_quantizer: Option<ProductQuantizationBuildStats>,
+    pub objects_published: usize,
+    pub bytes_published: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct AsyncCompositeBuildOptions {
+    pub config: CompositeAcceleratorConfig,
+    pub limits: CompositeBuildLimits,
+    pub hnsw_limits: HnswBuildLimits,
+    pub pq_parallelism: BuildParallelism,
+    pub pq_limits: ProductQuantizationBuildLimits,
+    pub publication_batch_items: usize,
+    pub graph_limits: ContentGraphLimits,
+}
+
+impl Default for AsyncCompositeBuildOptions {
+    fn default() -> Self {
+        Self {
+            config: CompositeAcceleratorConfig::default(),
+            limits: CompositeBuildLimits::default(),
+            hnsw_limits: HnswBuildLimits::default(),
+            pq_parallelism: BuildParallelism::serial(),
+            pq_limits: ProductQuantizationBuildLimits::default(),
+            publication_batch_items: 1_024,
+            graph_limits: ContentGraphLimits::default(),
+        }
+    }
+}
+
+pub enum AsyncCompositeBuildOutcome {
+    Composite {
+        accelerator: AsyncCompositeAccelerator,
+        stats: CompositeBuildStats,
+        objects_published: usize,
+        bytes_published: usize,
+    },
+    FullRebuildRequired {
+        reasons: Vec<FullRebuildReason>,
+        stats: CompositeBuildStats,
+    },
+}
 
 /// Validated HNSW metadata for an async-only store.
 #[derive(Clone)]
@@ -124,6 +213,79 @@ pub struct AsyncCompositeAccelerator {
 }
 
 impl AsyncCompositeAccelerator {
+    pub async fn build_from_hnsw<S>(
+        base_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        current_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        base: &AsyncHnswIndex,
+        options: AsyncCompositeBuildOptions,
+    ) -> Result<AsyncCompositeBuildOutcome, Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        let (staging, staged_base, staged_current) =
+            stage_source_pair(base_map, current_map).await?;
+        let (rebuilt, _) = HnswIndex::build_with_limits(
+            &staged_base,
+            base.config.clone(),
+            options.hnsw_limits.clone(),
+        )?;
+        if rebuilt.manifest_cid() != base.manifest_cid() {
+            return Err(invalid("staged HNSW base is not canonical with async base"));
+        }
+        publish_composite_outcome(
+            current_map,
+            staging,
+            CompositeAccelerator::build(
+                &staged_base,
+                &staged_current,
+                CompositeBase::Hnsw(rebuilt),
+                options.config,
+                options.limits,
+            )?,
+            options.publication_batch_items,
+            &options.graph_limits,
+        )
+        .await
+    }
+
+    pub async fn build_from_product_quantizer<S>(
+        base_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        current_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        base: &AsyncProductQuantizer,
+        options: AsyncCompositeBuildOptions,
+    ) -> Result<AsyncCompositeBuildOutcome, Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        let (staging, staged_base, staged_current) =
+            stage_source_pair(base_map, current_map).await?;
+        let (rebuilt, _) = ProductQuantizer::build_with_limits(
+            &staged_base,
+            base.config.clone(),
+            options.pq_parallelism,
+            options.pq_limits.clone(),
+        )?;
+        if rebuilt.manifest_cid() != base.manifest_cid() {
+            return Err(invalid("staged PQ base is not canonical with async base"));
+        }
+        publish_composite_outcome(
+            current_map,
+            staging,
+            CompositeAccelerator::build(
+                &staged_base,
+                &staged_current,
+                CompositeBase::ProductQuantized(rebuilt),
+                options.config,
+                options.limits,
+            )?,
+            options.publication_batch_items,
+            &options.graph_limits,
+        )
+        .await
+    }
+
     pub async fn load<S>(store: &S, manifest: Cid) -> Result<Self, Error>
     where
         S: AsyncStore + Clone,
@@ -357,6 +519,136 @@ pub struct AsyncAcceleratorCatalog {
 }
 
 impl AsyncAcceleratorCatalog {
+    /// Publish a canonical catalog for already-validated, source-bound async
+    /// accelerators, then reopen it through the async store.
+    pub async fn publish<S>(
+        store: &S,
+        source: &ProximityTree,
+        accelerators: AsyncAcceleratorSet,
+    ) -> Result<Self, Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        let mut entries = Vec::new();
+        if let Some(index) = accelerators.hnsw() {
+            entries.push(AcceleratorCatalogEntry {
+                kind: CatalogAcceleratorKind::Hnsw,
+                configuration_fingerprint: hnsw_fingerprint(index.config()),
+                manifest: index.manifest_cid().clone(),
+            });
+        }
+        if let Some(index) = accelerators.pq() {
+            entries.push(AcceleratorCatalogEntry {
+                kind: CatalogAcceleratorKind::ProductQuantized,
+                configuration_fingerprint: pq_fingerprint(index.config()),
+                manifest: index.manifest_cid().clone(),
+            });
+        }
+        if let Some(index) = accelerators.composite() {
+            entries.push(AcceleratorCatalogEntry {
+                kind: CatalogAcceleratorKind::Composite,
+                configuration_fingerprint: composite_fingerprint(index.config()),
+                manifest: index.manifest_cid().clone(),
+            });
+        }
+        entries.sort_by(|left, right| left.kind.cmp(&right.kind));
+        if entries.is_empty() {
+            return Err(invalid("accelerator catalog must not be empty"));
+        }
+        let object = CatalogManifest {
+            source: source.descriptor.clone(),
+            entries,
+        };
+        let bytes = object.encode()?;
+        let manifest = Cid::from_bytes(&bytes);
+        let publication = [(manifest.as_bytes(), bytes.as_slice())];
+        store
+            .publish_nodes(NodePublication::new(
+                &publication,
+                PublicationOrigin::Maintenance,
+            ))
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?;
+        Self::load(store, manifest, source).await
+    }
+
+    /// Construct canonical HNSW/PQ sidecars from an async-only source and
+    /// publish their complete catalog closure in bounded provider batches.
+    pub async fn build<S>(
+        map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        options: AsyncAcceleratorBuildOptions,
+    ) -> Result<(Self, AsyncAcceleratorBuildStats), Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        if options.publication_batch_items == 0 {
+            return Err(Error::InvalidProximityConfig {
+                reason: "accelerator publication batch size must be greater than zero".to_owned(),
+            });
+        }
+        if options.hnsw.is_none() && options.product_quantizer.is_none() {
+            return Err(invalid("async accelerator build plan is empty"));
+        }
+
+        // CPU builders remain runtime-neutral and deterministic. Staging in a
+        // memory Store lets async-only applications use those canonical
+        // builders without requiring a synchronous remote adapter.
+        let records = map.collect_records().await?;
+        let staging = Arc::new(MemStore::new());
+        let staged_map = ProximityMap::build(
+            staging.clone(),
+            map.tree().config.clone(),
+            records.into_values(),
+        )?;
+        if staged_map.tree() != map.tree() {
+            return Err(invalid(
+                "async accelerator staging did not reproduce the source descriptor",
+            ));
+        }
+
+        let mut stats = AsyncAcceleratorBuildStats::default();
+        let mut set = AcceleratorSet::empty();
+        if let Some(build) = options.hnsw {
+            let (index, built) =
+                HnswIndex::build_with_limits(&staged_map, build.config, build.limits)?;
+            stats.hnsw = Some(built);
+            set = set.with_hnsw(staged_map.tree(), index)?;
+        }
+        if let Some(build) = options.product_quantizer {
+            let (index, built) = ProductQuantizer::build_with_limits(
+                &staged_map,
+                build.config,
+                build.parallelism,
+                build.limits,
+            )?;
+            stats.product_quantizer = Some(built);
+            set = set.with_pq(staged_map.tree(), index)?;
+        }
+        let catalog = AcceleratorCatalog::build(staging.clone(), staged_map.tree(), set)?;
+        let manifest = catalog.manifest_cid().clone();
+        let walk = walk_content_graph(&staging, &[catalog.typed_root()], &options.graph_limits)?;
+        stats.objects_published = walk.objects.len();
+        stats.bytes_published = walk.total_bytes;
+        let store = map.store_clone();
+        for chunk in walk.objects.chunks(options.publication_batch_items) {
+            let entries = chunk
+                .iter()
+                .map(|object| (object.root.cid.as_bytes(), object.bytes.as_slice()))
+                .collect::<Vec<_>>();
+            store
+                .publish_nodes(NodePublication::new(
+                    &entries,
+                    PublicationOrigin::Maintenance,
+                ))
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+        }
+        let catalog = Self::load(&store, manifest, map.tree()).await?;
+        Ok((catalog, stats))
+    }
+
     pub async fn load<S>(store: &S, manifest: Cid, source: &ProximityTree) -> Result<Self, Error>
     where
         S: AsyncStore + Clone,
@@ -418,6 +710,95 @@ impl AsyncAcceleratorCatalog {
     }
     pub fn into_accelerators(self) -> AsyncAcceleratorSet {
         self.accelerators
+    }
+}
+
+async fn stage_source_pair<S>(
+    base_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+    current_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+) -> Result<
+    (
+        Arc<MemStore>,
+        ProximityMap<Arc<MemStore>>,
+        ProximityMap<Arc<MemStore>>,
+    ),
+    Error,
+>
+where
+    S: AsyncStore + Clone,
+    S::Error: Send + Sync,
+{
+    if base_map.tree().config != current_map.tree().config {
+        return Err(invalid("composite source configurations disagree"));
+    }
+    let base_records = base_map.collect_records().await?;
+    let current_records = current_map.collect_records().await?;
+    let staging = Arc::new(MemStore::new());
+    let staged_base = ProximityMap::build(
+        staging.clone(),
+        base_map.tree().config.clone(),
+        base_records.into_values(),
+    )?;
+    let staged_current = ProximityMap::build(
+        staging.clone(),
+        current_map.tree().config.clone(),
+        current_records.into_values(),
+    )?;
+    if staged_base.tree() != base_map.tree() || staged_current.tree() != current_map.tree() {
+        return Err(invalid(
+            "async composite staging did not reproduce source descriptors",
+        ));
+    }
+    Ok((staging, staged_base, staged_current))
+}
+
+async fn publish_composite_outcome<S>(
+    current_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+    staging: Arc<MemStore>,
+    outcome: CompositeBuildOutcome<Arc<MemStore>>,
+    publication_batch_items: usize,
+    graph_limits: &ContentGraphLimits,
+) -> Result<AsyncCompositeBuildOutcome, Error>
+where
+    S: AsyncStore + Clone,
+    S::Error: Send + Sync,
+{
+    match outcome {
+        CompositeBuildOutcome::FullRebuildRequired { reasons, stats } => {
+            Ok(AsyncCompositeBuildOutcome::FullRebuildRequired { reasons, stats })
+        }
+        CompositeBuildOutcome::Composite { accelerator, stats } => {
+            if publication_batch_items == 0 {
+                return Err(Error::InvalidProximityConfig {
+                    reason: "composite publication batch size must be greater than zero".to_owned(),
+                });
+            }
+            let manifest = accelerator.manifest_cid().clone();
+            let root =
+                TypedContentRoot::new(ContentObjectKind::CompositeAccelerator, manifest.clone());
+            let walk = walk_content_graph(&staging, &[root], graph_limits)?;
+            let store = current_map.store_clone();
+            for chunk in walk.objects.chunks(publication_batch_items) {
+                let entries = chunk
+                    .iter()
+                    .map(|object| (object.root.cid.as_bytes(), object.bytes.as_slice()))
+                    .collect::<Vec<_>>();
+                store
+                    .publish_nodes(NodePublication::new(
+                        &entries,
+                        PublicationOrigin::Maintenance,
+                    ))
+                    .await
+                    .map_err(|error| Error::Store(Box::new(error)))?;
+            }
+            let loaded = AsyncCompositeAccelerator::load(&store, manifest).await?;
+            Ok(AsyncCompositeBuildOutcome::Composite {
+                accelerator: loaded,
+                stats,
+                objects_published: walk.objects.len(),
+                bytes_published: walk.total_bytes,
+            })
+        }
     }
 }
 

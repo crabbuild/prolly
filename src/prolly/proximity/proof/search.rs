@@ -485,6 +485,50 @@ where
     S::Error: Send + Sync,
 {
     let source = map.prove_structure(limits)?;
+    build_proof_with_source(
+        map,
+        source,
+        request,
+        result,
+        accelerator_root,
+        accelerator_objects,
+        native_trace,
+    )
+}
+
+pub(crate) fn build_native_proof_from_source(
+    source: ProximityStructuralProof,
+    request: SearchRequest<'_>,
+    result: SearchResult,
+    native_trace: Vec<ProximitySearchEvent>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, Error> {
+    let (map, _) = source.verified_map(limits)?;
+    build_proof_with_source(
+        &map,
+        source,
+        request,
+        result,
+        None,
+        Vec::new(),
+        Some(native_trace),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_proof_with_source<S>(
+    map: &ProximityMap<S>,
+    source: ProximityStructuralProof,
+    request: SearchRequest<'_>,
+    result: SearchResult,
+    accelerator_root: Option<TypedContentRoot>,
+    accelerator_objects: Vec<TypedContentObject>,
+    native_trace: Option<Vec<ProximitySearchEvent>>,
+) -> Result<ProximitySearchProof, Error>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
     let plan = plan_from_summary(&result.plan, &request.filter)?;
     let request = ProximitySearchRequest::capture(&request);
     let request_commitment = request_commitment(&request, &plan);

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-30T21:37:57+00:00",
+  "generated_at": "2026-08-03T07:14:15+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -422,6 +422,116 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncAcceleratorBuildOptions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildOptions::graph_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildOptions::hnsw",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildOptions::product_quantizer",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildOptions::publication_batch_items",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildStats",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildStats::bytes_published",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildStats::hnsw",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildStats::objects_published",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildStats::product_quantizer",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncAcceleratorCatalog",
       "classification": "portable",
       "status": "planned",
@@ -445,6 +555,17 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncAcceleratorCatalog::accelerators has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorCatalog::build",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncAcceleratorCatalog::entries",
@@ -501,6 +622,17 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncAcceleratorCatalog::manifest_cid has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorCatalog::publish",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncAcceleratorCatalog::source_descriptor",
@@ -905,6 +1037,28 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::AsyncCompositeAccelerator::build_from_hnsw",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeAccelerator::build_from_product_quantizer",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncCompositeAccelerator::config",
       "classification": "portable",
       "status": "planned",
@@ -989,6 +1143,127 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::AsyncCompositeBuildOptions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::config",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::graph_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::hnsw_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::pq_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::pq_parallelism",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::publication_batch_items",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOutcome",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOutcome::Composite",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOutcome::FullRebuildRequired",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncConflictIter",
       "classification": "portable",
       "status": "planned",
@@ -1070,6 +1345,39 @@
       "classification": "portable",
       "status": "planned",
       "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncHnswBuild",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncHnswBuild::config",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncHnswBuild::limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
@@ -1781,6 +2089,50 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::AsyncProductQuantizerBuild",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProductQuantizerBuild::config",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProductQuantizerBuild::limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProductQuantizerBuild::parallelism",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncProlly",
       "classification": "portable",
       "status": "planned",
@@ -1935,7 +2287,282 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncProximityBuildOptions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityBuildOptions::max_owned_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityBuildOptions::max_records",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityBuildOptions::parallelism",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityBuildOptions::publication_batch_items",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::build_if_absent",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::mutate_with_retry",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::name",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::open",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::runtime",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::with_max_conflict_retries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHead::with_runtime",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHeadCommit",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHeadCommit::Applied",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityHeadCommit::Conflict",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncProximityMap",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::build",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::build_with_options",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::build_with_parallelism",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::clear_content_cache",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::contains_key",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::get",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::get_with",
       "classification": "portable",
       "status": "planned",
       "family": "proximity-map",
@@ -1958,6 +2585,127 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncProximityMap::load has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::load_with_runtime",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::load_with_search_io",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::mutate_batch",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::prove_membership",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::prove_search",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::prove_structure",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::read",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::rebuild_batch",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::scan_records",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::scan_records_range_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::scan_records_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncProximityMap::search",
@@ -2014,6 +2762,138 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncProximityMap::tree has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncProximityMap::verify",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession::contains_key",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession::get_lease",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession::get_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession::scan_records",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession::scan_records_range_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximityReadSession::scan_records_until",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximitySnapshot",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximitySnapshot::into_map",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximitySnapshot::map",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProximitySnapshot::publication",
+      "classification": "portable",
+      "status": "planned",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncRangeIter",
@@ -2151,6 +3031,17 @@
     },
     {
       "rust": "prolly::AsyncReadSession::first_entry_with",
+      "classification": "portable",
+      "status": "planned",
+      "family": "session",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncReadSession::get_lease",
       "classification": "portable",
       "status": "planned",
       "family": "session",
@@ -42606,6 +43497,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::compare_and_swap_named_content_root_async",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::compare_and_swap_named_content_root_with_limits",
       "classification": "portable",
       "status": "planned",
@@ -42617,7 +43519,29 @@
       "docs": []
     },
     {
+      "rust": "prolly::compare_and_swap_named_content_root_with_limits_async",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::content_references",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::content_references_async",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -42829,7 +43753,29 @@
       "docs": []
     },
     {
+      "rust": "prolly::load_named_content_root_async",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::load_named_content_root_with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::load_named_content_root_with_limits_async",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -42898,7 +43844,29 @@
       "docs": []
     },
     {
+      "rust": "prolly::put_named_content_root_async",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::put_named_content_root_with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::put_named_content_root_with_limits_async",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -43325,6 +44293,17 @@
     },
     {
       "rust": "prolly::walk_content_graph",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::walk_content_graph_async",
       "classification": "portable",
       "status": "planned",
       "family": "core",

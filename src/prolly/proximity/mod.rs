@@ -1,10 +1,12 @@
 //! Deterministic, content-addressed approximate nearest-neighbor maps.
 
 pub(crate) mod accelerator;
+mod async_map;
 mod build;
 mod builder;
 mod cache;
 mod distance;
+mod head;
 mod map;
 mod mutation;
 mod proof;
@@ -33,10 +35,14 @@ pub use accelerator::pq::{
 };
 pub use accelerator::AcceleratorSet;
 pub use accelerator::{
-    AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
-    AsyncProductQuantizer,
+    AsyncAcceleratorBuildOptions, AsyncAcceleratorBuildStats, AsyncAcceleratorCatalog,
+    AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncCompositeBuildOptions,
+    AsyncCompositeBuildOutcome, AsyncHnswBuild, AsyncHnswIndex, AsyncProductQuantizer,
+    AsyncProductQuantizerBuild,
 };
+pub use async_map::{AsyncProximityBuildOptions, AsyncProximityReadSession};
 pub use build::{BuildParallelism, ProximityBuildStats};
+pub use head::{AsyncProximityHead, AsyncProximityHeadCommit, AsyncProximitySnapshot};
 pub use map::{ProximityMap, ProximityReadSession};
 pub use proof::{
     ProximityMembershipProof, ProximityMembershipVerification, ProximityProofFilter,
