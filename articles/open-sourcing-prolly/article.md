@@ -104,17 +104,17 @@ The store owns bytes:
 
   +-------------+        +----------------------+        +------------------+
   | App state   | -----> | Tree manager         | -----> | Local            |
-  | keys/values |        | put/delete/batch     |        | memory, file    |
+  | keys/values |        | put/delete/batch     |        | memory, file     |
   +-------------+        +----------------------+        +------------------+
 
   +-------------+        +----------------------+        +------------------+
   | Workflows   | -----> | Named roots          | -----> | Embedded         |
-  | sync/branch |        | branches/views/CAS   |        | SQLite, RocksDB |
+  | sync/branch |        | branches/views/CAS   |        | SQLite, RocksDB  |
   +-------------+        +----------------------+        +------------------+
 
   +-------------+        +----------------------+        +------------------+
   | Trust edge  | -----> | Proofs               | -----> | Remote           |
-  | verify data |        | key/range/page/diff  |        | Redis, DB, API  |
+  | verify data |        | key/range/page/diff  |        | Redis, DB, API   |
   +-------------+        +----------------------+        +------------------+
 
                          +----------------------+
@@ -215,8 +215,8 @@ The destination can be local or remote. Prolly verifies node bytes against their
        |                       |                       |
        v                       v                       v
 +--------------+       +---------------+       +----------------+
-| Local-first  |       | AI memory/RAG |       | Versioned views |
-| app state    |       | snapshots     |       | and indexes     |
+| Local-first  |       | AI memory/RAG |       | Versioned views|
+| app state    |       | snapshots     |       | and indexes    |
 +--------------+       +---------------+       +----------------+
        |                       |                       |
        +-----------------------+-----------------------+
