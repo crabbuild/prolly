@@ -53,10 +53,7 @@ where
             PublicationOrigin::PointUpsert,
         ))
         .unwrap();
-    assert_eq!(
-        store.get(cid.as_bytes()).unwrap(),
-        Some(bytes.to_vec())
-    );
+    assert_eq!(store.get(cid.as_bytes()).unwrap(), Some(bytes.to_vec()));
 }
 
 pub fn assert_manifest_store_contract<S>(store: &S)
