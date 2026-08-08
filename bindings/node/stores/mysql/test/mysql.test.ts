@@ -5,9 +5,9 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { createPool, type Pool, type RowDataPacket } from "mysql2/promise";
-import { RemoteAsyncProllyEngine } from "@trail/prolly-node/remote-async";
-import { missingBytes, presentBytes, StoreError, upsertNode } from "@trail/prolly-node/remote-store";
-import { runStoreConformance } from "@trail/prolly-storetest";
+import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
+import { missingBytes, presentBytes, StoreError, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { MysqlStore } from "../src/index.ts";
 

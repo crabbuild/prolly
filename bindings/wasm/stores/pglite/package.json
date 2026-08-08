@@ -1,5 +1,5 @@
 {
-  "name": "@trail/prolly-browser-store-pglite",
+  "name": "@crabbuild/prolly-browser-store-pglite",
   "version": "0.1.0",
   "type": "module",
   "files": ["src", "README.md"],

@@ -1,5 +1,5 @@
 {
-  "name": "@trail/prolly-store-opfs",
+  "name": "@crabbuild/prolly-store-opfs",
   "version": "0.1.0",
   "type": "module",
   "files": ["src", "README.md"],

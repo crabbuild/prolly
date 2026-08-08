@@ -173,7 +173,7 @@ conformance/
 ```
 
 Artifacts preserve the repository's current ecosystem namespaces, including
-`@trail`, `build.crab`, and the existing Go module path. Every provider is a
+`@crabbuild`, `build.crab`, and the existing Go module path. Every provider is a
 separately installable artifact and declares:
 
 - the supported core binding version range;

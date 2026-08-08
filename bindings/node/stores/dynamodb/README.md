@@ -1,4 +1,4 @@
-# `@trail/prolly-store-dynamodb`
+# `@crabbuild/prolly-store-dynamodb`
 
 DynamoDB implementation of the shared async store protocol using the official AWS SDK. It borrows a configured `DynamoDBClient`; `close()` drains adapter operations but never destroys the client.
 

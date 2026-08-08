@@ -22,7 +22,7 @@ import {
   type RootWrite,
   type StoreDescriptor,
   type StoreTransactionResult,
-} from "@trail/prolly-node/remote-store";
+} from "@crabbuild/prolly-node/remote-store";
 
 export const PGLITE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS prolly_nodes (

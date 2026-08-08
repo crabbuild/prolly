@@ -5,14 +5,14 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { Pool } from "pg";
-import { RemoteAsyncProllyEngine } from "@trail/prolly-node/remote-async";
+import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
 import {
   missingBytes,
   presentBytes,
   StoreError,
   upsertNode,
-} from "@trail/prolly-node/remote-store";
-import { runStoreConformance } from "@trail/prolly-storetest";
+} from "@crabbuild/prolly-node/remote-store";
+import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { PostgresStore } from "../src/index.ts";
 

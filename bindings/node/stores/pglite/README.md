@@ -1,4 +1,4 @@
-# `@trail/prolly-store-pglite`
+# `@crabbuild/prolly-store-pglite`
 
 Browser-native PostgreSQL/WASM implementation of the shared async store
 protocol using a caller-owned `PGlite` database. It uses the same three-table

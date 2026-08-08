@@ -1,5 +1,5 @@
 {
-  "name": "@trail/prolly-store-spanner",
+  "name": "@crabbuild/prolly-store-spanner",
   "version": "0.1.0",
   "type": "module",
   "files": [
@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "@google-cloud/spanner": "8.0.0",
-    "@trail/prolly-node": "file:../.."
+    "@crabbuild/prolly-node": "file:../.."
   },
   "devDependencies": {
-    "@trail/prolly-storetest": "file:../../storetest",
+    "@crabbuild/prolly-storetest": "file:../../storetest",
     "@types/node": "20.19.25",
     "typescript": "5.9.3"
   },

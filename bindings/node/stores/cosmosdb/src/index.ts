@@ -22,7 +22,7 @@ import {
   type RootWrite,
   type StoreDescriptor,
   type StoreTransactionResult,
-} from "@trail/prolly-node/remote-store";
+} from "@crabbuild/prolly-node/remote-store";
 
 const TRANSACTION_LIMIT = 100;
 const NODE = Buffer.from("node:");

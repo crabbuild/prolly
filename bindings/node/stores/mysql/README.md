@@ -1,10 +1,10 @@
-# @trail/prolly-store-mysql
+# @crabbuild/prolly-store-mysql
 
 MySQL implementation of the Prolly version 1 asynchronous store protocol.
 
 ```ts
 import { createPool } from "mysql2/promise";
-import { MysqlStore } from "@trail/prolly-store-mysql";
+import { MysqlStore } from "@crabbuild/prolly-store-mysql";
 
 const pool = createPool(process.env.DATABASE_URL!);
 const store = new MysqlStore(pool);

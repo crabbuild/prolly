@@ -13,9 +13,9 @@ import {
   GetItemCommand,
   ListTablesCommand,
 } from "@aws-sdk/client-dynamodb";
-import { RemoteAsyncProllyEngine } from "@trail/prolly-node/remote-async";
-import { StoreError, missingBytes, presentBytes, upsertNode } from "@trail/prolly-node/remote-store";
-import { runStoreConformance } from "@trail/prolly-storetest";
+import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
+import { StoreError, missingBytes, presentBytes, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { DynamoDbStore } from "../src/index.ts";
 

@@ -1,10 +1,10 @@
-# `@trail/prolly-store-redis`
+# `@crabbuild/prolly-store-redis`
 
 Redis implementation of the shared async store protocol for Node.js. It accepts an already-connected official `redis` client and never closes or destroys that caller-owned client.
 
 ```ts
 import { createClient } from "redis";
-import { RedisStore } from "@trail/prolly-store-redis";
+import { RedisStore } from "@crabbuild/prolly-store-redis";
 
 const client = createClient({ url: process.env.REDIS_URL });
 await client.connect();

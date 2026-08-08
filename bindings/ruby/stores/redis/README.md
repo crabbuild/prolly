@@ -1,6 +1,6 @@
 # Ruby Redis store
 
-`trail-prolly-store-redis` adapts a caller-owned `Redis` client to Prolly's
+`crabbuild-prolly-store-redis` adapts a caller-owned `Redis` client to Prolly's
 version-1 asynchronous store bridge. Closing the adapter does not close the
 client.
 

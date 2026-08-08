@@ -7151,7 +7151,7 @@
       "languages": {
         "python": "prolly.api.BytesKeyCodec",
         "go": "prolly.BytesKeyCodec",
-        "node": "@trail/prolly-node.BytesKeyCodec",
+        "node": "@crabbuild/prolly-node.BytesKeyCodec",
         "kotlin": "build.crab.prolly.api.BytesKeyCodec",
         "java": "build.crab.prolly.javaapi.BytesKeyCodec",
         "ruby": "Prolly::BytesKeyCodec",
@@ -15756,7 +15756,7 @@
       "languages": {
         "python": "prolly.api.KeyCodec",
         "go": "prolly.KeyCodec",
-        "node": "@trail/prolly-node.KeyCodec",
+        "node": "@crabbuild/prolly-node.KeyCodec",
         "kotlin": "build.crab.prolly.api.KeyCodec",
         "java": "build.crab.prolly.javaapi.KeyCodec",
         "ruby": "Prolly key codec protocol",
@@ -17215,7 +17215,7 @@
       "languages": {
         "python": "prolly.api.MapSnapshot.export",
         "go": "prolly.(*MapSnapshot).Export",
-        "node": "@trail/prolly-node.MapSnapshot.export",
+        "node": "@crabbuild/prolly-node.MapSnapshot.export",
         "kotlin": "build.crab.prolly.api.MapSnapshot.export",
         "java": "build.crab.prolly.javaapi.MapSnapshot.export",
         "ruby": "Prolly::MapSnapshot#export",
@@ -37103,7 +37103,7 @@
       "languages": {
         "python": "prolly.api.StringKeyCodec",
         "go": "prolly.StringKeyCodec",
-        "node": "@trail/prolly-node.StringKeyCodec",
+        "node": "@crabbuild/prolly-node.StringKeyCodec",
         "kotlin": "build.crab.prolly.api.StringKeyCodec",
         "java": "build.crab.prolly.javaapi.StringKeyCodec",
         "ruby": "Prolly::StringKeyCodec",
@@ -39362,7 +39362,7 @@
       "languages": {
         "python": "prolly.api.TypedMigrationResult",
         "go": "prolly.TypedMigrationResult",
-        "node": "@trail/prolly-node.TypedMigrationResult",
+        "node": "@crabbuild/prolly-node.TypedMigrationResult",
         "kotlin": "build.crab.prolly.api.TypedMigrationResult",
         "java": "build.crab.prolly.javaapi.TypedMigrationResult",
         "ruby": "Prolly::TypedMigrationResult",
@@ -39454,7 +39454,7 @@
       "languages": {
         "python": "prolly.api.TypedVersionedMap",
         "go": "prolly.TypedVersionedMap",
-        "node": "@trail/prolly-node.TypedVersionedMap",
+        "node": "@crabbuild/prolly-node.TypedVersionedMap",
         "kotlin": "build.crab.prolly.api.TypedVersionedMap",
         "java": "build.crab.prolly.javaapi.TypedVersionedMap",
         "ruby": "Prolly::TypedVersionedMap",
@@ -39743,7 +39743,7 @@
       "languages": {
         "python": "prolly.api.ValueCodec",
         "go": "prolly.ValueCodec",
-        "node": "@trail/prolly-node.ValueCodec",
+        "node": "@crabbuild/prolly-node.ValueCodec",
         "kotlin": "build.crab.prolly.api.ValueCodec",
         "java": "build.crab.prolly.javaapi.ValueCodec",
         "ruby": "Prolly value codec protocol",
@@ -40845,7 +40845,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.get_large_value",
         "go": "prolly.(*VersionedMap).GetLargeValue",
-        "node": "@trail/prolly-node.VersionedMap.getLargeValue",
+        "node": "@crabbuild/prolly-node.VersionedMap.getLargeValue",
         "kotlin": "build.crab.prolly.api.VersionedMap.getLargeValue",
         "java": "build.crab.prolly.javaapi.VersionedMap.getLargeValue",
         "ruby": "Prolly::VersionedMap#get_large_value",
@@ -41171,7 +41171,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.head_name",
         "go": "prolly.(*VersionedMap).HeadName",
-        "node": "@trail/prolly-node.VersionedMap.headName",
+        "node": "@crabbuild/prolly-node.VersionedMap.headName",
         "kotlin": "build.crab.prolly.api.VersionedMap.headName",
         "java": "build.crab.prolly.javaapi.VersionedMap.headName",
         "ruby": "Prolly::VersionedMap#head_name",
@@ -41239,7 +41239,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.import_as_head",
         "go": "prolly.(*VersionedMap).ImportAsHead",
-        "node": "@trail/prolly-node.VersionedMap.importAsHead",
+        "node": "@crabbuild/prolly-node.VersionedMap.importAsHead",
         "kotlin": "build.crab.prolly.api.VersionedMap.importAsHead",
         "java": "build.crab.prolly.javaapi.VersionedMap.importAsHead",
         "ruby": "Prolly::VersionedMap#import_as_head",
@@ -41268,7 +41268,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.import_as_head_at_millis",
         "go": "prolly.(*VersionedMap).ImportAsHeadAtMillis",
-        "node": "@trail/prolly-node.VersionedMap.importAsHeadAtMillis",
+        "node": "@crabbuild/prolly-node.VersionedMap.importAsHeadAtMillis",
         "kotlin": "build.crab.prolly.api.VersionedMap.importAsHead(bundle,timestampMillis)",
         "java": "build.crab.prolly.javaapi.VersionedMap.importAsHead(bundle,timestampMillis)",
         "ruby": "Prolly::VersionedMap#import_as_head_at_millis",
@@ -41649,7 +41649,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.plan_blob_gc",
         "go": "prolly.(*VersionedMap).PlanBlobGC",
-        "node": "@trail/prolly-node.VersionedMap.planBlobGc",
+        "node": "@crabbuild/prolly-node.VersionedMap.planBlobGc",
         "kotlin": "build.crab.prolly.api.VersionedMap.planBlobGc",
         "java": "build.crab.prolly.javaapi.VersionedMap.planBlobGc",
         "ruby": "Prolly::VersionedMap#plan_blob_gc",
@@ -42031,7 +42031,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.put_large_value",
         "go": "prolly.(*VersionedMap).PutLargeValue",
-        "node": "@trail/prolly-node.VersionedMap.putLargeValue",
+        "node": "@crabbuild/prolly-node.VersionedMap.putLargeValue",
         "kotlin": "build.crab.prolly.api.VersionedMap.putLargeValue",
         "java": "build.crab.prolly.javaapi.VersionedMap.putLargeValue",
         "ruby": "Prolly::VersionedMap#put_large_value",
@@ -42060,7 +42060,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.put_large_value_if",
         "go": "prolly.(*VersionedMap).PutLargeValueIf",
-        "node": "@trail/prolly-node.VersionedMap.putLargeValueIf",
+        "node": "@crabbuild/prolly-node.VersionedMap.putLargeValueIf",
         "kotlin": "build.crab.prolly.api.VersionedMap.putLargeValueIf",
         "java": "build.crab.prolly.javaapi.VersionedMap.putLargeValueIf",
         "ruby": "Prolly::VersionedMap#put_large_value_if",
@@ -42761,7 +42761,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.sweep_blob_gc",
         "go": "prolly.(*VersionedMap).SweepBlobGC",
-        "node": "@trail/prolly-node.VersionedMap.sweepBlobGc",
+        "node": "@crabbuild/prolly-node.VersionedMap.sweepBlobGc",
         "kotlin": "build.crab.prolly.api.VersionedMap.sweepBlobGc",
         "java": "build.crab.prolly.javaapi.VersionedMap.sweepBlobGc",
         "ruby": "Prolly::VersionedMap#sweep_blob_gc",
@@ -42989,7 +42989,7 @@
       "languages": {
         "python": "prolly.api.VersionedMap.versions_prefix",
         "go": "prolly.(*VersionedMap).VersionsPrefix",
-        "node": "@trail/prolly-node.VersionedMap.versionsPrefix",
+        "node": "@crabbuild/prolly-node.VersionedMap.versionsPrefix",
         "kotlin": "build.crab.prolly.api.VersionedMap.versionsPrefix",
         "java": "build.crab.prolly.javaapi.VersionedMap.versionsPrefix",
         "ruby": "Prolly::VersionedMap#versions_prefix",
@@ -44340,7 +44340,7 @@
       "languages": {
         "python": "prolly package namespace (prolly::chunking)",
         "go": "prolly package namespace (prolly::chunking)",
-        "node": "@trail/prolly-node export namespace (prolly::chunking)",
+        "node": "@crabbuild/prolly-node export namespace (prolly::chunking)",
         "kotlin": "build.crab.prolly package namespace (prolly::chunking)",
         "java": "build.crab.prolly package namespace (prolly::chunking)",
         "ruby": "Prolly module namespace (prolly::chunking)",
@@ -44809,7 +44809,7 @@
       "languages": {
         "python": "prolly package namespace (prolly::remote_conformance)",
         "go": "prolly package namespace (prolly::remote_conformance)",
-        "node": "@trail/prolly-node export namespace (prolly::remote_conformance)",
+        "node": "@crabbuild/prolly-node export namespace (prolly::remote_conformance)",
         "kotlin": "build.crab.prolly package namespace (prolly::remote_conformance)",
         "java": "build.crab.prolly package namespace (prolly::remote_conformance)",
         "ruby": "Prolly module namespace (prolly::remote_conformance)",
@@ -44876,7 +44876,7 @@
       "languages": {
         "python": "prolly package namespace (prolly::resolver)",
         "go": "prolly package namespace (prolly::resolver)",
-        "node": "@trail/prolly-node export namespace (prolly::resolver)",
+        "node": "@crabbuild/prolly-node export namespace (prolly::resolver)",
         "kotlin": "build.crab.prolly package namespace (prolly::resolver)",
         "java": "build.crab.prolly package namespace (prolly::resolver)",
         "ruby": "Prolly module namespace (prolly::resolver)",

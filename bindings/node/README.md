@@ -107,28 +107,28 @@ only gives JavaScript code a familiar scheduling model.
 
 ## Async Store Providers
 
-Database adapters are separate packages, so installing `@trail/prolly-node`
+Database adapters are separate packages, so installing `@crabbuild/prolly-node`
 does not install a database SDK. Each adapter accepts a caller-owned SDK client,
 pool, database, or container and never closes it. Initialize or validate the
 physical schema explicitly before opening a remote engine.
 
 | Provider package | Minimal construction | Required preparation |
 | --- | --- | --- |
-| `@trail/prolly-store-sqlite` | `new SqliteStore(database)` | `await store.initializeSchema()` |
-| `@trail/prolly-store-postgres` | `new PostgresStore(pool)` | `await store.initializeSchema()` |
-| `@trail/prolly-store-mysql` | `new MysqlStore(pool)` | `await store.initializeSchema()` |
-| `@trail/prolly-store-redis` | `new RedisStore(client)` | connect the binary Redis client |
-| `@trail/prolly-store-dynamodb` | `new DynamoDbStore(client, { tableName: "prolly" })` | `await store.initializeTable()` |
-| `@trail/prolly-store-cosmosdb` | `new CosmosDbStore(container)` | create with `/kind`, then `await store.validateContainer()` |
-| `@trail/prolly-store-spanner` | `new SpannerStore(database)` | apply the exported `SPANNER_DDL` statements |
-| `@trail/prolly-store-pglite` | `new PGliteStore(database)` | `await store.initializeSchema()` |
+| `@crabbuild/prolly-store-sqlite` | `new SqliteStore(database)` | `await store.initializeSchema()` |
+| `@crabbuild/prolly-store-postgres` | `new PostgresStore(pool)` | `await store.initializeSchema()` |
+| `@crabbuild/prolly-store-mysql` | `new MysqlStore(pool)` | `await store.initializeSchema()` |
+| `@crabbuild/prolly-store-redis` | `new RedisStore(client)` | connect the binary Redis client |
+| `@crabbuild/prolly-store-dynamodb` | `new DynamoDbStore(client, { tableName: "prolly" })` | `await store.initializeTable()` |
+| `@crabbuild/prolly-store-cosmosdb` | `new CosmosDbStore(container)` | create with `/kind`, then `await store.validateContainer()` |
+| `@crabbuild/prolly-store-spanner` | `new SpannerStore(database)` | apply the exported `SPANNER_DDL` statements |
+| `@crabbuild/prolly-store-pglite` | `new PGliteStore(database)` | `await store.initializeSchema()` |
 
 Import the constructor from the provider package and create the injected value
 with its official SDK. For example:
 
 ```ts
 import { Pool } from "pg";
-import { PostgresStore } from "@trail/prolly-store-postgres";
+import { PostgresStore } from "@crabbuild/prolly-store-postgres";
 
 const pool = new Pool(); // standard PG* environment variables or explicit options
 const store = new PostgresStore(pool);

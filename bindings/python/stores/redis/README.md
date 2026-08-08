@@ -1,6 +1,6 @@
 # Python Redis store
 
-`trail-prolly-store-redis` adapts a caller-owned `redis.asyncio.Redis` client
+`crabbuild-prolly-store-redis` adapts a caller-owned `redis.asyncio.Redis` client
 to Prolly's version-1 asynchronous store protocol. Closing the adapter does not
 close the injected client.
 

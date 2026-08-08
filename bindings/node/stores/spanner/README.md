@@ -1,4 +1,4 @@
-# `@trail/prolly-store-spanner`
+# `@crabbuild/prolly-store-spanner`
 
 Cloud Spanner implementation of the shared async store protocol using the
 official `@google-cloud/spanner` SDK. Construct it with a caller-owned

@@ -27,7 +27,7 @@ import {
   type RootWrite,
   type StoreDescriptor,
   type StoreTransactionResult,
-} from "@trail/prolly-node/remote-store";
+} from "@crabbuild/prolly-node/remote-store";
 
 const CREATE_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS prolly_nodes (cid VARBINARY(32) PRIMARY KEY, node LONGBLOB NOT NULL)",
