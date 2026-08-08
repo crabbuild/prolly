@@ -10,7 +10,7 @@ import { DiffPlaybackPanel } from './components/DiffPlaybackPanel';
 import { LookupDetailsPanel, type LookupDetails } from './components/LookupDetailsPanel';
 import { MutationCostPanel } from './components/MutationCostPanel';
 import { NodeInspector } from './components/NodeInspector';
-import { TreeCanvas } from './components/TreeCanvas';
+import { compactNodeId, TreeCanvas } from './components/TreeCanvas';
 
 type Tab = 'tree' | 'diff' | 'chunks' | 'storage' | 'order';
 type ControlMode = 'modify' | 'lookup';
@@ -815,7 +815,9 @@ function App() {
                 <button key={snapshot.id} className={snapshot.id === current.id ? 'selected' : ''} onClick={() => { resetTreeState(); setViewId(snapshot.id); setInsertionOrderResult(undefined); }} disabled={snapshot.id === current.id}>
                   <span>Version {String(index + 1).padStart(2, '0')}{index === snapshots.length - 1 && <em>latest</em>}</span>
                   <b>{snapshot.label}</b>
-                  <code>{snapshot.rootHash}</code>
+                  <code title={`Full content address: ${snapshot.rootHash}`} aria-label={`Content address ${snapshot.rootHash}`}>
+                    {compactNodeId(snapshot.rootHash)}
+                  </code>
                   <small>{snapshot.rows.length} rows · {snapshot.nodes.size} nodes</small>
                 </button>
               );

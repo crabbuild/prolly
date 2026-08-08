@@ -327,7 +327,7 @@ button.mutation-stage:disabled { cursor: default; }
 .timeline button > span { color: var(--accent); font: 500 11px var(--mono); }
 .timeline button > span em { float: right; border: 1px solid #3b4b72; border-radius: 999px; padding: 2px 6px; color: #aebbd6; font-size: 11px; font-style: normal; text-transform: uppercase; letter-spacing: .08em; }
 .timeline button b { margin: 10px 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.timeline button code { color: #b9c5c1; font-size: 10px; line-height: 1.45; white-space: nowrap; }
+.timeline button code { min-width: 0; overflow: hidden; color: #b9c5c1; font-size: 10px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .timeline button small { color: #899592; margin-top: 8px; font-size: 11px; }
 
 footer { padding: 19px 4vw; display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); }
