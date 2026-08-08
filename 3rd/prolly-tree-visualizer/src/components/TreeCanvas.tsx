@@ -20,6 +20,14 @@ interface KeyLabelPart {
 }
 
 const KEY_PREVIEW_CHARACTERS = 34;
+const NODE_ID_PREFIX_CHARACTERS = 12;
+const NODE_ID_SUFFIX_CHARACTERS = 8;
+
+export function compactNodeId(nodeId: string) {
+  const visibleCharacters = NODE_ID_PREFIX_CHARACTERS + NODE_ID_SUFFIX_CHARACTERS;
+  if (nodeId.length <= visibleCharacters + 1) return nodeId;
+  return `${nodeId.slice(0, NODE_ID_PREFIX_CHARACTERS)}…${nodeId.slice(-NODE_ID_SUFFIX_CHARACTERS)}`;
+}
 
 function partsForIndexes(keys: string[], indexes: number[], matchIndexes: number[]) {
   return indexes.flatMap((index, position): KeyLabelPart[] => {
@@ -276,7 +284,10 @@ export function TreeCanvas({ snapshot, baseline, trace, activeTraceHash, diffHig
               <text className="node-range" x="15" y="84">
                 {node.size.toLocaleString()} bytes
               </text>
-              <text className={activeDiffHashes?.has(node.hash) ? 'node-hash node-hash-active' : isActiveSkipped ? 'node-hash node-hash-skip-active' : 'node-hash'} x="15" y="108">{node.hash}</text>
+              <text className={activeDiffHashes?.has(node.hash) ? 'node-hash node-hash-active' : isActiveSkipped ? 'node-hash node-hash-skip-active' : 'node-hash'} x="15" y="108">
+                <title>Full content address: {node.hash}</title>
+                {compactNodeId(node.hash)}
+              </text>
             </g>
           );
         })}
