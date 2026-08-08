@@ -4,7 +4,7 @@
     "node": {
       "sqlite": {
         "status": "supported",
-        "module": "@trail/prolly-store-sqlite",
+        "module": "@crabbuild/prolly-store-sqlite",
         "sdk_module": "better-sqlite3",
         "sdk_version": "12.11.1",
         "minimum_node": "20.0.0",
@@ -16,7 +16,7 @@
       },
       "postgresql": {
         "status": "supported",
-        "module": "@trail/prolly-store-postgres",
+        "module": "@crabbuild/prolly-store-postgres",
         "sdk_module": "pg",
         "sdk_version": "8.22.0",
         "minimum_node": "20.0.0",
@@ -28,7 +28,7 @@
       },
       "mysql": {
         "status": "supported",
-        "module": "@trail/prolly-store-mysql",
+        "module": "@crabbuild/prolly-store-mysql",
         "sdk_module": "mysql2",
         "sdk_version": "3.23.0",
         "minimum_node": "20.0.0",
@@ -40,7 +40,7 @@
       },
       "redis": {
         "status": "supported",
-        "module": "@trail/prolly-store-redis",
+        "module": "@crabbuild/prolly-store-redis",
         "sdk_module": "redis",
         "sdk_version": "6.1.0",
         "minimum_node": "20.0.0",
@@ -52,7 +52,7 @@
       },
       "dynamodb": {
         "status": "supported",
-        "module": "@trail/prolly-store-dynamodb",
+        "module": "@crabbuild/prolly-store-dynamodb",
         "sdk_module": "@aws-sdk/client-dynamodb",
         "sdk_version": "3.1089.0",
         "minimum_node": "20.0.0",
@@ -64,7 +64,7 @@
       },
       "cosmosdb": {
         "status": "supported",
-        "module": "@trail/prolly-store-cosmosdb",
+        "module": "@crabbuild/prolly-store-cosmosdb",
         "sdk_module": "@azure/cosmos",
         "sdk_version": "4.9.3",
         "minimum_node": "20.0.0",
@@ -76,7 +76,7 @@
       },
       "spanner": {
         "status": "supported",
-        "module": "@trail/prolly-store-spanner",
+        "module": "@crabbuild/prolly-store-spanner",
         "sdk_module": "@google-cloud/spanner",
         "sdk_version": "8.0.0",
         "minimum_node": "20.0.0",
@@ -88,7 +88,7 @@
       },
       "pglite": {
         "status": "supported",
-        "module": "@trail/prolly-store-pglite",
+        "module": "@crabbuild/prolly-store-pglite",
         "sdk_module": "@electric-sql/pglite",
         "sdk_version": "0.5.4",
         "minimum_node": "20.0.0",
@@ -360,7 +360,7 @@
     "python": {
       "sqlite": {
         "status": "supported",
-        "module": "trail-prolly-store-sqlite",
+        "module": "crabbuild-prolly-store-sqlite",
         "sdk_module": "sqlite3",
         "sdk_version": "stdlib",
         "minimum_python": "3.10",
@@ -372,7 +372,7 @@
       },
       "postgresql": {
         "status": "supported",
-        "module": "trail-prolly-store-postgres",
+        "module": "crabbuild-prolly-store-postgres",
         "sdk_module": "psycopg",
         "sdk_version": "3.3.4",
         "minimum_python": "3.10",
@@ -384,7 +384,7 @@
       },
       "mysql": {
         "status": "supported",
-        "module": "trail-prolly-store-mysql",
+        "module": "crabbuild-prolly-store-mysql",
         "sdk_module": "aiomysql",
         "sdk_version": "0.3.2",
         "minimum_python": "3.10",
@@ -396,7 +396,7 @@
       },
       "redis": {
         "status": "supported",
-        "module": "trail-prolly-store-redis",
+        "module": "crabbuild-prolly-store-redis",
         "sdk_module": "redis",
         "sdk_version": "8.0.1",
         "minimum_python": "3.10",
@@ -408,7 +408,7 @@
       },
       "dynamodb": {
         "status": "supported",
-        "module": "trail-prolly-store-dynamodb",
+        "module": "crabbuild-prolly-store-dynamodb",
         "sdk_module": "aioboto3",
         "sdk_version": "15.5.0",
         "minimum_python": "3.10",
@@ -420,7 +420,7 @@
       },
       "cosmosdb": {
         "status": "supported",
-        "module": "trail-prolly-store-cosmosdb",
+        "module": "crabbuild-prolly-store-cosmosdb",
         "sdk_module": "azure-cosmos",
         "sdk_version": "4.16.1",
         "minimum_python": "3.10",
@@ -432,7 +432,7 @@
       },
       "spanner": {
         "status": "supported",
-        "module": "trail-prolly-store-spanner",
+        "module": "crabbuild-prolly-store-spanner",
         "sdk_module": "google-cloud-spanner",
         "sdk_version": "3.69.0",
         "minimum_python": "3.10",
@@ -446,7 +446,7 @@
     "ruby": {
       "sqlite": {
         "status": "supported",
-        "module": "trail-prolly-store-sqlite",
+        "module": "crabbuild-prolly-store-sqlite",
         "sdk_module": "sqlite3",
         "sdk_version": "2.9.5",
         "minimum_ruby": "3.2",
@@ -458,7 +458,7 @@
       },
       "postgresql": {
         "status": "supported",
-        "module": "trail-prolly-store-postgres",
+        "module": "crabbuild-prolly-store-postgres",
         "sdk_module": "pg",
         "sdk_version": "1.6.3",
         "minimum_ruby": "3.2",
@@ -470,7 +470,7 @@
       },
       "mysql": {
         "status": "supported",
-        "module": "trail-prolly-store-mysql",
+        "module": "crabbuild-prolly-store-mysql",
         "sdk_module": "mysql2",
         "sdk_version": "0.5.7",
         "minimum_ruby": "3.2",
@@ -482,7 +482,7 @@
       },
       "redis": {
         "status": "supported",
-        "module": "trail-prolly-store-redis",
+        "module": "crabbuild-prolly-store-redis",
         "sdk_module": "redis",
         "sdk_version": "5.4.1",
         "minimum_ruby": "3.2",
@@ -494,7 +494,7 @@
       },
       "dynamodb": {
         "status": "supported",
-        "module": "trail-prolly-store-dynamodb",
+        "module": "crabbuild-prolly-store-dynamodb",
         "sdk_module": "aws-sdk-dynamodb",
         "sdk_version": "1.169.0",
         "minimum_ruby": "3.2",
@@ -507,7 +507,7 @@
       "cosmosdb": {"status":"unsupported","reason":"Microsoft does not publish a supported Cosmos DB Ruby client SDK"},
       "spanner": {
         "status": "supported",
-        "module": "trail-prolly-store-spanner",
+        "module": "crabbuild-prolly-store-spanner",
         "sdk_module": "google-cloud-spanner",
         "sdk_version": "2.36.0",
         "minimum_ruby": "3.2",
@@ -585,7 +585,7 @@
     "browser": {
       "indexeddb": {
         "status": "supported",
-        "module": "@trail/prolly-store-indexeddb",
+        "module": "@crabbuild/prolly-store-indexeddb",
         "sdk_module": "IndexedDB",
         "sdk_version": "browser-native",
         "minimum_browser": "IndexedDB 2.0",
@@ -597,7 +597,7 @@
       },
       "opfs": {
         "status": "supported",
-        "module": "@trail/prolly-store-opfs",
+        "module": "@crabbuild/prolly-store-opfs",
         "sdk_module": "Origin Private File System",
         "sdk_version": "browser-native",
         "minimum_browser": "File System Access API",
@@ -609,7 +609,7 @@
       },
       "pglite": {
         "status": "supported",
-        "module": "@trail/prolly-browser-store-pglite",
+        "module": "@crabbuild/prolly-browser-store-pglite",
         "sdk_module": "@electric-sql/pglite",
         "sdk_version": "0.5.4",
         "minimum_browser": "WebAssembly and IndexedDB",

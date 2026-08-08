@@ -1,12 +1,12 @@
 # Node SQLite remote store
 
-`@trail/prolly-store-sqlite` implements store protocol version 2 with an
+`@crabbuild/prolly-store-sqlite` implements store protocol version 2 with an
 application-owned `better-sqlite3` database.
 
 ```ts
 import Database from "better-sqlite3";
-import { RemoteAsyncProllyEngine } from "@trail/prolly-node/remote-async";
-import { SqliteStore } from "@trail/prolly-store-sqlite";
+import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
+import { SqliteStore } from "@crabbuild/prolly-store-sqlite";
 
 const database = new Database("prolly.db");
 const store = new SqliteStore(database);

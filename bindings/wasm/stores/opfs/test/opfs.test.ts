@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { missingBytes, presentBytes } from "@trail/prolly-wasm/remote-store";
+import { missingBytes, presentBytes } from "@crabbuild/prolly-wasm/remote-store";
 import { OpfsStore, type OpfsDirectoryHandle } from "../src/index.ts";
 
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);

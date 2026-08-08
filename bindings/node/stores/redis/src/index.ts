@@ -22,7 +22,7 @@ import {
   type RootWrite,
   type StoreDescriptor,
   type StoreTransactionResult,
-} from "@trail/prolly-node/remote-store";
+} from "@crabbuild/prolly-node/remote-store";
 
 const CAS_SCRIPT = `
 local current = redis.call('GET', KEYS[1])

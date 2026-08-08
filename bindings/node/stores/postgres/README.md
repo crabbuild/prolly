@@ -1,10 +1,10 @@
-# @trail/prolly-store-postgres
+# @crabbuild/prolly-store-postgres
 
 PostgreSQL implementation of the Prolly version 1 asynchronous store protocol.
 
 ```ts
 import { Pool } from "pg";
-import { PostgresStore } from "@trail/prolly-store-postgres";
+import { PostgresStore } from "@crabbuild/prolly-store-postgres";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const store = new PostgresStore(pool);

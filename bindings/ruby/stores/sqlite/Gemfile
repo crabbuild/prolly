@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 source 'https://rubygems.org'
-gem 'trail-prolly', path: '../..'
+gem 'crabbuild-prolly', path: '../..'
 gemspec

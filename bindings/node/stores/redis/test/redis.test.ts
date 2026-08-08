@@ -6,9 +6,9 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { createClient, RESP_TYPES, type RedisClientType } from "redis";
-import { RemoteAsyncProllyEngine } from "@trail/prolly-node/remote-async";
-import { missingBytes, presentBytes, StoreError, upsertNode } from "@trail/prolly-node/remote-store";
-import { runStoreConformance } from "@trail/prolly-storetest";
+import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
+import { missingBytes, presentBytes, StoreError, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { RedisStore } from "../src/index.ts";
 

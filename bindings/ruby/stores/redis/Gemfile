@@ -2,4 +2,4 @@
 
 source 'https://rubygems.org'
 gemspec
-gem 'trail-prolly', path: '../..'
+gem 'crabbuild-prolly', path: '../..'

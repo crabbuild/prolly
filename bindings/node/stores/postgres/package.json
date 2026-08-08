@@ -1,5 +1,5 @@
 {
-  "name": "@trail/prolly-store-postgres",
+  "name": "@crabbuild/prolly-store-postgres",
   "version": "0.1.0",
   "type": "module",
   "files": [
@@ -11,11 +11,11 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "@trail/prolly-node": "file:../..",
+    "@crabbuild/prolly-node": "file:../..",
     "pg": "8.22.0"
   },
   "devDependencies": {
-    "@trail/prolly-storetest": "file:../../storetest",
+    "@crabbuild/prolly-storetest": "file:../../storetest",
     "@types/node": "20.19.25",
     "@types/pg": "8.20.0",
     "typescript": "5.9.3"

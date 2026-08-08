@@ -5,8 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { PGlite } from "@electric-sql/pglite";
-import { StoreError, missingBytes, presentBytes, upsertNode } from "@trail/prolly-node/remote-store";
-import { runStoreConformance } from "@trail/prolly-storetest";
+import { StoreError, missingBytes, presentBytes, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { PGliteStore } from "../src/index.ts";
 

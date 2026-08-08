@@ -1431,7 +1431,7 @@ fn db_path() -> String {
     }
 
     let prefix = std::env::var("PROLLY_SLATEDB_PATH_PREFIX")
-        .unwrap_or_else(|_| "trail/prolly-workload".to_string());
+        .unwrap_or_else(|_| "crabbuild/prolly-workload".to_string());
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

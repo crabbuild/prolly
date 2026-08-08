@@ -18,12 +18,12 @@
       "language_symbols": {
         "python": "prolly.api.KeyCodec/ValueCodec contract ({rust})",
         "go": "prolly.KeyCodec/ValueCodec contract ({rust})",
-        "node": "@trail/prolly-node Codec<T> contract ({rust})",
+        "node": "@crabbuild/prolly-node Codec<T> contract ({rust})",
         "kotlin": "build.crab.prolly.api KeyCodec/ValueCodec contract ({rust})",
         "java": "build.crab.prolly.javaapi KeyCodec/ValueCodec contract ({rust})",
         "ruby": "Prolly codec contract ({rust})",
         "swift": "ProllyAPI KeyCodec/ValueCodec contract ({rust})",
-        "wasm": "@trail/prolly-wasm Codec<T> contract ({rust})"
+        "wasm": "@crabbuild/prolly-wasm Codec<T> contract ({rust})"
       },
       "tests": [
         "portable-parity::typed-codec-round-trip"
@@ -242,12 +242,12 @@
       "language_symbols": {
         "python": "prolly package namespace ({rust})",
         "go": "prolly package namespace ({rust})",
-        "node": "@trail/prolly-node export namespace ({rust})",
+        "node": "@crabbuild/prolly-node export namespace ({rust})",
         "kotlin": "build.crab.prolly package namespace ({rust})",
         "java": "build.crab.prolly package namespace ({rust})",
         "ruby": "Prolly module namespace ({rust})",
         "swift": "Prolly/ProllyAPI module namespace ({rust})",
-        "wasm": "@trail/prolly-wasm export namespace ({rust})"
+        "wasm": "@crabbuild/prolly-wasm export namespace ({rust})"
       },
       "tests": [
         "portable-parity::public-export-surface"

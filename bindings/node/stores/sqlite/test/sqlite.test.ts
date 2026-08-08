@@ -8,9 +8,9 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import Database from "better-sqlite3";
-import { RemoteAsyncProllyEngine } from "@trail/prolly-node/remote-async";
-import { missingBytes, presentBytes } from "@trail/prolly-node/remote-store";
-import { runStoreConformance } from "@trail/prolly-storetest";
+import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
+import { missingBytes, presentBytes } from "@crabbuild/prolly-node/remote-store";
+import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { SqliteStore } from "../src/index.ts";
 
