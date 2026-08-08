@@ -58,6 +58,14 @@ The storage view tracks every distinct encoded node observed in the current
 in-memory engine. Garbage collection rebuilds HEAD in a fresh engine and
 verifies that its root CID remains unchanged before replacing the old store.
 
+## Attribution
+
+This project is based on
+[`timsehn/prolly-tree-visualizer`](https://github.com/timsehn/prolly-tree-visualizer).
+Credit goes to Tim Sehn and the original contributors for the visualizer's
+design and implementation. This vendored version adapts the original project
+to use the `prolly-map` WASM engine.
+
 ## Validation
 
 ```bash
