@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { missingKeyLabel, rangeKeysForNode, routeKeyForLookup, shownKeys } from './TreeCanvas';
+import { compactNodeId, missingKeyLabel, rangeKeysForNode, routeKeyForLookup, shownKeys } from './TreeCanvas';
 import type { ProllyNode } from '../types';
 
 function leaf(keys: number[]): ProllyNode {
@@ -16,6 +16,12 @@ function leaf(keys: number[]): ProllyNode {
 }
 
 describe('tree key labels', () => {
+  it('compacts long node IDs while preserving distinguishing ends', () => {
+    expect(compactNodeId('0058c97f1e48bcd2441721d6c63421d3f70093c3475e36ce4627780918f3e253'))
+      .toBe('0058c97f1e48…18f3e253');
+    expect(compactNodeId('short-node-id')).toBe('short-node-id');
+  });
+
   it('keeps a looked-up key visible inside a compressed leaf', () => {
     expect(shownKeys(leaf([1, 2, 3, 4, 5, 6, 7, 8, 9]), [6])).toEqual([
       { text: '1', match: false },
