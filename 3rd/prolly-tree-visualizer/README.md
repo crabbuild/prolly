@@ -3,7 +3,7 @@
 An interactive browser visualizer for the real trees produced by this
 repository's Rust `prolly-map` engine. The interaction model is inspired by
 [btree.app](https://btree.app/), but mutations execute in the
-`@trail/prolly-wasm` binding rather than in a JavaScript tree simulation.
+`@crabbuild/prolly-wasm` binding rather than in a JavaScript tree simulation.
 
 The visualizer demonstrates:
 
@@ -40,7 +40,7 @@ npm --prefix 3rd/prolly-tree-visualizer run preview
 
 ```text
 browser control
-  → @trail/prolly-wasm
+  → @crabbuild/prolly-wasm
   → Rust prolly-map mutation
   → content-addressed in-memory node store
   → typed Rust debug traversal and real node CIDs

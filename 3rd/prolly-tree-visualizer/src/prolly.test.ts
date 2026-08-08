@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WasmTreeDebugViewRecord } from '@trail/prolly-wasm';
+import type { WasmTreeDebugViewRecord } from '@crabbuild/prolly-wasm';
 import {
   buildTreeFromDebug,
   diffRows,

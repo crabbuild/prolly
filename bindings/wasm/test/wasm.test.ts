@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const fixturePath = resolve(import.meta.dirname, "../../../conformance/prolly-fixtures.v1.json");
+const packageManifestPath = resolve(import.meta.dirname, "../package.json");
 
 function fixtures(): any {
   return JSON.parse(readFileSync(fixturePath, "utf8"));
@@ -66,6 +67,11 @@ test("wasm package declares browser memory-scope API", () => {
   assert.match(source, /WasmRangeProofRecord/);
   assert.match(source, /WasmRangeProofVerificationRecord/);
   assert.match(source, /WasmSnapshotNamespaceKind/);
+});
+
+test("wasm artifacts use the Crabbuild package scope", () => {
+  const manifest = JSON.parse(readFileSync(packageManifestPath, "utf8"));
+  assert.equal(manifest.name, "@crabbuild/prolly-wasm");
 });
 
 test("wasm deleteRange uses raw-byte half-open bounds", { skip: !generatedPresent }, () => {

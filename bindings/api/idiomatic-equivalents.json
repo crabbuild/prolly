@@ -23,7 +23,7 @@
         "java": "build.crab.prolly.javaapi KeyCodec/ValueCodec contract ({rust})",
         "ruby": "Prolly codec contract ({rust})",
         "swift": "ProllyAPI KeyCodec/ValueCodec contract ({rust})",
-        "wasm": "@trail/prolly-wasm Codec<T> contract ({rust})"
+        "wasm": "@crabbuild/prolly-wasm Codec<T> contract ({rust})"
       },
       "tests": [
         "portable-parity::typed-codec-round-trip"
@@ -247,7 +247,7 @@
         "java": "build.crab.prolly package namespace ({rust})",
         "ruby": "Prolly module namespace ({rust})",
         "swift": "Prolly/ProllyAPI module namespace ({rust})",
-        "wasm": "@trail/prolly-wasm export namespace ({rust})"
+        "wasm": "@crabbuild/prolly-wasm export namespace ({rust})"
       },
       "tests": [
         "portable-parity::public-export-surface"

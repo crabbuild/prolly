@@ -7156,7 +7156,7 @@
         "java": "build.crab.prolly.javaapi.BytesKeyCodec",
         "ruby": "Prolly::BytesKeyCodec",
         "swift": "ProllyAPI.BytesKeyCodec",
-        "wasm": "@trail/prolly-wasm.BytesKeyCodec"
+        "wasm": "@crabbuild/prolly-wasm.BytesKeyCodec"
       },
       "exclusions": {},
       "tests": [
@@ -15761,7 +15761,7 @@
         "java": "build.crab.prolly.javaapi.KeyCodec",
         "ruby": "Prolly key codec protocol",
         "swift": "ProllyAPI.KeyCodec",
-        "wasm": "@trail/prolly-wasm.KeyCodec"
+        "wasm": "@crabbuild/prolly-wasm.KeyCodec"
       },
       "exclusions": {},
       "tests": [
@@ -17220,7 +17220,7 @@
         "java": "build.crab.prolly.javaapi.MapSnapshot.export",
         "ruby": "Prolly::MapSnapshot#export",
         "swift": "ProllyAPI.MapSnapshot.export",
-        "wasm": "@trail/prolly-wasm.WasmMapSnapshot.export"
+        "wasm": "@crabbuild/prolly-wasm.WasmMapSnapshot.export"
       },
       "exclusions": {},
       "tests": [
@@ -37108,7 +37108,7 @@
         "java": "build.crab.prolly.javaapi.StringKeyCodec",
         "ruby": "Prolly::StringKeyCodec",
         "swift": "ProllyAPI.StringKeyCodec",
-        "wasm": "@trail/prolly-wasm.StringKeyCodec"
+        "wasm": "@crabbuild/prolly-wasm.StringKeyCodec"
       },
       "exclusions": {},
       "tests": [
@@ -39367,7 +39367,7 @@
         "java": "build.crab.prolly.javaapi.TypedMigrationResult",
         "ruby": "Prolly::TypedMigrationResult",
         "swift": "ProllyAPI.TypedMigrationResult",
-        "wasm": "@trail/prolly-wasm.TypedMigrationResult"
+        "wasm": "@crabbuild/prolly-wasm.TypedMigrationResult"
       },
       "exclusions": {},
       "tests": [
@@ -39459,7 +39459,7 @@
         "java": "build.crab.prolly.javaapi.TypedVersionedMap",
         "ruby": "Prolly::TypedVersionedMap",
         "swift": "ProllyAPI.TypedVersionedMap",
-        "wasm": "@trail/prolly-wasm.TypedVersionedMap"
+        "wasm": "@crabbuild/prolly-wasm.TypedVersionedMap"
       },
       "exclusions": {},
       "tests": [
@@ -39748,7 +39748,7 @@
         "java": "build.crab.prolly.javaapi.ValueCodec",
         "ruby": "Prolly value codec protocol",
         "swift": "ProllyAPI.ValueCodec",
-        "wasm": "@trail/prolly-wasm.ValueCodec"
+        "wasm": "@crabbuild/prolly-wasm.ValueCodec"
       },
       "exclusions": {},
       "tests": [
@@ -40850,7 +40850,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.getLargeValue",
         "ruby": "Prolly::VersionedMap#get_large_value",
         "swift": "ProllyAPI.VersionedMap.getLargeValue",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.getLargeValue"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.getLargeValue"
       },
       "exclusions": {},
       "tests": [
@@ -41176,7 +41176,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.headName",
         "ruby": "Prolly::VersionedMap#head_name",
         "swift": "ProllyAPI.VersionedMap.headName",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.headName"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.headName"
       },
       "exclusions": {},
       "tests": [
@@ -41244,7 +41244,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.importAsHead",
         "ruby": "Prolly::VersionedMap#import_as_head",
         "swift": "ProllyAPI.VersionedMap.importAsHead",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.importAsHead"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.importAsHead"
       },
       "exclusions": {},
       "tests": [
@@ -41273,7 +41273,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.importAsHead(bundle,timestampMillis)",
         "ruby": "Prolly::VersionedMap#import_as_head_at_millis",
         "swift": "ProllyAPI.VersionedMap.importAsHead(_:timestampMillis:)",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.importAsHeadAtMillis"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.importAsHeadAtMillis"
       },
       "exclusions": {},
       "tests": [
@@ -41654,7 +41654,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.planBlobGc",
         "ruby": "Prolly::VersionedMap#plan_blob_gc",
         "swift": "ProllyAPI.VersionedMap.planBlobGC",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.planBlobGc"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.planBlobGc"
       },
       "exclusions": {},
       "tests": [
@@ -42036,7 +42036,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.putLargeValue",
         "ruby": "Prolly::VersionedMap#put_large_value",
         "swift": "ProllyAPI.VersionedMap.putLargeValue",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.putLargeValue"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.putLargeValue"
       },
       "exclusions": {},
       "tests": [
@@ -42065,7 +42065,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.putLargeValueIf",
         "ruby": "Prolly::VersionedMap#put_large_value_if",
         "swift": "ProllyAPI.VersionedMap.putLargeValueIf",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.putLargeValueIf"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.putLargeValueIf"
       },
       "exclusions": {},
       "tests": [
@@ -42766,7 +42766,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.sweepBlobGc",
         "ruby": "Prolly::VersionedMap#sweep_blob_gc",
         "swift": "ProllyAPI.VersionedMap.sweepBlobGC",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.sweepBlobGc"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.sweepBlobGc"
       },
       "exclusions": {},
       "tests": [
@@ -42994,7 +42994,7 @@
         "java": "build.crab.prolly.javaapi.VersionedMap.versionsPrefix",
         "ruby": "Prolly::VersionedMap#versions_prefix",
         "swift": "ProllyAPI.VersionedMap.versionsPrefix",
-        "wasm": "@trail/prolly-wasm.WasmVersionedMap.versionsPrefix"
+        "wasm": "@crabbuild/prolly-wasm.WasmVersionedMap.versionsPrefix"
       },
       "exclusions": {},
       "tests": [
@@ -44345,7 +44345,7 @@
         "java": "build.crab.prolly package namespace (prolly::chunking)",
         "ruby": "Prolly module namespace (prolly::chunking)",
         "swift": "Prolly/ProllyAPI module namespace (prolly::chunking)",
-        "wasm": "@trail/prolly-wasm export namespace (prolly::chunking)"
+        "wasm": "@crabbuild/prolly-wasm export namespace (prolly::chunking)"
       },
       "exclusions": {},
       "tests": [
@@ -44814,7 +44814,7 @@
         "java": "build.crab.prolly package namespace (prolly::remote_conformance)",
         "ruby": "Prolly module namespace (prolly::remote_conformance)",
         "swift": "Prolly/ProllyAPI module namespace (prolly::remote_conformance)",
-        "wasm": "@trail/prolly-wasm export namespace (prolly::remote_conformance)"
+        "wasm": "@crabbuild/prolly-wasm export namespace (prolly::remote_conformance)"
       },
       "exclusions": {},
       "tests": [
@@ -44881,7 +44881,7 @@
         "java": "build.crab.prolly package namespace (prolly::resolver)",
         "ruby": "Prolly module namespace (prolly::resolver)",
         "swift": "Prolly/ProllyAPI module namespace (prolly::resolver)",
-        "wasm": "@trail/prolly-wasm export namespace (prolly::resolver)"
+        "wasm": "@crabbuild/prolly-wasm export namespace (prolly::resolver)"
       },
       "exclusions": {},
       "tests": [

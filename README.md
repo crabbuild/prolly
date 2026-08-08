@@ -45,7 +45,7 @@ Breaking changes and release qualification are recorded in
 
 The browser app in
 [`3rd/prolly-tree-visualizer`](3rd/prolly-tree-visualizer/README.md) executes
-mutations against this repository's real `@trail/prolly-wasm` binding and
+mutations against this repository's real `@crabbuild/prolly-wasm` binding and
 renders the resulting content-addressed tree, lookup paths, structural diffs,
 and storage history.
 
