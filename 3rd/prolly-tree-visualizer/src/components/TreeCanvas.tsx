@@ -20,8 +20,8 @@ interface KeyLabelPart {
 }
 
 const KEY_PREVIEW_CHARACTERS = 34;
-const NODE_ID_PREFIX_CHARACTERS = 12;
-const NODE_ID_SUFFIX_CHARACTERS = 8;
+const NODE_ID_PREFIX_CHARACTERS = 16;
+const NODE_ID_SUFFIX_CHARACTERS = 12;
 
 export function compactNodeId(nodeId: string) {
   const visibleCharacters = NODE_ID_PREFIX_CHARACTERS + NODE_ID_SUFFIX_CHARACTERS;

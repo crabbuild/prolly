@@ -18,7 +18,7 @@ function leaf(keys: number[]): ProllyNode {
 describe('tree key labels', () => {
   it('compacts long node IDs while preserving distinguishing ends', () => {
     expect(compactNodeId('0058c97f1e48bcd2441721d6c63421d3f70093c3475e36ce4627780918f3e253'))
-      .toBe('0058c97f1e48…18f3e253');
+      .toBe('0058c97f1e48bcd2…780918f3e253');
     expect(compactNodeId('short-node-id')).toBe('short-node-id');
   });
 
