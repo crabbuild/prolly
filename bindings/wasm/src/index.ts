@@ -654,10 +654,15 @@ export type ProllyWasmModule = Omit<RawProllyWasmModule, "WasmProllyEngine"> & {
 };
 
 export async function loadProllyWasm(
-  modulePath = "../pkg/prolly_wasm.js",
+  modulePath?: string,
   wasmInput?: WebAssembly.Module | BufferSource,
 ): Promise<ProllyWasmModule> {
-  const module = (await import(modulePath)) as ProllyWasmModule;
+  // Keep the default import statically visible so browser bundlers include the
+  // generated JavaScript shim and its WebAssembly asset. Explicit alternate
+  // module paths remain runtime-resolved for tests and custom deployments.
+  const module = (modulePath
+    ? await import(/* @vite-ignore */ modulePath)
+    : await import("../pkg/prolly_wasm.js")) as ProllyWasmModule;
   if (wasmInput && "initSync" in module) {
     module.initSync({ module: wasmInput });
     return module;

@@ -39,6 +39,8 @@ try {
 test("wasm package declares browser memory-scope API", () => {
   const source = readFileSync(resolve(import.meta.dirname, "../src/index.ts"), "utf8");
   assert.match(source, /loadProllyWasm/);
+  assert.match(source, /await import\("\.\.\/pkg\/prolly_wasm\.js"\)/);
+  assert.doesNotMatch(source, /modulePath\s*=\s*"\.\.\/pkg\/prolly_wasm\.js"/);
   assert.match(source, /WasmEntryRecord/);
   assert.match(source, /WasmOptionalEntryRecord/);
   assert.match(source, /WasmProllyEngineInstance/);
