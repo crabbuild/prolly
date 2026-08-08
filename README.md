@@ -41,6 +41,14 @@ Native approximate nearest-neighbor indexing is documented in
 Breaking changes and release qualification are recorded in
 [`CHANGELOG.md`](CHANGELOG.md).
 
+## Interactive visualizer
+
+The browser app in
+[`3rd/prolly-tree-visualizer`](3rd/prolly-tree-visualizer/README.md) executes
+mutations against this repository's real `@trail/prolly-wasm` binding and
+renders the resulting content-addressed tree, lookup paths, structural diffs,
+and storage history.
+
 For application builders who want a Git-like repository layer on top of prolly
 trees, see the proposed [`prolly-vcs` design](docs/prolly-vcs-design.md). It
 keeps `prolly-map` focused on immutable ordered maps while outlining a separate
