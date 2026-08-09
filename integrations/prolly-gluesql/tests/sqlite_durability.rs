@@ -2,7 +2,7 @@
 
 use {
     gluesql_core::{data::Value, executor::Payload, prelude::Glue},
-    prolly_gluesql::{ProllyStorageConfig, SqliteProllyStorage},
+    prolly_gluesql::SqliteProllyStorage,
     tempfile::TempDir,
 };
 
@@ -101,12 +101,8 @@ async fn branches_remain_isolated_after_reopen() {
         glue.storage.create_branch("experiment").unwrap();
     }
 
-    let config = ProllyStorageConfig {
-        branch: "experiment".to_owned(),
-        ..ProllyStorageConfig::default()
-    };
     {
-        let storage = SqliteProllyStorage::open_sqlite_with_config(&path, config.clone()).unwrap();
+        let storage = SqliteProllyStorage::open_sqlite_with_branch(&path, "experiment").unwrap();
         let mut glue = Glue::new(storage);
         glue.execute("UPDATE settings SET value = 'experiment' WHERE id = 1;")
             .await
@@ -114,7 +110,7 @@ async fn branches_remain_isolated_after_reopen() {
     }
 
     let mut experiment =
-        Glue::new(SqliteProllyStorage::open_sqlite_with_config(&path, config).unwrap());
+        Glue::new(SqliteProllyStorage::open_sqlite_with_branch(&path, "experiment").unwrap());
     let mut main = Glue::new(SqliteProllyStorage::open_sqlite(&path).unwrap());
     let experiment_rows = experiment
         .execute("SELECT value FROM settings;")

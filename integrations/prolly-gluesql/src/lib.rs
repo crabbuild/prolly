@@ -10,8 +10,7 @@ mod storage;
 
 pub use error::{Error, Result};
 pub use storage::{
-    DatabaseVersion, Diff, FunctionChange, ProllyStorage, ProllyStorageConfig, RowChange,
-    SchemaChange,
+    Diff, FunctionChange, ProllyStorage, RowChange, SchemaChange, Version, VersionId,
 };
 
 #[cfg(feature = "sqlite")]
