@@ -14,6 +14,9 @@ pub use storage::{
     Version, VersionId,
 };
 
+#[cfg(feature = "redb")]
+pub use storage::RedbProllyStorage;
+
 #[cfg(feature = "sqlite")]
 pub use storage::SqliteProllyStorage;
 

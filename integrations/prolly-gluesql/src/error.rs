@@ -39,6 +39,11 @@ pub enum Error {
     #[error("merge materialization failed: {0}")]
     Merge(String),
 
+    /// A redb-backed storage engine could not be opened.
+    #[cfg(feature = "redb")]
+    #[error("redb store failed: {0}")]
+    Redb(#[from] prolly_store_redb::RedbStoreError),
+
     /// A SQLite-backed storage engine could not be opened.
     #[cfg(feature = "sqlite")]
     #[error("sqlite store failed: {0}")]

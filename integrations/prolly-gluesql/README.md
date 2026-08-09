@@ -21,8 +21,8 @@ logical diffs, and optimistic conflict detection for concurrent writers.
   publication.
 - Named branches, immutable version handles, historical reads, logical diffs,
   typed three-way merges, and compare-and-swap resets.
-- In-memory storage by default and durable SQLite storage behind the `sqlite`
-  feature.
+- In-memory storage by default, durable pure-Rust redb storage behind the
+  `redb` feature, and durable SQLite storage behind the `sqlite` feature.
 - An optional `prolly-sql` command-line client behind the `cli` feature.
 - A versioned record envelope that detects incompatible or corrupt data.
 
@@ -74,6 +74,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Enable `redb` for a process-durable, pure-Rust single-file database:
+
+```toml
+prolly-gluesql = { version = "0.1", features = ["redb"] }
+```
+
+```rust,no_run
+use prolly_gluesql::{Glue, RedbProllyStorage};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let storage = RedbProllyStorage::open_redb("database.prolly.redb")?;
+    let mut db = Glue::new(storage);
+    let payloads = db.execute("SELECT * FROM users;").await?;
+    println!("{payloads:#?}");
+    Ok(())
+}
+```
+
+Redb permits one writable database handle per file. For multiple GlueSQL
+connections, open one `prolly_store_redb::RedbStore`, wrap it in `Arc`, and
+pass clones to `RedbProllyStorage::new`. This preserves independent SQL
+transaction state while sharing redb's database handle. See the
+[`redb_durable`](examples/redb_durable.rs) example for the complete pattern.
+Applications using this shared-handle pattern should also add
+`prolly-store-redb = "0.5"` as a direct dependency.
+
 Any custom backend implementing both `prolly::Store` and
 `prolly::ManifestStore` can be passed to `ProllyStorage::new`.
 
@@ -88,6 +115,7 @@ cargo run --example concurrent_writers
 cargo run --example versions_and_branches
 cargo run --example merge_clean
 cargo run --example merge_conflicts
+cargo run --features redb --example redb_durable
 cargo run --features sqlite --example sqlite_durable
 ```
 
@@ -96,7 +124,8 @@ external service or input. They cover SQL execution, transactions, indexes,
 custom functions, shared custom stores, optimistic writer conflicts, typed
 diffs, historical reads, branch isolation, clean merges, every typed conflict
 category, constraint conflicts, CAS publication, and durable SQLite reopen
-behavior.
+behavior. The redb example additionally demonstrates sharing one backend
+between connections and reopening durable branch heads.
 
 ## Versions and branches
 
@@ -267,9 +296,9 @@ have different ownership and execution models.
 
 The integration runs GlueSQL's published storage conformance suite plus tests
 for rollback, branch isolation, historical reads, reset, typed merge conflicts,
-merge constraint validation, derived-state rebuilding, SQLite reopen,
-secondary-index durability, custom-function durability, and concurrent-writer
-conflicts:
+merge constraint validation, derived-state rebuilding, redb and SQLite reopen,
+secondary-index durability, custom-function durability, durable branch
+isolation, and concurrent-writer conflicts:
 
 ```sh
 cargo test --all-features --all-targets
