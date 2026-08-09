@@ -41,11 +41,12 @@ if [[ -n "${target}" ]]; then
   linker_var="CARGO_TARGET_${target_env}_LINKER"
   matrix_linker="$(printenv "${linker_var}" 2>/dev/null || true)"
   if [[ -n "${matrix_linker}" ]]; then
-    [[ -x "${matrix_linker}" ]] || {
+    matrix_linker_path="$(command -v "${matrix_linker}" 2>/dev/null || true)"
+    [[ -n "${matrix_linker_path}" && -x "${matrix_linker_path}" ]] || {
       echo "${linker_var} does not name an executable: ${matrix_linker}" >&2
       exit 69
     }
-    "${matrix_linker}" --version | sed -n '1p'
+    "${matrix_linker_path}" --version | sed -n '1p'
   fi
 fi
 
