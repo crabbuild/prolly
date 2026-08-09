@@ -53,6 +53,14 @@ pub(crate) fn all_schemas_prefix() -> Vec<u8> {
     kind_prefix(KIND_SCHEMA)
 }
 
+pub(crate) fn all_rows_prefix() -> Vec<u8> {
+    kind_prefix(KIND_ROW)
+}
+
+pub(crate) fn all_sequences_prefix() -> Vec<u8> {
+    kind_prefix(KIND_SEQUENCE)
+}
+
 pub(crate) fn schema_key(table_name: &str) -> Vec<u8> {
     let mut key = all_schemas_prefix();
     push_segment(&mut key, table_name.as_bytes());
@@ -130,6 +138,10 @@ pub(crate) fn metadata_key(table_name: &str) -> Vec<u8> {
 
 pub(crate) fn functions_prefix() -> Vec<u8> {
     kind_prefix(KIND_FUNCTION)
+}
+
+pub(crate) fn all_indexes_prefix() -> Vec<u8> {
+    kind_prefix(KIND_INDEX)
 }
 
 pub(crate) fn function_key(function_name: &str) -> Vec<u8> {

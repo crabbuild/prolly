@@ -20,7 +20,7 @@ logical diffs, and optimistic conflict detection for concurrent writers.
 - Explicit transactions and GlueSQL autocommit with atomic catalog-and-data
   publication.
 - Named branches, immutable version handles, historical reads, logical diffs,
-  and compare-and-swap resets.
+  typed three-way merges, and compare-and-swap resets.
 - In-memory storage by default and durable SQLite storage behind the `sqlite`
   feature.
 - An optional `prolly-sql` command-line client behind the `cli` feature.
@@ -77,6 +77,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Any custom backend implementing both `prolly::Store` and
 `prolly::ManifestStore` can be passed to `ProllyStorage::new`.
 
+## Runnable examples
+
+The [`examples`](examples/README.md) directory contains complete programs. Run
+them from this crate directory:
+
+```sh
+cargo run --example basic_sql
+cargo run --example concurrent_writers
+cargo run --example versions_and_branches
+cargo run --example merge_clean
+cargo run --example merge_conflicts
+cargo run --features sqlite --example sqlite_durable
+```
+
+Each example creates its own state, checks its expected results, and needs no
+external service or input. They cover SQL execution, transactions, indexes,
+custom functions, shared custom stores, optimistic writer conflicts, typed
+diffs, historical reads, branch isolation, clean merges, every typed conflict
+category, constraint conflicts, CAS publication, and durable SQLite reopen
+behavior.
+
 ## Versions and branches
 
 `head` returns an immutable handle to the selected branch state. A branch is a
@@ -125,6 +146,53 @@ it does not expose the underlying Prolly tree and is not itself a durable pin.
 Keep important states reachable through a branch before running store garbage
 collection. The adapter intentionally does not invent SQL syntax for branch
 operations.
+
+## Merging branches
+
+`merge` performs a typed three-way merge. The selected branch is the current
+side, `incoming` is the version being merged, and `base` is their common
+ancestor. The base is explicit because `Version` is a database snapshot rather
+than a commit with parent history.
+
+```rust,ignore
+use prolly_gluesql::{MergeConflict, MergeResult};
+
+let base = db.storage.head()?.unwrap();
+db.storage.create_branch("feature")?;
+
+// Make changes on main and feature, then retain the feature head.
+db.storage.checkout_branch("feature")?;
+db.execute("UPDATE users SET name = 'Feature' WHERE id = 1;")
+    .await?;
+let incoming = db.storage.head()?.unwrap();
+db.storage.checkout_branch("main")?;
+
+match db.storage.merge(&base, &incoming).await? {
+    MergeResult::Applied { version, changes } => {
+        println!("published {} logical changes at {:?}", changes.len(), version.id());
+    }
+    MergeResult::Conflicted { conflicts } => {
+        for conflict in conflicts {
+            match conflict {
+                MergeConflict::Row { table, key, base, current, incoming } => {
+                    // All values are decoded GlueSQL records; no raw Prolly bytes leak.
+                }
+                MergeConflict::Schema { .. }
+                | MergeConflict::Function { .. }
+                | MergeConflict::Constraint { .. } => { /* present for resolution */ }
+            }
+        }
+    }
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Clean changes are combined with Prolly's structural prefix merge. The adapter
+then validates row shape, types, nullability, primary keys, unique columns, and
+foreign keys. Covering indexes, generated-key sequences, and metadata are
+rebuilt internally before the selected branch is moved with compare-and-swap.
+Conflicts and validation failures leave the branch unchanged; a concurrent
+head update returns a serialization conflict.
 
 ## Transaction and concurrency model
 
@@ -186,9 +254,9 @@ before upgrading between pre-1.0 releases.
 SQL parsing, execution semantics, and supported SQL syntax come from GlueSQL
 0.19. This adapter provides versioned storage rather than a Git-like commit
 graph: it has branch heads and immutable roots, but no author metadata,
-reflogs, semantic SQL merge, or automatic history retention. Those can be
-layered above `Version`, typed diffs, and durable branches when an application
-needs them.
+reflogs, automatic common-ancestor discovery, or automatic history retention.
+Those can be layered above `Version`, typed diffs, typed merges, and durable
+branches when an application needs them.
 
 The adapter currently targets synchronous Prolly stores. Remote
 `AsyncStore`/`AsyncManifestStore` backends would require a separate async
@@ -198,7 +266,8 @@ have different ownership and execution models.
 ## Verification
 
 The integration runs GlueSQL's published storage conformance suite plus tests
-for rollback, branch isolation, historical reads, reset, SQLite reopen,
+for rollback, branch isolation, historical reads, reset, typed merge conflicts,
+merge constraint validation, derived-state rebuilding, SQLite reopen,
 secondary-index durability, custom-function durability, and concurrent-writer
 conflicts:
 
