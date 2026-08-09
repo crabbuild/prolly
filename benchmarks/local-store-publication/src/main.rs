@@ -59,10 +59,21 @@ fn run() -> Result<(), String> {
     fs::create_dir_all(&work_root)
         .map_err(|error| format!("failed to create {}: {error}", work_root.display()))?;
 
+    let mut pair_sequence = 0usize;
     for run in 1..=config.runs {
-        for &adapter in &config.adapters {
-            for &api in &config.apis {
-                for &pattern in &config.patterns {
+        for &api in &config.apis {
+            for &pattern in &config.patterns {
+                let mut adapters = config.adapters.clone();
+                if !adapters.is_empty() {
+                    // Flip the starting adapter across repetitions as well as
+                    // adjacent cells. An even-sized cell matrix would otherwise
+                    // give each specific cell the same execution order in every
+                    // run.
+                    let rotation = pair_sequence.saturating_add(run - 1) % adapters.len();
+                    adapters.rotate_left(rotation);
+                }
+                pair_sequence = pair_sequence.saturating_add(1);
+                for adapter in adapters {
                     let spec = CellSpec {
                         adapter,
                         records: config.records,
