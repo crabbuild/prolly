@@ -1219,20 +1219,11 @@ where
                     source_version: source_version.clone(),
                     reason: "canonical descriptor is missing".to_string(),
                 })?;
-            let runtime = self
-                .runtime_definition_for_descriptor(&descriptor)?
-                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
-                    name: descriptor.name.clone(),
-                    generation: descriptor.generation,
-                })?;
-            let runtime_descriptor = IndexDescriptor::from_runtime(&self.source_map_id, &runtime)?;
-            if runtime_descriptor.fingerprint != descriptor.fingerprint {
-                return Err(Error::IndexDefinitionMismatch {
-                    name: descriptor.name.clone(),
-                    persisted: descriptor.fingerprint.clone(),
-                    runtime: runtime_descriptor.fingerprint,
-                });
-            }
+            let max_projection_bytes = match descriptor.projection {
+                IndexProjection::KeysOnly => 0,
+                IndexProjection::Include => descriptor.limits.max_projection_bytes,
+                IndexProjection::All => descriptor.limits.max_all_value_bytes,
+            };
             let index = MapSnapshot::from_tree(self.prolly, selected.tree.clone(), true)?;
             indexes.insert(
                 selected.name.clone(),
@@ -1243,11 +1234,7 @@ where
                     selected,
                     source_tree: source.tree().clone(),
                     index,
-                    max_projection_bytes: match runtime.projection() {
-                        IndexProjection::KeysOnly => 0,
-                        IndexProjection::Include => runtime.limits().max_projection_bytes,
-                        IndexProjection::All => runtime.limits().max_all_value_bytes,
-                    },
+                    max_projection_bytes,
                 },
             );
         }

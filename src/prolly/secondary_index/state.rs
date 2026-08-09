@@ -15,6 +15,10 @@ use super::definition::{IndexProjection, SecondaryIndex};
 /// never keeps multiple format readers alive.
 pub const INDEXED_COLLECTION_FORMAT: u32 = 1;
 
+/// Canonical immutable record format used to resolve one indexed snapshot
+/// without loading the mutable collection coordinator's retained history.
+pub const INDEXED_SNAPSHOT_MANIFEST_FORMAT: u32 = 1;
+
 const ROOT_PREFIX: &[u8] = b"\0prolly/indexed-collection/";
 const ROOT_SUFFIX: &[u8] = b"/state";
 const MAX_STATE_VALUE_BYTES: usize = 16 * 1024 * 1024;
@@ -100,6 +104,50 @@ pub fn indexed_collection_root_name(source_map_id: &[u8]) -> Result<Vec<u8>, Err
     name.extend_from_slice(&hex(source_map_id));
     name.extend_from_slice(ROOT_SUFFIX);
     Ok(name)
+}
+
+/// Decode a canonical indexed-collection state-root name. Ordinary named roots
+/// return `None`; malformed names inside the reserved namespace fail closed.
+pub fn indexed_collection_source_map_id(name: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+    if !name.starts_with(ROOT_PREFIX) {
+        return Ok(None);
+    }
+    let encoded = name
+        .strip_prefix(ROOT_PREFIX)
+        .and_then(|rest| rest.strip_suffix(ROOT_SUFFIX));
+    let Some(encoded) = encoded else {
+        return Err(Error::InvalidVersionedMap(
+            "malformed indexed collection root name".to_string(),
+        ));
+    };
+    if encoded.is_empty() || encoded.len() % 2 != 0 {
+        return Err(Error::InvalidVersionedMap(
+            "indexed collection root contains malformed source-map hex".to_string(),
+        ));
+    }
+    let mut source_map_id = Vec::with_capacity(encoded.len() / 2);
+    for pair in encoded.chunks_exact(2) {
+        let high = decode_hex_nibble(pair[0]).ok_or_else(|| {
+            Error::InvalidVersionedMap(
+                "indexed collection root contains malformed source-map hex".to_string(),
+            )
+        })?;
+        let low = decode_hex_nibble(pair[1]).ok_or_else(|| {
+            Error::InvalidVersionedMap(
+                "indexed collection root contains malformed source-map hex".to_string(),
+            )
+        })?;
+        source_map_id.push((high << 4) | low);
+    }
+    Ok(Some(source_map_id))
+}
+
+fn decode_hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        _ => None,
+    }
 }
 
 /// Semantic collection limits that participate in persisted state.
@@ -272,6 +320,120 @@ pub struct IndexedSnapshotRecord {
     pub parent: Option<IndexedSnapshotId>,
     pub source: SourceSnapshotRef,
     pub indexes: Vec<IndexSnapshotRef>,
+}
+
+/// Self-contained immutable locator for one source/index snapshot.
+///
+/// The manifest contains exactly the descriptors referenced by `record` and
+/// can therefore be stored under an application-owned version key. It is
+/// deliberately independent of the mutable indexed-collection state so an
+/// application can keep that coordinator bounded while retaining deep,
+/// content-addressed history elsewhere.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IndexedSnapshotManifest {
+    pub format_version: u32,
+    pub snapshot_id: IndexedSnapshotId,
+    pub record: IndexedSnapshotRecord,
+    pub descriptors: Vec<IndexDescriptor>,
+}
+
+impl IndexedSnapshotManifest {
+    /// Construct the exact manifest for the current state head.
+    pub fn from_state_head(state: &IndexedCollectionState) -> Result<Self, Error> {
+        state.validate_closure()?;
+        let record = state.head_snapshot()?.clone();
+        let mut descriptors = record
+            .indexes
+            .iter()
+            .map(|index| {
+                state
+                    .descriptors
+                    .get(&(index.name.clone(), index.descriptor_fingerprint.clone()))
+                    .cloned()
+                    .ok_or_else(|| {
+                        Error::InvalidVersionedMap(
+                            "indexed snapshot manifest descriptor is absent".to_string(),
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        descriptors.sort_by(|left, right| {
+            (&left.name, left.fingerprint.as_bytes())
+                .cmp(&(&right.name, right.fingerprint.as_bytes()))
+        });
+        let manifest = Self {
+            format_version: INDEXED_SNAPSHOT_MANIFEST_FORMAT,
+            snapshot_id: state.head.clone(),
+            record,
+            descriptors,
+        };
+        manifest.validate()?;
+        Ok(manifest)
+    }
+
+    /// Validate identity, ownership, ordering, and exact descriptor closure.
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.format_version != INDEXED_SNAPSHOT_MANIFEST_FORMAT {
+            return Err(Error::IndexFormatUnsupported);
+        }
+        self.record.validate()?;
+        if self.record.id()? != self.snapshot_id {
+            return Err(Error::InvalidVersionedMap(
+                "indexed snapshot manifest identity mismatch".to_string(),
+            ));
+        }
+        let expected = self
+            .record
+            .indexes
+            .iter()
+            .map(|index| (index.name.as_slice(), &index.descriptor_fingerprint))
+            .collect::<Vec<_>>();
+        let mut actual = Vec::with_capacity(self.descriptors.len());
+        let mut previous: Option<(&[u8], &[u8])> = None;
+        for descriptor in &self.descriptors {
+            descriptor.validate()?;
+            if descriptor.source_map_id != self.record.source_map_id {
+                return Err(Error::InvalidVersionedMap(
+                    "indexed snapshot manifest descriptor ownership mismatch".to_string(),
+                ));
+            }
+            let identity = (
+                descriptor.name.as_slice(),
+                descriptor.fingerprint.as_bytes(),
+            );
+            if previous.is_some_and(|previous| previous >= identity) {
+                return Err(Error::InvalidVersionedMap(
+                    "indexed snapshot manifest descriptors are not strictly ordered".to_string(),
+                ));
+            }
+            previous = Some(identity);
+            actual.push((descriptor.name.as_slice(), &descriptor.fingerprint));
+        }
+        if actual != expected {
+            return Err(Error::InvalidVersionedMap(
+                "indexed snapshot manifest descriptor closure mismatch".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Encode a canonical durable manifest.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        self.validate()?;
+        encode(self)
+    }
+
+    /// Decode and require the exact canonical byte representation.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let manifest: Self = decode(bytes)?;
+        manifest.validate()?;
+        if manifest.to_bytes()? != bytes {
+            return Err(Error::Deserialize(
+                "indexed snapshot manifest encoding is not canonical".to_string(),
+            ));
+        }
+        Ok(manifest)
+    }
 }
 
 impl IndexedSnapshotRecord {
@@ -458,6 +620,12 @@ impl IndexedCollectionState {
     /// every explicitly pinned snapshot.
     pub(crate) fn enforce_policy_limits(&mut self) -> Result<(), Error> {
         self.policy.validate()?;
+        // Do not discard non-head branches merely because a caller restored
+        // an older snapshot. They remain addressable history until the
+        // configured bound is actually exceeded or explicit retention runs.
+        if self.snapshots.len() <= self.policy.max_retained_snapshots {
+            return self.validate_closure();
+        }
         let mut keep = self
             .pins
             .values()
@@ -1172,6 +1340,15 @@ mod tests {
             b"\0prolly/indexed-collection/0061/state"
         );
         assert!(indexed_collection_root_name(b"").is_err());
+        assert_eq!(
+            indexed_collection_source_map_id(b"\0prolly/indexed-collection/0061/state").unwrap(),
+            Some(b"\0a".to_vec())
+        );
+        assert_eq!(
+            indexed_collection_source_map_id(b"maps/versioned/example").unwrap(),
+            None
+        );
+        assert!(indexed_collection_source_map_id(b"\0prolly/indexed-collection/0A/state").is_err());
     }
 
     #[test]
@@ -1185,5 +1362,48 @@ mod tests {
             entry_count: 0,
         });
         assert!(state.validate_closure().is_err());
+    }
+
+    #[test]
+    fn snapshot_manifest_is_canonical_and_self_contained() {
+        let mut state = empty_state();
+        let definition =
+            SecondaryIndex::non_unique("team", 1, "team-v1", |_, _| Ok(vec![b"blue".to_vec()]))
+                .unwrap();
+        let descriptor = IndexDescriptor::from_runtime(b"users", &definition).unwrap();
+        let mut record = state.head_snapshot().unwrap().clone();
+        record.indexes.push(IndexSnapshotRef {
+            name: descriptor.name.clone(),
+            descriptor_fingerprint: descriptor.fingerprint.clone(),
+            tree: Tree::default(),
+            entry_count: 0,
+        });
+        let id = record.id().unwrap();
+        state.snapshots.clear();
+        state.snapshots.insert(id.clone(), record);
+        state.head = id;
+        state
+            .active
+            .insert(descriptor.name.clone(), descriptor.fingerprint.clone());
+        state.descriptors.insert(
+            (descriptor.name.clone(), descriptor.fingerprint.clone()),
+            descriptor,
+        );
+
+        let manifest = IndexedSnapshotManifest::from_state_head(&state).unwrap();
+        let bytes = manifest.to_bytes().unwrap();
+        assert_eq!(
+            IndexedSnapshotManifest::from_bytes(&bytes).unwrap(),
+            manifest
+        );
+        assert!(IndexedSnapshotManifest::from_bytes(&[bytes, vec![0]].concat()).is_err());
+
+        let mut tampered = manifest.clone();
+        tampered.snapshot_id = IndexedSnapshotId(Cid::from_bytes(b"tampered"));
+        assert!(tampered.validate().is_err());
+
+        let mut tampered = manifest;
+        tampered.descriptors.clear();
+        assert!(tampered.validate().is_err());
     }
 }

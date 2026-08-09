@@ -305,7 +305,8 @@ pub use prolly::format::{
     TreeFormat,
 };
 pub use prolly::gc::{
-    BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep,
+    BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobReachabilityLimits, GcPlan, GcReachability,
+    GcSweep, GcTraversalLimits,
 };
 pub use prolly::key::{
     debug_key, decode_segments, encode_segment, encode_segment_prefix, i128_key, i64_key,
@@ -314,7 +315,7 @@ pub use prolly::key::{
 pub use prolly::manifest::{AsyncManifestStore, AsyncManifestStoreScan};
 pub use prolly::manifest::{
     ManifestStore, ManifestStoreScan, ManifestUpdate, NamedRoot, NamedRootManifest,
-    NamedRootRetention, NamedRootSelection, NamedRootUpdate, RootManifest,
+    NamedRootManifestPage, NamedRootRetention, NamedRootSelection, NamedRootUpdate, RootManifest,
 };
 pub use prolly::node::{Node, NodeBuilder};
 pub use prolly::parallel::ParallelConfig;
@@ -372,8 +373,8 @@ pub use prolly::read::{
 };
 pub use prolly::remote::{
     conformance as remote_conformance, RemoteAdapterError, RemoteBatchOp, RemoteManifestUpdate,
-    RemoteNamedRoot, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite, RemoteStoreBackend,
-    RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
+    RemoteNamedRoot, RemoteNamedRootPage, RemoteProllyStore, RemoteRootCondition, RemoteRootWrite,
+    RemoteStoreBackend, RemoteStoreConfig, RemoteTransactionConflict, RemoteTransactionUpdate,
 };
 #[cfg(feature = "tokio")]
 pub use prolly::remote::{
@@ -381,24 +382,25 @@ pub use prolly::remote::{
 };
 pub use prolly::secondary_index::{
     decode_physical_index_key, decode_physical_index_key_ref, indexed_collection_root_name,
-    physical_index_key, term_bounds_exact, term_bounds_prefix, term_bounds_range,
-    ActiveIndexHealth, AsyncIndexedMap, AsyncIndexedSnapshot, AsyncIndexedSourceView,
-    AsyncIndexedStore, AsyncSecondaryIndexQuery, AsyncSecondaryIndexSnapshot,
+    indexed_collection_source_map_id, physical_index_key, term_bounds_exact, term_bounds_prefix,
+    term_bounds_range, ActiveIndexHealth, AsyncIndexedMap, AsyncIndexedSnapshot,
+    AsyncIndexedSourceView, AsyncIndexedStore, AsyncPreparedIndexedMutation,
+    AsyncPreparedIndexedUpdate, AsyncSecondaryIndexQuery, AsyncSecondaryIndexSnapshot,
     CollectionIndexPolicy, DecodedPhysicalIndexKey, DecodedPhysicalIndexKeyRef, IndexBuildResult,
     IndexDescriptor, IndexProjection, IndexSemanticLimits, IndexSnapshotRef, IndexValue,
     IndexValueRef, IndexVerification, IndexedCollectionState, IndexedMap, IndexedMapEditor,
     IndexedMapHealth, IndexedMapMetricsSnapshot, IndexedMapUpdate, IndexedRetentionResult,
     IndexedSnapshot, IndexedSnapshotBundle, IndexedSnapshotBundleIndex,
     IndexedSnapshotBundleSummary, IndexedSnapshotBundleVerification, IndexedSnapshotId,
-    IndexedSnapshotRecord, IndexedSourceRecord, IndexedSourceRecordRef, IndexedStore,
-    IndexedVersion, MaintenanceBudget, MutationBudget, ProjectedIndexEntry, QueryBudget,
-    SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor, SecondaryIndexDirection,
-    SecondaryIndexEntry, SecondaryIndexEntryRef, SecondaryIndexError, SecondaryIndexExtractor,
-    SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexMatchRef, SecondaryIndexPage,
-    SecondaryIndexQuery, SecondaryIndexRegistry, SecondaryIndexSnapshot, SnapshotPin,
-    SnapshotPinGuard, SourceSnapshotRef, StreamingSecondaryIndexExtractor, TermBounds,
+    IndexedSnapshotManifest, IndexedSnapshotRecord, IndexedSourceRecord, IndexedSourceRecordRef,
+    IndexedStore, IndexedVersion, MaintenanceBudget, MutationBudget, ProjectedIndexEntry,
+    QueryBudget, SecondaryIndex, SecondaryIndexBuilder, SecondaryIndexCursor,
+    SecondaryIndexDirection, SecondaryIndexEntry, SecondaryIndexEntryRef, SecondaryIndexError,
+    SecondaryIndexExtractor, SecondaryIndexLimits, SecondaryIndexMatch, SecondaryIndexMatchRef,
+    SecondaryIndexPage, SecondaryIndexQuery, SecondaryIndexRegistry, SecondaryIndexSnapshot,
+    SnapshotPin, SnapshotPinGuard, SourceSnapshotRef, StreamingSecondaryIndexExtractor, TermBounds,
     TransferBudget, INDEXED_COLLECTION_FORMAT, INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION,
-    INDEX_PHYSICAL_LAYOUT_VERSION,
+    INDEXED_SNAPSHOT_MANIFEST_FORMAT, INDEX_PHYSICAL_LAYOUT_VERSION,
 };
 pub use prolly::snapshot::{
     snapshot_id_from_name, snapshot_root_name, SnapshotManager, SnapshotNamespace, SnapshotRoot,
@@ -415,7 +417,7 @@ pub use prolly::store::{
 pub use prolly::store::{TokioBlockingStore, TokioBlockingStoreError};
 pub use prolly::sync::{
     MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode, SnapshotBundleSummary,
-    SnapshotBundleVerification, SNAPSHOT_BUNDLE_FORMAT_VERSION,
+    SnapshotBundleVerification, SnapshotExportLimits, SNAPSHOT_BUNDLE_FORMAT_VERSION,
 };
 pub use prolly::tombstone::{
     is_tombstone_value, tombstone_compaction, tombstone_upsert, Tombstone,
@@ -433,19 +435,23 @@ pub use prolly::value::{
     decode_cbor, decode_json, encode_cbor, encode_json, CborCodec, JsonCodec, ValueCodec,
     VersionedCborCodec, VersionedJsonCodec, VersionedValue,
 };
-pub use prolly::versioned_map::{AsyncMapChangeSubscription, AsyncMapSnapshot, AsyncVersionedMap};
+pub use prolly::versioned_map::{
+    AsyncMapChangeSubscription, AsyncMapSnapshot, AsyncVersionedMap, AsyncVersionedMapsTransaction,
+};
 pub use prolly::versioned_map::{
     BytesKeyCodec, KeyCodec, MapBackupVersion, MapCatalogVerification, MapChangeEvent,
     MapChangeSubscription, MapComparison, MapMerge, MapReverseIter, MapSnapshot, MapVersion,
-    MapVersionId, ProofAuthentication, StringKeyCodec, TypedMigrationResult, TypedVersionedMap,
-    VersionPruneResult, VersionedMap, VersionedMapBackup, VersionedMapBatchResult,
-    VersionedMapEditor, VersionedMapUpdate, VersionedMapsTransaction,
+    MapVersionCursor, MapVersionId, MapVersionPage, ProofAuthentication, StringKeyCodec,
+    TypedMigrationResult, TypedVersionedMap, VersionPruneResult, VersionedMap, VersionedMapBackup,
+    VersionedMapBatchResult, VersionedMapEditor, VersionedMapUpdate, VersionedMapsTransaction,
     DEFAULT_VERSIONED_MAP_RETRIES, VERSIONED_MAP_ROOT_PREFIX,
 };
 pub use prolly::write::WriteStats;
 pub use prolly::write_session::{PendingValue, Savepoint, WriteSession};
 pub use prolly::AsyncProlly;
-pub use prolly::{ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyMetricsSnapshot};
+pub use prolly::{
+    ChangedSpan, ChangedSpanHint, KeyValue, Prolly, ProllyCacheUsage, ProllyMetricsSnapshot,
+};
 
 // Re-export constants
 pub use prolly::encoding::{

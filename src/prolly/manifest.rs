@@ -182,6 +182,15 @@ pub struct NamedRootManifest {
     pub manifest: RootManifest,
 }
 
+/// One lexicographically ordered, bounded page of named root manifests.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NamedRootManifestPage {
+    /// Roots whose raw names start with the requested prefix.
+    pub roots: Vec<NamedRootManifest>,
+    /// Last raw root name emitted when another matching root exists.
+    pub next_after: Option<Vec<u8>>,
+}
+
 impl NamedRootManifest {
     /// Create a named manifest entry.
     pub fn new(name: Vec<u8>, manifest: RootManifest) -> Self {
@@ -487,6 +496,36 @@ pub trait ManifestStore: Send + Sync {
 pub trait ManifestStoreScan: ManifestStore {
     /// List all durable named root manifests.
     fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error>;
+
+    /// List one bounded raw-name page under `prefix`, strictly after `after`.
+    ///
+    /// Backends should override this method with a native bounded range query.
+    /// The default preserves compatibility but may materialize the full list.
+    fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        if limit == 0 {
+            return Ok(NamedRootManifestPage::default());
+        }
+        let mut roots = self
+            .list_roots()?
+            .into_iter()
+            .filter(|root| {
+                root.name.starts_with(prefix)
+                    && after.is_none_or(|after| root.name.as_slice() > after)
+            })
+            .take(limit.saturating_add(1))
+            .collect::<Vec<_>>();
+        let has_more = roots.len() > limit;
+        if has_more {
+            roots.pop();
+        }
+        let next_after = has_more.then(|| roots.last().expect("nonzero page limit").name.clone());
+        Ok(NamedRootManifestPage { roots, next_after })
+    }
 }
 
 /// Async storage for named root manifests.
@@ -502,6 +541,19 @@ pub trait AsyncManifestStore {
 
     /// Load a named root manifest.
     async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error>;
+
+    /// Load root manifests in caller order. Backends may override this with a
+    /// native batch read; the default preserves compatibility.
+    async fn get_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<RootManifest>>, Self::Error> {
+        let mut roots = Vec::with_capacity(names.len());
+        for name in names {
+            roots.push(self.get_root(name).await?);
+        }
+        Ok(roots)
+    }
 
     /// Unconditionally insert or replace a named root manifest.
     async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error>;
@@ -530,6 +582,37 @@ pub trait AsyncManifestStore {
 pub trait AsyncManifestStoreScan: AsyncManifestStore {
     /// List all durable named root manifests.
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error>;
+
+    /// List one bounded raw-name page under `prefix`, strictly after `after`.
+    ///
+    /// Backends should override this method with a native bounded range query.
+    /// The default preserves compatibility but may materialize the full list.
+    async fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        if limit == 0 {
+            return Ok(NamedRootManifestPage::default());
+        }
+        let mut roots = self
+            .list_roots()
+            .await?
+            .into_iter()
+            .filter(|root| {
+                root.name.starts_with(prefix)
+                    && after.is_none_or(|after| root.name.as_slice() > after)
+            })
+            .take(limit.saturating_add(1))
+            .collect::<Vec<_>>();
+        let has_more = roots.len() > limit;
+        if has_more {
+            roots.pop();
+        }
+        let next_after = has_more.then(|| roots.last().expect("nonzero page limit").name.clone());
+        Ok(NamedRootManifestPage { roots, next_after })
+    }
 }
 
 impl<T: ManifestStore> ManifestStore for Arc<T> {
@@ -561,12 +644,28 @@ impl<T: ManifestStoreScan> ManifestStoreScan for Arc<T> {
     fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         (**self).list_roots()
     }
+
+    fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        (**self).list_roots_page(prefix, after, limit)
+    }
 }
 impl<T: AsyncManifestStore> AsyncManifestStore for Arc<T> {
     type Error = T::Error;
 
     async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
         (**self).get_root(name).await
+    }
+
+    async fn get_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<RootManifest>>, Self::Error> {
+        (**self).get_roots_ordered(names).await
     }
 
     async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
@@ -589,6 +688,15 @@ impl<T: AsyncManifestStore> AsyncManifestStore for Arc<T> {
 impl<T: AsyncManifestStoreScan> AsyncManifestStoreScan for Arc<T> {
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         (**self).list_roots().await
+    }
+
+    async fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        (**self).list_roots_page(prefix, after, limit).await
     }
 }
 

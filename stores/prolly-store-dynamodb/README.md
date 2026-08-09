@@ -94,6 +94,13 @@ the namespace rather than the number of node items in the primary table.
 Override the companion name with `with_root_table_name` when table naming or
 IAM policy requires it.
 
+Initialization is safe under concurrent provisioners. After either creating a
+table or observing `ResourceInUseException`, the adapter waits for the winning
+table to become ACTIVE and validates that final table description. A concurrent
+creator cannot make an incompatible primary or roots key schema pass
+initialization. Call `validate_initialized_schema` instead when the runtime
+identity must remain read-only to the control plane.
+
 Version 0.4 is a hard schema cutover. It does not read or migrate root entries
 written by 0.3 or earlier. Export or republish required named roots into the
 0.4 root table before switching production traffic.
@@ -249,9 +256,20 @@ async fn run(backend: DynamoDbBackend) -> Result<(), Box<dyn std::error::Error>>
   enumeration and namespace cleanup. Root operations never scan the primary
   table.
 - Each root is one item in the companion table. Ordinary root updates use one
-  conditional write, while multi-root commits participate directly in the
-  caller's `TransactWriteItems` transaction.
-- Individual serialized nodes must fit DynamoDB item limits.
+  conditional write. Strict transactions default to verified immutable-node
+  prepublication followed by one conditioned roots-only `TransactWriteItems`;
+  conflicts can leave unreachable nodes for retention-aware GC, but can never
+  expose a partial tree. `AtomicNodesAndRoots` remains an explicit small-write
+  compatibility mode. Inspect `transaction_capabilities()` before opening a
+  shared namespace.
+- Use `dynamodb_safe_config()` for byte-measured trees whose serialized nodes
+  stay below the adapter's tested safety ceiling. Oversized logical values must
+  use `DynamoDbBlobStore`, which publishes content-addressed chunks before a
+  visibility manifest and verifies the complete content on every read.
+- Ambiguous root transactions are retried with a deterministic DynamoDB client
+  request token. If reconciliation remains ambiguous, the returned error
+  includes that token for operator investigation; it is never treated as an
+  ordinary retryable logical failure.
 - Use `with_key_prefix` for tenant or test isolation inside a shared table.
 - `clear_namespace` scans primary-table items under the prefix and queries the
   matching root registry partition before deleting both. Use it for tests, not
@@ -268,6 +286,7 @@ export PROLLY_STORE_DYNAMODB_ENDPOINT=http://127.0.0.1:8000
 export PROLLY_STORE_DYNAMODB_TABLE=prolly_store_example
 export AWS_REGION=us-west-2
 cargo run --manifest-path stores/prolly-store-dynamodb/Cargo.toml --example basic_usage
+cargo run --manifest-path stores/prolly-store-dynamodb/Cargo.toml --example versioned_map
 ```
 
 The example supports both DynamoDB Local and AWS DynamoDB. With

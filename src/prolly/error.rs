@@ -287,6 +287,12 @@ pub enum Error {
     MissingNamedRoots { names: Vec<Vec<u8>> },
     /// A portable snapshot bundle is malformed or not self-contained.
     InvalidSnapshotBundle(String),
+    /// Portable snapshot export exceeded an explicit caller resource limit.
+    SnapshotExportLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+        actual: usize,
+    },
     /// The configured store does not support strict atomic transactions.
     UnsupportedTransactions { store: &'static str },
     /// A named root from an obsolete secondary-index architecture was found.
@@ -499,6 +505,14 @@ impl std::fmt::Display for Error {
             Error::InvalidSnapshotBundle(message) => {
                 write!(f, "invalid snapshot bundle: {message}")
             }
+            Error::SnapshotExportLimitExceeded {
+                resource,
+                limit,
+                actual,
+            } => write!(
+                f,
+                "snapshot export exceeded {resource} limit: limit={limit}, actual={actual}"
+            ),
             Error::UnsupportedTransactions { store } => {
                 write!(f, "store does not support strict transactions: {store}")
             }
@@ -616,4 +630,11 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Store(error) => Some(error.as_ref()),
+            _ => None,
+        }
+    }
+}

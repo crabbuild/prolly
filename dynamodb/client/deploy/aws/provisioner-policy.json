@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateAndDescribeExactTables",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/NODE_TABLE",
+        "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/ROOT_TABLE"
+      ]
+    }
+  ]
+}

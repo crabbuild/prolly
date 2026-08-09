@@ -12,6 +12,29 @@ pub const SNAPSHOT_BUNDLE_FORMAT_VERSION: u32 = 1;
 
 const SNAPSHOT_BUNDLE_BYTES_VERSION: u32 = SNAPSHOT_BUNDLE_FORMAT_VERSION;
 
+/// Hard resource limits for exporting one portable tree snapshot.
+///
+/// Both limits must be nonzero. Export stops before retaining data beyond
+/// either limit, so callers can safely derive these values from an operational
+/// memory budget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SnapshotExportLimits {
+    /// Maximum number of unique reachable nodes in the exported tree.
+    pub max_nodes: usize,
+    /// Maximum total bytes of canonical serialized node payloads.
+    pub max_bytes: usize,
+}
+
+impl SnapshotExportLimits {
+    /// Construct explicit export limits.
+    pub const fn new(max_nodes: usize, max_bytes: usize) -> Self {
+        Self {
+            max_nodes,
+            max_bytes,
+        }
+    }
+}
+
 /// Dry-run plan for making a destination store able to read one source tree.
 ///
 /// `required_cids` are all node CIDs reachable from the tree root. `missing_cids`
