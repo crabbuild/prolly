@@ -24,38 +24,36 @@ use {
         },
     },
     prolly::{prefix_range, Config, ManifestStore, Mutation, Prolly, Store, Tree},
-    serde::{Deserialize, Serialize},
+    serde::{de::DeserializeOwned, Deserialize, Serialize},
     std::{
         cmp::Ordering,
         collections::{BTreeMap, HashMap},
     },
 };
 
-/// Configuration for a logical Prolly-backed SQL database.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProllyStorageConfig {
-    /// Branch selected when the storage is opened.
-    pub branch: String,
-    /// Prolly tree chunking and encoding configuration.
-    pub tree: Config,
+/// An immutable database state returned by versioning APIs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Version {
+    branch: String,
+    id: Option<VersionId>,
+    tree: Tree,
 }
 
-impl Default for ProllyStorageConfig {
-    fn default() -> Self {
-        Self {
-            branch: "main".to_owned(),
-            tree: Config::default(),
-        }
+/// A stable, printable identifier for an immutable database state.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct VersionId(String);
+
+impl VersionId {
+    /// Return the lowercase hexadecimal content identifier.
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-/// An immutable database state returned by versioning APIs.
-#[derive(Clone, Debug, PartialEq)]
-pub struct DatabaseVersion {
-    /// Branch from which this state was resolved.
-    pub branch: String,
-    /// Complete immutable tree handle for the database state.
-    pub tree: Tree,
+impl std::fmt::Display for VersionId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
 }
 
 /// Logical, schema-aware changes between two complete database states.
@@ -221,10 +219,27 @@ fn function_change_name(change: &FunctionChange) -> &str {
     }
 }
 
-impl DatabaseVersion {
-    /// Return the content identifier of this database root, if it is non-empty.
-    pub fn root(&self) -> Option<&prolly::Cid> {
-        self.tree.root.as_ref()
+impl Version {
+    fn new(branch: String, tree: Tree) -> Self {
+        let id = tree.root.as_ref().map(|root| {
+            VersionId(
+                root.as_bytes()
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect(),
+            )
+        });
+        Self { branch, id, tree }
+    }
+
+    /// Return the branch from which this state was resolved.
+    pub fn branch(&self) -> &str {
+        &self.branch
+    }
+
+    /// Return the content-derived identifier, or `None` for an empty state.
+    pub fn id(&self) -> Option<&VersionId> {
+        self.id.as_ref()
     }
 }
 
@@ -282,18 +297,19 @@ impl<S> ProllyStorage<S>
 where
     S: Store + ManifestStore,
 {
-    /// Open a logical database using the default `main` branch.
+    /// Open a logical database on the default `main` branch.
     pub fn new(store: S) -> Result<Self> {
-        Self::with_config(store, ProllyStorageConfig::default())
+        Self::with_branch(store, "main")
     }
 
-    /// Open a logical database with explicit branch and tree configuration.
-    pub fn with_config(store: S, config: ProllyStorageConfig) -> Result<Self> {
-        let head_name = branch_root_name(&config.branch)?;
-        let engine = Prolly::new(store, config.tree);
+    /// Open a logical database on the selected branch.
+    pub fn with_branch(store: S, branch: impl Into<String>) -> Result<Self> {
+        let branch = branch.into();
+        let head_name = branch_root_name(&branch)?;
+        let engine = Prolly::new(store, Config::default());
         let mut storage = Self {
             engine,
-            branch: config.branch,
+            branch,
             head_name,
             transaction: None,
             functions: HashMap::new(),
@@ -308,14 +324,11 @@ where
     }
 
     /// Resolve the selected branch to its immutable database state.
-    pub fn head(&self) -> Result<Option<DatabaseVersion>> {
+    pub fn head(&self) -> Result<Option<Version>> {
         Ok(self
             .engine
             .load_named_root(&self.head_name)?
-            .map(|tree| DatabaseVersion {
-                branch: self.branch.clone(),
-                tree,
-            }))
+            .map(|tree| Version::new(self.branch.clone(), tree)))
     }
 
     /// Refresh connection-local state from the selected branch head.
@@ -334,7 +347,7 @@ where
     }
 
     /// Create `name` at the currently selected branch state.
-    pub fn create_branch(&self, name: &str) -> Result<DatabaseVersion> {
+    pub fn create_branch(&self, name: &str) -> Result<Version> {
         let source = self
             .head()?
             .map_or_else(|| self.engine.create(), |version| version.tree);
@@ -343,10 +356,7 @@ where
             .engine
             .compare_and_swap_named_root(&target_name, None, Some(&source))?
         {
-            prolly::NamedRootUpdate::Applied => Ok(DatabaseVersion {
-                branch: name.to_owned(),
-                tree: source,
-            }),
+            prolly::NamedRootUpdate::Applied => Ok(Version::new(name.to_owned(), source)),
             prolly::NamedRootUpdate::Conflict { .. } => {
                 Err(Error::Branch(format!("branch {name:?} already exists")))
             }
@@ -373,7 +383,7 @@ where
     ///
     /// A later write can commit only when the selected branch still points to
     /// this exact version. A read-only transaction may always be rolled back.
-    pub fn checkout(&mut self, version: &DatabaseVersion) -> Result<()> {
+    pub fn checkout(&mut self, version: &Version) -> Result<()> {
         if self.transaction.is_some() {
             return Err(Error::TransactionState(
                 "cannot checkout a version during a transaction",
@@ -395,7 +405,7 @@ where
     ///
     /// Secondary-index entries, sequences, metadata records, and other
     /// physical storage details are intentionally hidden.
-    pub fn diff(&self, base: &DatabaseVersion, other: &DatabaseVersion) -> Result<Diff> {
+    pub fn diff(&self, base: &Version, other: &Version) -> Result<Diff> {
         let mut result = Diff::default();
         for change in self.engine.diff(&base.tree, &other.tree)? {
             match key_kind(change.key()) {
@@ -420,7 +430,7 @@ where
     }
 
     /// Atomically move the selected branch to an earlier or otherwise pinned version.
-    pub fn reset(&mut self, version: &DatabaseVersion) -> Result<()> {
+    pub fn reset(&mut self, version: &Version) -> Result<()> {
         if self.transaction.is_some() {
             return Err(Error::TransactionState(
                 "cannot reset a branch during a transaction",
@@ -450,21 +460,43 @@ where
             .unwrap_or_else(|| self.engine.create()))
     }
 
-    fn read_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        Ok(self.engine.get(&self.current_tree()?, key)?)
+    fn read_record<T: DeserializeOwned>(&self, key: &[u8]) -> Result<Option<T>> {
+        self.engine
+            .get(&self.current_tree()?, key)?
+            .map(|bytes| decode_record(&bytes))
+            .transpose()
     }
 
-    fn scan_raw(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+    fn scan_records<T: DeserializeOwned>(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, T)>> {
         let (start, end) = prefix_range(prefix);
-        self.scan_raw_range(&start, end.as_deref())
+        self.scan_record_range(&start, end.as_deref())
     }
 
-    fn scan_raw_range(&self, start: &[u8], end: Option<&[u8]>) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+    fn scan_record_range<T: DeserializeOwned>(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+    ) -> Result<Vec<(Vec<u8>, T)>> {
         let tree = self.current_tree()?;
-        Ok(self
-            .engine
+        self.engine
             .range(&tree, start, end)?
-            .collect::<std::result::Result<Vec<_>, _>>()?)
+            .map(|entry| {
+                let (key, bytes) = entry?;
+                Ok((key, decode_record(&bytes)?))
+            })
+            .collect()
+    }
+
+    fn delete_prefix_mutations(&self, prefix: &[u8]) -> Result<Vec<Mutation>> {
+        let (start, end) = prefix_range(prefix);
+        let tree = self.current_tree()?;
+        self.engine
+            .range(&tree, &start, end.as_deref())?
+            .map(|entry| {
+                let (key, _) = entry?;
+                Ok(Mutation::Delete { key })
+            })
+            .collect()
     }
 
     fn apply(&mut self, mutations: Vec<Mutation>) -> Result<()> {
@@ -502,9 +534,7 @@ where
     }
 
     fn fetch_schema_inner(&self, table_name: &str) -> Result<Option<Schema>> {
-        self.read_raw(&schema_key(table_name))?
-            .map(|bytes| decode_record(&bytes))
-            .transpose()
+        self.read_record(&schema_key(table_name))
     }
 
     fn require_schema_inner(&self, table_name: &str) -> GlueResult<Schema> {
@@ -523,28 +553,21 @@ where
 
     fn fetch_data_inner(&self, table_name: &str, key: &Key) -> GlueResult<Option<DataRow>> {
         let encoded_key = Self::encoded_primary_key(key)?;
-        self.read_raw(&row_key(table_name, &encoded_key))
+        Ok(self
+            .read_record::<StoredRow>(&row_key(table_name, &encoded_key))
             .map_err(glue_error)?
-            .map(|bytes| {
-                decode_record::<StoredRow>(&bytes)
-                    .map(DataRow::from)
-                    .map_err(glue_error)
-            })
-            .transpose()
+            .map(DataRow::from))
     }
 
     fn scan_data_inner(&self, table_name: &str) -> GlueResult<Vec<(Key, DataRow)>> {
         let mut rows = self
-            .scan_raw(&row_prefix(table_name))
+            .scan_records::<StoredRow>(&row_prefix(table_name))
             .map_err(glue_error)?
             .into_iter()
-            .map(|(physical_key, bytes)| {
+            .map(|(physical_key, row)| {
                 let key_bytes = row_key_payload(table_name, &physical_key).map_err(glue_error)?;
                 let key: Key = bincode::deserialize(key_bytes).map_err(glue_error)?;
-                let row = decode_record::<StoredRow>(&bytes)
-                    .map(DataRow::from)
-                    .map_err(glue_error)?;
-                Ok((key, row))
+                Ok((key, DataRow::from(row)))
             })
             .collect::<GlueResult<Vec<_>>>()?;
         rows.sort_by(|left, right| left.0.cmp(&right.0));
@@ -602,17 +625,12 @@ where
         schema: &Schema,
     ) -> GlueResult<Vec<Mutation>> {
         let mut mutations = self
-            .scan_raw(&row_prefix(table_name))
-            .map_err(glue_error)?
-            .into_iter()
-            .map(|(key, _)| Mutation::Delete { key })
-            .collect::<Vec<_>>();
+            .delete_prefix_mutations(&row_prefix(table_name))
+            .map_err(glue_error)?;
         for index in &schema.indexes {
             mutations.extend(
-                self.scan_raw(&index_prefix(table_name, &index.name))
-                    .map_err(glue_error)?
-                    .into_iter()
-                    .map(|(key, _)| Mutation::Delete { key }),
+                self.delete_prefix_mutations(&index_prefix(table_name, &index.name))
+                    .map_err(glue_error)?,
             );
         }
         mutations.extend([
@@ -647,12 +665,12 @@ impl ProllyStorage<prolly_store_sqlite::SqliteStore> {
         Self::new(prolly_store_sqlite::SqliteStore::open(path)?)
     }
 
-    /// Open or create a durable SQLite-backed database with explicit configuration.
-    pub fn open_sqlite_with_config(
+    /// Open or create a durable SQLite-backed database on the selected branch.
+    pub fn open_sqlite_with_branch(
         path: impl AsRef<std::path::Path>,
-        config: ProllyStorageConfig,
+        branch: impl Into<String>,
     ) -> Result<Self> {
-        Self::with_config(prolly_store_sqlite::SqliteStore::open(path)?, config)
+        Self::with_branch(prolly_store_sqlite::SqliteStore::open(path)?, branch)
     }
 }
 
@@ -667,11 +685,11 @@ where
 
     async fn fetch_all_schemas(&self) -> GlueResult<Vec<Schema>> {
         let mut schemas = self
-            .scan_raw(&all_schemas_prefix())
+            .scan_records::<Schema>(&all_schemas_prefix())
             .map_err(glue_error)?
             .into_iter()
-            .map(|(_, bytes)| decode_record(&bytes).map_err(glue_error))
-            .collect::<GlueResult<Vec<Schema>>>()?;
+            .map(|(_, schema)| schema)
+            .collect::<Vec<_>>();
         schemas.sort_by(|left, right| left.table_name.cmp(&right.table_name));
         Ok(schemas)
     }
@@ -722,10 +740,8 @@ where
         self.require_schema_inner(table_name)?;
         let sequence_key = sequence_key(table_name);
         let mut sequence = self
-            .read_raw(&sequence_key)
+            .read_record::<i64>(&sequence_key)
             .map_err(glue_error)?
-            .map(|bytes| decode_record::<i64>(&bytes).map_err(glue_error))
-            .transpose()?
             .unwrap_or(0);
         let mut keyed = Vec::with_capacity(rows.len());
         for row in rows {
@@ -854,10 +870,10 @@ where
     async fn scan_table_meta(&self) -> GlueResult<MetaIter> {
         let prefix = metadata_prefix();
         let entries = self
-            .scan_raw(&prefix)
+            .scan_records::<BTreeMap<String, Value>>(&prefix)
             .map_err(glue_error)?
             .into_iter()
-            .map(|(key, bytes)| {
+            .map(|(key, metadata)| {
                 let tail = key
                     .strip_prefix(prefix.as_slice())
                     .ok_or_else(|| glue_error("metadata key escaped its prefix"))?;
@@ -875,8 +891,6 @@ where
                     .get(8..end)
                     .ok_or_else(|| glue_error("truncated metadata table name"))?;
                 let name = String::from_utf8(name.to_vec()).map_err(glue_error)?;
-                let metadata: BTreeMap<String, Value> =
-                    decode_record(&bytes).map_err(glue_error)?;
                 Ok((name, metadata))
             })
             .collect::<GlueResult<Vec<_>>>()?;
@@ -982,11 +996,8 @@ where
             .into());
         }
         let mut mutations = self
-            .scan_raw(&index_prefix(table_name, index_name))
-            .map_err(glue_error)?
-            .into_iter()
-            .map(|(key, _)| Mutation::Delete { key })
-            .collect::<Vec<_>>();
+            .delete_prefix_mutations(&index_prefix(table_name, index_name))
+            .map_err(glue_error)?;
         mutations.push(Mutation::Upsert {
             key: schema_key(table_name),
             val: encode_record(&schema).map_err(glue_error)?,
@@ -1036,11 +1047,11 @@ where
             (full_start, full_end)
         };
         let mut entries = self
-            .scan_raw_range(&start, end.as_deref())
+            .scan_record_range::<IndexEntry>(&start, end.as_deref())
             .map_err(glue_error)?
             .into_iter()
-            .map(|(_, bytes)| decode_record::<IndexEntry>(&bytes).map_err(glue_error))
-            .collect::<GlueResult<Vec<_>>>()?;
+            .map(|(_, entry)| entry)
+            .collect::<Vec<_>>();
         if let Some((operator, expected)) = comparison {
             entries.retain(|entry| compare_index_value(&entry.index_value, operator, &expected));
         }
@@ -1190,7 +1201,9 @@ mod tests {
             .await
             .unwrap();
         let after = glue.storage.head().unwrap().unwrap();
-        assert_ne!(before.root(), after.root());
+        assert_ne!(before.id(), after.id());
+        assert_eq!(before.branch(), "main");
+        assert_eq!(before.id().unwrap().as_str().len(), 64);
         let diff = glue.storage.diff(&before, &after).unwrap();
         assert_eq!(diff.schemas, Vec::<SchemaChange>::new());
         assert_eq!(diff.functions, Vec::<FunctionChange>::new());

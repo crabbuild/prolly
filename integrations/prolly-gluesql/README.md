@@ -120,10 +120,11 @@ for change in changes.rows {
 }
 ```
 
-`DatabaseVersion` itself is a lightweight tree handle, not a durable pin. Keep
-important states reachable through a branch before running store garbage
-collection. The adapter intentionally exposes storage-level versions and does
-not invent SQL syntax for branch operations.
+`Version` is an opaque, lightweight state handle with a printable `VersionId`;
+it does not expose the underlying Prolly tree and is not itself a durable pin.
+Keep important states reachable through a branch before running store garbage
+collection. The adapter intentionally does not invent SQL syntax for branch
+operations.
 
 ## Transaction and concurrency model
 
@@ -186,8 +187,8 @@ SQL parsing, execution semantics, and supported SQL syntax come from GlueSQL
 0.19. This adapter provides versioned storage rather than a Git-like commit
 graph: it has branch heads and immutable roots, but no author metadata,
 reflogs, semantic SQL merge, or automatic history retention. Those can be
-layered above `DatabaseVersion`, Prolly diffs, and named roots when an
-application needs them.
+layered above `Version`, typed diffs, and durable branches when an application
+needs them.
 
 The adapter currently targets synchronous Prolly stores. Remote
 `AsyncStore`/`AsyncManifestStore` backends would require a separate async

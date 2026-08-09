@@ -1,6 +1,6 @@
 use {
     clap::{Parser, Subcommand},
-    prolly_gluesql::{Glue, Payload, ProllyStorageConfig, SqliteProllyStorage},
+    prolly_gluesql::{Glue, Payload, SqliteProllyStorage},
     std::{
         error::Error,
         fs,
@@ -55,11 +55,8 @@ enum Command {
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn Error>> {
     let arguments = Arguments::parse();
-    let config = ProllyStorageConfig {
-        branch: arguments.branch,
-        ..ProllyStorageConfig::default()
-    };
-    let storage = SqliteProllyStorage::open_sqlite_with_config(&arguments.database, config)?;
+    let storage =
+        SqliteProllyStorage::open_sqlite_with_branch(&arguments.database, arguments.branch)?;
     let mut glue = Glue::new(storage);
 
     match arguments.command.unwrap_or(Command::Shell) {
@@ -70,12 +67,12 @@ async fn main() -> std::result::Result<(), Box<dyn Error>> {
             let version = glue.storage.create_branch(&name)?;
             println!(
                 "created branch {:?} at {}",
-                version.branch,
+                version.branch(),
                 display_root(&version)
             );
         }
         Command::Head => match glue.storage.head()? {
-            Some(version) => println!("{} {}", version.branch, display_root(&version)),
+            Some(version) => println!("{} {}", version.branch(), display_root(&version)),
             None => println!("{} <unborn>", glue.storage.branch()),
         },
     }
@@ -130,7 +127,7 @@ async fn shell(glue: &mut Glue<SqliteProllyStorage>) -> std::result::Result<(), 
                 }
                 ".head" => match glue.storage.head()? {
                     Some(version) => {
-                        println!("{} {}", version.branch, display_root(&version));
+                        println!("{} {}", version.branch(), display_root(&version));
                     }
                     None => println!("{} <unborn>", glue.storage.branch()),
                 },
@@ -159,14 +156,8 @@ async fn shell(glue: &mut Glue<SqliteProllyStorage>) -> std::result::Result<(), 
     Ok(())
 }
 
-fn display_root(version: &prolly_gluesql::DatabaseVersion) -> String {
-    version.root().map_or_else(
-        || "<empty>".to_owned(),
-        |cid| {
-            cid.as_bytes()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect()
-        },
-    )
+fn display_root(version: &prolly_gluesql::Version) -> String {
+    version
+        .id()
+        .map_or_else(|| "<empty>".to_owned(), ToString::to_string)
 }
