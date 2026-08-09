@@ -1192,6 +1192,31 @@ impl ProllyStorage<prolly::MemStore> {
     }
 }
 
+/// A durable redb-backed GlueSQL storage engine.
+///
+/// The shared handle lets multiple GlueSQL connections use one redb database,
+/// as redb permits only one open writable database handle per file.
+#[cfg(feature = "redb")]
+pub type RedbProllyStorage = ProllyStorage<std::sync::Arc<prolly_store_redb::RedbStore>>;
+
+#[cfg(feature = "redb")]
+impl ProllyStorage<std::sync::Arc<prolly_store_redb::RedbStore>> {
+    /// Open or create a durable redb-backed Prolly SQL database.
+    pub fn open_redb(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let store = prolly_store_redb::RedbStore::open(path)?;
+        Self::new(std::sync::Arc::new(store))
+    }
+
+    /// Open or create a durable redb-backed database on the selected branch.
+    pub fn open_redb_with_branch(
+        path: impl AsRef<std::path::Path>,
+        branch: impl Into<String>,
+    ) -> Result<Self> {
+        let store = prolly_store_redb::RedbStore::open(path)?;
+        Self::with_branch(std::sync::Arc::new(store), branch)
+    }
+}
+
 #[cfg(feature = "sqlite")]
 pub type SqliteProllyStorage = ProllyStorage<prolly_store_sqlite::SqliteStore>;
 

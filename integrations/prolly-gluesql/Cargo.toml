@@ -20,6 +20,7 @@ path = "src/lib.rs"
 [features]
 default = []
 sqlite = ["dep:prolly-store-sqlite"]
+redb = ["dep:prolly-store-redb"]
 cli = ["sqlite", "dep:clap", "dep:serde_json", "dep:tokio"]
 
 [dependencies]
@@ -29,6 +30,7 @@ clap = { version = "4.5", features = ["derive"], optional = true }
 futures = "0.3"
 gluesql-core = "0.19.0"
 prolly = { package = "prolly-map", path = "../..", version = "0.7.0" }
+prolly-store-redb = { path = "../../stores/prolly-store-redb", version = "0.5.0", optional = true }
 prolly-store-sqlite = { path = "../../stores/prolly-store-sqlite", version = "0.5.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
@@ -51,3 +53,7 @@ required-features = ["cli"]
 [[example]]
 name = "sqlite_durable"
 required-features = ["sqlite"]
+
+[[example]]
+name = "redb_durable"
+required-features = ["redb"]
