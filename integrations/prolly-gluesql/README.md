@@ -77,6 +77,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Any custom backend implementing both `prolly::Store` and
 `prolly::ManifestStore` can be passed to `ProllyStorage::new`.
 
+## Runnable examples
+
+The [`examples`](examples/README.md) directory contains complete programs. Run
+them from this crate directory:
+
+```sh
+cargo run --example basic_sql
+cargo run --example concurrent_writers
+cargo run --example versions_and_branches
+cargo run --example merge_clean
+cargo run --example merge_conflicts
+cargo run --features sqlite --example sqlite_durable
+```
+
+Each example creates its own state, checks its expected results, and needs no
+external service or input. They cover SQL execution, transactions, indexes,
+custom functions, shared custom stores, optimistic writer conflicts, typed
+diffs, historical reads, branch isolation, clean merges, every typed conflict
+category, constraint conflicts, CAS publication, and durable SQLite reopen
+behavior.
+
 ## Versions and branches
 
 `head` returns an immutable handle to the selected branch state. A branch is a

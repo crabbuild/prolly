@@ -11,7 +11,7 @@ documentation = "https://docs.rs/prolly-gluesql"
 readme = "README.md"
 keywords = ["sql", "database", "versioned", "prolly-tree", "gluesql"]
 categories = ["database-implementations"]
-include = ["/Cargo.toml", "/README.md", "/src/**", "/tests/**"]
+include = ["/Cargo.toml", "/README.md", "/examples/**", "/src/**", "/tests/**"]
 
 [lib]
 name = "prolly_gluesql"
@@ -47,3 +47,7 @@ unsafe_code = "forbid"
 name = "prolly-sql"
 path = "src/bin/prolly-sql.rs"
 required-features = ["cli"]
+
+[[example]]
+name = "sqlite_durable"
+required-features = ["sqlite"]
