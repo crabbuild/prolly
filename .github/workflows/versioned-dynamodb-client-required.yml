@@ -32,7 +32,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.91.1
         with:
           components: rustfmt, clippy
-      - uses: dtolnay/rust-toolchain@nightly-2026-06-19
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-06-19
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: versioned-dynamodb-quality-1.91.1
@@ -185,11 +187,14 @@ jobs:
         with:
           shared-key: versioned-dynamodb-linux-aarch64-1.91.1
       - name: Install cross linker
-        run: sudo apt-get update && sudo apt-get install --yes gcc-aarch64-linux-gnu
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13-aarch64-linux-gnu
+          test -x /usr/bin/aarch64-linux-gnu-gcc-13
       - name: Locked aarch64 Linux matrix
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc-13
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc-13
           AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
         run: ./scripts/verify_dynamodb_client_matrix.sh --toolchain "$RUST_TOOLCHAIN" --target aarch64-unknown-linux-gnu
 

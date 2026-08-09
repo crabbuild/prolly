@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-08-03T07:25:32+00:00",
+  "generated_at": "2026-08-09T23:23:03+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -1620,6 +1620,105 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncIndexedMap::prepare_apply_at_snapshot_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_apply_with_budget",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_rebuild_from_source",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_rebuild_from_source_at",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_remove_snapshot_ids",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_remove_snapshots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_restore",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_restore_manifest",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::prepare_restore_snapshot",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncIndexedMap::put",
       "classification": "portable",
       "status": "planned",
@@ -1720,6 +1819,17 @@
     },
     {
       "rust": "prolly::AsyncIndexedMap::snapshot_by_id",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncIndexedMap::snapshot_from_manifest",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",
@@ -2142,6 +2252,17 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::AsyncManifestStore::get_roots_ordered",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncManifestStore::put_root",
       "classification": "idiomatic",
       "status": "implemented",
@@ -2244,6 +2365,17 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::AsyncManifestStoreScan::list_roots_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncMapChangeSubscription",
       "classification": "portable",
       "status": "planned",
@@ -2300,6 +2432,17 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncMapSnapshot::get has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncMapSnapshot::get_large_value",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncMapSnapshot::get_many",
@@ -2428,6 +2571,17 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::AsyncMapSnapshot::reverse_range_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncMapSnapshot::stats",
       "classification": "portable",
       "status": "planned",
@@ -2468,6 +2622,127 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncMapSnapshot::version has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation::candidate_state_tree",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation::current",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation::expected_state_tree",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation::manifest",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation::previous_source_version",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedMutation::root_name",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedUpdate",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedUpdate::Conflict",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedUpdate::Prepared",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncPreparedIndexedUpdate::Unchanged",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncProductQuantizer",
@@ -2650,6 +2925,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncProllyTransaction::compare_and_swap_named_root_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncProllyTransaction::create",
       "classification": "portable",
       "status": "planned",
@@ -2705,6 +2991,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncProllyTransaction::load_named_roots_ordered",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncProllyTransaction::publish_named_root",
       "classification": "portable",
       "status": "planned",
@@ -2739,6 +3036,28 @@
     },
     {
       "rust": "prolly::AsyncProllyTransaction::rollback",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProllyTransaction::versioned_maps",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncProllyTransaction::versioned_maps_at_millis",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -3969,6 +4288,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncSecondaryIndexSnapshot::exact_cursor_after",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncSecondaryIndexSnapshot::exact_page",
       "classification": "portable",
       "status": "planned",
@@ -4003,6 +4333,17 @@
     },
     {
       "rust": "prolly::AsyncSecondaryIndexSnapshot::prefix",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncSecondaryIndexSnapshot::prefix_cursor_after",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",
@@ -4069,6 +4410,17 @@
     },
     {
       "rust": "prolly::AsyncSecondaryIndexSnapshot::range",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncSecondaryIndexSnapshot::range_cursor_after",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",
@@ -4752,6 +5104,17 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::AsyncStore::guarantees_durable_publication",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncStore::has_native_shared_reads",
       "classification": "idiomatic",
       "status": "implemented",
@@ -5153,7 +5516,29 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncVersionedMap::apply_if",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncVersionedMap::apply_if_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::changes_since",
       "classification": "portable",
       "status": "planned",
       "family": "versioned-map",
@@ -5202,6 +5587,28 @@
       ],
       "reconciliation_rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::diff",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::diff_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncVersionedMap::edit",
@@ -5278,6 +5685,17 @@
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
     },
     {
+      "rust": "prolly::AsyncVersionedMap::get_large_value",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncVersionedMap::head",
       "classification": "portable",
       "status": "implemented",
@@ -5316,6 +5734,17 @@
       ],
       "reconciliation_rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::head_name",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncVersionedMap::id",
@@ -5358,6 +5787,50 @@
       "rationale": "Map construction and immutable map identity do not perform asynchronous store I/O, so the portable wrappers expose them as immediate Engine factories and owned byte properties even when subsequent operations use host-native async constructs."
     },
     {
+      "rust": "prolly::AsyncVersionedMap::keep_for",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::keep_for_at",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::keep_last",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::keep_versions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncVersionedMap::new",
       "classification": "portable",
       "status": "implemented",
@@ -5398,6 +5871,17 @@
       "rationale": "Map construction and immutable map identity do not perform asynchronous store I/O, so the portable wrappers expose them as immediate Engine factories and owned byte properties even when subsequent operations use host-native async constructs."
     },
     {
+      "rust": "prolly::AsyncVersionedMap::prune_versions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::AsyncVersionedMap::put",
       "classification": "portable",
       "status": "implemented",
@@ -5436,6 +5920,28 @@
       ],
       "reconciliation_rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::put_large_value",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::restore_if",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncVersionedMap::snapshot",
@@ -5516,6 +6022,17 @@
       ],
       "reconciliation_rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::structural_diff_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AsyncVersionedMap::subscribe",
@@ -5636,6 +6153,160 @@
       ],
       "reconciliation_rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned.",
       "rationale": "Rust's async map wrapper is represented by each host's native concurrency model: awaitables in Python, promises in Node and browser WASM, coroutines in Kotlin, CompletableFuture in Java, Future in Ruby, Task in Swift, and ordinary blocking methods that callers compose with goroutines and context in Go. Inputs are copied before asynchronous execution and results remain owned."
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::version_root_name",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::versions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::versions_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMap::versions_prefix",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::apply",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::apply_if",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::delete",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::edit",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::get",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::head",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::put",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::restore_if",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::AsyncVersionedMapsTransaction::timestamp_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::AuthenticatedProofBundleVerification",
@@ -6601,6 +7272,72 @@
     },
     {
       "rust": "prolly::BlobGcSweep::plan",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BlobReachabilityLimits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BlobReachabilityLimits::max_blob_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BlobReachabilityLimits::max_blobs",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BlobReachabilityLimits::max_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BlobReachabilityLimits::max_values",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::BlobReachabilityLimits::new",
       "classification": "portable",
       "status": "planned",
       "family": "maintenance",
@@ -10901,6 +11638,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::Error::SnapshotExportLimitExceeded",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::Error::SpliceConfigMismatch",
       "classification": "portable",
       "status": "planned",
@@ -11680,6 +12428,50 @@
       "docs": []
     },
     {
+      "rust": "prolly::GcTraversalLimits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::GcTraversalLimits::max_node_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::GcTraversalLimits::max_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::GcTraversalLimits::new",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::HashAlgorithm",
       "classification": "portable",
       "status": "planned",
@@ -12187,6 +12979,17 @@
     },
     {
       "rust": "prolly::INDEXED_SNAPSHOT_BUNDLE_FORMAT_VERSION",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::INDEXED_SNAPSHOT_MANIFEST_FORMAT",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",
@@ -15317,6 +16120,105 @@
       "docs": []
     },
     {
+      "rust": "prolly::IndexedSnapshotManifest",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::descriptors",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::format_version",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::from_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::from_state_head",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::record",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::snapshot_id",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::to_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedSnapshotManifest::validate",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::IndexedSnapshotRecord",
       "classification": "portable",
       "status": "planned",
@@ -15551,6 +16453,17 @@
     },
     {
       "rust": "prolly::IndexedVersion::indexes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::IndexedVersion::snapshot_id",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",
@@ -16581,6 +17494,17 @@
         "bindings/api/idiomatic-equivalents.json#store-trait"
       ],
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::ManifestStoreScan::list_roots_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::ManifestUpdate",
@@ -18400,6 +19324,39 @@
       ]
     },
     {
+      "rust": "prolly::MapVersionCursor",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::MapVersionCursor::scope",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::MapVersionCursor::version",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::MapVersionId",
       "classification": "portable",
       "status": "planned",
@@ -18485,6 +19442,39 @@
       "audience": "application",
       "audience_rationale": "prolly::MapVersionId::into_cid has runtime behavior in the requested versioned-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::MapVersionPage",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::MapVersionPage::next_cursor",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::MapVersionPage::versions",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::MemBlobStore",
@@ -20251,6 +21241,39 @@
       "docs": []
     },
     {
+      "rust": "prolly::NamedRootManifestPage",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NamedRootManifestPage::next_after",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::NamedRootManifestPage::roots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::NamedRootRetention",
       "classification": "portable",
       "status": "planned",
@@ -21398,6 +22421,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::OwnedAsyncProllyTransaction::compare_and_swap_named_root_at_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::OwnedAsyncProllyTransaction::create",
       "classification": "portable",
       "status": "planned",
@@ -21443,6 +22477,17 @@
     },
     {
       "rust": "prolly::OwnedAsyncProllyTransaction::load_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedAsyncProllyTransaction::load_named_roots_ordered",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -21542,6 +22587,17 @@
     },
     {
       "rust": "prolly::OwnedProllyTransaction::compare_and_swap_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::OwnedProllyTransaction::compare_and_swap_named_root_at_millis",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -22633,6 +23689,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::Prolly::cache_usage",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::Prolly::checkpoint_snapshots",
       "classification": "portable",
       "status": "planned",
@@ -22907,6 +23974,17 @@
       "audience": "application",
       "audience_rationale": "prolly::Prolly::export_snapshot has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::Prolly::export_snapshot_with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::Prolly::first_entry",
@@ -24112,6 +25190,61 @@
       "docs": []
     },
     {
+      "rust": "prolly::ProllyCacheUsage",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyCacheUsage::entries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyCacheUsage::pinned_entries",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyCacheUsage::pinned_serialized_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyCacheUsage::serialized_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ProllyEngine",
       "classification": "portable",
       "status": "planned",
@@ -24234,6 +25367,17 @@
     },
     {
       "rust": "prolly::ProllyEngine::cache_pinned_len",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::cache_usage",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -24478,6 +25622,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::ProllyEngine::export_snapshot_with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ProllyEngine::first_entry",
       "classification": "portable",
       "status": "planned",
@@ -24610,6 +25765,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::ProllyEngine::indexed_map_with_policy",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ProllyEngine::last_entry",
       "classification": "portable",
       "status": "planned",
@@ -24654,6 +25820,17 @@
       "docs": []
     },
     {
+      "rust": "prolly::ProllyEngine::list_named_root_manifests_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::ProllyEngine::list_named_roots",
       "classification": "portable",
       "status": "planned",
@@ -24688,6 +25865,17 @@
     },
     {
       "rust": "prolly::ProllyEngine::load_named_roots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::load_named_roots_ordered",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -24754,6 +25942,28 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncProlly::mark_reachable_blobs has runtime behavior in the requested maintenance application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::ProllyEngine::mark_reachable_blobs_with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::mark_reachable_with_limits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::ProllyEngine::merge",
@@ -24939,6 +26149,50 @@
       "classification": "portable",
       "status": "planned",
       "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prepare_indexed_map",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prepare_indexed_map_from_source",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prepare_indexed_map_from_source_with_policy",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyEngine::prepare_indexed_map_with_policy",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
       "performance": "owned",
       "languages": {},
       "exclusions": {},
@@ -25701,6 +26955,17 @@
     },
     {
       "rust": "prolly::ProllyTransaction::compare_and_swap_named_root",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::ProllyTransaction::compare_and_swap_named_root_at_millis",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -30318,6 +31583,39 @@
       "docs": []
     },
     {
+      "rust": "prolly::RemoteNamedRootPage",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::RemoteNamedRootPage::next_after",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::RemoteNamedRootPage::roots",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::RemoteProllyStore",
       "classification": "portable",
       "status": "planned",
@@ -30330,6 +31628,17 @@
     },
     {
       "rust": "prolly::RemoteProllyStore::backend",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::RemoteProllyStore::config",
       "classification": "portable",
       "status": "planned",
       "family": "core",
@@ -30892,6 +32201,28 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::RemoteStoreBackend::get_root_manifests_ordered",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::RemoteStoreBackend::guarantees_durable_publication",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::RemoteStoreBackend::list_node_cids",
       "classification": "idiomatic",
       "status": "implemented",
@@ -30958,6 +32289,17 @@
         "bindings/api/idiomatic-equivalents.json#store-trait"
       ],
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::RemoteStoreBackend::list_root_manifests_page",
+      "classification": "portable",
+      "status": "planned",
+      "family": "core",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
     },
     {
       "rust": "prolly::RemoteStoreBackend::prefers_batch_reads",
@@ -35108,6 +36450,50 @@
     },
     {
       "rust": "prolly::SnapshotBundleVerification::valid",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::SnapshotExportLimits",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::SnapshotExportLimits::max_bytes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::SnapshotExportLimits::max_nodes",
+      "classification": "portable",
+      "status": "planned",
+      "family": "maintenance",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::SnapshotExportLimits::new",
       "classification": "portable",
       "status": "planned",
       "family": "maintenance",
@@ -43762,6 +45148,17 @@
       "rationale": "All eight wrappers expose atomic multi-map transactional reads, writes, mutation batches, and compare-and-swap publication through an owned VersionedTransaction handle."
     },
     {
+      "rust": "prolly::VersionedMapsTransaction::timestamp_millis",
+      "classification": "portable",
+      "status": "planned",
+      "family": "versioned-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
       "rust": "prolly::VersionedValue",
       "classification": "portable",
       "status": "planned",
@@ -44631,6 +46028,17 @@
     },
     {
       "rust": "prolly::indexed_collection_root_name",
+      "classification": "portable",
+      "status": "planned",
+      "family": "indexed-map",
+      "performance": "owned",
+      "languages": {},
+      "exclusions": {},
+      "tests": [],
+      "docs": []
+    },
+    {
+      "rust": "prolly::indexed_collection_source_map_id",
       "classification": "portable",
       "status": "planned",
       "family": "indexed-map",
