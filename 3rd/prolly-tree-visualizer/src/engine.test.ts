@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ProllyEngine } from './engine';
+import { canGrowTree, MAX_TREE_LEVELS, ProllyEngine } from './engine';
 
 const wasmBytes = Uint8Array.from(readFileSync(
   new URL('../../../bindings/wasm/pkg/prolly_wasm_bg.wasm', import.meta.url),
@@ -53,5 +53,13 @@ describe('random mutations', () => {
     } finally {
       engine.close();
     }
+  });
+});
+
+describe('tree level growth', () => {
+  it('allows growth from three displayed levels to four', () => {
+    expect(MAX_TREE_LEVELS).toBe(4);
+    expect(canGrowTree(2)).toBe(true);
+    expect(canGrowTree(3)).toBe(false);
   });
 });

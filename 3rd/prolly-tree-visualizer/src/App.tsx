@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ProllyEngine, type GrowthResult, type InsertionOrderResult } from './engine';
+import { canGrowTree, MAX_TREE_LEVELS, ProllyEngine, type GrowthResult, type InsertionOrderResult } from './engine';
 import { countSharedNodes, diffRows, estimateMutationSplitProbability, leafNodes, traceRange, traceSearch } from './prolly';
 import { calculateVersionStorage, countHistoricalTreeChunks } from './storage';
 import { calculateMutationCost } from './mutationCost';
@@ -259,16 +259,16 @@ function App() {
     }, 20);
   };
 
-  const runGrowth = (operation: (engine: ProllyEngine) => GrowthResult) => {
+  const runGrowth = (operation: (engine: ProllyEngine) => GrowthResult | Promise<GrowthResult>) => {
     const engine = engineRef.current;
     if (!engine || operationPendingRef.current) return;
     operationPendingRef.current = true;
     resetTreeState();
     setBusy(true);
     setError(undefined);
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       try {
-        const result = operation(engine);
+        const result = await operation(engine);
         appendSnapshot(result.after);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -523,7 +523,13 @@ function App() {
             <div className="control-fields bulk-actions">
               <button disabled={busy || viewingHistorical} onClick={() => run((engine) => engine.addSequential(25))}>+ 25 rows</button>
               <button disabled={busy || viewingHistorical} onClick={() => runGrowth((engine) => engine.growUntilSplit())}>Next split</button>
-              <button title={current.root.level >= 2 ? 'Three levels is the browser demo limit' : undefined} disabled={busy || viewingHistorical || current.root.level >= 2} onClick={() => runGrowth((engine) => engine.growUntilNextLevel())}>{current.root.level >= 2 ? 'Three levels reached' : 'Next tree level'}</button>
+              <button
+                title={!canGrowTree(current.root.level) ? `${MAX_TREE_LEVELS} levels is the browser demo limit` : undefined}
+                disabled={busy || viewingHistorical || !canGrowTree(current.root.level)}
+                onClick={() => runGrowth((engine) => engine.growUntilNextLevel())}
+              >
+                {!canGrowTree(current.root.level) ? `${MAX_TREE_LEVELS} levels reached` : 'Next tree level'}
+              </button>
               <button className="reset-button" disabled={busy || viewingHistorical} onClick={() => {
                 const engine = engineRef.current;
                 if (!engine) return;

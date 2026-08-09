@@ -5,6 +5,7 @@ import {
   type WasmProllyEngineInstance,
   type WasmTree,
   type WasmTreeDebugViewRecord,
+  type WasmTreeStatsRecord,
 } from '@crabbuild/prolly-wasm';
 import { bootstrapKeys, deterministicShuffle } from './bootstrap';
 import { buildTreeFromDebug, leafNodes, toHex } from './prolly';
@@ -12,6 +13,12 @@ import type { RowValue, TreeSnapshot } from './types';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+
+export const MAX_TREE_LEVELS = 4;
+
+export function canGrowTree(rootLevel: number) {
+  return rootLevel + 1 < MAX_TREE_LEVELS;
+}
 
 function decodeI64Key(bytes: Uint8Array) {
   let encoded = 0n;
@@ -226,24 +233,33 @@ export class ProllyEngine {
     return { before, after: candidate, added: limit };
   }
 
-  growUntilNextLevel(): GrowthResult {
+  async growUntilNextLevel(): Promise<GrowthResult> {
     const before = this.capture('Before level growth');
     const rootLevel = before.root.level;
-    if (rootLevel >= 2) throw new Error('Four-level trees exceed the full-node browser rendering limit');
-    const limit = rootLevel === 0 ? 2_048 : 48_000;
-    const batchSize = rootLevel === 0 ? 256 : 2_000;
+    if (!canGrowTree(rootLevel)) throw new Error(`${MAX_TREE_LEVELS} levels is the browser demo limit`);
+    const limit = rootLevel === 0 ? 2_048 : rootLevel === 1 ? 48_000 : 1_000_000;
+    const batchSize = rootLevel === 0 ? 256 : rootLevel === 1 ? 2_000 : 20_000;
     let next = (before.rows.at(-1)?.key ?? 0) + 1;
-    let candidate = before;
     for (let added = 0; added < limit;) {
       const amount = Math.min(batchSize, limit - added);
       this.insertSequential(next, amount, 'level');
       added += amount;
       next += amount;
-      candidate = this.capture(`Reached level ${rootLevel + 1} after appending ${added} rows`);
-      if (candidate.root.level > rootLevel) return { before, after: candidate, added };
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      const stats = this.runtime.collectStats(this.tree) as WasmTreeStatsRecord;
+      if (stats.tree_height > rootLevel + 1) {
+        return {
+          before,
+          after: this.capture(`Reached level ${rootLevel + 1} after appending ${added} rows`),
+          added,
+        };
+      }
     }
-    candidate.label = `No new level after ${limit} inserts`;
-    return { before, after: candidate, added: limit };
+    return {
+      before,
+      after: this.capture(`No new level after ${limit} inserts`),
+      added: limit,
+    };
   }
 
   garbageCollect(): GarbageCollectionResult {
