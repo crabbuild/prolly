@@ -21,6 +21,8 @@ logical diffs, and optimistic conflict detection for concurrent writers.
   publication.
 - Named branches, immutable version handles, historical reads, logical diffs,
   typed three-way merges, and compare-and-swap resets.
+- Durable Git-like commits, authors, extensible metadata, named refs, ancestry,
+  merge-base discovery, and retained commit snapshots.
 - In-memory storage by default, durable pure-Rust redb storage behind the
   `redb` feature, and durable SQLite storage behind the `sqlite` feature.
 - An optional `prolly-sql` command-line client behind the `cli` feature.
@@ -112,6 +114,7 @@ them from this crate directory:
 ```sh
 cargo run --example basic_sql
 cargo run --example concurrent_writers
+cargo run --example commit_graph
 cargo run --example versions_and_branches
 cargo run --example merge_clean
 cargo run --example merge_conflicts
@@ -122,10 +125,11 @@ cargo run --features sqlite --example sqlite_durable
 Each example creates its own state, checks its expected results, and needs no
 external service or input. They cover SQL execution, transactions, indexes,
 custom functions, shared custom stores, optimistic writer conflicts, typed
-diffs, historical reads, branch isolation, clean merges, every typed conflict
-category, constraint conflicts, CAS publication, and durable SQLite reopen
-behavior. The redb example additionally demonstrates sharing one backend
-between connections and reopening durable branch heads.
+diffs, historical reads, commit graphs, flexible branch sources, branch
+isolation, clean merges, every typed conflict category, constraint conflicts,
+CAS publication, and durable SQLite reopen behavior. The redb example
+additionally demonstrates sharing one backend between connections and
+reopening durable branch heads.
 
 ## Versions and branches
 
@@ -172,16 +176,74 @@ for change in changes.rows {
 
 `Version` is an opaque, lightweight state handle with a printable `VersionId`;
 it does not expose the underlying Prolly tree and is not itself a durable pin.
-Keep important states reachable through a branch before running store garbage
-collection. The adapter intentionally does not invent SQL syntax for branch
-operations.
+Keep important states reachable through a branch or graph commit before running
+store garbage collection. The adapter intentionally does not invent SQL syntax
+for branch operations.
+
+## Commit graph and refs
+
+SQL `COMMIT` atomically publishes database state. A graph commit is an explicit
+history checkpoint created afterward with `storage.commit`; this separation
+lets applications choose which transactional states deserve messages,
+authorship, review metadata, tags, or long-term retention.
+
+```rust,ignore
+use prolly_gluesql::{CommitActor, CommitOptions, DatabaseRef};
+
+let base = db.storage.commit_with(
+    CommitOptions::new("initialize users")
+        .author(CommitActor::named("Ada"))
+        .metadata(b"request-id", b"req-42"),
+)?;
+
+db.storage.create_branch_from(
+    "feature",
+    &DatabaseRef::Commit(base.id.clone()),
+)?;
+
+// Generic refs support tags, checkpoints, or application-defined namespaces.
+db.storage.create_ref("refs/tags/v1", &base.id)?;
+db.storage.create_branch_from(
+    "release-fix",
+    &DatabaseRef::Ref("refs/tags/v1".to_owned()),
+)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`create_branch_from` accepts `DatabaseRef::Branch`, `Ref`, `Commit`, or
+`Version`. `CommitId` and `VersionId` implement `FromStr`, so persisted IDs can
+be parsed and used without exposing trees or raw storage records. Creating a
+branch from a commit or commit-backed ref also initializes its history parent.
+
+Commits contain a retained `Version`, ordered parent IDs, optional author and
+committer identities, a message, timestamp, generation, and byte-oriented
+metadata. Explicit parents support merge commits:
+
+```rust,ignore
+let merged = db.storage.commit_with(
+    CommitOptions::new("merge feature")
+        .parents([main.id.clone(), feature.id.clone()]),
+)?;
+
+let log = db.storage.log(&merged.id, 100)?;
+let common = db.storage.merge_base(&main.id, &feature.id)?;
+assert!(db.storage.is_ancestor(&main.id, &merged.id)?);
+let changes = db.storage.diff_commits(&main.id, &merged.id)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Named refs use compare-and-swap through `compare_and_swap_ref`; failed updates
+return `RefUpdate::Conflict` with the current typed ref. Commit records and refs
+live in a private Prolly metadata tree, while each commit publishes a private
+retention root for its SQL snapshot. Graph records therefore never appear in
+SQL diffs, and durable backends can reopen old commits after branch heads move.
 
 ## Merging branches
 
 `merge` performs a typed three-way merge. The selected branch is the current
 side, `incoming` is the version being merged, and `base` is their common
-ancestor. The base is explicit because `Version` is a database snapshot rather
-than a commit with parent history.
+ancestor. The merge primitive remains explicit and also works without history;
+applications using graph commits can obtain `base` with `merge_base`.
 
 ```rust,ignore
 use prolly_gluesql::{MergeConflict, MergeResult};
@@ -270,9 +332,9 @@ are emitted as JSON.
 Keys live under a private, versioned namespace. Identifiers use length-prefixed
 segments, while primary keys and indexed expressions use order-preserving byte
 encodings.
-Every persisted value starts with the `PGSQ` magic bytes and a wire-format
-version before its serialized payload. Unknown versions fail explicitly rather
-than being silently misread.
+Every persisted SQL value starts with the `PGSQ` magic bytes and a wire-format
+version; commit graph records use the separate `PGHG` envelope. Unknown
+versions fail explicitly rather than being silently misread.
 
 The current crate release is pre-1.0. Its wire format is explicit, but backward
 compatibility is not promised until a stable release. Back up a durable store
@@ -281,11 +343,12 @@ before upgrading between pre-1.0 releases.
 ## Scope
 
 SQL parsing, execution semantics, and supported SQL syntax come from GlueSQL
-0.19. This adapter provides versioned storage rather than a Git-like commit
-graph: it has branch heads and immutable roots, but no author metadata,
-reflogs, automatic common-ancestor discovery, or automatic history retention.
-Those can be layered above `Version`, typed diffs, typed merges, and durable
-branches when an application needs them.
+0.19. The history layer provides commits, refs, ancestry, merge bases, and
+retention, but intentionally leaves reflogs, signatures, authorization,
+automatic merge policies, and remote synchronization to applications. Its byte
+metadata fields provide an extension point for those concerns without changing
+the core graph format. Every commit currently retains its SQL snapshot; a
+future pruning API will be needed for applications that want bounded history.
 
 The adapter currently targets synchronous Prolly stores. Remote
 `AsyncStore`/`AsyncManifestStore` backends would require a separate async
@@ -296,9 +359,10 @@ have different ownership and execution models.
 
 The integration runs GlueSQL's published storage conformance suite plus tests
 for rollback, branch isolation, historical reads, reset, typed merge conflicts,
-merge constraint validation, derived-state rebuilding, redb and SQLite reopen,
-secondary-index durability, custom-function durability, durable branch
-isolation, and concurrent-writer conflicts:
+commit graph traversal, merge-base discovery, flexible branch creation, graph
+durability, merge constraint validation, derived-state rebuilding, redb and
+SQLite reopen, secondary-index durability, custom-function durability, durable
+branch isolation, and concurrent-writer conflicts:
 
 ```sh
 cargo test --all-features --all-targets

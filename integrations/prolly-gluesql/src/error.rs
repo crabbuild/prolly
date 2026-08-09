@@ -39,6 +39,14 @@ pub enum Error {
     #[error("merge materialization failed: {0}")]
     Merge(String),
 
+    /// Commit graph data or a graph operation was invalid.
+    #[error("commit graph operation failed: {0}")]
+    History(String),
+
+    /// Another writer changed the commit graph while it was being updated.
+    #[error("commit graph update conflicted; reload the ref and retry")]
+    HistoryConflict,
+
     /// A redb-backed storage engine could not be opened.
     #[cfg(feature = "redb")]
     #[error("redb store failed: {0}")]

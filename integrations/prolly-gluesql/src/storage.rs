@@ -32,6 +32,12 @@ use {
     },
 };
 
+mod history;
+
+pub use history::{
+    Commit, CommitActor, CommitId, CommitMetadata, CommitOptions, CommitRef, DatabaseRef, RefUpdate,
+};
+
 /// An immutable database state returned by versioning APIs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Version {
@@ -465,6 +471,9 @@ where
 
     /// Create `name` at the currently selected branch state.
     pub fn create_branch(&self, name: &str) -> Result<Version> {
+        if self.head()?.is_some() {
+            return self.create_branch_from(name, &DatabaseRef::Branch(self.branch.clone()));
+        }
         let source = self
             .head()?
             .map_or_else(|| self.engine.create(), |version| *version.tree);
