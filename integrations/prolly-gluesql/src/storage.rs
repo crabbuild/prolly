@@ -2,17 +2,18 @@ use {
     crate::{
         error::glue_error,
         layout::{
-            all_schemas_prefix, branch_root_name, decode_record, encode_record, function_key,
-            functions_prefix, index_key, index_prefix, index_value_prefix, key_kind, metadata_key,
-            metadata_prefix, row_key, row_key_parts, row_key_payload, row_prefix, schema_key,
-            sequence_key, KIND_FUNCTION, KIND_ROW, KIND_SCHEMA,
+            all_indexes_prefix, all_rows_prefix, all_schemas_prefix, all_sequences_prefix,
+            branch_root_name, decode_record, encode_record, function_key, functions_prefix,
+            index_key, index_prefix, index_value_prefix, key_kind, metadata_key, metadata_prefix,
+            row_key, row_key_parts, row_key_payload, row_prefix, schema_key, sequence_key,
+            KIND_FUNCTION, KIND_ROW, KIND_SCHEMA,
         },
         Error, Result,
     },
     async_trait::async_trait,
     futures::stream,
     gluesql_core::{
-        ast::{IndexOperator, OrderByExpr, Statement},
+        ast::{ColumnUniqueOption, IndexOperator, OrderByExpr, Statement},
         chrono::Utc,
         data::{CustomFunction as GlueFunction, Key, Schema, SchemaIndex, SchemaIndexOrd, Value},
         error::Result as GlueResult,
@@ -27,7 +28,7 @@ use {
     serde::{de::DeserializeOwned, Deserialize, Serialize},
     std::{
         cmp::Ordering,
-        collections::{BTreeMap, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
     },
 };
 
@@ -36,7 +37,7 @@ use {
 pub struct Version {
     branch: String,
     id: Option<VersionId>,
-    tree: Tree,
+    tree: Box<Tree>,
 }
 
 /// A stable, printable identifier for an immutable database state.
@@ -127,6 +128,71 @@ pub enum FunctionChange {
     Modified {
         before: GlueFunction,
         after: GlueFunction,
+    },
+}
+
+/// Outcome of merging an incoming version into the selected branch.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MergeResult {
+    /// The selected branch now points to the merged database state.
+    Applied {
+        /// Newly published version, or the unchanged head for a no-op merge.
+        version: Version,
+        /// Logical changes applied to the selected branch head.
+        changes: Diff,
+    },
+    /// The branch was not changed because manual resolution is required.
+    Conflicted {
+        /// All logical conflicts found during the merge.
+        conflicts: Vec<MergeConflict>,
+    },
+}
+
+impl MergeResult {
+    /// Return whether the merge completed without logical conflicts.
+    pub fn is_applied(&self) -> bool {
+        matches!(self, Self::Applied { .. })
+    }
+
+    /// Return conflicts when the merge requires manual resolution.
+    pub fn conflicts(&self) -> &[MergeConflict] {
+        match self {
+            Self::Applied { .. } => &[],
+            Self::Conflicted { conflicts } => conflicts,
+        }
+    }
+}
+
+/// A decoded SQL-level conflict produced by a three-way merge.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum MergeConflict {
+    /// Both sides changed the same table definition differently.
+    Schema {
+        table: String,
+        base: Option<Schema>,
+        current: Option<Schema>,
+        incoming: Option<Schema>,
+    },
+    /// Both sides changed the same row differently.
+    Row {
+        table: String,
+        key: Key,
+        base: Option<DataRow>,
+        current: Option<DataRow>,
+        incoming: Option<DataRow>,
+    },
+    /// Both sides changed the same custom function differently.
+    Function {
+        name: String,
+        base: Option<GlueFunction>,
+        current: Option<GlueFunction>,
+        incoming: Option<GlueFunction>,
+    },
+    /// Individually valid changes combine into an invalid SQL database state.
+    Constraint {
+        table: String,
+        key: Option<Key>,
+        reason: String,
     },
 }
 
@@ -229,7 +295,11 @@ impl Version {
                     .collect(),
             )
         });
-        Self { branch, id, tree }
+        Self {
+            branch,
+            id,
+            tree: Box::new(tree),
+        }
     }
 
     /// Return the branch from which this state was resolved.
@@ -250,7 +320,7 @@ struct ActiveTransaction {
     functions_before: HashMap<String, GlueFunction>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 enum StoredRow {
     Vec(Vec<Value>),
     Map(BTreeMap<String, Value>),
@@ -279,6 +349,53 @@ struct IndexEntry {
     primary_key: Key,
     index_value: Value,
     row: StoredRow,
+}
+
+#[derive(Default)]
+struct LogicalState {
+    schemas: BTreeMap<String, Schema>,
+    rows: BTreeMap<(String, Key), StoredRow>,
+    functions: BTreeMap<String, GlueFunction>,
+}
+
+fn merge_maps<K, V, F>(
+    base: &BTreeMap<K, V>,
+    current: &BTreeMap<K, V>,
+    incoming: &BTreeMap<K, V>,
+    mut conflict: F,
+) -> (BTreeMap<K, V>, Vec<MergeConflict>)
+where
+    K: Clone + Ord,
+    V: Clone + PartialEq,
+    F: FnMut(&K, Option<&V>, Option<&V>, Option<&V>) -> MergeConflict,
+{
+    let keys = base
+        .keys()
+        .chain(current.keys())
+        .chain(incoming.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut merged = BTreeMap::new();
+    let mut conflicts = Vec::new();
+    for key in keys {
+        let base_value = base.get(&key);
+        let current_value = current.get(&key);
+        let incoming_value = incoming.get(&key);
+        let selected = if current_value == incoming_value {
+            current_value
+        } else if current_value == base_value {
+            incoming_value
+        } else if incoming_value == base_value {
+            current_value
+        } else {
+            conflicts.push(conflict(&key, base_value, current_value, incoming_value));
+            current_value
+        };
+        if let Some(value) = selected {
+            merged.insert(key, value.clone());
+        }
+    }
+    (merged, conflicts)
 }
 
 /// A GlueSQL storage engine whose complete database state is one Prolly tree.
@@ -350,7 +467,7 @@ where
     pub fn create_branch(&self, name: &str) -> Result<Version> {
         let source = self
             .head()?
-            .map_or_else(|| self.engine.create(), |version| version.tree);
+            .map_or_else(|| self.engine.create(), |version| *version.tree);
         let target_name = branch_root_name(name)?;
         match self
             .engine
@@ -393,8 +510,8 @@ where
         self.head_name = branch_root_name(&version.branch)?;
         self.functions = self.load_functions_from_tree(&version.tree)?;
         self.transaction = Some(ActiveTransaction {
-            base: Some(version.tree.clone()),
-            tree: version.tree.clone(),
+            base: Some(version.tree.as_ref().clone()),
+            tree: version.tree.as_ref().clone(),
             dirty: false,
             functions_before: self.functions.clone(),
         });
@@ -429,6 +546,53 @@ where
         Ok(result)
     }
 
+    /// Merge `incoming` into the selected branch using `base` as their common ancestor.
+    ///
+    /// The current branch head is the left side of the three-way merge. Logical
+    /// schema, row, and function conflicts are returned as decoded SQL values.
+    /// Secondary indexes, sequences, and metadata remain private implementation
+    /// details and are rebuilt before the new version is atomically published.
+    ///
+    /// The selected branch is changed only when there are no conflicts and its
+    /// head has not advanced since the merge began.
+    pub async fn merge(&mut self, base: &Version, incoming: &Version) -> Result<MergeResult> {
+        if self.transaction.is_some() {
+            return Err(Error::TransactionState("cannot merge during a transaction"));
+        }
+
+        let current_root = self.load_head_tree()?;
+        let current_tree = current_root.clone().unwrap_or_else(|| self.engine.create());
+        let current = Version::new(self.branch.clone(), current_tree.clone());
+
+        if current.tree == incoming.tree || incoming.tree == base.tree {
+            self.reload_function_cache()?;
+            return Ok(MergeResult::Applied {
+                version: current,
+                changes: Diff::default(),
+            });
+        }
+        if current.tree == base.tree {
+            return self.publish_merge(current_root, current, incoming.tree.as_ref().clone());
+        }
+
+        let base_state = self.load_logical_state(&base.tree)?;
+        let current_state = self.load_logical_state(&current.tree)?;
+        let incoming_state = self.load_logical_state(&incoming.tree)?;
+        let (merged_state, mut conflicts) =
+            Self::merge_logical_states(&base_state, &current_state, &incoming_state);
+        if conflicts.is_empty() {
+            conflicts = Self::validate_logical_state(&merged_state);
+        }
+        if !conflicts.is_empty() {
+            return Ok(MergeResult::Conflicted { conflicts });
+        }
+
+        let merged_tree = self
+            .materialize_logical_state(&base.tree, &current.tree, &incoming.tree, &merged_state)
+            .await?;
+        self.publish_merge(current_root, current, merged_tree)
+    }
+
     /// Atomically move the selected branch to an earlier or otherwise pinned version.
     pub fn reset(&mut self, version: &Version) -> Result<()> {
         if self.transaction.is_some() {
@@ -445,6 +609,357 @@ where
             prolly::NamedRootUpdate::Applied => self.reload_function_cache(),
             prolly::NamedRootUpdate::Conflict { .. } => Err(Error::SerializationConflict),
         }
+    }
+
+    fn publish_merge(
+        &mut self,
+        expected_root: Option<Tree>,
+        current: Version,
+        merged_tree: Tree,
+    ) -> Result<MergeResult> {
+        if current.tree.as_ref() == &merged_tree {
+            return Ok(MergeResult::Applied {
+                version: current,
+                changes: Diff::default(),
+            });
+        }
+        let merged = Version::new(self.branch.clone(), merged_tree);
+        let changes = self.diff(&current, &merged)?;
+        match self.engine.compare_and_swap_named_root(
+            &self.head_name,
+            expected_root.as_ref(),
+            Some(&merged.tree),
+        )? {
+            prolly::NamedRootUpdate::Applied => {
+                self.reload_function_cache()?;
+                Ok(MergeResult::Applied {
+                    version: merged,
+                    changes,
+                })
+            }
+            prolly::NamedRootUpdate::Conflict { .. } => Err(Error::SerializationConflict),
+        }
+    }
+
+    fn load_logical_state(&self, tree: &Tree) -> Result<LogicalState> {
+        let schemas = self
+            .scan_tree_records::<Schema>(tree, &all_schemas_prefix())?
+            .into_iter()
+            .map(|(_, schema)| (schema.table_name.clone(), schema))
+            .collect();
+        let rows = self
+            .scan_tree_records::<StoredRow>(tree, &all_rows_prefix())?
+            .into_iter()
+            .map(|(physical_key, row)| Ok((decode_row_identity(&physical_key)?, row)))
+            .collect::<Result<_>>()?;
+        let functions = self
+            .scan_tree_records::<GlueFunction>(tree, &functions_prefix())?
+            .into_iter()
+            .map(|(_, function)| (function.func_name.to_uppercase(), function))
+            .collect();
+        Ok(LogicalState {
+            schemas,
+            rows,
+            functions,
+        })
+    }
+
+    fn merge_logical_states(
+        base: &LogicalState,
+        current: &LogicalState,
+        incoming: &LogicalState,
+    ) -> (LogicalState, Vec<MergeConflict>) {
+        let (schemas, mut conflicts) = merge_maps(
+            &base.schemas,
+            &current.schemas,
+            &incoming.schemas,
+            |table, base, current, incoming| MergeConflict::Schema {
+                table: table.clone(),
+                base: base.cloned(),
+                current: current.cloned(),
+                incoming: incoming.cloned(),
+            },
+        );
+        let (rows, row_conflicts) = merge_maps(
+            &base.rows,
+            &current.rows,
+            &incoming.rows,
+            |(table, key), base, current, incoming| MergeConflict::Row {
+                table: table.clone(),
+                key: key.clone(),
+                base: base.cloned().map(DataRow::from),
+                current: current.cloned().map(DataRow::from),
+                incoming: incoming.cloned().map(DataRow::from),
+            },
+        );
+        conflicts.extend(row_conflicts);
+        let (functions, function_conflicts) = merge_maps(
+            &base.functions,
+            &current.functions,
+            &incoming.functions,
+            |name, base, current, incoming| MergeConflict::Function {
+                name: name.clone(),
+                base: base.cloned(),
+                current: current.cloned(),
+                incoming: incoming.cloned(),
+            },
+        );
+        conflicts.extend(function_conflicts);
+        (
+            LogicalState {
+                schemas,
+                rows,
+                functions,
+            },
+            conflicts,
+        )
+    }
+
+    fn validate_logical_state(state: &LogicalState) -> Vec<MergeConflict> {
+        let mut conflicts = Vec::new();
+        let mut unique_values = BTreeMap::<(String, String, Key), Key>::new();
+
+        for ((table, key), row) in &state.rows {
+            let Some(schema) = state.schemas.get(table) else {
+                conflicts.push(MergeConflict::Constraint {
+                    table: table.clone(),
+                    key: Some(key.clone()),
+                    reason: "row belongs to a table that was removed".to_owned(),
+                });
+                continue;
+            };
+            let (Some(column_defs), StoredRow::Vec(values)) = (&schema.column_defs, row) else {
+                if !matches!((&schema.column_defs, row), (None, StoredRow::Map(_))) {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: "row representation does not match the merged schema".to_owned(),
+                    });
+                }
+                continue;
+            };
+            if values.len() != column_defs.len() {
+                conflicts.push(MergeConflict::Constraint {
+                    table: table.clone(),
+                    key: Some(key.clone()),
+                    reason: format!(
+                        "row has {} values but the merged schema has {} columns",
+                        values.len(),
+                        column_defs.len()
+                    ),
+                });
+                continue;
+            }
+            for (column, value) in column_defs.iter().zip(values) {
+                if let Err(error) = value
+                    .validate_type(&column.data_type)
+                    .and_then(|()| value.validate_null(column.nullable))
+                {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: format!("column {:?}: {error}", column.name),
+                    });
+                    continue;
+                }
+                let Some(unique) = column.unique else {
+                    continue;
+                };
+                let Ok(value_key) = Key::try_from(value.clone()) else {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: format!(
+                            "unique column {:?} cannot be represented as a key",
+                            column.name
+                        ),
+                    });
+                    continue;
+                };
+                if unique == (ColumnUniqueOption { is_primary: true }) && &value_key != key {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: format!(
+                            "primary-key column {:?} does not match the stored row key",
+                            column.name
+                        ),
+                    });
+                }
+                if matches!(value_key, Key::None) {
+                    continue;
+                }
+                let identity = (table.clone(), column.name.clone(), value_key);
+                if let Some(existing_key) = unique_values.insert(identity, key.clone()) {
+                    if existing_key != *key {
+                        conflicts.push(MergeConflict::Constraint {
+                            table: table.clone(),
+                            key: Some(key.clone()),
+                            reason: format!(
+                                "unique column {:?} duplicates row key {existing_key:?}",
+                                column.name
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        for ((table, key), row) in &state.rows {
+            let Some(schema) = state.schemas.get(table) else {
+                continue;
+            };
+            let (Some(column_defs), StoredRow::Vec(values)) = (&schema.column_defs, row) else {
+                continue;
+            };
+            for foreign_key in &schema.foreign_keys {
+                let Some(column_index) = column_defs
+                    .iter()
+                    .position(|column| column.name == foreign_key.referencing_column_name)
+                else {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: format!(
+                            "foreign key {:?} references a missing local column",
+                            foreign_key.name
+                        ),
+                    });
+                    continue;
+                };
+                let Some(value) = values.get(column_index) else {
+                    continue;
+                };
+                if matches!(value, Value::Null) {
+                    continue;
+                }
+                let Ok(referenced_key) = Key::try_from(value.clone()) else {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: format!(
+                            "foreign-key column {:?} cannot be represented as a key",
+                            foreign_key.referencing_column_name
+                        ),
+                    });
+                    continue;
+                };
+                if !state.rows.contains_key(&(
+                    foreign_key.referenced_table_name.clone(),
+                    referenced_key.clone(),
+                )) {
+                    conflicts.push(MergeConflict::Constraint {
+                        table: table.clone(),
+                        key: Some(key.clone()),
+                        reason: format!(
+                            "foreign key {:?} cannot find {:?} in table {:?}",
+                            foreign_key.name, referenced_key, foreign_key.referenced_table_name
+                        ),
+                    });
+                }
+            }
+        }
+
+        conflicts
+    }
+
+    async fn materialize_logical_state(
+        &self,
+        base: &Tree,
+        current: &Tree,
+        incoming: &Tree,
+        state: &LogicalState,
+    ) -> Result<Tree> {
+        let merged =
+            self.engine
+                .merge_prefix(base, current, incoming, &all_schemas_prefix(), None)?;
+        let merged = self
+            .engine
+            .merge_prefix(base, &merged, incoming, &all_rows_prefix(), None)?;
+        let merged =
+            self.engine
+                .merge_prefix(base, &merged, incoming, &functions_prefix(), None)?;
+        let mut mutations = BTreeMap::<Vec<u8>, Mutation>::new();
+        for prefix in [
+            all_sequences_prefix(),
+            metadata_prefix(),
+            all_indexes_prefix(),
+        ] {
+            let (start, end) = prefix_range(&prefix);
+            for entry in self.engine.range(&merged, &start, end.as_deref())? {
+                let (key, _) = entry?;
+                mutations.insert(key.clone(), Mutation::Delete { key });
+            }
+        }
+
+        for schema in state.schemas.values() {
+            let metadata_key = metadata_key(&schema.table_name);
+            let metadata = self
+                .read_tree_record::<BTreeMap<String, Value>>(current, &metadata_key)?
+                .or(self.read_tree_record(incoming, &metadata_key)?)
+                .or(self.read_tree_record(base, &metadata_key)?)
+                .unwrap_or_else(|| {
+                    BTreeMap::from([(
+                        "CREATED".to_owned(),
+                        Value::Timestamp(Utc::now().naive_utc()),
+                    )])
+                });
+            mutations.insert(
+                metadata_key.clone(),
+                Mutation::Upsert {
+                    key: metadata_key,
+                    val: encode_record(&metadata)?,
+                },
+            );
+
+            let sequence_key = sequence_key(&schema.table_name);
+            let mut sequence = [base, current, incoming]
+                .into_iter()
+                .map(|tree| self.read_tree_record::<i64>(tree, &sequence_key))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .max()
+                .unwrap_or(0);
+            sequence = state
+                .rows
+                .keys()
+                .filter_map(|(table, key)| {
+                    (table == &schema.table_name)
+                        .then_some(key)
+                        .and_then(|key| match key {
+                            Key::I64(value) => Some(*value),
+                            _ => None,
+                        })
+                })
+                .fold(sequence, i64::max);
+            if sequence > 0 {
+                mutations.insert(
+                    sequence_key.clone(),
+                    Mutation::Upsert {
+                        key: sequence_key,
+                        val: encode_record(&sequence)?,
+                    },
+                );
+            }
+
+            for ((table, primary_key), stored_row) in &state.rows {
+                if table != &schema.table_name {
+                    continue;
+                }
+                let row = DataRow::from(stored_row.clone());
+                for index in &schema.indexes {
+                    let mutation = Self::index_mutation(schema, index, primary_key, &row, false)
+                        .await
+                        .map_err(|error| Error::Merge(error.to_string()))?;
+                    mutations.insert(mutation.key().to_vec(), mutation);
+                }
+            }
+        }
+
+        Ok(self
+            .engine
+            .batch(&merged, mutations.into_values().collect())?)
     }
 
     fn load_head_tree(&self) -> Result<Option<Tree>> {
@@ -465,6 +980,28 @@ where
             .get(&self.current_tree()?, key)?
             .map(|bytes| decode_record(&bytes))
             .transpose()
+    }
+
+    fn read_tree_record<T: DeserializeOwned>(&self, tree: &Tree, key: &[u8]) -> Result<Option<T>> {
+        self.engine
+            .get(tree, key)?
+            .map(|bytes| decode_record(&bytes))
+            .transpose()
+    }
+
+    fn scan_tree_records<T: DeserializeOwned>(
+        &self,
+        tree: &Tree,
+        prefix: &[u8],
+    ) -> Result<Vec<(Vec<u8>, T)>> {
+        let (start, end) = prefix_range(prefix);
+        self.engine
+            .range(tree, &start, end.as_deref())?
+            .map(|entry| {
+                let (key, bytes) = entry?;
+                Ok((key, decode_record(&bytes)?))
+            })
+            .collect()
     }
 
     fn scan_records<T: DeserializeOwned>(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, T)>> {
@@ -1233,6 +1770,277 @@ mod tests {
             Payload::Select { rows, .. }
                 if rows == &vec![vec![Value::Str("before".to_owned())]]
         ));
+    }
+
+    #[tokio::test]
+    async fn clean_merge_rebuilds_indexes_and_advances_sequences() {
+        let storage = ProllyStorage::in_memory().unwrap();
+        let mut glue = Glue::new(storage);
+        glue.execute("CREATE TABLE notes (value TEXT NOT NULL);")
+            .await
+            .unwrap();
+        glue.execute("INSERT INTO notes VALUES ('base');")
+            .await
+            .unwrap();
+        let base = glue.storage.head().unwrap().unwrap();
+        glue.storage.create_branch("feature").unwrap();
+
+        glue.execute("CREATE INDEX notes_value ON notes (value);")
+            .await
+            .unwrap();
+        glue.storage.checkout_branch("feature").unwrap();
+        glue.execute("INSERT INTO notes VALUES ('incoming');")
+            .await
+            .unwrap();
+        let incoming = glue.storage.head().unwrap().unwrap();
+
+        glue.storage.checkout_branch("main").unwrap();
+        let result = glue.storage.merge(&base, &incoming).await.unwrap();
+        let MergeResult::Applied { version, changes } = result else {
+            panic!("disjoint changes should merge cleanly");
+        };
+        assert_eq!(version.branch(), "main");
+        assert_eq!(changes.rows.len(), 1);
+        assert!(changes.schemas.is_empty());
+
+        let selected = glue
+            .execute("SELECT value FROM notes WHERE value = 'incoming';")
+            .await
+            .unwrap();
+        assert!(matches!(
+            &selected[0],
+            Payload::Select { rows, .. }
+                if rows == &vec![vec![Value::Str("incoming".to_owned())]]
+        ));
+
+        glue.execute("INSERT INTO notes VALUES ('after');")
+            .await
+            .unwrap();
+        let keys = glue
+            .storage
+            .scan_data_inner("notes")
+            .unwrap()
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect::<Vec<_>>();
+        assert_eq!(keys, vec![Key::I64(1), Key::I64(2), Key::I64(3)]);
+    }
+
+    #[tokio::test]
+    async fn merge_returns_typed_row_conflicts_without_moving_head() {
+        let storage = ProllyStorage::in_memory().unwrap();
+        let mut glue = Glue::new(storage);
+        glue.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT);")
+            .await
+            .unwrap();
+        glue.execute("INSERT INTO t VALUES (1, 'base');")
+            .await
+            .unwrap();
+        let base = glue.storage.head().unwrap().unwrap();
+        glue.storage.create_branch("feature").unwrap();
+
+        glue.execute("UPDATE t SET value = 'current' WHERE id = 1;")
+            .await
+            .unwrap();
+        let current = glue.storage.head().unwrap().unwrap();
+        glue.storage.checkout_branch("feature").unwrap();
+        glue.execute("UPDATE t SET value = 'incoming' WHERE id = 1;")
+            .await
+            .unwrap();
+        let incoming = glue.storage.head().unwrap().unwrap();
+
+        glue.storage.checkout_branch("main").unwrap();
+        let result = glue.storage.merge(&base, &incoming).await.unwrap();
+        assert!(!result.is_applied());
+        assert!(matches!(
+            result.conflicts(),
+            [MergeConflict::Row {
+                table,
+                key: Key::I64(1),
+                base: Some(DataRow::Vec(base)),
+                current: Some(DataRow::Vec(current)),
+                incoming: Some(DataRow::Vec(incoming)),
+            }] if table == "t"
+                && base[1] == Value::Str("base".to_owned())
+                && current[1] == Value::Str("current".to_owned())
+                && incoming[1] == Value::Str("incoming".to_owned())
+        ));
+        assert_eq!(glue.storage.head().unwrap().unwrap().id(), current.id());
+    }
+
+    #[tokio::test]
+    async fn merge_reports_cross_branch_unique_constraint_conflicts() {
+        let storage = ProllyStorage::in_memory().unwrap();
+        let mut glue = Glue::new(storage);
+        glue.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE);")
+            .await
+            .unwrap();
+        let base = glue.storage.head().unwrap().unwrap();
+        glue.storage.create_branch("feature").unwrap();
+
+        glue.execute("INSERT INTO users VALUES (1, 'same@example.com');")
+            .await
+            .unwrap();
+        let current = glue.storage.head().unwrap().unwrap();
+        glue.storage.checkout_branch("feature").unwrap();
+        glue.execute("INSERT INTO users VALUES (2, 'same@example.com');")
+            .await
+            .unwrap();
+        let incoming = glue.storage.head().unwrap().unwrap();
+
+        glue.storage.checkout_branch("main").unwrap();
+        let result = glue.storage.merge(&base, &incoming).await.unwrap();
+        assert!(matches!(
+            result.conflicts(),
+            [MergeConflict::Constraint { table, reason, .. }]
+                if table == "users" && reason.contains("unique column")
+        ));
+        assert_eq!(glue.storage.head().unwrap().unwrap().id(), current.id());
+    }
+
+    #[tokio::test]
+    async fn merge_reports_cross_branch_foreign_key_conflicts() {
+        let storage = ProllyStorage::in_memory().unwrap();
+        let mut glue = Glue::new(storage);
+        glue.execute("CREATE TABLE parents (id INTEGER PRIMARY KEY);")
+            .await
+            .unwrap();
+        glue.execute(
+            "CREATE TABLE children (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER,
+                FOREIGN KEY (parent_id) REFERENCES parents (id)
+            );",
+        )
+        .await
+        .unwrap();
+        glue.execute("INSERT INTO parents VALUES (1);")
+            .await
+            .unwrap();
+        let base = glue.storage.head().unwrap().unwrap();
+        glue.storage.create_branch("feature").unwrap();
+
+        glue.execute("DELETE FROM parents WHERE id = 1;")
+            .await
+            .unwrap();
+        let current = glue.storage.head().unwrap().unwrap();
+        glue.storage.checkout_branch("feature").unwrap();
+        glue.execute("INSERT INTO children VALUES (1, 1);")
+            .await
+            .unwrap();
+        let incoming = glue.storage.head().unwrap().unwrap();
+
+        glue.storage.checkout_branch("main").unwrap();
+        let result = glue.storage.merge(&base, &incoming).await.unwrap();
+        assert!(matches!(
+            result.conflicts(),
+            [MergeConflict::Constraint { table, reason, .. }]
+                if table == "children" && reason.contains("foreign key")
+        ));
+        assert_eq!(glue.storage.head().unwrap().unwrap().id(), current.id());
+    }
+
+    #[tokio::test]
+    async fn merge_reports_schema_and_function_conflicts() {
+        let storage = ProllyStorage::in_memory().unwrap();
+        let mut glue = Glue::new(storage);
+        glue.execute("CREATE TABLE t (id INTEGER PRIMARY KEY);")
+            .await
+            .unwrap();
+        glue.execute("CREATE FUNCTION transform(n INT) RETURN n;")
+            .await
+            .unwrap();
+        let base = glue.storage.head().unwrap().unwrap();
+        glue.storage.create_branch("feature").unwrap();
+
+        glue.execute("ALTER TABLE t ADD COLUMN current_value TEXT NULL;")
+            .await
+            .unwrap();
+        glue.execute("DROP FUNCTION transform;").await.unwrap();
+        glue.execute("CREATE FUNCTION transform(n INT) RETURN n + 1;")
+            .await
+            .unwrap();
+        glue.storage.checkout_branch("feature").unwrap();
+        glue.execute("ALTER TABLE t ADD COLUMN incoming_value TEXT NULL;")
+            .await
+            .unwrap();
+        glue.execute("DROP FUNCTION transform;").await.unwrap();
+        glue.execute("CREATE FUNCTION transform(n INT) RETURN n + 2;")
+            .await
+            .unwrap();
+        let incoming = glue.storage.head().unwrap().unwrap();
+
+        glue.storage.checkout_branch("main").unwrap();
+        let result = glue.storage.merge(&base, &incoming).await.unwrap();
+        assert_eq!(result.conflicts().len(), 2);
+        assert!(result.conflicts().iter().any(
+            |conflict| matches!(conflict, MergeConflict::Schema { table, .. } if table == "t")
+        ));
+        assert!(result.conflicts().iter().any(
+            |conflict| matches!(conflict, MergeConflict::Function { name, .. } if name == "TRANSFORM")
+        ));
+    }
+
+    #[tokio::test]
+    async fn merge_publication_rejects_a_stale_branch_head() {
+        let store = std::sync::Arc::new(prolly::MemStore::new());
+        let mut primary = Glue::new(ProllyStorage::new(store.clone()).unwrap());
+        primary
+            .execute("CREATE TABLE t (id INTEGER PRIMARY KEY);")
+            .await
+            .unwrap();
+        let base = primary.storage.head().unwrap().unwrap();
+        primary.storage.create_branch("feature").unwrap();
+        primary.storage.checkout_branch("feature").unwrap();
+        primary.execute("INSERT INTO t VALUES (1);").await.unwrap();
+        let incoming = primary.storage.head().unwrap().unwrap();
+        primary.storage.checkout_branch("main").unwrap();
+
+        let expected_root = primary.storage.load_head_tree().unwrap();
+        let expected = Version::new("main".to_owned(), expected_root.clone().unwrap());
+        let mut concurrent = Glue::new(ProllyStorage::new(store).unwrap());
+        concurrent
+            .execute("INSERT INTO t VALUES (2);")
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            primary
+                .storage
+                .publish_merge(expected_root, expected, *incoming.tree),
+            Err(Error::SerializationConflict)
+        ));
+        assert_eq!(
+            concurrent.storage.head().unwrap().unwrap().id(),
+            primary.storage.head().unwrap().unwrap().id()
+        );
+        assert_ne!(primary.storage.head().unwrap().unwrap().id(), base.id());
+    }
+
+    #[tokio::test]
+    async fn merge_fast_forwards_and_rejects_active_transactions() {
+        let storage = ProllyStorage::in_memory().unwrap();
+        let mut glue = Glue::new(storage);
+        glue.execute("CREATE TABLE t (id INTEGER PRIMARY KEY);")
+            .await
+            .unwrap();
+        let base = glue.storage.head().unwrap().unwrap();
+        glue.storage.create_branch("feature").unwrap();
+        glue.storage.checkout_branch("feature").unwrap();
+        glue.execute("INSERT INTO t VALUES (1);").await.unwrap();
+        let incoming = glue.storage.head().unwrap().unwrap();
+
+        glue.storage.checkout_branch("main").unwrap();
+        let result = glue.storage.merge(&base, &incoming).await.unwrap();
+        assert!(result.is_applied());
+        assert_eq!(glue.storage.head().unwrap().unwrap().id(), incoming.id());
+
+        glue.execute("START TRANSACTION;").await.unwrap();
+        assert!(matches!(
+            glue.storage.merge(&base, &incoming).await,
+            Err(Error::TransactionState("cannot merge during a transaction"))
+        ));
+        glue.execute("ROLLBACK;").await.unwrap();
     }
 
     #[tokio::test]

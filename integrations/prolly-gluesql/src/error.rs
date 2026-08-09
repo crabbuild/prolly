@@ -35,6 +35,10 @@ pub enum Error {
     #[error("branch operation failed: {0}")]
     Branch(String),
 
+    /// A merged logical state could not be materialized as SQL storage records.
+    #[error("merge materialization failed: {0}")]
+    Merge(String),
+
     /// A SQLite-backed storage engine could not be opened.
     #[cfg(feature = "sqlite")]
     #[error("sqlite store failed: {0}")]
