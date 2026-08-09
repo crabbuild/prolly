@@ -489,7 +489,23 @@ function App() {
                   },
                 );
               }}>Put row</button>
-              <button title="Randomly insert a new key or update an existing row" disabled={busy || viewingHistorical} onClick={() => run((engine) => engine.addRandom())}>Random</button>
+              <button title="Randomly insert a new key or update an existing row" disabled={busy || viewingHistorical} onClick={() => {
+                let randomKey: number | undefined;
+                let randomValue: string | undefined;
+                run(
+                  (engine) => {
+                    const result = engine.addRandom();
+                    randomKey = result.key;
+                    randomValue = result.value;
+                    return result.snapshot;
+                  },
+                  () => {
+                    if (randomKey === undefined || randomValue === undefined) return;
+                    setKeyInput(String(randomKey));
+                    setValueInput(randomValue);
+                  },
+                );
+              }}>Random</button>
             </div>
           </div>
           <div className="control-section delete-section">

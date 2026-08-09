@@ -41,6 +41,12 @@ export interface GrowthResult {
   added: number;
 }
 
+export interface RandomMutationResult {
+  snapshot: TreeSnapshot;
+  key: number;
+  value: string;
+}
+
 export interface GarbageCollectionResult {
   head: TreeSnapshot;
   message: string;
@@ -86,8 +92,8 @@ export class ProllyEngine {
     this.tree = this.runtime.create();
   }
 
-  static async create() {
-    return new ProllyEngine(await loadProllyWasm());
+  static async create(wasmInput?: WebAssembly.Module | BufferSource) {
+    return new ProllyEngine(await loadProllyWasm(undefined, wasmInput));
   }
 
   private key(key: number) {
@@ -190,15 +196,17 @@ export class ProllyEngine {
     this.replaceTree(this.runtime.appendBatch(this.tree, mutations));
   }
 
-  addRandom() {
+  addRandom(): RandomMutationResult {
     const rows = this.rows();
     if (rows.length > 0 && Math.random() < 0.5) {
       const row = rows[Math.floor(Math.random() * rows.length)];
-      return this.put(row.key, `random-update-${row.key}-${this.snapshotId}`);
+      const value = `random-update-${row.key}-${this.snapshotId}`;
+      return { snapshot: this.put(row.key, value), key: row.key, value };
     }
     const maxKey = rows.at(-1)?.key ?? 0;
     const key = maxKey + Math.floor(Math.random() * Math.max(160, maxKey)) + 1;
-    return this.put(key, `random-${key}`);
+    const value = `random-${key}`;
+    return { snapshot: this.put(key, value), key, value };
   }
 
   growUntilSplit(limit = 512, batchSize = 16): GrowthResult {
