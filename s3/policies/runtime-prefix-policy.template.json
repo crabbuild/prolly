@@ -1,0 +1,57 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListOnlyTheRepositoryPrefix",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::__BUCKET__"
+      ],
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "__PREFIX__",
+            "__PREFIX__/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadAndPublishRepositoryObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::__BUCKET__/__PREFIX__",
+        "arn:aws:s3:::__BUCKET__/__PREFIX__/*"
+      ]
+    },
+    {
+      "Sid": "DenyDestructiveBucketAdministration",
+      "Effect": "Deny",
+      "Action": [
+        "s3:PutBucketVersioning"
+      ],
+      "Resource": [
+        "arn:aws:s3:::__BUCKET__"
+      ]
+    },
+    {
+      "Sid": "DenyPhysicalDeletion",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::__BUCKET__/__PREFIX__",
+        "arn:aws:s3:::__BUCKET__/__PREFIX__/*"
+      ]
+    }
+  ]
+}

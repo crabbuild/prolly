@@ -1,0 +1,33 @@
+[package]
+name = "prolly-s3-core"
+description = "AWS-independent bucket-level versioned object repository over Prolly trees."
+edition = "2021"
+rust-version = "1.89"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/crabbuild/prolly"
+
+[dependencies]
+async-stream = "0.3"
+async-trait = "0.1"
+bytes = "1.10"
+data-encoding = "2.9"
+futures-util = "0.3"
+hex = "0.4"
+md-5 = "0.10"
+prolly = { package = "prolly-map", version = "0.7.0" }
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.11"
+sha2 = "0.10"
+thiserror = "2.0"
+tokio = { version = "1.45", features = ["sync", "time"] }
+uuid = { version = "1.18", features = ["v4", "serde"] }
+
+[dev-dependencies]
+proptest = "1.7"
+serde_json = "1.0"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(prolly_s3_legacy_v1_codec)'] }
