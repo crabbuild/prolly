@@ -10,7 +10,8 @@ mod storage;
 
 pub use error::{Error, Result};
 pub use storage::{
-    Diff, FunctionChange, MergeConflict, MergeResult, ProllyStorage, RowChange, SchemaChange,
+    Commit, CommitActor, CommitId, CommitMetadata, CommitOptions, CommitRef, DatabaseRef, Diff,
+    FunctionChange, MergeConflict, MergeResult, ProllyStorage, RefUpdate, RowChange, SchemaChange,
     Version, VersionId,
 };
 
