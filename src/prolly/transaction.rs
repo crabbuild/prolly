@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::error::{Error, Mutation};
 use super::manifest::{ManifestStore, ManifestUpdate, NamedRootUpdate, RootManifest};
-use super::store::{BatchOp, NodePublication, OrderedBatchReadPlan, Store};
+use super::store::{cid_from_store_key, BatchOp, NodePublication, OrderedBatchReadPlan, Store};
 use super::tree::Tree;
-use super::Prolly;
+use super::{Cid, Config, NodeCache, Prolly, ProllyMetrics};
 use {
     super::manifest::AsyncManifestStore,
     super::store::{AsyncStore, SyncStoreAsAsync},
@@ -433,8 +433,14 @@ where
     type Error = TransactionOverlayError;
 
     fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
-        if let Some(write) = self.lock()?.root_writes.get(name).cloned() {
-            return Ok(write.replacement().cloned());
+        {
+            let state = self.lock()?;
+            if let Some(write) = state.root_writes.get(name) {
+                return Ok(write.replacement().cloned());
+            }
+            if let Some(read) = state.root_reads.get(name) {
+                return Ok(read.clone());
+            }
         }
 
         let current = self
@@ -442,11 +448,14 @@ where
             .get_root(name)
             .map_err(TransactionOverlayError::store)?;
         let mut state = self.lock()?;
-        state
+        if let Some(write) = state.root_writes.get(name) {
+            return Ok(write.replacement().cloned());
+        }
+        Ok(state
             .root_reads
             .entry(name.to_vec())
-            .or_insert_with(|| current.clone());
-        Ok(current)
+            .or_insert(current)
+            .clone())
     }
 
     fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
@@ -613,8 +622,14 @@ where
     type Error = TransactionOverlayError;
 
     fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
-        if let Some(write) = self.lock()?.root_writes.get(name).cloned() {
-            return Ok(write.replacement().cloned());
+        {
+            let state = self.lock()?;
+            if let Some(write) = state.root_writes.get(name) {
+                return Ok(write.replacement().cloned());
+            }
+            if let Some(read) = state.root_reads.get(name) {
+                return Ok(read.clone());
+            }
         }
 
         let current = self
@@ -622,11 +637,14 @@ where
             .get_root(name)
             .map_err(TransactionOverlayError::store)?;
         let mut state = self.lock()?;
-        state
+        if let Some(write) = state.root_writes.get(name) {
+            return Ok(write.replacement().cloned());
+        }
+        Ok(state
             .root_reads
             .entry(name.to_vec())
-            .or_insert_with(|| current.clone());
-        Ok(current)
+            .or_insert(current)
+            .clone())
     }
 
     fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
@@ -674,10 +692,28 @@ where
 pub struct OwnedAsyncTransactionOverlayStore<S> {
     base: S,
     state: Arc<Mutex<TransactionState>>,
+    committed_cache: Option<Arc<std::sync::RwLock<NodeCache>>>,
 }
 impl<S> OwnedAsyncTransactionOverlayStore<S> {
+    #[cfg(test)]
     fn new(base: S, state: Arc<Mutex<TransactionState>>) -> Self {
-        Self { base, state }
+        Self {
+            base,
+            state,
+            committed_cache: None,
+        }
+    }
+
+    fn with_committed_cache(
+        base: S,
+        state: Arc<Mutex<TransactionState>>,
+        committed_cache: Arc<std::sync::RwLock<NodeCache>>,
+    ) -> Self {
+        Self {
+            base,
+            state,
+            committed_cache: Some(committed_cache),
+        }
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, TransactionState>, TransactionOverlayError> {
@@ -695,11 +731,14 @@ where
         let staged = self.lock()?.node_writes.get(key).cloned();
         match staged {
             Some(value) => Ok(value),
-            None => self
-                .base
-                .get(key)
-                .await
-                .map_err(TransactionOverlayError::store),
+            None => match cached_node_bytes(self.committed_cache.as_ref(), key) {
+                Some(value) => Ok(Some(value)),
+                None => self
+                    .base
+                    .get(key)
+                    .await
+                    .map_err(TransactionOverlayError::store),
+            },
         }
     }
 
@@ -737,7 +776,26 @@ where
     }
 
     async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
-        async_overlay_batch_get_ordered(&self.base, &self.state, keys).await
+        async_overlay_batch_get_ordered(
+            &self.base,
+            &self.state,
+            self.committed_cache.as_ref(),
+            keys,
+        )
+        .await
+    }
+
+    async fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        async_overlay_batch_get_ordered(
+            &self.base,
+            &self.state,
+            self.committed_cache.as_ref(),
+            keys,
+        )
+        .await
     }
 
     fn prefers_batch_reads(&self) -> bool {
@@ -756,8 +814,14 @@ where
     type Error = TransactionOverlayError;
 
     async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
-        if let Some(write) = self.lock()?.root_writes.get(name).cloned() {
-            return Ok(write.replacement().cloned());
+        {
+            let state = self.lock()?;
+            if let Some(write) = state.root_writes.get(name) {
+                return Ok(write.replacement().cloned());
+            }
+            if let Some(read) = state.root_reads.get(name) {
+                return Ok(read.clone());
+            }
         }
 
         let current = self
@@ -766,11 +830,21 @@ where
             .await
             .map_err(TransactionOverlayError::store)?;
         let mut state = self.lock()?;
-        state
+        if let Some(write) = state.root_writes.get(name) {
+            return Ok(write.replacement().cloned());
+        }
+        Ok(state
             .root_reads
             .entry(name.to_vec())
-            .or_insert_with(|| current.clone());
-        Ok(current)
+            .or_insert(current)
+            .clone())
+    }
+
+    async fn get_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<RootManifest>>, Self::Error> {
+        async_overlay_get_roots_ordered(&self.base, &self.state, names).await
     }
 
     async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
@@ -815,6 +889,7 @@ where
 async fn async_overlay_batch_get_ordered<S: AsyncStore>(
     base: &S,
     state: &Arc<Mutex<TransactionState>>,
+    committed_cache: Option<&Arc<std::sync::RwLock<NodeCache>>>,
     keys: &[&[u8]],
 ) -> Result<Vec<Option<Vec<u8>>>, TransactionOverlayError>
 where
@@ -833,10 +908,13 @@ where
     for (position, staged_value) in staged.into_iter().enumerate() {
         match staged_value {
             Some(value) => results[position] = value,
-            None => {
-                missing_keys.push(keys[position]);
-                missing_positions.push(position);
-            }
+            None => match cached_node_bytes(committed_cache, keys[position]) {
+                Some(value) => results[position] = Some(value),
+                None => {
+                    missing_keys.push(keys[position]);
+                    missing_positions.push(position);
+                }
+            },
         }
     }
     if missing_keys.is_empty() {
@@ -855,15 +933,138 @@ where
     Ok(results)
 }
 
+fn cached_node_bytes(
+    cache: Option<&Arc<std::sync::RwLock<NodeCache>>>,
+    key: &[u8],
+) -> Option<Vec<u8>> {
+    let cid = cid_from_store_key(key, "transaction cache lookup").ok()?;
+    let node = cache?.read().ok()?.peek(&cid)?;
+    let bytes = node.to_bytes();
+    (Cid::from_bytes(&bytes) == cid).then_some(bytes)
+}
+
+fn promote_committed_nodes(
+    cache: &Arc<std::sync::RwLock<NodeCache>>,
+    metrics: &Arc<ProllyMetrics>,
+    config: &Config,
+    writes: &[TransactionNodeWrite],
+) {
+    let mut decoded = Vec::new();
+    let mut contains_delete = false;
+    for write in writes {
+        match write {
+            TransactionNodeWrite::Upsert { key, value } => {
+                let Ok(cid) = cid_from_store_key(key, "committed transaction node") else {
+                    debug_assert!(false, "transaction committed a malformed node key");
+                    continue;
+                };
+                let Ok(node) = super::engine::validation::decode_owned(&cid, &config.format, value)
+                else {
+                    debug_assert!(false, "transaction committed malformed node bytes");
+                    continue;
+                };
+                decoded.push((cid, Arc::new(node), value.len()));
+            }
+            TransactionNodeWrite::Delete { .. } => contains_delete = true,
+        }
+    }
+    if let Ok(mut cache) = cache.write() {
+        let mut evictions = if contains_delete { cache.clear() } else { 0 };
+        for (cid, node, bytes) in decoded {
+            evictions += cache.insert(cid, node, bytes);
+        }
+        metrics.add_cache_evictions(evictions);
+    }
+}
+
+async fn async_overlay_get_roots_ordered<S: AsyncManifestStore>(
+    base: &S,
+    state: &Arc<Mutex<TransactionState>>,
+    names: &[&[u8]],
+) -> Result<Vec<Option<RootManifest>>, TransactionOverlayError>
+where
+    S::Error: Send + Sync,
+{
+    let mut results = vec![None; names.len()];
+    let mut resolved = vec![false; names.len()];
+    let mut missing_names = Vec::new();
+    let mut missing_positions = Vec::new();
+    {
+        let state = state.lock().map_err(TransactionOverlayError::poisoned)?;
+        for (position, name) in names.iter().enumerate() {
+            if let Some(write) = state.root_writes.get(*name) {
+                results[position] = write.replacement().cloned();
+                resolved[position] = true;
+            } else if let Some(read) = state.root_reads.get(*name) {
+                results[position] = read.clone();
+                resolved[position] = true;
+            } else {
+                missing_names.push(*name);
+                missing_positions.push(position);
+            }
+        }
+    }
+    if missing_names.is_empty() {
+        return Ok(results);
+    }
+    let observed = base
+        .get_roots_ordered(&missing_names)
+        .await
+        .map_err(TransactionOverlayError::store)?;
+    if observed.len() != missing_names.len() {
+        return Err(TransactionOverlayError {
+            message: "base manifest batch returned the wrong result count".into(),
+            source: None,
+        });
+    }
+    let mut state = state.lock().map_err(TransactionOverlayError::poisoned)?;
+    for ((position, name), observed) in missing_positions
+        .into_iter()
+        .zip(missing_names)
+        .zip(observed)
+    {
+        results[position] = if let Some(write) = state.root_writes.get(name) {
+            write.replacement().cloned()
+        } else {
+            state
+                .root_reads
+                .entry(name.to_vec())
+                .or_insert(observed)
+                .clone()
+        };
+        resolved[position] = true;
+    }
+    debug_assert!(resolved.into_iter().all(|value| value));
+    Ok(results)
+}
+
 /// Async store overlay used internally by [`AsyncProllyTransaction`].
 #[derive(Clone)]
 pub struct AsyncTransactionOverlayStore<'a, S> {
     base: &'a S,
     state: Arc<Mutex<TransactionState>>,
+    committed_cache: Option<Arc<std::sync::RwLock<NodeCache>>>,
 }
 impl<'a, S> AsyncTransactionOverlayStore<'a, S> {
+    #[cfg(test)]
     fn new(base: &'a S, state: Arc<Mutex<TransactionState>>) -> Self {
-        Self { base, state }
+        Self {
+            base,
+            state,
+            committed_cache: None,
+        }
+    }
+
+    fn with_committed_cache(
+        base: &'a S,
+        state: Arc<Mutex<TransactionState>>,
+        committed_cache: Arc<std::sync::RwLock<NodeCache>>,
+    ) -> Self {
+        Self {
+            base,
+            state,
+            committed_cache: Some(committed_cache),
+        }
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, TransactionState>, TransactionOverlayError> {
@@ -881,11 +1082,14 @@ where
         let staged = self.lock()?.node_writes.get(key).cloned();
         match staged {
             Some(value) => Ok(value),
-            None => self
-                .base
-                .get(key)
-                .await
-                .map_err(TransactionOverlayError::store),
+            None => match cached_node_bytes(self.committed_cache.as_ref(), key) {
+                Some(value) => Ok(Some(value)),
+                None => self
+                    .base
+                    .get(key)
+                    .await
+                    .map_err(TransactionOverlayError::store),
+            },
         }
     }
 
@@ -923,7 +1127,16 @@ where
     }
 
     async fn batch_get_ordered(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
-        async_overlay_batch_get_ordered(self.base, &self.state, keys).await
+        async_overlay_batch_get_ordered(self.base, &self.state, self.committed_cache.as_ref(), keys)
+            .await
+    }
+
+    async fn batch_get_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        async_overlay_batch_get_ordered(self.base, &self.state, self.committed_cache.as_ref(), keys)
+            .await
     }
 
     fn prefers_batch_reads(&self) -> bool {
@@ -942,8 +1155,14 @@ where
     type Error = TransactionOverlayError;
 
     async fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
-        if let Some(write) = self.lock()?.root_writes.get(name).cloned() {
-            return Ok(write.replacement().cloned());
+        {
+            let state = self.lock()?;
+            if let Some(write) = state.root_writes.get(name) {
+                return Ok(write.replacement().cloned());
+            }
+            if let Some(read) = state.root_reads.get(name) {
+                return Ok(read.clone());
+            }
         }
 
         let current = self
@@ -952,11 +1171,21 @@ where
             .await
             .map_err(TransactionOverlayError::store)?;
         let mut state = self.lock()?;
-        state
+        if let Some(write) = state.root_writes.get(name) {
+            return Ok(write.replacement().cloned());
+        }
+        Ok(state
             .root_reads
             .entry(name.to_vec())
-            .or_insert_with(|| current.clone());
-        Ok(current)
+            .or_insert(current)
+            .clone())
+    }
+
+    async fn get_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<RootManifest>>, Self::Error> {
+        async_overlay_get_roots_ordered(self.base, &self.state, names).await
     }
 
     async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
@@ -1098,6 +1327,23 @@ where
         super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
+    /// Stage a named-root CAS update with explicit manifest timestamps.
+    pub fn compare_and_swap_named_root_at_millis(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+        timestamp_millis: u64,
+    ) -> Result<NamedRootUpdate, Error> {
+        let future = self.inner().compare_and_swap_named_root_at_millis(
+            name,
+            expected,
+            new,
+            timestamp_millis,
+        );
+        super::engine::ready::run_ready(self.ready_store.ready(future))
+    }
+
     /// Discard all staged writes. Dropping an uncommitted transaction has the
     /// same effect; this method is useful when callers want to be explicit.
     pub fn rollback(mut self) {
@@ -1204,6 +1450,23 @@ where
         super::engine::ready::run_ready(self.ready_store.ready(future))
     }
 
+    /// Stage a named-root CAS update with explicit manifest timestamps.
+    pub fn compare_and_swap_named_root_at_millis(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+        timestamp_millis: u64,
+    ) -> Result<NamedRootUpdate, Error> {
+        let future = self.inner().compare_and_swap_named_root_at_millis(
+            name,
+            expected,
+            new,
+            timestamp_millis,
+        );
+        super::engine::ready::run_ready(self.ready_store.ready(future))
+    }
+
     /// Discard all staged writes. Dropping an uncommitted transaction has the
     /// same effect; this method is useful when callers want to be explicit.
     pub fn rollback(mut self) {
@@ -1231,6 +1494,9 @@ where
     <S as AsyncManifestStore>::Error: Send + Sync,
 {
     base_store: S,
+    base_cache: Arc<std::sync::RwLock<NodeCache>>,
+    base_metrics: Arc<ProllyMetrics>,
+    base_config: Config,
     state: Arc<Mutex<TransactionState>>,
     manager: AsyncProlly<OwnedAsyncTransactionOverlayStore<S>>,
     completed: bool,
@@ -1249,11 +1515,21 @@ where
         }
 
         let base_store = base.store.clone();
+        let base_cache = base.node_cache.clone();
+        let base_metrics = base.metrics.clone();
+        let base_config = base.config.clone();
         let state = Arc::new(Mutex::new(TransactionState::default()));
-        let overlay = OwnedAsyncTransactionOverlayStore::new(base_store.clone(), state.clone());
+        let overlay = OwnedAsyncTransactionOverlayStore::with_committed_cache(
+            base_store.clone(),
+            state.clone(),
+            base_cache.clone(),
+        );
         let manager = AsyncProlly::new(overlay, base.config.clone());
         Ok(Self {
             base_store,
+            base_cache,
+            base_metrics,
+            base_config,
             state,
             manager,
             completed: false,
@@ -1290,6 +1566,15 @@ where
         self.manager.load_named_root(name).await
     }
 
+    /// Load and pin named roots in caller order, batching backend reads when
+    /// supported by the manifest store.
+    pub async fn load_named_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<Tree>>, Error> {
+        self.manager.load_named_roots_ordered(names).await
+    }
+
     /// Stage an unconditional named-root publish.
     pub async fn publish_named_root(&self, name: &[u8], tree: &Tree) -> Result<(), Error> {
         self.manager.publish_named_root(name, tree).await
@@ -1324,6 +1609,19 @@ where
             .await
     }
 
+    /// Stage a named-root CAS update with explicit manifest timestamps.
+    pub async fn compare_and_swap_named_root_at_millis(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+        timestamp_millis: u64,
+    ) -> Result<NamedRootUpdate, Error> {
+        self.manager
+            .compare_and_swap_named_root_at_millis(name, expected, new, timestamp_millis)
+            .await
+    }
+
     /// Discard all staged writes.
     pub fn rollback(mut self) {
         self.completed = true;
@@ -1347,6 +1645,14 @@ where
             .base_store
             .commit_transaction(&node_writes, &root_conditions, &root_writes)
             .await?;
+        if update.is_applied() {
+            promote_committed_nodes(
+                &self.base_cache,
+                &self.base_metrics,
+                &self.base_config,
+                &node_writes,
+            );
+        }
         self.completed = true;
         Ok(update)
     }
@@ -1378,7 +1684,11 @@ where
         }
 
         let state = Arc::new(Mutex::new(TransactionState::default()));
-        let overlay = AsyncTransactionOverlayStore::new(&base.store, state.clone());
+        let overlay = AsyncTransactionOverlayStore::with_committed_cache(
+            &base.store,
+            state.clone(),
+            base.node_cache.clone(),
+        );
         let manager = AsyncProlly::new(overlay, base.config.clone());
         Ok(Self {
             base,
@@ -1396,6 +1706,16 @@ where
     /// Get a value from a tree, including nodes staged in this transaction.
     pub async fn get(&self, tree: &Tree, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         self.manager.get(tree, key).await
+    }
+
+    /// Read several keys from one transaction-visible tree in caller order.
+    #[doc(hidden)]
+    pub async fn get_many<K: AsRef<[u8]>>(
+        &self,
+        tree: &Tree,
+        keys: &[K],
+    ) -> Result<Vec<Option<Vec<u8>>>, Error> {
+        self.manager.get_many(tree, keys).await
     }
 
     /// Insert or update a key/value pair, staging rewritten nodes.
@@ -1416,6 +1736,15 @@ where
     /// Load a named root and add it to the transaction read set.
     pub async fn load_named_root(&self, name: &[u8]) -> Result<Option<Tree>, Error> {
         self.manager.load_named_root(name).await
+    }
+
+    /// Load and pin named roots in caller order, batching backend reads when
+    /// supported by the manifest store.
+    pub async fn load_named_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<Tree>>, Error> {
+        self.manager.load_named_roots_ordered(names).await
     }
 
     /// Stage an unconditional named-root publish.
@@ -1452,6 +1781,19 @@ where
             .await
     }
 
+    /// Stage a named-root CAS update with explicit manifest timestamps.
+    pub async fn compare_and_swap_named_root_at_millis(
+        &self,
+        name: &[u8],
+        expected: Option<&Tree>,
+        new: Option<&Tree>,
+        timestamp_millis: u64,
+    ) -> Result<NamedRootUpdate, Error> {
+        self.manager
+            .compare_and_swap_named_root_at_millis(name, expected, new, timestamp_millis)
+            .await
+    }
+
     /// Discard all staged writes. Dropping an uncommitted transaction has the
     /// same effect; this method is useful when callers want to be explicit.
     pub fn rollback(mut self) {
@@ -1477,6 +1819,14 @@ where
             .store
             .commit_transaction(&node_writes, &root_conditions, &root_writes)
             .await?;
+        if update.is_applied() {
+            promote_committed_nodes(
+                &self.base.node_cache,
+                &self.base.metrics,
+                &self.base.config,
+                &node_writes,
+            );
+        }
         self.completed = true;
         Ok(update)
     }
@@ -1582,7 +1932,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prolly::store::{MemStore, MemStoreError, NodePublicationHint, PublicationOrigin};
+    use crate::prolly::store::{
+        MemStore, MemStoreError, NodePublicationHint, PublicationOrigin, SyncStoreAsAsync,
+    };
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::{
@@ -1597,6 +1949,7 @@ mod tests {
         batch_reads: Arc<AtomicUsize>,
         batch_keys: Arc<AtomicUsize>,
         publication_calls: Arc<AtomicUsize>,
+        root_reads: Arc<AtomicUsize>,
     }
 
     impl Store for CountingBatchStore {
@@ -1639,10 +1992,135 @@ mod tests {
         }
     }
 
+    impl ManifestStore for CountingBatchStore {
+        type Error = MemStoreError;
+
+        fn get_root(&self, name: &[u8]) -> Result<Option<RootManifest>, Self::Error> {
+            self.root_reads.fetch_add(1, Ordering::Relaxed);
+            self.inner.get_root(name)
+        }
+
+        fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
+            self.inner.put_root(name, manifest)
+        }
+
+        fn delete_root(&self, name: &[u8]) -> Result<(), Self::Error> {
+            self.inner.delete_root(name)
+        }
+
+        fn compare_and_swap_root(
+            &self,
+            name: &[u8],
+            expected: Option<&RootManifest>,
+            new: Option<&RootManifest>,
+        ) -> Result<ManifestUpdate, Self::Error> {
+            self.inner.compare_and_swap_root(name, expected, new)
+        }
+    }
+
+    impl TransactionalStore for CountingBatchStore {
+        fn supports_transactions(&self) -> bool {
+            true
+        }
+
+        fn commit_transaction(
+            &self,
+            node_writes: &[TransactionNodeWrite],
+            root_conditions: &[RootCondition],
+            root_writes: &[RootWrite],
+        ) -> Result<TransactionUpdate, Error> {
+            self.inner
+                .commit_transaction(node_writes, root_conditions, root_writes)
+        }
+    }
+
     fn seed(store: &CountingBatchStore) {
         store.inner.put(b"a", b"base-a").unwrap();
         store.inner.put(b"b", b"base-b").unwrap();
         store.inner.put(b"c", b"base-c").unwrap();
+    }
+
+    #[test]
+    fn transaction_overlay_reuses_the_first_pinned_root_read() {
+        let base = CountingBatchStore::default();
+        let first =
+            RootManifest::from_tree(&Tree::new(crate::Config::default())).with_updated_at_millis(1);
+        let moved = first.clone().with_updated_at_millis(2);
+        base.inner.put_root(b"root", &first).unwrap();
+        let overlay =
+            TransactionOverlayStore::new(&base, Arc::new(Mutex::new(TransactionState::default())));
+
+        assert_eq!(overlay.get_root(b"root").unwrap(), Some(first.clone()));
+        base.inner.put_root(b"root", &moved).unwrap();
+        assert_eq!(overlay.get_root(b"root").unwrap(), Some(first));
+        assert_eq!(base.root_reads.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn async_transaction_overlay_reuses_the_first_pinned_root_read() {
+        block_on(async {
+            let base = CountingBatchStore::default();
+            let first = RootManifest::from_tree(&Tree::new(crate::Config::default()))
+                .with_updated_at_millis(1);
+            let moved = first.clone().with_updated_at_millis(2);
+            base.inner.put_root(b"root", &first).unwrap();
+            let adapter = SyncStoreAsAsync::new(Arc::new(base.clone()));
+            let overlay = AsyncTransactionOverlayStore::new(
+                &adapter,
+                Arc::new(Mutex::new(TransactionState::default())),
+            );
+
+            assert_eq!(
+                AsyncManifestStore::get_root(&overlay, b"root")
+                    .await
+                    .unwrap(),
+                Some(first.clone())
+            );
+            base.inner.put_root(b"root", &moved).unwrap();
+            assert_eq!(
+                AsyncManifestStore::get_root(&overlay, b"root")
+                    .await
+                    .unwrap(),
+                Some(first)
+            );
+            assert_eq!(base.root_reads.load(Ordering::Relaxed), 1);
+        });
+    }
+
+    #[test]
+    fn async_transaction_overlay_batch_preserves_order_missing_and_pins() {
+        block_on(async {
+            let base = CountingBatchStore::default();
+            let first = RootManifest::from_tree(&Tree::new(crate::Config::default()))
+                .with_updated_at_millis(1);
+            let moved = first.clone().with_updated_at_millis(2);
+            base.inner.put_root(b"root", &first).unwrap();
+            let adapter = SyncStoreAsAsync::new(Arc::new(base.clone()));
+            let overlay = AsyncTransactionOverlayStore::new(
+                &adapter,
+                Arc::new(Mutex::new(TransactionState::default())),
+            );
+            let names = [
+                b"root".as_slice(),
+                b"missing".as_slice(),
+                b"root".as_slice(),
+            ];
+
+            assert_eq!(
+                AsyncManifestStore::get_roots_ordered(&overlay, &names)
+                    .await
+                    .unwrap(),
+                vec![Some(first.clone()), None, Some(first.clone())]
+            );
+            base.inner.put_root(b"root", &moved).unwrap();
+            assert_eq!(
+                AsyncManifestStore::get_roots_ordered(&overlay, &names)
+                    .await
+                    .unwrap(),
+                vec![Some(first.clone()), None, Some(first)]
+            );
+            assert_eq!(base.root_reads.load(Ordering::Relaxed), 3);
+        });
     }
 
     fn assert_overlay_reads<S: Store<Error = TransactionOverlayError>>(overlay: &S) {
@@ -1768,6 +2246,29 @@ mod tests {
         assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 1);
         assert_eq!(counters.batch_keys.load(Ordering::Relaxed), 2);
     }
+
+    #[test]
+    fn transaction_cas_preserves_explicit_manifest_timestamp() {
+        let store = Arc::new(MemStore::new());
+        let engine = Prolly::new(store.clone(), crate::prolly::Config::default());
+        let tree = engine
+            .put(&engine.create(), b"key".to_vec(), b"value".to_vec())
+            .unwrap();
+        let tx = engine.begin_transaction().unwrap();
+        assert!(matches!(
+            tx.compare_and_swap_named_root_at_millis(b"root", None, Some(&tree), 42_000)
+                .unwrap(),
+            NamedRootUpdate::Applied
+        ));
+        assert!(matches!(
+            tx.commit().unwrap(),
+            TransactionUpdate::Applied { .. }
+        ));
+        let manifest = store.get_root(b"root").unwrap().unwrap();
+        assert_eq!(manifest.created_at_millis, Some(42_000));
+        assert_eq!(manifest.updated_at_millis, Some(42_000));
+    }
+
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
         let mut context = Context::from_waker(&waker);
@@ -1812,5 +2313,152 @@ mod tests {
         assert_eq!(counters.point_reads.load(Ordering::Relaxed), 0);
         assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 1);
         assert_eq!(counters.batch_keys.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn async_overlay_unique_batch_reads_use_one_base_batch() {
+        let base = CountingBatchStore::default();
+        seed(&base);
+        let counters = base.clone();
+        let base = SyncStoreAsAsync::new(base);
+        let overlay = AsyncTransactionOverlayStore::new(
+            &base,
+            Arc::new(Mutex::new(TransactionState::default())),
+        );
+        block_on(async {
+            let values = overlay
+                .batch_get_ordered_unique(&[b"a", b"b", b"missing"])
+                .await
+                .unwrap();
+            assert_eq!(
+                values,
+                vec![Some(b"base-a".to_vec()), Some(b"base-b".to_vec()), None]
+            );
+        });
+        assert_eq!(counters.point_reads.load(Ordering::Relaxed), 0);
+        assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 1);
+        assert_eq!(counters.batch_keys.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn committed_transaction_nodes_are_promoted_but_rollback_nodes_are_isolated() {
+        let store = Arc::new(MemStore::new());
+        let engine = Prolly::new(store, crate::Config::default());
+
+        let rolled_back = {
+            let tx = engine.begin_transaction().unwrap();
+            let tree = tx
+                .put(&tx.create(), b"rolled-back".to_vec(), b"value".to_vec())
+                .unwrap();
+            tx.rollback();
+            tree
+        };
+        assert_eq!(engine.cache_len(), 0);
+        assert!(matches!(
+            engine.get(&rolled_back, b"rolled-back"),
+            Err(Error::NotFound(_))
+        ));
+
+        let committed = {
+            let tx = engine.begin_transaction().unwrap();
+            let tree = tx
+                .put(&tx.create(), b"committed".to_vec(), b"value".to_vec())
+                .unwrap();
+            assert!(matches!(
+                tx.commit().unwrap(),
+                TransactionUpdate::Applied { .. }
+            ));
+            tree
+        };
+        assert!(engine.cache_len() > 0);
+        assert_eq!(
+            engine.get(&committed, b"committed").unwrap(),
+            Some(b"value".to_vec())
+        );
+    }
+
+    #[test]
+    fn conflicting_transaction_does_not_promote_uncommitted_nodes() {
+        let store = Arc::new(MemStore::new());
+        let engine = Prolly::new(store.clone(), crate::Config::default());
+        let initial = engine
+            .put(&engine.create(), b"base".to_vec(), b"value".to_vec())
+            .unwrap();
+        engine
+            .compare_and_swap_named_root(b"root", None, Some(&initial))
+            .unwrap();
+        engine.clear_cache();
+
+        let tx = engine.begin_transaction().unwrap();
+        let observed = tx.load_named_root(b"root").unwrap().unwrap();
+        let candidate = tx
+            .put(&observed, b"candidate".to_vec(), b"value".to_vec())
+            .unwrap();
+        tx.compare_and_swap_named_root(b"root", Some(&observed), Some(&candidate))
+            .unwrap();
+
+        let moved = engine
+            .put(&initial, b"winner".to_vec(), b"value".to_vec())
+            .unwrap();
+        assert!(matches!(
+            engine.compare_and_swap_named_root(b"root", Some(&initial), Some(&moved)),
+            Ok(NamedRootUpdate::Applied)
+        ));
+        engine.clear_cache();
+        assert!(matches!(
+            tx.commit().unwrap(),
+            TransactionUpdate::Conflict(_)
+        ));
+        assert!(matches!(
+            engine.get(&candidate, b"candidate"),
+            Err(Error::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn owned_commit_promotes_cache_for_later_borrowed_transactions() {
+        block_on(async {
+            let store = CountingBatchStore::default();
+            let counters = store.clone();
+            let engine = AsyncProlly::new(SyncStoreAsAsync::new(store), crate::Config::default());
+            let committed = {
+                let tx = engine.begin_owned_transaction().unwrap();
+                let tree = tx
+                    .put(&tx.create(), b"committed".to_vec(), b"value".to_vec())
+                    .await
+                    .unwrap();
+                assert!(matches!(
+                    tx.commit().await.unwrap(),
+                    TransactionUpdate::Applied { .. }
+                ));
+                tree
+            };
+            counters.point_reads.store(0, Ordering::Relaxed);
+            counters.batch_reads.store(0, Ordering::Relaxed);
+
+            let tx = engine.begin_transaction().unwrap();
+            assert_eq!(
+                tx.get(&committed, b"committed").await.unwrap(),
+                Some(b"value".to_vec())
+            );
+            tx.rollback();
+            assert_eq!(counters.point_reads.load(Ordering::Relaxed), 0);
+            assert_eq!(counters.batch_reads.load(Ordering::Relaxed), 0);
+
+            let rolled_back = {
+                let tx = engine.begin_owned_transaction().unwrap();
+                let tree = tx
+                    .put(&committed, b"rolled-back".to_vec(), b"value".to_vec())
+                    .await
+                    .unwrap();
+                tx.rollback();
+                tree
+            };
+            engine.clear_cache();
+            assert!(matches!(
+                engine.get(&rolled_back, b"rolled-back").await,
+                Err(Error::NotFound(_))
+            ));
+        });
     }
 }

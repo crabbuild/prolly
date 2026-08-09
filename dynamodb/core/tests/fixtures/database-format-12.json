@@ -1,0 +1,12 @@
+{
+  "fixture_version": 1,
+  "database_format_version": 12,
+  "logical_protocol_major": 1,
+  "logical_protocol_minor": 0,
+  "tree_format_input": "tree",
+  "publication_mode": "prepublish_immutable_nodes",
+  "large_value_inline_threshold": 65536,
+  "minimum_reader_version": 12,
+  "minimum_writer_version": 12,
+  "encoded_hex": "44444246010000000c00010000b7634b782bbeede79bb1e3bc4cf9c09d87bc25e4c5d0e4b0cf4b22c8b6497b0829baf85dbdc57671178597c88d234550b1dcfd38d9b7a385c887b9fc0e62ba5449c889882eeee206599d6a755fb7223def4412eaa4d43e035b51ca7547ef6a198fd2be6d05910d62ce8b3cbbe53742ab8ab8171ab6ad9e18c0eb9b4ce45e6dbadc9c5edb8b2d479e697b4b0b8ab874f32b325138598ce9e7b759eb82921106220100000000000100000000000c0000000c"
+}

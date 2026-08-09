@@ -1,0 +1,96 @@
+{
+  "fixture_version": 1,
+  "cases": [
+    {
+      "name": "empty_projection_length_precedes_syntax",
+      "kind": "projection",
+      "expression": "",
+      "names": {},
+      "values": {},
+      "category": "validation",
+      "message": "update or condition expression length must be 1..=4096 UTF-8 bytes"
+    },
+    {
+      "name": "unaliased_projection_fails_closed",
+      "kind": "projection",
+      "expression": "status",
+      "names": {},
+      "values": {},
+      "category": "unsupported",
+      "message": "projection supports comma-separated aliased document paths"
+    },
+    {
+      "name": "invalid_declared_placeholder_precedes_parse",
+      "kind": "projection",
+      "expression": "#valid",
+      "names": { "#bad-name": "status", "#valid": "status" },
+      "values": {},
+      "category": "validation",
+      "message": "invalid expression placeholder \"#bad-name\""
+    },
+    {
+      "name": "missing_name_is_distinct_from_unused_binding",
+      "kind": "condition",
+      "expression": "#missing = :value",
+      "names": {},
+      "values": { ":value": { "S": "OPEN" } },
+      "category": "validation",
+      "message": "missing expression attribute name #missing"
+    },
+    {
+      "name": "missing_value_follows_resolved_name",
+      "kind": "condition",
+      "expression": "#status = :missing",
+      "names": { "#status": "status" },
+      "values": {},
+      "category": "validation",
+      "message": "missing expression attribute value :missing"
+    },
+    {
+      "name": "invalid_token_precedes_binding_audit",
+      "kind": "condition",
+      "expression": "#status = :value @",
+      "names": { "#status": "status", "#unused": "unused" },
+      "values": { ":value": { "S": "OPEN" } },
+      "category": "validation",
+      "message": "invalid expression token at byte 17"
+    },
+    {
+      "name": "unused_projection_binding",
+      "kind": "projection",
+      "expression": "#status",
+      "names": { "#status": "status", "#unused": "unused" },
+      "values": {},
+      "category": "validation",
+      "message": "expression contains missing or unused expression bindings"
+    },
+    {
+      "name": "unsupported_key_condition_shape",
+      "kind": "key_condition",
+      "expression": "#pk = :pk OR #sk = :sk",
+      "names": { "#pk": "account", "#sk": "sequence" },
+      "values": { ":pk": { "S": "acct-1" }, ":sk": { "N": "1" } },
+      "category": "unsupported",
+      "message": "Query key condition requires #pk = :pk with optional sort-key =, <, <=, >, >=, BETWEEN, or begins_with"
+    },
+    {
+      "name": "bindings_without_read_expression",
+      "kind": "read_none",
+      "expression": "",
+      "names": { "#status": "status" },
+      "values": {},
+      "category": "validation",
+      "message": "expression bindings were supplied without an expression"
+    },
+    {
+      "name": "update_and_condition_share_exact_namespace",
+      "kind": "update",
+      "expression": "SET #status = :closed",
+      "condition": "#status <> :open",
+      "names": { "#status": "status", "#unused": "unused" },
+      "values": { ":closed": { "S": "CLOSED" }, ":open": { "S": "OPEN" } },
+      "category": "validation",
+      "message": "expression contains missing or unused expression bindings"
+    }
+  ]
+}

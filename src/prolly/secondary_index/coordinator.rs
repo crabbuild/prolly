@@ -17,7 +17,8 @@ use super::definition::{IndexProjection, SecondaryIndex, SecondaryIndexRegistry}
 use super::publication::IndexedStore;
 use super::state::{
     indexed_collection_root_name, CollectionIndexPolicy, IndexDescriptor, IndexSnapshotRef,
-    IndexedCollectionState, IndexedSnapshotRecord, SnapshotPin, SourceSnapshotRef,
+    IndexedCollectionState, IndexedSnapshotId, IndexedSnapshotRecord, SnapshotPin,
+    SourceSnapshotRef,
 };
 use super::storage::{physical_index_key, IndexValue};
 use super::workspace::IndexBuildWorkspace;
@@ -87,6 +88,9 @@ pub struct IndexedRetentionResult {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IndexedVersion {
+    /// Exact indexed snapshot identity. Unlike `source.id`, this changes when
+    /// the index generation set changes over identical source content.
+    pub snapshot_id: IndexedSnapshotId,
     pub source: MapVersion,
     pub state: MapVersion,
     pub indexes: Vec<IndexSnapshotRef>,
@@ -519,6 +523,7 @@ impl<'a, S: IndexedStore> IndexedMap<'a, S> {
         let source = map_version(head.source.tree.clone(), true)?;
         let indexes = head.indexes.clone();
         Ok(IndexedVersion {
+            snapshot_id: loaded.state.head.clone(),
             source,
             state: map_version(loaded.tree.clone(), true)?,
             indexes,

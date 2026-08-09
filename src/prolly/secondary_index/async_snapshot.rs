@@ -17,8 +17,11 @@ use super::snapshot::{
     SecondaryIndexDirection, SecondaryIndexMatch, SecondaryIndexMatchRef, SecondaryIndexPage,
     SnapshotContext,
 };
-use super::state::{IndexDescriptor, IndexedSnapshotId, IndexedSnapshotRecord};
-use super::storage::{decode_physical_index_key, IndexValue};
+use super::state::{
+    CollectionIndexPolicy, IndexDescriptor, IndexedCollectionState, IndexedSnapshotId,
+    IndexedSnapshotManifest, IndexedSnapshotRecord,
+};
+use super::storage::{decode_physical_index_key, physical_index_key, IndexValue};
 
 /// Immutable async view pinned to one canonical collection-state root.
 pub struct AsyncIndexedSnapshot<'a, S: AsyncIndexedStore> {
@@ -694,6 +697,76 @@ where
         .await
     }
 
+    /// Construct a snapshot-bound continuation cursor from the logical term
+    /// and primary key carried by a DynamoDB-style `ExclusiveStartKey`.
+    pub fn exact_cursor_after(
+        &self,
+        query_term: &[u8],
+        term: &[u8],
+        primary_key: &[u8],
+        direction: SecondaryIndexDirection,
+    ) -> Result<SecondaryIndexCursor, Error> {
+        self.cursor_after_logical(
+            LogicalBounds::Exact(query_term.to_vec()),
+            term,
+            primary_key,
+            direction,
+        )
+    }
+
+    pub fn prefix_cursor_after(
+        &self,
+        query_prefix: &[u8],
+        term: &[u8],
+        primary_key: &[u8],
+        direction: SecondaryIndexDirection,
+    ) -> Result<SecondaryIndexCursor, Error> {
+        self.cursor_after_logical(
+            LogicalBounds::Prefix(query_prefix.to_vec()),
+            term,
+            primary_key,
+            direction,
+        )
+    }
+
+    pub fn range_cursor_after(
+        &self,
+        start: &[u8],
+        end: Option<&[u8]>,
+        term: &[u8],
+        primary_key: &[u8],
+        direction: SecondaryIndexDirection,
+    ) -> Result<SecondaryIndexCursor, Error> {
+        self.cursor_after_logical(
+            LogicalBounds::Range(start.to_vec(), end.map(ToOwned::to_owned)),
+            term,
+            primary_key,
+            direction,
+        )
+    }
+
+    fn cursor_after_logical(
+        &self,
+        logical: LogicalBounds,
+        term: &[u8],
+        primary_key: &[u8],
+        direction: SecondaryIndexDirection,
+    ) -> Result<SecondaryIndexCursor, Error> {
+        let cursor = SecondaryIndexCursor {
+            snapshot: self.snapshot_id.snapshot.clone(),
+            source_version: self.snapshot_id.source_version.clone(),
+            state_version: self.snapshot_id.state_version.clone(),
+            index_name: self.descriptor.name.clone(),
+            index_version: MapVersionId::for_tree(&self.selected.tree)?,
+            definition_fingerprint: self.descriptor.fingerprint.clone(),
+            direction,
+            bounds: logical.clone(),
+            raw_key: Some(physical_index_key(term, primary_key)?),
+        };
+        self.validate_cursor(&cursor, &logical, direction)?;
+        Ok(cursor)
+    }
+
     async fn page(
         &self,
         logical: LogicalBounds,
@@ -958,6 +1031,55 @@ where
         self.resolve_snapshot(loaded.tree, loaded.state, id.clone(), record)
     }
 
+    /// Resolve an immutable snapshot from a self-contained historical manifest.
+    ///
+    /// `manifest_tree` is the immutable tree that durably carried the manifest;
+    /// its content identity is bound into secondary-index cursor context. The
+    /// method performs no mutable-state lookup and rejects a manifest owned by
+    /// another indexed map.
+    pub fn snapshot_from_manifest(
+        &self,
+        manifest_tree: Tree,
+        manifest: IndexedSnapshotManifest,
+    ) -> Result<AsyncIndexedSnapshot<'a, S>, Error> {
+        manifest.validate()?;
+        if manifest.record.source_map_id != self.source_map_id {
+            return Err(Error::InvalidVersionedMap(
+                "indexed snapshot manifest belongs to another source".to_string(),
+            ));
+        }
+        let active = manifest
+            .record
+            .indexes
+            .iter()
+            .map(|index| (index.name.clone(), index.descriptor_fingerprint.clone()))
+            .collect();
+        let descriptors = manifest
+            .descriptors
+            .into_iter()
+            .map(|descriptor| {
+                (
+                    (descriptor.name.clone(), descriptor.fingerprint.clone()),
+                    descriptor,
+                )
+            })
+            .collect();
+        let record_id = manifest.snapshot_id;
+        let record = manifest.record;
+        let state = IndexedCollectionState {
+            source_map_id: self.source_map_id.clone(),
+            policy: CollectionIndexPolicy::default(),
+            head: record_id.clone(),
+            snapshots: BTreeMap::from([(record_id.clone(), record.clone())]),
+            descriptors,
+            active,
+            retired: Default::default(),
+            pins: BTreeMap::new(),
+        };
+        state.validate_closure()?;
+        self.resolve_snapshot(manifest_tree, state, record_id, record)
+    }
+
     fn resolve_snapshot(
         &self,
         state_tree: Tree,
@@ -986,20 +1108,11 @@ where
                     source_version: source_version.clone(),
                     reason: "canonical descriptor is missing".to_string(),
                 })?;
-            let runtime = self
-                .runtime_definition_for_descriptor(&descriptor)?
-                .ok_or_else(|| Error::IndexRuntimeDefinitionMissing {
-                    name: descriptor.name.clone(),
-                    generation: descriptor.generation,
-                })?;
-            let runtime_descriptor = IndexDescriptor::from_runtime(&self.source_map_id, &runtime)?;
-            if runtime_descriptor.fingerprint != descriptor.fingerprint {
-                return Err(Error::IndexDefinitionMismatch {
-                    name: descriptor.name.clone(),
-                    persisted: descriptor.fingerprint.clone(),
-                    runtime: runtime_descriptor.fingerprint,
-                });
-            }
+            let max_projection_bytes = match descriptor.projection {
+                IndexProjection::KeysOnly => 0,
+                IndexProjection::Include => descriptor.limits.max_projection_bytes,
+                IndexProjection::All => descriptor.limits.max_all_value_bytes,
+            };
             indexes.insert(
                 selected.name.clone(),
                 AsyncSecondaryIndexSnapshot {
@@ -1008,11 +1121,7 @@ where
                     descriptor,
                     source_tree: record.source.tree.clone(),
                     index_tree: selected.tree.clone(),
-                    max_projection_bytes: match runtime.projection() {
-                        IndexProjection::KeysOnly => 0,
-                        IndexProjection::Include => runtime.limits().max_projection_bytes,
-                        IndexProjection::All => runtime.limits().max_all_value_bytes,
-                    },
+                    max_projection_bytes,
                     selected,
                 },
             );

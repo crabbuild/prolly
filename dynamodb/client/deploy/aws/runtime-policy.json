@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VersionedDynamoDbExactTables",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:TransactWriteItems"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/NODE_TABLE",
+        "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/ROOT_TABLE"
+      ]
+    },
+    {
+      "Sid": "DescribeExactTables",
+      "Effect": "Allow",
+      "Action": "dynamodb:DescribeTable",
+      "Resource": [
+        "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/NODE_TABLE",
+        "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/ROOT_TABLE"
+      ]
+    }
+  ]
+}

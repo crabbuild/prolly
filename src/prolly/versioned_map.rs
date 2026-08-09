@@ -135,7 +135,7 @@ impl ProofAuthentication {
 /// The identifier hashes the complete timestamp-free [`RootManifest`], so it
 /// includes both the root CID and the tree configuration. Empty trees therefore
 /// also have a stable version identifier.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MapVersionId(Cid);
 
 impl MapVersionId {
@@ -190,6 +190,34 @@ pub struct MapVersion {
     pub created_at_millis: Option<u64>,
     /// Whether this snapshot is the index's current head.
     pub is_head: bool,
+}
+
+/// Stable cursor for immutable version discovery in version-ID byte order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MapVersionCursor {
+    scope: Cid,
+    after: MapVersionId,
+}
+
+impl MapVersionCursor {
+    /// Return the last version identifier emitted by the previous page.
+    pub fn version(&self) -> &MapVersionId {
+        &self.after
+    }
+
+    /// Return the opaque map-scope digest used to reject cross-map reuse.
+    pub fn scope(&self) -> &Cid {
+        &self.scope
+    }
+}
+
+/// One bounded page of immutable versions in stable version-ID byte order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MapVersionPage {
+    /// Cataloged immutable versions.
+    pub versions: Vec<MapVersion>,
+    /// Cursor for the next page, or `None` when enumeration is complete.
+    pub next_cursor: Option<MapVersionCursor>,
 }
 
 /// Result of pruning immutable version roots from a managed map.
@@ -1128,6 +1156,22 @@ where
     timestamp_millis: u64,
 }
 
+/// Managed-map facade over one strict async engine transaction.
+///
+/// All staged map heads, immutable version roots, and content-addressed nodes
+/// are committed together by the owning [`super::transaction::AsyncProllyTransaction`].
+pub struct AsyncVersionedMapsTransaction<'tx, 'engine, S>
+where
+    S: super::store::AsyncStore
+        + super::manifest::AsyncManifestStore
+        + super::transaction::AsyncTransactionalStore,
+    <S as super::store::AsyncStore>::Error: Send + Sync,
+    <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
+{
+    tx: &'tx super::transaction::AsyncProllyTransaction<'engine, S>,
+    timestamp_millis: u64,
+}
+
 /// Codec for converting typed application keys to and from ordered map bytes.
 pub trait KeyCodec<K> {
     /// Encode one typed key into its order-preserving byte representation.
@@ -1382,6 +1426,11 @@ where
         }
     }
 
+    /// Timestamp applied to every managed root staged by this transaction.
+    pub fn timestamp_millis(&self) -> u64 {
+        self.timestamp_millis
+    }
+
     /// Load the staged or original head for one map.
     pub fn head(&self, map_id: impl AsRef<[u8]>) -> Result<Option<MapVersion>, Error> {
         let (_, head_name, _) = versioned_map_names(map_id.as_ref());
@@ -1517,6 +1566,229 @@ where
         let mut editor = VersionedMapEditor::new();
         edit(&mut editor);
         self.apply(map_id, editor.into_mutations())
+    }
+}
+
+impl<'tx, 'engine, S> AsyncVersionedMapsTransaction<'tx, 'engine, S>
+where
+    S: super::store::AsyncStore
+        + super::manifest::AsyncManifestStore
+        + super::transaction::AsyncTransactionalStore,
+    <S as super::store::AsyncStore>::Error: Send + Sync,
+    <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
+{
+    fn new(
+        tx: &'tx super::transaction::AsyncProllyTransaction<'engine, S>,
+        timestamp_millis: u64,
+    ) -> Self {
+        Self {
+            tx,
+            timestamp_millis,
+        }
+    }
+
+    /// Timestamp applied to every managed root staged by this transaction.
+    pub fn timestamp_millis(&self) -> u64 {
+        self.timestamp_millis
+    }
+
+    /// Load the staged or original head for one map.
+    pub async fn head(&self, map_id: impl AsRef<[u8]>) -> Result<Option<MapVersion>, Error> {
+        let (_, head_name, _) = versioned_map_names(map_id.as_ref());
+        self.tx
+            .load_named_root(&head_name)
+            .await?
+            .map(|tree| {
+                Ok(MapVersion {
+                    id: MapVersionId::for_tree(&tree)?,
+                    tree,
+                    created_at_millis: None,
+                    is_head: true,
+                })
+            })
+            .transpose()
+    }
+
+    /// Read one key from a staged or original map head.
+    pub async fn get(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>, Error> {
+        match self.head(map_id).await? {
+            Some(head) => self.tx.get(&head.tree, key).await,
+            None => Ok(None),
+        }
+    }
+
+    /// Apply a logical mutation batch to one map inside this transaction.
+    pub async fn apply(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        mutations: Vec<Mutation>,
+    ) -> Result<MapVersion, Error> {
+        self.apply_with_authority(map_id.as_ref(), mutations, MapWriteAuthority::Unmanaged)
+            .await
+    }
+
+    async fn apply_with_authority(
+        &self,
+        map_id: &[u8],
+        mutations: Vec<Mutation>,
+        authority: MapWriteAuthority,
+    ) -> Result<MapVersion, Error> {
+        guard_async_managed_map_write(self.tx, map_id, authority).await?;
+        let (_, head_name, versions_prefix) = versioned_map_names(map_id);
+        let current = self.tx.load_named_root(&head_name).await?;
+        let base = current.clone().unwrap_or_else(|| self.tx.create());
+        let next = self.tx.batch(&base, mutations).await?;
+        if current.as_ref() == Some(&next) {
+            return Ok(MapVersion {
+                id: MapVersionId::for_tree(&next)?,
+                tree: next,
+                created_at_millis: None,
+                is_head: true,
+            });
+        }
+
+        let id = MapVersionId::for_tree(&next)?;
+        let mut version_name = versions_prefix;
+        version_name.extend_from_slice(id.as_cid().as_bytes());
+        match self.tx.load_named_root(&version_name).await? {
+            Some(existing) if existing != next => {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "content identifier collision for async transaction version {}",
+                    id
+                )));
+            }
+            Some(_) => {}
+            None => {
+                self.tx
+                    .publish_named_root_at_millis(&version_name, &next, self.timestamp_millis)
+                    .await?;
+            }
+        }
+        self.tx
+            .publish_named_root_at_millis(&head_name, &next, self.timestamp_millis)
+            .await?;
+        Ok(MapVersion {
+            id,
+            tree: next,
+            created_at_millis: Some(self.timestamp_millis),
+            is_head: true,
+        })
+    }
+
+    /// Conditionally apply mutations when the staged/original head matches.
+    pub async fn apply_if(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        expected: Option<&MapVersionId>,
+        mutations: Vec<Mutation>,
+    ) -> Result<VersionedMapUpdate, Error> {
+        let current = self.head(map_id.as_ref()).await?;
+        if current.as_ref().map(|version| &version.id) != expected {
+            return Ok(VersionedMapUpdate::Conflict { current });
+        }
+        let previous = current.map(|version| version.id);
+        let current = self.apply(map_id, mutations).await?;
+        if previous.as_ref() == Some(&current.id) {
+            Ok(VersionedMapUpdate::Unchanged {
+                current: Some(current),
+            })
+        } else {
+            Ok(VersionedMapUpdate::Applied { previous, current })
+        }
+    }
+
+    /// Move one managed map head to a retained immutable version inside the
+    /// owning strict transaction.
+    ///
+    /// This variant lets callers atomically couple a restore with other managed
+    /// maps such as audit/commit logs. The target catalog entry is included in
+    /// the transaction read set and its tree is rehashed before publication.
+    pub async fn restore_if(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        expected: Option<&MapVersionId>,
+        target: &MapVersionId,
+    ) -> Result<VersionedMapUpdate, Error> {
+        let map_id = map_id.as_ref();
+        guard_async_managed_map_write(self.tx, map_id, MapWriteAuthority::Unmanaged).await?;
+        let current = self.head(map_id).await?;
+        if current.as_ref().map(|version| &version.id) != expected {
+            return Ok(VersionedMapUpdate::Conflict { current });
+        }
+        if current
+            .as_ref()
+            .is_some_and(|version| &version.id == target)
+        {
+            return Ok(VersionedMapUpdate::Unchanged { current });
+        }
+
+        let (_, head_name, mut versions_prefix) = versioned_map_names(map_id);
+        versions_prefix.extend_from_slice(target.as_cid().as_bytes());
+        let tree = self
+            .tx
+            .load_named_root(&versions_prefix)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {target}")))?;
+        let actual = MapVersionId::for_tree(&tree)?;
+        if &actual != target {
+            return Err(Error::InvalidVersionedMap(format!(
+                "version catalog entry {target} resolves to mismatched tree {actual}"
+            )));
+        }
+        self.tx
+            .publish_named_root_at_millis(&head_name, &tree, self.timestamp_millis)
+            .await?;
+        Ok(VersionedMapUpdate::Applied {
+            previous: current.map(|version| version.id),
+            current: MapVersion {
+                id: actual,
+                tree,
+                created_at_millis: Some(self.timestamp_millis),
+                is_head: true,
+            },
+        })
+    }
+
+    /// Put one key in one managed map.
+    pub async fn put(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        key: impl Into<Vec<u8>>,
+        value: impl Into<Vec<u8>>,
+    ) -> Result<MapVersion, Error> {
+        self.apply(
+            map_id,
+            vec![Mutation::Upsert {
+                key: key.into(),
+                val: value.into(),
+            }],
+        )
+        .await
+    }
+
+    /// Delete one key from one managed map.
+    pub async fn delete(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        key: impl Into<Vec<u8>>,
+    ) -> Result<MapVersion, Error> {
+        self.apply(map_id, vec![Mutation::Delete { key: key.into() }])
+            .await
+    }
+
+    /// Collect and apply several edits to one managed map.
+    pub async fn edit(
+        &self,
+        map_id: impl AsRef<[u8]>,
+        edit: impl FnOnce(&mut VersionedMapEditor),
+    ) -> Result<MapVersion, Error> {
+        let mut editor = VersionedMapEditor::new();
+        edit(&mut editor);
+        self.apply(map_id, editor.into_mutations()).await
     }
 }
 
@@ -2059,6 +2331,21 @@ impl<'a, S: super::store::AsyncStore> AsyncVersionedMap<'a, S> {
         &self.id
     }
 
+    /// Full durable named-root key used for the current head.
+    pub fn head_name(&self) -> &[u8] {
+        &self.head_name
+    }
+
+    /// Prefix containing this map's immutable version roots.
+    pub fn versions_prefix(&self) -> &[u8] {
+        &self.versions_prefix
+    }
+
+    /// Full durable named-root key for one content-derived version.
+    pub fn version_root_name(&self, id: &MapVersionId) -> Vec<u8> {
+        self.version_name(id)
+    }
+
     fn version_name(&self, id: &MapVersionId) -> Vec<u8> {
         let mut name = self.versions_prefix.clone();
         name.extend_from_slice(id.as_cid().as_bytes());
@@ -2159,6 +2446,172 @@ where
             None => Ok(None),
         }
     }
+
+    /// Read one inline or blob-backed value from current head.
+    pub async fn get_large_value<B>(
+        &self,
+        blob_store: &B,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>, Error>
+    where
+        B: super::blob::AsyncBlobStore,
+        B::Error: Send + Sync,
+    {
+        match self.snapshot().await? {
+            Some(snapshot) => snapshot.get_large_value(blob_store, key).await,
+            None => Ok(None),
+        }
+    }
+}
+impl<S> AsyncVersionedMap<'_, S>
+where
+    S: super::store::AsyncStore
+        + super::manifest::AsyncManifestStore
+        + super::manifest::AsyncManifestStoreScan,
+    <S as super::store::AsyncStore>::Error: Send + Sync,
+    <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
+{
+    /// List a bounded page of cataloged versions in stable version-ID order.
+    ///
+    /// Unlike [`Self::versions`], this method never needs to enumerate other
+    /// maps' roots. Cloud backends can implement it as one bounded range query.
+    pub async fn versions_page(
+        &self,
+        cursor: Option<&MapVersionCursor>,
+        limit: usize,
+    ) -> Result<MapVersionPage, Error> {
+        if limit == 0 {
+            return Err(Error::InvalidVersionedMap(
+                "version page limit must be positive".into(),
+            ));
+        }
+        let scope = Cid::from_bytes(&self.versions_prefix);
+        if cursor.is_some_and(|cursor| cursor.scope != scope) {
+            return Err(Error::InvalidVersionedMap(
+                "version cursor belongs to another map".into(),
+            ));
+        }
+        let head_id = self.head().await?.map(|head| head.id);
+        let after = cursor.map(|cursor| {
+            let mut name = self.versions_prefix.clone();
+            name.extend_from_slice(cursor.after.as_cid().as_bytes());
+            name
+        });
+        let page = self
+            .prolly
+            .list_named_root_manifests_page(&self.versions_prefix, after.as_deref(), limit)
+            .await?;
+        let versions = page
+            .roots
+            .into_iter()
+            .map(|named| self.decode_cataloged_version(named, head_id.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let next_cursor = page
+            .next_after
+            .map(|name| self.version_cursor_from_root_name(&name))
+            .transpose()?;
+        Ok(MapVersionPage {
+            versions,
+            next_cursor,
+        })
+    }
+
+    /// List cataloged versions newest first.
+    pub async fn versions(&self) -> Result<Vec<MapVersion>, Error> {
+        let head_id = self.head().await?.map(|head| head.id);
+        let mut versions = self
+            .prolly
+            .list_named_root_manifests()
+            .await?
+            .into_iter()
+            .filter_map(|named| {
+                let suffix = named.name.strip_prefix(self.versions_prefix.as_slice())?;
+                if suffix.len() != 32 {
+                    return Some(Err(Error::InvalidVersionedMap(format!(
+                        "invalid version root name under {:?}",
+                        self.versions_prefix
+                    ))));
+                }
+                let tree = named.manifest.to_tree();
+                let actual = match MapVersionId::for_tree(&tree) {
+                    Ok(id) => id,
+                    Err(err) => return Some(Err(err)),
+                };
+                if actual.as_cid().as_bytes() != suffix {
+                    return Some(Err(Error::InvalidVersionedMap(format!(
+                        "version catalog key does not match tree content: {}",
+                        actual
+                    ))));
+                }
+                Some(Ok(MapVersion {
+                    is_head: head_id.as_ref() == Some(&actual),
+                    id: actual,
+                    tree,
+                    created_at_millis: named.manifest.created_at_millis,
+                }))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        versions.sort_by(|left, right| {
+            right
+                .created_at_millis
+                .cmp(&left.created_at_millis)
+                .then_with(|| {
+                    left.id
+                        .as_cid()
+                        .as_bytes()
+                        .cmp(right.id.as_cid().as_bytes())
+                })
+        });
+        Ok(versions)
+    }
+
+    fn decode_cataloged_version(
+        &self,
+        named: super::manifest::NamedRootManifest,
+        head_id: Option<&MapVersionId>,
+    ) -> Result<MapVersion, Error> {
+        let suffix = named
+            .name
+            .strip_prefix(self.versions_prefix.as_slice())
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap(format!(
+                    "version root is outside prefix {:?}",
+                    self.versions_prefix
+                ))
+            })?;
+        if suffix.len() != 32 {
+            return Err(Error::InvalidVersionedMap(format!(
+                "invalid version root name under {:?}",
+                self.versions_prefix
+            )));
+        }
+        let tree = named.manifest.to_tree();
+        let actual = MapVersionId::for_tree(&tree)?;
+        if actual.as_cid().as_bytes() != suffix {
+            return Err(Error::InvalidVersionedMap(format!(
+                "version catalog key does not match tree content: {actual}"
+            )));
+        }
+        Ok(MapVersion {
+            is_head: head_id == Some(&actual),
+            id: actual,
+            tree,
+            created_at_millis: named.manifest.created_at_millis,
+        })
+    }
+
+    fn version_cursor_from_root_name(&self, name: &[u8]) -> Result<MapVersionCursor, Error> {
+        let suffix = name
+            .strip_prefix(self.versions_prefix.as_slice())
+            .ok_or_else(|| {
+                Error::InvalidVersionedMap("version continuation escaped map prefix".into())
+            })?;
+        Ok(MapVersionCursor {
+            scope: Cid::from_bytes(&self.versions_prefix),
+            after: MapVersionId::from_bytes(suffix)?,
+        })
+    }
 }
 impl<'a, S> AsyncMapChangeSubscription<'a, S>
 where
@@ -2223,6 +2676,24 @@ where
         self.prolly.get(self.tree(), key).await
     }
 
+    /// Read one inline or blob-backed value from this pinned version.
+    pub async fn get_large_value<B>(
+        &self,
+        blob_store: &B,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>, Error>
+    where
+        B: super::blob::AsyncBlobStore,
+        B::Error: Send + Sync,
+    {
+        match self.get(key).await? {
+            Some(stored) => Ok(Some(
+                super::blob::resolve_stored_value_async(blob_store, &stored).await?,
+            )),
+            None => Ok(None),
+        }
+    }
+
     /// Read several keys while preserving order and duplicates.
     pub async fn get_many<K: AsRef<[u8]>>(
         &self,
@@ -2272,6 +2743,19 @@ where
             .await
     }
 
+    /// Read one descending cursor page over the half-open range `[start, end)`.
+    pub async fn reverse_range_page(
+        &self,
+        cursor: &ReverseCursor,
+        start: &[u8],
+        end: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<super::range::AsyncReversePage, Error> {
+        self.prolly
+            .reverse_range_page(self.tree(), cursor, start, end, limit)
+            .await
+    }
+
     /// Collect tree statistics asynchronously.
     pub async fn stats(&self) -> Result<TreeStats, Error> {
         self.prolly.collect_stats(self.tree()).await
@@ -2312,6 +2796,78 @@ where
     <S as super::store::AsyncStore>::Error: Send + Sync,
     <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
 {
+    /// Diff two cataloged immutable versions.
+    pub async fn diff(
+        &self,
+        base: &MapVersionId,
+        target: &MapVersionId,
+    ) -> Result<Vec<Diff>, Error> {
+        let base = self
+            .version(base)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {base}")))?;
+        let target = self
+            .version(target)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {target}")))?;
+        self.prolly.diff(&base.tree, &target.tree).await
+    }
+
+    /// Read one resumable key-cursor page between cataloged versions.
+    pub async fn diff_page(
+        &self,
+        base: &MapVersionId,
+        target: &MapVersionId,
+        cursor: &RangeCursor,
+        end: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<super::diff::DiffPage, Error> {
+        let base = self
+            .version(base)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {base}")))?;
+        let target = self
+            .version(target)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {target}")))?;
+        self.prolly
+            .diff_page(&base.tree, &target.tree, cursor, end, limit)
+            .await
+    }
+
+    /// Read one resumable structural page between cataloged versions.
+    pub async fn structural_diff_page(
+        &self,
+        base: &MapVersionId,
+        target: &MapVersionId,
+        cursor: Option<&super::diff::StructuralDiffCursor>,
+        limit: usize,
+    ) -> Result<super::diff::StructuralDiffPage, Error> {
+        let base = self
+            .version(base)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {base}")))?;
+        let target = self
+            .version(target)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {target}")))?;
+        self.prolly
+            .structural_diff_page(&base.tree, &target.tree, cursor, limit)
+            .await
+    }
+
+    /// Diff one cataloged version against current head.
+    pub async fn changes_since(&self, base: &MapVersionId) -> Result<Vec<Diff>, Error> {
+        let base = self
+            .version(base)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {base}")))?;
+        let head = self.head().await?.ok_or_else(|| {
+            Error::InvalidVersionedMap("map has not been initialized".to_string())
+        })?;
+        self.prolly.diff(&base.tree, &head.tree).await
+    }
+
     /// Atomically apply a batch and retry optimistic head conflicts.
     pub async fn apply(&self, mutations: Vec<Mutation>) -> Result<MapVersion, Error> {
         self.apply_at_millis(mutations, current_unix_time_millis())
@@ -2343,6 +2899,17 @@ where
     }
 
     /// Apply a batch only when `expected` is still the current version.
+    pub async fn apply_if(
+        &self,
+        expected: Option<&MapVersionId>,
+        mutations: Vec<Mutation>,
+    ) -> Result<VersionedMapUpdate, Error> {
+        self.apply_if_at_millis(expected, mutations, current_unix_time_millis())
+            .await
+    }
+
+    /// Apply a batch only when `expected` is still the current version, with
+    /// an explicit catalog timestamp.
     pub async fn apply_if_at_millis(
         &self,
         expected: Option<&MapVersionId>,
@@ -2501,6 +3068,23 @@ where
         }
     }
 
+    /// Move head to an existing version when `expected` is still current.
+    ///
+    /// The target must remain in the immutable version catalog. A concurrent
+    /// head movement is reported as [`VersionedMapUpdate::Conflict`].
+    pub async fn restore_if(
+        &self,
+        expected: Option<&MapVersionId>,
+        target: &MapVersionId,
+    ) -> Result<VersionedMapUpdate, Error> {
+        let target = self
+            .version(target)
+            .await?
+            .ok_or_else(|| Error::InvalidVersionedMap(format!("unknown map version {target}")))?;
+        self.publish_tree_if(expected, &target.tree, current_unix_time_millis())
+            .await
+    }
+
     /// Put one key asynchronously.
     pub async fn put(
         &self,
@@ -2512,6 +3096,56 @@ where
             val: value.into(),
         }])
         .await
+    }
+
+    /// Put one value, offloading large bytes, and retry head conflicts.
+    pub async fn put_large_value<B>(
+        &self,
+        blob_store: &B,
+        key: impl Into<Vec<u8>>,
+        value: impl Into<Vec<u8>>,
+        config: super::blob::LargeValueConfig,
+    ) -> Result<MapVersion, Error>
+    where
+        B: super::blob::AsyncBlobStore,
+        B::Error: Send + Sync,
+    {
+        let key = key.into();
+        let value = value.into();
+        let mut last_conflict = None;
+        for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
+            let current = self.head().await?;
+            let expected = current.as_ref().map(|version| &version.id);
+            let tree = current
+                .as_ref()
+                .map(|version| version.tree.clone())
+                .unwrap_or_else(|| self.prolly.create());
+            let next = self
+                .prolly
+                .put_large_value(
+                    blob_store,
+                    &tree,
+                    key.clone(),
+                    value.clone(),
+                    config.clone(),
+                )
+                .await?;
+            match self
+                .publish_tree_if(expected, &next, current_unix_time_millis())
+                .await?
+            {
+                VersionedMapUpdate::Applied { current, .. }
+                | VersionedMapUpdate::Unchanged {
+                    current: Some(current),
+                } => return Ok(current),
+                VersionedMapUpdate::Conflict { current } => last_conflict = current,
+                VersionedMapUpdate::Unchanged { current: None } => {}
+            }
+        }
+        Err(Error::InvalidVersionedMap(format!(
+            "async large-value update exhausted retries at head {:?}",
+            last_conflict.map(|version| version.id)
+        )))
     }
 
     /// Delete one key asynchronously.
@@ -2527,6 +3161,159 @@ where
         let mut editor = VersionedMapEditor::new();
         edit(&mut editor);
         self.apply(editor.into_mutations()).await
+    }
+}
+impl<S> AsyncVersionedMap<'_, S>
+where
+    S: super::store::AsyncStore
+        + super::manifest::AsyncManifestStore
+        + super::manifest::AsyncManifestStoreScan
+        + super::transaction::AsyncTransactionalStore,
+    <S as super::store::AsyncStore>::Error: Send + Sync,
+    <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
+{
+    /// Keep the newest `keep_latest` versions plus the current head.
+    pub async fn prune_versions(&self, keep_latest: usize) -> Result<VersionPruneResult, Error> {
+        self.keep_last(keep_latest).await
+    }
+
+    /// Retain the newest `count` versions plus the current head.
+    pub async fn keep_last(&self, count: usize) -> Result<VersionPruneResult, Error> {
+        self.prune_with(|versions| {
+            Ok(versions
+                .iter()
+                .take(count)
+                .map(|version| version.id.clone())
+                .collect())
+        })
+        .await
+    }
+
+    /// Retain versions newer than `max_age` plus the current head.
+    pub async fn keep_for(
+        &self,
+        max_age: std::time::Duration,
+    ) -> Result<VersionPruneResult, Error> {
+        self.keep_for_at(current_unix_time_millis(), max_age).await
+    }
+
+    /// Deterministic form of [`AsyncVersionedMap::keep_for`] with an explicit clock.
+    pub async fn keep_for_at(
+        &self,
+        now_millis: u64,
+        max_age: std::time::Duration,
+    ) -> Result<VersionPruneResult, Error> {
+        let age_millis = max_age.as_millis().min(u128::from(u64::MAX)) as u64;
+        let cutoff = now_millis.saturating_sub(age_millis);
+        self.prune_with(|versions| {
+            Ok(versions
+                .iter()
+                .filter(|version| {
+                    version
+                        .created_at_millis
+                        .map(|created| created >= cutoff)
+                        .unwrap_or(true)
+                })
+                .map(|version| version.id.clone())
+                .collect())
+        })
+        .await
+    }
+
+    /// Retain an explicit version set plus the current head.
+    ///
+    /// Missing requested IDs are rejected so a typo cannot silently discard
+    /// more history than intended.
+    pub async fn keep_versions<I, V>(&self, ids: I) -> Result<VersionPruneResult, Error>
+    where
+        I: IntoIterator<Item = V>,
+        V: Borrow<MapVersionId>,
+    {
+        let requested = ids
+            .into_iter()
+            .map(|id| id.borrow().clone())
+            .collect::<HashSet<_>>();
+        self.prune_with(|versions| {
+            let present = versions
+                .iter()
+                .map(|version| version.id.clone())
+                .collect::<HashSet<_>>();
+            let missing = requested.difference(&present).collect::<Vec<_>>();
+            if !missing.is_empty() {
+                return Err(Error::InvalidVersionedMap(format!(
+                    "retention requested unknown versions: {:?}",
+                    missing
+                )));
+            }
+            Ok(requested.clone())
+        })
+        .await
+    }
+
+    async fn prune_with(
+        &self,
+        select: impl Fn(&[MapVersion]) -> Result<HashSet<MapVersionId>, Error>,
+    ) -> Result<VersionPruneResult, Error> {
+        let mut last_conflict = None;
+
+        for _ in 0..DEFAULT_VERSIONED_MAP_RETRIES {
+            let tx = self.prolly.begin_transaction()?;
+            guard_async_managed_map_write(&tx, &self.id, MapWriteAuthority::Unmanaged).await?;
+            let Some(head_tree) = tx.load_named_root(&self.head_name).await? else {
+                tx.rollback();
+                let versions = self.versions().await?;
+                if versions.is_empty() {
+                    return Ok(VersionPruneResult::default());
+                }
+                return Err(Error::InvalidVersionedMap(
+                    "version roots exist without a current head".to_string(),
+                ));
+            };
+            let head_id = MapVersionId::for_tree(&head_tree)?;
+            let versions = self.versions().await?;
+            if !versions.iter().any(|version| version.id == head_id) {
+                tx.rollback();
+                return Err(Error::InvalidVersionedMap(format!(
+                    "current head {} is absent from the version catalog",
+                    head_id
+                )));
+            }
+
+            let mut retained_ids = select(&versions)?;
+            retained_ids.insert(head_id);
+            let retained = versions
+                .iter()
+                .filter(|version| retained_ids.contains(&version.id))
+                .map(|version| version.id.clone())
+                .collect::<Vec<_>>();
+            let removed = versions
+                .iter()
+                .filter(|version| !retained_ids.contains(&version.id))
+                .map(|version| version.id.clone())
+                .collect::<Vec<_>>();
+
+            if removed.is_empty() {
+                tx.rollback();
+                return Ok(VersionPruneResult { retained, removed });
+            }
+            for id in &removed {
+                let name = self.version_name(id);
+                if tx.load_named_root(&name).await?.is_some() {
+                    tx.delete_named_root(&name).await?;
+                }
+            }
+
+            match tx.commit().await? {
+                TransactionUpdate::Applied { .. } => {
+                    return Ok(VersionPruneResult { retained, removed });
+                }
+                TransactionUpdate::Conflict(conflict) => last_conflict = Some(*conflict),
+            }
+        }
+
+        Err(Error::transaction_conflict(
+            last_conflict.expect("retry loop records a conflict before exhaustion"),
+        ))
     }
 }
 impl<S: super::store::AsyncStore> super::AsyncProlly<S> {
@@ -3391,6 +4178,28 @@ where
     }
 }
 
+impl<'engine, S> super::transaction::AsyncProllyTransaction<'engine, S>
+where
+    S: super::store::AsyncStore
+        + super::manifest::AsyncManifestStore
+        + super::transaction::AsyncTransactionalStore,
+    <S as super::store::AsyncStore>::Error: Send + Sync,
+    <S as super::manifest::AsyncManifestStore>::Error: Send + Sync,
+{
+    /// Open the managed-map facade for this strict async transaction.
+    pub fn versioned_maps(&self) -> AsyncVersionedMapsTransaction<'_, 'engine, S> {
+        AsyncVersionedMapsTransaction::new(self, current_unix_time_millis())
+    }
+
+    /// Open the managed-map facade with a deterministic publication timestamp.
+    pub fn versioned_maps_at_millis(
+        &self,
+        timestamp_millis: u64,
+    ) -> AsyncVersionedMapsTransaction<'_, 'engine, S> {
+        AsyncVersionedMapsTransaction::new(self, timestamp_millis)
+    }
+}
+
 fn append_hex(output: &mut Vec<u8>, bytes: &[u8]) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     output.reserve(bytes.len() * 2);
@@ -3417,7 +4226,22 @@ mod index_fence_tests {
     use super::*;
     use crate::prolly::config::Config;
     use crate::prolly::secondary_index::indexed_collection_root_name;
-    use crate::prolly::store::MemStore;
+    use crate::prolly::store::{MemStore, SyncStoreAsAsync};
+    use std::future::Future;
+    use std::sync::Arc;
+    use std::task::{Context, Poll};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(value) => return value,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
 
     #[test]
     fn map_version_id_decodes_only_exact_cid_bytes() {
@@ -3447,5 +4271,228 @@ mod index_fence_tests {
             TransactionUpdate::Conflict(conflict)
                 if conflict.name == root
         ));
+    }
+
+    #[test]
+    fn async_history_diff_cas_restore_and_retention_are_consistent() {
+        block_on(async {
+            let store = Arc::new(MemStore::new());
+            let prolly =
+                super::super::AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+            let map = prolly.versioned_map(b"async-history");
+            let first = map
+                .apply_at_millis(
+                    vec![Mutation::Upsert {
+                        key: b"balance".to_vec(),
+                        val: b"100".to_vec(),
+                    }],
+                    1_000,
+                )
+                .await
+                .unwrap();
+            let middle = map
+                .apply_at_millis(
+                    vec![Mutation::Upsert {
+                        key: b"balance".to_vec(),
+                        val: b"200".to_vec(),
+                    }],
+                    2_000,
+                )
+                .await
+                .unwrap();
+            let newest = map
+                .apply_at_millis(
+                    vec![Mutation::Upsert {
+                        key: b"balance".to_vec(),
+                        val: b"300".to_vec(),
+                    }],
+                    3_000,
+                )
+                .await
+                .unwrap();
+
+            let versions = map.versions().await.unwrap();
+            assert_eq!(
+                versions
+                    .iter()
+                    .map(|version| &version.id)
+                    .collect::<Vec<_>>(),
+                vec![&newest.id, &middle.id, &first.id]
+            );
+            assert_eq!(map.diff(&first.id, &newest.id).await.unwrap().len(), 1);
+
+            let mut cursor = None;
+            let mut paged = Vec::new();
+            loop {
+                let page = map.versions_page(cursor.as_ref(), 1).await.unwrap();
+                assert!(page.versions.len() <= 1);
+                paged.extend(page.versions.into_iter().map(|version| version.id));
+                match page.next_cursor {
+                    Some(next) => cursor = Some(next),
+                    None => break,
+                }
+            }
+            assert_eq!(paged.len(), 3);
+            assert!(paged
+                .windows(2)
+                .all(|ids| { ids[0].as_cid().as_bytes() < ids[1].as_cid().as_bytes() }));
+
+            let other = prolly.versioned_map(b"other-history");
+            other.put(b"key", b"value").await.unwrap();
+            other.put(b"key", b"changed").await.unwrap();
+            let foreign_cursor = other
+                .versions_page(None, 1)
+                .await
+                .unwrap()
+                .next_cursor
+                .expect("two versions require a continuation");
+            assert!(map.versions_page(Some(&foreign_cursor), 1).await.is_err());
+
+            let stale = map.restore_if(Some(&middle.id), &first.id).await.unwrap();
+            assert!(matches!(
+                stale,
+                VersionedMapUpdate::Conflict { current: Some(current) }
+                    if current.id == newest.id
+            ));
+            assert_eq!(map.get(b"balance").await.unwrap(), Some(b"300".to_vec()));
+
+            let restored = map.restore_if(Some(&newest.id), &first.id).await.unwrap();
+            assert!(matches!(
+                restored,
+                VersionedMapUpdate::Applied { previous: Some(previous), current }
+                    if previous == newest.id && current.id == first.id
+            ));
+            assert_eq!(map.get(b"balance").await.unwrap(), Some(b"100".to_vec()));
+
+            let pruned = map.keep_last(1).await.unwrap();
+            assert_eq!(pruned.removed, vec![middle.id.clone()]);
+            assert!(pruned.retained.contains(&first.id));
+            assert!(pruned.retained.contains(&newest.id));
+            assert!(map.version(&middle.id).await.unwrap().is_none());
+            assert_eq!(map.versions().await.unwrap().len(), 2);
+        });
+    }
+
+    #[test]
+    fn async_multi_map_facade_commits_and_rolls_back_atomically() {
+        block_on(async {
+            let store = Arc::new(MemStore::new());
+            let prolly =
+                super::super::AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+
+            let tx = prolly.begin_transaction().unwrap();
+            {
+                let maps = tx.versioned_maps_at_millis(7_000);
+                maps.put(b"accounts", b"acct/1", b"open").await.unwrap();
+                maps.put(b"balances", b"acct/1", b"100").await.unwrap();
+                assert_eq!(
+                    maps.get(b"balances", b"acct/1").await.unwrap(),
+                    Some(b"100".to_vec())
+                );
+            }
+            assert!(matches!(
+                tx.commit().await.unwrap(),
+                TransactionUpdate::Applied { .. }
+            ));
+            assert_eq!(
+                prolly
+                    .versioned_map(b"accounts")
+                    .get(b"acct/1")
+                    .await
+                    .unwrap(),
+                Some(b"open".to_vec())
+            );
+            assert_eq!(
+                prolly
+                    .versioned_map(b"balances")
+                    .get(b"acct/1")
+                    .await
+                    .unwrap(),
+                Some(b"100".to_vec())
+            );
+
+            let accounts = prolly.versioned_map(b"accounts");
+            let first = accounts.head().await.unwrap().unwrap();
+            let second = accounts.put(b"acct/1", b"closed").await.unwrap();
+            let tx = prolly.begin_transaction().unwrap();
+            {
+                let maps = tx.versioned_maps_at_millis(8_000);
+                let restored = maps
+                    .restore_if(b"accounts", Some(&second.id), &first.id)
+                    .await
+                    .unwrap();
+                assert!(matches!(
+                    restored,
+                    VersionedMapUpdate::Applied { previous: Some(previous), current }
+                        if previous == second.id && current.id == first.id
+                ));
+                maps.put(b"audit", b"event/1", b"restored").await.unwrap();
+            }
+            assert!(matches!(
+                tx.commit().await.unwrap(),
+                TransactionUpdate::Applied { .. }
+            ));
+            assert_eq!(
+                accounts.get(b"acct/1").await.unwrap(),
+                Some(b"open".to_vec())
+            );
+            assert_eq!(
+                prolly
+                    .versioned_map(b"audit")
+                    .get(b"event/1")
+                    .await
+                    .unwrap(),
+                Some(b"restored".to_vec())
+            );
+
+            let tx = prolly.begin_transaction().unwrap();
+            tx.versioned_maps()
+                .put(b"accounts", b"acct/2", b"pending")
+                .await
+                .unwrap();
+            tx.rollback();
+            assert_eq!(
+                prolly
+                    .versioned_map(b"accounts")
+                    .get(b"acct/2")
+                    .await
+                    .unwrap(),
+                None
+            );
+        });
+    }
+
+    #[test]
+    fn async_versioned_map_round_trips_blob_backed_values() {
+        block_on(async {
+            let store = Arc::new(MemStore::new());
+            let prolly =
+                super::super::AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+            let blobs = super::super::blob::SyncBlobStoreAsAsync::new(
+                super::super::blob::MemBlobStore::new(),
+            );
+            let map = prolly.versioned_map(b"async-blobs");
+            let value = vec![0xa5; 96 * 1024];
+            let version = map
+                .put_large_value(
+                    &blobs,
+                    b"evidence",
+                    value.clone(),
+                    super::super::blob::LargeValueConfig::new(1024),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                map.get_large_value(&blobs, b"evidence").await.unwrap(),
+                Some(value.clone())
+            );
+            let snapshot = map.snapshot_at(&version.id).await.unwrap().unwrap();
+            assert_eq!(
+                snapshot.get_large_value(&blobs, b"evidence").await.unwrap(),
+                Some(value)
+            );
+            assert!(map.get(b"evidence").await.unwrap().unwrap().len() < 64);
+        });
     }
 }

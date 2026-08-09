@@ -1,0 +1,1216 @@
+pub mod prolly_dynamodb_client
+pub use prolly_dynamodb_client::AttributeValue
+pub use prolly_dynamodb_client::CancellationToken
+pub use prolly_dynamodb_client::Commit
+pub use prolly_dynamodb_client::CommitId
+pub use prolly_dynamodb_client::DEFAULT_LOGICAL_RETRY_LIMIT
+pub use prolly_dynamodb_client::ImportAuditRecord
+pub use prolly_dynamodb_client::ImportPlan
+pub use prolly_dynamodb_client::ImportPlanId
+pub use prolly_dynamodb_client::ImportResult
+pub use prolly_dynamodb_client::IndexReconfigurationAuditRecord
+pub use prolly_dynamodb_client::IndexReconfigurationPlan
+pub use prolly_dynamodb_client::IndexReconfigurationPlanId
+pub use prolly_dynamodb_client::IndexReconfigurationResult
+pub use prolly_dynamodb_client::KeyAttribute
+pub use prolly_dynamodb_client::KeyKind
+pub use prolly_dynamodb_client::MAX_GC_PLAN_DELETES
+pub use prolly_dynamodb_client::MAX_LOGICAL_RETRY_LIMIT
+pub use prolly_dynamodb_client::MAX_MAINTENANCE_LEASE_MILLIS
+pub use prolly_dynamodb_client::MAX_RETENTION_PROTECTED_VERSIONS
+pub use prolly_dynamodb_client::MAX_RETENTION_REMOVALS
+pub use prolly_dynamodb_client::MAX_WORKER_LEASE_MILLIS
+pub use prolly_dynamodb_client::MIN_MAINTENANCE_LEASE_MILLIS
+pub use prolly_dynamodb_client::MIN_WORKER_LEASE_MILLIS
+pub use prolly_dynamodb_client::MaintenanceContext
+pub use prolly_dynamodb_client::MaintenanceLease
+pub use prolly_dynamodb_client::MaintenanceLeaseId
+pub use prolly_dynamodb_client::MaintenanceLeaseRelease
+pub use prolly_dynamodb_client::ProllyCacheUsage
+pub use prolly_dynamodb_client::RetentionAuditRecord
+pub use prolly_dynamodb_client::RetentionPlan
+pub use prolly_dynamodb_client::RetentionPlanId
+pub use prolly_dynamodb_client::RetentionPolicy
+pub use prolly_dynamodb_client::RetentionResult
+pub use prolly_dynamodb_client::SecondaryIndexDefinition
+pub use prolly_dynamodb_client::SecondaryIndexKind
+pub use prolly_dynamodb_client::SecondaryIndexProjection
+pub use prolly_dynamodb_client::TABLE_ARCHIVE_FORMAT_VERSION
+pub use prolly_dynamodb_client::TableArchive
+pub use prolly_dynamodb_client::TableArchiveBlob
+pub use prolly_dynamodb_client::TableArchiveLimits
+pub use prolly_dynamodb_client::TableArchiveSummary
+pub use prolly_dynamodb_client::TableCommit
+pub use prolly_dynamodb_client::TableCommitPage
+pub use prolly_dynamodb_client::WorkerCheckpoint
+pub use prolly_dynamodb_client::WorkerJobId
+pub use prolly_dynamodb_client::WorkerKind
+pub use prolly_dynamodb_client::WorkerLease
+pub use prolly_dynamodb_client::WorkerLeaseRelease
+pub use prolly_dynamodb_client::WorkerProgress
+pub mod prolly_dynamodb_client::operation
+pub struct prolly_dynamodb_client::operation::BatchGetItem
+impl prolly_dynamodb_client::operation::BatchGetItem
+pub fn prolly_dynamodb_client::operation::BatchGetItem::at<I>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = (alloc::string::String, prolly::prolly::versioned_map::MapVersionId)>
+pub fn prolly_dynamodb_client::operation::BatchGetItem::request_items(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_keys_and_attributes::KeysAndAttributes) -> Self
+pub fn prolly_dynamodb_client::operation::BatchGetItem::return_consumed_capacity(self, aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity) -> Self
+pub async fn prolly_dynamodb_client::operation::BatchGetItem::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::batch_get_item::_batch_get_item_output::BatchGetItemOutput>
+pub async fn prolly_dynamodb_client::operation::BatchGetItem::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::batch_get_item::_batch_get_item_output::BatchGetItemOutput>>
+pub fn prolly_dynamodb_client::operation::BatchGetItem::set_request_items(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_keys_and_attributes::KeysAndAttributes>>) -> Self
+pub fn prolly_dynamodb_client::operation::BatchGetItem::set_return_consumed_capacity(self, core::option::Option<aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::BatchGetItem
+pub fn prolly_dynamodb_client::operation::BatchGetItem::clone(&self) -> prolly_dynamodb_client::operation::BatchGetItem
+impl core::marker::Freeze for prolly_dynamodb_client::operation::BatchGetItem
+impl core::marker::Send for prolly_dynamodb_client::operation::BatchGetItem
+impl core::marker::Sync for prolly_dynamodb_client::operation::BatchGetItem
+impl core::marker::Unpin for prolly_dynamodb_client::operation::BatchGetItem
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::BatchGetItem
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::BatchGetItem
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::BatchGetItem
+pub struct prolly_dynamodb_client::operation::BatchWriteItem
+impl prolly_dynamodb_client::operation::BatchWriteItem
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::request_items(self, impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<aws_sdk_dynamodb::types::_write_request::WriteRequest>) -> Self
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::return_consumed_capacity(self, aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity) -> Self
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::return_item_collection_metrics(self, aws_sdk_dynamodb::types::_return_item_collection_metrics::ReturnItemCollectionMetrics) -> Self
+pub async fn prolly_dynamodb_client::operation::BatchWriteItem::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::batch_write_item::_batch_write_item_output::BatchWriteItemOutput>
+pub async fn prolly_dynamodb_client::operation::BatchWriteItem::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::batch_write_item::_batch_write_item_output::BatchWriteItemOutput>>
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::set_request_items(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<aws_sdk_dynamodb::types::_write_request::WriteRequest>>>) -> Self
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::set_return_consumed_capacity(self, core::option::Option<aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity>) -> Self
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::set_return_item_collection_metrics(self, core::option::Option<aws_sdk_dynamodb::types::_return_item_collection_metrics::ReturnItemCollectionMetrics>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::BatchWriteItem
+pub fn prolly_dynamodb_client::operation::BatchWriteItem::clone(&self) -> prolly_dynamodb_client::operation::BatchWriteItem
+impl core::marker::Freeze for prolly_dynamodb_client::operation::BatchWriteItem
+impl core::marker::Send for prolly_dynamodb_client::operation::BatchWriteItem
+impl core::marker::Sync for prolly_dynamodb_client::operation::BatchWriteItem
+impl core::marker::Unpin for prolly_dynamodb_client::operation::BatchWriteItem
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::BatchWriteItem
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::BatchWriteItem
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::BatchWriteItem
+pub struct prolly_dynamodb_client::operation::CreateTable
+impl prolly_dynamodb_client::operation::CreateTable
+pub fn prolly_dynamodb_client::operation::CreateTable::attribute_definitions(self, aws_sdk_dynamodb::types::_attribute_definition::AttributeDefinition) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::global_secondary_indexes(self, aws_sdk_dynamodb::types::_global_secondary_index::GlobalSecondaryIndex) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::key_schema(self, aws_sdk_dynamodb::types::_key_schema_element::KeySchemaElement) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::local_secondary_indexes(self, aws_sdk_dynamodb::types::_local_secondary_index::LocalSecondaryIndex) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub async fn prolly_dynamodb_client::operation::CreateTable::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::create_table::_create_table_output::CreateTableOutput>
+pub async fn prolly_dynamodb_client::operation::CreateTable::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::create_table::_create_table_output::CreateTableOutput>>
+pub fn prolly_dynamodb_client::operation::CreateTable::set_attribute_definitions(self, core::option::Option<alloc::vec::Vec<aws_sdk_dynamodb::types::_attribute_definition::AttributeDefinition>>) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::set_global_secondary_indexes(self, core::option::Option<alloc::vec::Vec<aws_sdk_dynamodb::types::_global_secondary_index::GlobalSecondaryIndex>>) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::set_key_schema(self, core::option::Option<alloc::vec::Vec<aws_sdk_dynamodb::types::_key_schema_element::KeySchemaElement>>) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::set_local_secondary_indexes(self, core::option::Option<alloc::vec::Vec<aws_sdk_dynamodb::types::_local_secondary_index::LocalSecondaryIndex>>) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::set_request_token(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::CreateTable::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::CreateTable
+pub fn prolly_dynamodb_client::operation::CreateTable::clone(&self) -> prolly_dynamodb_client::operation::CreateTable
+impl core::marker::Freeze for prolly_dynamodb_client::operation::CreateTable
+impl core::marker::Send for prolly_dynamodb_client::operation::CreateTable
+impl core::marker::Sync for prolly_dynamodb_client::operation::CreateTable
+impl core::marker::Unpin for prolly_dynamodb_client::operation::CreateTable
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::CreateTable
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::CreateTable
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::CreateTable
+pub struct prolly_dynamodb_client::operation::DeleteItem
+impl prolly_dynamodb_client::operation::DeleteItem
+pub fn prolly_dynamodb_client::operation::DeleteItem::condition_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::expected_head(self, prolly::prolly::versioned_map::MapVersionId) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::expression_attribute_names(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::expression_attribute_values(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::key(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::return_values(self, aws_sdk_dynamodb::types::_return_value::ReturnValue) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::return_values_on_condition_check_failure(self, aws_sdk_dynamodb::types::_return_values_on_condition_check_failure::ReturnValuesOnConditionCheckFailure) -> Self
+pub async fn prolly_dynamodb_client::operation::DeleteItem::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::delete_item::_delete_item_output::DeleteItemOutput>
+pub async fn prolly_dynamodb_client::operation::DeleteItem::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::delete_item::_delete_item_output::DeleteItemOutput>>
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_condition_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_expression_attribute_names(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_expression_attribute_values(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_key(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_request_token(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_return_values(self, core::option::Option<aws_sdk_dynamodb::types::_return_value::ReturnValue>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::set_return_values_on_condition_check_failure(self, core::option::Option<aws_sdk_dynamodb::types::_return_values_on_condition_check_failure::ReturnValuesOnConditionCheckFailure>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteItem::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::DeleteItem
+pub fn prolly_dynamodb_client::operation::DeleteItem::clone(&self) -> prolly_dynamodb_client::operation::DeleteItem
+impl core::marker::Freeze for prolly_dynamodb_client::operation::DeleteItem
+impl core::marker::Send for prolly_dynamodb_client::operation::DeleteItem
+impl core::marker::Sync for prolly_dynamodb_client::operation::DeleteItem
+impl core::marker::Unpin for prolly_dynamodb_client::operation::DeleteItem
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::DeleteItem
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::DeleteItem
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::DeleteItem
+pub struct prolly_dynamodb_client::operation::DeleteTable
+impl prolly_dynamodb_client::operation::DeleteTable
+pub fn prolly_dynamodb_client::operation::DeleteTable::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub async fn prolly_dynamodb_client::operation::DeleteTable::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::delete_table::_delete_table_output::DeleteTableOutput>
+pub async fn prolly_dynamodb_client::operation::DeleteTable::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::delete_table::_delete_table_output::DeleteTableOutput>>
+pub fn prolly_dynamodb_client::operation::DeleteTable::set_request_token(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::DeleteTable::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::DeleteTable
+pub fn prolly_dynamodb_client::operation::DeleteTable::clone(&self) -> prolly_dynamodb_client::operation::DeleteTable
+impl core::marker::Freeze for prolly_dynamodb_client::operation::DeleteTable
+impl core::marker::Send for prolly_dynamodb_client::operation::DeleteTable
+impl core::marker::Sync for prolly_dynamodb_client::operation::DeleteTable
+impl core::marker::Unpin for prolly_dynamodb_client::operation::DeleteTable
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::DeleteTable
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::DeleteTable
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::DeleteTable
+pub struct prolly_dynamodb_client::operation::DescribeTable
+impl prolly_dynamodb_client::operation::DescribeTable
+pub async fn prolly_dynamodb_client::operation::DescribeTable::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::describe_table::_describe_table_output::DescribeTableOutput>
+pub fn prolly_dynamodb_client::operation::DescribeTable::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::DescribeTable
+pub fn prolly_dynamodb_client::operation::DescribeTable::clone(&self) -> prolly_dynamodb_client::operation::DescribeTable
+impl core::marker::Freeze for prolly_dynamodb_client::operation::DescribeTable
+impl core::marker::Send for prolly_dynamodb_client::operation::DescribeTable
+impl core::marker::Sync for prolly_dynamodb_client::operation::DescribeTable
+impl core::marker::Unpin for prolly_dynamodb_client::operation::DescribeTable
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::DescribeTable
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::DescribeTable
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::DescribeTable
+pub struct prolly_dynamodb_client::operation::GetItem
+impl prolly_dynamodb_client::operation::GetItem
+pub fn prolly_dynamodb_client::operation::GetItem::expression_attribute_names(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::GetItem::key(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::GetItem::projection_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub async fn prolly_dynamodb_client::operation::GetItem::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::get_item::_get_item_output::GetItemOutput>
+pub async fn prolly_dynamodb_client::operation::GetItem::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::get_item::_get_item_output::GetItemOutput>>
+pub fn prolly_dynamodb_client::operation::GetItem::set_expression_attribute_names(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> Self
+pub fn prolly_dynamodb_client::operation::GetItem::set_key(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::GetItem::set_projection_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::GetItem::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::GetItem
+pub fn prolly_dynamodb_client::operation::GetItem::clone(&self) -> prolly_dynamodb_client::operation::GetItem
+impl core::marker::Freeze for prolly_dynamodb_client::operation::GetItem
+impl core::marker::Send for prolly_dynamodb_client::operation::GetItem
+impl core::marker::Sync for prolly_dynamodb_client::operation::GetItem
+impl core::marker::Unpin for prolly_dynamodb_client::operation::GetItem
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::GetItem
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::GetItem
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::GetItem
+pub struct prolly_dynamodb_client::operation::ListTables
+impl prolly_dynamodb_client::operation::ListTables
+pub fn prolly_dynamodb_client::operation::ListTables::exclusive_start_table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::ListTables::limit(self, i32) -> Self
+pub async fn prolly_dynamodb_client::operation::ListTables::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::list_tables::_list_tables_output::ListTablesOutput>
+pub fn prolly_dynamodb_client::operation::ListTables::set_exclusive_start_table_name(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::ListTables::set_limit(self, core::option::Option<i32>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::ListTables
+pub fn prolly_dynamodb_client::operation::ListTables::clone(&self) -> prolly_dynamodb_client::operation::ListTables
+impl core::marker::Freeze for prolly_dynamodb_client::operation::ListTables
+impl core::marker::Send for prolly_dynamodb_client::operation::ListTables
+impl core::marker::Sync for prolly_dynamodb_client::operation::ListTables
+impl core::marker::Unpin for prolly_dynamodb_client::operation::ListTables
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::ListTables
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::ListTables
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::ListTables
+pub struct prolly_dynamodb_client::operation::PutItem
+impl prolly_dynamodb_client::operation::PutItem
+pub fn prolly_dynamodb_client::operation::PutItem::condition_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::expected_head(self, prolly::prolly::versioned_map::MapVersionId) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::expression_attribute_names(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::expression_attribute_values(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::item(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::return_values(self, aws_sdk_dynamodb::types::_return_value::ReturnValue) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::return_values_on_condition_check_failure(self, aws_sdk_dynamodb::types::_return_values_on_condition_check_failure::ReturnValuesOnConditionCheckFailure) -> Self
+pub async fn prolly_dynamodb_client::operation::PutItem::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::put_item::_put_item_output::PutItemOutput>
+pub async fn prolly_dynamodb_client::operation::PutItem::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::put_item::_put_item_output::PutItemOutput>>
+pub fn prolly_dynamodb_client::operation::PutItem::set_condition_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::set_expression_attribute_names(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::set_expression_attribute_values(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::set_item(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::set_request_token(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::set_return_values(self, core::option::Option<aws_sdk_dynamodb::types::_return_value::ReturnValue>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::set_return_values_on_condition_check_failure(self, core::option::Option<aws_sdk_dynamodb::types::_return_values_on_condition_check_failure::ReturnValuesOnConditionCheckFailure>) -> Self
+pub fn prolly_dynamodb_client::operation::PutItem::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::PutItem
+pub fn prolly_dynamodb_client::operation::PutItem::clone(&self) -> prolly_dynamodb_client::operation::PutItem
+impl core::marker::Freeze for prolly_dynamodb_client::operation::PutItem
+impl core::marker::Send for prolly_dynamodb_client::operation::PutItem
+impl core::marker::Sync for prolly_dynamodb_client::operation::PutItem
+impl core::marker::Unpin for prolly_dynamodb_client::operation::PutItem
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::PutItem
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::PutItem
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::PutItem
+pub struct prolly_dynamodb_client::operation::Query
+impl prolly_dynamodb_client::operation::Query
+pub fn prolly_dynamodb_client::operation::Query::consistent_read(self, bool) -> Self
+pub fn prolly_dynamodb_client::operation::Query::exclusive_start_key(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::Query::expression_attribute_names(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::expression_attribute_values(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::Query::filter_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::index_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::into_paginator(self) -> prolly_dynamodb_client::operation::QueryPaginator
+pub fn prolly_dynamodb_client::operation::Query::key_condition_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::limit(self, i32) -> Self
+pub fn prolly_dynamodb_client::operation::Query::projection_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::scan_index_forward(self, bool) -> Self
+pub fn prolly_dynamodb_client::operation::Query::select(self, aws_sdk_dynamodb::types::_select::Select) -> Self
+pub async fn prolly_dynamodb_client::operation::Query::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::query::_query_output::QueryOutput>
+pub async fn prolly_dynamodb_client::operation::Query::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::query::_query_output::QueryOutput>>
+pub fn prolly_dynamodb_client::operation::Query::set_consistent_read(self, core::option::Option<bool>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_exclusive_start_key(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_expression_attribute_names(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_expression_attribute_values(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_filter_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_index_name(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_key_condition_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_limit(self, core::option::Option<i32>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_projection_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_scan_index_forward(self, core::option::Option<bool>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::set_select(self, core::option::Option<aws_sdk_dynamodb::types::_select::Select>) -> Self
+pub fn prolly_dynamodb_client::operation::Query::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::Query
+pub fn prolly_dynamodb_client::operation::Query::clone(&self) -> prolly_dynamodb_client::operation::Query
+impl core::marker::Freeze for prolly_dynamodb_client::operation::Query
+impl core::marker::Send for prolly_dynamodb_client::operation::Query
+impl core::marker::Sync for prolly_dynamodb_client::operation::Query
+impl core::marker::Unpin for prolly_dynamodb_client::operation::Query
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::Query
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::Query
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::Query
+pub struct prolly_dynamodb_client::operation::QueryPaginator
+impl prolly_dynamodb_client::operation::QueryPaginator
+pub fn prolly_dynamodb_client::operation::QueryPaginator::into_stream(self) -> impl futures_core::stream::Stream<Item = prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::query::_query_output::QueryOutput>>> + core::marker::Send + 'static
+pub async fn prolly_dynamodb_client::operation::QueryPaginator::next_page(&mut self) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::query::_query_output::QueryOutput>>>
+impl core::marker::Freeze for prolly_dynamodb_client::operation::QueryPaginator
+impl core::marker::Send for prolly_dynamodb_client::operation::QueryPaginator
+impl core::marker::Sync for prolly_dynamodb_client::operation::QueryPaginator
+impl core::marker::Unpin for prolly_dynamodb_client::operation::QueryPaginator
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::QueryPaginator
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::QueryPaginator
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::QueryPaginator
+pub struct prolly_dynamodb_client::operation::Scan
+impl prolly_dynamodb_client::operation::Scan
+pub fn prolly_dynamodb_client::operation::Scan::consistent_read(self, bool) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::exclusive_start_key(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::expression_attribute_names(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::expression_attribute_values(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::filter_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::index_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::into_paginator(self) -> prolly_dynamodb_client::operation::ScanPaginator
+pub fn prolly_dynamodb_client::operation::Scan::limit(self, i32) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::projection_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::select(self, aws_sdk_dynamodb::types::_select::Select) -> Self
+pub async fn prolly_dynamodb_client::operation::Scan::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::scan::_scan_output::ScanOutput>
+pub async fn prolly_dynamodb_client::operation::Scan::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::scan::_scan_output::ScanOutput>>
+pub fn prolly_dynamodb_client::operation::Scan::set_consistent_read(self, core::option::Option<bool>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_exclusive_start_key(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_expression_attribute_names(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_expression_attribute_values(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_filter_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_index_name(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_limit(self, core::option::Option<i32>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_projection_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::set_select(self, core::option::Option<aws_sdk_dynamodb::types::_select::Select>) -> Self
+pub fn prolly_dynamodb_client::operation::Scan::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::Scan
+pub fn prolly_dynamodb_client::operation::Scan::clone(&self) -> prolly_dynamodb_client::operation::Scan
+impl core::marker::Freeze for prolly_dynamodb_client::operation::Scan
+impl core::marker::Send for prolly_dynamodb_client::operation::Scan
+impl core::marker::Sync for prolly_dynamodb_client::operation::Scan
+impl core::marker::Unpin for prolly_dynamodb_client::operation::Scan
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::Scan
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::Scan
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::Scan
+pub struct prolly_dynamodb_client::operation::ScanPaginator
+impl prolly_dynamodb_client::operation::ScanPaginator
+pub fn prolly_dynamodb_client::operation::ScanPaginator::into_stream(self) -> impl futures_core::stream::Stream<Item = prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::scan::_scan_output::ScanOutput>>> + core::marker::Send + 'static
+pub async fn prolly_dynamodb_client::operation::ScanPaginator::next_page(&mut self) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::scan::_scan_output::ScanOutput>>>
+impl core::marker::Freeze for prolly_dynamodb_client::operation::ScanPaginator
+impl core::marker::Send for prolly_dynamodb_client::operation::ScanPaginator
+impl core::marker::Sync for prolly_dynamodb_client::operation::ScanPaginator
+impl core::marker::Unpin for prolly_dynamodb_client::operation::ScanPaginator
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::ScanPaginator
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::ScanPaginator
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::ScanPaginator
+pub struct prolly_dynamodb_client::operation::TransactGetItems
+impl prolly_dynamodb_client::operation::TransactGetItems
+pub fn prolly_dynamodb_client::operation::TransactGetItems::return_consumed_capacity(self, aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity) -> Self
+pub async fn prolly_dynamodb_client::operation::TransactGetItems::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::transact_get_items::_transact_get_items_output::TransactGetItemsOutput>
+pub async fn prolly_dynamodb_client::operation::TransactGetItems::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::transact_get_items::_transact_get_items_output::TransactGetItemsOutput>>
+pub fn prolly_dynamodb_client::operation::TransactGetItems::set_return_consumed_capacity(self, core::option::Option<aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactGetItems::set_transact_items(self, core::option::Option<alloc::vec::Vec<aws_sdk_dynamodb::types::_transact_get_item::TransactGetItem>>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactGetItems::transact_items(self, aws_sdk_dynamodb::types::_transact_get_item::TransactGetItem) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::TransactGetItems
+pub fn prolly_dynamodb_client::operation::TransactGetItems::clone(&self) -> prolly_dynamodb_client::operation::TransactGetItems
+impl core::marker::Freeze for prolly_dynamodb_client::operation::TransactGetItems
+impl core::marker::Send for prolly_dynamodb_client::operation::TransactGetItems
+impl core::marker::Sync for prolly_dynamodb_client::operation::TransactGetItems
+impl core::marker::Unpin for prolly_dynamodb_client::operation::TransactGetItems
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::TransactGetItems
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::TransactGetItems
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::TransactGetItems
+pub struct prolly_dynamodb_client::operation::TransactWriteItems
+impl prolly_dynamodb_client::operation::TransactWriteItems
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::client_request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::return_consumed_capacity(self, aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity) -> Self
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::return_item_collection_metrics(self, aws_sdk_dynamodb::types::_return_item_collection_metrics::ReturnItemCollectionMetrics) -> Self
+pub async fn prolly_dynamodb_client::operation::TransactWriteItems::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::transact_write_items::_transact_write_items_output::TransactWriteItemsOutput>
+pub async fn prolly_dynamodb_client::operation::TransactWriteItems::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::transact_write_items::_transact_write_items_output::TransactWriteItemsOutput>>
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::set_client_request_token(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::set_return_consumed_capacity(self, core::option::Option<aws_sdk_dynamodb::types::_return_consumed_capacity::ReturnConsumedCapacity>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::set_return_item_collection_metrics(self, core::option::Option<aws_sdk_dynamodb::types::_return_item_collection_metrics::ReturnItemCollectionMetrics>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::set_transact_items(self, core::option::Option<alloc::vec::Vec<aws_sdk_dynamodb::types::_transact_write_item::TransactWriteItem>>) -> Self
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::transact_items(self, aws_sdk_dynamodb::types::_transact_write_item::TransactWriteItem) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::TransactWriteItems
+pub fn prolly_dynamodb_client::operation::TransactWriteItems::clone(&self) -> prolly_dynamodb_client::operation::TransactWriteItems
+impl core::marker::Freeze for prolly_dynamodb_client::operation::TransactWriteItems
+impl core::marker::Send for prolly_dynamodb_client::operation::TransactWriteItems
+impl core::marker::Sync for prolly_dynamodb_client::operation::TransactWriteItems
+impl core::marker::Unpin for prolly_dynamodb_client::operation::TransactWriteItems
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::TransactWriteItems
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::TransactWriteItems
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::TransactWriteItems
+pub struct prolly_dynamodb_client::operation::UpdateItem
+impl prolly_dynamodb_client::operation::UpdateItem
+pub fn prolly_dynamodb_client::operation::UpdateItem::condition_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::expected_head(self, prolly::prolly::versioned_map::MapVersionId) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::expression_attribute_names(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::expression_attribute_values(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::key(self, impl core::convert::Into<alloc::string::String>, aws_sdk_dynamodb::types::_attribute_value::AttributeValue) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::return_values(self, aws_sdk_dynamodb::types::_return_value::ReturnValue) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::return_values_on_condition_check_failure(self, aws_sdk_dynamodb::types::_return_values_on_condition_check_failure::ReturnValuesOnConditionCheckFailure) -> Self
+pub async fn prolly_dynamodb_client::operation::UpdateItem::send(self) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::update_item::_update_item_output::UpdateItemOutput>
+pub async fn prolly_dynamodb_client::operation::UpdateItem::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<aws_sdk_dynamodb::operation::update_item::_update_item_output::UpdateItemOutput>>
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_condition_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_expression_attribute_names(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_expression_attribute_values(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_key(self, core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_request_token(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_return_values(self, core::option::Option<aws_sdk_dynamodb::types::_return_value::ReturnValue>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_return_values_on_condition_check_failure(self, core::option::Option<aws_sdk_dynamodb::types::_return_values_on_condition_check_failure::ReturnValuesOnConditionCheckFailure>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::set_update_expression(self, core::option::Option<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::table_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::operation::UpdateItem::update_expression(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::operation::UpdateItem
+pub fn prolly_dynamodb_client::operation::UpdateItem::clone(&self) -> prolly_dynamodb_client::operation::UpdateItem
+impl core::marker::Freeze for prolly_dynamodb_client::operation::UpdateItem
+impl core::marker::Send for prolly_dynamodb_client::operation::UpdateItem
+impl core::marker::Sync for prolly_dynamodb_client::operation::UpdateItem
+impl core::marker::Unpin for prolly_dynamodb_client::operation::UpdateItem
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::operation::UpdateItem
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::operation::UpdateItem
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::operation::UpdateItem
+pub enum prolly_dynamodb_client::BatchWriteFailureDisposition
+pub prolly_dynamodb_client::BatchWriteFailureDisposition::OutcomeUnknown
+pub prolly_dynamodb_client::BatchWriteFailureDisposition::Terminal
+impl core::clone::Clone for prolly_dynamodb_client::BatchWriteFailureDisposition
+pub fn prolly_dynamodb_client::BatchWriteFailureDisposition::clone(&self) -> prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::cmp::Eq for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::cmp::PartialEq for prolly_dynamodb_client::BatchWriteFailureDisposition
+pub fn prolly_dynamodb_client::BatchWriteFailureDisposition::eq(&self, &prolly_dynamodb_client::BatchWriteFailureDisposition) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::BatchWriteFailureDisposition
+pub fn prolly_dynamodb_client::BatchWriteFailureDisposition::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::marker::Freeze for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::marker::Send for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::marker::Sync for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::marker::Unpin for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::BatchWriteFailureDisposition
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::BatchWriteFailureDisposition
+pub enum prolly_dynamodb_client::CompatibilityLevel
+pub prolly_dynamodb_client::CompatibilityLevel::CompatibleStronger
+pub prolly_dynamodb_client::CompatibilityLevel::Exact
+pub prolly_dynamodb_client::CompatibilityLevel::Extension
+pub prolly_dynamodb_client::CompatibilityLevel::Subset
+impl core::clone::Clone for prolly_dynamodb_client::CompatibilityLevel
+pub fn prolly_dynamodb_client::CompatibilityLevel::clone(&self) -> prolly_dynamodb_client::CompatibilityLevel
+impl core::cmp::Eq for prolly_dynamodb_client::CompatibilityLevel
+impl core::cmp::PartialEq for prolly_dynamodb_client::CompatibilityLevel
+pub fn prolly_dynamodb_client::CompatibilityLevel::eq(&self, &prolly_dynamodb_client::CompatibilityLevel) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::CompatibilityLevel
+pub fn prolly_dynamodb_client::CompatibilityLevel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for prolly_dynamodb_client::CompatibilityLevel
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::CompatibilityLevel
+impl serde_core::ser::Serialize for prolly_dynamodb_client::CompatibilityLevel
+pub fn prolly_dynamodb_client::CompatibilityLevel::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::CompatibilityLevel
+pub fn prolly_dynamodb_client::CompatibilityLevel::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::CompatibilityLevel
+impl core::marker::Send for prolly_dynamodb_client::CompatibilityLevel
+impl core::marker::Sync for prolly_dynamodb_client::CompatibilityLevel
+impl core::marker::Unpin for prolly_dynamodb_client::CompatibilityLevel
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::CompatibilityLevel
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::CompatibilityLevel
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::CompatibilityLevel
+pub enum prolly_dynamodb_client::Error
+pub prolly_dynamodb_client::Error::BatchWrite(alloc::boxed::Box<prolly_dynamodb_client::BatchWriteFailure>)
+pub prolly_dynamodb_client::Error::ConditionalCheckFailed
+pub prolly_dynamodb_client::Error::ConditionalCheckFailed::item: core::option::Option<std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>
+pub prolly_dynamodb_client::Error::Core(prolly_dynamodb_core::error::Error)
+pub prolly_dynamodb_client::Error::HeadConflict
+pub prolly_dynamodb_client::Error::HeadConflict::current: core::option::Option<prolly::prolly::versioned_map::MapVersionId>
+pub prolly_dynamodb_client::Error::HeadConflict::expected: prolly::prolly::versioned_map::MapVersionId
+pub prolly_dynamodb_client::Error::InvalidRequest(alloc::string::String)
+pub prolly_dynamodb_client::Error::Store(prolly_store_dynamodb::dynamodb::DynamoDbBackendError)
+pub prolly_dynamodb_client::Error::TransactionCanceled
+pub prolly_dynamodb_client::Error::TransactionCanceled::cancellation_reasons: alloc::vec::Vec<aws_sdk_dynamodb::types::_cancellation_reason::CancellationReason>
+pub prolly_dynamodb_client::Error::Unsupported(alloc::string::String)
+pub prolly_dynamodb_client::Error::WorkerSink
+pub prolly_dynamodb_client::Error::WorkerSink::source: alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync)>
+impl prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::batch_write_failure(&self) -> core::option::Option<&prolly_dynamodb_client::BatchWriteFailure>
+pub fn prolly_dynamodb_client::Error::cancellation_reasons(&self) -> core::option::Option<&[aws_sdk_dynamodb::types::_cancellation_reason::CancellationReason]>
+pub fn prolly_dynamodb_client::Error::conditional_failure_item(&self) -> core::option::Option<&std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>
+impl core::convert::From<alloc::boxed::Box<prolly_dynamodb_client::BatchWriteFailure>> for prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::from(alloc::boxed::Box<prolly_dynamodb_client::BatchWriteFailure>) -> Self
+impl core::convert::From<prolly_dynamodb_core::error::Error> for prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::from(prolly_dynamodb_core::error::Error) -> Self
+impl core::convert::From<prolly_store_dynamodb::dynamodb::DynamoDbBackendError> for prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::from(prolly_store_dynamodb::dynamodb::DynamoDbBackendError) -> Self
+impl core::error::Error for prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for prolly_dynamodb_client::Error
+pub fn prolly_dynamodb_client::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for prolly_dynamodb_client::Error
+impl core::marker::Send for prolly_dynamodb_client::Error
+impl core::marker::Sync for prolly_dynamodb_client::Error
+impl core::marker::Unpin for prolly_dynamodb_client::Error
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Error
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Error
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Error
+pub struct prolly_dynamodb_client::BatchWriteFailure
+pub prolly_dynamodb_client::BatchWriteFailure::applied_transitions: alloc::vec::Vec<prolly_dynamodb_client::TableTransitionMetadata>
+pub prolly_dynamodb_client::BatchWriteFailure::disposition: prolly_dynamodb_client::BatchWriteFailureDisposition
+pub prolly_dynamodb_client::BatchWriteFailure::failed_request: aws_sdk_dynamodb::types::_write_request::WriteRequest
+pub prolly_dynamodb_client::BatchWriteFailure::failed_table: alloc::string::String
+pub prolly_dynamodb_client::BatchWriteFailure::transaction_token: core::option::Option<alloc::string::String>
+pub prolly_dynamodb_client::BatchWriteFailure::unattempted_items: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<aws_sdk_dynamodb::types::_write_request::WriteRequest>>
+impl prolly_dynamodb_client::BatchWriteFailure
+pub fn prolly_dynamodb_client::BatchWriteFailure::cause(&self) -> &prolly_dynamodb_client::Error
+impl core::error::Error for prolly_dynamodb_client::BatchWriteFailure
+pub fn prolly_dynamodb_client::BatchWriteFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for prolly_dynamodb_client::BatchWriteFailure
+pub fn prolly_dynamodb_client::BatchWriteFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for prolly_dynamodb_client::BatchWriteFailure
+pub fn prolly_dynamodb_client::BatchWriteFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for prolly_dynamodb_client::BatchWriteFailure
+impl core::marker::Send for prolly_dynamodb_client::BatchWriteFailure
+impl core::marker::Sync for prolly_dynamodb_client::BatchWriteFailure
+impl core::marker::Unpin for prolly_dynamodb_client::BatchWriteFailure
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::BatchWriteFailure
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::BatchWriteFailure
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::BatchWriteFailure
+pub struct prolly_dynamodb_client::CapabilityReport
+pub prolly_dynamodb_client::CapabilityReport::aws_sdk_dynamodb_version: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::catalog_codec_digest: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::commit_codec_digest: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::database_format_record_hex: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::database_format_version: u32
+pub prolly_dynamodb_client::CapabilityReport::extensions: alloc::vec::Vec<alloc::string::String>
+pub prolly_dynamodb_client::CapabilityReport::gc_requires_maintenance_lease: bool
+pub prolly_dynamodb_client::CapabilityReport::item_codec: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::item_codec_digest: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::key_codec_digest: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::large_value_inline_threshold: usize
+pub prolly_dynamodb_client::CapabilityReport::logical_protocol_major: u16
+pub prolly_dynamodb_client::CapabilityReport::logical_protocol_minor: u16
+pub prolly_dynamodb_client::CapabilityReport::logical_retry_limit: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_collected_diff_items: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_collected_versions: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_diff_page_items: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_gc_blob_delete_parallelism: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_gc_candidate_page_evaluated_items: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_gc_plan_deletes: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_logical_item_bytes: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_maintenance_lease_millis: u64
+pub prolly_dynamodb_client::CapabilityReport::maximum_retention_protected_versions: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_retention_removals: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_root_actions: usize
+pub prolly_dynamodb_client::CapabilityReport::maximum_version_page_items: usize
+pub prolly_dynamodb_client::CapabilityReport::minimum_maintenance_lease_millis: u64
+pub prolly_dynamodb_client::CapabilityReport::node_cache_max_bytes: core::option::Option<usize>
+pub prolly_dynamodb_client::CapabilityReport::node_cache_max_nodes: core::option::Option<usize>
+pub prolly_dynamodb_client::CapabilityReport::operations: alloc::vec::Vec<prolly_dynamodb_client::OperationCapability>
+pub prolly_dynamodb_client::CapabilityReport::process_local_write_admission: bool
+pub prolly_dynamodb_client::CapabilityReport::staged_node_deletes: bool
+pub prolly_dynamodb_client::CapabilityReport::transaction_publication_mode: alloc::string::String
+pub prolly_dynamodb_client::CapabilityReport::tree_format_digest: alloc::string::String
+impl prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::CapabilityReport::operation(&self, &str) -> core::option::Option<&prolly_dynamodb_client::OperationCapability>
+pub fn prolly_dynamodb_client::CapabilityReport::to_json(&self) -> core::result::Result<alloc::string::String, serde_json::error::Error>
+impl core::clone::Clone for prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::CapabilityReport::clone(&self) -> prolly_dynamodb_client::CapabilityReport
+impl core::cmp::Eq for prolly_dynamodb_client::CapabilityReport
+impl core::cmp::PartialEq for prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::CapabilityReport::eq(&self, &prolly_dynamodb_client::CapabilityReport) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::CapabilityReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::CapabilityReport
+impl serde_core::ser::Serialize for prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::CapabilityReport::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::CapabilityReport::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::CapabilityReport
+impl core::marker::Send for prolly_dynamodb_client::CapabilityReport
+impl core::marker::Sync for prolly_dynamodb_client::CapabilityReport
+impl core::marker::Unpin for prolly_dynamodb_client::CapabilityReport
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::CapabilityReport
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::CapabilityReport
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::CapabilityReport
+pub struct prolly_dynamodb_client::Client
+impl prolly_dynamodb_client::Client
+pub async fn prolly_dynamodb_client::Client::acquire_maintenance_lease(&self, prolly_dynamodb_core::database::MaintenanceContext, u64) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::MaintenanceLease>
+pub fn prolly_dynamodb_client::Client::backend(&self) -> &prolly_store_dynamodb::dynamodb::DynamoDbBackend
+pub fn prolly_dynamodb_client::Client::batch_get_item(&self) -> prolly_dynamodb_client::operation::BatchGetItem
+pub fn prolly_dynamodb_client::Client::batch_write_item(&self) -> prolly_dynamodb_client::operation::BatchWriteItem
+pub async fn prolly_dynamodb_client::Client::break_expired_maintenance_lease(&self, &prolly_dynamodb_core::database::MaintenanceLeaseId, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::MaintenanceLeaseRelease>
+pub fn prolly_dynamodb_client::Client::builder() -> prolly_dynamodb_client::ClientBuilder
+pub fn prolly_dynamodb_client::Client::cache_usage(&self) -> prolly::prolly::ProllyCacheUsage
+pub fn prolly_dynamodb_client::Client::capabilities(&self) -> &prolly_dynamodb_client::CapabilityReport
+pub fn prolly_dynamodb_client::Client::create_table(&self) -> prolly_dynamodb_client::operation::CreateTable
+pub fn prolly_dynamodb_client::Client::delete_item(&self) -> prolly_dynamodb_client::operation::DeleteItem
+pub fn prolly_dynamodb_client::Client::delete_table(&self) -> prolly_dynamodb_client::operation::DeleteTable
+pub fn prolly_dynamodb_client::Client::describe_table(&self) -> prolly_dynamodb_client::operation::DescribeTable
+pub async fn prolly_dynamodb_client::Client::execute_batch_get_item(&self, aws_sdk_dynamodb::operation::batch_get_item::_batch_get_item_input::BatchGetItemInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::batch_get_item::_batch_get_item_output::BatchGetItemOutput>
+pub async fn prolly_dynamodb_client::Client::execute_batch_write_item(&self, aws_sdk_dynamodb::operation::batch_write_item::_batch_write_item_input::BatchWriteItemInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::batch_write_item::_batch_write_item_output::BatchWriteItemOutput>
+pub async fn prolly_dynamodb_client::Client::execute_create_table(&self, aws_sdk_dynamodb::operation::create_table::_create_table_input::CreateTableInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::create_table::_create_table_output::CreateTableOutput>
+pub async fn prolly_dynamodb_client::Client::execute_delete_item(&self, aws_sdk_dynamodb::operation::delete_item::_delete_item_input::DeleteItemInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::delete_item::_delete_item_output::DeleteItemOutput>
+pub async fn prolly_dynamodb_client::Client::execute_delete_table(&self, aws_sdk_dynamodb::operation::delete_table::_delete_table_input::DeleteTableInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::delete_table::_delete_table_output::DeleteTableOutput>
+pub async fn prolly_dynamodb_client::Client::execute_describe_table(&self, aws_sdk_dynamodb::operation::describe_table::_describe_table_input::DescribeTableInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::describe_table::_describe_table_output::DescribeTableOutput>
+pub async fn prolly_dynamodb_client::Client::execute_get_item(&self, aws_sdk_dynamodb::operation::get_item::_get_item_input::GetItemInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::get_item::_get_item_output::GetItemOutput>
+pub async fn prolly_dynamodb_client::Client::execute_list_tables(&self, aws_sdk_dynamodb::operation::list_tables::_list_tables_input::ListTablesInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::list_tables::_list_tables_output::ListTablesOutput>
+pub async fn prolly_dynamodb_client::Client::execute_put_item(&self, aws_sdk_dynamodb::operation::put_item::_put_item_input::PutItemInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::put_item::_put_item_output::PutItemOutput>
+pub async fn prolly_dynamodb_client::Client::execute_query(&self, aws_sdk_dynamodb::operation::query::_query_input::QueryInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::query::_query_output::QueryOutput>
+pub async fn prolly_dynamodb_client::Client::execute_scan(&self, aws_sdk_dynamodb::operation::scan::_scan_input::ScanInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::scan::_scan_output::ScanOutput>
+pub async fn prolly_dynamodb_client::Client::execute_transact_get_items(&self, aws_sdk_dynamodb::operation::transact_get_items::_transact_get_items_input::TransactGetItemsInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::transact_get_items::_transact_get_items_output::TransactGetItemsOutput>
+pub async fn prolly_dynamodb_client::Client::execute_transact_write_items(&self, aws_sdk_dynamodb::operation::transact_write_items::_transact_write_items_input::TransactWriteItemsInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::transact_write_items::_transact_write_items_output::TransactWriteItemsOutput>
+pub async fn prolly_dynamodb_client::Client::execute_update_item(&self, aws_sdk_dynamodb::operation::update_item::_update_item_input::UpdateItemInput) -> prolly_dynamodb_client::Result<aws_sdk_dynamodb::operation::update_item::_update_item_output::UpdateItemOutput>
+pub fn prolly_dynamodb_client::Client::get_item(&self) -> prolly_dynamodb_client::operation::GetItem
+pub fn prolly_dynamodb_client::Client::import(&self, prolly_dynamodb_core::archive::TableArchive, impl core::convert::Into<alloc::string::String>, prolly_dynamodb_core::archive::TableArchiveLimits) -> prolly_dynamodb_client::Import
+pub async fn prolly_dynamodb_client::Client::import_audit(&self, &prolly_dynamodb_core::database::ImportPlanId) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_core::database::ImportAuditRecord>>
+pub fn prolly_dynamodb_client::Client::list_tables(&self) -> prolly_dynamodb_client::operation::ListTables
+pub fn prolly_dynamodb_client::Client::logical_retry_limit(&self) -> usize
+pub async fn prolly_dynamodb_client::Client::maintenance_lease(&self) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_core::database::MaintenanceLease>>
+pub async fn prolly_dynamodb_client::Client::open(prolly_store_dynamodb::dynamodb::DynamoDbBackend) -> prolly_dynamodb_client::Result<Self>
+pub async fn prolly_dynamodb_client::Client::open_store(prolly_store_dynamodb::dynamodb::DynamoDbStore) -> prolly_dynamodb_client::Result<Self>
+pub fn prolly_dynamodb_client::Client::put_item(&self) -> prolly_dynamodb_client::operation::PutItem
+pub fn prolly_dynamodb_client::Client::query(&self) -> prolly_dynamodb_client::operation::Query
+pub async fn prolly_dynamodb_client::Client::release_maintenance_lease(&self, &prolly_dynamodb_core::database::MaintenanceLeaseId, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::MaintenanceLeaseRelease>
+pub fn prolly_dynamodb_client::Client::remote_store_config(&self) -> &prolly::prolly::remote::RemoteStoreConfig
+pub fn prolly_dynamodb_client::Client::scan(&self) -> prolly_dynamodb_client::operation::Scan
+pub fn prolly_dynamodb_client::Client::table(&self, impl core::convert::Into<alloc::string::String>) -> prolly_dynamodb_client::Table
+pub fn prolly_dynamodb_client::Client::transact_get_items(&self) -> prolly_dynamodb_client::operation::TransactGetItems
+pub fn prolly_dynamodb_client::Client::transact_write_items(&self) -> prolly_dynamodb_client::operation::TransactWriteItems
+pub fn prolly_dynamodb_client::Client::update_item(&self) -> prolly_dynamodb_client::operation::UpdateItem
+pub fn prolly_dynamodb_client::Client::workers(&self) -> prolly_dynamodb_client::Workers
+impl prolly_dynamodb_client::Client
+pub async fn prolly_dynamodb_client::Client::apply_gc(&self, &prolly_dynamodb_client::GcPlan, prolly_dynamodb_core::database::MaintenanceContext, prolly_dynamodb_client::GcApplyOptions) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::GcApplyResult>
+pub async fn prolly_dynamodb_client::Client::plan_gc(&self, &prolly_dynamodb_core::database::MaintenanceLeaseId, core::option::Option<&prolly_dynamodb_client::GcCursor>, prolly_dynamodb_client::GcPlanLimits) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::GcPlan>
+impl core::clone::Clone for prolly_dynamodb_client::Client
+pub fn prolly_dynamodb_client::Client::clone(&self) -> prolly_dynamodb_client::Client
+impl core::marker::Freeze for prolly_dynamodb_client::Client
+impl core::marker::Send for prolly_dynamodb_client::Client
+impl core::marker::Sync for prolly_dynamodb_client::Client
+impl core::marker::Unpin for prolly_dynamodb_client::Client
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Client
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Client
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Client
+pub struct prolly_dynamodb_client::ClientBuilder
+impl prolly_dynamodb_client::ClientBuilder
+pub fn prolly_dynamodb_client::ClientBuilder::backend(self, prolly_store_dynamodb::dynamodb::DynamoDbBackend) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::clock(self, alloc::sync::Arc<dyn prolly_dynamodb_core::database::Clock>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::id_generator(self, alloc::sync::Arc<dyn prolly_dynamodb_core::database::IdGenerator>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::logical_retry_limit(self, usize) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::node_cache_max_bytes(self, usize) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::node_cache_max_nodes(self, usize) -> Self
+pub async fn prolly_dynamodb_client::ClientBuilder::open(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::Client>
+pub fn prolly_dynamodb_client::ClientBuilder::remote_store_config(self, prolly::prolly::remote::RemoteStoreConfig) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_backend(self, core::option::Option<prolly_store_dynamodb::dynamodb::DynamoDbBackend>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_clock(self, core::option::Option<alloc::sync::Arc<dyn prolly_dynamodb_core::database::Clock>>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_id_generator(self, core::option::Option<alloc::sync::Arc<dyn prolly_dynamodb_core::database::IdGenerator>>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_logical_retry_limit(self, core::option::Option<usize>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_node_cache_max_bytes(self, core::option::Option<usize>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_node_cache_max_nodes(self, core::option::Option<usize>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_remote_store_config(self, core::option::Option<prolly::prolly::remote::RemoteStoreConfig>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::set_store(self, core::option::Option<prolly_store_dynamodb::dynamodb::DynamoDbStore>) -> Self
+pub fn prolly_dynamodb_client::ClientBuilder::store(self, prolly_store_dynamodb::dynamodb::DynamoDbStore) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::ClientBuilder
+pub fn prolly_dynamodb_client::ClientBuilder::clone(&self) -> prolly_dynamodb_client::ClientBuilder
+impl core::default::Default for prolly_dynamodb_client::ClientBuilder
+pub fn prolly_dynamodb_client::ClientBuilder::default() -> prolly_dynamodb_client::ClientBuilder
+impl core::marker::Freeze for prolly_dynamodb_client::ClientBuilder
+impl core::marker::Send for prolly_dynamodb_client::ClientBuilder
+impl core::marker::Sync for prolly_dynamodb_client::ClientBuilder
+impl core::marker::Unpin for prolly_dynamodb_client::ClientBuilder
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::ClientBuilder
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::ClientBuilder
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::ClientBuilder
+pub struct prolly_dynamodb_client::ConditionalTable
+impl prolly_dynamodb_client::ConditionalTable
+pub fn prolly_dynamodb_client::ConditionalTable::delete_item(&self) -> prolly_dynamodb_client::operation::DeleteItem
+pub fn prolly_dynamodb_client::ConditionalTable::put_item(&self) -> prolly_dynamodb_client::operation::PutItem
+pub fn prolly_dynamodb_client::ConditionalTable::update_item(&self) -> prolly_dynamodb_client::operation::UpdateItem
+impl core::clone::Clone for prolly_dynamodb_client::ConditionalTable
+pub fn prolly_dynamodb_client::ConditionalTable::clone(&self) -> prolly_dynamodb_client::ConditionalTable
+impl core::marker::Freeze for prolly_dynamodb_client::ConditionalTable
+impl core::marker::Send for prolly_dynamodb_client::ConditionalTable
+impl core::marker::Sync for prolly_dynamodb_client::ConditionalTable
+impl core::marker::Unpin for prolly_dynamodb_client::ConditionalTable
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::ConditionalTable
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::ConditionalTable
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::ConditionalTable
+pub struct prolly_dynamodb_client::DiffPaginator
+impl prolly_dynamodb_client::DiffPaginator
+pub fn prolly_dynamodb_client::DiffPaginator::cursor(self, prolly::prolly::diff::StructuralDiffCursor) -> Self
+pub fn prolly_dynamodb_client::DiffPaginator::into_stream(self) -> impl futures_core::stream::Stream<Item = prolly_dynamodb_client::Result<prolly::prolly::diff::StructuralDiffPage>> + core::marker::Send + 'static
+pub async fn prolly_dynamodb_client::DiffPaginator::next_page(&mut self) -> prolly_dynamodb_client::Result<core::option::Option<prolly::prolly::diff::StructuralDiffPage>>
+pub fn prolly_dynamodb_client::DiffPaginator::page_size(self, usize) -> Self
+pub fn prolly_dynamodb_client::DiffPaginator::set_cursor(self, core::option::Option<prolly::prolly::diff::StructuralDiffCursor>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::DiffPaginator
+pub fn prolly_dynamodb_client::DiffPaginator::clone(&self) -> prolly_dynamodb_client::DiffPaginator
+impl core::marker::Freeze for prolly_dynamodb_client::DiffPaginator
+impl core::marker::Send for prolly_dynamodb_client::DiffPaginator
+impl core::marker::Sync for prolly_dynamodb_client::DiffPaginator
+impl core::marker::Unpin for prolly_dynamodb_client::DiffPaginator
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::DiffPaginator
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::DiffPaginator
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::DiffPaginator
+pub struct prolly_dynamodb_client::GcApplyOptions
+pub prolly_dynamodb_client::GcApplyOptions::blob_delete_parallelism: usize
+impl core::clone::Clone for prolly_dynamodb_client::GcApplyOptions
+pub fn prolly_dynamodb_client::GcApplyOptions::clone(&self) -> prolly_dynamodb_client::GcApplyOptions
+impl core::cmp::Eq for prolly_dynamodb_client::GcApplyOptions
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcApplyOptions
+pub fn prolly_dynamodb_client::GcApplyOptions::eq(&self, &prolly_dynamodb_client::GcApplyOptions) -> bool
+impl core::default::Default for prolly_dynamodb_client::GcApplyOptions
+pub fn prolly_dynamodb_client::GcApplyOptions::default() -> Self
+impl core::fmt::Debug for prolly_dynamodb_client::GcApplyOptions
+pub fn prolly_dynamodb_client::GcApplyOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for prolly_dynamodb_client::GcApplyOptions
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcApplyOptions
+impl core::marker::Freeze for prolly_dynamodb_client::GcApplyOptions
+impl core::marker::Send for prolly_dynamodb_client::GcApplyOptions
+impl core::marker::Sync for prolly_dynamodb_client::GcApplyOptions
+impl core::marker::Unpin for prolly_dynamodb_client::GcApplyOptions
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcApplyOptions
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcApplyOptions
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcApplyOptions
+pub struct prolly_dynamodb_client::GcApplyResult
+pub prolly_dynamodb_client::GcApplyResult::blob_deletes: usize
+pub prolly_dynamodb_client::GcApplyResult::completed_at_millis: u64
+pub prolly_dynamodb_client::GcApplyResult::lease_id: prolly_dynamodb_core::database::MaintenanceLeaseId
+pub prolly_dynamodb_client::GcApplyResult::node_deletes: usize
+pub prolly_dynamodb_client::GcApplyResult::plan_id: prolly_dynamodb_client::GcPlanId
+pub prolly_dynamodb_client::GcApplyResult::replayed: bool
+impl core::clone::Clone for prolly_dynamodb_client::GcApplyResult
+pub fn prolly_dynamodb_client::GcApplyResult::clone(&self) -> prolly_dynamodb_client::GcApplyResult
+impl core::cmp::Eq for prolly_dynamodb_client::GcApplyResult
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcApplyResult
+pub fn prolly_dynamodb_client::GcApplyResult::eq(&self, &prolly_dynamodb_client::GcApplyResult) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::GcApplyResult
+pub fn prolly_dynamodb_client::GcApplyResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcApplyResult
+impl serde_core::ser::Serialize for prolly_dynamodb_client::GcApplyResult
+pub fn prolly_dynamodb_client::GcApplyResult::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::GcApplyResult
+pub fn prolly_dynamodb_client::GcApplyResult::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::GcApplyResult
+impl core::marker::Send for prolly_dynamodb_client::GcApplyResult
+impl core::marker::Sync for prolly_dynamodb_client::GcApplyResult
+impl core::marker::Unpin for prolly_dynamodb_client::GcApplyResult
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcApplyResult
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcApplyResult
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcApplyResult
+pub struct prolly_dynamodb_client::GcBlobCandidate
+pub prolly_dynamodb_client::GcBlobCandidate::cid: prolly::prolly::cid::Cid
+pub prolly_dynamodb_client::GcBlobCandidate::len: u64
+impl core::clone::Clone for prolly_dynamodb_client::GcBlobCandidate
+pub fn prolly_dynamodb_client::GcBlobCandidate::clone(&self) -> prolly_dynamodb_client::GcBlobCandidate
+impl core::cmp::Eq for prolly_dynamodb_client::GcBlobCandidate
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcBlobCandidate
+pub fn prolly_dynamodb_client::GcBlobCandidate::eq(&self, &prolly_dynamodb_client::GcBlobCandidate) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::GcBlobCandidate
+pub fn prolly_dynamodb_client::GcBlobCandidate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcBlobCandidate
+impl serde_core::ser::Serialize for prolly_dynamodb_client::GcBlobCandidate
+pub fn prolly_dynamodb_client::GcBlobCandidate::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::GcBlobCandidate
+pub fn prolly_dynamodb_client::GcBlobCandidate::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::GcBlobCandidate
+impl core::marker::Send for prolly_dynamodb_client::GcBlobCandidate
+impl core::marker::Sync for prolly_dynamodb_client::GcBlobCandidate
+impl core::marker::Unpin for prolly_dynamodb_client::GcBlobCandidate
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcBlobCandidate
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcBlobCandidate
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcBlobCandidate
+pub struct prolly_dynamodb_client::GcCursor
+pub prolly_dynamodb_client::GcCursor::blob_cursor: core::option::Option<alloc::vec::Vec<u8>>
+pub prolly_dynamodb_client::GcCursor::blob_done: bool
+pub prolly_dynamodb_client::GcCursor::node_cursor: core::option::Option<alloc::vec::Vec<u8>>
+pub prolly_dynamodb_client::GcCursor::node_done: bool
+impl core::clone::Clone for prolly_dynamodb_client::GcCursor
+pub fn prolly_dynamodb_client::GcCursor::clone(&self) -> prolly_dynamodb_client::GcCursor
+impl core::cmp::Eq for prolly_dynamodb_client::GcCursor
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcCursor
+pub fn prolly_dynamodb_client::GcCursor::eq(&self, &prolly_dynamodb_client::GcCursor) -> bool
+impl core::default::Default for prolly_dynamodb_client::GcCursor
+pub fn prolly_dynamodb_client::GcCursor::default() -> prolly_dynamodb_client::GcCursor
+impl core::fmt::Debug for prolly_dynamodb_client::GcCursor
+pub fn prolly_dynamodb_client::GcCursor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcCursor
+impl serde_core::ser::Serialize for prolly_dynamodb_client::GcCursor
+pub fn prolly_dynamodb_client::GcCursor::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::GcCursor
+pub fn prolly_dynamodb_client::GcCursor::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::GcCursor
+impl core::marker::Send for prolly_dynamodb_client::GcCursor
+impl core::marker::Sync for prolly_dynamodb_client::GcCursor
+impl core::marker::Unpin for prolly_dynamodb_client::GcCursor
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcCursor
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcCursor
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcCursor
+pub struct prolly_dynamodb_client::GcPlan
+pub prolly_dynamodb_client::GcPlan::cursor: prolly_dynamodb_client::GcCursor
+pub prolly_dynamodb_client::GcPlan::examined_blob_candidates: usize
+pub prolly_dynamodb_client::GcPlan::examined_node_candidates: usize
+pub prolly_dynamodb_client::GcPlan::id: prolly_dynamodb_client::GcPlanId
+pub prolly_dynamodb_client::GcPlan::lease_id: prolly_dynamodb_core::database::MaintenanceLeaseId
+pub prolly_dynamodb_client::GcPlan::limits: prolly_dynamodb_client::GcPlanLimits
+pub prolly_dynamodb_client::GcPlan::live_blob_bytes: u64
+pub prolly_dynamodb_client::GcPlan::live_blobs: usize
+pub prolly_dynamodb_client::GcPlan::live_node_bytes: usize
+pub prolly_dynamodb_client::GcPlan::live_nodes: usize
+pub prolly_dynamodb_client::GcPlan::next_cursor: core::option::Option<prolly_dynamodb_client::GcCursor>
+pub prolly_dynamodb_client::GcPlan::planned_at_millis: u64
+pub prolly_dynamodb_client::GcPlan::protected_trees: usize
+pub prolly_dynamodb_client::GcPlan::reclaimable_blobs: alloc::vec::Vec<prolly_dynamodb_client::GcBlobCandidate>
+pub prolly_dynamodb_client::GcPlan::reclaimable_nodes: alloc::vec::Vec<prolly::prolly::cid::Cid>
+pub prolly_dynamodb_client::GcPlan::retained_roots: usize
+pub prolly_dynamodb_client::GcPlan::roots_digest: prolly::prolly::cid::Cid
+pub prolly_dynamodb_client::GcPlan::scanned_blob_nodes: usize
+pub prolly_dynamodb_client::GcPlan::scanned_values: usize
+impl core::clone::Clone for prolly_dynamodb_client::GcPlan
+pub fn prolly_dynamodb_client::GcPlan::clone(&self) -> prolly_dynamodb_client::GcPlan
+impl core::cmp::Eq for prolly_dynamodb_client::GcPlan
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcPlan
+pub fn prolly_dynamodb_client::GcPlan::eq(&self, &prolly_dynamodb_client::GcPlan) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::GcPlan
+pub fn prolly_dynamodb_client::GcPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcPlan
+impl serde_core::ser::Serialize for prolly_dynamodb_client::GcPlan
+pub fn prolly_dynamodb_client::GcPlan::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::GcPlan
+pub fn prolly_dynamodb_client::GcPlan::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::GcPlan
+impl core::marker::Send for prolly_dynamodb_client::GcPlan
+impl core::marker::Sync for prolly_dynamodb_client::GcPlan
+impl core::marker::Unpin for prolly_dynamodb_client::GcPlan
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcPlan
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcPlan
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcPlan
+pub struct prolly_dynamodb_client::GcPlanId(pub [u8; 32])
+impl core::clone::Clone for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::clone(&self) -> prolly_dynamodb_client::GcPlanId
+impl core::cmp::Eq for prolly_dynamodb_client::GcPlanId
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::eq(&self, &prolly_dynamodb_client::GcPlanId) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcPlanId
+impl serde_core::ser::Serialize for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::GcPlanId
+pub fn prolly_dynamodb_client::GcPlanId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::GcPlanId
+impl core::marker::Send for prolly_dynamodb_client::GcPlanId
+impl core::marker::Sync for prolly_dynamodb_client::GcPlanId
+impl core::marker::Unpin for prolly_dynamodb_client::GcPlanId
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcPlanId
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcPlanId
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcPlanId
+pub struct prolly_dynamodb_client::GcPlanLimits
+pub prolly_dynamodb_client::GcPlanLimits::candidate_page_evaluation_limit: usize
+pub prolly_dynamodb_client::GcPlanLimits::max_live_blob_bytes: u64
+pub prolly_dynamodb_client::GcPlanLimits::max_live_blobs: usize
+pub prolly_dynamodb_client::GcPlanLimits::max_live_node_bytes: usize
+pub prolly_dynamodb_client::GcPlanLimits::max_live_nodes: usize
+pub prolly_dynamodb_client::GcPlanLimits::max_roots: usize
+pub prolly_dynamodb_client::GcPlanLimits::max_scanned_values: usize
+impl prolly_dynamodb_client::GcPlanLimits
+pub const fn prolly_dynamodb_client::GcPlanLimits::new(usize, usize, usize, usize, usize, u64, usize) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::GcPlanLimits
+pub fn prolly_dynamodb_client::GcPlanLimits::clone(&self) -> prolly_dynamodb_client::GcPlanLimits
+impl core::cmp::Eq for prolly_dynamodb_client::GcPlanLimits
+impl core::cmp::PartialEq for prolly_dynamodb_client::GcPlanLimits
+pub fn prolly_dynamodb_client::GcPlanLimits::eq(&self, &prolly_dynamodb_client::GcPlanLimits) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::GcPlanLimits
+pub fn prolly_dynamodb_client::GcPlanLimits::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for prolly_dynamodb_client::GcPlanLimits
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::GcPlanLimits
+impl serde_core::ser::Serialize for prolly_dynamodb_client::GcPlanLimits
+pub fn prolly_dynamodb_client::GcPlanLimits::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::GcPlanLimits
+pub fn prolly_dynamodb_client::GcPlanLimits::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::GcPlanLimits
+impl core::marker::Send for prolly_dynamodb_client::GcPlanLimits
+impl core::marker::Sync for prolly_dynamodb_client::GcPlanLimits
+impl core::marker::Unpin for prolly_dynamodb_client::GcPlanLimits
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::GcPlanLimits
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::GcPlanLimits
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::GcPlanLimits
+pub struct prolly_dynamodb_client::Import
+impl prolly_dynamodb_client::Import
+pub async fn prolly_dynamodb_client::Import::apply(&self, &prolly_dynamodb_core::database::ImportPlan, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::ImportResult>
+pub fn prolly_dynamodb_client::Import::archive(&self) -> &prolly_dynamodb_core::archive::TableArchive
+pub async fn prolly_dynamodb_client::Import::plan(&self) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::ImportPlan>
+pub fn prolly_dynamodb_client::Import::target_table_name(&self) -> &str
+impl core::marker::Freeze for prolly_dynamodb_client::Import
+impl core::marker::Send for prolly_dynamodb_client::Import
+impl core::marker::Sync for prolly_dynamodb_client::Import
+impl core::marker::Unpin for prolly_dynamodb_client::Import
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Import
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Import
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Import
+pub struct prolly_dynamodb_client::Indexes
+impl prolly_dynamodb_client::Indexes
+pub fn prolly_dynamodb_client::Indexes::desired(&self) -> &[prolly_dynamodb_core::model::table::SecondaryIndexDefinition]
+pub async fn prolly_dynamodb_client::Indexes::plan(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::IndexReconfigurationPlan>
+impl core::clone::Clone for prolly_dynamodb_client::Indexes
+pub fn prolly_dynamodb_client::Indexes::clone(&self) -> prolly_dynamodb_client::Indexes
+impl core::marker::Freeze for prolly_dynamodb_client::Indexes
+impl core::marker::Send for prolly_dynamodb_client::Indexes
+impl core::marker::Sync for prolly_dynamodb_client::Indexes
+impl core::marker::Unpin for prolly_dynamodb_client::Indexes
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Indexes
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Indexes
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Indexes
+pub struct prolly_dynamodb_client::MaintenanceWorker
+impl prolly_dynamodb_client::MaintenanceWorker
+pub async fn prolly_dynamodb_client::MaintenanceWorker::apply_gc(&self, &prolly_dynamodb_client::GcPlan, prolly_dynamodb_core::database::MaintenanceContext, prolly_dynamodb_client::GcApplyOptions) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::GcApplyResult>
+pub fn prolly_dynamodb_client::MaintenanceWorker::lease(&self) -> core::option::Option<&prolly_dynamodb_core::database::MaintenanceLease>
+pub async fn prolly_dynamodb_client::MaintenanceWorker::plan_gc(&self, core::option::Option<&prolly_dynamodb_client::GcCursor>, prolly_dynamodb_client::GcPlanLimits) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::GcPlan>
+pub async fn prolly_dynamodb_client::MaintenanceWorker::shutdown(&mut self, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::MaintenanceLeaseRelease>
+impl core::marker::Freeze for prolly_dynamodb_client::MaintenanceWorker
+impl core::marker::Send for prolly_dynamodb_client::MaintenanceWorker
+impl core::marker::Sync for prolly_dynamodb_client::MaintenanceWorker
+impl core::marker::Unpin for prolly_dynamodb_client::MaintenanceWorker
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::MaintenanceWorker
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::MaintenanceWorker
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::MaintenanceWorker
+pub struct prolly_dynamodb_client::OperationCapability
+pub prolly_dynamodb_client::OperationCapability::expression_forms: alloc::vec::Vec<alloc::string::String>
+pub prolly_dynamodb_client::OperationCapability::fluent: bool
+pub prolly_dynamodb_client::OperationCapability::input_first: bool
+pub prolly_dynamodb_client::OperationCapability::level: prolly_dynamodb_client::CompatibilityLevel
+pub prolly_dynamodb_client::OperationCapability::operation: alloc::string::String
+pub prolly_dynamodb_client::OperationCapability::semantic_differences: alloc::vec::Vec<alloc::string::String>
+pub prolly_dynamodb_client::OperationCapability::supported_fields: alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for prolly_dynamodb_client::OperationCapability
+pub fn prolly_dynamodb_client::OperationCapability::clone(&self) -> prolly_dynamodb_client::OperationCapability
+impl core::cmp::Eq for prolly_dynamodb_client::OperationCapability
+impl core::cmp::PartialEq for prolly_dynamodb_client::OperationCapability
+pub fn prolly_dynamodb_client::OperationCapability::eq(&self, &prolly_dynamodb_client::OperationCapability) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::OperationCapability
+pub fn prolly_dynamodb_client::OperationCapability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::OperationCapability
+impl serde_core::ser::Serialize for prolly_dynamodb_client::OperationCapability
+pub fn prolly_dynamodb_client::OperationCapability::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for prolly_dynamodb_client::OperationCapability
+pub fn prolly_dynamodb_client::OperationCapability::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for prolly_dynamodb_client::OperationCapability
+impl core::marker::Send for prolly_dynamodb_client::OperationCapability
+impl core::marker::Sync for prolly_dynamodb_client::OperationCapability
+impl core::marker::Unpin for prolly_dynamodb_client::OperationCapability
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::OperationCapability
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::OperationCapability
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::OperationCapability
+pub struct prolly_dynamodb_client::Restore
+impl prolly_dynamodb_client::Restore
+pub fn prolly_dynamodb_client::Restore::expected_head(self, prolly::prolly::versioned_map::MapVersionId) -> Self
+pub fn prolly_dynamodb_client::Restore::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub async fn prolly_dynamodb_client::Restore::send(self) -> prolly_dynamodb_client::Result<prolly::prolly::versioned_map::VersionedMapUpdate>
+pub async fn prolly_dynamodb_client::Restore::send_with_metadata(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WithMetadata<prolly::prolly::versioned_map::VersionedMapUpdate>>
+pub fn prolly_dynamodb_client::Restore::set_request_token(self, core::option::Option<alloc::string::String>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::Restore
+pub fn prolly_dynamodb_client::Restore::clone(&self) -> prolly_dynamodb_client::Restore
+impl core::marker::Freeze for prolly_dynamodb_client::Restore
+impl core::marker::Send for prolly_dynamodb_client::Restore
+impl core::marker::Sync for prolly_dynamodb_client::Restore
+impl core::marker::Unpin for prolly_dynamodb_client::Restore
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Restore
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Restore
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Restore
+pub struct prolly_dynamodb_client::RetentionPlanner
+impl prolly_dynamodb_client::RetentionPlanner
+pub async fn prolly_dynamodb_client::RetentionPlanner::plan(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::RetentionPlan>
+impl core::clone::Clone for prolly_dynamodb_client::RetentionPlanner
+pub fn prolly_dynamodb_client::RetentionPlanner::clone(&self) -> prolly_dynamodb_client::RetentionPlanner
+impl core::marker::Freeze for prolly_dynamodb_client::RetentionPlanner
+impl core::marker::Send for prolly_dynamodb_client::RetentionPlanner
+impl core::marker::Sync for prolly_dynamodb_client::RetentionPlanner
+impl core::marker::Unpin for prolly_dynamodb_client::RetentionPlanner
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::RetentionPlanner
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::RetentionPlanner
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::RetentionPlanner
+pub struct prolly_dynamodb_client::Snapshot
+impl prolly_dynamodb_client::Snapshot
+pub async fn prolly_dynamodb_client::Snapshot::export(&self, prolly_dynamodb_core::archive::TableArchiveLimits) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::archive::TableArchive>
+pub fn prolly_dynamodb_client::Snapshot::get_item(&self) -> prolly_dynamodb_client::operation::GetItem
+pub fn prolly_dynamodb_client::Snapshot::query(&self) -> prolly_dynamodb_client::operation::Query
+pub fn prolly_dynamodb_client::Snapshot::scan(&self) -> prolly_dynamodb_client::operation::Scan
+pub fn prolly_dynamodb_client::Snapshot::version(&self) -> &prolly::prolly::versioned_map::MapVersionId
+impl core::clone::Clone for prolly_dynamodb_client::Snapshot
+pub fn prolly_dynamodb_client::Snapshot::clone(&self) -> prolly_dynamodb_client::Snapshot
+impl core::marker::Freeze for prolly_dynamodb_client::Snapshot
+impl core::marker::Send for prolly_dynamodb_client::Snapshot
+impl core::marker::Sync for prolly_dynamodb_client::Snapshot
+impl core::marker::Unpin for prolly_dynamodb_client::Snapshot
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Snapshot
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Snapshot
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Snapshot
+pub struct prolly_dynamodb_client::StreamRun
+pub prolly_dynamodb_client::StreamRun::delivered: usize
+pub prolly_dynamodb_client::StreamRun::delivered_through_sequence: core::option::Option<u64>
+pub prolly_dynamodb_client::StreamRun::more_available: bool
+impl core::clone::Clone for prolly_dynamodb_client::StreamRun
+pub fn prolly_dynamodb_client::StreamRun::clone(&self) -> prolly_dynamodb_client::StreamRun
+impl core::cmp::Eq for prolly_dynamodb_client::StreamRun
+impl core::cmp::PartialEq for prolly_dynamodb_client::StreamRun
+pub fn prolly_dynamodb_client::StreamRun::eq(&self, &prolly_dynamodb_client::StreamRun) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::StreamRun
+pub fn prolly_dynamodb_client::StreamRun::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::StreamRun
+impl core::marker::Freeze for prolly_dynamodb_client::StreamRun
+impl core::marker::Send for prolly_dynamodb_client::StreamRun
+impl core::marker::Sync for prolly_dynamodb_client::StreamRun
+impl core::marker::Unpin for prolly_dynamodb_client::StreamRun
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::StreamRun
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::StreamRun
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::StreamRun
+pub struct prolly_dynamodb_client::StreamWorker
+impl prolly_dynamodb_client::StreamWorker
+pub async fn prolly_dynamodb_client::StreamWorker::run<F, Fut, E>(&mut self, &tokio_util::sync::cancellation_token::CancellationToken, F) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WorkerExit> where F: core::ops::function::FnMut(prolly_dynamodb_core::database::TableCommit) -> Fut + core::marker::Send, Fut: core::future::future::Future<Output = core::result::Result<(), E>> + core::marker::Send, E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+pub async fn prolly_dynamodb_client::StreamWorker::run_once<F, Fut, E>(&mut self, &mut F) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::StreamRun> where F: core::ops::function::FnMut(prolly_dynamodb_core::database::TableCommit) -> Fut + core::marker::Send, Fut: core::future::future::Future<Output = core::result::Result<(), E>> + core::marker::Send, E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+pub async fn prolly_dynamodb_client::StreamWorker::shutdown(&mut self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WorkerExit>
+impl prolly_dynamodb_client::Worker for prolly_dynamodb_client::StreamWorker
+pub fn prolly_dynamodb_client::StreamWorker::checkpoint(&self) -> core::option::Option<&prolly_dynamodb_core::database::WorkerCheckpoint>
+pub fn prolly_dynamodb_client::StreamWorker::job_id(&self) -> &prolly_dynamodb_core::database::WorkerJobId
+pub fn prolly_dynamodb_client::StreamWorker::lease(&self) -> &prolly_dynamodb_core::database::WorkerLease
+impl core::marker::Freeze for prolly_dynamodb_client::StreamWorker
+impl core::marker::Send for prolly_dynamodb_client::StreamWorker
+impl core::marker::Sync for prolly_dynamodb_client::StreamWorker
+impl core::marker::Unpin for prolly_dynamodb_client::StreamWorker
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::StreamWorker
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::StreamWorker
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::StreamWorker
+pub struct prolly_dynamodb_client::StreamWorkerOptions
+impl prolly_dynamodb_client::StreamWorkerOptions
+pub fn prolly_dynamodb_client::StreamWorkerOptions::idle_delay(self, core::time::Duration) -> Self
+pub fn prolly_dynamodb_client::StreamWorkerOptions::lease_duration(self, core::time::Duration) -> prolly_dynamodb_client::Result<Self>
+pub fn prolly_dynamodb_client::StreamWorkerOptions::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::StreamWorkerOptions::page_size(self, usize) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::StreamWorkerOptions
+pub fn prolly_dynamodb_client::StreamWorkerOptions::clone(&self) -> prolly_dynamodb_client::StreamWorkerOptions
+impl core::fmt::Debug for prolly_dynamodb_client::StreamWorkerOptions
+pub fn prolly_dynamodb_client::StreamWorkerOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for prolly_dynamodb_client::StreamWorkerOptions
+impl core::marker::Send for prolly_dynamodb_client::StreamWorkerOptions
+impl core::marker::Sync for prolly_dynamodb_client::StreamWorkerOptions
+impl core::marker::Unpin for prolly_dynamodb_client::StreamWorkerOptions
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::StreamWorkerOptions
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::StreamWorkerOptions
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::StreamWorkerOptions
+pub struct prolly_dynamodb_client::Table
+impl prolly_dynamodb_client::Table
+pub async fn prolly_dynamodb_client::Table::apply_indexes(&self, &prolly_dynamodb_core::database::IndexReconfigurationPlan, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::IndexReconfigurationResult>
+pub async fn prolly_dynamodb_client::Table::apply_retention(&self, &prolly_dynamodb_core::database::RetentionPlan, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::RetentionResult>
+pub fn prolly_dynamodb_client::Table::at(&self, prolly::prolly::versioned_map::MapVersionId) -> prolly_dynamodb_client::Snapshot
+pub async fn prolly_dynamodb_client::Table::collect_diff(&self, &prolly::prolly::versioned_map::MapVersionId, &prolly::prolly::versioned_map::MapVersionId) -> prolly_dynamodb_client::Result<alloc::vec::Vec<prolly::prolly::error::Diff>>
+pub async fn prolly_dynamodb_client::Table::collect_versions(&self) -> prolly_dynamodb_client::Result<alloc::vec::Vec<prolly::prolly::versioned_map::MapVersion>>
+pub async fn prolly_dynamodb_client::Table::commit(&self, &prolly_dynamodb_core::database::CommitId) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_core::database::TransactWriteResult>>
+pub async fn prolly_dynamodb_client::Table::commits(&self, core::option::Option<u64>, usize) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::TableCommitPage>
+pub fn prolly_dynamodb_client::Table::delete_item(&self) -> prolly_dynamodb_client::operation::DeleteItem
+pub fn prolly_dynamodb_client::Table::diff(&self, prolly::prolly::versioned_map::MapVersionId, prolly::prolly::versioned_map::MapVersionId) -> prolly_dynamodb_client::DiffPaginator
+pub async fn prolly_dynamodb_client::Table::export(&self, prolly_dynamodb_core::archive::TableArchiveLimits) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::archive::TableArchive>
+pub async fn prolly_dynamodb_client::Table::head(&self) -> prolly_dynamodb_client::Result<prolly::prolly::versioned_map::MapVersion>
+pub fn prolly_dynamodb_client::Table::if_head(&self, prolly::prolly::versioned_map::MapVersionId) -> prolly_dynamodb_client::ConditionalTable
+pub fn prolly_dynamodb_client::Table::indexes(&self, alloc::vec::Vec<prolly_dynamodb_core::model::table::SecondaryIndexDefinition>) -> prolly_dynamodb_client::Indexes
+pub async fn prolly_dynamodb_client::Table::indexes_audit(&self, &prolly_dynamodb_core::database::IndexReconfigurationPlanId) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_core::database::IndexReconfigurationAuditRecord>>
+pub fn prolly_dynamodb_client::Table::name(&self) -> &str
+pub fn prolly_dynamodb_client::Table::put_item(&self) -> prolly_dynamodb_client::operation::PutItem
+pub fn prolly_dynamodb_client::Table::restore(&self, prolly::prolly::versioned_map::MapVersionId) -> prolly_dynamodb_client::Restore
+pub fn prolly_dynamodb_client::Table::retention(&self, prolly_dynamodb_core::database::RetentionPolicy) -> prolly_dynamodb_client::RetentionPlanner
+pub async fn prolly_dynamodb_client::Table::retention_audit(&self, &prolly_dynamodb_core::database::RetentionPlanId) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_core::database::RetentionAuditRecord>>
+pub fn prolly_dynamodb_client::Table::update_item(&self) -> prolly_dynamodb_client::operation::UpdateItem
+pub fn prolly_dynamodb_client::Table::versions(&self) -> prolly_dynamodb_client::VersionsPaginator
+impl core::clone::Clone for prolly_dynamodb_client::Table
+pub fn prolly_dynamodb_client::Table::clone(&self) -> prolly_dynamodb_client::Table
+impl core::marker::Freeze for prolly_dynamodb_client::Table
+impl core::marker::Send for prolly_dynamodb_client::Table
+impl core::marker::Sync for prolly_dynamodb_client::Table
+impl core::marker::Unpin for prolly_dynamodb_client::Table
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Table
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Table
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Table
+pub struct prolly_dynamodb_client::TableTransitionMetadata
+pub prolly_dynamodb_client::TableTransitionMetadata::after: core::option::Option<prolly::prolly::versioned_map::MapVersionId>
+pub prolly_dynamodb_client::TableTransitionMetadata::applied: bool
+pub prolly_dynamodb_client::TableTransitionMetadata::before: core::option::Option<prolly::prolly::versioned_map::MapVersionId>
+pub prolly_dynamodb_client::TableTransitionMetadata::commit_id: core::option::Option<prolly_dynamodb_core::database::CommitId>
+pub prolly_dynamodb_client::TableTransitionMetadata::table_id: core::option::Option<prolly_dynamodb_core::model::table::TableId>
+pub prolly_dynamodb_client::TableTransitionMetadata::table_name: alloc::string::String
+impl core::clone::Clone for prolly_dynamodb_client::TableTransitionMetadata
+pub fn prolly_dynamodb_client::TableTransitionMetadata::clone(&self) -> prolly_dynamodb_client::TableTransitionMetadata
+impl core::cmp::Eq for prolly_dynamodb_client::TableTransitionMetadata
+impl core::cmp::PartialEq for prolly_dynamodb_client::TableTransitionMetadata
+pub fn prolly_dynamodb_client::TableTransitionMetadata::eq(&self, &prolly_dynamodb_client::TableTransitionMetadata) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::TableTransitionMetadata
+pub fn prolly_dynamodb_client::TableTransitionMetadata::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::TableTransitionMetadata
+impl core::marker::Freeze for prolly_dynamodb_client::TableTransitionMetadata
+impl core::marker::Send for prolly_dynamodb_client::TableTransitionMetadata
+impl core::marker::Sync for prolly_dynamodb_client::TableTransitionMetadata
+impl core::marker::Unpin for prolly_dynamodb_client::TableTransitionMetadata
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::TableTransitionMetadata
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::TableTransitionMetadata
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::TableTransitionMetadata
+pub struct prolly_dynamodb_client::TtlRun
+pub prolly_dynamodb_client::TtlRun::completed_cycle: bool
+pub prolly_dynamodb_client::TtlRun::cycle: u64
+pub prolly_dynamodb_client::TtlRun::deleted: usize
+pub prolly_dynamodb_client::TtlRun::evaluated: usize
+impl core::clone::Clone for prolly_dynamodb_client::TtlRun
+pub fn prolly_dynamodb_client::TtlRun::clone(&self) -> prolly_dynamodb_client::TtlRun
+impl core::cmp::Eq for prolly_dynamodb_client::TtlRun
+impl core::cmp::PartialEq for prolly_dynamodb_client::TtlRun
+pub fn prolly_dynamodb_client::TtlRun::eq(&self, &prolly_dynamodb_client::TtlRun) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::TtlRun
+pub fn prolly_dynamodb_client::TtlRun::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::TtlRun
+impl core::marker::Freeze for prolly_dynamodb_client::TtlRun
+impl core::marker::Send for prolly_dynamodb_client::TtlRun
+impl core::marker::Sync for prolly_dynamodb_client::TtlRun
+impl core::marker::Unpin for prolly_dynamodb_client::TtlRun
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::TtlRun
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::TtlRun
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::TtlRun
+pub struct prolly_dynamodb_client::TtlWorker
+impl prolly_dynamodb_client::TtlWorker
+pub async fn prolly_dynamodb_client::TtlWorker::run(&mut self, &tokio_util::sync::cancellation_token::CancellationToken) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WorkerExit>
+pub async fn prolly_dynamodb_client::TtlWorker::run_once(&mut self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::TtlRun>
+pub async fn prolly_dynamodb_client::TtlWorker::run_once_at(&mut self, u64) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::TtlRun>
+pub async fn prolly_dynamodb_client::TtlWorker::shutdown(&mut self) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::WorkerExit>
+impl prolly_dynamodb_client::Worker for prolly_dynamodb_client::TtlWorker
+pub fn prolly_dynamodb_client::TtlWorker::checkpoint(&self) -> core::option::Option<&prolly_dynamodb_core::database::WorkerCheckpoint>
+pub fn prolly_dynamodb_client::TtlWorker::job_id(&self) -> &prolly_dynamodb_core::database::WorkerJobId
+pub fn prolly_dynamodb_client::TtlWorker::lease(&self) -> &prolly_dynamodb_core::database::WorkerLease
+impl core::marker::Freeze for prolly_dynamodb_client::TtlWorker
+impl core::marker::Send for prolly_dynamodb_client::TtlWorker
+impl core::marker::Sync for prolly_dynamodb_client::TtlWorker
+impl core::marker::Unpin for prolly_dynamodb_client::TtlWorker
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::TtlWorker
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::TtlWorker
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::TtlWorker
+pub struct prolly_dynamodb_client::TtlWorkerOptions
+impl prolly_dynamodb_client::TtlWorkerOptions
+pub fn prolly_dynamodb_client::TtlWorkerOptions::idle_delay(self, core::time::Duration) -> Self
+pub fn prolly_dynamodb_client::TtlWorkerOptions::lease_duration(self, core::time::Duration) -> prolly_dynamodb_client::Result<Self>
+pub fn prolly_dynamodb_client::TtlWorkerOptions::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn prolly_dynamodb_client::TtlWorkerOptions::page_size(self, usize) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::TtlWorkerOptions
+pub fn prolly_dynamodb_client::TtlWorkerOptions::clone(&self) -> prolly_dynamodb_client::TtlWorkerOptions
+impl core::fmt::Debug for prolly_dynamodb_client::TtlWorkerOptions
+pub fn prolly_dynamodb_client::TtlWorkerOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for prolly_dynamodb_client::TtlWorkerOptions
+impl core::marker::Send for prolly_dynamodb_client::TtlWorkerOptions
+impl core::marker::Sync for prolly_dynamodb_client::TtlWorkerOptions
+impl core::marker::Unpin for prolly_dynamodb_client::TtlWorkerOptions
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::TtlWorkerOptions
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::TtlWorkerOptions
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::TtlWorkerOptions
+pub struct prolly_dynamodb_client::VersionsPaginator
+impl prolly_dynamodb_client::VersionsPaginator
+pub fn prolly_dynamodb_client::VersionsPaginator::cursor(self, prolly::prolly::versioned_map::MapVersionCursor) -> Self
+pub fn prolly_dynamodb_client::VersionsPaginator::into_stream(self) -> impl futures_core::stream::Stream<Item = prolly_dynamodb_client::Result<prolly::prolly::versioned_map::MapVersionPage>> + core::marker::Send + 'static
+pub async fn prolly_dynamodb_client::VersionsPaginator::next_page(&mut self) -> prolly_dynamodb_client::Result<core::option::Option<prolly::prolly::versioned_map::MapVersionPage>>
+pub fn prolly_dynamodb_client::VersionsPaginator::page_size(self, usize) -> Self
+pub fn prolly_dynamodb_client::VersionsPaginator::set_cursor(self, core::option::Option<prolly::prolly::versioned_map::MapVersionCursor>) -> Self
+impl core::clone::Clone for prolly_dynamodb_client::VersionsPaginator
+pub fn prolly_dynamodb_client::VersionsPaginator::clone(&self) -> prolly_dynamodb_client::VersionsPaginator
+impl core::marker::Freeze for prolly_dynamodb_client::VersionsPaginator
+impl core::marker::Send for prolly_dynamodb_client::VersionsPaginator
+impl core::marker::Sync for prolly_dynamodb_client::VersionsPaginator
+impl core::marker::Unpin for prolly_dynamodb_client::VersionsPaginator
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::VersionsPaginator
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::VersionsPaginator
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::VersionsPaginator
+pub struct prolly_dynamodb_client::WithMetadata<T>
+pub prolly_dynamodb_client::WithMetadata::commit_id: core::option::Option<prolly_dynamodb_core::database::CommitId>
+pub prolly_dynamodb_client::WithMetadata::output: T
+pub prolly_dynamodb_client::WithMetadata::table_versions: alloc::collections::btree::map::BTreeMap<alloc::string::String, prolly::prolly::versioned_map::MapVersionId>
+pub prolly_dynamodb_client::WithMetadata::transitions: alloc::vec::Vec<prolly_dynamodb_client::TableTransitionMetadata>
+pub prolly_dynamodb_client::WithMetadata::version_id: core::option::Option<prolly::prolly::versioned_map::MapVersionId>
+impl<T> prolly_dynamodb_client::WithMetadata<T>
+pub fn prolly_dynamodb_client::WithMetadata<T>::into_output(self) -> T
+impl<T: core::clone::Clone> core::clone::Clone for prolly_dynamodb_client::WithMetadata<T>
+pub fn prolly_dynamodb_client::WithMetadata<T>::clone(&self) -> prolly_dynamodb_client::WithMetadata<T>
+impl<T: core::fmt::Debug> core::fmt::Debug for prolly_dynamodb_client::WithMetadata<T>
+pub fn prolly_dynamodb_client::WithMetadata<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::marker::Freeze for prolly_dynamodb_client::WithMetadata<T> where T: core::marker::Freeze
+impl<T> core::marker::Send for prolly_dynamodb_client::WithMetadata<T> where T: core::marker::Send
+impl<T> core::marker::Sync for prolly_dynamodb_client::WithMetadata<T> where T: core::marker::Sync
+impl<T> core::marker::Unpin for prolly_dynamodb_client::WithMetadata<T> where T: core::marker::Unpin
+impl<T> core::marker::UnsafeUnpin for prolly_dynamodb_client::WithMetadata<T> where T: core::marker::UnsafeUnpin
+impl<T> core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::WithMetadata<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::WithMetadata<T> where T: core::panic::unwind_safe::UnwindSafe
+pub struct prolly_dynamodb_client::WorkerExit
+pub prolly_dynamodb_client::WorkerExit::release: prolly_dynamodb_core::database::WorkerLeaseRelease
+impl core::clone::Clone for prolly_dynamodb_client::WorkerExit
+pub fn prolly_dynamodb_client::WorkerExit::clone(&self) -> prolly_dynamodb_client::WorkerExit
+impl core::cmp::Eq for prolly_dynamodb_client::WorkerExit
+impl core::cmp::PartialEq for prolly_dynamodb_client::WorkerExit
+pub fn prolly_dynamodb_client::WorkerExit::eq(&self, &prolly_dynamodb_client::WorkerExit) -> bool
+impl core::fmt::Debug for prolly_dynamodb_client::WorkerExit
+pub fn prolly_dynamodb_client::WorkerExit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for prolly_dynamodb_client::WorkerExit
+impl core::marker::Freeze for prolly_dynamodb_client::WorkerExit
+impl core::marker::Send for prolly_dynamodb_client::WorkerExit
+impl core::marker::Sync for prolly_dynamodb_client::WorkerExit
+impl core::marker::Unpin for prolly_dynamodb_client::WorkerExit
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::WorkerExit
+impl core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::WorkerExit
+impl core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::WorkerExit
+pub struct prolly_dynamodb_client::Workers
+impl prolly_dynamodb_client::Workers
+pub async fn prolly_dynamodb_client::Workers::maintenance(&self, prolly_dynamodb_core::database::MaintenanceContext, u64) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::MaintenanceWorker>
+pub async fn prolly_dynamodb_client::Workers::stream(&self, prolly_dynamodb_client::StreamWorkerOptions) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::StreamWorker>
+pub async fn prolly_dynamodb_client::Workers::ttl(&self, prolly_dynamodb_client::TtlWorkerOptions) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::TtlWorker>
+impl core::clone::Clone for prolly_dynamodb_client::Workers
+pub fn prolly_dynamodb_client::Workers::clone(&self) -> prolly_dynamodb_client::Workers
+impl core::marker::Freeze for prolly_dynamodb_client::Workers
+impl core::marker::Send for prolly_dynamodb_client::Workers
+impl core::marker::Sync for prolly_dynamodb_client::Workers
+impl core::marker::Unpin for prolly_dynamodb_client::Workers
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Workers
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Workers
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Workers
+pub const prolly_dynamodb_client::DEFAULT_NODE_CACHE_MAX_BYTES: usize
+pub const prolly_dynamodb_client::MAX_GC_BLOB_DELETE_PARALLELISM: usize
+pub const prolly_dynamodb_client::MAX_WORKER_PAGE_ITEMS: usize
+pub const prolly_dynamodb_client::MAX_WORKER_SLEEP: core::time::Duration
+pub const prolly_dynamodb_client::MIN_WORKER_SLEEP: core::time::Duration
+pub trait prolly_dynamodb_client::Worker
+pub fn prolly_dynamodb_client::Worker::checkpoint(&self) -> core::option::Option<&prolly_dynamodb_core::database::WorkerCheckpoint>
+pub fn prolly_dynamodb_client::Worker::job_id(&self) -> &prolly_dynamodb_core::database::WorkerJobId
+pub fn prolly_dynamodb_client::Worker::lease(&self) -> &prolly_dynamodb_core::database::WorkerLease
+impl prolly_dynamodb_client::Worker for prolly_dynamodb_client::StreamWorker
+pub fn prolly_dynamodb_client::StreamWorker::checkpoint(&self) -> core::option::Option<&prolly_dynamodb_core::database::WorkerCheckpoint>
+pub fn prolly_dynamodb_client::StreamWorker::job_id(&self) -> &prolly_dynamodb_core::database::WorkerJobId
+pub fn prolly_dynamodb_client::StreamWorker::lease(&self) -> &prolly_dynamodb_core::database::WorkerLease
+impl prolly_dynamodb_client::Worker for prolly_dynamodb_client::TtlWorker
+pub fn prolly_dynamodb_client::TtlWorker::checkpoint(&self) -> core::option::Option<&prolly_dynamodb_core::database::WorkerCheckpoint>
+pub fn prolly_dynamodb_client::TtlWorker::job_id(&self) -> &prolly_dynamodb_core::database::WorkerJobId
+pub fn prolly_dynamodb_client::TtlWorker::lease(&self) -> &prolly_dynamodb_core::database::WorkerLease
+pub type prolly_dynamodb_client::Result<T, E> = core::result::Result<T, E>

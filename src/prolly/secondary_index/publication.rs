@@ -53,6 +53,9 @@ pub trait AsyncIndexedStore: AsyncStore + AsyncManifestStore + AsyncTransactiona
     where
         <Self as AsyncStore>::Error: Send + Sync,
     {
+        if self.guarantees_durable_publication() {
+            return Ok(());
+        }
         for tree in trees {
             let Some(root) = &tree.root else {
                 continue;
@@ -91,5 +94,12 @@ mod tests {
             .store()
             .confirm_indexed_publication(&[&tree])
             .unwrap();
+
+        let root = tree.root.as_ref().expect("non-empty tree").clone();
+        prolly.store().delete(root.as_bytes()).unwrap();
+        assert!(matches!(
+            prolly.store().confirm_indexed_publication(&[&tree]),
+            Err(Error::NotFound(cid)) if cid == root
+        ));
     }
 }

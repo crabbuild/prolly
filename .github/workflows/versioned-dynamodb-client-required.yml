@@ -1,0 +1,211 @@
+name: Versioned DynamoDB client required
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "src/**"
+      - "stores/prolly-store-dynamodb/**"
+      - "dynamodb/**"
+      - "benchmarks/dynamodb-client/**"
+      - "scripts/*dynamodb*"
+      - "scripts/tests/test_*dynamodb*"
+      - ".github/workflows/versioned-dynamodb-client-required.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.91.1"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          components: rustfmt, clippy
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-06-19
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: versioned-dynamodb-quality-1.91.1
+      - name: Check formatting
+        run: |
+          cargo +"$RUST_TOOLCHAIN" fmt --all -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path stores/prolly-store-dynamodb/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path dynamodb/core/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path dynamodb/client/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path dynamodb/admin/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path benchmarks/dynamodb-client/Cargo.toml -- --check
+      - name: Strict Clippy
+        run: |
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path stores/prolly-store-dynamodb/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path dynamodb/core/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path dynamodb/client/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path dynamodb/admin/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path benchmarks/dynamodb-client/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: Core and client tests
+        run: |
+          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path dynamodb/core/Cargo.toml --all-targets
+          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path dynamodb/client/Cargo.toml --all-targets
+          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path benchmarks/dynamodb-client/Cargo.toml --all-targets
+      - name: Release-script contracts
+        run: python3 -m unittest scripts.tests.test_validate_dynamodb_client_benchmark scripts.tests.test_validate_dynamodb_client_matrix scripts.tests.test_run_dynamodb_client_benchmark_matrix scripts.tests.test_run_dynamodb_client_history_matrix scripts.tests.test_run_dynamodb_rolling_compatibility scripts.tests.test_dynamodb_security_policies scripts.tests.test_verify_dynamodb_client_packages
+      - name: Frozen public API
+        run: |
+          cargo install cargo-public-api --version 0.52.0 --locked
+          ./scripts/verify_dynamodb_client_public_api.sh
+      - name: Locked x86_64 Linux matrix
+        run: ./scripts/verify_dynamodb_client_matrix.sh --toolchain "$RUST_TOOLCHAIN"
+
+  dynamodb-local:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PROLLY_STORE_DYNAMODB_ENDPOINT: http://127.0.0.1:58001
+      PROLLY_DYNAMODB_CLIENT_TEST_TABLE: prolly-versioned-client-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: versioned-dynamodb-local-1.91.1
+      - name: Start checksum-pinned DynamoDB Local
+        run: |
+          curl --fail --location --retry 5 --output "$RUNNER_TEMP/dynamodb-local.tar.gz" https://d1ni2b6xgvw0s0.cloudfront.net/v3.x/dynamodb_local_2025-07-15.tar.gz
+          printf '%s  %s\n' 1125086301253b89539fa3bdbf1ded0656c596a2d34e0ca3c10af83373e7fd88 "$RUNNER_TEMP/dynamodb-local.tar.gz" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/dynamodb-local"
+          tar -xzf "$RUNNER_TEMP/dynamodb-local.tar.gz" -C "$RUNNER_TEMP/dynamodb-local"
+          cd "$RUNNER_TEMP/dynamodb-local"
+          java -Djava.library.path=./DynamoDBLocal_lib -jar DynamoDBLocal.jar -inMemory -sharedDb -port 58001 >"$RUNNER_TEMP/dynamodb-local.log" 2>&1 &
+          printf '%s\n' "$!" >"$RUNNER_TEMP/dynamodb-local.pid"
+          for attempt in $(seq 1 60); do
+            if curl --silent --output /dev/null http://127.0.0.1:58001; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/dynamodb-local.log"
+          exit 1
+      - name: Provider contracts
+        run: cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path stores/prolly-store-dynamodb/Cargo.toml --all-targets
+      - name: Client behavioral and differential contracts
+        run: cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path dynamodb/client/Cargo.toml --all-targets
+      - name: Repeated current-binary multi-process process-death soak
+        env:
+          PROLLY_DYNAMODB_RUN_SOAK: "1"
+        run: |
+          for soak_run in 1 2 3; do
+            printf 'multi-process soak run %s/3\n' "$soak_run"
+            cargo +"$RUST_TOOLCHAIN" test --locked \
+              --manifest-path dynamodb/client/Cargo.toml \
+              --test dynamodb_local \
+              multi_process_soak_preserves_items_versions_and_commits \
+              -- --exact --nocapture --test-threads=1
+          done
+      - name: Exact runner-v15 benchmark diagnostic
+        env:
+          PROLLY_BENCH_SKIP_DOCKER: "1"
+          PROLLY_DYNAMODB_LOCAL_ARCHIVE: ${{ runner.temp }}/dynamodb-local.tar.gz
+          BENCH_SAMPLES: "1"
+          BENCH_RECORDS: "100"
+          BENCH_HISTORY_DEPTH: "100"
+          BENCH_TRANSACTION_SHAPES: "1,10"
+          BENCH_CONCURRENCY_WRITERS: "1,4,8"
+          BENCH_CONCURRENCY_OPERATIONS_PER_WRITER: "5"
+          BENCH_CONCURRENCY_RETRY_LIMIT: "7"
+        run: >-
+          ./scripts/run_dynamodb_client_benchmark.sh
+          --profile smoke
+          --endpoint "$PROLLY_STORE_DYNAMODB_ENDPOINT"
+          --table prolly-versioned-client-benchmark-ci
+          --root-table prolly-versioned-client-benchmark-ci-roots
+          --output "$RUNNER_TEMP/dynamodb-client-benchmark-v15"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dynamodb-client-benchmark-v15
+          path: ${{ runner.temp }}/dynamodb-client-benchmark-v15
+      - name: Exact runner-v15 shallow-history diagnostic
+        env:
+          PROLLY_BENCH_SKIP_DOCKER: "1"
+          PROLLY_DYNAMODB_LOCAL_ARCHIVE: ${{ runner.temp }}/dynamodb-local.tar.gz
+          BENCH_WORKLOAD: history
+          BENCH_SAMPLES: "1"
+          BENCH_RECORDS: "100"
+          BENCH_HISTORY_DEPTH: "10"
+          BENCH_TRANSACTION_SHAPES: "1"
+          BENCH_CONCURRENCY_WRITERS: "1"
+          BENCH_CONCURRENCY_OPERATIONS_PER_WRITER: "1"
+          BENCH_CONCURRENCY_RETRY_LIMIT: "7"
+        run: >-
+          ./scripts/run_dynamodb_client_benchmark.sh
+          --profile smoke
+          --endpoint "$PROLLY_STORE_DYNAMODB_ENDPOINT"
+          --table prolly-versioned-client-history-ci
+          --root-table prolly-versioned-client-history-ci-roots
+          --output "$RUNNER_TEMP/dynamodb-client-history-v15"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dynamodb-client-history-v15
+          path: ${{ runner.temp }}/dynamodb-client-history-v15
+      - name: Stop DynamoDB Local
+        if: always()
+        run: |
+          if test -s "$RUNNER_TEMP/dynamodb-local.pid"; then
+            kill "$(cat "$RUNNER_TEMP/dynamodb-local.pid")" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dynamodb-local-contract-log
+          path: ${{ runner.temp }}/dynamodb-local.log
+
+  linux-aarch64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: versioned-dynamodb-linux-aarch64-1.91.1
+      - name: Install cross linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-13-aarch64-linux-gnu
+          test -x /usr/bin/aarch64-linux-gnu-gcc-13
+      - name: Locked aarch64 Linux matrix
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc-13
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc-13
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+        run: ./scripts/verify_dynamodb_client_matrix.sh --toolchain "$RUST_TOOLCHAIN" --target aarch64-unknown-linux-gnu
+
+  packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: versioned-dynamodb-packages-1.91.1
+      - name: Verify clean archives and downstream consumer
+        run: ./scripts/verify_dynamodb_client_packages.sh

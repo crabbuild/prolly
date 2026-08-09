@@ -10,6 +10,47 @@
 use super::blob::BlobRef;
 use super::cid::Cid;
 
+/// Hard bounds for one node-graph reachability traversal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GcTraversalLimits {
+    pub max_nodes: usize,
+    pub max_node_bytes: usize,
+}
+
+impl GcTraversalLimits {
+    pub const fn new(max_nodes: usize, max_node_bytes: usize) -> Self {
+        Self {
+            max_nodes,
+            max_node_bytes,
+        }
+    }
+}
+
+/// Hard bounds for discovering offloaded blobs through retained trees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlobReachabilityLimits {
+    pub max_nodes: usize,
+    pub max_values: usize,
+    pub max_blobs: usize,
+    pub max_blob_bytes: u64,
+}
+
+impl BlobReachabilityLimits {
+    pub const fn new(
+        max_nodes: usize,
+        max_values: usize,
+        max_blobs: usize,
+        max_blob_bytes: u64,
+    ) -> Self {
+        Self {
+            max_nodes,
+            max_values,
+            max_blobs,
+            max_blob_bytes,
+        }
+    }
+}
+
 /// Live node set discovered from one or more retained tree roots.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GcReachability {

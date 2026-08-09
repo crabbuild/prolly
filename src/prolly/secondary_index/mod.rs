@@ -15,7 +15,10 @@ mod state;
 mod storage;
 mod workspace;
 
-pub use async_coordinator::{AsyncIndexedMap, AsyncIndexedSourceView};
+pub use async_coordinator::{
+    AsyncIndexedMap, AsyncIndexedSourceView, AsyncPreparedIndexedMutation,
+    AsyncPreparedIndexedUpdate,
+};
 pub use async_snapshot::{
     AsyncIndexedSnapshot, AsyncSecondaryIndexQuery, AsyncSecondaryIndexSnapshot,
 };
@@ -41,9 +44,10 @@ pub use snapshot::{
     SecondaryIndexPage, SecondaryIndexQuery, SecondaryIndexSnapshot,
 };
 pub use state::{
-    indexed_collection_root_name, CollectionIndexPolicy, IndexDescriptor, IndexSemanticLimits,
-    IndexSnapshotRef, IndexedCollectionState, IndexedSnapshotId, IndexedSnapshotRecord,
-    SnapshotPin, SourceSnapshotRef, INDEXED_COLLECTION_FORMAT,
+    indexed_collection_root_name, indexed_collection_source_map_id, CollectionIndexPolicy,
+    IndexDescriptor, IndexSemanticLimits, IndexSnapshotRef, IndexedCollectionState,
+    IndexedSnapshotId, IndexedSnapshotManifest, IndexedSnapshotRecord, SnapshotPin,
+    SourceSnapshotRef, INDEXED_COLLECTION_FORMAT, INDEXED_SNAPSHOT_MANIFEST_FORMAT,
 };
 pub use storage::{
     decode_physical_index_key, decode_physical_index_key_ref, physical_index_key,

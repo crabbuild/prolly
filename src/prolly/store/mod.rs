@@ -13,7 +13,7 @@ use super::cid::Cid;
 use super::engine::ready::{ready_only, ReadyOnly};
 use super::manifest::{
     AsyncManifestStore, AsyncManifestStoreScan, ManifestStore, ManifestStoreScan, ManifestUpdate,
-    NamedRootManifest, RootManifest,
+    NamedRootManifest, NamedRootManifestPage, RootManifest,
 };
 
 pub(crate) struct OrderedBatchReadPlan<'a> {
@@ -578,6 +578,17 @@ pub trait AsyncStore {
         false
     }
 
+    /// Whether a successful node publication durably persists every submitted
+    /// immutable node before returning.
+    ///
+    /// The conservative default requires coordinators to read candidate roots
+    /// back before making them visible. A backend may return `true` only when
+    /// its successful single and batch publication paths acknowledge every
+    /// submitted write and never silently retain unprocessed work.
+    fn guarantees_durable_publication(&self) -> bool {
+        false
+    }
+
     /// Maximum in-flight point reads for default ordered batch reads.
     ///
     /// Stores with true native multi-get should override
@@ -885,6 +896,15 @@ impl<S: ManifestStore> AsyncManifestStore for SyncStoreAsAsync<S> {
 impl<S: ManifestStoreScan> AsyncManifestStoreScan for SyncStoreAsAsync<S> {
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         self.inner.list_roots()
+    }
+
+    async fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        self.inner.list_roots_page(prefix, after, limit)
     }
 }
 
@@ -1242,6 +1262,20 @@ where
     async fn list_roots(&self) -> Result<Vec<NamedRootManifest>, Self::Error> {
         spawn_manifest_blocking(self.inner.clone(), move |store| store.list_roots()).await
     }
+
+    async fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        let prefix = prefix.to_vec();
+        let after = after.map(<[u8]>::to_vec);
+        spawn_manifest_blocking(self.inner.clone(), move |store| {
+            store.list_roots_page(&prefix, after.as_deref(), limit)
+        })
+        .await
+    }
 }
 
 /// Implement Store for `Arc<T>` where T: Store
@@ -1481,6 +1515,10 @@ impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
 
     fn read_parallelism(&self) -> usize {
         (**self).read_parallelism()
+    }
+
+    fn guarantees_durable_publication(&self) -> bool {
+        (**self).guarantees_durable_publication()
     }
 
     async fn batch_put(&self, entries: &[(&[u8], &[u8])]) -> Result<(), Self::Error> {

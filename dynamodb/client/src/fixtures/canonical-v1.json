@@ -1,0 +1,67 @@
+{
+  "fixture_version": 1,
+  "item_codec": "DDBI-v1-canonical-cbor",
+  "items": [
+    {
+      "name": "scalar",
+      "item": {
+        "active": { "Bool": true },
+        "id": { "S": "case-1" },
+        "ratio": { "N": "1.2" }
+      },
+      "encoded_hex": "4444424901a366616374697665a164426f6f6cf5626964a1615366636173652d3165726174696fa1614e63312e32"
+    },
+    {
+      "name": "sets_and_document",
+      "item": {
+        "document": {
+          "M": {
+            "tags": {
+              "L": [
+                { "S": "legal" },
+                { "Null": true }
+              ]
+            }
+          }
+        },
+        "numbers": { "Ns": ["10", "-2.5"] },
+        "strings": { "Ss": ["z", "a"] }
+      },
+      "encoded_hex": "4444424901a368646f63756d656e74a1614da16474616773a1614c82a16153656c6567616ca1644e756c6cf5676e756d62657273a1624e7382642d322e3562313067737472696e6773a1625373826161617a"
+    }
+  ],
+  "keys": [
+    {
+      "name": "-2.50",
+      "key": {
+        "account": { "S": "acct-1" },
+        "sequence": { "N": "-2.5" }
+      },
+      "encoded_hex": "73616363742d3100006e00ffff7dcdcaff0000"
+    },
+    {
+      "name": "0",
+      "key": {
+        "account": { "S": "acct-1" },
+        "sequence": { "N": "0" }
+      },
+      "encoded_hex": "73616363742d3100006e010000"
+    },
+    {
+      "name": "01.200e0",
+      "key": {
+        "account": { "S": "acct-1" },
+        "sequence": { "N": "1.2" }
+      },
+      "encoded_hex": "73616363742d3100006e0200ff82313200ff0000"
+    },
+    {
+      "name": "10",
+      "key": {
+        "account": { "S": "acct-1" },
+        "sequence": { "N": "10" }
+      },
+      "encoded_hex": "73616363742d3100006e0200ff83313000ff0000"
+    }
+  ]
+}

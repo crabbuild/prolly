@@ -19,7 +19,8 @@ use super::definition::{IndexProjection, SecondaryIndex, SecondaryIndexRegistry}
 use super::publication::AsyncIndexedStore;
 use super::state::{
     indexed_collection_root_name, CollectionIndexPolicy, IndexDescriptor, IndexSnapshotRef,
-    IndexedCollectionState, IndexedSnapshotRecord, SnapshotPin, SourceSnapshotRef,
+    IndexedCollectionState, IndexedSnapshotId, IndexedSnapshotManifest, IndexedSnapshotRecord,
+    SnapshotPin, SourceSnapshotRef,
 };
 use super::storage::{physical_index_key, IndexValue};
 use super::workspace::IndexBuildWorkspace;
@@ -62,6 +63,62 @@ pub struct AsyncIndexedSourceView<'map, 'engine, S: AsyncIndexedStore> {
     map: &'map AsyncIndexedMap<'engine, S>,
 }
 
+/// Immutable candidate for composing an indexed-map source/index transition
+/// into a larger strict root transaction.
+///
+/// All referenced nodes have already been published and verified. Visibility
+/// changes only when the caller conditionally replaces `expected_state_tree`
+/// with `candidate_state_tree` in the same transaction as its other roots.
+#[derive(Clone, Debug)]
+pub struct AsyncPreparedIndexedMutation {
+    root_name: Vec<u8>,
+    expected_state_tree: Option<Tree>,
+    candidate_state_tree: Tree,
+    previous_source_version: Option<MapVersionId>,
+    current: IndexedVersion,
+    manifest: IndexedSnapshotManifest,
+}
+
+impl AsyncPreparedIndexedMutation {
+    pub fn root_name(&self) -> &[u8] {
+        &self.root_name
+    }
+
+    pub fn expected_state_tree(&self) -> Option<&Tree> {
+        self.expected_state_tree.as_ref()
+    }
+
+    pub fn candidate_state_tree(&self) -> &Tree {
+        &self.candidate_state_tree
+    }
+
+    pub fn previous_source_version(&self) -> Option<&MapVersionId> {
+        self.previous_source_version.as_ref()
+    }
+
+    pub fn current(&self) -> &IndexedVersion {
+        &self.current
+    }
+
+    /// Self-contained immutable manifest for the prepared head snapshot.
+    pub fn manifest(&self) -> &IndexedSnapshotManifest {
+        &self.manifest
+    }
+}
+
+/// Result of preparing an indexed mutation without changing root visibility.
+#[derive(Clone, Debug)]
+pub enum AsyncPreparedIndexedUpdate {
+    Prepared(Box<AsyncPreparedIndexedMutation>),
+    Unchanged { current: IndexedVersion },
+    Conflict { current: IndexedVersion },
+}
+
+enum InternalIndexedUpdate {
+    Complete(Box<IndexedMapUpdate>),
+    Prepared(Box<AsyncPreparedIndexedMutation>),
+}
+
 impl<S> AsyncIndexedSourceView<'_, '_, S>
 where
     S: AsyncIndexedStore + Clone,
@@ -94,6 +151,15 @@ where
         source_map_id: impl AsRef<[u8]>,
         registry: SecondaryIndexRegistry,
     ) -> Result<Self, Error> {
+        Self::open_with_optional_policy(prolly, source_map_id, registry, None).await
+    }
+
+    async fn open_with_optional_policy(
+        prolly: &'a AsyncProlly<S>,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+        required_policy: Option<CollectionIndexPolicy>,
+    ) -> Result<Self, Error> {
         if !AsyncTransactionalStore::supports_transactions(prolly.store()) {
             return Err(Error::UnsupportedTransactions {
                 store: std::any::type_name::<S>(),
@@ -111,7 +177,7 @@ where
             runtime_overrides: RwLock::new(BTreeMap::new()),
             metrics: Arc::new(AsyncIndexedMapMetrics::default()),
         };
-        indexed.initialize_or_load().await?;
+        indexed.initialize_or_load(required_policy.as_ref()).await?;
         Ok(indexed)
     }
 
@@ -264,14 +330,15 @@ where
         }
     }
 
-    async fn initialize_or_load(&self) -> Result<(), Error> {
-        if self
-            .prolly
-            .load_named_root(&self.root_name()?)
-            .await?
-            .is_some()
-        {
-            self.load_state().await?;
+    async fn initialize_or_load(
+        &self,
+        required_policy: Option<&CollectionIndexPolicy>,
+    ) -> Result<(), Error> {
+        if let Some(tree) = self.prolly.load_named_root(&self.root_name()?).await? {
+            let loaded = self.load_state_from_tree(tree).await?;
+            if required_policy.is_some_and(|policy| loaded.state.policy != *policy) {
+                return Err(Error::IndexFormatUnsupported);
+            }
             return Ok(());
         }
         if self
@@ -286,7 +353,7 @@ where
         let source = self.prolly.create();
         let state = IndexedCollectionState::new(
             self.source_map_id.clone(),
-            CollectionIndexPolicy::default(),
+            required_policy.cloned().unwrap_or_default(),
             IndexedSnapshotRecord {
                 source_map_id: self.source_map_id.clone(),
                 parent: None,
@@ -305,7 +372,10 @@ where
         if self.commit_collection_root(None, &state_tree).await? {
             return Ok(());
         }
-        self.load_state().await?;
+        let loaded = self.load_state().await?;
+        if required_policy.is_some_and(|policy| loaded.state.policy != *policy) {
+            return Err(Error::IndexFormatUnsupported);
+        }
         Ok(())
     }
 
@@ -317,6 +387,10 @@ where
             .ok_or_else(|| {
                 Error::InvalidVersionedMap("indexed collection state root is absent".to_string())
             })?;
+        self.load_state_from_tree(tree).await
+    }
+
+    async fn load_state_from_tree(&self, tree: Tree) -> Result<AsyncLoadedIndexedState, Error> {
         let state = IndexedCollectionState::from_async_tree(self.prolly, &tree).await?;
         if state.source_map_id != self.source_map_id {
             return Err(Error::InvalidVersionedMap(
@@ -331,6 +405,16 @@ where
         loaded: &AsyncLoadedIndexedState,
         candidate: &mut IndexedCollectionState,
     ) -> Result<bool, Error> {
+        let candidate_tree = self.prepare_publication(loaded, candidate).await?;
+        self.commit_collection_root(Some(&loaded.tree), &candidate_tree)
+            .await
+    }
+
+    async fn prepare_publication(
+        &self,
+        loaded: &AsyncLoadedIndexedState,
+        candidate: &mut IndexedCollectionState,
+    ) -> Result<Tree, Error> {
         candidate.enforce_policy_limits()?;
         let candidate_tree = candidate
             .to_async_tree_from(self.prolly, &loaded.state, &loaded.tree)
@@ -343,18 +427,25 @@ where
             .store()
             .confirm_async_indexed_publication(&referenced)
             .await?;
-        self.commit_collection_root(Some(&loaded.tree), &candidate_tree)
-            .await
+        Ok(candidate_tree)
     }
 
     pub(crate) fn current_version(
         &self,
         loaded: &AsyncLoadedIndexedState,
     ) -> Result<IndexedVersion, Error> {
-        let head = loaded.state.head_snapshot()?;
+        Self::version_for_state(&loaded.tree, &loaded.state)
+    }
+
+    fn version_for_state(
+        state_tree: &Tree,
+        state: &IndexedCollectionState,
+    ) -> Result<IndexedVersion, Error> {
+        let head = state.head_snapshot()?;
         Ok(IndexedVersion {
+            snapshot_id: state.head.clone(),
             source: map_version(head.source.tree.clone(), true)?,
-            state: map_version(loaded.tree.clone(), true)?,
+            state: map_version(state_tree.clone(), true)?,
             indexes: head.indexes.clone(),
         })
     }
@@ -472,10 +563,19 @@ where
         mutations: Vec<Mutation>,
         budget: &MutationBudget,
     ) -> Result<IndexedVersion, Error> {
-        match self
-            .apply_with_budget_internal(mutations, budget, None)
+        let update = match self
+            .apply_with_budget_internal(mutations, budget, None, None, None, false)
             .await?
         {
+            InternalIndexedUpdate::Complete(update) => *update,
+            InternalIndexedUpdate::Prepared(_) => {
+                return Err(Error::InvalidVersionedMap(
+                    "ordinary indexed mutation unexpectedly returned a prepared candidate"
+                        .to_string(),
+                ))
+            }
+        };
+        match update {
             IndexedMapUpdate::Applied { current, .. }
             | IndexedMapUpdate::Unchanged {
                 current: Some(current),
@@ -489,12 +589,463 @@ where
         }
     }
 
+    /// Prepare source and synchronous-index changes for composition into a
+    /// caller-owned strict root transaction. This method never changes a named
+    /// root and performs only bounded, verified immutable publication.
+    pub async fn prepare_apply_with_budget(
+        &self,
+        expected: Option<&MapVersionId>,
+        mutations: Vec<Mutation>,
+        budget: &MutationBudget,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        match self
+            .apply_with_budget_internal(mutations, budget, Some(expected), None, None, true)
+            .await?
+        {
+            InternalIndexedUpdate::Prepared(prepared) => {
+                Ok(AsyncPreparedIndexedUpdate::Prepared(prepared))
+            }
+            InternalIndexedUpdate::Complete(update) => match *update {
+                IndexedMapUpdate::Unchanged {
+                    current: Some(current),
+                } => Ok(AsyncPreparedIndexedUpdate::Unchanged { current }),
+                IndexedMapUpdate::Conflict {
+                    current: Some(current),
+                } => Ok(AsyncPreparedIndexedUpdate::Conflict { current }),
+                IndexedMapUpdate::Applied { .. } => Err(Error::InvalidVersionedMap(
+                    "prepared indexed mutation changed root visibility".to_string(),
+                )),
+                IndexedMapUpdate::Unchanged { current: None }
+                | IndexedMapUpdate::Conflict { current: None } => Err(Error::InvalidVersionedMap(
+                    "initialized indexed map has no current version".to_string(),
+                )),
+            },
+        }
+    }
+
+    /// Prepare an indexed mutation only when the exact coordinator snapshot is
+    /// still current. This distinguishes ABA states that share source content
+    /// but activate different index generations.
+    pub async fn prepare_apply_at_snapshot_with_budget(
+        &self,
+        expected: &IndexedSnapshotId,
+        mutations: Vec<Mutation>,
+        budget: &MutationBudget,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        match self
+            .apply_with_budget_internal(mutations, budget, None, Some(expected), None, true)
+            .await?
+        {
+            InternalIndexedUpdate::Prepared(prepared) => {
+                Ok(AsyncPreparedIndexedUpdate::Prepared(prepared))
+            }
+            InternalIndexedUpdate::Complete(update) => match *update {
+                IndexedMapUpdate::Unchanged {
+                    current: Some(current),
+                } => Ok(AsyncPreparedIndexedUpdate::Unchanged { current }),
+                IndexedMapUpdate::Conflict {
+                    current: Some(current),
+                } => Ok(AsyncPreparedIndexedUpdate::Conflict { current }),
+                IndexedMapUpdate::Applied { .. } => Err(Error::InvalidVersionedMap(
+                    "prepared indexed mutation changed root visibility".to_string(),
+                )),
+                IndexedMapUpdate::Unchanged { current: None }
+                | IndexedMapUpdate::Conflict { current: None } => Err(Error::InvalidVersionedMap(
+                    "initialized indexed map has no current version".to_string(),
+                )),
+            },
+        }
+    }
+
+    /// Prepare an exact retained-snapshot restore for composition into a
+    /// caller-owned strict root transaction. The indexed collection remains
+    /// invisible at the candidate head until the caller commits the returned
+    /// conditional root replacement.
+    pub async fn prepare_restore(
+        &self,
+        expected: &MapVersionId,
+        target: &MapVersionId,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if current.source.id != *expected {
+            return Ok(AsyncPreparedIndexedUpdate::Conflict { current });
+        }
+        let target_id = find_snapshot(&loaded.state, target)?.id()?;
+        self.prepare_restore_snapshot(&loaded.state.head, &target_id)
+            .await
+    }
+
+    /// Prepare a restore by exact indexed snapshot identity. This is the safe
+    /// form when multiple index generations intentionally bind identical
+    /// source content.
+    pub async fn prepare_restore_snapshot(
+        &self,
+        expected: &IndexedSnapshotId,
+        target: &IndexedSnapshotId,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if loaded.state.head != *expected {
+            return Ok(AsyncPreparedIndexedUpdate::Conflict { current });
+        }
+        let target_snapshot = loaded.state.snapshots.get(target).cloned().ok_or_else(|| {
+            Error::InvalidVersionedMap(format!(
+                "indexed snapshot {:?} is not retained",
+                target.as_cid()
+            ))
+        })?;
+        if loaded.state.head == *target {
+            return Ok(AsyncPreparedIndexedUpdate::Unchanged { current });
+        }
+
+        let mut candidate = loaded.state.clone();
+        let target_active = target_snapshot
+            .indexes
+            .iter()
+            .map(|index| (index.name.clone(), index.descriptor_fingerprint.clone()))
+            .collect::<BTreeMap<_, _>>();
+        for (name, fingerprint) in &candidate.active {
+            if target_active.get(name) != Some(fingerprint) {
+                candidate
+                    .retired
+                    .insert((name.clone(), fingerprint.clone()));
+            }
+        }
+        for (name, fingerprint) in &target_active {
+            candidate
+                .retired
+                .remove(&(name.clone(), fingerprint.clone()));
+        }
+        candidate.active = target_active;
+        candidate.head = target.clone();
+        let candidate_tree = self.prepare_publication(&loaded, &mut candidate).await?;
+        Ok(AsyncPreparedIndexedUpdate::Prepared(Box::new(
+            AsyncPreparedIndexedMutation {
+                root_name: self.root_name()?,
+                expected_state_tree: Some(loaded.tree),
+                candidate_state_tree: candidate_tree.clone(),
+                previous_source_version: Some(current.source.id),
+                current: Self::version_for_state(&candidate_tree, &candidate)?,
+                manifest: IndexedSnapshotManifest::from_state_head(&candidate)?,
+            },
+        )))
+    }
+
+    /// Prepare activation of a self-contained historical manifest when the
+    /// mutable coordinator deliberately retains only its active snapshot.
+    pub async fn prepare_restore_manifest(
+        &self,
+        expected: &IndexedSnapshotId,
+        manifest: &IndexedSnapshotManifest,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        manifest.validate()?;
+        if manifest.record.source_map_id != self.source_map_id {
+            return Err(Error::InvalidVersionedMap(
+                "indexed restore manifest belongs to another source".to_string(),
+            ));
+        }
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if loaded.state.head != *expected {
+            return Ok(AsyncPreparedIndexedUpdate::Conflict { current });
+        }
+        if loaded.state.head == manifest.snapshot_id {
+            return Ok(AsyncPreparedIndexedUpdate::Unchanged { current });
+        }
+        if !loaded.state.pins.is_empty() {
+            return Err(Error::InvalidVersionedMap(
+                "externally retained indexed history cannot use coordinator snapshot pins"
+                    .to_string(),
+            ));
+        }
+
+        let mut candidate = loaded.state.clone();
+        candidate.head = manifest.snapshot_id.clone();
+        candidate.snapshots.clear();
+        candidate
+            .snapshots
+            .insert(manifest.snapshot_id.clone(), manifest.record.clone());
+        candidate.descriptors = manifest
+            .descriptors
+            .iter()
+            .cloned()
+            .map(|descriptor| {
+                (
+                    (descriptor.name.clone(), descriptor.fingerprint.clone()),
+                    descriptor,
+                )
+            })
+            .collect();
+        candidate.active = manifest
+            .record
+            .indexes
+            .iter()
+            .map(|index| (index.name.clone(), index.descriptor_fingerprint.clone()))
+            .collect();
+        candidate.retired.clear();
+        let candidate_tree = self.prepare_publication(&loaded, &mut candidate).await?;
+        Ok(AsyncPreparedIndexedUpdate::Prepared(Box::new(
+            AsyncPreparedIndexedMutation {
+                root_name: self.root_name()?,
+                expected_state_tree: Some(loaded.tree),
+                candidate_state_tree: candidate_tree.clone(),
+                previous_source_version: Some(current.source.id),
+                current: Self::version_for_state(&candidate_tree, &candidate)?,
+                manifest: IndexedSnapshotManifest::from_state_head(&candidate)?,
+            },
+        )))
+    }
+
+    /// Prepare removal of an exact set of retained source snapshots for
+    /// composition with an external audited retention transaction.
+    pub async fn prepare_remove_snapshots(
+        &self,
+        remove: &BTreeSet<MapVersionId>,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if remove.is_empty() {
+            return Ok(AsyncPreparedIndexedUpdate::Unchanged { current });
+        }
+        if remove.contains(&current.source.id) {
+            return Err(Error::InvalidVersionedMap(
+                "indexed retention cannot remove the current source snapshot".to_string(),
+            ));
+        }
+
+        let mut removed_snapshot_ids = BTreeSet::new();
+        for (id, snapshot) in &loaded.state.snapshots {
+            let source = MapVersionId::for_tree(&snapshot.source.tree)?;
+            if remove.contains(&source) {
+                removed_snapshot_ids.insert(id.clone());
+            }
+        }
+        let matched = removed_snapshot_ids
+            .iter()
+            .map(|id| {
+                loaded
+                    .state
+                    .snapshots
+                    .get(id)
+                    .ok_or_else(|| {
+                        Error::InvalidVersionedMap(
+                            "indexed retention lost a selected snapshot".to_string(),
+                        )
+                    })
+                    .and_then(|snapshot| MapVersionId::for_tree(&snapshot.source.tree))
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        if &matched != remove {
+            return Err(Error::InvalidVersionedMap(
+                "indexed retention references an unretained source snapshot".to_string(),
+            ));
+        }
+        self.prepare_remove_snapshot_ids(&removed_snapshot_ids)
+            .await
+    }
+
+    /// Prepare removal of exact indexed snapshot identities.
+    pub async fn prepare_remove_snapshot_ids(
+        &self,
+        remove: &BTreeSet<IndexedSnapshotId>,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if remove.is_empty() {
+            return Ok(AsyncPreparedIndexedUpdate::Unchanged { current });
+        }
+        if remove.contains(&loaded.state.head) {
+            return Err(Error::InvalidVersionedMap(
+                "indexed retention cannot remove the current snapshot".to_string(),
+            ));
+        }
+        if !remove
+            .iter()
+            .all(|id| loaded.state.snapshots.contains_key(id))
+        {
+            return Err(Error::InvalidVersionedMap(
+                "indexed retention references an unretained snapshot".to_string(),
+            ));
+        }
+        if let Some((pin_id, _)) = loaded
+            .state
+            .pins
+            .iter()
+            .find(|(_, pin)| remove.contains(&pin.snapshot))
+        {
+            return Err(Error::InvalidVersionedMap(format!(
+                "indexed retention would remove pinned snapshot {:?}",
+                String::from_utf8_lossy(pin_id)
+            )));
+        }
+
+        let mut candidate = loaded.state.clone();
+        candidate.snapshots.retain(|id, _| !remove.contains(id));
+        let referenced = candidate
+            .snapshots
+            .values()
+            .flat_map(|snapshot| {
+                snapshot
+                    .indexes
+                    .iter()
+                    .map(|index| (index.name.clone(), index.descriptor_fingerprint.clone()))
+            })
+            .chain(
+                candidate
+                    .active
+                    .iter()
+                    .map(|(name, fingerprint)| (name.clone(), fingerprint.clone())),
+            )
+            .collect::<BTreeSet<_>>();
+        candidate
+            .descriptors
+            .retain(|identity, _| referenced.contains(identity));
+        candidate
+            .retired
+            .retain(|identity| referenced.contains(identity));
+        let candidate_tree = self.prepare_publication(&loaded, &mut candidate).await?;
+        Ok(AsyncPreparedIndexedUpdate::Prepared(Box::new(
+            AsyncPreparedIndexedMutation {
+                root_name: self.root_name()?,
+                expected_state_tree: Some(loaded.tree),
+                candidate_state_tree: candidate_tree.clone(),
+                previous_source_version: Some(current.source.id.clone()),
+                current: Self::version_for_state(&candidate_tree, &candidate)?,
+                manifest: IndexedSnapshotManifest::from_state_head(&candidate)?,
+            },
+        )))
+    }
+
+    /// Build a complete replacement source/index closure without changing
+    /// visibility. Existing snapshots and descriptors remain retained for
+    /// historical reads; the returned candidate activates the supplied
+    /// registry only if the caller commits its state-root CAS.
+    pub async fn prepare_rebuild_from_source(
+        &self,
+        expected: &MapVersionId,
+        source: Tree,
+        registry: SecondaryIndexRegistry,
+        budget: &MaintenanceBudget,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        budget.validate()?;
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if current.source.id != *expected {
+            return Ok(AsyncPreparedIndexedUpdate::Conflict { current });
+        }
+        self.prepare_rebuild_from_source_at(&loaded.state.head, source, registry, budget)
+            .await
+    }
+
+    /// Build a replacement closure against one exact indexed head. Exact
+    /// identity avoids ABA when index generations change over identical source
+    /// content (including an empty table).
+    pub async fn prepare_rebuild_from_source_at(
+        &self,
+        expected: &IndexedSnapshotId,
+        source: Tree,
+        registry: SecondaryIndexRegistry,
+        budget: &MaintenanceBudget,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        budget.validate()?;
+        let loaded = self.load_state().await?;
+        let current = self.current_version(&loaded)?;
+        if loaded.state.head != *expected {
+            return Ok(AsyncPreparedIndexedUpdate::Conflict { current });
+        }
+        if registry.len() > loaded.state.policy.max_active_indexes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "active_indexes",
+                limit: loaded.state.policy.max_active_indexes,
+                actual: registry.len(),
+            });
+        }
+        let entry_count = count_entries_with_budget(
+            self.prolly,
+            &source,
+            budget.max_source_entries,
+            budget,
+            &BudgetCounter::new(),
+        )
+        .await?;
+        let builder = AsyncIndexedMap {
+            prolly: self.prolly,
+            source_map_id: self.source_map_id.clone(),
+            registry: registry.clone(),
+            runtime_overrides: RwLock::new(BTreeMap::new()),
+            metrics: Arc::new(AsyncIndexedMapMetrics::default()),
+        };
+        let mut candidate = loaded.state.clone();
+        candidate.retired.extend(
+            candidate
+                .active
+                .iter()
+                .map(|(name, fingerprint)| (name.clone(), fingerprint.clone())),
+        );
+        candidate.active.clear();
+        let mut snapshot = IndexedSnapshotRecord {
+            source_map_id: self.source_map_id.clone(),
+            parent: Some(loaded.state.head.clone()),
+            source: SourceSnapshotRef {
+                tree: source,
+                entry_count: entry_count as u64,
+            },
+            indexes: Vec::with_capacity(registry.len()),
+        };
+        for definition in registry.iter() {
+            let descriptor = IndexDescriptor::from_runtime(&self.source_map_id, definition)?;
+            let (tree, entries) = builder
+                .build_index_tree(&snapshot.source.tree, definition, budget)
+                .await?;
+            candidate
+                .active
+                .insert(descriptor.name.clone(), descriptor.fingerprint.clone());
+            candidate
+                .retired
+                .remove(&(descriptor.name.clone(), descriptor.fingerprint.clone()));
+            candidate.descriptors.insert(
+                (descriptor.name.clone(), descriptor.fingerprint.clone()),
+                descriptor.clone(),
+            );
+            snapshot.indexes.push(IndexSnapshotRef {
+                name: descriptor.name,
+                descriptor_fingerprint: descriptor.fingerprint,
+                tree,
+                entry_count: entries as u64,
+            });
+        }
+        snapshot
+            .indexes
+            .sort_by(|left, right| left.name.cmp(&right.name));
+        let snapshot_id = snapshot.id()?;
+        if snapshot_id == loaded.state.head && candidate.active == loaded.state.active {
+            return Ok(AsyncPreparedIndexedUpdate::Unchanged { current });
+        }
+        candidate.snapshots.insert(snapshot_id.clone(), snapshot);
+        candidate.head = snapshot_id;
+        let candidate_tree = self.prepare_publication(&loaded, &mut candidate).await?;
+        Ok(AsyncPreparedIndexedUpdate::Prepared(Box::new(
+            AsyncPreparedIndexedMutation {
+                root_name: self.root_name()?,
+                expected_state_tree: Some(loaded.tree),
+                candidate_state_tree: candidate_tree.clone(),
+                previous_source_version: Some(current.source.id),
+                current: Self::version_for_state(&candidate_tree, &candidate)?,
+                manifest: IndexedSnapshotManifest::from_state_head(&candidate)?,
+            },
+        )))
+    }
+
     async fn apply_with_budget_internal(
         &self,
         mutations: Vec<Mutation>,
         budget: &MutationBudget,
         expected: Option<Option<&MapVersionId>>,
-    ) -> Result<IndexedMapUpdate, Error> {
+        expected_snapshot: Option<&IndexedSnapshotId>,
+        mut initial_loaded: Option<AsyncLoadedIndexedState>,
+        prepare_only: bool,
+    ) -> Result<InternalIndexedUpdate, Error> {
         budget.validate()?;
         let counter = BudgetCounter::new();
         if mutations.len() > budget.max_input_records {
@@ -532,14 +1083,26 @@ where
         let normalized = normalize_mutations(&mutations);
         for _ in 0..budget.max_cas_attempts {
             counter.check_elapsed("mutation_elapsed_millis", budget.max_elapsed)?;
-            let loaded = self.load_state().await?;
+            let loaded = match initial_loaded.take() {
+                Some(loaded) => loaded,
+                None => self.load_state().await?,
+            };
             let head = loaded.state.head_snapshot()?;
             let previous = MapVersionId::for_tree(&head.source.tree)?;
+            if expected_snapshot.is_some_and(|expected| loaded.state.head != *expected) {
+                return Ok(InternalIndexedUpdate::Complete(Box::new(
+                    IndexedMapUpdate::Conflict {
+                        current: Some(self.current_version(&loaded)?),
+                    },
+                )));
+            }
             if let Some(expected) = expected {
                 if expected != Some(&previous) {
-                    return Ok(IndexedMapUpdate::Conflict {
-                        current: Some(self.current_version(&loaded)?),
-                    });
+                    return Ok(InternalIndexedUpdate::Complete(Box::new(
+                        IndexedMapUpdate::Conflict {
+                            current: Some(self.current_version(&loaded)?),
+                        },
+                    )));
                 }
             }
 
@@ -558,9 +1121,11 @@ where
                 .batch(&head.source.tree, source_mutations)
                 .await?;
             if source_tree == head.source.tree {
-                return Ok(IndexedMapUpdate::Unchanged {
-                    current: Some(self.current_version(&loaded)?),
-                });
+                return Ok(InternalIndexedUpdate::Complete(Box::new(
+                    IndexedMapUpdate::Unchanged {
+                        current: Some(self.current_version(&loaded)?),
+                    },
+                )));
             }
             let mut source_entry_delta = 0i64;
             for (key, mutation) in &normalized {
@@ -715,7 +1280,23 @@ where
             let snapshot_id = snapshot.id()?;
             candidate.snapshots.insert(snapshot_id.clone(), snapshot);
             candidate.head = snapshot_id;
-            if self.publish(&loaded, &mut candidate).await? {
+            let candidate_tree = self.prepare_publication(&loaded, &mut candidate).await?;
+            if prepare_only {
+                return Ok(InternalIndexedUpdate::Prepared(Box::new(
+                    AsyncPreparedIndexedMutation {
+                        root_name: self.root_name()?,
+                        expected_state_tree: Some(loaded.tree),
+                        candidate_state_tree: candidate_tree.clone(),
+                        previous_source_version: Some(previous),
+                        current: Self::version_for_state(&candidate_tree, &candidate)?,
+                        manifest: IndexedSnapshotManifest::from_state_head(&candidate)?,
+                    },
+                )));
+            }
+            if self
+                .commit_collection_root(Some(&loaded.tree), &candidate_tree)
+                .await?
+            {
                 let loaded = self.load_state().await?;
                 self.metrics
                     .normalized_source_mutations
@@ -738,10 +1319,12 @@ where
                 self.metrics
                     .unchanged_emissions_skipped
                     .fetch_add(unchanged_skipped, Ordering::Relaxed);
-                return Ok(IndexedMapUpdate::Applied {
-                    previous: Some(previous),
-                    current: self.current_version(&loaded)?,
-                });
+                return Ok(InternalIndexedUpdate::Complete(Box::new(
+                    IndexedMapUpdate::Applied {
+                        previous: Some(previous),
+                        current: self.current_version(&loaded)?,
+                    },
+                )));
             }
             self.metrics.retries.fetch_add(1, Ordering::Relaxed);
         }
@@ -757,8 +1340,23 @@ where
         expected: Option<&MapVersionId>,
         mutations: Vec<Mutation>,
     ) -> Result<IndexedMapUpdate, Error> {
-        self.apply_with_budget_internal(mutations, &MutationBudget::default(), Some(expected))
-            .await
+        match self
+            .apply_with_budget_internal(
+                mutations,
+                &MutationBudget::default(),
+                Some(expected),
+                None,
+                None,
+                false,
+            )
+            .await?
+        {
+            InternalIndexedUpdate::Complete(update) => Ok(*update),
+            InternalIndexedUpdate::Prepared(_) => Err(Error::InvalidVersionedMap(
+                "conditional indexed mutation unexpectedly returned a prepared candidate"
+                    .to_string(),
+            )),
+        }
     }
 
     /// Put one source value and update every active index atomically.
@@ -1339,6 +1937,252 @@ where
     <S as AsyncStore>::Error: Send + Sync,
     <S as AsyncManifestStore>::Error: Send + Sync,
 {
+    /// Prepare a new empty indexed collection, with every registered index
+    /// active, for composition into a caller-owned strict root transaction.
+    /// No named root becomes visible until the caller stages and commits the
+    /// returned conditional root replacement.
+    pub async fn prepare_indexed_map(
+        &self,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+    ) -> Result<AsyncPreparedIndexedMutation, Error> {
+        self.prepare_indexed_map_with_policy(
+            source_map_id,
+            registry,
+            CollectionIndexPolicy::default(),
+        )
+        .await
+    }
+
+    /// Prepare a new empty indexed collection with an exact persisted policy.
+    pub async fn prepare_indexed_map_with_policy(
+        &self,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+        policy: CollectionIndexPolicy,
+    ) -> Result<AsyncPreparedIndexedMutation, Error> {
+        policy.validate()?;
+        if !AsyncTransactionalStore::supports_transactions(self.store()) {
+            return Err(Error::UnsupportedTransactions {
+                store: std::any::type_name::<S>(),
+            });
+        }
+        let source_map_id = source_map_id.as_ref().to_vec();
+        if source_map_id.is_empty() {
+            return Err(Error::InvalidIndexDefinition {
+                reason: "indexed source map ID must not be empty".to_string(),
+            });
+        }
+        let root_name = indexed_collection_root_name(&source_map_id)?;
+        if self.load_named_root(&root_name).await?.is_some()
+            || self.versioned_map(&source_map_id).head().await?.is_some()
+        {
+            return Err(Error::IndexFormatUnsupported);
+        }
+
+        let source = self.create();
+        let mut state = IndexedCollectionState::new(
+            source_map_id.clone(),
+            policy,
+            IndexedSnapshotRecord {
+                source_map_id: source_map_id.clone(),
+                parent: None,
+                source: SourceSnapshotRef {
+                    tree: source.clone(),
+                    entry_count: 0,
+                },
+                indexes: Vec::new(),
+            },
+        )?;
+        if registry.len() > state.policy.max_active_indexes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "active_indexes",
+                limit: state.policy.max_active_indexes,
+                actual: registry.len(),
+            });
+        }
+        let mut snapshot = state.head_snapshot()?.clone();
+        for definition in registry.iter() {
+            let descriptor = IndexDescriptor::from_runtime(&source_map_id, definition)?;
+            state
+                .active
+                .insert(descriptor.name.clone(), descriptor.fingerprint.clone());
+            state.descriptors.insert(
+                (descriptor.name.clone(), descriptor.fingerprint.clone()),
+                descriptor.clone(),
+            );
+            snapshot.indexes.push(IndexSnapshotRef {
+                name: descriptor.name,
+                descriptor_fingerprint: descriptor.fingerprint,
+                tree: source.clone(),
+                entry_count: 0,
+            });
+        }
+        snapshot
+            .indexes
+            .sort_by(|left, right| left.name.cmp(&right.name));
+        let snapshot_id = snapshot.id()?;
+        state.snapshots.clear();
+        state.snapshots.insert(snapshot_id.clone(), snapshot);
+        state.head = snapshot_id;
+        state.enforce_policy_limits()?;
+        let state_tree = state.to_async_tree(self).await?;
+        let mut referenced = vec![&source, &state_tree];
+        referenced.extend(
+            state
+                .head_snapshot()?
+                .indexes
+                .iter()
+                .map(|index| &index.tree),
+        );
+        self.store()
+            .confirm_async_indexed_publication(&referenced)
+            .await?;
+        Ok(AsyncPreparedIndexedMutation {
+            root_name,
+            expected_state_tree: None,
+            candidate_state_tree: state_tree.clone(),
+            previous_source_version: None,
+            current: AsyncIndexedMap::<S>::version_for_state(&state_tree, &state)?,
+            manifest: IndexedSnapshotManifest::from_state_head(&state)?,
+        })
+    }
+
+    /// Prepare a new indexed collection from an already published canonical
+    /// source tree. This is the bounded bulk-build path used by verified
+    /// imports; it does not make the collection visible.
+    pub async fn prepare_indexed_map_from_source(
+        &self,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+        source: Tree,
+        budget: &MaintenanceBudget,
+    ) -> Result<AsyncPreparedIndexedMutation, Error> {
+        self.prepare_indexed_map_from_source_with_policy(
+            source_map_id,
+            registry,
+            source,
+            budget,
+            CollectionIndexPolicy::default(),
+        )
+        .await
+    }
+
+    /// Prepare an indexed collection from a source tree with an exact policy.
+    pub async fn prepare_indexed_map_from_source_with_policy(
+        &self,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+        source: Tree,
+        budget: &MaintenanceBudget,
+        policy: CollectionIndexPolicy,
+    ) -> Result<AsyncPreparedIndexedMutation, Error> {
+        policy.validate()?;
+        budget.validate()?;
+        if !AsyncTransactionalStore::supports_transactions(self.store()) {
+            return Err(Error::UnsupportedTransactions {
+                store: std::any::type_name::<S>(),
+            });
+        }
+        let source_map_id = source_map_id.as_ref().to_vec();
+        if source_map_id.is_empty() {
+            return Err(Error::InvalidIndexDefinition {
+                reason: "indexed source map ID must not be empty".to_string(),
+            });
+        }
+        let root_name = indexed_collection_root_name(&source_map_id)?;
+        if self.load_named_root(&root_name).await?.is_some()
+            || self.versioned_map(&source_map_id).head().await?.is_some()
+        {
+            return Err(Error::IndexFormatUnsupported);
+        }
+
+        let mut state = IndexedCollectionState::new(
+            source_map_id.clone(),
+            policy,
+            IndexedSnapshotRecord {
+                source_map_id: source_map_id.clone(),
+                parent: None,
+                source: SourceSnapshotRef {
+                    tree: source.clone(),
+                    entry_count: 0,
+                },
+                indexes: Vec::new(),
+            },
+        )?;
+        if registry.len() > state.policy.max_active_indexes {
+            return Err(Error::IndexResourceLimitExceeded {
+                resource: "active_indexes",
+                limit: state.policy.max_active_indexes,
+                actual: registry.len(),
+            });
+        }
+        let entry_count = count_entries_with_budget(
+            self,
+            &source,
+            budget.max_source_entries,
+            budget,
+            &BudgetCounter::new(),
+        )
+        .await?;
+        let builder = AsyncIndexedMap {
+            prolly: self,
+            source_map_id: source_map_id.clone(),
+            registry: registry.clone(),
+            runtime_overrides: RwLock::new(BTreeMap::new()),
+            metrics: Arc::new(AsyncIndexedMapMetrics::default()),
+        };
+        let mut snapshot = state.head_snapshot()?.clone();
+        snapshot.source.entry_count = entry_count as u64;
+        for definition in registry.iter() {
+            let descriptor = IndexDescriptor::from_runtime(&source_map_id, definition)?;
+            let (tree, entries) = builder
+                .build_index_tree(&source, definition, budget)
+                .await?;
+            state
+                .active
+                .insert(descriptor.name.clone(), descriptor.fingerprint.clone());
+            state.descriptors.insert(
+                (descriptor.name.clone(), descriptor.fingerprint.clone()),
+                descriptor.clone(),
+            );
+            snapshot.indexes.push(IndexSnapshotRef {
+                name: descriptor.name,
+                descriptor_fingerprint: descriptor.fingerprint,
+                tree,
+                entry_count: entries as u64,
+            });
+        }
+        snapshot
+            .indexes
+            .sort_by(|left, right| left.name.cmp(&right.name));
+        let snapshot_id = snapshot.id()?;
+        state.snapshots.clear();
+        state.snapshots.insert(snapshot_id.clone(), snapshot);
+        state.head = snapshot_id;
+        state.enforce_policy_limits()?;
+        let state_tree = state.to_async_tree(self).await?;
+        let mut referenced = vec![&source, &state_tree];
+        referenced.extend(
+            state
+                .head_snapshot()?
+                .indexes
+                .iter()
+                .map(|index| &index.tree),
+        );
+        self.store()
+            .confirm_async_indexed_publication(&referenced)
+            .await?;
+        Ok(AsyncPreparedIndexedMutation {
+            root_name,
+            expected_state_tree: None,
+            candidate_state_tree: state_tree.clone(),
+            previous_source_version: None,
+            current: AsyncIndexedMap::<S>::version_for_state(&state_tree, &state)?,
+            manifest: IndexedSnapshotManifest::from_state_head(&state)?,
+        })
+    }
+
     /// Open a native asynchronous indexed-map coordinator.
     pub async fn indexed_map(
         &self,
@@ -1346,6 +2190,81 @@ where
         registry: SecondaryIndexRegistry,
     ) -> Result<AsyncIndexedMap<'_, S>, Error> {
         AsyncIndexedMap::open(self, source_map_id, registry).await
+    }
+
+    /// Open or initialize an indexed-map coordinator with an exact persisted
+    /// collection policy. Existing state with a different policy is rejected.
+    pub async fn indexed_map_with_policy(
+        &self,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+        policy: CollectionIndexPolicy,
+    ) -> Result<AsyncIndexedMap<'_, S>, Error> {
+        policy.validate()?;
+        AsyncIndexedMap::open_with_optional_policy(self, source_map_id, registry, Some(policy))
+            .await
+    }
+
+    /// Prepare against one state tree already pinned by a caller-owned root
+    /// transaction. This avoids re-reading the coordinator root while keeping
+    /// its exact tree in the transaction's conflict set.
+    #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn prepare_indexed_apply_at_snapshot_with_policy(
+        &self,
+        source_map_id: impl AsRef<[u8]>,
+        registry: SecondaryIndexRegistry,
+        policy: CollectionIndexPolicy,
+        state_tree: Tree,
+        expected: &IndexedSnapshotId,
+        mutations: Vec<Mutation>,
+        budget: &MutationBudget,
+    ) -> Result<AsyncPreparedIndexedUpdate, Error> {
+        policy.validate()?;
+        if !AsyncTransactionalStore::supports_transactions(self.store()) {
+            return Err(Error::UnsupportedTransactions {
+                store: std::any::type_name::<S>(),
+            });
+        }
+        if source_map_id.as_ref().is_empty() {
+            return Err(Error::InvalidIndexDefinition {
+                reason: "indexed source map ID must not be empty".to_string(),
+            });
+        }
+        let indexed = AsyncIndexedMap {
+            prolly: self,
+            source_map_id: source_map_id.as_ref().to_vec(),
+            registry,
+            runtime_overrides: RwLock::new(BTreeMap::new()),
+            metrics: Arc::new(AsyncIndexedMapMetrics::default()),
+        };
+        let loaded = indexed.load_state_from_tree(state_tree).await?;
+        if loaded.state.policy != policy {
+            return Err(Error::IndexFormatUnsupported);
+        }
+        match indexed
+            .apply_with_budget_internal(mutations, budget, None, Some(expected), Some(loaded), true)
+            .await?
+        {
+            InternalIndexedUpdate::Prepared(prepared) => {
+                Ok(AsyncPreparedIndexedUpdate::Prepared(prepared))
+            }
+            InternalIndexedUpdate::Complete(update) => match *update {
+                IndexedMapUpdate::Unchanged {
+                    current: Some(current),
+                } => Ok(AsyncPreparedIndexedUpdate::Unchanged { current }),
+                IndexedMapUpdate::Conflict {
+                    current: Some(current),
+                } => Ok(AsyncPreparedIndexedUpdate::Conflict { current }),
+                IndexedMapUpdate::Applied { .. } => Err(Error::InvalidVersionedMap(
+                    "prepared indexed mutation changed root visibility".to_string(),
+                )),
+                IndexedMapUpdate::Unchanged { current: None }
+                | IndexedMapUpdate::Conflict { current: None } => Err(Error::InvalidVersionedMap(
+                    "initialized indexed map has no current version".to_string(),
+                )),
+            },
+        }
     }
 }
 

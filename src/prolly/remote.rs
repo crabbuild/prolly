@@ -14,7 +14,8 @@ use super::cid::Cid;
 use super::config::Config;
 use super::error::Error;
 use super::manifest::{
-    AsyncManifestStore, AsyncManifestStoreScan, ManifestUpdate, NamedRootManifest, RootManifest,
+    AsyncManifestStore, AsyncManifestStoreScan, ManifestUpdate, NamedRootManifest,
+    NamedRootManifestPage, RootManifest,
 };
 use super::store::{AsyncStore, BatchOp, NodePublication, NodePublicationHint, PublicationOrigin};
 use super::transaction::{
@@ -50,6 +51,15 @@ impl RemoteNamedRoot {
     pub fn new(name: Vec<u8>, manifest: Vec<u8>) -> Self {
         Self { name, manifest }
     }
+}
+
+/// One bounded backend page of serialized named roots in raw-name order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RemoteNamedRootPage {
+    /// Serialized roots in ascending raw-name order.
+    pub roots: Vec<RemoteNamedRoot>,
+    /// Last emitted raw name when another matching root exists.
+    pub next_after: Option<Vec<u8>>,
 }
 
 /// Result of a backend-level root compare-and-swap.
@@ -197,6 +207,16 @@ pub trait RemoteStoreBackend: Send + Sync {
         false
     }
 
+    /// Whether every successful node publication is durably complete.
+    ///
+    /// This is a correctness capability, not a performance hint. Returning
+    /// `true` permits higher-level coordinators to omit independent root-node
+    /// readback before publishing a manifest. Implementations must return an
+    /// error whenever any submitted write remains unprocessed or ambiguous.
+    fn guarantees_durable_publication(&self) -> bool {
+        false
+    }
+
     /// Maximum in-flight reads for default async traversal paths.
     fn read_parallelism(&self) -> usize {
         1
@@ -260,6 +280,19 @@ pub trait RemoteStoreBackend: Send + Sync {
     /// Read a serialized root manifest.
     async fn get_root_manifest(&self, name: &[u8]) -> Result<Option<Vec<u8>>, Self::Error>;
 
+    /// Read serialized root manifests in caller order. Remote backends should
+    /// override this when they support native batch point reads.
+    async fn get_root_manifests_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        let mut roots = Vec::with_capacity(names.len());
+        for name in names {
+            roots.push(self.get_root_manifest(name).await?);
+        }
+        Ok(roots)
+    }
+
     /// Write a serialized root manifest unconditionally.
     async fn put_root_manifest(&self, name: &[u8], manifest: &[u8]) -> Result<(), Self::Error>;
 
@@ -276,6 +309,37 @@ pub trait RemoteStoreBackend: Send + Sync {
 
     /// List serialized root manifests sorted by raw name bytes.
     async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error>;
+
+    /// List one bounded raw-name page beneath `prefix`, strictly after `after`.
+    ///
+    /// Provider adapters should override this with a native range query. The
+    /// default preserves existing backends but may materialize their full list.
+    async fn list_root_manifests_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<RemoteNamedRootPage, Self::Error> {
+        if limit == 0 {
+            return Ok(RemoteNamedRootPage::default());
+        }
+        let mut roots = self
+            .list_root_manifests()
+            .await?
+            .into_iter()
+            .filter(|root| {
+                root.name.starts_with(prefix)
+                    && after.is_none_or(|after| root.name.as_slice() > after)
+            })
+            .take(limit.saturating_add(1))
+            .collect::<Vec<_>>();
+        let has_more = roots.len() > limit;
+        if has_more {
+            roots.pop();
+        }
+        let next_after = has_more.then(|| roots.last().expect("nonzero page limit").name.clone());
+        Ok(RemoteNamedRootPage { roots, next_after })
+    }
 
     /// Whether this backend can atomically validate root conditions and commit
     /// staged node/root writes.
@@ -335,6 +399,10 @@ impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
         (**self).prefers_batch_reads()
     }
 
+    fn guarantees_durable_publication(&self) -> bool {
+        (**self).guarantees_durable_publication()
+    }
+
     fn read_parallelism(&self) -> usize {
         (**self).read_parallelism()
     }
@@ -380,6 +448,13 @@ impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
         (**self).get_root_manifest(name).await
     }
 
+    async fn get_root_manifests_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<Vec<u8>>>, Self::Error> {
+        (**self).get_root_manifests_ordered(names).await
+    }
+
     async fn put_root_manifest(&self, name: &[u8], manifest: &[u8]) -> Result<(), Self::Error> {
         (**self).put_root_manifest(name, manifest).await
     }
@@ -401,6 +476,17 @@ impl<T: RemoteStoreBackend> RemoteStoreBackend for Arc<T> {
 
     async fn list_root_manifests(&self) -> Result<Vec<RemoteNamedRoot>, Self::Error> {
         (**self).list_root_manifests().await
+    }
+
+    async fn list_root_manifests_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<RemoteNamedRootPage, Self::Error> {
+        (**self)
+            .list_root_manifests_page(prefix, after, limit)
+            .await
     }
 
     fn supports_transactions(&self) -> bool {
@@ -455,6 +541,11 @@ impl<B> RemoteProllyStore<B> {
     /// Borrow the backend.
     pub fn backend(&self) -> &B {
         &self.backend
+    }
+
+    /// Borrow the adapter configuration retained by this store.
+    pub fn config(&self) -> &RemoteStoreConfig {
+        &self.config
     }
 
     /// Consume the adapter and return the backend.
@@ -1080,6 +1171,10 @@ impl<B: RemoteStoreBackend> AsyncStore for RemoteProllyStore<B> {
         self.backend.prefers_batch_reads()
     }
 
+    fn guarantees_durable_publication(&self) -> bool {
+        self.backend.guarantees_durable_publication()
+    }
+
     fn read_parallelism(&self) -> usize {
         self.backend.read_parallelism()
     }
@@ -1161,6 +1256,19 @@ impl<B: RemoteStoreBackend> AsyncManifestStore for RemoteProllyStore<B> {
             .transpose()
     }
 
+    async fn get_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<RootManifest>>, Self::Error> {
+        self.backend
+            .get_root_manifests_ordered(names)
+            .await
+            .map_err(backend_error)?
+            .into_iter()
+            .map(|bytes| bytes.as_deref().map(decode_root_manifest).transpose())
+            .collect()
+    }
+
     async fn put_root(&self, name: &[u8], manifest: &RootManifest) -> Result<(), Self::Error> {
         let bytes = encode_root_manifest(manifest)?;
         self.backend
@@ -1213,6 +1321,31 @@ impl<B: RemoteStoreBackend> AsyncManifestStoreScan for RemoteProllyStore<B> {
             .collect::<Result<Vec<_>, RemoteAdapterError<B::Error>>>()?;
         roots.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(roots)
+    }
+
+    async fn list_roots_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<NamedRootManifestPage, Self::Error> {
+        let page = self
+            .backend
+            .list_root_manifests_page(prefix, after, limit)
+            .await
+            .map_err(backend_error)?;
+        let roots = page
+            .roots
+            .into_iter()
+            .map(|root| {
+                let manifest = decode_root_manifest(&root.manifest)?;
+                Ok(NamedRootManifest::new(root.name, manifest))
+            })
+            .collect::<Result<Vec<_>, RemoteAdapterError<B::Error>>>()?;
+        Ok(NamedRootManifestPage {
+            roots,
+            next_after: page.next_after,
+        })
     }
 }
 
@@ -1818,11 +1951,12 @@ pub mod conformance {
 mod tests {
     use std::collections::BTreeMap;
     use std::future::Future;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
     use std::task::{Context, Poll};
 
     use super::*;
-    use crate::{AsyncProlly, Config};
+    use crate::{AsyncProlly, Config, Tree};
 
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
@@ -1854,6 +1988,7 @@ mod tests {
         hints: Mutex<BTreeMap<HintKey, Vec<u8>>>,
         roots: Mutex<BTreeMap<Vec<u8>, Vec<u8>>>,
         publications: Mutex<Vec<PublicationOrigin>>,
+        node_gets: AtomicUsize,
     }
 
     type HintKey = (Vec<u8>, Vec<u8>);
@@ -1862,6 +1997,7 @@ mod tests {
         type Error = MemoryBackendError;
 
         async fn get_node(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+            self.node_gets.fetch_add(1, Ordering::Relaxed);
             Ok(self.nodes.lock().unwrap().get(key).cloned())
         }
 
@@ -1902,6 +2038,10 @@ mod tests {
         }
 
         fn prefers_batch_reads(&self) -> bool {
+            true
+        }
+
+        fn guarantees_durable_publication(&self) -> bool {
             true
         }
 
@@ -2083,6 +2223,34 @@ mod tests {
     }
 
     #[test]
+    fn remote_root_pages_are_prefix_scoped_bounded_and_resumable() {
+        block_on(async {
+            let store = RemoteProllyStore::new(MemoryBackend::default());
+            let manifest = RootManifest::from_tree(&Tree::new(Config::default()));
+            for name in [b"maps/a/1".as_slice(), b"maps/a/2", b"maps/b/1"] {
+                store.put_root(name, &manifest).await.unwrap();
+            }
+
+            let first = store.list_roots_page(b"maps/a/", None, 1).await.unwrap();
+            assert_eq!(first.roots.len(), 1);
+            assert_eq!(first.roots[0].name, b"maps/a/1");
+            assert_eq!(first.next_after.as_deref(), Some(b"maps/a/1".as_slice()));
+
+            let second = store
+                .list_roots_page(b"maps/a/", first.next_after.as_deref(), 1)
+                .await
+                .unwrap();
+            assert_eq!(second.roots.len(), 1);
+            assert_eq!(second.roots[0].name, b"maps/a/2");
+            assert!(second.next_after.is_none());
+
+            let empty = store.list_roots_page(b"maps/a/", None, 0).await.unwrap();
+            assert!(empty.roots.is_empty());
+            assert!(empty.next_after.is_none());
+        });
+    }
+
+    #[test]
     fn remote_publication_preserves_origin_and_always_verifies_cids() {
         block_on(async {
             let backend = Arc::new(MemoryBackend::default());
@@ -2140,6 +2308,37 @@ mod tests {
                 .unwrap_err();
             assert!(matches!(error, RemoteAdapterError::CidMismatch { .. }));
             assert!(unchecked_backend.publications.lock().unwrap().is_empty());
+        });
+    }
+
+    #[test]
+    fn durable_remote_publication_omits_redundant_root_readback() {
+        use crate::AsyncIndexedStore as _;
+
+        block_on(async {
+            let store = Arc::new(RemoteProllyStore::new(MemoryBackend::default()));
+            let prolly = AsyncProlly::new(store.clone(), Config::default());
+            let tree = prolly
+                .batch(
+                    &prolly.create(),
+                    vec![crate::Mutation::Upsert {
+                        key: b"k".to_vec(),
+                        val: b"v".to_vec(),
+                    }],
+                )
+                .await
+                .unwrap();
+            let reads_before = store.backend().node_gets.load(Ordering::Relaxed);
+
+            store
+                .confirm_async_indexed_publication(&[&tree])
+                .await
+                .unwrap();
+
+            assert_eq!(
+                store.backend().node_gets.load(Ordering::Relaxed),
+                reads_before
+            );
         });
     }
 

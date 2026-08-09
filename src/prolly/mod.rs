@@ -181,7 +181,9 @@ pub mod utils;
 // Internal traits for future extensibility (not exposed publicly)
 mod traits;
 
-use self::sync::{MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode};
+use self::sync::{
+    MissingNodeCopy, MissingNodePlan, SnapshotBundle, SnapshotBundleNode, SnapshotExportLimits,
+};
 use blob::{BlobStore, BlobStoreScan, LargeValueConfig};
 use cid::Cid;
 use config::Config;
@@ -193,7 +195,10 @@ use error::Diff;
 use error::Error;
 use error::Mutation;
 use error::Resolver;
-use gc::{BlobGcPlan, BlobGcReachability, BlobGcSweep, GcPlan, GcReachability, GcSweep};
+use gc::{
+    BlobGcPlan, BlobGcReachability, BlobGcSweep, BlobReachabilityLimits, GcPlan, GcReachability,
+    GcSweep, GcTraversalLimits,
+};
 use manifest::{AsyncManifestStore, AsyncManifestStoreScan};
 use manifest::{
     ManifestStore, ManifestStoreScan, NamedRoot, NamedRootRetention, NamedRootSelection,
@@ -423,6 +428,15 @@ impl NodeCache {
             .filter(|entry| entry.pinned)
             .map(|entry| entry.bytes)
             .sum()
+    }
+
+    fn usage(&self) -> ProllyCacheUsage {
+        ProllyCacheUsage {
+            entries: self.len(),
+            serialized_bytes: self.bytes_len(),
+            pinned_entries: self.pinned_len(),
+            pinned_serialized_bytes: self.pinned_bytes_len(),
+        }
     }
 
     #[inline]
@@ -729,6 +743,25 @@ impl NodeCache {
                 .unwrap_or(false)
         });
     }
+}
+
+/// Current retained-node cache occupancy for a prolly manager.
+///
+/// Unlike [`ProllyMetricsSnapshot`], these values are gauges rather than
+/// cumulative counters. All four fields are captured while holding one cache
+/// read lock, so their invariants can be evaluated as one observation.
+/// Serialized byte values are the cache's retained node weights; they do not
+/// include decoded Rust allocations, store-client buffers, or process overhead.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProllyCacheUsage {
+    /// Immutable node entries currently retained by the cache.
+    pub entries: usize,
+    /// Total serialized-node byte weight currently retained by the cache.
+    pub serialized_bytes: usize,
+    /// Retained entries explicitly pinned as correctness-optional hints.
+    pub pinned_entries: usize,
+    /// Serialized-node byte weight attributable to pinned entries.
+    pub pinned_serialized_bytes: usize,
 }
 
 /// Cumulative cache and node I/O metrics for a prolly manager.
@@ -2558,17 +2591,19 @@ impl<S: Store> Prolly<S> {
         } else {
             1
         };
-        let mut seen = HashSet::new();
+        let mut seen_paths = HashSet::new();
         let mut frontier = Vec::new();
 
         for tree in roots {
             if let Some(root_cid) = &tree.root {
-                if seen.insert(root_cid.clone()) {
-                    frontier.push((root_cid.clone(), tree.config.format.clone()));
+                let format_digest = tree.config.format.digest()?;
+                if seen_paths.insert((root_cid.clone(), format_digest.clone())) {
+                    frontier.push((root_cid.clone(), tree.config.format.clone(), format_digest));
                 }
             }
         }
 
+        let mut live_seen = HashSet::new();
         let mut live_cids = Vec::new();
         let mut live_bytes = 0usize;
         let mut leaf_nodes = 0usize;
@@ -2578,11 +2613,11 @@ impl<S: Store> Prolly<S> {
             let expected_format = frontier[0].1.clone();
             let mut current = Vec::new();
             let mut deferred = Vec::new();
-            for (cid, format) in std::mem::take(&mut frontier) {
+            for (cid, format, format_digest) in std::mem::take(&mut frontier) {
                 if format == expected_format {
                     current.push(cid);
                 } else {
-                    deferred.push((cid, format));
+                    deferred.push((cid, format, format_digest));
                 }
             }
             frontier = deferred;
@@ -2600,20 +2635,29 @@ impl<S: Store> Prolly<S> {
                     return Err(Error::InvalidNode);
                 }
 
-                live_bytes += node.encoded_len();
-                if node.leaf {
-                    leaf_nodes += 1;
-                } else {
-                    internal_nodes += 1;
+                if live_seen.insert(cid.clone()) {
+                    live_bytes += node.encoded_len();
+                    if node.leaf {
+                        leaf_nodes += 1;
+                    } else {
+                        internal_nodes += 1;
+                    }
+                    live_cids.push(cid.clone());
+                }
+                if !node.leaf {
+                    let format_digest = expected_format.digest()?;
                     frontier.reserve(node.vals.len());
                     for idx in 0..node.len() {
                         let child_cid = child_cid_at(&node, idx)?;
-                        if seen.insert(child_cid.clone()) {
-                            frontier.push((child_cid, expected_format.clone()));
+                        if seen_paths.insert((child_cid.clone(), format_digest.clone())) {
+                            frontier.push((
+                                child_cid,
+                                expected_format.clone(),
+                                format_digest.clone(),
+                            ));
                         }
                     }
                 }
-                live_cids.push(cid);
             }
         }
 
@@ -2714,6 +2758,17 @@ impl<S: Store> Prolly<S> {
     pub fn export_snapshot(&self, tree: &Tree) -> Result<SnapshotBundle, Error> {
         let ready_store = self.engine.store.clone();
         let future = self.engine.export_snapshot(tree);
+        engine::ready::run_ready(ready_store.ready(future))
+    }
+
+    /// Export one tree subject to explicit node-count and byte limits.
+    pub fn export_snapshot_with_limits(
+        &self,
+        tree: &Tree,
+        limits: SnapshotExportLimits,
+    ) -> Result<SnapshotBundle, Error> {
+        let ready_store = self.engine.store.clone();
+        let future = self.engine.export_snapshot_with_limits(tree, limits);
         engine::ready::run_ready(ready_store.ready(future))
     }
 
@@ -3816,6 +3871,11 @@ impl<S: Store> Prolly<S> {
     /// Return the serialized-node byte weight of pinned cache entries.
     pub fn cache_pinned_bytes_len(&self) -> usize {
         self.engine.cache_pinned_bytes_len()
+    }
+
+    /// Return one internally consistent snapshot of current cache occupancy.
+    pub fn cache_usage(&self) -> ProllyCacheUsage {
+        self.engine.cache_usage()
     }
 
     /// Pin the root node of a tree in this manager's node cache.
@@ -5397,17 +5457,36 @@ where
     /// This mirrors [`Prolly::mark_reachable`] while loading changed frontiers
     /// through [`AsyncStore::batch_get_ordered_unique`].
     pub async fn mark_reachable(&self, roots: &[Tree]) -> Result<GcReachability, Error> {
-        let mut seen = HashSet::new();
+        self.mark_reachable_with_limits(roots, GcTraversalLimits::new(usize::MAX, usize::MAX))
+            .await
+    }
+
+    /// Mark reachable nodes while enforcing hard retained-set bounds.
+    pub async fn mark_reachable_with_limits(
+        &self,
+        roots: &[Tree],
+        limits: GcTraversalLimits,
+    ) -> Result<GcReachability, Error> {
+        if limits.max_nodes == 0 || limits.max_node_bytes == 0 {
+            return Err(Error::InvalidExecutionConfig {
+                field: "gc traversal limits",
+                value: 0,
+            });
+        }
+        let mut seen_paths = HashSet::new();
         let mut frontier = Vec::new();
 
         for tree in roots {
             if let Some(root_cid) = &tree.root {
-                if seen.insert(root_cid.clone()) {
-                    frontier.push((root_cid.clone(), tree.config.format.clone()));
+                let format_digest = tree.config.format.digest()?;
+                if seen_paths.insert((root_cid.clone(), format_digest.clone())) {
+                    enforce_content_graph_limit("nodes", limits.max_nodes, seen_paths.len())?;
+                    frontier.push((root_cid.clone(), tree.config.format.clone(), format_digest));
                 }
             }
         }
 
+        let mut live_seen = HashSet::new();
         let mut live_cids = Vec::new();
         let mut live_bytes = 0usize;
         let mut leaf_nodes = 0usize;
@@ -5417,11 +5496,11 @@ where
             let expected_format = frontier[0].1.clone();
             let mut current = Vec::new();
             let mut deferred = Vec::new();
-            for (cid, node_format) in std::mem::take(&mut frontier) {
+            for (cid, node_format, format_digest) in std::mem::take(&mut frontier) {
                 if node_format == expected_format {
                     current.push(cid);
                 } else {
-                    deferred.push((cid, node_format));
+                    deferred.push((cid, node_format, format_digest));
                 }
             }
             frontier = deferred;
@@ -5434,20 +5513,41 @@ where
                     return Err(Error::InvalidNode);
                 }
 
-                live_bytes += node.encoded_len();
-                if node.leaf {
-                    leaf_nodes += 1;
-                } else {
-                    internal_nodes += 1;
+                if live_seen.insert(cid.clone()) {
+                    live_bytes = live_bytes.checked_add(node.encoded_len()).ok_or(
+                        Error::ContentGraphResourceLimitExceeded {
+                            resource: "node bytes",
+                            limit: limits.max_node_bytes,
+                            actual: usize::MAX,
+                        },
+                    )?;
+                    enforce_content_graph_limit("node bytes", limits.max_node_bytes, live_bytes)?;
+                    if node.leaf {
+                        leaf_nodes += 1;
+                    } else {
+                        internal_nodes += 1;
+                    }
+                    live_cids.push(cid.clone());
+                }
+                if !node.leaf {
+                    let format_digest = expected_format.digest()?;
                     frontier.reserve(node.vals.len());
                     for idx in 0..node.len() {
                         let child_cid = child_cid_at(&node, idx)?;
-                        if seen.insert(child_cid.clone()) {
-                            frontier.push((child_cid, expected_format.clone()));
+                        if seen_paths.insert((child_cid.clone(), format_digest.clone())) {
+                            enforce_content_graph_limit(
+                                "nodes",
+                                limits.max_nodes,
+                                seen_paths.len(),
+                            )?;
+                            frontier.push((
+                                child_cid,
+                                expected_format.clone(),
+                                format_digest.clone(),
+                            ));
                         }
                     }
                 }
-                live_cids.push(cid);
             }
         }
 
@@ -5522,24 +5622,92 @@ where
 
     /// Export one tree and its reachable nodes as a verified portable bundle.
     pub async fn export_snapshot(&self, tree: &Tree) -> Result<SnapshotBundle, Error> {
-        let reachability = self.mark_reachable(std::slice::from_ref(tree)).await?;
-        let keys = reachability
-            .live_cids
-            .iter()
-            .map(|cid| cid.as_bytes())
-            .collect::<Vec<_>>();
-        let values = async_batch_get_ordered_unique_bounded(
-            &self.store,
-            &keys,
-            ASYNC_NODE_PREFETCH_BATCH_SIZE,
-        )
-        .await?;
-        let mut nodes = Vec::with_capacity(reachability.live_cids.len());
-        for (cid, value) in reachability.live_cids.into_iter().zip(values) {
-            let bytes = value.ok_or_else(|| Error::NotFound(cid.clone()))?;
-            self::sync::verify_node_bytes(&cid, &bytes)?;
-            nodes.push(SnapshotBundleNode { cid, bytes });
+        self.export_snapshot_with_limits(tree, SnapshotExportLimits::new(usize::MAX, usize::MAX))
+            .await
+    }
+
+    /// Export one tree while enforcing explicit in-memory resource limits.
+    ///
+    /// Traversal retains no more than `max_nodes` unique CIDs and no more than
+    /// `max_bytes` serialized node bytes. Nodes are loaded in bounded batches,
+    /// verified against their content IDs, and sorted for deterministic output.
+    pub async fn export_snapshot_with_limits(
+        &self,
+        tree: &Tree,
+        limits: SnapshotExportLimits,
+    ) -> Result<SnapshotBundle, Error> {
+        if limits.max_nodes == 0 {
+            return Err(Error::InvalidExecutionConfig {
+                field: "snapshot_export.max_nodes",
+                value: 0,
+            });
         }
+        if limits.max_bytes == 0 {
+            return Err(Error::InvalidExecutionConfig {
+                field: "snapshot_export.max_bytes",
+                value: 0,
+            });
+        }
+
+        let Some(root) = tree.root.clone() else {
+            return Ok(SnapshotBundle::new(tree.clone(), Vec::new()));
+        };
+        let mut seen = HashSet::new();
+        seen.insert(root.clone());
+        let mut frontier = std::collections::VecDeque::from([root]);
+        let mut nodes = Vec::new();
+        let mut byte_count = 0usize;
+
+        while !frontier.is_empty() {
+            let batch_len = frontier.len().min(ASYNC_NODE_PREFETCH_BATCH_SIZE);
+            let current = (0..batch_len)
+                .map(|_| frontier.pop_front().expect("bounded nonempty frontier"))
+                .collect::<Vec<_>>();
+            let loaded = self
+                .load_child_frontier_ordered_for_format(&current, &tree.config.format)
+                .await?;
+
+            for (cid, node) in current.into_iter().zip(loaded) {
+                if node.keys.len() != node.vals.len() {
+                    return Err(Error::InvalidNode);
+                }
+                let bytes = node.to_bytes();
+                self::sync::verify_node_bytes(&cid, &bytes)?;
+                byte_count = byte_count.checked_add(bytes.len()).ok_or(
+                    Error::SnapshotExportLimitExceeded {
+                        resource: "bytes",
+                        limit: limits.max_bytes,
+                        actual: usize::MAX,
+                    },
+                )?;
+                if byte_count > limits.max_bytes {
+                    return Err(Error::SnapshotExportLimitExceeded {
+                        resource: "bytes",
+                        limit: limits.max_bytes,
+                        actual: byte_count,
+                    });
+                }
+
+                if !node.leaf {
+                    for idx in 0..node.len() {
+                        let child = child_cid_at(&node, idx)?;
+                        if seen.insert(child.clone()) {
+                            if seen.len() > limits.max_nodes {
+                                return Err(Error::SnapshotExportLimitExceeded {
+                                    resource: "nodes",
+                                    limit: limits.max_nodes,
+                                    actual: seen.len(),
+                                });
+                            }
+                            frontier.push_back(child);
+                        }
+                    }
+                }
+                nodes.push(SnapshotBundleNode { cid, bytes });
+            }
+        }
+
+        nodes.sort_by(|left, right| left.cid.as_bytes().cmp(right.cid.as_bytes()));
         Ok(SnapshotBundle::new(tree.clone(), nodes))
     }
 
@@ -5755,13 +5923,38 @@ where
     /// Mark all offloaded blobs reachable from retained tree roots through the
     /// async node store.
     pub async fn mark_reachable_blobs(&self, roots: &[Tree]) -> Result<BlobGcReachability, Error> {
-        let mut seen_nodes = HashSet::new();
+        self.mark_reachable_blobs_with_limits(
+            roots,
+            BlobReachabilityLimits::new(usize::MAX, usize::MAX, usize::MAX, u64::MAX),
+        )
+        .await
+    }
+
+    /// Discover reachable blobs subject to explicit graph/value/blob bounds.
+    pub async fn mark_reachable_blobs_with_limits(
+        &self,
+        roots: &[Tree],
+        limits: BlobReachabilityLimits,
+    ) -> Result<BlobGcReachability, Error> {
+        if limits.max_nodes == 0
+            || limits.max_values == 0
+            || limits.max_blobs == 0
+            || limits.max_blob_bytes == 0
+        {
+            return Err(Error::InvalidExecutionConfig {
+                field: "blob reachability limits",
+                value: 0,
+            });
+        }
+        let mut seen_paths = HashSet::new();
         let mut frontier = Vec::new();
 
         for tree in roots {
             if let Some(root_cid) = &tree.root {
-                if seen_nodes.insert(root_cid.clone()) {
-                    frontier.push((root_cid.clone(), tree.config.format.clone()));
+                let format_digest = tree.config.format.digest()?;
+                if seen_paths.insert((root_cid.clone(), format_digest.clone())) {
+                    enforce_content_graph_limit("nodes", limits.max_nodes, seen_paths.len())?;
+                    frontier.push((root_cid.clone(), tree.config.format.clone(), format_digest));
                 }
             }
         }
@@ -5774,11 +5967,11 @@ where
             let expected_format = frontier[0].1.clone();
             let mut current = Vec::new();
             let mut next_frontier = Vec::new();
-            for (cid, node_format) in std::mem::take(&mut frontier) {
+            for (cid, node_format, format_digest) in std::mem::take(&mut frontier) {
                 if node_format == expected_format {
                     current.push(cid);
                 } else {
-                    next_frontier.push((cid, node_format));
+                    next_frontier.push((cid, node_format, format_digest));
                 }
             }
             let nodes = self
@@ -5790,9 +5983,11 @@ where
                     return Err(Error::InvalidNode);
                 }
                 scanned_nodes += 1;
+                enforce_content_graph_limit("nodes", limits.max_nodes, scanned_nodes)?;
 
                 if node.leaf {
                     scanned_values += node.vals.len();
+                    enforce_content_graph_limit("values", limits.max_values, scanned_values)?;
                     for value in &node.vals {
                         if let blob::ValueRef::Blob(reference) =
                             blob::ValueRef::from_stored_bytes(value)?
@@ -5808,16 +6003,31 @@ where
                                 }
                                 Entry::Vacant(entry) => {
                                     entry.insert(reference);
+                                    enforce_content_graph_limit(
+                                        "blobs",
+                                        limits.max_blobs,
+                                        live_blobs_by_cid.len(),
+                                    )?;
                                 }
                             }
                         }
                     }
                 } else {
+                    let format_digest = expected_format.digest()?;
                     next_frontier.reserve(node.vals.len());
                     for idx in 0..node.len() {
                         let child_cid = child_cid_at(&node, idx)?;
-                        if seen_nodes.insert(child_cid.clone()) {
-                            next_frontier.push((child_cid, expected_format.clone()));
+                        if seen_paths.insert((child_cid.clone(), format_digest.clone())) {
+                            enforce_content_graph_limit(
+                                "nodes",
+                                limits.max_nodes,
+                                seen_paths.len(),
+                            )?;
+                            next_frontier.push((
+                                child_cid,
+                                expected_format.clone(),
+                                format_digest.clone(),
+                            ));
                         }
                     }
                 }
@@ -5828,10 +6038,22 @@ where
 
         let mut live_blobs = live_blobs_by_cid.into_values().collect::<Vec<_>>();
         gc::sort_blob_refs(&mut live_blobs);
-        let live_blob_bytes = live_blobs
-            .iter()
-            .map(|reference| reference.len)
-            .sum::<u64>();
+        let live_blob_bytes = live_blobs.iter().try_fold(0_u64, |total, reference| {
+            total
+                .checked_add(reference.len)
+                .ok_or(Error::ContentGraphResourceLimitExceeded {
+                    resource: "blob bytes",
+                    limit: usize::try_from(limits.max_blob_bytes).unwrap_or(usize::MAX),
+                    actual: usize::MAX,
+                })
+        })?;
+        if live_blob_bytes > limits.max_blob_bytes {
+            return Err(Error::ContentGraphResourceLimitExceeded {
+                resource: "blob bytes",
+                limit: usize::try_from(limits.max_blob_bytes).unwrap_or(usize::MAX),
+                actual: usize::try_from(live_blob_bytes).unwrap_or(usize::MAX),
+            });
+        }
 
         Ok(BlobGcReachability {
             live_blob_count: live_blobs.len(),
@@ -5943,6 +6165,9 @@ where
             let evictions = cache.clear();
             self.metrics.add_cache_evictions(evictions);
         }
+        if let Ok(mut lineage) = self.branch_lineage.write() {
+            *lineage = BranchLineageCache::default();
+        }
         if let Ok(mut cache) = self.rightmost_path_cache.write() {
             *cache = None;
         }
@@ -5997,6 +6222,17 @@ where
             .read()
             .map(|cache| cache.pinned_bytes_len())
             .unwrap_or(0)
+    }
+
+    /// Return one internally consistent snapshot of current cache occupancy.
+    pub fn cache_usage(&self) -> ProllyCacheUsage {
+        match self.node_cache.read() {
+            Ok(cache) => cache.usage(),
+            // A poisoned observability lock must not turn retained memory into
+            // a misleading all-zero sample. The cache remains readable even
+            // though subsequent cache mutation paths conservatively bypass it.
+            Err(poisoned) => poisoned.into_inner().usage(),
+        }
     }
 
     /// Pin the root node of a tree in this async manager's node cache.
@@ -6243,6 +6479,50 @@ where
         self.metrics.reset();
     }
 
+    /// Load the value from each exact one-entry leaf tree in input order.
+    ///
+    /// This is an infrastructure primitive for durable detached records whose
+    /// catalog stores complete immutable tree handles. Roots are fetched through
+    /// the store's ordered batch path; every tree must contain exactly `key` and
+    /// one value. Any empty, internal, multi-entry, or mismatched tree fails
+    /// closed.
+    #[doc(hidden)]
+    pub async fn load_single_leaf_values_ordered(
+        &self,
+        trees: &[Tree],
+        key: &[u8],
+    ) -> Result<Vec<Vec<u8>>, Error> {
+        if trees.is_empty() {
+            return Ok(Vec::new());
+        }
+        for tree in trees {
+            if tree.config.format != self.config.format {
+                return Err(Error::InvalidFormat(
+                    "detached record tree format differs from manager format".into(),
+                ));
+            }
+        }
+        let roots = trees
+            .iter()
+            .map(|tree| tree.root.clone().ok_or(Error::InvalidNode))
+            .collect::<Result<Vec<_>, _>>()?;
+        let nodes = self.load_many_ordered(&roots).await?;
+        nodes
+            .into_iter()
+            .map(|node| {
+                if !node.leaf
+                    || node.level != 0
+                    || node.keys.len() != 1
+                    || node.vals.len() != 1
+                    || node.keys[0].as_slice() != key
+                {
+                    return Err(Error::InvalidNode);
+                }
+                Ok(node.vals[0].clone())
+            })
+            .collect()
+    }
+
     /// Load a named root as a [`Tree`] through the underlying async manifest
     /// store.
     ///
@@ -6256,6 +6536,28 @@ where
             .get_root(name)
             .await
             .map(|manifest| manifest.map(RootManifest::into_tree))
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
+    /// Load named roots in caller order, using a backend-native batch read when
+    /// available. Missing names remain `None` at their original positions.
+    pub async fn load_named_roots_ordered(
+        &self,
+        names: &[&[u8]],
+    ) -> Result<Vec<Option<Tree>>, Error>
+    where
+        S: AsyncManifestStore,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.store
+            .get_roots_ordered(names)
+            .await
+            .map(|roots| {
+                roots
+                    .into_iter()
+                    .map(|manifest| manifest.map(RootManifest::into_tree))
+                    .collect()
+            })
             .map_err(|err| Error::Store(Box::new(err)))
     }
 
@@ -6315,6 +6617,23 @@ where
     {
         self.store
             .list_roots()
+            .await
+            .map_err(|err| Error::Store(Box::new(err)))
+    }
+
+    /// List one bounded page of named root manifests under a raw-name prefix.
+    pub async fn list_named_root_manifests_page(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<manifest::NamedRootManifestPage, Error>
+    where
+        S: AsyncManifestStoreScan,
+        <S as AsyncManifestStore>::Error: Send + Sync,
+    {
+        self.store
+            .list_roots_page(prefix, after, limit)
             .await
             .map_err(|err| Error::Store(Box::new(err)))
     }
@@ -7595,6 +7914,22 @@ fn child_cid_at(node: &Node, idx: usize) -> Result<Cid, Error> {
         .map_err(|_| Error::InvalidNode)?))
 }
 
+fn enforce_content_graph_limit(
+    resource: &'static str,
+    limit: usize,
+    actual: usize,
+) -> Result<(), Error> {
+    if actual > limit {
+        Err(Error::ContentGraphResourceLimitExceeded {
+            resource,
+            limit,
+            actual,
+        })
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_owned_node_format(
     node: &Node,
     expected_format: &format::TreeFormat,
@@ -7956,6 +8291,147 @@ mod tests {
         let error = destination.import_snapshot(&extra_bundle).unwrap_err();
         assert!(matches!(error, Error::InvalidSnapshotBundle(_)));
     }
+
+    #[test]
+    fn snapshot_export_limits_are_hard_and_exact() {
+        let source = Prolly::new(Arc::new(MemStore::new()), Config::default());
+        let tree = source
+            .batch(
+                &source.create(),
+                (0_u32..512)
+                    .map(|index| Mutation::Upsert {
+                        key: index.to_be_bytes().to_vec(),
+                        val: vec![(index % 251) as u8; 512],
+                    })
+                    .collect(),
+            )
+            .unwrap();
+        let baseline = source.export_snapshot(&tree).unwrap();
+        assert!(baseline.node_count() > 1);
+
+        let exact = source
+            .export_snapshot_with_limits(
+                &tree,
+                SnapshotExportLimits::new(baseline.node_count(), baseline.byte_count()),
+            )
+            .unwrap();
+        assert_eq!(exact, baseline);
+
+        let node_error = source
+            .export_snapshot_with_limits(
+                &tree,
+                SnapshotExportLimits::new(baseline.node_count() - 1, usize::MAX),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            node_error,
+            Error::SnapshotExportLimitExceeded {
+                resource: "nodes",
+                ..
+            }
+        ));
+
+        let byte_error = source
+            .export_snapshot_with_limits(
+                &tree,
+                SnapshotExportLimits::new(usize::MAX, baseline.byte_count() - 1),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            byte_error,
+            Error::SnapshotExportLimitExceeded {
+                resource: "bytes",
+                ..
+            }
+        ));
+
+        assert!(matches!(
+            source.export_snapshot_with_limits(&tree, SnapshotExportLimits::new(0, 1)),
+            Err(Error::InvalidExecutionConfig {
+                field: "snapshot_export.max_nodes",
+                ..
+            })
+        ));
+        assert!(matches!(
+            source.export_snapshot_with_limits(&tree, SnapshotExportLimits::new(1, 0)),
+            Err(Error::InvalidExecutionConfig {
+                field: "snapshot_export.max_bytes",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn async_gc_reachability_limits_fail_closed() {
+        let store = Arc::new(MemStore::new());
+        let sync = Prolly::new(store.clone(), Config::default());
+        let first_blob = blob::BlobRef::from_bytes(&[1; 100]);
+        let second_blob = blob::BlobRef::from_bytes(&[2; 200]);
+        let tree = sync
+            .batch(
+                &sync.create(),
+                (0_u32..512)
+                    .map(|index| Mutation::Upsert {
+                        key: index.to_be_bytes().to_vec(),
+                        val: if index == 10 {
+                            blob::ValueRef::Blob(first_blob.clone()).to_bytes()
+                        } else if index == 20 {
+                            blob::ValueRef::Blob(second_blob.clone()).to_bytes()
+                        } else {
+                            vec![(index % 251) as u8; 512]
+                        },
+                    })
+                    .collect(),
+            )
+            .unwrap();
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
+        let baseline = block_on(async_prolly.mark_reachable(std::slice::from_ref(&tree))).unwrap();
+        assert!(baseline.live_nodes > 1);
+        assert!(matches!(
+            block_on(async_prolly.mark_reachable_with_limits(
+                std::slice::from_ref(&tree),
+                GcTraversalLimits::new(baseline.live_nodes - 1, usize::MAX),
+            )),
+            Err(Error::ContentGraphResourceLimitExceeded {
+                resource: "nodes",
+                ..
+            })
+        ));
+        assert!(matches!(
+            block_on(async_prolly.mark_reachable_with_limits(
+                std::slice::from_ref(&tree),
+                GcTraversalLimits::new(usize::MAX, baseline.live_bytes - 1),
+            )),
+            Err(Error::ContentGraphResourceLimitExceeded {
+                resource: "node bytes",
+                ..
+            })
+        ));
+
+        let blobs = block_on(async_prolly.mark_reachable_blobs_with_limits(
+            std::slice::from_ref(&tree),
+            BlobReachabilityLimits::new(
+                baseline.live_nodes,
+                512,
+                2,
+                first_blob.len + second_blob.len,
+            ),
+        ))
+        .unwrap();
+        let mut expected_blobs = vec![first_blob, second_blob];
+        gc::sort_blob_refs(&mut expected_blobs);
+        assert_eq!(blobs.live_blobs, expected_blobs);
+        assert!(matches!(
+            block_on(async_prolly.mark_reachable_blobs_with_limits(
+                std::slice::from_ref(&tree),
+                BlobReachabilityLimits::new(baseline.live_nodes, 512, 1, u64::MAX),
+            )),
+            Err(Error::ContentGraphResourceLimitExceeded {
+                resource: "blobs",
+                ..
+            })
+        ));
+    }
     #[test]
     fn async_prolly_get_reads_tree_from_async_store() {
         let store = Arc::new(MemStore::new());
@@ -7977,6 +8453,55 @@ mod tests {
 
         async_prolly.clear_cache();
         assert_eq!(async_prolly.cache_len(), 0);
+    }
+
+    #[test]
+    fn async_detached_record_batch_is_ordered_and_strict() {
+        let store = Arc::new(MemStore::new());
+        let config = Config::default();
+        let prolly = Prolly::new(store.clone(), config.clone());
+        let empty = prolly.create();
+        let first = prolly
+            .put(&empty, b"record".to_vec(), b"first".to_vec())
+            .unwrap();
+        let second = prolly
+            .put(&empty, b"record".to_vec(), b"second".to_vec())
+            .unwrap();
+        let malformed = prolly
+            .batch(
+                &empty,
+                vec![
+                    Mutation::Upsert {
+                        key: b"record".to_vec(),
+                        val: b"first".to_vec(),
+                    },
+                    Mutation::Upsert {
+                        key: b"extra".to_vec(),
+                        val: b"second".to_vec(),
+                    },
+                ],
+            )
+            .unwrap();
+        let async_prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), config);
+
+        let values =
+            block_on(async_prolly.load_single_leaf_values_ordered(
+                &[second.clone(), first.clone(), second],
+                b"record",
+            ))
+            .unwrap();
+        assert_eq!(
+            values,
+            vec![b"second".to_vec(), b"first".to_vec(), b"second".to_vec()]
+        );
+        assert!(matches!(
+            block_on(async_prolly.load_single_leaf_values_ordered(&[malformed], b"record")),
+            Err(Error::InvalidNode)
+        ));
+        assert!(matches!(
+            block_on(async_prolly.load_single_leaf_values_ordered(&[empty], b"record")),
+            Err(Error::InvalidNode)
+        ));
     }
 
     #[test]
@@ -8058,6 +8583,18 @@ mod tests {
     }
 
     #[test]
+    fn async_cache_clear_invalidates_branch_lineage_after_external_maintenance() {
+        let store = SyncStoreAsAsync::new(Arc::new(MemStore::new()));
+        let prolly = AsyncProlly::new(store, Config::default());
+        let base = prolly.create();
+        let branch = block_on(prolly.put(&base, b"key".to_vec(), b"value".to_vec())).unwrap();
+
+        assert!(prolly.direct_branch_changes(&base, &branch).is_some());
+        prolly.clear_cache();
+        assert!(prolly.direct_branch_changes(&base, &branch).is_none());
+    }
+
+    #[test]
     fn missing_node_batch_keeps_unique_positions_inline() {
         let cid_a = Cid::from_bytes(b"a");
         let cid_b = Cid::from_bytes(b"b");
@@ -8132,11 +8669,25 @@ mod tests {
         prolly.clear_cache();
         assert_eq!(prolly.pin_tree_root(&tree).unwrap(), 1);
         assert_eq!(prolly.cache_len(), 1);
+        let pinned = prolly.cache_usage();
+        assert_eq!(pinned.entries, 1);
+        assert_eq!(pinned.pinned_entries, 1);
+        assert!(pinned.serialized_bytes > 0);
+        assert_eq!(pinned.pinned_serialized_bytes, pinned.serialized_bytes);
         assert_eq!(prolly.get(&tree, b"a").unwrap(), Some(b"1".to_vec()));
         assert_eq!(prolly.cache_len(), 2);
 
+        let mixed = prolly.cache_usage();
+        assert_eq!(mixed.entries, 2);
+        assert_eq!(mixed.pinned_entries, 1);
+        assert!(mixed.serialized_bytes > mixed.pinned_serialized_bytes);
+
         prolly.clear_unpinned_cache();
         assert_eq!(prolly.cache_len(), 1);
+        let retained = prolly.cache_usage();
+        assert_eq!(retained.entries, 1);
+        assert_eq!(retained.pinned_entries, 1);
+        assert_eq!(retained.pinned_serialized_bytes, retained.serialized_bytes);
         let gets_before = store.get_calls.load(Ordering::Relaxed);
         assert_eq!(prolly.get(&tree, b"b").unwrap(), Some(b"2".to_vec()));
         assert_eq!(
@@ -8144,6 +8695,24 @@ mod tests {
             1,
             "the pinned root should remain cached while its unpinned leaf reloads"
         );
+    }
+
+    #[test]
+    fn cache_usage_does_not_underreport_after_observability_lock_poison() {
+        let prolly = Prolly::new(Arc::new(MemStore::new()), Config::default());
+        let mut leaf = prolly.new_leaf_node();
+        leaf.keys = vec![b"key".to_vec()];
+        leaf.vals = vec![b"value".to_vec()];
+        prolly.save(&leaf).unwrap();
+        let expected = prolly.cache_usage();
+        assert!(expected.entries > 0);
+
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = prolly.node_cache().write().unwrap();
+            panic!("intentional cache-lock poison");
+        }));
+        assert!(poisoned.is_err());
+        assert_eq!(prolly.cache_usage(), expected);
     }
 
     #[test]

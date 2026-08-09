@@ -18,6 +18,10 @@ path = "src/lib.rs"
 
 [dependencies]
 aws-credential-types = "=1.2.14"
+# Keep the qualified rustls provider reproducible. aws-lc-rs 1.18.0 resolves
+# aws-lc-sys 0.44.0, which emits an invalid empty object with the supported
+# Apple clang toolchain; upgrades require the provider target/TLS matrix.
+aws-lc-rs = "=1.17.3"
 aws-runtime = "=1.7.5"
 aws-sdk-dynamodb = "=1.73.0"
 aws-sigv4 = "=1.4.5"
@@ -37,7 +41,9 @@ tokio = { version = "1.45", features = ["time"] }
 
 [dev-dependencies]
 aws-config = { version = "=1.5.18", features = ["behavior-version-latest"] }
-tokio = { version = "1.45", features = ["rt-multi-thread", "time"] }
+aws-smithy-http-client = { version = "=1.1.13", features = ["test-util"] }
+http = "1"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
 
 [[example]]
 name = "dynamodb_basic_usage"
@@ -48,4 +54,4 @@ name = "language_interop"
 path = "examples/language_interop.rs"
 
 [lints.rust]
-unsafe_code = "allow"
+unsafe_code = "forbid"
