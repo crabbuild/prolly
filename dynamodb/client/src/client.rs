@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use prolly::{ProllyCacheUsage, RemoteProllyStore, RemoteStoreConfig};
 use prolly_dynamodb_core::{
-    Clock, Database, IdGenerator, ImportAuditRecord, ImportPlanId, LargeValueConfig,
+    BulkImportOptions, BulkImportResult, Clock, Database, IdGenerator, ImportAuditRecord,
+    ImportPlanId, KeyAttribute, LargeValueConfig,
     MaintenanceContext, MaintenanceLease, MaintenanceLeaseId, MaintenanceLeaseRelease,
     StoragePublicationMode,
 };
@@ -17,7 +19,7 @@ use crate::operation::{
 };
 use crate::table::{Import, Table};
 use crate::worker::Workers;
-use crate::CapabilityReport;
+use crate::{CapabilityReport, WriteSession};
 
 type CoreDatabase = Database<DynamoDbStore>;
 
@@ -392,6 +394,41 @@ impl Client {
 
     pub fn table(&self, name: impl Into<String>) -> Table {
         Table::new(self.clone(), name.into())
+    }
+
+    /// Open an explicit large write session for one logical table.
+    pub fn write_session(&self, table_name: impl Into<String>) -> WriteSession {
+        WriteSession::new(self.clone(), table_name.into())
+    }
+
+    /// Create a table from strictly primary-key-sorted items as one initial
+    /// version. This administrative path deliberately does not emulate an AWS
+    /// operation builder and never changes `PutItem` or `BatchWriteItem`
+    /// commit semantics.
+    pub async fn bulk_import_sorted<I>(
+        &self,
+        table_name: impl Into<String>,
+        partition_key: KeyAttribute,
+        sort_key: Option<KeyAttribute>,
+        items: I,
+        options: BulkImportOptions,
+    ) -> crate::Result<BulkImportResult>
+    where
+        I: IntoIterator<Item = HashMap<String, aws_sdk_dynamodb::types::AttributeValue>>,
+    {
+        Ok(self
+            .core()
+            .bulk_import_sorted(
+                table_name,
+                partition_key,
+                sort_key,
+                items.into_iter().map(|item| {
+                    crate::conversion::item_from_aws(item)
+                        .map_err(|error| prolly_dynamodb_core::Error::Validation(error.to_string()))
+                }),
+                options,
+            )
+            .await?)
     }
 
     /// Construct explicit leased background workers. Merely opening a client

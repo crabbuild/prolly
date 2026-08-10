@@ -1,8 +1,15 @@
 pub mod prolly_dynamodb_client
 pub use prolly_dynamodb_client::AttributeValue
+pub use prolly_dynamodb_client::BulkImportOptions
+pub use prolly_dynamodb_client::BulkImportResult
 pub use prolly_dynamodb_client::CancellationToken
 pub use prolly_dynamodb_client::Commit
 pub use prolly_dynamodb_client::CommitId
+pub use prolly_dynamodb_client::DEFAULT_BULK_IMPORT_MAX_BYTES
+pub use prolly_dynamodb_client::DEFAULT_BULK_IMPORT_MAX_ITEMS
+pub use prolly_dynamodb_client::DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM
+pub use prolly_dynamodb_client::DEFAULT_LARGE_WRITE_MAX_BYTES
+pub use prolly_dynamodb_client::DEFAULT_LARGE_WRITE_MAX_ITEMS
 pub use prolly_dynamodb_client::DEFAULT_LOGICAL_RETRY_LIMIT
 pub use prolly_dynamodb_client::ImportAuditRecord
 pub use prolly_dynamodb_client::ImportPlan
@@ -14,7 +21,9 @@ pub use prolly_dynamodb_client::IndexReconfigurationPlanId
 pub use prolly_dynamodb_client::IndexReconfigurationResult
 pub use prolly_dynamodb_client::KeyAttribute
 pub use prolly_dynamodb_client::KeyKind
+pub use prolly_dynamodb_client::LargeWriteOptions
 pub use prolly_dynamodb_client::MAX_GC_PLAN_DELETES
+pub use prolly_dynamodb_client::MAX_IMMUTABLE_UPLOAD_PARALLELISM
 pub use prolly_dynamodb_client::MAX_LOGICAL_RETRY_LIMIT
 pub use prolly_dynamodb_client::MAX_MAINTENANCE_LEASE_MILLIS
 pub use prolly_dynamodb_client::MAX_RETENTION_PROTECTED_VERSIONS
@@ -563,6 +572,7 @@ pub fn prolly_dynamodb_client::Client::batch_get_item(&self) -> prolly_dynamodb_
 pub fn prolly_dynamodb_client::Client::batch_write_item(&self) -> prolly_dynamodb_client::operation::BatchWriteItem
 pub async fn prolly_dynamodb_client::Client::break_expired_maintenance_lease(&self, &prolly_dynamodb_core::database::MaintenanceLeaseId, prolly_dynamodb_core::database::MaintenanceContext) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::MaintenanceLeaseRelease>
 pub fn prolly_dynamodb_client::Client::builder() -> prolly_dynamodb_client::ClientBuilder
+pub async fn prolly_dynamodb_client::Client::bulk_import_sorted<I>(&self, impl core::convert::Into<alloc::string::String>, prolly_dynamodb_core::model::table::KeyAttribute, core::option::Option<prolly_dynamodb_core::model::table::KeyAttribute>, I, prolly_dynamodb_core::database::BulkImportOptions) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::BulkImportResult> where I: core::iter::traits::collect::IntoIterator<Item = std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>>
 pub fn prolly_dynamodb_client::Client::cache_usage(&self) -> prolly::prolly::ProllyCacheUsage
 pub fn prolly_dynamodb_client::Client::capabilities(&self) -> &prolly_dynamodb_client::CapabilityReport
 pub fn prolly_dynamodb_client::Client::create_table(&self) -> prolly_dynamodb_client::operation::CreateTable
@@ -601,6 +611,7 @@ pub fn prolly_dynamodb_client::Client::transact_get_items(&self) -> prolly_dynam
 pub fn prolly_dynamodb_client::Client::transact_write_items(&self) -> prolly_dynamodb_client::operation::TransactWriteItems
 pub fn prolly_dynamodb_client::Client::update_item(&self) -> prolly_dynamodb_client::operation::UpdateItem
 pub fn prolly_dynamodb_client::Client::workers(&self) -> prolly_dynamodb_client::Workers
+pub fn prolly_dynamodb_client::Client::write_session(&self, impl core::convert::Into<alloc::string::String>) -> prolly_dynamodb_client::WriteSession
 impl prolly_dynamodb_client::Client
 pub async fn prolly_dynamodb_client::Client::apply_gc(&self, &prolly_dynamodb_client::GcPlan, prolly_dynamodb_core::database::MaintenanceContext, prolly_dynamodb_client::GcApplyOptions) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::GcApplyResult>
 pub async fn prolly_dynamodb_client::Client::plan_gc(&self, &prolly_dynamodb_core::database::MaintenanceLeaseId, core::option::Option<&prolly_dynamodb_client::GcCursor>, prolly_dynamodb_client::GcPlanLimits) -> prolly_dynamodb_client::Result<prolly_dynamodb_client::GcPlan>
@@ -1045,6 +1056,7 @@ pub fn prolly_dynamodb_client::Table::retention(&self, prolly_dynamodb_core::dat
 pub async fn prolly_dynamodb_client::Table::retention_audit(&self, &prolly_dynamodb_core::database::RetentionPlanId) -> prolly_dynamodb_client::Result<core::option::Option<prolly_dynamodb_core::database::RetentionAuditRecord>>
 pub fn prolly_dynamodb_client::Table::update_item(&self) -> prolly_dynamodb_client::operation::UpdateItem
 pub fn prolly_dynamodb_client::Table::versions(&self) -> prolly_dynamodb_client::VersionsPaginator
+pub fn prolly_dynamodb_client::Table::write_session(&self) -> prolly_dynamodb_client::WriteSession
 impl core::clone::Clone for prolly_dynamodb_client::Table
 pub fn prolly_dynamodb_client::Table::clone(&self) -> prolly_dynamodb_client::Table
 impl core::marker::Freeze for prolly_dynamodb_client::Table
@@ -1196,6 +1208,23 @@ impl core::marker::Unpin for prolly_dynamodb_client::Workers
 impl core::marker::UnsafeUnpin for prolly_dynamodb_client::Workers
 impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::Workers
 impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::Workers
+pub struct prolly_dynamodb_client::WriteSession
+impl prolly_dynamodb_client::WriteSession
+pub async fn prolly_dynamodb_client::WriteSession::commit(self) -> prolly_dynamodb_client::Result<prolly_dynamodb_core::database::TransactWriteResult>
+pub fn prolly_dynamodb_client::WriteSession::delete(&mut self, std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>) -> prolly_dynamodb_client::Result<&mut Self>
+pub fn prolly_dynamodb_client::WriteSession::if_head(self, prolly::prolly::versioned_map::MapVersionId) -> Self
+pub fn prolly_dynamodb_client::WriteSession::is_empty(&self) -> bool
+pub fn prolly_dynamodb_client::WriteSession::len(&self) -> usize
+pub fn prolly_dynamodb_client::WriteSession::options(self, prolly_dynamodb_core::database::LargeWriteOptions) -> Self
+pub fn prolly_dynamodb_client::WriteSession::put(&mut self, std::collections::hash::map::HashMap<alloc::string::String, aws_sdk_dynamodb::types::_attribute_value::AttributeValue>) -> prolly_dynamodb_client::Result<&mut Self>
+pub fn prolly_dynamodb_client::WriteSession::request_token(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::marker::Freeze for prolly_dynamodb_client::WriteSession
+impl core::marker::Send for prolly_dynamodb_client::WriteSession
+impl core::marker::Sync for prolly_dynamodb_client::WriteSession
+impl core::marker::Unpin for prolly_dynamodb_client::WriteSession
+impl core::marker::UnsafeUnpin for prolly_dynamodb_client::WriteSession
+impl !core::panic::unwind_safe::RefUnwindSafe for prolly_dynamodb_client::WriteSession
+impl !core::panic::unwind_safe::UnwindSafe for prolly_dynamodb_client::WriteSession
 pub const prolly_dynamodb_client::DEFAULT_NODE_CACHE_MAX_BYTES: usize
 pub const prolly_dynamodb_client::MAX_GC_BLOB_DELETE_PARALLELISM: usize
 pub const prolly_dynamodb_client::MAX_WORKER_PAGE_ITEMS: usize

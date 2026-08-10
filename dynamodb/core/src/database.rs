@@ -5,11 +5,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use futures_util::{lock::Mutex, stream, StreamExt, TryStreamExt};
 use prolly::{
     AsyncManifestStore, AsyncManifestStoreScan, AsyncPreparedIndexedUpdate, AsyncProlly,
-    AsyncProllyTransaction, AsyncStore, AsyncTransactionalStore, AsyncVersionedMapsTransaction,
-    BlobRef, CollectionIndexPolicy, IndexedSnapshotId, IndexedSnapshotManifest, MapVersion,
-    MapVersionCursor, MapVersionId, MapVersionPage, Mutation, MutationBudget, NamedRootUpdate,
-    RootManifest, SnapshotExportLimits, StructuralDiffCursor, StructuralDiffPage,
-    TransactionUpdate, Tree, ValueRef, VersionedMapUpdate, DEFAULT_VERSIONED_MAP_RETRIES,
+    AsyncProllyTransaction, AsyncSortedBatchBuilder, AsyncStore, AsyncTransactionalStore,
+    AsyncVersionedMapsTransaction, BlobRef, CollectionIndexPolicy, IndexedSnapshotId,
+    IndexedSnapshotManifest, MapVersion, MapVersionCursor, MapVersionId, MapVersionPage, Mutation,
+    MutationBudget, NamedRootUpdate, RootManifest, SnapshotExportLimits, StructuralDiffCursor,
+    StructuralDiffPage, TransactionUpdate, Tree, ValueRef, VersionedMapUpdate,
+    DEFAULT_VERSIONED_MAP_RETRIES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -60,6 +61,8 @@ const MAX_READ_PAGE_BYTES: usize = 1024 * 1024;
 const READ_CHUNK_ITEMS: usize = 128;
 const IMPORT_INDEX_BATCH_ITEMS: usize = 1_024;
 const IMPORT_INDEX_BATCH_BYTES: usize = 16 * 1024 * 1024;
+pub const DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM: usize = 8;
+pub const MAX_IMMUTABLE_UPLOAD_PARALLELISM: usize = 64;
 /// DynamoDB TTL eligibility excludes timestamps older than five 365-day years.
 pub const TTL_MAX_PAST_SECONDS: u64 = 5 * 365 * 24 * 60 * 60;
 
@@ -69,6 +72,11 @@ pub const MAX_BATCH_GET_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_BATCH_WRITE_ITEMS: usize = 25;
 pub const MAX_TRANSACTION_ITEMS: usize = 100;
 pub const MAX_TRANSACTION_BYTES: usize = 4 * 1024 * 1024;
+pub const DEFAULT_LARGE_WRITE_MAX_ITEMS: usize = 100_000;
+pub const DEFAULT_LARGE_WRITE_MAX_BYTES: usize = 256 * 1024 * 1024;
+/// Default safety envelope for one explicit bulk snapshot build.
+pub const DEFAULT_BULK_IMPORT_MAX_ITEMS: usize = 1_000_000;
+pub const DEFAULT_BULK_IMPORT_MAX_BYTES: usize = 2 * 1024 * 1024 * 1024;
 pub const MAX_COMMIT_PAGE_ITEMS: usize = 1_000;
 /// Maximum number of changes returned by one resumable diff page.
 pub const MAX_DIFF_PAGE_ITEMS: usize = 1_000;
@@ -421,6 +429,51 @@ pub struct ImportAuditRecord {
     pub completed_at_millis: u64,
 }
 
+/// Explicit resource envelope for a one-version bulk snapshot import.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BulkImportOptions {
+    pub max_items: usize,
+    pub max_logical_bytes: usize,
+    pub blob_upload_parallelism: usize,
+}
+
+impl Default for BulkImportOptions {
+    fn default() -> Self {
+        Self {
+            max_items: DEFAULT_BULK_IMPORT_MAX_ITEMS,
+            max_logical_bytes: DEFAULT_BULK_IMPORT_MAX_BYTES,
+            blob_upload_parallelism: DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM,
+        }
+    }
+}
+
+impl BulkImportOptions {
+    fn validate(self) -> Result<Self> {
+        if self.max_items == 0 || self.max_logical_bytes == 0 {
+            return Err(Error::Validation(
+                "bulk import limits must be nonzero".into(),
+            ));
+        }
+        if !(1..=MAX_IMMUTABLE_UPLOAD_PARALLELISM).contains(&self.blob_upload_parallelism) {
+            return Err(Error::Validation(format!(
+                "bulk import blob upload parallelism must be 1..={MAX_IMMUTABLE_UPLOAD_PARALLELISM}"
+            )));
+        }
+        Ok(self)
+    }
+}
+
+/// Outcome of creating a table from one sorted item stream and publishing one
+/// initial version and one audit commit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BulkImportResult {
+    pub description: TableDescription,
+    pub version: MapVersionId,
+    pub commit_id: CommitId,
+    pub item_count: usize,
+    pub logical_bytes: usize,
+}
+
 /// Content identity for one exact online secondary-index reconfiguration.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IndexReconfigurationPlanId(pub [u8; 32]);
@@ -667,6 +720,40 @@ pub enum TransactWriteAction {
         condition: Condition,
         return_failure_old: bool,
     },
+}
+
+/// Resource envelope for an explicit non-AWS large write session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LargeWriteOptions {
+    pub max_items: usize,
+    pub max_logical_bytes: usize,
+    pub blob_upload_parallelism: usize,
+}
+
+impl Default for LargeWriteOptions {
+    fn default() -> Self {
+        Self {
+            max_items: DEFAULT_LARGE_WRITE_MAX_ITEMS,
+            max_logical_bytes: DEFAULT_LARGE_WRITE_MAX_BYTES,
+            blob_upload_parallelism: DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM,
+        }
+    }
+}
+
+impl LargeWriteOptions {
+    fn validate(self) -> Result<Self> {
+        if self.max_items == 0 || self.max_logical_bytes == 0 {
+            return Err(Error::Validation(
+                "large write limits must be nonzero".into(),
+            ));
+        }
+        if !(1..=MAX_IMMUTABLE_UPLOAD_PARALLELISM).contains(&self.blob_upload_parallelism) {
+            return Err(Error::Validation(format!(
+                "large write blob upload parallelism must be 1..={MAX_IMMUTABLE_UPLOAD_PARALLELISM}"
+            )));
+        }
+        Ok(self)
+    }
 }
 
 impl TransactWriteAction {
@@ -2544,9 +2631,31 @@ where
         committed_at_millis: u64,
     ) -> Result<()> {
         let encoded_commit = encode_commit_result(result)?;
-        let commit_catalog = tx
-            .load_named_root(COMMIT_CATALOG_ROOT_NAME)
-            .await?
+        // Commit metadata is a fixed cost on every logical write. Pin the
+        // global catalog and every participating table log in one ordered
+        // provider read instead of issuing one GetItem per root.
+        let log_names = result
+            .transitions
+            .iter()
+            .map(|transition| {
+                descriptions
+                    .get(&transition.table_name)
+                    .map(|description| Self::table_commit_log_root_name(&description.id))
+                    .ok_or_else(|| {
+                        Error::CorruptData(format!(
+                            "commit transition references unvalidated table {:?}",
+                            transition.table_name
+                        ))
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut root_names = Vec::with_capacity(log_names.len() + 1);
+        root_names.push(COMMIT_CATALOG_ROOT_NAME);
+        root_names.extend(log_names.iter().map(Vec::as_slice));
+        let mut roots = tx.load_named_roots_ordered(&root_names).await?.into_iter();
+        let commit_catalog = roots
+            .next()
+            .flatten()
             .unwrap_or_else(|| tx.create());
         if tx
             .get(&commit_catalog, &result.commit_id.0)
@@ -2570,7 +2679,7 @@ where
         tx.publish_named_root_at_millis(COMMIT_CATALOG_ROOT_NAME, &next, committed_at_millis)
             .await?;
         let mut seen_tables = BTreeSet::new();
-        for transition in &result.transitions {
+        for (transition, loaded_log) in result.transitions.iter().zip(roots) {
             let description = descriptions.get(&transition.table_name).ok_or_else(|| {
                 Error::CorruptData(format!(
                     "commit transition references unvalidated table {:?}",
@@ -2583,10 +2692,7 @@ where
                 ));
             }
             let log_name = Self::table_commit_log_root_name(&description.id);
-            let log = tx
-                .load_named_root(&log_name)
-                .await?
-                .unwrap_or_else(|| tx.create());
+            let log = loaded_log.unwrap_or_else(|| tx.create());
             let sequence = match tx.get(&log, COMMIT_SEQUENCE_KEY).await? {
                 Some(bytes) => decode_commit_sequence(&bytes)?
                     .checked_add(1)
@@ -3134,6 +3240,216 @@ where
             .await?
             .map(|bytes| decode_import_audit_record(&bytes))
             .transpose()
+    }
+
+    /// Create a new table from primary-key-sorted items while publishing only
+    /// one logical version and one commit. Immutable nodes and large blobs are
+    /// uploaded during the build and remain unreachable until the final root
+    /// transaction succeeds.
+    pub async fn bulk_import_sorted<I>(
+        &self,
+        name: impl Into<String>,
+        partition_key: crate::KeyAttribute,
+        sort_key: Option<crate::KeyAttribute>,
+        items: I,
+        options: BulkImportOptions,
+    ) -> Result<BulkImportResult>
+    where
+        I: IntoIterator<Item = Result<Item>>,
+    {
+        let options = options.validate()?;
+        if self.publication_mode != StoragePublicationMode::PrepublishImmutableNodes {
+            return Err(Error::Validation(
+                "bulk import requires PrepublishImmutableNodes storage publication mode".into(),
+            ));
+        }
+        let name = name.into();
+        if self
+            .engine
+            .versioned_map(CATALOG_MAP_ID)
+            .get(name.as_bytes())
+            .await?
+            .is_some()
+        {
+            return Err(Error::TableAlreadyExists(name));
+        }
+        let description = TableDescription {
+            name,
+            id: self.ids.generate()?,
+            attribute_definitions: table_key_definitions(&partition_key, sort_key.as_ref()),
+            partition_key,
+            sort_key,
+            secondary_indexes: Vec::new(),
+            status: TableStatus::Active,
+            created_at_millis: self.clock.now_millis(),
+        };
+        description.validate()?;
+
+        let mut base = AsyncSortedBatchBuilder::new(
+            self.engine.store().clone(),
+            self.engine.config().clone(),
+        );
+        let mut index_source = AsyncSortedBatchBuilder::new(
+            self.engine.store().clone(),
+            self.engine.config().clone(),
+        );
+        let mut previous_key: Option<Vec<u8>> = None;
+        let mut item_count = 0usize;
+        let mut logical_bytes = 0usize;
+        let mut introduced_blobs = BTreeMap::<prolly::Cid, BlobRef>::new();
+        let bulk_description = &description;
+        let bulk_blobs = &self.blobs;
+        let mut prepared_items = stream::iter(items.into_iter())
+            .map(move |item| async move {
+                let item = item?;
+                let item_bytes = item_size(&item)?;
+                let key = encode_primary_key(
+                    bulk_description,
+                    &key_from_item(bulk_description, &item)?,
+                )?;
+                let stored = bulk_blobs.prepare(encode_item(&item)?).await?;
+                let blob = match ValueRef::from_stored_bytes(&stored)? {
+                    ValueRef::Blob(reference) => Some(reference),
+                    ValueRef::Inline(_) => None,
+                };
+                let indexed =
+                    prepare_index_source_record(bulk_description, &item, stored.clone(), bulk_blobs)
+                        .await?;
+                Ok::<_, Error>((item_bytes, key, stored, indexed, blob))
+            })
+            // Preserve sorted source order while overlapping independent
+            // content-addressed blob uploads.
+            .buffered(options.blob_upload_parallelism);
+        while let Some((item_bytes, key, stored, indexed, blob)) =
+            prepared_items.try_next().await?
+        {
+            item_count = item_count
+                .checked_add(1)
+                .ok_or_else(|| Error::Validation("bulk import item count overflow".into()))?;
+            if item_count > options.max_items {
+                return Err(Error::Validation(format!(
+                    "bulk import exceeds {} items",
+                    options.max_items
+                )));
+            }
+            logical_bytes = logical_bytes
+                .checked_add(item_bytes)
+                .ok_or_else(|| Error::Validation("bulk import byte count overflow".into()))?;
+            if logical_bytes > options.max_logical_bytes {
+                return Err(Error::Validation(format!(
+                    "bulk import exceeds {} logical bytes",
+                    options.max_logical_bytes
+                )));
+            }
+            if previous_key.as_ref().is_some_and(|previous| key <= *previous) {
+                return Err(Error::Validation(
+                    "bulk import items must have strictly increasing primary keys".into(),
+                ));
+            }
+            if let Some(reference) = blob {
+                introduced_blobs.insert(reference.cid.clone(), reference);
+            }
+            base.add(key.clone(), stored).await?;
+            index_source.add(key.clone(), indexed).await?;
+            previous_key = Some(key);
+        }
+        drop(prepared_items);
+        base.add(
+            TABLE_SCHEMA_RECORD_KEY.to_vec(),
+            encode_table_schema_record(&description)?,
+        )
+        .await?;
+        let base = base.build().await?;
+        let index_source = index_source.build().await?;
+        let version = MapVersionId::for_tree(&base)?;
+        let budget = prolly::MaintenanceBudget::default();
+        let prepared_indexes = self
+            .engine
+            .prepare_indexed_map_from_source_with_policy(
+                Self::table_indexed_source_id(&description.id),
+                index_registry(&description)?,
+                index_source,
+                &budget,
+                table_index_policy(),
+            )
+            .await?;
+
+        let committed_at_millis = self.clock.now_millis();
+        let commit_id = CommitId(self.ids.generate()?.0);
+        let tx = self.engine.begin_transaction()?;
+        let maps = tx.versioned_maps_at_millis(committed_at_millis);
+        self.prefetch_transaction_global_roots(&tx).await?;
+        self.ensure_writes_unfenced(&tx, &maps).await?;
+        if maps
+            .get(CATALOG_MAP_ID, description.name.as_bytes())
+            .await?
+            .is_some()
+        {
+            tx.rollback();
+            return Err(Error::TableAlreadyExists(description.name));
+        }
+        if !matches!(
+            tx.compare_and_swap_named_root_at_millis(
+                prepared_indexes.root_name(),
+                prepared_indexes.expected_state_tree(),
+                Some(prepared_indexes.candidate_state_tree()),
+                committed_at_millis,
+            )
+            .await?,
+            NamedRootUpdate::Applied
+        ) {
+            tx.rollback();
+            return Err(Error::ConflictExhausted);
+        }
+        let table_map = self.engine.versioned_map(Self::table_map_id(&description.id));
+        tx.publish_named_root_at_millis(
+            &table_map.version_root_name(&version),
+            &base,
+            committed_at_millis,
+        )
+        .await?;
+        tx.publish_named_root_at_millis(table_map.head_name(), &base, committed_at_millis)
+            .await?;
+        self.stage_table_blob_references(
+            &tx,
+            &description.id,
+            introduced_blobs.values(),
+            committed_at_millis,
+        )
+        .await?;
+        self.stage_table_snapshot_manifest(
+            &tx,
+            &description,
+            &version,
+            prepared_indexes.manifest(),
+            committed_at_millis,
+        )
+        .await?;
+        let encoded = encode_description(&description)?;
+        maps.put(CATALOG_MAP_ID, description.name.as_bytes(), encoded.clone())
+            .await?;
+        maps.put(TABLE_DESCRIPTOR_MAP_ID, description.id.0.to_vec(), encoded)
+            .await?;
+        let commit = self
+            .stage_single_table_commit(
+                &tx,
+                &description,
+                commit_id.clone(),
+                None,
+                Some(version.clone()),
+                committed_at_millis,
+            )
+            .await?;
+        match tx.commit().await? {
+            TransactionUpdate::Applied { .. } => Ok(BulkImportResult {
+                description,
+                version,
+                commit_id: commit.commit_id,
+                item_count,
+                logical_bytes,
+            }),
+            TransactionUpdate::Conflict(_) => Err(Error::ConflictExhausted),
+        }
     }
 
     /// Create one active table and its empty initial version atomically.
@@ -4264,9 +4580,59 @@ where
         client_request_token: Option<&str>,
         expected_heads: &BTreeMap<String, MapVersionId>,
     ) -> Result<TransactWriteResult> {
-        if actions.is_empty() || actions.len() > MAX_TRANSACTION_ITEMS {
+        self.transact_write_with_limits(
+            actions,
+            client_request_token,
+            expected_heads,
+            MAX_TRANSACTION_ITEMS,
+            MAX_TRANSACTION_BYTES,
+            DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM,
+            "TransactWriteItems",
+        )
+        .await
+    }
+
+    /// Apply a caller-bounded set of actions as one version and one commit.
+    /// This extension requires immutable-node prepublication and is not subject
+    /// to AWS `TransactWriteItems`' 100-item/4-MiB logical envelope.
+    pub async fn write_large(
+        &self,
+        actions: Vec<TransactWriteAction>,
+        client_request_token: Option<&str>,
+        expected_heads: &BTreeMap<String, MapVersionId>,
+        options: LargeWriteOptions,
+    ) -> Result<TransactWriteResult> {
+        let options = options.validate()?;
+        if self.publication_mode != StoragePublicationMode::PrepublishImmutableNodes {
+            return Err(Error::Validation(
+                "large writes require PrepublishImmutableNodes storage publication mode".into(),
+            ));
+        }
+        self.transact_write_with_limits(
+            actions,
+            client_request_token,
+            expected_heads,
+            options.max_items,
+            options.max_logical_bytes,
+            options.blob_upload_parallelism,
+            "large write",
+        )
+        .await
+    }
+
+    async fn transact_write_with_limits(
+        &self,
+        actions: Vec<TransactWriteAction>,
+        client_request_token: Option<&str>,
+        expected_heads: &BTreeMap<String, MapVersionId>,
+        max_items: usize,
+        max_logical_bytes: usize,
+        blob_upload_parallelism: usize,
+        operation: &str,
+    ) -> Result<TransactWriteResult> {
+        if actions.is_empty() || actions.len() > max_items {
             return Err(Error::Validation(format!(
-                "TransactWriteItems requires 1..={MAX_TRANSACTION_ITEMS} actions"
+                "{operation} requires 1..={max_items} actions"
             )));
         }
         validate_client_request_token(client_request_token)?;
@@ -4405,9 +4771,18 @@ where
                     )));
                 }
                 let map_id = Self::table_map_id(&description.id);
-                let old_item = match maps.get(&map_id, &encoded_key).await? {
-                    Some(bytes) => Some(decode_item(&self.blobs.resolve(&bytes).await?)?),
-                    None => None,
+                // Unconditional Put/Delete actions do not consume the old
+                // image. Avoid one tree/blob read per action; batch mutation
+                // and index maintenance remain authoritative for replacement
+                // and deletion semantics.
+                let needs_old_item = condition.is_some()
+                    || matches!(action, TransactWriteAction::Update { .. });
+                let old_item = match needs_old_item {
+                    true => match maps.get(&map_id, &encoded_key).await? {
+                        Some(bytes) => Some(decode_item(&self.blobs.resolve(&bytes).await?)?),
+                        None => None,
+                    },
+                    false => None,
                 };
                 if let Some(condition) = condition {
                     if !condition.evaluate(old_item.as_ref())? {
@@ -4450,9 +4825,9 @@ where
                 transaction_bytes = transaction_bytes
                     .checked_add(logical_bytes)
                     .ok_or_else(|| Error::Validation("transaction item size overflow".into()))?;
-                if transaction_bytes > MAX_TRANSACTION_BYTES {
+                if transaction_bytes > max_logical_bytes {
                     return Err(Error::Validation(format!(
-                        "TransactWriteItems aggregate item size exceeds {MAX_TRANSACTION_BYTES} bytes"
+                        "{operation} aggregate item size exceeds {max_logical_bytes} bytes"
                     )));
                 }
                 if let Some(mutation) = mutation {
@@ -4495,10 +4870,9 @@ where
                 let description = descriptions
                     .get(&table)
                     .expect("validated table description");
-                let mut prepared = Vec::with_capacity(mutations.len());
-                let mut indexed_mutations = Vec::with_capacity(mutations.len());
-                for mutation in mutations {
-                    match mutation {
+                let prepared_pairs = stream::iter(mutations)
+                    .map(|mutation| async move {
+                        Ok::<_, Error>(match mutation {
                         PendingMutation::Upsert { key, item } => {
                             let stored_item = self.blobs.prepare(encode_item(&item)?).await?;
                             let index_source = prepare_index_source_record(
@@ -4508,21 +4882,28 @@ where
                                 &self.blobs,
                             )
                             .await?;
-                            prepared.push(Mutation::Upsert {
-                                key: key.clone(),
-                                val: stored_item,
-                            });
-                            indexed_mutations.push(Mutation::Upsert {
-                                key,
-                                val: index_source,
-                            });
+                            (
+                                Mutation::Upsert {
+                                    key: key.clone(),
+                                    val: stored_item,
+                                },
+                                Mutation::Upsert {
+                                    key,
+                                    val: index_source,
+                                },
+                            )
                         }
-                        PendingMutation::Delete { key } => {
-                            prepared.push(Mutation::Delete { key: key.clone() });
-                            indexed_mutations.push(Mutation::Delete { key });
-                        }
-                    }
-                }
+                        PendingMutation::Delete { key } => (
+                            Mutation::Delete { key: key.clone() },
+                            Mutation::Delete { key },
+                        ),
+                    })
+                    })
+                    .buffer_unordered(blob_upload_parallelism)
+                    .try_collect::<Vec<_>>()
+                    .await?;
+                let (prepared, indexed_mutations): (Vec<_>, Vec<_>) =
+                    prepared_pairs.into_iter().unzip();
                 let before = before_versions[&table].clone();
                 let Some(after) = self
                     .stage_indexed_table_mutations(
