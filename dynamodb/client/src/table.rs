@@ -12,7 +12,7 @@ use prolly_dynamodb_core::{
 };
 
 use crate::operation::{DeleteItem, GetItem, PutItem, Query, Scan, UpdateItem};
-use crate::{Client, Error, Result, TableTransitionMetadata, WithMetadata};
+use crate::{Client, Error, Result, TableTransitionMetadata, WithMetadata, WriteSession};
 
 #[derive(Clone)]
 pub struct Table {
@@ -114,6 +114,11 @@ impl Table {
 
     pub fn update_item(&self) -> UpdateItem {
         self.client.update_item().table_name(&self.name)
+    }
+
+    /// Open an explicit large write session scoped to this table.
+    pub fn write_session(&self) -> WriteSession {
+        WriteSession::new(self.client.clone(), self.name.clone())
     }
 
     pub fn if_head(&self, version: MapVersionId) -> ConditionalTable {
