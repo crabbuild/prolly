@@ -1,0 +1,121 @@
+<svg viewBox="0 0 1040 690" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title description" font-family="Arial, Helvetica, sans-serif">
+  <title id="title">Versioned S3 client architecture</title>
+  <desc id="description">An application calls an in-process Versioned S3 adapter. The adapter stores immutable content and commits before publishing one branch reference with compare-and-swap. An optional SlateDB index shares the bucket but is not authoritative.</desc>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="690" fill="#0f172a"/>
+  <rect width="1040" height="690" fill="url(#grid)"/>
+
+  <text x="36" y="42" fill="#f8fafc" font-size="18" font-weight="700">Versioned S3: one bucket, repository semantics</text>
+  <text x="36" y="64" fill="#94a3b8" font-size="10">The adapter runs in your process. S3 remains the durable source of truth.</text>
+
+  <!-- Regions -->
+  <rect x="250" y="92" width="420" height="418" rx="14" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="266" y="115" fill="#34d399" font-size="10" font-weight="600">YOUR PROCESS</text>
+  <rect x="720" y="92" width="284" height="418" rx="14" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="736" y="115" fill="#fbbf24" font-size="10" font-weight="600">ONE PHYSICAL S3 BUCKET</text>
+
+  <!-- Connectors behind boxes -->
+  <path d="M 202 244 L 290 244" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <path d="M 455 220 L 455 272" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <path d="M 455 350 L 375 396" fill="none" stroke="#34d399" stroke-width="1.7" marker-end="url(#arrow-emerald)"/>
+  <path d="M 610 301 L 696 301 L 696 173 L 755 173" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <path d="M 610 324 L 696 324 L 696 324 L 755 324" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+  <path d="M 450 425 L 696 425 L 696 350 L 755 350" fill="none" stroke="#a78bfa" stroke-width="1.7" marker-end="url(#arrow-violet)"/>
+  <path d="M 620 425 L 696 425 L 696 459 L 755 459" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow-violet)"/>
+
+  <!-- Labels on connectors -->
+  <rect x="208" y="226" width="76" height="15" rx="3" fill="#0f172a"/>
+  <text x="246" y="237" fill="#22d3ee" font-size="8" text-anchor="middle">AWS-shaped calls</text>
+  <rect x="617" y="157" width="130" height="15" rx="3" fill="#0f172a"/>
+  <text x="682" y="168" fill="#fbbf24" font-size="8" text-anchor="middle">2. publish ref with CAS</text>
+  <rect x="627" y="307" width="122" height="15" rx="3" fill="#0f172a"/>
+  <text x="688" y="318" fill="#a78bfa" font-size="8" text-anchor="middle">1. write immutable data</text>
+
+  <!-- Opaque masks -->
+  <rect x="42" y="198" width="160" height="92" rx="8" fill="#0f172a"/>
+  <rect x="290" y="144" width="330" height="76" rx="8" fill="#0f172a"/>
+  <rect x="290" y="272" width="330" height="78" rx="8" fill="#0f172a"/>
+  <rect x="300" y="390" width="150" height="70" rx="8" fill="#0f172a"/>
+  <rect x="470" y="390" width="150" height="70" rx="8" fill="#0f172a"/>
+  <rect x="755" y="135" width="214" height="76" rx="8" fill="#0f172a"/>
+  <rect x="755" y="270" width="214" height="112" rx="8" fill="#0f172a"/>
+  <rect x="755" y="425" width="214" height="68" rx="8" fill="#0f172a"/>
+
+  <!-- Components -->
+  <rect x="42" y="198" width="160" height="92" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="122" y="228" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Your application</text>
+  <text x="122" y="249" fill="#94a3b8" font-size="9" text-anchor="middle">Rust + aws_sdk_s3::Client</text>
+  <text x="122" y="268" fill="#94a3b8" font-size="9" text-anchor="middle">No proxy or sidecar</text>
+
+  <rect x="290" y="144" width="330" height="76" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="455" y="173" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">S3-shaped client API</text>
+  <text x="455" y="194" fill="#94a3b8" font-size="9" text-anchor="middle">put · get · list · copy · multipart · versions</text>
+
+  <rect x="290" y="272" width="330" height="78" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="455" y="302" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Repository and commit engine</text>
+  <text x="455" y="323" fill="#94a3b8" font-size="9" text-anchor="middle">snapshots · branches · atomic commits · merge · GC</text>
+
+  <rect x="300" y="390" width="150" height="70" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="375" y="418" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle">Prolly trees</text>
+  <text x="375" y="438" fill="#94a3b8" font-size="9" text-anchor="middle">bucket state by commit</text>
+
+  <rect x="470" y="390" width="150" height="70" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="545" y="418" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle">SlateDB index</text>
+  <text x="545" y="438" fill="#94a3b8" font-size="9" text-anchor="middle">optional · rebuildable</text>
+
+  <rect x="755" y="135" width="214" height="76" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="862" y="164" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle">Branch and tag refs</text>
+  <text x="862" y="185" fill="#94a3b8" font-size="9" text-anchor="middle">conditional writes define visibility</text>
+
+  <rect x="755" y="270" width="214" height="112" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="862" y="299" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle">Immutable repository data</text>
+  <text x="862" y="322" fill="#94a3b8" font-size="9" text-anchor="middle">chunks · content manifests · nodes</text>
+  <text x="862" y="341" fill="#94a3b8" font-size="9" text-anchor="middle">commits · deltas · reflogs</text>
+  <text x="862" y="360" fill="#94a3b8" font-size="9" text-anchor="middle">.prolly/v1/…</text>
+
+  <rect x="755" y="425" width="214" height="68" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="862" y="452" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle">Advisory cache data</text>
+  <text x="862" y="474" fill="#94a3b8" font-size="9" text-anchor="middle">.prolly-cache/… · safe to rebuild</text>
+
+  <!-- Publication sequence -->
+  <text x="36" y="557" fill="#f8fafc" font-size="13" font-weight="700">What makes a write visible</text>
+  <line x1="106" y1="610" x2="930" y2="610" stroke="#334155" stroke-width="2"/>
+  <path d="M 258 610 L 310 610" fill="none" stroke="#64748b" marker-end="url(#arrow-emerald)"/>
+  <path d="M 478 610 L 530 610" fill="none" stroke="#64748b" marker-end="url(#arrow-emerald)"/>
+  <path d="M 698 610 L 750 610" fill="none" stroke="#64748b" marker-end="url(#arrow-emerald)"/>
+
+  <circle cx="106" cy="610" r="24" fill="#0f172a" stroke="#a78bfa" stroke-width="2"/>
+  <text x="106" y="615" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">1</text>
+  <text x="106" y="650" fill="#cbd5e1" font-size="9" text-anchor="middle">write payload + nodes</text>
+
+  <circle cx="326" cy="610" r="24" fill="#0f172a" stroke="#a78bfa" stroke-width="2"/>
+  <text x="326" y="615" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">2</text>
+  <text x="326" y="650" fill="#cbd5e1" font-size="9" text-anchor="middle">write immutable commit</text>
+
+  <circle cx="546" cy="610" r="24" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+  <text x="546" y="615" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">3</text>
+  <text x="546" y="650" fill="#cbd5e1" font-size="9" text-anchor="middle">CAS the branch ref</text>
+
+  <circle cx="766" cy="610" r="24" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+  <text x="766" y="615" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">4</text>
+  <text x="766" y="650" fill="#cbd5e1" font-size="9" text-anchor="middle">readers pin the commit</text>
+
+  <text x="1004" y="670" fill="#64748b" font-size="8" text-anchor="end">SlateDB never publishes refs</text>
+</svg>
