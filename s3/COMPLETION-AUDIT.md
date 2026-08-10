@@ -36,7 +36,13 @@ Status meanings:
 | Bounded streaming and retry without rereading caller bodies | **Proven** | Deterministic failure tests, 10,000-operation corpus, and 160 MiB RSS probe |
 | Retention, fsck, exact-version GC, and recoverability | **Proven** | Fault-injection tests, maintenance matrix, lease fencing, IAM drill, and physical backup/restore rehearsal |
 | Operational and release instructions | **Proven** | `README.md`, `OPERATIONS.md`, required CI workflow, dependency-security gate, and signed package rehearsal |
-| Corrected final-source 24-hour RustFS stability run | **Running** | `soak-evidence/local-20260809-24h-cleanup-v2-screen-final/soak.log`; completion requires the terminal manifest, checksums, independent verifier, 86,400 elapsed seconds, zero failed/missing workflow or cleanup records, zero restarts, and all resource bounds |
+| Corrected final-source 24-hour RustFS stability run | **Incomplete** | `soak-evidence/local-20260809-24h-cleanup-v2-screen-final/soak.log` ended at iteration 37 after the local Docker daemon stopped and the provider endpoint became unreachable. A new uninterrupted run is required. |
+
+The screen-supervised
+`local-20260809-24h-cleanup-v2-screen-final` run completed 36 valid iterations,
+then failed during iteration 37 when the local Docker daemon stopped and
+`127.0.0.1:9000` refused connections. Its evidence remains preserved as an
+incomplete diagnostic run and contributes no elapsed time to the release gate.
 
 The earlier terminal-owned
 `local-20260809-24h-cleanup-v2-final` evidence ended after 5,343 valid seconds
