@@ -7,6 +7,10 @@ It is an in-process Rust client adapter, not an S3 HTTP proxy: callers provide
 an `aws_sdk_s3::Client`, then use familiar S3-shaped builders against a logical
 bucket whose complete state is published as immutable Prolly commits.
 
+See [`API.md`](API.md) for the complete client API, request and response
+contracts, lifecycle and maintenance operations, and examples for every API
+family.
+
 The exact implemented surface and intentional exclusions are recorded in
 [`compatibility-v1.json`](compatibility-v1.json). S3 remains authoritative.
 SlateDB is optional and rebuildable; it never owns branch publication.
