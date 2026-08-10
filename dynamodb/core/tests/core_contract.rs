@@ -14,12 +14,131 @@ use prolly::{
 use prolly_dynamodb_core::{
     encode_item, encode_primary_key, item_size, parse_key_condition, parse_projection,
     parse_update, AttributeValue, BatchGetTableRequest, BatchWriteAction, BatchWriteExecutionError,
-    BlobFuture, BlobStorage, Clock, Condition, Database, DatabaseFormatRecord, DynamoNumber,
-    IdGenerator, IndexQueryRequest, Item, KeyAttribute, KeyCondition, KeyKind, LargeValueConfig,
-    MaintenanceContext, Result, RetentionPolicy, SecondaryIndexDefinition, SecondaryIndexKind,
-    SecondaryIndexProjection, StoragePublicationMode, TableArchive, TableArchiveLimits, TableId,
-    TransactGetRequest, TransactWriteAction, TransactionCancellationCode,
+    BlobFuture, BlobStorage, BulkImportOptions, Clock, Condition, Database, DatabaseFormatRecord,
+    DynamoNumber, IdGenerator, IndexQueryRequest, Item, KeyAttribute, KeyCondition, KeyKind,
+    LargeValueConfig, LargeWriteOptions, MaintenanceContext, Result, RetentionPolicy,
+    SecondaryIndexDefinition, SecondaryIndexKind, SecondaryIndexProjection,
+    StoragePublicationMode, TableArchive, TableArchiveLimits, TableId, TransactGetRequest,
+    TransactWriteAction, TransactionCancellationCode,
 };
+
+#[test]
+fn bulk_import_sorted_publishes_one_version_and_one_commit() {
+    block_on(async {
+        let database = Database::open_with_blob_storage_and_mode_and_sources(
+            SyncStoreAsAsync::new(Arc::new(MemStore::new())),
+            Config::default(),
+            Arc::new(RecordingBlobs::default()),
+            LargeValueConfig::default(),
+            StoragePublicationMode::PrepublishImmutableNodes,
+            Arc::new(WideSequenceIds::default()),
+            Arc::new(FixedClock),
+        )
+        .await
+        .unwrap();
+        let key = KeyAttribute {
+            name: "id".into(),
+            kind: KeyKind::String,
+        };
+        let items = (0..1_001)
+            .map(|index| {
+                Item::from([
+                    ("id".into(), AttributeValue::S(format!("{index:08}"))),
+                    ("value".into(), AttributeValue::S("payload".into())),
+                ])
+            })
+            .collect::<Vec<_>>();
+        let result = database
+            .bulk_import_sorted(
+                "Imported",
+                key,
+                None,
+                items.into_iter().map(Ok),
+                BulkImportOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.item_count, 1_001);
+        assert_eq!(database.versions("Imported").await.unwrap().len(), 1);
+        assert_eq!(
+            database
+                .commits("Imported", None, 10)
+                .await
+                .unwrap()
+                .commits
+                .len(),
+            1
+        );
+        let found = database
+            .get_item(
+                "Imported",
+                &Item::from([("id".into(), AttributeValue::S("00001000".into()))]),
+            )
+            .await
+            .unwrap();
+        assert!(found.is_some());
+    });
+}
+
+#[test]
+fn explicit_large_write_exceeds_aws_action_limit_in_one_commit() {
+    block_on(async {
+        let database = Database::open_with_blob_storage_and_mode_and_sources(
+            SyncStoreAsAsync::new(Arc::new(MemStore::new())),
+            Config::default(),
+            Arc::new(RecordingBlobs::default()),
+            LargeValueConfig::default(),
+            StoragePublicationMode::PrepublishImmutableNodes,
+            Arc::new(WideSequenceIds::default()),
+            Arc::new(FixedClock),
+        )
+        .await
+        .unwrap();
+        database
+            .create_table(
+                "Large",
+                KeyAttribute {
+                    name: "id".into(),
+                    kind: KeyKind::String,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+        let actions = (0..101)
+            .map(|index| TransactWriteAction::Put {
+                table_name: "Large".into(),
+                item: Item::from([(
+                    "id".into(),
+                    AttributeValue::S(format!("{index:08}")),
+                )]),
+                condition: None,
+                return_failure_old: false,
+            })
+            .collect();
+        database
+            .write_large(
+                actions,
+                None,
+                &BTreeMap::new(),
+                LargeWriteOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(database.versions("Large").await.unwrap().len(), 2);
+        assert_eq!(
+            database
+                .commits("Large", None, 10)
+                .await
+                .unwrap()
+                .commits
+                .len(),
+            2
+        );
+    });
+}
 
 #[test]
 fn logical_retry_tuning_is_bounded_and_format_neutral() {

@@ -61,6 +61,27 @@ cannot silently produce acceptable evidence.
 Runner v14 also binds `BENCH_NODE_CACHE_MAX_BYTES` into the executable CLI,
 run manifest, and validator. It defaults to the client's 64-MiB retained
 serialized-node weight; zero disables caching. This is not a process-RSS cap.
+
+The executable also has a focused `bulk` workload for the one-version import
+path. It records latency, SDK/wire calls, request/response bytes, and physical
+transaction actions, then verifies that the imported table has exactly one
+version. For example, against an already-running DynamoDB Local instance:
+
+```bash
+cargo run --release --manifest-path benchmarks/dynamodb-client/Cargo.toml -- \
+  --workload bulk --records 1000000 --value-bytes 1024 --samples 1 \
+  --endpoint http://127.0.0.1:8000 \
+  --output performance-results/dynamodb-client-bulk-1m
+```
+
+This path consumes primary-key-sorted records and creates one commit for the
+entire import. It is distinct from compatible `BatchWriteItem`, which retains
+one commit per accepted item action.
+
+Use `--workload large` with the same size flags to profile an explicit
+`WriteSession` commit into an existing empty table. The timed row is
+`LargeWriteCommit`; table creation is outside that row, and the harness verifies
+that the session adds exactly one version.
 The result directory contains raw samples, a deterministic summary/report,
 machine and run manifests, dependency graph, binary digest, build log, DynamoDB
 artifact identity, raw BSD/GNU process timing, and normalized peak RSS. The raw

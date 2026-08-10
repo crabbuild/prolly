@@ -17,9 +17,9 @@ use aws_smithy_runtime_api::client::interceptors::context::{
 use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_types::config_bag::ConfigBag;
 use prolly_dynamodb_client::{
-    Client, GcApplyOptions, GcPlanLimits, KeyAttribute, KeyKind, MaintenanceContext,
-    RetentionPolicy, SecondaryIndexDefinition, SecondaryIndexKind, SecondaryIndexProjection,
-    WithMetadata, MIN_MAINTENANCE_LEASE_MILLIS,
+    BulkImportOptions, Client, GcApplyOptions, GcPlanLimits, KeyAttribute, KeyKind,
+    LargeWriteOptions, MaintenanceContext, RetentionPolicy, SecondaryIndexDefinition,
+    SecondaryIndexKind, SecondaryIndexProjection, WithMetadata, MIN_MAINTENANCE_LEASE_MILLIS,
 };
 use prolly_store_dynamodb::DynamoDbBackend;
 use serde::Serialize;
@@ -62,6 +62,8 @@ struct Args {
 enum Workload {
     Full,
     History,
+    Bulk,
+    Large,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -339,6 +341,12 @@ async fn run(args: Result<Args, String>) -> Result<(), String> {
     backend.initialize_schema().await.map_err(error)?;
     if args.workload == Workload::History {
         return run_history_workload(&args, &metrics, &backend, &raw_path).await;
+    }
+    if args.workload == Workload::Bulk {
+        return run_bulk_workload(&args, &metrics, &backend, &raw_path).await;
+    }
+    if args.workload == Workload::Large {
+        return run_large_write_workload(&args, &metrics, &backend, &raw_path).await;
     }
     let client = Client::builder()
         .backend(backend.clone())
@@ -2064,6 +2072,195 @@ async fn run(args: Result<Args, String>) -> Result<(), String> {
     Ok(())
 }
 
+async fn run_large_write_workload(
+    args: &Args,
+    metrics: &PhysicalMetrics,
+    backend: &DynamoDbBackend,
+    raw_path: &std::path::Path,
+) -> Result<(), String> {
+    let mut writer = csv::Writer::from_path(raw_path).map_err(error)?;
+    for sample in 0..args.samples {
+        let mut sample_prefix = backend.key_prefix().to_vec();
+        sample_prefix.extend_from_slice(format!("large-sample-{sample}:").as_bytes());
+        let client = Client::builder()
+            .backend(backend.clone().with_key_prefix(sample_prefix))
+            .node_cache_max_bytes(args.node_cache_max_bytes)
+            .open()
+            .await
+            .map_err(error)?;
+        let table = format!("BenchmarkLarge{sample}");
+        client
+            .create_table()
+            .table_name(&table)
+            .attribute_definitions(
+                AttributeDefinition::builder()
+                    .attribute_name("id")
+                    .attribute_type(ScalarAttributeType::S)
+                    .build()
+                    .map_err(error)?,
+            )
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("id")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .map_err(error)?,
+            )
+            .send()
+            .await
+            .map_err(error)?;
+        let logical_bytes = logical_item_bytes("00000000000000000000", args.value_bytes)
+            .checked_mul(args.records)
+            .ok_or("large write logical byte count overflowed")?;
+        measure(
+            args,
+            metrics,
+            &mut writer,
+            "LargeWriteCommit",
+            "warm",
+            sample,
+            logical_bytes,
+            0,
+            true,
+            1,
+            async {
+                let mut session = client.table(&table).write_session().options(LargeWriteOptions {
+                    max_items: args.records,
+                    max_logical_bytes: logical_bytes.max(1),
+                    ..LargeWriteOptions::default()
+                });
+                for index in 0..args.records {
+                    session
+                        .put(HashMap::from([
+                            ("id".into(), AttributeValue::S(format!("{index:020}"))),
+                            (
+                                "payload".into(),
+                                AttributeValue::B(value(index, 0, args.value_bytes).into()),
+                            ),
+                        ]))
+                        .map_err(error)?;
+                }
+                let result = session.commit().await.map_err(error)?;
+                if result.transitions.len() != 1 || !result.transitions[0].applied {
+                    return Err("large write did not report one applied transition".into());
+                }
+                Ok(args.records)
+            },
+        )
+        .await?;
+        if client
+            .table(&table)
+            .collect_versions()
+            .await
+            .map_err(error)?
+            .len()
+            != 2
+        {
+            return Err("large write did not create exactly one version after table creation".into());
+        }
+    }
+    writer.flush().map_err(error)?;
+    writer.get_ref().sync_all().map_err(error)?;
+    if args.cleanup {
+        backend.clear_namespace().await.map_err(error)?;
+    }
+    println!(
+        "wrote {} validated large-write samples to {}",
+        args.samples,
+        raw_path.display()
+    );
+    Ok(())
+}
+
+async fn run_bulk_workload(
+    args: &Args,
+    metrics: &PhysicalMetrics,
+    backend: &DynamoDbBackend,
+    raw_path: &std::path::Path,
+) -> Result<(), String> {
+    let mut writer = csv::Writer::from_path(raw_path).map_err(error)?;
+    for sample in 0..args.samples {
+        let mut sample_prefix = backend.key_prefix().to_vec();
+        sample_prefix.extend_from_slice(format!("bulk-sample-{sample}:").as_bytes());
+        let client = Client::builder()
+            .backend(backend.clone().with_key_prefix(sample_prefix))
+            .node_cache_max_bytes(args.node_cache_max_bytes)
+            .open()
+            .await
+            .map_err(error)?;
+        let table = format!("BenchmarkBulk{sample}");
+        let logical_bytes = logical_item_bytes("00000000000000000000", args.value_bytes)
+            .checked_mul(args.records)
+            .ok_or("bulk import logical byte count overflowed")?;
+        measure(
+            args,
+            metrics,
+            &mut writer,
+            "BulkImportSorted",
+            "cold",
+            sample,
+            logical_bytes,
+            0,
+            true,
+            1,
+            async {
+                let items = (0..args.records).map(|index| {
+                    HashMap::from([
+                        ("id".into(), AttributeValue::S(format!("{index:020}"))),
+                        (
+                            "payload".into(),
+                            AttributeValue::B(value(index, 0, args.value_bytes).into()),
+                        ),
+                    ])
+                });
+                let result = client
+                    .bulk_import_sorted(
+                        &table,
+                        KeyAttribute {
+                            name: "id".into(),
+                            kind: KeyKind::String,
+                        },
+                        None,
+                        items,
+                        BulkImportOptions::default(),
+                    )
+                    .await
+                    .map_err(error)?;
+                if result.item_count != args.records {
+                    return Err(format!(
+                        "bulk import reported {} items; expected {}",
+                        result.item_count, args.records
+                    ));
+                }
+                Ok(result.item_count)
+            },
+        )
+        .await?;
+        let versions = client
+            .table(&table)
+            .collect_versions()
+            .await
+            .map_err(error)?;
+        if versions.len() != 1 {
+            return Err(format!(
+                "bulk import created {} versions; expected 1",
+                versions.len()
+            ));
+        }
+    }
+    writer.flush().map_err(error)?;
+    writer.get_ref().sync_all().map_err(error)?;
+    if args.cleanup {
+        backend.clear_namespace().await.map_err(error)?;
+    }
+    println!(
+        "wrote {} validated bulk-import samples to {}",
+        args.samples,
+        raw_path.display()
+    );
+    Ok(())
+}
+
 async fn run_history_workload(
     args: &Args,
     metrics: &PhysicalMetrics,
@@ -2498,6 +2695,8 @@ fn parse_args() -> Result<Args, String> {
                 args.workload = match take(&values, &mut index, flag)?.as_str() {
                     "full" => Workload::Full,
                     "history" => Workload::History,
+                    "bulk" => Workload::Bulk,
+                    "large" => Workload::Large,
                     value => return Err(format!("invalid --workload: {value}")),
                 }
             }

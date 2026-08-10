@@ -11,10 +11,11 @@ mod model;
 
 pub use blob::{BlobFuture, BlobStorage, InlineBlobStorage};
 pub use database::{
-    BatchGetResult, BatchGetTableRequest, BatchGetTableResult, BatchWriteAction,
+    BatchGetResult, BatchGetTableRequest, BatchGetTableResult, BatchWriteAction, BulkImportOptions,
+    BulkImportResult,
     BatchWriteExecutionError, BatchWriteResult, BatchWriteTransition, Clock, CommitId, Database,
     GcExecutionRecord, GcExecutionResult, GcExecutionState, IdGenerator, ImportAuditRecord,
-    ImportPlan, ImportPlanId, ImportResult, IndexQueryRequest, IndexReadPage,
+    ImportPlan, ImportPlanId, ImportResult, IndexQueryRequest, IndexReadPage, LargeWriteOptions,
     IndexReconfigurationAuditRecord, IndexReconfigurationPlan, IndexReconfigurationPlanId,
     IndexReconfigurationResult, ItemRead, ItemUpdate, ItemWrite, MaintenanceContext,
     MaintenanceLease, MaintenanceLeaseId, MaintenanceLeaseRelease, ReadPage, RestoreResult,
@@ -28,7 +29,10 @@ pub use database::{
     MAX_BATCH_WRITE_ITEMS, MAX_COLLECTED_DIFF_ITEMS, MAX_COLLECTED_VERSIONS, MAX_COMMIT_PAGE_ITEMS,
     MAX_DIFF_PAGE_ITEMS, MAX_GC_PLAN_DELETES, MAX_LOGICAL_RETRY_LIMIT,
     MAX_MAINTENANCE_LEASE_MILLIS, MAX_RETENTION_PROTECTED_VERSIONS, MAX_RETENTION_REMOVALS,
-    MAX_TRANSACTION_BYTES, MAX_TRANSACTION_ITEMS, MAX_VERSION_PAGE_ITEMS, MAX_WORKER_LEASE_MILLIS,
+    DEFAULT_BULK_IMPORT_MAX_BYTES, DEFAULT_BULK_IMPORT_MAX_ITEMS,
+    DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM, DEFAULT_LARGE_WRITE_MAX_BYTES,
+    DEFAULT_LARGE_WRITE_MAX_ITEMS, MAX_IMMUTABLE_UPLOAD_PARALLELISM, MAX_TRANSACTION_BYTES,
+    MAX_TRANSACTION_ITEMS, MAX_VERSION_PAGE_ITEMS, MAX_WORKER_LEASE_MILLIS,
     MIN_MAINTENANCE_LEASE_MILLIS, MIN_WORKER_LEASE_MILLIS, TTL_MAX_PAST_SECONDS,
 };
 pub use error::{Error, Result};

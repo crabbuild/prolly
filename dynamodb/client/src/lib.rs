@@ -11,6 +11,7 @@ mod metadata;
 pub mod operation;
 mod table;
 mod worker;
+mod write_session;
 
 pub use capabilities::{CapabilityReport, CompatibilityLevel, OperationCapability};
 pub use client::{Client, ClientBuilder, DEFAULT_NODE_CACHE_MAX_BYTES};
@@ -21,7 +22,8 @@ pub use gc::{
 };
 pub use metadata::{TableTransitionMetadata, WithMetadata};
 pub use prolly_dynamodb_core::{
-    CommitId, ImportAuditRecord, ImportPlan, ImportPlanId, ImportResult,
+    BulkImportOptions, BulkImportResult, CommitId, ImportAuditRecord, ImportPlan, ImportPlanId,
+    ImportResult, LargeWriteOptions,
     IndexReconfigurationAuditRecord, IndexReconfigurationPlan, IndexReconfigurationPlanId,
     IndexReconfigurationResult, KeyAttribute, KeyKind, MaintenanceContext, MaintenanceLease,
     MaintenanceLeaseId, MaintenanceLeaseRelease, RetentionAuditRecord, RetentionPlan,
@@ -32,7 +34,10 @@ pub use prolly_dynamodb_core::{
     WorkerLeaseRelease, WorkerProgress, DEFAULT_LOGICAL_RETRY_LIMIT, MAX_GC_PLAN_DELETES,
     MAX_LOGICAL_RETRY_LIMIT, MAX_MAINTENANCE_LEASE_MILLIS, MAX_RETENTION_PROTECTED_VERSIONS,
     MAX_RETENTION_REMOVALS, MAX_WORKER_LEASE_MILLIS, MIN_MAINTENANCE_LEASE_MILLIS,
-    MIN_WORKER_LEASE_MILLIS, TABLE_ARCHIVE_FORMAT_VERSION,
+    MIN_WORKER_LEASE_MILLIS, TABLE_ARCHIVE_FORMAT_VERSION, DEFAULT_BULK_IMPORT_MAX_BYTES,
+    DEFAULT_BULK_IMPORT_MAX_ITEMS, DEFAULT_IMMUTABLE_UPLOAD_PARALLELISM,
+    DEFAULT_LARGE_WRITE_MAX_BYTES, DEFAULT_LARGE_WRITE_MAX_ITEMS,
+    MAX_IMMUTABLE_UPLOAD_PARALLELISM,
 };
 pub use table::{
     ConditionalTable, DiffPaginator, Import, Indexes, Restore, RetentionPlanner, Snapshot, Table,
@@ -44,6 +49,7 @@ pub use worker::{
     TtlWorkerOptions, Worker, WorkerExit, Workers, MAX_WORKER_PAGE_ITEMS, MAX_WORKER_SLEEP,
     MIN_WORKER_SLEEP,
 };
+pub use write_session::WriteSession;
 
 pub use aws_sdk_dynamodb::types::AttributeValue;
 pub use prolly::ProllyCacheUsage;

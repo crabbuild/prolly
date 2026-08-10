@@ -2281,6 +2281,54 @@ item tables; cold/warm point reads; uniform and hot-table writers; small and
 1-MB queries; 1/10/100-item logical transactions where effective limits allow;
 and history depths from 10 to 100K transitions.
 
+### 18.1 Bulk ingestion and large commits
+
+High-cardinality migration must not be implemented as one compatible
+`PutItem` or `BatchWriteItem` call per source record. Two explicit extension
+paths preserve the compatible API while reducing version and commit count:
+
+```rust
+let imported = client
+    .bulk_import_sorted(
+        "Events",
+        KeyAttribute { name: "id".into(), kind: KeyKind::String },
+        None,
+        primary_key_sorted_items,
+        BulkImportOptions::default(),
+    )
+    .await?;
+assert_eq!(imported.item_count, 1_000_000);
+
+let mut writes = client
+    .table("Events")
+    .write_session()
+    .options(LargeWriteOptions::default())
+    .if_head(imported.version);
+writes.put(next_item)?;
+writes.delete(expired_key)?;
+let commit = writes.commit().await?;
+```
+
+`bulk_import_sorted` creates a fresh table. It consumes strictly increasing
+canonical primary keys through the memory-bounded sorted tree builder,
+prepublishes immutable nodes and blobs, and atomically exposes the catalog,
+table head, version root, index snapshot, blob registry, and one commit. Thus a
+one-million-record import creates one table version and one commit, not one
+million versions.
+
+`WriteSession` is an explicit buffered extension for an existing table. One
+successful `commit()` produces one version and one commit for all distinct
+buffered item targets. Its caller-selected `LargeWriteOptions` bounds item
+count and logical bytes. It requires `PrepublishImmutableNodes`; compatible
+`TransactWriteItems` remains limited to 100 items and 4 MiB.
+
+The optimized commit path loads the global commit catalog and all participating
+table logs with one ordered root batch. Immutable node publication is divided
+into DynamoDB's 25-request batches and bounded by the backend's
+`batch_write_parallelism`; large-value preparation overlaps up to eight
+independent content-addressed blob uploads. A final root transaction remains
+the only visibility point.
+
 ## 19. Risks and mitigations
 
 | Risk | Consequence | Mitigation |

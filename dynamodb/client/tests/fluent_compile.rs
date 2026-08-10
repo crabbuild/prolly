@@ -10,9 +10,10 @@ use aws_sdk_dynamodb::types::{
 };
 use prolly::MapVersionId;
 use prolly_dynamodb_client::{
-    Client, IndexReconfigurationPlan, KeyAttribute, KeyKind, MaintenanceContext, RetentionPolicy,
-    SecondaryIndexDefinition, SecondaryIndexKind, SecondaryIndexProjection, StreamWorkerOptions,
-    TableArchive, TableArchiveLimits, TtlWorkerOptions,
+    BulkImportOptions, Client, IndexReconfigurationPlan, KeyAttribute, KeyKind,
+    LargeWriteOptions, MaintenanceContext, RetentionPolicy, SecondaryIndexDefinition,
+    SecondaryIndexKind, SecondaryIndexProjection, StreamWorkerOptions, TableArchive,
+    TableArchiveLimits, TtlWorkerOptions,
 };
 
 #[allow(dead_code)]
@@ -201,6 +202,29 @@ fn advertised_fluent_chains_compile(
             .ttl(TtlWorkerOptions::new("Orders", "expiresAt", "worker-a")),
     );
     assert_send(client.workers().maintenance(context, 60_000));
+    let mut session = client
+        .table("Orders")
+        .write_session()
+        .options(LargeWriteOptions::default())
+        .if_head(version.clone())
+        .request_token("large-write");
+    session
+        .put(HashMap::from([(
+        "accountId".into(),
+        AttributeValue::S("acct-bulk".into()),
+        )]))
+        .unwrap();
+    assert_send(session.commit());
+    assert_send(client.bulk_import_sorted(
+        "ImportedOrders",
+        KeyAttribute {
+            name: "accountId".into(),
+            kind: KeyKind::String,
+        },
+        None,
+        Vec::<HashMap<String, AttributeValue>>::new(),
+        BulkImportOptions::default(),
+    ));
     assert_stream(
         client
             .table("Orders")
