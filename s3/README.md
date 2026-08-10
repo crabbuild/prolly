@@ -75,6 +75,20 @@ can live in the same physical bucket under disjoint prefixes. The credentials
 in `.env.example` are local-only and must not be reused on a reachable
 deployment.
 
+Verify the live endpoint, credentials, bucket access, byte round trip, and
+exact-version cleanup using only the AWS CLI's `s3api` commands:
+
+```bash
+bash s3/scripts/verify_rustfs_aws_cli.sh
+```
+
+The verifier defaults to `prolly-versioned-s3-demo`. Override
+`PROLLY_RUSTFS_ENDPOINT`, `PROLLY_RUSTFS_ACCESS_KEY`,
+`PROLLY_RUSTFS_SECRET_KEY`, `PROLLY_RUSTFS_REGION`, or
+`PROLLY_RUSTFS_BUCKET` as needed. Its unique probe key is outside the Prolly
+repository namespace. It removes the exact probe version after a successful
+check and makes a best-effort cleanup attempt if verification fails.
+
 Stop the server without deleting data:
 
 ```bash
