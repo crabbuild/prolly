@@ -1,0 +1,76 @@
+name: Versioned S3 client required
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "src/**"
+      - "s3/**"
+      - "plans/020-versioned-s3-client-adapter.md"
+      - ".github/workflows/versioned-s3-client-required.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CLIENT_TOOLCHAIN: "1.94.1"
+  CORE_TOOLCHAIN: "1.89.0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: versioned-s3-quality-1.94.1
+      - name: Install pinned dependency auditor
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      - name: Format and dependency security
+        run: |
+          cargo +"$CLIENT_TOOLCHAIN" fmt --manifest-path s3/Cargo.toml --all -- --check
+          bash s3/scripts/check_dependency_security.sh
+      - name: Strict Clippy
+        run: >-
+          cargo +"$CLIENT_TOOLCHAIN" clippy --locked
+          --manifest-path s3/Cargo.toml --workspace --all-targets --all-features
+          -- -D warnings
+      - name: Behavioral and compatibility suite
+        run: >-
+          cargo +"$CLIENT_TOOLCHAIN" test --locked
+          --manifest-path s3/Cargo.toml --workspace --all-features
+          -- --skip seeded_histories_are_identical_across_stores_and_restart
+      - name: Independent canonical-format verifier
+        run: python3 s3/fixtures/verify_canonical_v1.py
+      - name: Soak evidence verifier contracts
+        run: python3 -m unittest s3.scripts.tests.test_verify_soak_evidence
+
+  msrv-and-downstream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - run: rustup toolchain install "$CORE_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: versioned-s3-msrv-1.89.0-1.94.1
+      - name: Exact core MSRV
+        run: >-
+          cargo +"$CORE_TOOLCHAIN" check --locked
+          --manifest-path s3/Cargo.toml -p prolly-s3-core
+      - name: Exact client baseline and minimal surface
+        run: |
+          cargo +"$CLIENT_TOOLCHAIN" check --locked --manifest-path s3/Cargo.toml --workspace --all-features
+          cargo +"$CLIENT_TOOLCHAIN" check --locked --manifest-path s3/Cargo.toml -p prolly-s3-client --no-default-features
+      - name: Locked clean-downstream consumers
+        run: bash s3/scripts/check_clean_downstream.sh

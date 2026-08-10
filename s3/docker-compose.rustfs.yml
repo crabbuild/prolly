@@ -1,0 +1,31 @@
+name: prolly-versioned-s3
+
+services:
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.10@sha256:60f4f2f41ce95216f8cac676e69f9d90c0bfec458a3bc7fd7fb9b7c2452ac57a
+    container_name: prolly-rustfs
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${PROLLY_RUSTFS_API_PORT:-9000}:9000"
+      - "127.0.0.1:${PROLLY_RUSTFS_CONSOLE_PORT:-9001}:9001"
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${PROLLY_RUSTFS_ACCESS_KEY:-prollyadmin}
+      RUSTFS_SECRET_KEY: ${PROLLY_RUSTFS_SECRET_KEY:-prolly-local-secret-change-me}
+      RUSTFS_RPC_SECRET: ${PROLLY_RUSTFS_RPC_SECRET:-prolly-local-rpc-secret-change-me}
+      RUSTFS_OBS_LOGGER_LEVEL: ${PROLLY_RUSTFS_LOG_LEVEL:-info}
+    volumes:
+      - type: bind
+        source: ${PROLLY_RUSTFS_DATA_DIR:-/Volumes/Workspace/prolly-data}
+        target: /data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 10s

@@ -1,0 +1,13 @@
+[graph]
+all-features = true
+
+[advisories]
+# `serde_cbor` is the established v1 canonical codec in prolly-map and in the
+# S3 repository's signed cursors and durable records. RUSTSEC-2021-0127 reports
+# that the crate is unmaintained; it does not report a vulnerability or
+# unsoundness. Replacing it requires a versioned, golden-fixture-backed format
+# migration so existing repositories and tokens remain readable. Keep this one
+# exception exact and reason-bearing; every other advisory remains denied.
+ignore = [
+  { id = "RUSTSEC-2021-0127", reason = "Unmaintained canonical v1 codec; replacement requires an explicit backward-compatible durable-format migration" },
+]

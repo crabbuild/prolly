@@ -1,0 +1,16 @@
+[package]
+name = "prolly-s3-downstream-client-check"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.94.1"
+publish = false
+
+[workspace]
+
+[features]
+default = []
+slatedb-index = ["prolly-s3-client/slatedb-index"]
+
+[dependencies]
+aws-sdk-s3 = { version = "=1.140.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
+prolly-s3-client = { path = "../../client", default-features = false }
