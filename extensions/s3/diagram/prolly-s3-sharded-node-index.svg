@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 680" role="img" aria-labelledby="title desc">
-  <title id="title">Prolly S3 sharded node index</title>
-  <desc id="desc">A node CID selects a prefix shard and a sorted immutable leaf page; only that path is fetched and cached.</desc>
+  <title id="title">Prolly S3 lazy node index</title>
+  <desc id="desc">A node CID follows one path through a separate immutable Prolly tree; only those verified pages are fetched and cached.</desc>
   <defs>
     <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0V30" fill="none" stroke="#334155" stroke-opacity=".22"/></pattern>
     <filter id="shadow" x="-15%" y="-20%" width="130%" height="145%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#020617" flood-opacity=".55"/></filter>
@@ -10,37 +10,37 @@
     </style>
   </defs>
   <rect width="1180" height="680" fill="#0f172a"/><rect width="1180" height="680" fill="url(#grid)"/>
-  <text x="52" y="50" class="title">Sharded node index v2</text><text x="52" y="76" class="sub">One small head · immutable copy-on-write pages · O(index depth) lazy lookup</text>
+  <text x="52" y="50" class="title">Lazy node index v2</text><text x="52" y="76" class="sub">One small head · immutable Prolly pages · O(tree depth) lazy lookup</text>
 
   <text x="52" y="124" class="label">LOOKUP INPUT</text>
   <g filter="url(#shadow)"><rect x="52" y="142" width="210" height="76" rx="12" fill="#172554" stroke="#60a5fa"/><text x="72" y="171" class="boxTitle">Node CID</text><text x="72" y="196" class="mono">8f:2a:91:…</text></g>
 
   <text x="318" y="124" class="label">MUTABLE POINTER</text>
-  <g filter="url(#shadow)"><rect x="318" y="142" width="220" height="76" rx="12" fill="#302414" stroke="#f59e0b"/><text x="338" y="171" class="boxTitle">Index head</text><text x="338" y="194" class="body">generation 1842</text><text x="338" y="211" class="mono">manifest: c91d…</text></g>
+  <g filter="url(#shadow)"><rect x="318" y="142" width="220" height="76" rx="12" fill="#302414" stroke="#f59e0b"/><text x="338" y="171" class="boxTitle">Index head</text><text x="338" y="194" class="body">generation 1842</text><text x="338" y="211" class="mono">tree root: c91d…</text></g>
 
-  <text x="594" y="124" class="label">IMMUTABLE DIRECTORY</text>
-  <g filter="url(#shadow)"><rect x="594" y="142" width="250" height="76" rx="12" fill="#2e2450" stroke="#a78bfa"/><text x="614" y="171" class="boxTitle">Sparse manifest</text><text x="614" y="194" class="body">CID prefix → shard root</text><text x="614" y="211" class="mono">8f → b0e7…</text></g>
+  <text x="594" y="124" class="label">IMMUTABLE ROOT</text>
+  <g filter="url(#shadow)"><rect x="594" y="142" width="250" height="76" rx="12" fill="#2e2450" stroke="#a78bfa"/><text x="614" y="171" class="boxTitle">Prolly root page</text><text x="614" y="194" class="body">Sorted CID separators</text><text x="614" y="211" class="mono">8f… → b0e7…</text></g>
 
-  <text x="900" y="124" class="label">SELECTED SHARD</text>
-  <g filter="url(#shadow)"><rect x="900" y="142" width="228" height="76" rx="12" fill="#2e2450" stroke="#a78bfa"/><text x="920" y="171" class="boxTitle">Prefix 8f</text><text x="920" y="194" class="body">Sorted page directory</text><text x="920" y="211" class="mono">2a00…2aff → 47bd…</text></g>
+  <text x="900" y="124" class="label">SELECTED PATH</text>
+  <g filter="url(#shadow)"><rect x="900" y="142" width="228" height="76" rx="12" fill="#2e2450" stroke="#a78bfa"/><text x="920" y="171" class="boxTitle">Internal page</text><text x="920" y="194" class="body">Only matching child</text><text x="920" y="211" class="mono">8f2a… → 47bd…</text></g>
 
   <path d="M262 180H318M538 180H594M844 180H900" class="edge"/>
 
   <rect x="52" y="270" width="1076" height="190" rx="18" fill="#172033" stroke="#334155"/>
-  <text x="74" y="298" class="label">IMMUTABLE LEAF PAGES — TARGET 4–16 MiB</text>
+  <text x="74" y="298" class="label">CONTENT-DEFINED IMMUTABLE LEAF PAGES</text>
   <g filter="url(#shadow)">
-    <rect x="82" y="326" width="282" height="96" rx="12" fill="#1e293b" stroke="#475569"/><text x="102" y="353" class="boxTitle">Page 2a00…2a55</text><text x="102" y="376" class="mono">8f2a03… → envelope/range</text><text x="102" y="397" class="mono">8f2a21… → envelope/range</text>
-    <rect x="449" y="316" width="282" height="116" rx="12" fill="#172554" stroke="#38bdf8" stroke-width="2"/><text x="469" y="345" class="boxTitle">Page 2a56…2aaa</text><text x="469" y="369" class="mono">8f2a91… → commit 7c1f…</text><text x="469" y="390" class="mono">offset 8421 · len 913</text><text x="469" y="411" class="body">Fetched, verified, cached</text>
-    <rect x="816" y="326" width="282" height="96" rx="12" fill="#1e293b" stroke="#475569"/><text x="836" y="353" class="boxTitle">Page 2aab…2aff</text><text x="836" y="376" class="mono">8f2ab4… → envelope/range</text><text x="836" y="397" class="mono">8f2ae9… → envelope/range</text>
+    <rect x="82" y="326" width="282" height="96" rx="12" fill="#1e293b" stroke="#475569"/><text x="102" y="353" class="boxTitle">Neighbor leaf</text><text x="102" y="376" class="mono">8f2a03… → envelope/range</text><text x="102" y="397" class="mono">8f2a21… → envelope/range</text>
+    <rect x="449" y="316" width="282" height="116" rx="12" fill="#172554" stroke="#38bdf8" stroke-width="2"/><text x="469" y="345" class="boxTitle">Selected leaf</text><text x="469" y="369" class="mono">8f2a91… → commit 7c1f…</text><text x="469" y="390" class="mono">offset 8421 · len 913</text><text x="469" y="411" class="body">Fetched, verified, cached</text>
+    <rect x="816" y="326" width="282" height="96" rx="12" fill="#1e293b" stroke="#475569"/><text x="836" y="353" class="boxTitle">Neighbor leaf</text><text x="836" y="376" class="mono">8f2ab4… → envelope/range</text><text x="836" y="397" class="mono">8f2ae9… → envelope/range</text>
   </g>
   <path d="M1014 218V245H590V316" class="edge"/>
 
   <text x="52" y="512" class="label">DATA FETCH</text>
   <g filter="url(#shadow)">
     <rect x="52" y="532" width="292" height="94" rx="12" fill="#12352f" stroke="#34d399"/><text x="72" y="561" class="boxTitle">Commit envelope</text><text x="72" y="585" class="body">One exact ranged GET</text><text x="72" y="606" class="mono">commit 7c1f… @ 8421+913</text>
-    <rect x="444" y="532" width="292" height="94" rx="12" fill="#12352f" stroke="#34d399"/><text x="464" y="561" class="boxTitle">Verified node bytes</text><text x="464" y="585" class="body">Length + SHA-256 + CID</text><text x="464" y="606" class="mono">cache key includes generation</text>
+    <rect x="444" y="532" width="292" height="94" rx="12" fill="#12352f" stroke="#34d399"/><text x="464" y="561" class="boxTitle">Verified node bytes</text><text x="464" y="585" class="body">Length + SHA-256 + CID</text><text x="464" y="606" class="mono">repo + format + CID</text>
     <rect x="836" y="532" width="292" height="94" rx="12" fill="#172554" stroke="#60a5fa"/><text x="856" y="561" class="boxTitle">L1 / L2 cache</text><text x="856" y="585" class="body">Future lookups skip index + S3</text><text x="856" y="606" class="mono">CID → immutable bytes</text>
   </g>
   <path d="M590 432V488H198V532" class="edge"/><path d="M344 579H444M736 579H836" class="edge"/>
-  <text x="52" y="660" class="sub">Only affected pages are rewritten by background compaction; old generations remain readable through a grace period.</text>
+  <text x="52" y="660" class="sub">Background scans update copy-on-write paths; a completed generation clears stale in-process locations.</text>
 </svg>

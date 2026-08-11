@@ -62,9 +62,19 @@ aws_s3api list-buckets --query 'Buckets[].Name' --output table
 echo "Checking bucket $bucket"
 aws_s3api head-bucket --bucket "$bucket"
 
-echo "Physical bucket versioning configuration"
-if ! aws_s3api get-bucket-versioning --bucket "$bucket" --output json; then
-  echo "The provider did not expose GetBucketVersioning for $bucket" >&2
+echo "Enabling and verifying physical bucket versioning"
+aws_s3api put-bucket-versioning \
+  --bucket "$bucket" \
+  --versioning-configuration Status=Enabled
+versioning_status="$(
+  aws_s3api get-bucket-versioning \
+    --bucket "$bucket" \
+    --query Status \
+    --output text
+)"
+if [[ "$versioning_status" != "Enabled" ]]; then
+  echo "bucket versioning is not enabled for $bucket: $versioning_status" >&2
+  exit 1
 fi
 
 printf 'prolly RustFS AWS CLI verification\n' >"$payload_file"
@@ -80,6 +90,10 @@ probe_version_id="$(
     --output text
 )"
 probe_written=1
+if [[ -z "$probe_version_id" || "$probe_version_id" == "None" || "$probe_version_id" == "null" ]]; then
+  echo "versioned probe upload did not return a physical VersionId" >&2
+  exit 1
+fi
 
 echo "Reading probe metadata"
 aws_s3api head-object \

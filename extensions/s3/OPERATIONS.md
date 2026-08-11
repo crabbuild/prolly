@@ -80,14 +80,28 @@ delete marker. A current-key-only copy is always insufficient.
 
 ## Garbage collection
 
-Use only repository GC for managed versions. Review a dry run, retain required
-reflogs and pins, apply a conservative grace period, and pace exact-version
-deletes. Abort if reachability or provider listing is incomplete.
+Use only repository GC for managed versions. For growing repositories, use the
+v2 epoch workflow rather than the in-memory v1 dry run:
+
+1. Advance node index v2 through a complete scan epoch.
+2. Start the epoch with a conservative grace period.
+3. Call bounded `advance_gc_epoch` steps until `Ready`.
+4. Call bounded `sweep_gc_epoch` steps until `Completed`.
+5. Continue advancing instead of sweeping whenever a write or restart returns
+   the epoch to `DiscoverRoots`.
+
+GC v2 requires the authoritative writer lease. It marks reachable CIDs and the
+actual envelopes supplying them before deletion, then names every exact
+physical `VersionId`. Never bypass a `MissingCapability`, root-restart, or
+writer-fence error. Export marked-node, candidate, deleted, skipped-reachable,
+and restart counts.
 
 ## Local RustFS
 
 ```bash
 docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
+
+extensions/s3/scripts/verify_rustfs_aws_cli.sh
 
 PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml \

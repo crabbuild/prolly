@@ -664,6 +664,120 @@ pub struct NodeIndexHeadV1 {
     pub updated_at_millis: u64,
 }
 
+/// Mutable head for the scalable node-location index. The root addresses a
+/// separate immutable Prolly tree whose keys are node CIDs and whose values are
+/// canonical [`NodeIndexEntryV1`] records.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeIndexHeadV2 {
+    pub repository: RepositoryId,
+    pub root: TreeRootV1,
+    pub generation: u64,
+    /// Opaque provider continuation for the current bounded commit scan.
+    pub scan_continuation: Option<String>,
+    /// Increments whenever a complete commit namespace scan finishes.
+    pub scan_epoch: u64,
+    pub indexed_commit_objects: u64,
+    pub updated_at_millis: u64,
+}
+
+impl NodeIndexHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        if self.repository != repository || self.root.format_digest != expected_format {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-index v2 head namespace or tree format is invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Rebuildable catalog entry for scalable ref enumeration. Authoritative ref
+/// objects remain the source of truth for reads and compare-and-exchange.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RefCatalogEntryV2 {
+    Branch {
+        target: CommitId,
+        generation: RefGeneration,
+    },
+    Tag {
+        target: CommitId,
+        generation: RefGeneration,
+    },
+}
+
+/// Mutable head for the derived ref catalog Prolly tree.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefCatalogHeadV2 {
+    pub repository: RepositoryId,
+    pub root: TreeRootV1,
+    pub generation: u64,
+    /// False scans heads, true scans tags. Completing tags completes an epoch.
+    pub scanning_tags: bool,
+    pub scan_continuation: Option<String>,
+    pub scan_epoch: u64,
+    pub indexed_ref_objects: u64,
+    pub updated_at_millis: u64,
+}
+
+impl RefCatalogHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        if self.repository != repository || self.root.format_digest != expected_format {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "ref-catalog v2 head namespace or tree format is invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Rebuildable acceleration record for commit ancestry. `first_parent_jumps[n]`
+/// is the ancestor 2^n first-parent edges away when that ancestor was indexed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitGraphEntryV2 {
+    pub commit: CommitId,
+    pub generation: CommitGeneration,
+    pub parents: Vec<CommitId>,
+    pub first_parent_jumps: Vec<CommitId>,
+}
+
+/// Mutable head for the derived commit-graph Prolly tree.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitGraphHeadV2 {
+    pub repository: RepositoryId,
+    pub root: TreeRootV1,
+    pub generation: u64,
+    pub scan_continuation: Option<String>,
+    pub scan_epoch: u64,
+    pub indexed_commit_objects: u64,
+    pub updated_at_millis: u64,
+}
+
+impl CommitGraphHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        if self.repository != repository || self.root.format_digest != expected_format {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "commit-graph v2 head namespace or tree format is invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl NodeIndexHeadV1 {
     pub fn validate(&self, checkpoint: &NodeIndexCheckpointV1) -> Result<()> {
         if self.checkpoint != checkpoint.id
@@ -1177,6 +1291,64 @@ pub struct GcRunV1 {
     pub delete_rate_limit_per_second: u32,
     #[serde(default)]
     pub last_delete_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GcEpochPhaseV2 {
+    DiscoverRoots,
+    MarkCommits,
+    MarkNodes,
+    MarkVersions,
+    ScanCandidates,
+    Ready,
+    Sweeping,
+    Completed,
+    Aborted,
+}
+
+/// Bounded, restartable GC state. The large mark set, work queues, and
+/// candidates live in the immutable Prolly tree addressed by `root`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcEpochV2 {
+    pub id: OperationId,
+    pub repository: RepositoryId,
+    pub process_session: OperationId,
+    pub writer_fence_generation: u64,
+    pub publication_acquisition: u64,
+    pub planned_at_millis: u64,
+    pub cutoff_millis: u64,
+    pub root: TreeRootV1,
+    pub phase: GcEpochPhaseV2,
+    /// 0=heads, 1=tags, 2=pins, 3=tag reflogs.
+    pub root_namespace: u8,
+    pub source_continuation: Option<String>,
+    pub sweep_after: Option<Vec<u8>>,
+    pub generation: u64,
+    pub marked_commits: u64,
+    pub marked_nodes: u64,
+    pub marked_versions: u64,
+    pub candidates: u64,
+    pub candidate_bytes: u64,
+    pub deleted_versions: u64,
+    pub deleted_bytes: u64,
+    pub skipped_reachable: u64,
+    pub already_missing: u64,
+    pub updated_at_millis: u64,
+    pub abort_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcCommitWorkV2 {
+    pub commit: CommitId,
+    /// Direct roots need their version tree scanned; ordinary ancestors do not
+    /// because logical versions are append-only along descendants.
+    pub scan_versions: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcVersionWorkV2 {
+    pub root: TreeRootV1,
+    pub after: Option<Vec<u8>>,
 }
 
 impl GcPlanV1 {

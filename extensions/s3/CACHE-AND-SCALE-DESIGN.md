@@ -1,14 +1,16 @@
 # Prolly S3 cache and unbounded-cardinality design
 
-Status: proposed scale architecture. This design is not part of the frozen
-Prolly S3 Protocol v1 and is not implemented yet.
+Status: implemented as rebuildable v2 scale metadata alongside the frozen
+Prolly S3 Protocol v1. Local correctness tests and a RustFS qualification
+harness are included; the million/billion-object AWS qualification tiers remain
+release gates, not completed claims.
 
 ## Decision
 
 Prolly S3 will support **unbounded repository cardinality**: the protocol will
-not impose a fixed maximum number of files, commits, or refs. Every foreground
-operation must nevertheless have bounded memory, bounded concurrency, and a
-resumable work budget.
+not impose a fixed maximum number of files, commits, or refs. Every scale-safe
+API must nevertheless have bounded memory, bounded concurrency, and a resumable
+work budget. Legacy whole-result compatibility APIs retain explicit limits.
 
 “Unlimited” cannot mean infinite storage, zero-cost global queries, or infinite
 history traversed in one request. Capacity remains constrained by object-store
@@ -95,14 +97,16 @@ format prevent an old decoder from consuming incompatible bytes. A deployment
 may deliberately share verified nodes across repositories only when its trust
 and encryption policy permits it.
 
-Node-location entries use:
+The bounded in-process node-location map uses:
 
 ```text
-(repository_namespace, node_index_generation, cid)
+(repository_namespace, cid) -> (envelope, byte_range, digest)
 ```
 
-Including the generation prevents compaction or garbage collection from
-leaving a stale physical range mapping in cache.
+When a complete node-index scan publishes a new root, the in-process location
+map is cleared. Immutable node bytes remain cached by CID; locations are then
+resolved lazily through the newly pinned index root. GC also marks the actual
+container selected for every reachable CID before deleting envelopes.
 
 ### Admission and eviction
 
@@ -140,20 +144,18 @@ Protocol v1 points to one checkpoint containing every known node location.
 Opening that checkpoint is O(total nodes) in bytes and memory, so it cannot be
 the billion-node design.
 
-Version 2 replaces it with a small mutable head and immutable, content-addressed
-pages:
+Version 2 replaces it with a small mutable head and a separate immutable,
+content-addressed Prolly tree:
 
 ![Sharded node index](diagram/prolly-s3-sharded-node-index.svg)
 
-1. `node-index/head` identifies a generation and manifest digest.
-2. The manifest maps CID prefixes to immutable shard roots.
-3. Each shard is a shallow sorted tree of fixed-target-size pages.
-4. Leaf entries map a CID to commit envelope, byte range, length, and digest.
-5. A lookup fetches only one manifest path and one leaf page, then caches them.
-
-Pages target 4–16 MiB before compression; actual sizing is selected by load
-tests. Prefixes split when a page exceeds its target. Sparse manifest levels
-avoid eagerly creating empty shards.
+1. `node-index/v2/head.cbor` identifies the tree root and scan generation.
+2. Tree keys are CIDs; values contain the commit envelope, byte range, length,
+   pack identity, and digest.
+3. Native Prolly chunk boundaries split the index incrementally; no monolithic
+   checkpoint is decoded at repository open.
+4. A lookup reads only one root-to-leaf path, then caches verified index pages
+   and the requested data node.
 
 Checkpoint construction is background work. It merges new commit-envelope
 indexes into affected copy-on-write pages and conditionally advances the head.
@@ -161,8 +163,10 @@ The commit envelope remains a self-describing correctness fallback, so a lost
 checkpoint update delays lookup optimization but cannot lose committed data.
 No index-maintenance S3 call is added to the three-call foreground write.
 
-Readers pin a head generation for the duration of a lookup. Old generations
-remain readable until a grace period covers active readers and cache leases.
+Each lookup clones one validated head root before traversing it. Immutable nodes
+therefore remain readable while a concurrent maintainer publishes a newer
+root. Reclaiming unreachable generations is separate, grace-period-protected
+maintenance and is not on the foreground lookup path.
 
 ## Files and versions
 
@@ -183,22 +187,29 @@ must not become a second authority.
 Commits stay immutable and directly addressable by `CommitId`. Repository open
 does not enumerate commits.
 
-The current fixed history traversal ceiling becomes a `TraversalBudget` with:
+`log_page_bounded` uses a `TraversalBudget` with:
 
 - maximum visited commits;
 - maximum decoded bytes;
-- maximum elapsed time;
-- cancellation and concurrency limits.
+- maximum elapsed time.
 
-When a budget is exhausted, log, ancestry, merge-base, diff, and reachability
-operations return an opaque continuation cursor instead of treating repository
-size as an error.
+Dropping the async future cancels an in-flight traversal. Services should place
+their own semaphore around concurrent traversal requests because that limit is
+deployment-wide rather than repository-format state.
 
-Background workers build immutable commit-graph segments with generation
-numbers and binary-lifting ancestor pointers. A commit can reference ancestors
-at distances 1, 2, 4, 8, and so on, allowing long first-parent walks and common
-ancestor searches to skip history. Missing segments fall back to bounded graph
-walking, preserving correctness.
+When a budget is exhausted, first-parent history returns a continuation cursor
+instead of treating repository size as an error. `diff_page_bounded` uses the
+engine's structural checkpoint, preserving CID-subtree pruning across pages.
+Legacy `log_at`, `diff_at`, `merge_bases`, merge planning, and whole-repository
+`fsck` remain compatibility APIs with finite traversal/memory limits; they are
+not the interfaces to use for unbounded jobs.
+
+Background workers build a separate immutable commit-graph Prolly tree with
+generation numbers and binary-lifting ancestor pointers. A commit can reference
+ancestors at distances 1, 2, 4, 8, and so on, allowing bounded first-parent
+walks to skip history. Missing segments fall back to bounded graph walking,
+preserving correctness. Merge-base discovery remains a finite compatibility
+API until it gains its own resumable graph frontier.
 
 ## Refs
 
@@ -208,9 +219,9 @@ do not contend on a global head.
 
 Listing millions or billions of refs uses a derived Prolly catalog keyed by
 normalized ref name. The catalog is partitioned by tenant and prefix and is
-updated asynchronously from authoritative ref mutations. List responses are
-paged and disclose catalog freshness. A repair worker reconciles catalog
-entries against ref mutation records.
+updated asynchronously by bounded, repeated authoritative namespace scans.
+List responses are paged and disclose catalog generation, scan epoch, and
+update time. A later scan repairs missed or stale entries.
 
 The catalog must never authorize writes. A caller that selects a catalog result
 still loads the authoritative ref object before mutation. Ref creation and
@@ -237,20 +248,23 @@ head has a finite maximum commit rate.
 ## Garbage collection at billion scale
 
 A GC implementation cannot hold all reachable commits, nodes, or physical
-versions in one process. It uses an epoch-based, partitioned mark-and-sweep:
+versions in one process. `start_gc_epoch_v2`, `advance_gc_epoch_v2`, and
+`sweep_gc_epoch_v2` implement an epoch-based, partitioned mark-and-sweep:
 
 1. Snapshot ref, pin, and reflog roots into a GC epoch.
-2. Persist a sharded work queue and per-partition mark runs.
-3. Workers traverse with bounded memory and checkpoint their cursors.
-4. Merge sorted mark runs into immutable reachability manifests.
-5. Produce exact `(key, VersionId)` deletion partitions.
-6. Revalidate roots and the epoch before deleting each bounded batch.
-7. Rate-limit deletion and persist every completed partition.
+2. Persist commit, node, and version work queues in an epoch-specific Prolly
+   tree.
+3. Traverse each phase with a caller-selected 1–1,000 item budget.
+4. Mark every reachable CID and the physical envelope that currently supplies
+   it, including shared nodes outside commit ancestry.
+5. Persist exact `(key, VersionId)` candidates in the same tree.
+6. Restart root discovery after any intervening publication or process restart.
+7. Delete and checkpoint at most 1–1,000 exact versions per sweep call.
 
-Workers are restartable and idempotent. A later epoch may supersede an earlier
-one, but no sweep deletes from an epoch whose roots can no longer be validated.
-The node-index generation advances away from reclaimed envelopes before their
-grace period ends.
+Work is restartable and idempotent. GC v2 requires the authoritative writer
+lease and complete v2 node-index coverage. Mark state only grows; stale
+candidates are rechecked against it. A ref or commit publication between calls
+forces another full bounded root-discovery pass before deletion resumes.
 
 ## Backpressure and isolation
 
@@ -306,32 +320,35 @@ Tier C is a qualification target, not a protocol maximum. Larger deployments
 continue by adding storage, cache, workers, and repository partitions without a
 format migration, subject to measured provider and operational limits.
 
-## Migration and implementation phases
+## Implementation status
 
 Protocol v1 remains frozen. Scale metadata lives under versioned v2 paths or a
 negotiated capability; readers never reinterpret v1 bytes as v2.
 
-1. Add the `NodeCache` interface, verified node-level admission,
-   singleflight, metrics, and an optional audited Foyer adapter.
-2. Add sharded node-index v2 with lazy pages, generation-aware location cache,
-   background construction, and v1 fallback.
-3. Add paged traversal APIs, durable continuation cursors, and commit-graph
-   skip segments.
-4. Add the derived sharded ref catalog and reconciliation.
-5. Replace in-memory GC planning with epoch-based partitioned GC.
-6. Run the qualification matrix before increasing the supported scale claim.
+1. Done: verified `NodeCache`, byte-bounded memory cache, singleflight, metrics,
+   corruption fail-open, and optional persistent Foyer adapter.
+2. Done: lazy node-index v2, bounded location map, background scans, and v1
+   read fallback.
+3. Done: bounded history, structural diff, and binary-lifting first-parent
+   traversal.
+4. Done: paged derived ref catalog with explicit freshness.
+5. Done: epoch-based GC v2 with persisted work/candidate partitions and shared
+   node-container safety.
+6. Pending: execute and publish the Tier A/B/C AWS qualification matrix.
 
-Foyer is currently denied by the dependency policy because it was previously
-removed. Adoption requires an intentional dependency/security review, pinned
-feature set, MSRV and license validation, corruption tests, and all workspace
-quality gates. The engine-level cache interface should land independently so a
-different cache implementation remains possible.
+Foyer is pinned to `0.22.3` with Tokio runtime only. `cargo-deny` contains a
+narrow, reason-bearing exception for RUSTSEC-2024-0436: Foyer's transitive
+`paste 1.0.15` proc-macro is unmaintained, but the advisory reports no
+vulnerability or unsoundness. Remove the exception when Foyer migrates. Cache
+correctness remains in core, so another `NodeCache` implementation can replace
+Foyer without changing repository authority.
 
 ## Consequence
 
 This design can remove fixed repository cardinality limits; it cannot remove
 physical limits or make unbounded work instantaneous. The API contract is:
 
-> Repository growth does not require whole-repository loading or rewriting.
-> Every operation is bounded, pageable or resumable, and correctness never
-> depends on a cache or derived index.
+> Repository growth does not require whole-repository loading or rewriting for
+> scale-safe APIs. Those APIs are bounded, pageable or resumable, and
+> correctness never depends on a cache or derived index. Legacy whole-result
+> compatibility APIs retain explicit finite limits.

@@ -19,8 +19,12 @@ branches, diffs, conditional publication, and idempotency.
 | Create multipart upload | `client.create_multipart_upload().send()` |
 | List current objects | `client.list_objects_v2().send()` |
 | List logical versions | `client.list_object_versions().send()` |
-| Branch/tag/history | `create_branch`, `create_tag`, `log_page` |
-| Compare commits | `diff_page` |
+| Bounded history | `log_bounded`, `first_parent_ancestor_bounded` |
+| Scalable ref listing | `list_branch_catalog_page`, `list_tag_catalog_page` |
+| Bounded structural diff | `diff_bounded` |
+| Maintain derived indexes | `advance_scale_indexes` |
+| Persistent node cache | `FoyerNodeCache` plus `ClientBuilder::node_cache` |
+| Partitioned GC | `start_gc_epoch`, `advance_gc_epoch`, `sweep_gc_epoch` |
 | Merge/restore | `merge`, `restore` |
 | Verify repository | `fsck` |
 | Explicit writer handoff | `takeover_writer` |
@@ -36,4 +40,12 @@ branches, diffs, conditional publication, and idempotency.
 - Branch conflicts are returned; they are not retried automatically.
 - Commit sessions are atomic, process-local, non-resumable, and bounded by
   `max_staged_batch_bytes`.
-- Pagination tokens are commit-pinned and cryptographically signed.
+- AWS-shaped object-list pagination tokens are commit-pinned and
+  cryptographically signed. Core history/diff cursor structs have private
+  fields; services should authenticate them when crossing a trust boundary.
+- Cache bytes and derived indexes are never write authority; every node cache
+  hit is verified by CID.
+- Catalog pages disclose freshness and a selected ref is resolved through its
+  authoritative object before mutation.
+- Whole-result compatibility APIs retain finite limits. Use bounded history,
+  structural diff, catalog, and GC APIs for growing repositories.
