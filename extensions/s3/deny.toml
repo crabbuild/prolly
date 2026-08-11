@@ -10,4 +10,5 @@ all-features = true
 # exception exact and reason-bearing; every other advisory remains denied.
 ignore = [
   { id = "RUSTSEC-2021-0127", reason = "Unmaintained canonical v1 codec; replacement requires an explicit backward-compatible durable-format migration" },
+  { id = "RUSTSEC-2024-0436", reason = "Unmaintained macro-only transitive dependency of pinned Foyer 0.22.3; the advisory reports no vulnerability or unsoundness and cache correctness remains independent of Foyer" },
 ]

@@ -1,16 +1,52 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use md5::Md5;
 use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
-    tree_format_digest, Checksums, CommitGeneration, CommitObjectV1, ErrorCode,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryObjectPlane, MergePolicy,
+    tree_format_digest, Checksums, CommitGeneration, CommitObjectV1, CompareExchange,
+    CompareExchangeOutcome, ErrorCode, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    MemoryNodeCache, MemoryObjectPlane, MergePolicy, NodeCache, NodeCacheError, NodeCacheKey,
     NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionOrder,
     ObjectVersionV1, OperationId, PhysicalBatchMutationV1, PhysicalMultipartCompletedPart,
     PhysicalObjectBindingV1, PhysicalPut, PhysicalVersion, PhysicalVersioning,
-    ProviderCapabilities, Repository, RepositoryId, RepositoryOptions,
+    ProviderCapabilities, Repository, RepositoryId, RepositoryOptions, TraversalBudget,
 };
 use sha2::{Digest as _, Sha256};
+
+#[derive(Default)]
+struct CorruptNodeCache {
+    removals: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl NodeCache for CorruptNodeCache {
+    async fn get(
+        &self,
+        _key: &NodeCacheKey,
+    ) -> std::result::Result<Option<Vec<u8>>, NodeCacheError> {
+        Ok(Some(vec![0x5a; 17]))
+    }
+
+    async fn insert(
+        &self,
+        _key: NodeCacheKey,
+        _value: Vec<u8>,
+    ) -> std::result::Result<(), NodeCacheError> {
+        Ok(())
+    }
+
+    async fn remove(&self, _key: &NodeCacheKey) -> std::result::Result<(), NodeCacheError> {
+        self.removals.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+}
 
 fn physical_options(prefix: &str) -> RepositoryOptions {
     RepositoryOptions {
@@ -18,6 +54,20 @@ fn physical_options(prefix: &str) -> RepositoryOptions {
         writer: "physical-writer".to_string(),
         ..RepositoryOptions::default()
     }
+}
+
+async fn corrupt_mutable_head(plane: &MemoryObjectPlane, path: &str) {
+    let path = ObjectPath::new(path).unwrap();
+    let current = plane.load_mutable(&path).await.unwrap().unwrap();
+    let outcome = plane
+        .compare_exchange(CompareExchange {
+            path,
+            expected: Some(current.metadata.token),
+            bytes: b"invalid derived head".to_vec(),
+        })
+        .await
+        .unwrap();
+    assert!(matches!(outcome, CompareExchangeOutcome::Applied(_)));
 }
 
 #[tokio::test]
@@ -1432,7 +1482,406 @@ async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
 }
 
 #[tokio::test]
-async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
+async fn legacy_node_lookup_finds_entries_evicted_from_the_bounded_locator() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        max_cached_node_locations: 1,
+        max_cached_node_pack_bytes: 1,
+        max_cached_node_bytes: 1,
+        ..physical_options(".prolly/prolly-s3/bounded-legacy-locator")
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..8 {
+        repository
+            .put_bytes(
+                "main",
+                format!("objects/{index}.bin").into_bytes(),
+                vec![index; 4096],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    drop(repository);
+
+    let reopened = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        reopened
+            .get_current("main", b"objects/0.bin")
+            .await
+            .unwrap()
+            .bytes,
+        vec![0; 4096]
+    );
+}
+
+#[tokio::test]
+async fn sharded_node_index_opens_lazily_and_node_cache_eliminates_repeat_ranges() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        max_cached_node_pack_bytes: 1,
+        ..physical_options(".prolly/prolly-s3/node-index-v2")
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..64 {
+        repository
+            .put_bytes(
+                "main",
+                format!("objects/{index:04}.bin").into_bytes(),
+                vec![index; 4096],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let advance = repository.advance_node_index_v2(1_000).await.unwrap();
+    assert!(advance.completed_scan);
+    assert!(advance.indexed_commit_objects >= 65);
+    assert!(advance.indexed_node_entries > 0);
+
+    plane.reset_request_counts();
+    let shared_node_cache = Arc::new(MemoryNodeCache::new(64 * 1024 * 1024));
+    let reopened = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            node_cache: Some(shared_node_cache.clone()),
+            ..options.clone()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(plane.request_snapshot().list, 0);
+
+    plane.reset_request_counts();
+    assert_eq!(
+        reopened
+            .get_current("main", b"objects/0000.bin")
+            .await
+            .unwrap()
+            .bytes,
+        vec![0; 4096]
+    );
+    assert_eq!(plane.request_snapshot().list, 0);
+    let after_cold = reopened.performance_snapshot();
+    assert!(after_cold.node_ranged_fetches > 0);
+
+    plane.reset_request_counts();
+    assert_eq!(
+        reopened
+            .get_current("main", b"objects/0000.bin")
+            .await
+            .unwrap()
+            .bytes,
+        vec![0; 4096]
+    );
+    let after_warm = reopened.performance_snapshot();
+    assert_eq!(
+        after_warm.node_ranged_fetches,
+        after_cold.node_ranged_fetches
+    );
+    assert_eq!(plane.request_snapshot().list, 0);
+
+    let warm_reopen = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            node_cache: Some(shared_node_cache),
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    plane.reset_request_counts();
+    assert_eq!(
+        warm_reopen
+            .get_current("main", b"objects/0000.bin")
+            .await
+            .unwrap()
+            .bytes,
+        vec![0; 4096]
+    );
+    let shared_warm = warm_reopen.performance_snapshot();
+    assert!(shared_warm.node_cache_hits > 0);
+    assert_eq!(shared_warm.node_ranged_fetches, 0);
+    assert_eq!(plane.request_snapshot().list, 0);
+}
+
+#[tokio::test]
+async fn corrupt_external_node_cache_fails_open_and_is_invalidated() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        max_cached_node_pack_bytes: 1,
+        ..physical_options(".prolly/prolly-s3/corrupt-node-cache")
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..64 {
+        repository
+            .put_bytes(
+                "main",
+                format!("objects/{index:04}.bin").into_bytes(),
+                vec![index; 2048],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    let cache = Arc::new(CorruptNodeCache::default());
+    let reopened = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            node_cache: Some(cache.clone()),
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        reopened
+            .get_current("main", b"objects/0000.bin")
+            .await
+            .unwrap()
+            .bytes,
+        vec![0; 2048]
+    );
+    assert!(cache.removals.load(Ordering::Relaxed) > 0);
+    assert!(reopened.performance_snapshot().node_cache_corruptions > 0);
+}
+
+#[tokio::test]
+async fn scale_indexes_and_history_are_bounded_and_resumable() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        history_traversal_limit: 3,
+        ..physical_options(".prolly/prolly-s3/scale-metadata-v2")
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..12 {
+        repository
+            .put_bytes(
+                "main",
+                format!("history/{index:02}").into_bytes(),
+                vec![index; 64],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let root = repository.head("main").await.unwrap();
+    for index in 0..7 {
+        repository
+            .create_branch(&format!("branch-{index:02}"), root)
+            .await
+            .unwrap();
+        repository
+            .create_tag(&format!("tag-{index:02}"), root)
+            .await
+            .unwrap();
+    }
+
+    let first = repository
+        .log_page_bounded(
+            root,
+            None,
+            4,
+            TraversalBudget {
+                max_commits: 4,
+                max_decoded_bytes: 1024 * 1024,
+                max_elapsed: Duration::from_secs(1),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.commits.len(), 4);
+    assert!(first.continuation.is_some());
+    let second = repository
+        .log_page_bounded(
+            root,
+            first.continuation.as_ref(),
+            4,
+            TraversalBudget::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.commits.len(), 4);
+    assert_ne!(first.commits[3].0, second.commits[0].0);
+    let diff = repository
+        .diff_page_bounded(first.commits[3].0, root, None, 1)
+        .await
+        .unwrap();
+    assert_eq!(diff.changes.len(), 1);
+    assert!(diff.continuation.is_some());
+    let resumed_diff = repository
+        .diff_page_bounded(first.commits[3].0, root, diff.continuation.as_ref(), 1)
+        .await
+        .unwrap();
+    assert_eq!(resumed_diff.changes.len(), 1);
+
+    let branches = repository.advance_ref_catalog_v2(1_000).await.unwrap();
+    assert!(!branches.completed_scan);
+    let tags = repository.advance_ref_catalog_v2(1_000).await.unwrap();
+    assert!(tags.completed_scan);
+    let first_branches = repository.list_branch_catalog_page(None, 3).await.unwrap();
+    assert_eq!(first_branches.branches.len(), 3);
+    assert!(first_branches.continuation.is_some());
+    assert_eq!(first_branches.freshness.scan_epoch, 1);
+    let next_branches = repository
+        .list_branch_catalog_page(first_branches.continuation.as_deref(), 3)
+        .await
+        .unwrap();
+    assert_eq!(next_branches.branches.len(), 3);
+    assert!(first_branches.branches[2].name < next_branches.branches[0].name);
+    assert_eq!(
+        repository
+            .list_tag_catalog_page(None, 1_000)
+            .await
+            .unwrap()
+            .tags
+            .len(),
+        7
+    );
+
+    let mut graph = repository.advance_commit_graph_v2(1_000).await.unwrap();
+    assert!(graph.completed_scan);
+    assert!(graph.indexed_commit_objects >= 13);
+    for _ in 0..4 {
+        graph = repository.advance_commit_graph_v2(1_000).await.unwrap();
+        assert!(graph.completed_scan);
+    }
+    let skipped = repository
+        .first_parent_ancestor_bounded(root, 8, None, 4)
+        .await
+        .unwrap();
+    assert!(skipped.ancestor.is_some());
+    assert!(skipped.continuation.is_none());
+    assert_eq!(skipped.fallback_commit_reads, 0);
+    assert!(skipped.index_reads <= 4);
+
+    plane.reset_request_counts();
+    let reopened = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(plane.request_snapshot().list, 0);
+    assert_eq!(
+        reopened
+            .list_branch_catalog_page(None, 2)
+            .await
+            .unwrap()
+            .branches
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn corrupt_scale_indexes_fail_open_and_rebuild_from_authority() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = physical_options(".prolly/prolly-s3/corrupt-scale-metadata-v2");
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"authoritative.bin".to_vec(),
+            b"still readable".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    repository.advance_ref_catalog_v2(1_000).await.unwrap();
+    repository.advance_ref_catalog_v2(1_000).await.unwrap();
+    repository.advance_commit_graph_v2(1_000).await.unwrap();
+
+    let prefix = &options.repository_prefix;
+    for suffix in [
+        "node-index/v2/head.cbor",
+        "ref-catalog/v2/head.cbor",
+        "commit-graph/v2/head.cbor",
+    ] {
+        corrupt_mutable_head(&plane, &format!("{prefix}/{suffix}")).await;
+    }
+
+    let fail_open = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            ..options.clone()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        fail_open
+            .get_current("main", b"authoritative.bin")
+            .await
+            .unwrap()
+            .bytes,
+        b"still readable"
+    );
+
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    repository.advance_ref_catalog_v2(1_000).await.unwrap();
+    repository.advance_ref_catalog_v2(1_000).await.unwrap();
+    repository.advance_commit_graph_v2(1_000).await.unwrap();
+
+    let repaired = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        repaired
+            .list_branch_catalog_page(None, 10)
+            .await
+            .unwrap()
+            .branches
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn corrupt_v1_checkpoint_is_ignored_without_eager_namespace_scan() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let options = physical_options(".prolly/prolly-s3/checkpoint-corrupt");
     let repository = Repository::initialize(plane.clone(), options.clone())
@@ -1491,7 +1940,7 @@ async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
     )
     .await
     .unwrap();
-    assert!(plane.request_snapshot().list > 0);
+    assert_eq!(plane.request_snapshot().list, 0);
     plane.reset_request_counts();
     assert_eq!(
         reopened

@@ -9,6 +9,7 @@ repository = "https://github.com/crabbuild/prolly"
 
 [features]
 default = []
+foyer-cache = ["dep:foyer"]
 slatedb-index = ["dep:slatedb"]
 
 [dependencies]
@@ -21,6 +22,7 @@ aws-types = "1.3"
 bytes = "1.10"
 base64 = "0.22"
 futures-util = "0.3"
+foyer = { version = "=0.22.3", default-features = false, features = ["runtime-tokio"], optional = true }
 hmac = "0.12"
 http-body = "1"
 md-5 = "0.10"
@@ -37,6 +39,7 @@ tokio = { version = "1.45", features = ["io-util", "macros", "net", "rt-multi-th
 [dev-dependencies]
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
 serde_json = "1.0"
+tempfile = "3.23"
 
 [lints.rust]
 unsafe_code = "forbid"

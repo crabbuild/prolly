@@ -5,9 +5,241 @@ use std::{
 };
 
 use prolly_s3_core::{
-    ErrorCode, FixedClock, ImmutablePut, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath,
-    ObjectPlane, Repository, RepositoryOptions,
+    CommitGeneration, CommitObjectV1, ErrorCode, FixedClock, GcEpochPhaseV2, GetRequest,
+    ImmutablePut, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane,
+    Repository, RepositoryOptions,
 };
+
+#[tokio::test]
+async fn partitioned_gc_v2_is_bounded_restartable_and_publication_fenced() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: "gc-v2-partitioned".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    let orphan_path = ObjectPath::new(format!(
+        "gc-v2-partitioned/commits/sha256/{}/{}/{}",
+        "ab",
+        "cd",
+        "ef".repeat(32)
+    ))
+    .unwrap();
+    let orphan = b"unreachable immutable envelope".to_vec();
+    plane
+        .put_immutable(ImmutablePut {
+            path: orphan_path.clone(),
+            expected_sha256: Sha256::digest(&orphan).into(),
+            bytes: orphan,
+        })
+        .await
+        .unwrap();
+    let epoch = repository
+        .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
+        .await
+        .unwrap();
+    let mut current = epoch;
+    for _ in 0..100 {
+        if matches!(current.phase, GcEpochPhaseV2::Ready) {
+            break;
+        }
+        current = repository
+            .advance_gc_epoch_v2(current.id, 2)
+            .await
+            .unwrap()
+            .epoch;
+    }
+    assert!(matches!(current.phase, GcEpochPhaseV2::Ready));
+    assert!(current.candidates >= 1);
+
+    // Any intervening ref publication makes the first sweep call restart root
+    // discovery without deleting a candidate.
+    let main = repository.head("main").await.unwrap();
+    repository.create_tag("gc-fence", main).await.unwrap();
+    let restarted = repository.sweep_gc_epoch_v2(current.id, 1).await.unwrap();
+    assert!(restarted.restarted_for_new_roots);
+    assert_eq!(restarted.processed, 0);
+    assert!(matches!(
+        restarted.epoch.phase,
+        GcEpochPhaseV2::DiscoverRoots
+    ));
+
+    current = restarted.epoch;
+    for _ in 0..100 {
+        if matches!(current.phase, GcEpochPhaseV2::Ready) {
+            break;
+        }
+        current = repository
+            .advance_gc_epoch_v2(current.id, 2)
+            .await
+            .unwrap()
+            .epoch;
+    }
+    assert!(matches!(current.phase, GcEpochPhaseV2::Ready));
+    for _ in 0..100 {
+        if matches!(current.phase, GcEpochPhaseV2::Completed) {
+            break;
+        }
+        current = repository
+            .sweep_gc_epoch_v2(current.id, 1)
+            .await
+            .unwrap()
+            .epoch;
+    }
+    assert!(matches!(current.phase, GcEpochPhaseV2::Completed));
+    assert!(current.deleted_versions >= 1);
+    assert!(plane.head(&orphan_path).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn partitioned_gc_retains_an_orphan_envelope_that_supplies_a_shared_live_node() {
+    let clock = Arc::new(FixedClock::new(10_000_000));
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        repository_prefix: "gc-v2-shared-node".to_string(),
+        clock: clock.clone(),
+        reflog_retention_millis: 1,
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    let main = repository
+        .put_bytes(
+            "main",
+            b"shared.txt".to_vec(),
+            b"live".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap()
+        .id;
+    let main_encoded = hex::encode(main.as_bytes());
+    let main_path = ObjectPath::new(format!(
+        "gc-v2-shared-node/commits/sha256/{}/{}/{}",
+        &main_encoded[..2],
+        &main_encoded[2..4],
+        main_encoded
+    ))
+    .unwrap();
+    let source = plane
+        .get(GetRequest {
+            path: main_path,
+            range: None,
+            physical_version: None,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let source = CommitObjectV1::decode_object(&source.bytes).unwrap();
+    let pack = source.node_pack.clone().unwrap();
+    let initial = source.commit.parents[0];
+    let mut thin_commit = source.commit.clone();
+    thin_commit.parents = vec![initial];
+    thin_commit.node_pack = None;
+    thin_commit.created_at_millis += 50_000;
+    thin_commit.message = Some("reachable state with external node containers".to_string());
+    let thin_object = CommitObjectV1::new(thin_commit, None).unwrap();
+    let thin = thin_object.commit.id().unwrap();
+    let thin_encoded = hex::encode(thin.as_bytes());
+    let thin_path = ObjectPath::new(format!(
+        "gc-v2-shared-node/commits/sha256/{}/{}/{}",
+        &thin_encoded[..2],
+        &thin_encoded[2..4],
+        thin_encoded
+    ))
+    .unwrap();
+    let thin_bytes = thin_object.encode_object().unwrap();
+    plane
+        .put_immutable(ImmutablePut {
+            path: thin_path,
+            expected_sha256: Sha256::digest(&thin_bytes).into(),
+            bytes: thin_bytes,
+        })
+        .await
+        .unwrap();
+    repository
+        .create_branch("live-no-pack", thin)
+        .await
+        .unwrap();
+    repository.delete_branch("main", main).await.unwrap();
+    let (orphan, orphan_object) = (0..10_000u64)
+        .find_map(|nonce| {
+            let mut commit = source.commit.clone();
+            commit.parents = vec![initial];
+            commit.generation = CommitGeneration(source.commit.generation.0);
+            commit.created_at_millis += nonce + 1;
+            commit.message = Some(format!("unreachable duplicate node container {nonce}"));
+            let object = CommitObjectV1::new(commit, Some(pack.clone())).ok()?;
+            let id = object.commit.id().ok()?;
+            (id.as_bytes() > main.as_bytes()).then_some((id, object))
+        })
+        .expect("a later lexicographic commit ID is easy to find");
+    let encoded = hex::encode(orphan.as_bytes());
+    let orphan_path = ObjectPath::new(format!(
+        "gc-v2-shared-node/commits/sha256/{}/{}/{}",
+        &encoded[..2],
+        &encoded[2..4],
+        encoded
+    ))
+    .unwrap();
+    let orphan_bytes = orphan_object.encode_object().unwrap();
+    plane
+        .put_immutable(ImmutablePut {
+            path: orphan_path.clone(),
+            expected_sha256: Sha256::digest(&orphan_bytes).into(),
+            bytes: orphan_bytes,
+        })
+        .await
+        .unwrap();
+    clock.advance(10).unwrap();
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    let repository = Repository::open(plane.clone(), options).await.unwrap();
+
+    let mut epoch = repository
+        .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
+        .await
+        .unwrap();
+    for _ in 0..200 {
+        if matches!(epoch.phase, GcEpochPhaseV2::Ready) {
+            break;
+        }
+        epoch = repository
+            .advance_gc_epoch_v2(epoch.id, 2)
+            .await
+            .unwrap()
+            .epoch;
+    }
+    assert!(matches!(epoch.phase, GcEpochPhaseV2::Ready));
+    assert!(epoch.marked_nodes > 0);
+    for _ in 0..200 {
+        if matches!(epoch.phase, GcEpochPhaseV2::Completed) {
+            break;
+        }
+        epoch = repository
+            .sweep_gc_epoch_v2(epoch.id, 2)
+            .await
+            .unwrap()
+            .epoch;
+    }
+    assert!(matches!(epoch.phase, GcEpochPhaseV2::Completed));
+    assert!(plane.head(&orphan_path).await.unwrap().is_some());
+    assert_eq!(
+        repository
+            .get_current("live-no-pack", b"shared.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"live"
+    );
+}
 use sha2::{Digest, Sha256};
 
 #[tokio::test]

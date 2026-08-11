@@ -492,6 +492,7 @@ pub struct Client {
     physical_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), PhysicalMultipartPartResult>>>,
     physical_multipart_sessions: Arc<RwLock<BTreeMap<String, PhysicalMultipartSessionV1>>>,
     writer_lease_maintenance: Option<Arc<WriterLeaseMaintenance>>,
+    node_index_maintenance: Option<Arc<prolly_s3_core::NodeIndexMaintenance>>,
     max_staged_batch_bytes: usize,
 }
 
@@ -508,6 +509,11 @@ pub struct ClientBuilder {
     max_cached_commits: Option<usize>,
     max_cached_branches: Option<usize>,
     max_cached_node_pack_bytes: Option<usize>,
+    max_cached_node_locations: Option<usize>,
+    max_cached_node_bytes: Option<usize>,
+    node_cache: Option<Arc<dyn prolly_s3_core::NodeCache>>,
+    node_index_maintenance_interval: Option<Duration>,
+    node_index_maintenance_batch: Option<usize>,
     max_staged_batch_bytes: Option<usize>,
     gc_delete_rate_limit_per_second: Option<u32>,
     token_signer: Option<Arc<dyn TokenSigner>>,
@@ -560,6 +566,34 @@ impl Client {
         self.repository.performance_snapshot()
     }
 
+    /// Run one bounded node-index maintenance step immediately. Normal
+    /// writable clients also run this work in the background.
+    pub async fn advance_node_index(
+        &self,
+        max_commit_objects: usize,
+    ) -> Result<prolly_s3_core::NodeIndexAdvanceReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .advance_node_index_v2(max_commit_objects)
+            .await
+    }
+
+    /// Run one bounded maintenance page for every rebuildable scale index.
+    pub async fn advance_scale_indexes(
+        &self,
+        max_objects: usize,
+    ) -> Result<(
+        prolly_s3_core::NodeIndexAdvanceReport,
+        prolly_s3_core::RefCatalogAdvanceReport,
+        prolly_s3_core::CommitGraphAdvanceReport,
+    )> {
+        self.ensure_provider_qualified()?;
+        let nodes = self.repository.advance_node_index_v2(max_objects).await?;
+        let refs = self.repository.advance_ref_catalog_v2(max_objects).await?;
+        let graph = self.repository.advance_commit_graph_v2(max_objects).await?;
+        Ok((nodes, refs, graph))
+    }
+
     /// Perform an operator-authorized writer handoff after the previous
     /// process and credentials have been independently stopped or revoked.
     /// Open this client read-only and ensure no derived branch/snapshot clients
@@ -581,6 +615,10 @@ impl Client {
         };
         self.writer_lease_maintenance =
             Some(Arc::new(self.repository.start_writer_lease_maintenance()?));
+        self.node_index_maintenance = Some(Arc::new(
+            self.repository
+                .start_node_index_maintenance(Duration::from_secs(60), 1_000)?,
+        ));
         Ok(generation)
     }
 
@@ -601,6 +639,7 @@ impl Client {
             physical_multipart_parts: self.physical_multipart_parts.clone(),
             physical_multipart_sessions: self.physical_multipart_sessions.clone(),
             writer_lease_maintenance: self.writer_lease_maintenance.clone(),
+            node_index_maintenance: self.node_index_maintenance.clone(),
             max_staged_batch_bytes: self.max_staged_batch_bytes,
         })
     }
@@ -625,6 +664,30 @@ impl Client {
         self.ensure_provider_qualified()?;
         self.repository.log_at(start, after, limit).await
     }
+    pub async fn log_bounded(
+        &self,
+        start: CommitId,
+        cursor: Option<&prolly_s3_core::HistoryCursor>,
+        limit: usize,
+        budget: prolly_s3_core::TraversalBudget,
+    ) -> Result<prolly_s3_core::CommitPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .log_page_bounded(start, cursor, limit, budget)
+            .await
+    }
+    pub async fn first_parent_ancestor_bounded(
+        &self,
+        start: CommitId,
+        distance: u64,
+        cursor: Option<&prolly_s3_core::FirstParentCursor>,
+        max_reads: usize,
+    ) -> Result<prolly_s3_core::FirstParentPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .first_parent_ancestor_bounded(start, distance, cursor, max_reads)
+            .await
+    }
     pub async fn create_branch(
         &self,
         name: impl AsRef<str>,
@@ -644,6 +707,24 @@ impl Client {
     pub async fn list_branches(&self) -> Result<Vec<prolly_s3_core::BranchHead>> {
         self.ensure_provider_qualified()?;
         self.repository.list_branches().await
+    }
+    pub async fn list_branches_page(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<prolly_s3_core::BranchPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_branches_page(continuation, limit)
+            .await
+    }
+    pub async fn list_branch_catalog_page(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<prolly_s3_core::CatalogBranchPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.list_branch_catalog_page(after, limit).await
     }
     pub async fn rebuild_advisory_index(&self) -> Result<crate::AdvisoryRebuildReport> {
         self.ensure_provider_qualified()?;
@@ -673,6 +754,22 @@ impl Client {
     pub async fn list_tags(&self) -> Result<Vec<prolly_s3_core::Tag>> {
         self.ensure_provider_qualified()?;
         self.repository.list_tags().await
+    }
+    pub async fn list_tags_page(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<prolly_s3_core::TagPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.list_tags_page(continuation, limit).await
+    }
+    pub async fn list_tag_catalog_page(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<prolly_s3_core::CatalogTagPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.list_tag_catalog_page(after, limit).await
     }
     pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {
         self.ensure_provider_qualified()?;
@@ -729,6 +826,18 @@ impl Client {
     ) -> Result<(Vec<prolly_s3_core::ObjectDiff>, bool)> {
         self.ensure_provider_qualified()?;
         self.repository.diff_at(from, to, after, limit).await
+    }
+    pub async fn diff_bounded(
+        &self,
+        from: CommitId,
+        to: CommitId,
+        cursor: Option<&prolly_s3_core::ObjectDiffCursor>,
+        limit: usize,
+    ) -> Result<prolly_s3_core::ObjectDiffPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .diff_page_bounded(from, to, cursor, limit)
+            .await
     }
     pub async fn merge_bases(&self, left: CommitId, right: CommitId) -> Result<Vec<CommitId>> {
         self.ensure_provider_qualified()?;
@@ -1002,6 +1111,36 @@ impl Client {
         let grace_millis = u64::try_from(grace.as_millis())
             .map_err(|_| Error::new(ErrorCode::InvalidLimit, "GC grace exceeds u64 millis"))?;
         self.repository.plan_gc(grace_millis, max_candidates).await
+    }
+    /// Starts the scalable GC workflow. Prefer this over `plan_gc` when the
+    /// repository can exceed one process's memory.
+    pub async fn start_gc_epoch(&self, grace: Duration) -> Result<prolly_s3_core::GcEpochV2> {
+        self.ensure_provider_qualified()?;
+        let grace_millis = u64::try_from(grace.as_millis())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "GC grace exceeds u64 millis"))?;
+        self.repository.start_gc_epoch_v2(grace_millis).await
+    }
+    pub async fn advance_gc_epoch(
+        &self,
+        epoch: OperationId,
+        max_items: usize,
+    ) -> Result<prolly_s3_core::GcEpochStepReport> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_gc_epoch_v2(epoch, max_items).await
+    }
+    pub async fn sweep_gc_epoch(
+        &self,
+        epoch: OperationId,
+        max_candidates: usize,
+    ) -> Result<prolly_s3_core::GcEpochStepReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .sweep_gc_epoch_v2(epoch, max_candidates)
+            .await
+    }
+    pub async fn gc_epoch(&self, epoch: OperationId) -> Result<prolly_s3_core::GcEpochV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.gc_epoch_v2(epoch).await
     }
     pub async fn plan_gc_resumable(
         &self,
@@ -1464,6 +1603,23 @@ impl ClientBuilder {
         self.max_cached_node_pack_bytes = Some(bytes);
         self
     }
+    pub fn max_cached_node_locations(mut self, locations: usize) -> Self {
+        self.max_cached_node_locations = Some(locations);
+        self
+    }
+    pub fn max_cached_node_bytes(mut self, bytes: usize) -> Self {
+        self.max_cached_node_bytes = Some(bytes);
+        self
+    }
+    pub fn node_cache(mut self, cache: Arc<dyn prolly_s3_core::NodeCache>) -> Self {
+        self.node_cache = Some(cache);
+        self
+    }
+    pub fn node_index_maintenance(mut self, interval: Duration, batch: usize) -> Self {
+        self.node_index_maintenance_interval = Some(interval);
+        self.node_index_maintenance_batch = Some(batch);
+        self
+    }
     /// Fail-closed memory bound for all bodies staged in one atomic commit.
     pub fn max_staged_batch_bytes(mut self, bytes: usize) -> Self {
         self.max_staged_batch_bytes = Some(bytes);
@@ -1598,6 +1754,13 @@ impl ClientBuilder {
         if let Some(value) = self.max_cached_node_pack_bytes {
             options.max_cached_node_pack_bytes = value;
         }
+        if let Some(value) = self.max_cached_node_locations {
+            options.max_cached_node_locations = value;
+        }
+        if let Some(value) = self.max_cached_node_bytes {
+            options.max_cached_node_bytes = value;
+        }
+        options.node_cache = self.node_cache;
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
@@ -1657,6 +1820,16 @@ impl ClientBuilder {
             .then(|| repository.start_writer_lease_maintenance())
             .transpose()?
             .map(Arc::new);
+        let node_index_maintenance = maintain_physical_writer
+            .then(|| {
+                repository.start_node_index_maintenance(
+                    self.node_index_maintenance_interval
+                        .unwrap_or(Duration::from_secs(60)),
+                    self.node_index_maintenance_batch.unwrap_or(1_000),
+                )
+            })
+            .transpose()?
+            .map(Arc::new);
         Ok(Client {
             repository,
             bucket,
@@ -1671,6 +1844,7 @@ impl ClientBuilder {
             physical_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
             physical_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
             writer_lease_maintenance,
+            node_index_maintenance,
             max_staged_batch_bytes,
         })
     }

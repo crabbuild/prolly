@@ -20,7 +20,7 @@ Add the crate from this workspace:
 
 ```toml
 [dependencies]
-prolly-s3-client = { path = "../extensions/s3/client" }
+prolly-s3-client = { path = "../extensions/s3/client", features = ["foyer-cache"] }
 aws-config = "1.8"
 aws-sdk-s3 = "1.140"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -245,6 +245,140 @@ The client does not retry logical branch conflicts. Local payload uploads may
 run concurrently, while the short metadata-publication phase is serialized; a
 stale expected head fails explicitly.
 
+## Add a persistent node cache
+
+Foyer keeps verified immutable Prolly nodes in bounded memory and local disk.
+Cache hits are checked against the CID; corruption and cache I/O errors fail
+open to a verified S3 read.
+
+```rust
+use std::{path::PathBuf, sync::Arc, time::Duration};
+
+use prolly_s3_client::{
+    Client, FoyerNodeCache, FoyerNodeCacheConfig, HmacAttestationSigner,
+    HmacTokenSigner, ProviderIdentity,
+};
+
+let node_cache = FoyerNodeCache::open(FoyerNodeCacheConfig {
+    directory: PathBuf::from("/var/cache/prolly-s3/nodes"),
+    memory_capacity_bytes: 512 * 1024 * 1024,
+    disk_capacity_bytes: 20 * 1024 * 1024 * 1024,
+    disk_block_size_bytes: 8 * 1024 * 1024,
+    memory_shards: 16,
+})
+.await?;
+
+let client = Client::builder()
+    .aws_client(aws)
+    .bucket(bucket)
+    .writer("repository-service")
+    .provider_identity(ProviderIdentity::aws_region("us-west-2"))
+    .attestation_signer(Arc::new(HmacAttestationSigner::single(
+        "provider-key-2026-01",
+        vec![0x41; 32],
+    )?))
+    .token_signer(Arc::new(HmacTokenSigner::single(
+        "cursor-key-2026-01",
+        vec![0x42; 32],
+    )?))
+    .node_cache(node_cache.clone())
+    .max_cached_node_locations(262_144)
+    .node_index_maintenance(Duration::from_secs(60), 1_000)
+    .open()
+    .await?;
+```
+
+Use one filesystem owner per cache directory. Drop clients before calling
+`node_cache.close().await?` during graceful shutdown.
+
+## Page through large histories and ref sets
+
+Run one maintenance page immediately after bulk import; writable clients also
+advance the rebuildable indexes every 60 seconds by default.
+
+```rust
+use prolly_s3_client::core::TraversalBudget;
+
+client.advance_scale_indexes(1_000).await?;
+
+let root = client.head_commit().await?;
+let mut history_cursor = None;
+loop {
+    let page = client
+        .log_bounded(root, history_cursor.as_ref(), 500, TraversalBudget::default())
+        .await?;
+
+    for (commit_id, commit) in page.commits {
+        println!("{} {}", commit_id, commit.message.unwrap_or_default());
+    }
+
+    history_cursor = page.continuation;
+    if history_cursor.is_none() {
+        break;
+    }
+}
+```
+
+The derived ref catalog is for enumeration only. Its response includes a scan
+epoch and update time; resolve a selected name through the authoritative ref
+before mutation.
+
+```rust
+let mut after = None;
+loop {
+    let page = client
+        .list_branch_catalog_page(after.as_deref(), 500)
+        .await?;
+
+    for branch in &page.branches {
+        println!("{} -> {}", branch.name, branch.target);
+    }
+
+    after = page.continuation;
+    if after.is_none() {
+        break;
+    }
+}
+```
+
+Use `diff_bounded` for very large comparisons. Its continuation preserves the
+structural traversal frontier, so unchanged CID subtrees stay pruned after a
+resume.
+
+## Run partitioned garbage collection
+
+GC v2 requires the writable authoritative client and complete node-index
+coverage. Each call has a 1–1,000 item budget and persists its checkpoint.
+
+```rust
+use prolly_s3_client::core::GcEpochPhaseV2;
+
+client.advance_node_index(1_000).await?;
+let mut epoch = client
+    .start_gc_epoch(Duration::from_secs(7 * 24 * 60 * 60))
+    .await?;
+
+loop {
+    match epoch.phase {
+        GcEpochPhaseV2::Ready | GcEpochPhaseV2::Sweeping => {
+            epoch = client.sweep_gc_epoch(epoch.id, 500).await?.epoch;
+        }
+        GcEpochPhaseV2::Completed => break,
+        GcEpochPhaseV2::Aborted => {
+            eprintln!("GC epoch was aborted; inspect its abort_reason");
+            break;
+        }
+        _ => {
+            // This also handles a safe root-discovery restart after a write.
+            epoch = client.advance_gc_epoch(epoch.id, 1_000).await?.epoch;
+        }
+    }
+}
+```
+
+For a large repository, call `advance_node_index` until its report says
+`completed_scan`; one 1,000-object call may be only part of an index epoch.
+
 ## Use cases
 
 - Configuration, model, and artifact registries that need exact rollback.
@@ -263,6 +397,9 @@ stale expected head fails explicitly.
   part's ETag/SHA-256/size, and whole-object checksums.
 - Provider-native version IDs cannot be preserved across buckets.
 - Raw S3 listing shows physical state, not a branch or historical snapshot.
+- Whole-result compatibility methods such as `list_branches`, `merge_bases`,
+  merge planning, and repository-wide `fsck` are not billion-scale APIs. Use
+  paged catalog/history/diff calls and partition operational work.
 - Production AWS scale and throttling qualification is still pending.
 
 The complete RustFS example is

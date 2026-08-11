@@ -15,7 +15,10 @@ Core tests verify:
 - `N + 4` provider-native multipart publication;
 - bounded parallel payload preparation and concurrent OperationId singleflight;
 - bounded commit, branch, and node-pack caches;
+- persistent verified-node cache reopen and durable corruption invalidation;
 - two-GET node-index checkpoint open without a metadata listing;
+- bounded legacy node-location fallback after in-memory eviction;
+- corrupt v2 node/ref/graph indexes failing open and rebuilding from authority;
 - idempotent replay and lost put/copy/delete response reconciliation;
 - exclusive writer takeover fencing;
 - clone, fetch, push, repair, and provider-ID rebinding;
@@ -26,8 +29,8 @@ Core tests verify:
 RustFS integration tests verify a 64 KiB whole-object write at three S3 calls,
 one-call warm current and historical reads, historical content after overwrite,
 a two-part multipart write at six calls, and 32 concurrent writes at exactly 96
-calls. Two local runs on 2026-08-11 completed the 32-write tier in 862–878 ms
-(p99 778–805 ms, 36.44–37.09 writes/s). This is a reproducible local baseline,
+calls. Four local runs on 2026-08-11 completed the 32-write tier in 862–1,211 ms
+(p99 778–1,113 ms, 26.40–37.09 writes/s). This is a reproducible local range,
 not an AWS SLO.
 
 Run them with:

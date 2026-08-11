@@ -1,15 +1,18 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    sync::{Arc, RwLock},
+    collections::{BTreeMap, VecDeque},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, RwLock, Weak,
+    },
 };
 
 use prolly::{AsyncStore, BatchOp, Cid};
 
 use crate::{
     codec::sha256, CommitId, CommitObjectV1, DeleteOutcome, Error, ErrorCode, GetRequest,
-    ImmutablePut, ListRequest, NodeIndexEntryV1, NodePackAttachmentKindV1, NodePackAttachmentV1,
-    NodePackEntryV1, NodePackId, NodePackRefV1, NodePackV1, ObjectPath, ObjectPlane,
-    PhysicalVersion, Result, TreeFormatDigest,
+    ImmutablePut, ListRequest, NodeCache, NodeCacheKey, NodeIndexEntryV1, NodePackAttachmentKindV1,
+    NodePackAttachmentV1, NodePackEntryV1, NodePackId, NodePackRefV1, NodePackV1, ObjectPath,
+    ObjectPlane, PhysicalVersion, RepositoryId, Result, TreeFormatDigest,
 };
 
 #[derive(Clone)]
@@ -23,9 +26,90 @@ struct PackedNodeLocation {
 
 struct PackedNodeState {
     pending: RwLock<BTreeMap<Cid, Vec<u8>>>,
-    locations: RwLock<BTreeMap<Cid, PackedNodeLocation>>,
+    locations: RwLock<BoundedNodeLocations>,
     packs: RwLock<PackedNodeCache>,
-    indexed_containers: RwLock<BTreeSet<CommitId>>,
+    node_cache: Option<Arc<dyn NodeCache>>,
+    cache_namespace: Option<NodeCacheNamespace>,
+    fetch_locks: Mutex<BTreeMap<Cid, Weak<tokio::sync::Mutex<()>>>>,
+    cache_hits: AtomicU64,
+    cache_misses: AtomicU64,
+    cache_insertions: AtomicU64,
+    cache_errors: AtomicU64,
+    cache_corruptions: AtomicU64,
+    coalesced_waits: AtomicU64,
+    ranged_fetches: AtomicU64,
+    locator: RwLock<Option<Arc<dyn NodeLocator>>>,
+}
+
+struct DirectNodeState {
+    node_cache: Arc<dyn NodeCache>,
+    cache_namespace: NodeCacheNamespace,
+    fetch_locks: Mutex<BTreeMap<Cid, Weak<tokio::sync::Mutex<()>>>>,
+    cache_hits: AtomicU64,
+    cache_misses: AtomicU64,
+    cache_insertions: AtomicU64,
+    cache_errors: AtomicU64,
+    cache_corruptions: AtomicU64,
+    coalesced_waits: AtomicU64,
+    object_fetches: AtomicU64,
+}
+
+struct BoundedNodeLocations {
+    entries: BTreeMap<Cid, PackedNodeLocation>,
+    order: VecDeque<Cid>,
+    capacity: usize,
+}
+
+impl BoundedNodeLocations {
+    fn new(capacity: usize) -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn get(&self, cid: &Cid) -> Option<&PackedNodeLocation> {
+        self.entries.get(cid)
+    }
+
+    fn insert(&mut self, cid: Cid, location: PackedNodeLocation) {
+        if self.entries.insert(cid.clone(), location).is_none() {
+            self.order.push_back(cid);
+        }
+        while self.entries.len() > self.capacity {
+            if let Some(evicted) = self.order.pop_front() {
+                self.entries.remove(&evicted);
+            }
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&Cid, &PackedNodeLocation)> {
+        self.entries.iter()
+    }
+}
+
+#[async_trait::async_trait]
+pub(crate) trait NodeLocator: Send + Sync + 'static {
+    async fn locate(&self, cid: &Cid) -> Result<Option<NodeIndexEntryV1>>;
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct NodeCacheNamespace {
+    pub(crate) repository: RepositoryId,
+    pub(crate) protocol_version: u32,
+    pub(crate) tree_format: TreeFormatDigest,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NodeCacheSnapshot {
+    pub hits: u64,
+    pub misses: u64,
+    pub insertions: u64,
+    pub errors: u64,
+    pub corruptions: u64,
+    pub coalesced_waits: u64,
+    pub ranged_fetches: u64,
 }
 
 struct PackedNodeCache {
@@ -87,6 +171,7 @@ pub struct ProllyObjectStore<P> {
     plane: Arc<P>,
     repository_prefix: String,
     packed: Option<Arc<PackedNodeState>>,
+    direct: Option<Arc<DirectNodeState>>,
 }
 
 impl<P> Clone for ProllyObjectStore<P> {
@@ -95,6 +180,7 @@ impl<P> Clone for ProllyObjectStore<P> {
             plane: self.plane.clone(),
             repository_prefix: self.repository_prefix.clone(),
             packed: self.packed.clone(),
+            direct: self.direct.clone(),
         }
     }
 }
@@ -105,6 +191,7 @@ impl<P> ProllyObjectStore<P> {
             plane,
             repository_prefix: repository_prefix.into(),
             packed: None,
+            direct: None,
         }
     }
 
@@ -117,16 +204,88 @@ impl<P> ProllyObjectStore<P> {
         repository_prefix: impl Into<String>,
         max_cached_pack_bytes: usize,
     ) -> Self {
+        Self::new_packed_with_limits(plane, repository_prefix, max_cached_pack_bytes, 65_536)
+    }
+
+    pub fn new_packed_with_limits(
+        plane: Arc<P>,
+        repository_prefix: impl Into<String>,
+        max_cached_pack_bytes: usize,
+        max_cached_locations: usize,
+    ) -> Self {
         Self {
             plane,
             repository_prefix: repository_prefix.into(),
             packed: Some(Arc::new(PackedNodeState {
                 pending: RwLock::new(BTreeMap::new()),
-                locations: RwLock::new(BTreeMap::new()),
+                locations: RwLock::new(BoundedNodeLocations::new(max_cached_locations)),
                 packs: RwLock::new(PackedNodeCache::new(max_cached_pack_bytes)),
-                indexed_containers: RwLock::new(BTreeSet::new()),
+                node_cache: None,
+                cache_namespace: None,
+                fetch_locks: Mutex::new(BTreeMap::new()),
+                cache_hits: AtomicU64::new(0),
+                cache_misses: AtomicU64::new(0),
+                cache_insertions: AtomicU64::new(0),
+                cache_errors: AtomicU64::new(0),
+                cache_corruptions: AtomicU64::new(0),
+                coalesced_waits: AtomicU64::new(0),
+                ranged_fetches: AtomicU64::new(0),
+                locator: RwLock::new(None),
+            })),
+            direct: None,
+        }
+    }
+
+    pub fn new_cached_direct(
+        plane: Arc<P>,
+        repository_prefix: impl Into<String>,
+        repository: RepositoryId,
+        protocol_version: u32,
+        tree_format: TreeFormatDigest,
+        node_cache: Arc<dyn NodeCache>,
+    ) -> Self {
+        Self {
+            plane,
+            repository_prefix: repository_prefix.into(),
+            packed: None,
+            direct: Some(Arc::new(DirectNodeState {
+                node_cache,
+                cache_namespace: NodeCacheNamespace {
+                    repository,
+                    protocol_version,
+                    tree_format,
+                },
+                fetch_locks: Mutex::new(BTreeMap::new()),
+                cache_hits: AtomicU64::new(0),
+                cache_misses: AtomicU64::new(0),
+                cache_insertions: AtomicU64::new(0),
+                cache_errors: AtomicU64::new(0),
+                cache_corruptions: AtomicU64::new(0),
+                coalesced_waits: AtomicU64::new(0),
+                object_fetches: AtomicU64::new(0),
             })),
         }
+    }
+
+    pub(crate) fn new_packed_with_node_cache(
+        plane: Arc<P>,
+        repository_prefix: impl Into<String>,
+        max_cached_pack_bytes: usize,
+        max_cached_locations: usize,
+        cache_namespace: NodeCacheNamespace,
+        node_cache: Arc<dyn NodeCache>,
+    ) -> Self {
+        let mut store = Self::new_packed_with_limits(
+            plane,
+            repository_prefix,
+            max_cached_pack_bytes,
+            max_cached_locations,
+        );
+        let state = Arc::get_mut(store.packed.as_mut().expect("packed state was created"))
+            .expect("newly created packed state has one owner");
+        state.node_cache = Some(node_cache);
+        state.cache_namespace = Some(cache_namespace);
+        store
     }
 
     fn path_for_key(&self, key: &[u8]) -> Result<ObjectPath> {
@@ -161,6 +320,47 @@ impl<P> ProllyObjectStore<P> {
 impl<P: ObjectPlane> ProllyObjectStore<P> {
     pub fn is_packed(&self) -> bool {
         self.packed.is_some()
+    }
+
+    pub fn node_cache_snapshot(&self) -> NodeCacheSnapshot {
+        if let Some(state) = &self.packed {
+            return NodeCacheSnapshot {
+                hits: state.cache_hits.load(Ordering::Relaxed),
+                misses: state.cache_misses.load(Ordering::Relaxed),
+                insertions: state.cache_insertions.load(Ordering::Relaxed),
+                errors: state.cache_errors.load(Ordering::Relaxed),
+                corruptions: state.cache_corruptions.load(Ordering::Relaxed),
+                coalesced_waits: state.coalesced_waits.load(Ordering::Relaxed),
+                ranged_fetches: state.ranged_fetches.load(Ordering::Relaxed),
+            };
+        }
+        if let Some(state) = &self.direct {
+            return NodeCacheSnapshot {
+                hits: state.cache_hits.load(Ordering::Relaxed),
+                misses: state.cache_misses.load(Ordering::Relaxed),
+                insertions: state.cache_insertions.load(Ordering::Relaxed),
+                errors: state.cache_errors.load(Ordering::Relaxed),
+                corruptions: state.cache_corruptions.load(Ordering::Relaxed),
+                coalesced_waits: state.coalesced_waits.load(Ordering::Relaxed),
+                ranged_fetches: state.object_fetches.load(Ordering::Relaxed),
+            };
+        }
+        NodeCacheSnapshot::default()
+    }
+
+    pub(crate) fn set_node_locator(&self, locator: Arc<dyn NodeLocator>) -> Result<()> {
+        let state = self.packed.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "cannot attach a node locator to an unpacked store",
+            )
+        })?;
+        *state
+            .locator
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))? =
+            Some(locator);
+        Ok(())
     }
 
     pub fn export_node_index(&self) -> Result<Vec<NodeIndexEntryV1>> {
@@ -221,8 +421,87 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
 
     pub async fn rebuild_node_index(&self) -> Result<()> {
         if self.packed.is_some() {
-            self.scan_commit_objects().await?;
+            self.scan_commit_objects_for(None).await?;
         }
+        Ok(())
+    }
+
+    /// Resolve the physical envelope that currently supplies a packed node.
+    /// GC uses this after walking reachable CIDs so shared nodes retain at
+    /// least one verified container even when that container is not in commit
+    /// ancestry.
+    pub(crate) async fn resolve_node_location(
+        &self,
+        cid: &Cid,
+    ) -> Result<Option<NodeIndexEntryV1>> {
+        let Some(state) = &self.packed else {
+            return Ok(None);
+        };
+        let lookup = || -> Result<Option<PackedNodeLocation>> {
+            Ok(state
+                .locations
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+                .get(cid)
+                .cloned())
+        };
+        let mut location = lookup()?;
+        if location.is_none() {
+            let locator = state
+                .locator
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+                .clone();
+            if let Some(locator) = locator {
+                if let Some(entry) = locator.locate(cid).await? {
+                    if entry.cid != *cid || entry.len == 0 || entry.cid.as_bytes() != entry.sha256 {
+                        return Err(Error::new(
+                            ErrorCode::CorruptNode,
+                            "resolved node-index entry failed validation",
+                        ));
+                    }
+                    let resolved = PackedNodeLocation {
+                        container: entry.container,
+                        pack: entry.pack,
+                        absolute_offset: entry.absolute_offset,
+                        len: entry.len,
+                        sha256: entry.sha256,
+                    };
+                    state
+                        .locations
+                        .write()
+                        .map_err(|_| {
+                            Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
+                        })?
+                        .insert(cid.clone(), resolved.clone());
+                    location = Some(resolved);
+                }
+            }
+        }
+        Ok(location.map(|location| NodeIndexEntryV1 {
+            cid: cid.clone(),
+            container: location.container,
+            pack: location.pack,
+            absolute_offset: location.absolute_offset,
+            len: location.len,
+            sha256: location.sha256,
+        }))
+    }
+
+    pub(crate) fn clear_node_locations(&self) -> Result<()> {
+        let Some(state) = &self.packed else {
+            return Ok(());
+        };
+        let capacity = state
+            .locations
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+            .capacity;
+        *state
+            .locations
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))? =
+            BoundedNodeLocations::new(capacity);
         Ok(())
     }
 
@@ -330,11 +609,6 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 Arc::new(pack),
                 usize::try_from(reference.object_len).unwrap_or(usize::MAX),
             );
-        state
-            .indexed_containers
-            .write()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-            .insert(container);
         let mut live_pending = state
             .pending
             .write()
@@ -371,15 +645,16 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
             })?;
             for entry in &pack.entries {
-                locations
-                    .entry(entry.cid.clone())
-                    .or_insert(PackedNodeLocation {
+                locations.insert(
+                    entry.cid.clone(),
+                    PackedNodeLocation {
                         container,
                         pack: reference.id,
                         absolute_offset: payload_offset + entry.offset,
                         len: entry.len,
                         sha256: entry.sha256,
-                    });
+                    },
+                );
             }
         }
         state
@@ -391,11 +666,6 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 Arc::new(pack.clone()),
                 usize::try_from(reference.object_len).unwrap_or(usize::MAX),
             );
-        state
-            .indexed_containers
-            .write()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-            .insert(container);
         Ok(())
     }
 
@@ -419,17 +689,120 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         {
             return Ok(Some(bytes));
         }
+        if let Some(bytes) = self.cached_node(&cid).await {
+            return Ok(Some(bytes));
+        }
         if let Some(bytes) = self.cached_packed_node(&cid)? {
+            self.admit_node(cid.clone(), bytes.clone()).await;
+            return Ok(Some(bytes));
+        }
+        let fetch_lock = {
+            let mut locks = state
+                .fetch_locks
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            if let Some(lock) = locks.get(&cid).and_then(Weak::upgrade) {
+                state.coalesced_waits.fetch_add(1, Ordering::Relaxed);
+                lock
+            } else {
+                let lock = Arc::new(tokio::sync::Mutex::new(()));
+                locks.insert(cid.clone(), Arc::downgrade(&lock));
+                lock
+            }
+        };
+        let _fetch = fetch_lock.lock().await;
+
+        // Another request may have populated any tier while this request was
+        // waiting for the CID-scoped fetch lock.
+        if let Some(bytes) = state
+            .pending
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+            .get(&cid)
+            .cloned()
+        {
+            return Ok(Some(bytes));
+        }
+        if let Some(bytes) = self.cached_node(&cid).await {
+            return Ok(Some(bytes));
+        }
+        if let Some(bytes) = self.cached_packed_node(&cid)? {
+            self.admit_node(cid.clone(), bytes.clone()).await;
             return Ok(Some(bytes));
         }
         if let Some(bytes) = self.ranged_packed_node(&cid).await? {
+            self.admit_node(cid.clone(), bytes.clone()).await;
             return Ok(Some(bytes));
         }
-        self.scan_commit_objects().await?;
-        if let Some(bytes) = self.cached_packed_node(&cid)? {
+        if let Some(bytes) = self.scan_commit_objects_for(Some(&cid)).await? {
+            self.admit_node(cid.clone(), bytes.clone()).await;
             return Ok(Some(bytes));
         }
-        self.ranged_packed_node(&cid).await
+        Ok(None)
+    }
+
+    fn node_cache_key(&self, cid: Cid) -> Option<NodeCacheKey> {
+        let namespace = self.packed.as_ref()?.cache_namespace?;
+        Some(NodeCacheKey {
+            repository: namespace.repository,
+            protocol_version: namespace.protocol_version,
+            tree_format: namespace.tree_format,
+            cid,
+        })
+    }
+
+    async fn cached_node(&self, cid: &Cid) -> Option<Vec<u8>> {
+        let state = self.packed.as_ref()?;
+        let cache = state.node_cache.as_ref()?;
+        let key = self.node_cache_key(cid.clone())?;
+        match cache.get(&key).await {
+            Ok(Some(bytes)) if sha256(&bytes).as_slice() == cid.as_bytes() => {
+                state.cache_hits.fetch_add(1, Ordering::Relaxed);
+                Some(bytes)
+            }
+            Ok(Some(_)) => {
+                state.cache_corruptions.fetch_add(1, Ordering::Relaxed);
+                state.cache_misses.fetch_add(1, Ordering::Relaxed);
+                if cache.remove(&key).await.is_err() {
+                    state.cache_errors.fetch_add(1, Ordering::Relaxed);
+                }
+                None
+            }
+            Ok(None) => {
+                state.cache_misses.fetch_add(1, Ordering::Relaxed);
+                None
+            }
+            Err(_) => {
+                state.cache_errors.fetch_add(1, Ordering::Relaxed);
+                state.cache_misses.fetch_add(1, Ordering::Relaxed);
+                None
+            }
+        }
+    }
+
+    async fn admit_node(&self, cid: Cid, bytes: Vec<u8>) {
+        let Some(state) = self.packed.as_ref() else {
+            return;
+        };
+        if sha256(&bytes).as_slice() != cid.as_bytes() {
+            state.cache_corruptions.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        let Some(cache) = state.node_cache.as_ref() else {
+            return;
+        };
+        let Some(key) = self.node_cache_key(cid) else {
+            return;
+        };
+        match cache.insert(key, bytes).await {
+            Ok(()) => {
+                state.cache_insertions.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(_) => {
+                state.cache_errors.fetch_add(1, Ordering::Relaxed);
+            }
+        }
     }
 
     fn cached_packed_node(&self, cid: &Cid) -> Result<Option<Vec<u8>>> {
@@ -459,15 +832,48 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let state = self.packed.as_ref().ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "packed node state is absent")
         })?;
-        let location = state
+        let mut location = state
             .locations
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
             .get(cid)
             .cloned();
+        if location.is_none() {
+            let locator = state
+                .locator
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+                .clone();
+            if let Some(locator) = locator {
+                if let Some(entry) = locator.locate(cid).await? {
+                    if entry.cid != *cid || entry.len == 0 || entry.cid.as_bytes() != entry.sha256 {
+                        return Err(Error::new(
+                            ErrorCode::CorruptNode,
+                            "lazy node-index entry failed validation",
+                        ));
+                    }
+                    let resolved = PackedNodeLocation {
+                        container: entry.container,
+                        pack: entry.pack,
+                        absolute_offset: entry.absolute_offset,
+                        len: entry.len,
+                        sha256: entry.sha256,
+                    };
+                    state
+                        .locations
+                        .write()
+                        .map_err(|_| {
+                            Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
+                        })?
+                        .insert(cid.clone(), resolved.clone());
+                    location = Some(resolved);
+                }
+            }
+        }
         let Some(location) = location else {
             return Ok(None);
         };
+        state.ranged_fetches.fetch_add(1, Ordering::Relaxed);
         if location.len == 0 {
             return Err(Error::new(
                 ErrorCode::CorruptNode,
@@ -499,8 +905,8 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         Ok(Some(object.bytes))
     }
 
-    async fn scan_commit_objects(&self) -> Result<()> {
-        let state = self.packed.as_ref().ok_or_else(|| {
+    async fn scan_commit_objects_for(&self, target: Option<&Cid>) -> Result<Option<Vec<u8>>> {
+        self.packed.as_ref().ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "packed node state is absent")
         })?;
         let prefix = format!("{}/commits/sha256/", self.repository_prefix);
@@ -523,16 +929,6 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 let id = CommitId::from_hash(raw.try_into().map_err(|_| {
                     Error::new(ErrorCode::CorruptCommit, "commit ID has the wrong length")
                 })?);
-                if state
-                    .indexed_containers
-                    .read()
-                    .map_err(|_| {
-                        Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
-                    })?
-                    .contains(&id)
-                {
-                    continue;
-                }
                 let stored = self
                     .plane
                     .get(GetRequest {
@@ -554,23 +950,123 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 if object.commit.id()? != id {
                     return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
                 }
+                let target_bytes = match (target, object.node_pack.as_ref()) {
+                    (Some(target), Some(pack)) => pack.node(target)?.map(ToOwned::to_owned),
+                    _ => None,
+                };
                 self.register_commit_object(id, &object, &stored.bytes)?;
+                if target_bytes.is_some() {
+                    return Ok(target_bytes);
+                }
             }
             continuation = page.continuation;
             if continuation.is_none() {
-                return Ok(());
+                return Ok(None);
             }
         }
     }
-}
 
-impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
-    type Error = Error;
+    fn direct_cache_key(&self, cid: Cid) -> Option<NodeCacheKey> {
+        let namespace = self.direct.as_ref()?.cache_namespace;
+        Some(NodeCacheKey {
+            repository: namespace.repository,
+            protocol_version: namespace.protocol_version,
+            tree_format: namespace.tree_format,
+            cid,
+        })
+    }
 
-    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        if self.packed.is_some() {
-            return self.get_packed(key).await;
+    async fn direct_cached_node(&self, cid: &Cid) -> Option<Vec<u8>> {
+        let state = self.direct.as_ref()?;
+        let key = self.direct_cache_key(cid.clone())?;
+        match state.node_cache.get(&key).await {
+            Ok(Some(bytes)) if sha256(&bytes).as_slice() == cid.as_bytes() => {
+                state.cache_hits.fetch_add(1, Ordering::Relaxed);
+                Some(bytes)
+            }
+            Ok(Some(_)) => {
+                state.cache_corruptions.fetch_add(1, Ordering::Relaxed);
+                state.cache_misses.fetch_add(1, Ordering::Relaxed);
+                if state.node_cache.remove(&key).await.is_err() {
+                    state.cache_errors.fetch_add(1, Ordering::Relaxed);
+                }
+                None
+            }
+            Ok(None) => {
+                state.cache_misses.fetch_add(1, Ordering::Relaxed);
+                None
+            }
+            Err(_) => {
+                state.cache_errors.fetch_add(1, Ordering::Relaxed);
+                state.cache_misses.fetch_add(1, Ordering::Relaxed);
+                None
+            }
         }
+    }
+
+    async fn admit_direct_node(&self, cid: Cid, bytes: Vec<u8>) {
+        let Some(state) = self.direct.as_ref() else {
+            return;
+        };
+        if sha256(&bytes).as_slice() != cid.as_bytes() {
+            state.cache_corruptions.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        let Some(key) = self.direct_cache_key(cid) else {
+            return;
+        };
+        match state.node_cache.insert(key, bytes).await {
+            Ok(()) => {
+                state.cache_insertions.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(_) => {
+                state.cache_errors.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    async fn get_direct(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        if key.len() != 32 {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                format!("Prolly node key has {} bytes, expected 32", key.len()),
+            ));
+        }
+        let cid = Cid(key.try_into().expect("length checked"));
+        if let Some(bytes) = self.direct_cached_node(&cid).await {
+            return Ok(Some(bytes));
+        }
+        let Some(state) = self.direct.as_ref() else {
+            return self.get_uncached_direct(key).await;
+        };
+        let fetch_lock = {
+            let mut locks = state
+                .fetch_locks
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            if let Some(lock) = locks.get(&cid).and_then(Weak::upgrade) {
+                state.coalesced_waits.fetch_add(1, Ordering::Relaxed);
+                lock
+            } else {
+                let lock = Arc::new(tokio::sync::Mutex::new(()));
+                locks.insert(cid.clone(), Arc::downgrade(&lock));
+                lock
+            }
+        };
+        let _fetch = fetch_lock.lock().await;
+        if let Some(bytes) = self.direct_cached_node(&cid).await {
+            return Ok(Some(bytes));
+        }
+        state.object_fetches.fetch_add(1, Ordering::Relaxed);
+        let bytes = self.get_uncached_direct(key).await?;
+        if let Some(bytes) = &bytes {
+            self.admit_direct_node(cid, bytes.clone()).await;
+        }
+        Ok(bytes)
+    }
+
+    async fn get_uncached_direct(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         let path = self.path_for_key(key)?;
         let Some(object) = self
             .plane
@@ -590,6 +1086,17 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
             ));
         }
         Ok(Some(object.bytes))
+    }
+}
+
+impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
+    type Error = Error;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        if self.packed.is_some() {
+            return self.get_packed(key).await;
+        }
+        self.get_direct(key).await
     }
 
     async fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
@@ -615,6 +1122,10 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
                 expected_sha256: sha256(value),
             })
             .await?;
+        if self.direct.is_some() {
+            self.admit_direct_node(Cid(key.try_into().expect("length checked")), value.to_vec())
+                .await;
+        }
         Ok(())
     }
 

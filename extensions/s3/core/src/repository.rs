@@ -8,25 +8,27 @@ use std::{
     time::Duration,
 };
 
-use crate::store::PreparedNodePack;
+use crate::store::{NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::{
     decode_canonical, derive_input_digest, derive_repository_id, encode_canonical,
     tree_format_digest, BatchId, BucketCommitV1, BucketDeltaV1, BucketStateV1, CanonicalLimits,
-    CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitId,
-    CommitObjectV1, CommitReceipt, CompareExchange, CompareExchangeOutcome, CurrentObjectV1,
-    DeleteOutcome, Error, ErrorCode, EtagPredicateV1, GcCandidateV1, GcFenceV1, GcMarkRunStateV1,
-    GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GetRequest, IdSource,
-    ImmutablePut, InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1,
-    LogicalObjectVersionKindV1, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
+    CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitGraphEntryV2,
+    CommitGraphHeadV2, CommitId, CommitObjectV1, CommitReceipt, CompareExchange,
+    CompareExchangeOutcome, CurrentObjectV1, DeleteOutcome, Error, ErrorCode, EtagPredicateV1,
+    GcCandidateV1, GcCommitWorkV2, GcEpochPhaseV2, GcEpochV2, GcFenceV1, GcMarkRunStateV1,
+    GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GcVersionWorkV2,
+    GetRequest, IdSource, ImmutablePut, InitializationIntentV1, ListRequest,
+    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
+    NodeIndexEntryV1, NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
     ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1,
     OperationId, OperationKind, OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1,
-    PhysicalVersion, ProllyObjectStore, RandomIdSource, RefGeneration, ReflogEntryV1,
-    RepositoryFormatV1, RepositoryId, Result, RetentionPinV1, RetryAdvice, StorageToken,
-    SystemClock, TreeRootV1,
+    PhysicalVersion, ProllyObjectStore, RandomIdSource, RefCatalogEntryV2, RefCatalogHeadV2,
+    RefGeneration, ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result, RetentionPinV1,
+    RetryAdvice, StorageToken, SystemClock, TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
-use prolly::{AsyncProlly, Config, RuntimeConfig, Tree, TreeFormat};
+use prolly::{AsyncProlly, AsyncStore, Config, Mutation, Node, RuntimeConfig, Tree, TreeFormat};
 use sha2::Sha256;
 
 const MIN_NONFINAL_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024;
@@ -55,6 +57,15 @@ pub struct RepositoryOptions {
     pub max_cached_commits: usize,
     pub max_cached_branches: usize,
     pub max_cached_node_pack_bytes: usize,
+    /// Maximum CID-to-envelope range mappings retained in process. The v2
+    /// index resolves evicted entries lazily.
+    pub max_cached_node_locations: usize,
+    /// Maximum bytes in the default verified node cache. Ignored when
+    /// `node_cache` supplies an external implementation.
+    pub max_cached_node_bytes: usize,
+    /// Optional shared memory/disk cache. Cache failures are fail-open and all
+    /// returned bytes are verified by CID before use.
+    pub node_cache: Option<Arc<dyn NodeCache>>,
     /// Maximum exact physical deletions per second during GC. Zero disables
     /// pacing. The physical format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
@@ -78,6 +89,9 @@ impl Default for RepositoryOptions {
             max_cached_commits: 4_096,
             max_cached_branches: 1_024,
             max_cached_node_pack_bytes: 64 * 1024 * 1024,
+            max_cached_node_locations: 65_536,
+            max_cached_node_bytes: 64 * 1024 * 1024,
+            node_cache: None,
             gc_delete_rate_limit_per_second: 0,
             clock: Arc::new(SystemClock),
             ids: Arc::new(RandomIdSource),
@@ -116,6 +130,21 @@ pub struct ObjectDiff {
     pub key: Vec<u8>,
     pub from: Option<ObjectVersionId>,
     pub to: Option<ObjectVersionId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ObjectDiffCursor {
+    from: CommitId,
+    to: CommitId,
+    traversal: prolly::StructuralDiffCursor,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectDiffPage {
+    pub changes: Vec<ObjectDiff>,
+    pub continuation: Option<ObjectDiffCursor>,
+    pub compared_nodes: usize,
+    pub reused_subtrees: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -175,6 +204,13 @@ pub struct GcSweepReport {
     pub deleted_bytes_by_kind: BTreeMap<String, u64>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GcEpochStepReport {
+    pub epoch: GcEpochV2,
+    pub processed: usize,
+    pub restarted_for_new_roots: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CloneReport {
     pub immutable_objects: usize,
@@ -209,12 +245,131 @@ pub struct RepairReport {
     pub fsck: FsckReport,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NodeIndexAdvanceReport {
+    pub generation: u64,
+    pub scan_epoch: u64,
+    pub indexed_commit_objects: usize,
+    pub indexed_node_entries: usize,
+    pub completed_scan: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IndexFreshness {
+    pub generation: u64,
+    pub scan_epoch: u64,
+    pub updated_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RefCatalogAdvanceReport {
+    pub freshness: IndexFreshness,
+    pub indexed_ref_objects: usize,
+    pub completed_scan: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitGraphAdvanceReport {
+    pub freshness: IndexFreshness,
+    pub indexed_commit_objects: usize,
+    pub completed_scan: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CatalogBranchPage {
+    pub branches: Vec<BranchHead>,
+    pub continuation: Option<String>,
+    pub freshness: IndexFreshness,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CatalogTagPage {
+    pub tags: Vec<Tag>,
+    pub continuation: Option<String>,
+    pub freshness: IndexFreshness,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TraversalBudget {
+    pub max_commits: usize,
+    pub max_decoded_bytes: u64,
+    pub max_elapsed: Duration,
+}
+
+impl Default for TraversalBudget {
+    fn default() -> Self {
+        Self {
+            max_commits: 10_000,
+            max_decoded_bytes: 64 * 1024 * 1024,
+            max_elapsed: Duration::from_secs(30),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HistoryCursor {
+    root: CommitId,
+    next: CommitId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitPage {
+    pub commits: Vec<(CommitId, BucketCommitV1)>,
+    pub continuation: Option<HistoryCursor>,
+    pub visited_commits: usize,
+    pub decoded_bytes: u64,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FirstParentCursor {
+    root: CommitId,
+    requested_distance: u64,
+    current: CommitId,
+    remaining: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FirstParentPage {
+    /// Present when the requested ancestor was reached.
+    pub ancestor: Option<CommitId>,
+    pub continuation: Option<FirstParentCursor>,
+    pub edges_advanced: u64,
+    pub index_reads: usize,
+    pub fallback_commit_reads: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchPage {
+    pub branches: Vec<BranchHead>,
+    pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagPage {
+    pub tags: Vec<Tag>,
+    pub continuation: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RepositoryPerformanceSnapshot {
     pub publication_acquisitions: u64,
     pub publication_wait_nanos: u64,
     pub publication_queue_depth: u64,
     pub publication_max_queue_depth: u64,
+    pub node_cache_hits: u64,
+    pub node_cache_misses: u64,
+    pub node_cache_insertions: u64,
+    pub node_cache_errors: u64,
+    pub node_cache_corruptions: u64,
+    pub node_fetch_coalesced_waits: u64,
+    pub node_ranged_fetches: u64,
+    pub node_index_cache_hits: u64,
+    pub node_index_cache_misses: u64,
+    pub node_index_page_fetches: u64,
+    pub node_index_advances: u64,
+    pub node_index_advance_errors: u64,
+    pub node_index_entries_indexed: u64,
 }
 
 #[derive(Default)]
@@ -223,6 +378,9 @@ struct RepositoryPerformanceCounters {
     publication_wait_nanos: AtomicU64,
     publication_queue_depth: AtomicU64,
     publication_max_queue_depth: AtomicU64,
+    node_index_advances: AtomicU64,
+    node_index_advance_errors: AtomicU64,
+    node_index_entries_indexed: AtomicU64,
 }
 
 /// Returns the exclusive version-tree cursor immediately after every version
@@ -331,6 +489,144 @@ struct LoadedGcMarkRun {
     token: StorageToken,
 }
 
+struct LoadedGcEpoch {
+    value: GcEpochV2,
+    token: StorageToken,
+}
+
+struct ProllyNodeIndex<P: ObjectPlane> {
+    store: ProllyObjectStore<P>,
+    engine: AsyncProlly<ProllyObjectStore<P>>,
+    tree: RwLock<Tree>,
+}
+
+struct ProllyMetadataIndex<P: ObjectPlane> {
+    _store: ProllyObjectStore<P>,
+    engine: AsyncProlly<ProllyObjectStore<P>>,
+    tree: RwLock<Tree>,
+    name: &'static str,
+}
+
+struct MetadataIndexSpec<'a> {
+    path: &'a str,
+    protocol_version: u32,
+    name: &'static str,
+}
+
+impl<P: ObjectPlane> ProllyMetadataIndex<P> {
+    fn new(
+        plane: Arc<P>,
+        prefix: &str,
+        repository: RepositoryId,
+        format: TreeFormat,
+        node_cache: Arc<dyn NodeCache>,
+        spec: MetadataIndexSpec<'_>,
+    ) -> Result<Self> {
+        let config = Config {
+            format: format.clone(),
+            runtime: RuntimeConfig::default(),
+        };
+        let store = ProllyObjectStore::new_cached_direct(
+            plane,
+            format!("{prefix}/{}", spec.path),
+            repository,
+            spec.protocol_version,
+            tree_format_digest(&format)?,
+            node_cache,
+        );
+        let engine = AsyncProlly::new(store.clone(), config);
+        let tree = engine.create();
+        Ok(Self {
+            _store: store,
+            engine,
+            tree: RwLock::new(tree),
+            name: spec.name,
+        })
+    }
+
+    fn tree(&self) -> Result<Tree> {
+        self.tree
+            .read()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    format!("{} lock poisoned", self.name),
+                )
+            })
+            .map(|tree| tree.clone())
+    }
+
+    fn install_root(&self, root: Option<prolly::Cid>) -> Result<()> {
+        self.tree
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    format!("{} lock poisoned", self.name),
+                )
+            })?
+            .root = root;
+        Ok(())
+    }
+}
+
+impl<P: ObjectPlane> ProllyNodeIndex<P> {
+    fn new(
+        plane: Arc<P>,
+        prefix: &str,
+        repository: RepositoryId,
+        format: TreeFormat,
+        node_cache: Arc<dyn NodeCache>,
+    ) -> Result<Self> {
+        let config = Config {
+            format: format.clone(),
+            runtime: RuntimeConfig::default(),
+        };
+        let store = ProllyObjectStore::new_cached_direct(
+            plane,
+            format!("{prefix}/node-index/v2/tree"),
+            repository,
+            2,
+            tree_format_digest(&format)?,
+            node_cache,
+        );
+        let engine = AsyncProlly::new(store.clone(), config);
+        let tree = engine.create();
+        Ok(Self {
+            store,
+            engine,
+            tree: RwLock::new(tree),
+        })
+    }
+
+    fn tree(&self) -> Result<Tree> {
+        self.tree
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "node-index lock poisoned"))
+            .map(|tree| tree.clone())
+    }
+
+    fn install_root(&self, root: Option<prolly::Cid>) -> Result<()> {
+        self.tree
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "node-index lock poisoned"))?
+            .root = root;
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl<P: ObjectPlane> NodeLocator for ProllyNodeIndex<P> {
+    async fn locate(&self, cid: &prolly::Cid) -> Result<Option<NodeIndexEntryV1>> {
+        let tree = self.tree()?;
+        self.engine
+            .get(&tree, cid.as_bytes())
+            .await?
+            .map(|bytes| decode_canonical::<NodeIndexEntryV1>(&bytes))
+            .transpose()
+    }
+}
+
 pub struct WriterLeaseMaintenance {
     task: tokio::task::JoinHandle<()>,
 }
@@ -341,11 +637,25 @@ impl Drop for WriterLeaseMaintenance {
     }
 }
 
+pub struct NodeIndexMaintenance {
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for NodeIndexMaintenance {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 pub struct Repository<P: ObjectPlane> {
     plane: Arc<P>,
     options: RepositoryOptions,
     format: RepositoryFormatV1,
     node_store: ProllyObjectStore<P>,
+    node_cache: Arc<dyn NodeCache>,
+    node_index: Arc<ProllyNodeIndex<P>>,
+    ref_catalog: Arc<ProllyMetadataIndex<P>>,
+    commit_graph: Arc<ProllyMetadataIndex<P>>,
     engine: AsyncProlly<ProllyObjectStore<P>>,
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
     warm_branches: Arc<RwLock<BoundedCache<String, WarmBranchState>>>,
@@ -355,6 +665,7 @@ pub struct Repository<P: ObjectPlane> {
     operation_locks: Arc<std::sync::Mutex<BTreeMap<OperationId, Weak<tokio::sync::Mutex<()>>>>>,
     lease_renewal: Arc<tokio::sync::Mutex<()>>,
     performance: Arc<RepositoryPerformanceCounters>,
+    process_session: OperationId,
 }
 
 impl<P: ObjectPlane> Repository<P> {
@@ -541,6 +852,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_format_compatibility(&format, &options)?;
         let mut repository = Self::from_format(plane, options, format)?;
         repository.load_latest_node_index_checkpoint().await?;
+        repository.load_latest_scale_metadata().await?;
         repository.acquire_physical_writer().await?;
         Ok(repository)
     }
@@ -554,11 +866,53 @@ impl<P: ObjectPlane> Repository<P> {
             format: format.state_tree_format.clone(),
             runtime: RuntimeConfig::default(),
         };
-        let node_store = ProllyObjectStore::new_packed_with_cache_limit(
+        let node_cache = options.node_cache.clone().unwrap_or_else(|| {
+            Arc::new(MemoryNodeCache::new(options.max_cached_node_bytes)) as Arc<dyn NodeCache>
+        });
+        let node_store = ProllyObjectStore::new_packed_with_node_cache(
             plane.clone(),
             options.repository_prefix.clone(),
             options.max_cached_node_pack_bytes,
+            options.max_cached_node_locations,
+            NodeCacheNamespace {
+                repository: format.repository_id,
+                protocol_version: RepositoryFormatV1::PROLLY_S3_PROTOCOL_VERSION,
+                tree_format: tree_format_digest(&format.state_tree_format)?,
+            },
+            node_cache.clone(),
         );
+        let node_index = Arc::new(ProllyNodeIndex::new(
+            plane.clone(),
+            &options.repository_prefix,
+            format.repository_id,
+            format.state_tree_format.clone(),
+            node_cache.clone(),
+        )?);
+        let ref_catalog = Arc::new(ProllyMetadataIndex::new(
+            plane.clone(),
+            &options.repository_prefix,
+            format.repository_id,
+            format.state_tree_format.clone(),
+            node_cache.clone(),
+            MetadataIndexSpec {
+                path: "ref-catalog/v2/tree",
+                protocol_version: 3,
+                name: "ref-catalog",
+            },
+        )?);
+        let commit_graph = Arc::new(ProllyMetadataIndex::new(
+            plane.clone(),
+            &options.repository_prefix,
+            format.repository_id,
+            format.state_tree_format.clone(),
+            node_cache.clone(),
+            MetadataIndexSpec {
+                path: "commit-graph/v2/tree",
+                protocol_version: 4,
+                name: "commit-graph",
+            },
+        )?);
+        node_store.set_node_locator(node_index.clone())?;
         let engine = AsyncProlly::new(node_store.clone(), config);
         let max_cached_branches = options.max_cached_branches;
         let max_cached_commits = options.max_cached_commits;
@@ -568,6 +922,10 @@ impl<P: ObjectPlane> Repository<P> {
             options,
             format,
             node_store,
+            node_cache,
+            node_index,
+            ref_catalog,
+            commit_graph,
             engine,
             writer_lease: Arc::new(RwLock::new(None)),
             warm_branches: Arc::new(RwLock::new(BoundedCache::new(max_cached_branches))),
@@ -577,10 +935,13 @@ impl<P: ObjectPlane> Repository<P> {
             operation_locks: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             lease_renewal: Arc::new(tokio::sync::Mutex::new(())),
             performance: Arc::new(RepositoryPerformanceCounters::default()),
+            process_session: OperationId(uuid::Uuid::new_v4()),
         })
     }
 
     pub fn performance_snapshot(&self) -> RepositoryPerformanceSnapshot {
+        let node_cache = self.node_store.node_cache_snapshot();
+        let node_index_cache = self.node_index.store.node_cache_snapshot();
         RepositoryPerformanceSnapshot {
             publication_acquisitions: self
                 .performance
@@ -597,6 +958,25 @@ impl<P: ObjectPlane> Repository<P> {
             publication_max_queue_depth: self
                 .performance
                 .publication_max_queue_depth
+                .load(Ordering::Relaxed),
+            node_cache_hits: node_cache.hits,
+            node_cache_misses: node_cache.misses,
+            node_cache_insertions: node_cache.insertions,
+            node_cache_errors: node_cache.errors,
+            node_cache_corruptions: node_cache.corruptions,
+            node_fetch_coalesced_waits: node_cache.coalesced_waits,
+            node_ranged_fetches: node_cache.ranged_fetches,
+            node_index_cache_hits: node_index_cache.hits,
+            node_index_cache_misses: node_index_cache.misses,
+            node_index_page_fetches: node_index_cache.ranged_fetches,
+            node_index_advances: self.performance.node_index_advances.load(Ordering::Relaxed),
+            node_index_advance_errors: self
+                .performance
+                .node_index_advance_errors
+                .load(Ordering::Relaxed),
+            node_index_entries_indexed: self
+                .performance
+                .node_index_entries_indexed
                 .load(Ordering::Relaxed),
         }
     }
@@ -718,7 +1098,572 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(checkpoint)
     }
 
+    /// Advance the scalable node-location index through a bounded page of
+    /// immutable commit envelopes. Index nodes are written as an independent
+    /// Prolly tree; only the small mutable head is CAS-published.
+    ///
+    /// Completing a scan starts a new epoch on the next invocation so commits
+    /// inserted behind an earlier provider continuation are eventually seen.
+    pub async fn advance_node_index_v2(
+        &self,
+        max_commit_objects: usize,
+    ) -> Result<NodeIndexAdvanceReport> {
+        if !(1..=1_000).contains(&max_commit_objects) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "node-index advance must process between 1 and 1,000 commit objects",
+            ));
+        }
+        let head_path = node_index_v2_head_path(&self.options.repository_prefix)?;
+        let loaded = self.plane.load_mutable(&head_path).await?;
+        let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
+        let expected_format = tree_format_digest(&self.format.state_tree_format)?;
+        let empty_head = NodeIndexHeadV2 {
+            repository: self.format.repository_id,
+            root: TreeRootV1::from_tree(&self.node_index.engine.create())?,
+            generation: 0,
+            scan_continuation: None,
+            scan_epoch: 0,
+            indexed_commit_objects: 0,
+            updated_at_millis: self.now_millis()?,
+        };
+        let head = match loaded {
+            Some(stored) => match decode_canonical::<NodeIndexHeadV2>(&stored.bytes) {
+                Ok(head)
+                    if head
+                        .validate(self.format.repository_id, expected_format)
+                        .is_ok() =>
+                {
+                    head
+                }
+                _ => empty_head.clone(),
+            },
+            None => empty_head,
+        };
+        let mut tree = Tree {
+            root: head.root.root.clone(),
+            config: Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        };
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/commits/sha256/", self.options.repository_prefix),
+                continuation: head.scan_continuation.clone(),
+                limit: max_commit_objects,
+                include_versions: false,
+            })
+            .await?;
+        let mut indexed_node_entries = 0usize;
+        let mut indexed_commit_objects = 0usize;
+        for listed in page.entries {
+            let encoded = listed.path.as_str().rsplit('/').next().unwrap_or_default();
+            let raw = hex::decode(encoded).map_err(|_| {
+                Error::new(ErrorCode::CorruptCommit, "commit path has an invalid ID")
+            })?;
+            let commit_id = CommitId::from_hash(raw.try_into().map_err(|_| {
+                Error::new(ErrorCode::CorruptCommit, "commit ID has the wrong length")
+            })?);
+            let stored = self
+                .plane
+                .get(GetRequest {
+                    path: listed.path,
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "listed commit disappeared")
+                })?;
+            let object = CommitObjectV1::decode_object(&stored.bytes)?;
+            if object.commit.id()? != commit_id {
+                return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
+            }
+            let mut mutations = Vec::new();
+            if let Some(pack) = object.node_pack.as_ref() {
+                let payload_offset = CommitObjectV1::node_payload_offset(&stored.bytes)?
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::CorruptCommit,
+                            "indexed commit node pack has no payload offset",
+                        )
+                    })?;
+                let pack_id = pack.reference()?.id;
+                mutations.reserve(pack.entries.len());
+                for entry in &pack.entries {
+                    let absolute_offset =
+                        payload_offset.checked_add(entry.offset).ok_or_else(|| {
+                            Error::new(ErrorCode::CorruptNode, "node-index offset overflow")
+                        })?;
+                    let location = NodeIndexEntryV1 {
+                        cid: entry.cid.clone(),
+                        container: commit_id,
+                        pack: pack_id,
+                        absolute_offset,
+                        len: entry.len,
+                        sha256: entry.sha256,
+                    };
+                    mutations.push(Mutation::Upsert {
+                        key: entry.cid.as_bytes().to_vec(),
+                        val: encode_canonical(&location)?,
+                    });
+                }
+            }
+            indexed_node_entries = indexed_node_entries
+                .checked_add(mutations.len())
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::EntityTooLarge,
+                        "node-index entry counter overflow",
+                    )
+                })?;
+            if !mutations.is_empty() {
+                tree = self.node_index.engine.batch(&tree, mutations).await?;
+            }
+            indexed_commit_objects += 1;
+        }
+        let completed_scan = page.continuation.is_none();
+        let next = NodeIndexHeadV2 {
+            repository: head.repository,
+            root: TreeRootV1::from_tree(&tree)?,
+            generation: head.generation.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "node-index generation overflow",
+                )
+            })?,
+            scan_continuation: page.continuation,
+            scan_epoch: if completed_scan {
+                head.scan_epoch.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "node-index scan epoch overflow",
+                    )
+                })?
+            } else {
+                head.scan_epoch
+            },
+            indexed_commit_objects: head
+                .indexed_commit_objects
+                .checked_add(u64::try_from(indexed_commit_objects).map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "node-index commit count exceeds u64",
+                    )
+                })?)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "node-index commit counter overflow",
+                    )
+                })?,
+            updated_at_millis: self.now_millis()?,
+        };
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: head_path,
+                expected,
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                if completed_scan {
+                    self.node_store.clear_node_locations()?;
+                }
+                self.node_index.install_root(next.root.root.clone())?;
+                self.performance
+                    .node_index_advances
+                    .fetch_add(1, Ordering::Relaxed);
+                self.performance.node_index_entries_indexed.fetch_add(
+                    u64::try_from(indexed_node_entries).unwrap_or(u64::MAX),
+                    Ordering::Relaxed,
+                );
+            }
+            CompareExchangeOutcome::Conflict(_) => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "node-index v2 head changed while publishing an advance",
+                )
+                .retry(RetryAdvice::ReloadHead));
+            }
+        }
+        Ok(NodeIndexAdvanceReport {
+            generation: next.generation,
+            scan_epoch: next.scan_epoch,
+            indexed_commit_objects,
+            indexed_node_entries,
+            completed_scan,
+        })
+    }
+
+    /// Advances the rebuildable ref catalog by one bounded provider page.
+    /// Branch and tag objects remain authoritative; this tree serves only
+    /// scalable, ordered enumeration.
+    pub async fn advance_ref_catalog_v2(
+        &self,
+        max_ref_objects: usize,
+    ) -> Result<RefCatalogAdvanceReport> {
+        if !(1..=1_000).contains(&max_ref_objects) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "ref-catalog advance must process between 1 and 1,000 refs",
+            ));
+        }
+        let head_path = ref_catalog_v2_head_path(&self.options.repository_prefix)?;
+        let loaded = self.plane.load_mutable(&head_path).await?;
+        let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
+        let expected_format = tree_format_digest(&self.format.state_tree_format)?;
+        let head = match loaded {
+            Some(stored) => match decode_canonical::<RefCatalogHeadV2>(&stored.bytes) {
+                Ok(head)
+                    if head
+                        .validate(self.format.repository_id, expected_format)
+                        .is_ok() =>
+                {
+                    head
+                }
+                _ => RefCatalogHeadV2 {
+                    repository: self.format.repository_id,
+                    root: TreeRootV1::from_tree(&self.ref_catalog.engine.create())?,
+                    generation: 0,
+                    scanning_tags: false,
+                    scan_continuation: None,
+                    scan_epoch: 0,
+                    indexed_ref_objects: 0,
+                    updated_at_millis: self.now_millis()?,
+                },
+            },
+            None => RefCatalogHeadV2 {
+                repository: self.format.repository_id,
+                root: TreeRootV1::from_tree(&self.ref_catalog.engine.create())?,
+                generation: 0,
+                scanning_tags: false,
+                scan_continuation: None,
+                scan_epoch: 0,
+                indexed_ref_objects: 0,
+                updated_at_millis: self.now_millis()?,
+            },
+        };
+        let mut tree = Tree {
+            root: head.root.root.clone(),
+            config: Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        };
+        let namespace = if head.scanning_tags { "tags" } else { "heads" };
+        let prefix = format!("{}/refs/{namespace}/", self.options.repository_prefix);
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: prefix.clone(),
+                continuation: head.scan_continuation.clone(),
+                limit: max_ref_objects,
+                include_versions: false,
+            })
+            .await?;
+        let mut mutations = Vec::with_capacity(page.entries.len());
+        for listed in &page.entries {
+            let encoded = listed.path.as_str().strip_prefix(&prefix).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "ref scan escaped its prefix")
+            })?;
+            let name = String::from_utf8(hex::decode(encoded).map_err(|_| {
+                Error::new(ErrorCode::CorruptCommit, "ref path is not canonical hex")
+            })?)
+            .map_err(|_| Error::new(ErrorCode::CorruptCommit, "ref name is not UTF-8"))?;
+            validate_branch(&name)?;
+            let stored = self
+                .plane
+                .load_mutable(&listed.path)
+                .await?
+                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "listed ref disappeared"))?;
+            let key = ref_catalog_key(head.scanning_tags, &name);
+            if head.scanning_tags {
+                let value: crate::TagValueV1 = decode_canonical(&stored.bytes)?;
+                if value.tombstone {
+                    mutations.push(Mutation::Delete { key });
+                } else {
+                    mutations.push(Mutation::Upsert {
+                        key,
+                        val: encode_canonical(&RefCatalogEntryV2::Tag {
+                            target: value.target,
+                            generation: value.generation,
+                        })?,
+                    });
+                }
+            } else {
+                let value: crate::RefValueV1 = decode_canonical(&stored.bytes)?;
+                if value.tombstone {
+                    mutations.push(Mutation::Delete { key });
+                } else {
+                    mutations.push(Mutation::Upsert {
+                        key,
+                        val: encode_canonical(&RefCatalogEntryV2::Branch {
+                            target: value.target,
+                            generation: value.generation,
+                        })?,
+                    });
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            tree = self.ref_catalog.engine.batch(&tree, mutations).await?;
+        }
+        let namespace_complete = page.continuation.is_none();
+        let completed_scan = head.scanning_tags && namespace_complete;
+        let next = RefCatalogHeadV2 {
+            repository: head.repository,
+            root: TreeRootV1::from_tree(&tree)?,
+            generation: head.generation.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "ref-catalog generation overflow",
+                )
+            })?,
+            scanning_tags: if namespace_complete {
+                !head.scanning_tags
+            } else {
+                head.scanning_tags
+            },
+            scan_continuation: if namespace_complete {
+                None
+            } else {
+                page.continuation
+            },
+            scan_epoch: if completed_scan {
+                head.scan_epoch.checked_add(1).ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "ref-catalog epoch overflow")
+                })?
+            } else {
+                head.scan_epoch
+            },
+            indexed_ref_objects: head
+                .indexed_ref_objects
+                .checked_add(u64::try_from(page.entries.len()).map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "ref count exceeds u64")
+                })?)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "ref-catalog counter overflow")
+                })?,
+            updated_at_millis: self.now_millis()?,
+        };
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: head_path,
+                expected,
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                self.ref_catalog.install_root(next.root.root.clone())?;
+            }
+            CompareExchangeOutcome::Conflict(_) => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "ref-catalog head changed while publishing an advance",
+                )
+                .retry(RetryAdvice::ReloadHead));
+            }
+        }
+        Ok(RefCatalogAdvanceReport {
+            freshness: IndexFreshness {
+                generation: next.generation,
+                scan_epoch: next.scan_epoch,
+                updated_at_millis: next.updated_at_millis,
+            },
+            indexed_ref_objects: page.entries.len(),
+            completed_scan,
+        })
+    }
+
+    /// Advances commit generation and binary-lifting metadata through one
+    /// bounded commit-object page. Missing higher jumps are filled by later
+    /// scan epochs after their ancestors have been indexed.
+    pub async fn advance_commit_graph_v2(
+        &self,
+        max_commit_objects: usize,
+    ) -> Result<CommitGraphAdvanceReport> {
+        if !(1..=1_000).contains(&max_commit_objects) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-graph advance must process between 1 and 1,000 commits",
+            ));
+        }
+        let head_path = commit_graph_v2_head_path(&self.options.repository_prefix)?;
+        let loaded = self.plane.load_mutable(&head_path).await?;
+        let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
+        let expected_format = tree_format_digest(&self.format.state_tree_format)?;
+        let head = match loaded {
+            Some(stored) => match decode_canonical::<CommitGraphHeadV2>(&stored.bytes) {
+                Ok(head)
+                    if head
+                        .validate(self.format.repository_id, expected_format)
+                        .is_ok() =>
+                {
+                    head
+                }
+                _ => CommitGraphHeadV2 {
+                    repository: self.format.repository_id,
+                    root: TreeRootV1::from_tree(&self.commit_graph.engine.create())?,
+                    generation: 0,
+                    scan_continuation: None,
+                    scan_epoch: 0,
+                    indexed_commit_objects: 0,
+                    updated_at_millis: self.now_millis()?,
+                },
+            },
+            None => CommitGraphHeadV2 {
+                repository: self.format.repository_id,
+                root: TreeRootV1::from_tree(&self.commit_graph.engine.create())?,
+                generation: 0,
+                scan_continuation: None,
+                scan_epoch: 0,
+                indexed_commit_objects: 0,
+                updated_at_millis: self.now_millis()?,
+            },
+        };
+        let mut tree = Tree {
+            root: head.root.root.clone(),
+            config: Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        };
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/commits/sha256/", self.options.repository_prefix),
+                continuation: head.scan_continuation.clone(),
+                limit: max_commit_objects,
+                include_versions: false,
+            })
+            .await?;
+        for listed in &page.entries {
+            let commit_id = commit_id_from_path(&listed.path)?;
+            let commit = self.load_commit(commit_id).await?;
+            let mut jumps = Vec::new();
+            if let Some(first_parent) = commit.parents.first().copied() {
+                jumps.push(first_parent);
+                for level in 1..64usize {
+                    let ancestor = jumps[level - 1];
+                    let Some(encoded) = self
+                        .commit_graph
+                        .engine
+                        .get(&tree, ancestor.as_bytes())
+                        .await?
+                    else {
+                        break;
+                    };
+                    let entry: CommitGraphEntryV2 = decode_canonical(&encoded)?;
+                    let Some(next) = entry.first_parent_jumps.get(level - 1).copied() else {
+                        break;
+                    };
+                    jumps.push(next);
+                }
+            }
+            let entry = CommitGraphEntryV2 {
+                commit: commit_id,
+                generation: commit.generation,
+                parents: commit.parents,
+                first_parent_jumps: jumps,
+            };
+            tree = self
+                .commit_graph
+                .engine
+                .batch(
+                    &tree,
+                    vec![Mutation::Upsert {
+                        key: commit_id.as_bytes().to_vec(),
+                        val: encode_canonical(&entry)?,
+                    }],
+                )
+                .await?;
+        }
+        let completed_scan = page.continuation.is_none();
+        let next = CommitGraphHeadV2 {
+            repository: head.repository,
+            root: TreeRootV1::from_tree(&tree)?,
+            generation: head.generation.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "commit-graph generation overflow",
+                )
+            })?,
+            scan_continuation: page.continuation,
+            scan_epoch: if completed_scan {
+                head.scan_epoch.checked_add(1).ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "commit-graph epoch overflow")
+                })?
+            } else {
+                head.scan_epoch
+            },
+            indexed_commit_objects: head
+                .indexed_commit_objects
+                .checked_add(u64::try_from(page.entries.len()).map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "commit count exceeds u64")
+                })?)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "commit-graph counter overflow",
+                    )
+                })?,
+            updated_at_millis: self.now_millis()?,
+        };
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: head_path,
+                expected,
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                self.commit_graph.install_root(next.root.root.clone())?;
+            }
+            CompareExchangeOutcome::Conflict(_) => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "commit-graph head changed while publishing an advance",
+                )
+                .retry(RetryAdvice::ReloadHead));
+            }
+        }
+        Ok(CommitGraphAdvanceReport {
+            freshness: IndexFreshness {
+                generation: next.generation,
+                scan_epoch: next.scan_epoch,
+                updated_at_millis: next.updated_at_millis,
+            },
+            indexed_commit_objects: page.entries.len(),
+            completed_scan,
+        })
+    }
+
     async fn load_latest_node_index_checkpoint(&self) -> Result<()> {
+        if let Some(stored) = self
+            .plane
+            .load_mutable(&node_index_v2_head_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            if let Ok(head) = decode_canonical::<NodeIndexHeadV2>(&stored.bytes) {
+                let expected_format = tree_format_digest(&self.format.state_tree_format)?;
+                if head
+                    .validate(self.format.repository_id, expected_format)
+                    .is_ok()
+                {
+                    self.node_index.install_root(head.root.root)?;
+                    return Ok(());
+                }
+            }
+        }
         let Some(head_object) = self
             .plane
             .load_mutable(&node_index_head_path(&self.options.repository_prefix)?)
@@ -728,7 +1673,7 @@ impl<P: ObjectPlane> Repository<P> {
         };
         let head = match decode_canonical::<crate::NodeIndexHeadV1>(&head_object.bytes) {
             Ok(head) => head,
-            Err(_) => return self.node_store.rebuild_node_index().await,
+            Err(_) => return Ok(()),
         };
         let checkpoint = self
             .plane
@@ -743,19 +1688,52 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?;
         let Some(checkpoint) = checkpoint else {
-            return self.node_store.rebuild_node_index().await;
+            return Ok(());
         };
         let checkpoint = match decode_canonical::<crate::NodeIndexCheckpointV1>(&checkpoint.bytes) {
             Ok(checkpoint) => checkpoint,
-            Err(_) => return self.node_store.rebuild_node_index().await,
+            Err(_) => return Ok(()),
         };
         if checkpoint.repository != self.format.repository_id
             || checkpoint.validate().is_err()
             || head.validate(&checkpoint).is_err()
         {
-            return self.node_store.rebuild_node_index().await;
+            return Ok(());
         }
         self.node_store.import_node_index(&checkpoint.entries)
+    }
+
+    async fn load_latest_scale_metadata(&self) -> Result<()> {
+        let expected_format = tree_format_digest(&self.format.state_tree_format)?;
+        if let Some(stored) = self
+            .plane
+            .load_mutable(&ref_catalog_v2_head_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            if let Ok(head) = decode_canonical::<RefCatalogHeadV2>(&stored.bytes) {
+                if head
+                    .validate(self.format.repository_id, expected_format)
+                    .is_ok()
+                {
+                    self.ref_catalog.install_root(head.root.root)?;
+                }
+            }
+        }
+        if let Some(stored) = self
+            .plane
+            .load_mutable(&commit_graph_v2_head_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            if let Ok(head) = decode_canonical::<CommitGraphHeadV2>(&stored.bytes) {
+                if head
+                    .validate(self.format.repository_id, expected_format)
+                    .is_ok()
+                {
+                    self.commit_graph.install_root(head.root.root)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn now_millis(&self) -> Result<u64> {
@@ -937,6 +1915,51 @@ impl<P: ObjectPlane> Repository<P> {
             }
         });
         Ok(WriterLeaseMaintenance { task })
+    }
+
+    /// Continuously advance the rebuildable v2 node index outside foreground
+    /// publication. The task is single-writer friendly but remains safe if a
+    /// second worker races it because the index head is CAS-protected.
+    pub fn start_node_index_maintenance(
+        self: &Arc<Self>,
+        interval: Duration,
+        max_commit_objects: usize,
+    ) -> Result<NodeIndexMaintenance> {
+        if self.options.read_only {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "node-index maintenance requires a writable repository",
+            ));
+        }
+        if interval.is_zero() || !(1..=1_000).contains(&max_commit_objects) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "node-index maintenance requires a nonzero interval and a 1..=1,000 commit batch",
+            ));
+        }
+        let weak = Arc::downgrade(self);
+        let task = tokio::spawn(async move {
+            loop {
+                // Keep derived-index traffic out of the foreground publication
+                // window. Operators that need an immediate catch-up can call
+                // `advance_node_index_v2` explicitly.
+                tokio::time::sleep(interval).await;
+                let Some(repository) = weak.upgrade() else {
+                    break;
+                };
+                let node = repository.advance_node_index_v2(max_commit_objects).await;
+                let refs = repository.advance_ref_catalog_v2(max_commit_objects).await;
+                let graph = repository.advance_commit_graph_v2(max_commit_objects).await;
+                if node.is_err() || refs.is_err() || graph.is_err() {
+                    repository
+                        .performance
+                        .node_index_advance_errors
+                        .fetch_add(1, Ordering::Relaxed);
+                }
+                drop(repository);
+            }
+        });
+        Ok(NodeIndexMaintenance { task })
     }
 
     /// Explicitly take over an expired or credential-revoked physical writer.
@@ -2397,43 +3420,150 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    pub async fn list_branches(&self) -> Result<Vec<BranchHead>> {
+    /// Lists an ordered page from the rebuildable branch catalog. Results may
+    /// lag authoritative refs by the returned freshness watermark; callers
+    /// must resolve a selected branch through `head` before acting on it.
+    pub async fn list_branch_catalog_page(
+        &self,
+        after: Option<&str>,
+        requested_limit: usize,
+    ) -> Result<CatalogBranchPage> {
+        if let Some(after) = after {
+            validate_branch(after)?;
+        }
+        let limit = requested_limit
+            .min(self.format.canonical_limits.max_list_page as usize)
+            .min(1_000);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "branch catalog page limit must be greater than zero",
+            ));
+        }
+        let stored = self
+            .plane
+            .load_mutable(&ref_catalog_v2_head_path(&self.options.repository_prefix)?)
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingCapability,
+                    "ref catalog has not been built; advance it before listing",
+                )
+            })?;
+        let head: RefCatalogHeadV2 = decode_canonical(&stored.bytes)?;
+        head.validate(
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+        )?;
+        self.ref_catalog.install_root(head.root.root.clone())?;
+        let tree = self.ref_catalog.tree()?;
+        let prefix = b"h\0";
+        let after_key = after.map(|name| ref_catalog_key(false, name));
+        let mut iter = self.ref_catalog.engine.prefix(&tree, prefix).await?;
+        let mut branches = Vec::with_capacity(limit.saturating_add(1));
+        while branches.len() <= limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if after_key
+                .as_ref()
+                .is_some_and(|after| key.as_slice() <= after.as_slice())
+            {
+                continue;
+            }
+            let name = String::from_utf8(key[prefix.len()..].to_vec())
+                .map_err(|_| Error::new(ErrorCode::CorruptCommit, "catalog branch is not UTF-8"))?;
+            let value: RefCatalogEntryV2 = decode_canonical(&encoded)?;
+            let RefCatalogEntryV2::Branch { target, generation } = value else {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "branch catalog contains a tag value",
+                ));
+            };
+            branches.push(BranchHead {
+                name,
+                target,
+                generation,
+            });
+        }
+        let truncated = branches.len() > limit;
+        branches.truncate(limit);
+        let continuation = truncated
+            .then(|| branches.last().map(|branch| branch.name.clone()))
+            .flatten();
+        Ok(CatalogBranchPage {
+            branches,
+            continuation,
+            freshness: IndexFreshness {
+                generation: head.generation,
+                scan_epoch: head.scan_epoch,
+                updated_at_millis: head.updated_at_millis,
+            },
+        })
+    }
+
+    /// Lists one bounded page of branch heads. The continuation token is owned
+    /// by the object plane and must be passed back unchanged.
+    pub async fn list_branches_page(
+        &self,
+        continuation: Option<String>,
+        requested_limit: usize,
+    ) -> Result<BranchPage> {
+        let limit = requested_limit.min(1_000);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "branch page limit must be greater than zero",
+            ));
+        }
         let prefix = format!("{}/refs/heads/", self.options.repository_prefix);
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: prefix.clone(),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut branches = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let encoded = entry.path.as_str().strip_prefix(&prefix).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "branch list escaped its prefix",
+                )
+            })?;
+            let name = String::from_utf8(hex::decode(encoded).map_err(|_| {
+                Error::new(ErrorCode::CorruptCommit, "branch path is not canonical hex")
+            })?)
+            .map_err(|_| Error::new(ErrorCode::CorruptCommit, "branch name is not UTF-8"))?;
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            let value: crate::RefValueV1 = decode_canonical(&stored.bytes)?;
+            if !value.tombstone {
+                branches.push(BranchHead {
+                    name,
+                    target: value.target,
+                    generation: value.generation,
+                });
+            }
+        }
+        branches.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(BranchPage {
+            branches,
+            continuation: page.continuation,
+        })
+    }
+
+    pub async fn list_branches(&self) -> Result<Vec<BranchHead>> {
         let mut continuation = None;
         let mut result = Vec::new();
         loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let encoded = entry.path.as_str().strip_prefix(&prefix).ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "branch list escaped its prefix",
-                    )
-                })?;
-                let name = String::from_utf8(hex::decode(encoded).map_err(|_| {
-                    Error::new(ErrorCode::CorruptCommit, "branch path is not canonical hex")
-                })?)
-                .map_err(|_| Error::new(ErrorCode::CorruptCommit, "branch name is not UTF-8"))?;
-                let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
-                    continue;
-                };
-                let value: crate::RefValueV1 = decode_canonical(&stored.bytes)?;
-                if !value.tombstone {
-                    result.push(BranchHead {
-                        name,
-                        target: value.target,
-                        generation: value.generation,
-                    });
-                }
-            }
+            let page = self.list_branches_page(continuation, 1_000).await?;
+            result.extend(page.branches);
             continuation = page.continuation;
             if continuation.is_none() {
                 break;
@@ -2514,40 +3644,142 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    pub async fn list_tags(&self) -> Result<Vec<Tag>> {
+    /// Lists an ordered page from the rebuildable tag catalog. The freshness
+    /// watermark makes asynchronous catalog lag explicit.
+    pub async fn list_tag_catalog_page(
+        &self,
+        after: Option<&str>,
+        requested_limit: usize,
+    ) -> Result<CatalogTagPage> {
+        if let Some(after) = after {
+            validate_branch(after)?;
+        }
+        let limit = requested_limit
+            .min(self.format.canonical_limits.max_list_page as usize)
+            .min(1_000);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "tag catalog page limit must be greater than zero",
+            ));
+        }
+        let stored = self
+            .plane
+            .load_mutable(&ref_catalog_v2_head_path(&self.options.repository_prefix)?)
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingCapability,
+                    "ref catalog has not been built; advance it before listing",
+                )
+            })?;
+        let head: RefCatalogHeadV2 = decode_canonical(&stored.bytes)?;
+        head.validate(
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+        )?;
+        self.ref_catalog.install_root(head.root.root.clone())?;
+        let tree = self.ref_catalog.tree()?;
+        let prefix = b"t\0";
+        let after_key = after.map(|name| ref_catalog_key(true, name));
+        let mut iter = self.ref_catalog.engine.prefix(&tree, prefix).await?;
+        let mut tags = Vec::with_capacity(limit.saturating_add(1));
+        while tags.len() <= limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if after_key
+                .as_ref()
+                .is_some_and(|after| key.as_slice() <= after.as_slice())
+            {
+                continue;
+            }
+            let name = String::from_utf8(key[prefix.len()..].to_vec())
+                .map_err(|_| Error::new(ErrorCode::CorruptCommit, "catalog tag is not UTF-8"))?;
+            let value: RefCatalogEntryV2 = decode_canonical(&encoded)?;
+            let RefCatalogEntryV2::Tag { target, .. } = value else {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "tag catalog contains a branch value",
+                ));
+            };
+            tags.push(Tag { name, target });
+        }
+        let truncated = tags.len() > limit;
+        tags.truncate(limit);
+        let continuation = truncated
+            .then(|| tags.last().map(|tag| tag.name.clone()))
+            .flatten();
+        Ok(CatalogTagPage {
+            tags,
+            continuation,
+            freshness: IndexFreshness {
+                generation: head.generation,
+                scan_epoch: head.scan_epoch,
+                updated_at_millis: head.updated_at_millis,
+            },
+        })
+    }
+
+    /// Lists one bounded page of tags. Tombstones are omitted while still
+    /// advancing the underlying object-plane continuation.
+    pub async fn list_tags_page(
+        &self,
+        continuation: Option<String>,
+        requested_limit: usize,
+    ) -> Result<TagPage> {
+        let limit = requested_limit.min(1_000);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "tag page limit must be greater than zero",
+            ));
+        }
         let prefix = format!("{}/refs/tags/", self.options.repository_prefix);
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: prefix.clone(),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut tags = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let encoded = entry.path.as_str().strip_prefix(&prefix).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "tag list escaped prefix")
+            })?;
+            let name = String::from_utf8(
+                hex::decode(encoded)
+                    .map_err(|_| Error::new(ErrorCode::CorruptCommit, "tag path is not hex"))?,
+            )
+            .map_err(|_| Error::new(ErrorCode::CorruptCommit, "tag name is not UTF-8"))?;
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            let value: crate::TagValueV1 = decode_canonical(&stored.bytes)?;
+            if !value.tombstone {
+                tags.push(Tag {
+                    name,
+                    target: value.target,
+                });
+            }
+        }
+        tags.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(TagPage {
+            tags,
+            continuation: page.continuation,
+        })
+    }
+
+    pub async fn list_tags(&self) -> Result<Vec<Tag>> {
         let mut continuation = None;
         let mut result = Vec::new();
         loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let encoded = entry.path.as_str().strip_prefix(&prefix).ok_or_else(|| {
-                    Error::new(ErrorCode::InternalInvariant, "tag list escaped prefix")
-                })?;
-                let name =
-                    String::from_utf8(hex::decode(encoded).map_err(|_| {
-                        Error::new(ErrorCode::CorruptCommit, "tag path is not hex")
-                    })?)
-                    .map_err(|_| Error::new(ErrorCode::CorruptCommit, "tag name is not UTF-8"))?;
-                let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
-                    continue;
-                };
-                let value: crate::TagValueV1 = decode_canonical(&stored.bytes)?;
-                if !value.tombstone {
-                    result.push(Tag {
-                        name,
-                        target: value.target,
-                    });
-                }
-            }
+            let page = self.list_tags_page(continuation, 1_000).await?;
+            result.extend(page.tags);
             continuation = page.continuation;
             if continuation.is_none() {
                 break;
@@ -5139,6 +6371,184 @@ impl<P: ObjectPlane> Repository<P> {
         self.log_at(self.head(branch).await?, None, limit).await
     }
 
+    /// Bounded, resumable first-parent traversal. Unlike `log_at`, resuming
+    /// starts directly at the cursor commit and never walks from the root to
+    /// rediscover the previous page boundary.
+    pub async fn log_page_bounded(
+        &self,
+        start: CommitId,
+        cursor: Option<&HistoryCursor>,
+        requested_limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<CommitPage> {
+        if budget.max_commits == 0 || budget.max_decoded_bytes == 0 || budget.max_elapsed.is_zero()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "history traversal budgets must be greater than zero",
+            ));
+        }
+        if cursor.is_some_and(|cursor| cursor.root != start) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history cursor belongs to a different root commit",
+            ));
+        }
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Ok(CommitPage {
+                commits: Vec::new(),
+                continuation: cursor.cloned(),
+                visited_commits: 0,
+                decoded_bytes: 0,
+                budget_exhausted: false,
+            });
+        }
+        let started = std::time::Instant::now();
+        let mut current = cursor.map_or(start, |cursor| cursor.next);
+        let mut commits = Vec::with_capacity(limit);
+        let mut visited_commits = 0usize;
+        let mut decoded_bytes = 0u64;
+        let mut budget_exhausted = false;
+        let continuation = loop {
+            if commits.len() >= limit {
+                break Some(HistoryCursor {
+                    root: start,
+                    next: current,
+                });
+            }
+            if visited_commits >= budget.max_commits || started.elapsed() >= budget.max_elapsed {
+                budget_exhausted = true;
+                break Some(HistoryCursor {
+                    root: start,
+                    next: current,
+                });
+            }
+            let commit = self.load_commit(current).await?;
+            let encoded_len = u64::try_from(encode_canonical(&commit)?.len()).map_err(|_| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "encoded commit length exceeds u64",
+                )
+            })?;
+            if decoded_bytes.saturating_add(encoded_len) > budget.max_decoded_bytes {
+                if commits.is_empty() {
+                    return Err(Error::new(
+                        ErrorCode::InvalidLimit,
+                        "history byte budget cannot hold one commit",
+                    ));
+                }
+                budget_exhausted = true;
+                break Some(HistoryCursor {
+                    root: start,
+                    next: current,
+                });
+            }
+            let parent = commit.parents.first().copied();
+            decoded_bytes = decoded_bytes.checked_add(encoded_len).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "history byte counter overflow")
+            })?;
+            visited_commits += 1;
+            commits.push((current, commit));
+            let Some(parent) = parent else {
+                break None;
+            };
+            current = parent;
+        };
+        Ok(CommitPage {
+            commits,
+            continuation,
+            visited_commits,
+            decoded_bytes,
+            budget_exhausted,
+        })
+    }
+
+    /// Advances toward a first-parent ancestor using binary-lifting entries
+    /// when available. Each invocation performs at most `max_reads` metadata
+    /// or fallback commit reads and returns a durable continuation otherwise.
+    pub async fn first_parent_ancestor_bounded(
+        &self,
+        start: CommitId,
+        distance: u64,
+        cursor: Option<&FirstParentCursor>,
+        max_reads: usize,
+    ) -> Result<FirstParentPage> {
+        if max_reads == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "first-parent traversal read budget must be greater than zero",
+            ));
+        }
+        if cursor
+            .is_some_and(|cursor| cursor.root != start || cursor.requested_distance != distance)
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "first-parent cursor belongs to a different traversal",
+            ));
+        }
+        let mut current = cursor.map_or(start, |cursor| cursor.current);
+        let mut remaining = cursor.map_or(distance, |cursor| cursor.remaining);
+        let initial_remaining = remaining;
+        let mut index_reads = 0usize;
+        let mut fallback_commit_reads = 0usize;
+        let tree = self.commit_graph.tree()?;
+        while remaining > 0 && index_reads + fallback_commit_reads < max_reads {
+            index_reads += 1;
+            let indexed = self
+                .commit_graph
+                .engine
+                .get(&tree, current.as_bytes())
+                .await?
+                .map(|bytes| decode_canonical::<CommitGraphEntryV2>(&bytes))
+                .transpose()?;
+            let mut advanced = false;
+            if let Some(entry) = indexed {
+                if entry.commit != current {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "commit-graph entry identity mismatch",
+                    ));
+                }
+                let max_level = (63 - remaining.leading_zeros()) as usize;
+                if let Some(ancestor) = entry.first_parent_jumps.get(max_level).copied() {
+                    current = ancestor;
+                    remaining -= 1_u64 << max_level;
+                    advanced = true;
+                }
+            }
+            if advanced {
+                continue;
+            }
+            if index_reads + fallback_commit_reads >= max_reads {
+                break;
+            }
+            fallback_commit_reads += 1;
+            let commit = self.load_commit(current).await?;
+            current = commit.parents.first().copied().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidRevision,
+                    "requested first-parent distance exceeds history",
+                )
+            })?;
+            remaining -= 1;
+        }
+        let continuation = (remaining > 0).then_some(FirstParentCursor {
+            root: start,
+            requested_distance: distance,
+            current,
+            remaining,
+        });
+        Ok(FirstParentPage {
+            ancestor: (remaining == 0).then_some(current),
+            continuation,
+            edges_advanced: initial_remaining - remaining,
+            index_reads,
+            fallback_commit_reads,
+        })
+    }
+
     /// Bounded first-parent history traversal. `after` is an exclusive commit
     /// cursor and must occur on the selected first-parent chain.
     pub async fn log_at(
@@ -5230,6 +6640,61 @@ impl<P: ObjectPlane> Repository<P> {
         let truncated = differences.len() > limit;
         differences.truncate(limit);
         Ok((differences, truncated))
+    }
+
+    /// Bounded structural diff that preserves CID-pruning state across pages.
+    /// This is the scale-safe alternative to the legacy key-only `diff_at`
+    /// cursor, which must rediscover the earlier structural frontier.
+    pub async fn diff_page_bounded(
+        &self,
+        from: CommitId,
+        to: CommitId,
+        cursor: Option<&ObjectDiffCursor>,
+        requested_limit: usize,
+    ) -> Result<ObjectDiffPage> {
+        if cursor.is_some_and(|cursor| cursor.from != from || cursor.to != to) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "diff cursor belongs to different commits",
+            ));
+        }
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "bounded diff page limit must be greater than zero",
+            ));
+        }
+        let from_commit = self.load_commit(from).await?;
+        let to_commit = self.load_commit(to).await?;
+        let from_tree =
+            self.tree_from_root(&from_commit.state.objects, &self.format.state_tree_format)?;
+        let to_tree =
+            self.tree_from_root(&to_commit.state.objects, &self.format.state_tree_format)?;
+        let page = self
+            .engine
+            .structural_diff_page(
+                &from_tree,
+                &to_tree,
+                cursor.map(|cursor| &cursor.traversal),
+                limit,
+            )
+            .await?;
+        let changes = page
+            .diffs
+            .into_iter()
+            .map(object_diff_from_prolly)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ObjectDiffPage {
+            changes,
+            continuation: page.next_cursor.map(|traversal| ObjectDiffCursor {
+                from,
+                to,
+                traversal,
+            }),
+            compared_nodes: page.stats.compared_nodes,
+            reused_subtrees: page.stats.reused_subtrees,
+        })
     }
 
     /// Return every best common ancestor in stable commit-ID order.
@@ -6396,6 +7861,866 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
+    fn gc_epoch_index(&self, id: OperationId) -> Result<ProllyMetadataIndex<P>> {
+        let path = gc_epoch_v2_tree_path(id);
+        ProllyMetadataIndex::new(
+            self.plane.clone(),
+            &self.options.repository_prefix,
+            self.format.repository_id,
+            self.format.state_tree_format.clone(),
+            self.node_cache.clone(),
+            MetadataIndexSpec {
+                path: &path,
+                protocol_version: 5,
+                name: "gc-epoch",
+            },
+        )
+    }
+
+    async fn load_gc_epoch_v2(&self, id: OperationId) -> Result<LoadedGcEpoch> {
+        let stored = self
+            .plane
+            .load_mutable(&gc_epoch_v2_path(&self.options.repository_prefix, id)?)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "GC epoch does not exist"))?;
+        let value: GcEpochV2 = decode_canonical(&stored.bytes)?;
+        if value.id != id || value.repository != self.format.repository_id {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "GC epoch belongs to another repository",
+            ));
+        }
+        if value.root.format_digest != tree_format_digest(&self.format.state_tree_format)? {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "GC epoch tree format is invalid",
+            ));
+        }
+        Ok(LoadedGcEpoch {
+            value,
+            token: stored.metadata.token,
+        })
+    }
+
+    /// Starts a partitioned GC epoch. Every later call processes a bounded
+    /// amount of root discovery, graph marking, version marking, candidate
+    /// enumeration, or exact-version deletion.
+    pub async fn start_gc_epoch_v2(&self, grace_millis: u64) -> Result<GcEpochV2> {
+        self.validate_gc_plan_limits(grace_millis, 1)?;
+        self.physical_writer_generation_for_mutation().await?;
+        let _publication = self.lock_publication().await;
+        let planned_at_millis = self.now_millis()?;
+        let cutoff_millis = planned_at_millis
+            .checked_sub(grace_millis)
+            .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "GC grace predates the epoch"))?;
+        let id = self.new_operation();
+        let index = self.gc_epoch_index(id)?;
+        let epoch = GcEpochV2 {
+            id,
+            repository: self.format.repository_id,
+            process_session: self.process_session,
+            writer_fence_generation: self.writer_fence_generation()?,
+            publication_acquisition: self
+                .performance
+                .publication_acquisitions
+                .load(Ordering::Relaxed),
+            planned_at_millis,
+            cutoff_millis,
+            root: TreeRootV1::from_tree(&index.engine.create())?,
+            phase: GcEpochPhaseV2::DiscoverRoots,
+            root_namespace: 0,
+            source_continuation: None,
+            sweep_after: None,
+            generation: 0,
+            marked_commits: 0,
+            marked_nodes: 0,
+            marked_versions: 0,
+            candidates: 0,
+            candidate_bytes: 0,
+            deleted_versions: 0,
+            deleted_bytes: 0,
+            skipped_reachable: 0,
+            already_missing: 0,
+            updated_at_millis: planned_at_millis,
+            abort_reason: None,
+        };
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
+                expected: None,
+                bytes: encode_canonical(&epoch)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(epoch),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "generated GC epoch ID already exists",
+            )),
+        }
+    }
+
+    pub async fn gc_epoch_v2(&self, id: OperationId) -> Result<GcEpochV2> {
+        Ok(self.load_gc_epoch_v2(id).await?.value)
+    }
+
+    pub async fn advance_gc_epoch_v2(
+        &self,
+        id: OperationId,
+        max_items: usize,
+    ) -> Result<GcEpochStepReport> {
+        if !(1..=1_000).contains(&max_items) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC epoch step must process between 1 and 1,000 items",
+            ));
+        }
+        self.physical_writer_generation_for_mutation().await?;
+        let _publication = self.lock_publication().await;
+        let acquisition = self
+            .performance
+            .publication_acquisitions
+            .load(Ordering::Relaxed);
+        let loaded = self.load_gc_epoch_v2(id).await?;
+        if matches!(
+            loaded.value.phase,
+            GcEpochPhaseV2::Completed | GcEpochPhaseV2::Aborted
+        ) {
+            return Ok(GcEpochStepReport {
+                epoch: loaded.value,
+                processed: 0,
+                restarted_for_new_roots: false,
+            });
+        }
+        if loaded.value.writer_fence_generation != self.writer_fence_generation()? {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC epoch writer fence no longer matches",
+            ));
+        }
+        let mut next = loaded.value;
+        let restarted_for_new_roots = next.process_session != self.process_session
+            || acquisition != next.publication_acquisition.saturating_add(1);
+        if restarted_for_new_roots {
+            // Mark state only grows. Re-discovering roots after a writer action
+            // or process restart makes stale candidates safe to skip later.
+            next.process_session = self.process_session;
+            next.phase = GcEpochPhaseV2::DiscoverRoots;
+            next.root_namespace = 0;
+            next.source_continuation = None;
+            next.sweep_after = None;
+        }
+        let index = self.gc_epoch_index(id)?;
+        index.install_root(next.root.root.clone())?;
+        let mut tree = index.tree()?;
+        let processed = match next.phase {
+            GcEpochPhaseV2::DiscoverRoots => {
+                self.gc_v2_discover_roots(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::MarkCommits => {
+                self.gc_v2_mark_commits(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::MarkNodes => {
+                self.gc_v2_mark_nodes(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::MarkVersions => {
+                self.gc_v2_mark_versions(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::ScanCandidates => {
+                self.gc_v2_scan_candidates(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::Ready | GcEpochPhaseV2::Sweeping => 0,
+            GcEpochPhaseV2::Completed | GcEpochPhaseV2::Aborted => unreachable!(),
+        };
+        next.root = TreeRootV1::from_tree(&tree)?;
+        next.publication_acquisition = acquisition;
+        next.generation = next.generation.checked_add(1).ok_or_else(|| {
+            Error::new(ErrorCode::InternalInvariant, "GC epoch generation overflow")
+        })?;
+        next.updated_at_millis = self.now_millis()?;
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
+                expected: Some(loaded.token),
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(GcEpochStepReport {
+                epoch: next,
+                processed,
+                restarted_for_new_roots,
+            }),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC epoch changed concurrently",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+        }
+    }
+
+    async fn gc_v2_discover_roots(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        let suffix = match epoch.root_namespace {
+            0 => "refs/heads/",
+            1 => "refs/tags/",
+            2 => "retention/pins/",
+            3 => "reflogs/tags/",
+            _ => {
+                epoch.phase = GcEpochPhaseV2::MarkCommits;
+                epoch.source_continuation = None;
+                return Ok(0);
+            }
+        };
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/{suffix}", self.options.repository_prefix),
+                continuation: epoch.source_continuation.clone(),
+                limit: max_items,
+                include_versions: false,
+            })
+            .await?;
+        let mut roots = Vec::new();
+        for listed in &page.entries {
+            let Some(stored) = self
+                .plane
+                .get(GetRequest {
+                    path: listed.path.clone(),
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+            else {
+                continue;
+            };
+            match epoch.root_namespace {
+                0 => {
+                    let value: crate::RefValueV1 = decode_canonical(&stored.bytes)?;
+                    if !value.tombstone {
+                        roots.push(value.target);
+                        roots.extend(value.previous_target);
+                    }
+                }
+                1 => {
+                    let value: crate::TagValueV1 = decode_canonical(&stored.bytes)?;
+                    if !value.tombstone {
+                        roots.push(value.target);
+                        roots.extend(value.previous_target);
+                    }
+                }
+                2 => {
+                    let value: RetentionPinV1 = decode_canonical(&stored.bytes)?;
+                    if !value.tombstone
+                        && (value.expires_at_millis == 0
+                            || value.expires_at_millis > epoch.planned_at_millis)
+                    {
+                        roots.push(value.target);
+                    }
+                }
+                3 => {
+                    let value: ReflogEntryV1 = decode_canonical(&stored.bytes)?;
+                    let retain_until = value
+                        .created_at_millis
+                        .saturating_add(self.options.reflog_retention_millis);
+                    if self.options.reflog_retention_millis == 0
+                        || retain_until > epoch.planned_at_millis
+                    {
+                        roots.push(value.new_target);
+                        roots.extend(value.old_target);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        roots.sort_unstable();
+        roots.dedup();
+        if !roots.is_empty() {
+            let mut mutations = Vec::with_capacity(roots.len());
+            for commit in roots {
+                mutations.push(Mutation::Upsert {
+                    key: gc_v2_commit_queue_key(commit),
+                    val: encode_canonical(&GcCommitWorkV2 {
+                        commit,
+                        scan_versions: true,
+                    })?,
+                });
+            }
+            *tree = index.engine.batch(tree, mutations).await?;
+        }
+        if page.continuation.is_none() {
+            epoch.root_namespace += 1;
+            epoch.source_continuation = None;
+            if epoch.root_namespace > 3 {
+                epoch.phase = GcEpochPhaseV2::MarkCommits;
+            }
+        } else {
+            epoch.source_continuation = page.continuation;
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_v2_mark_commits(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        let mut iter = index.engine.prefix(tree, b"qc/").await?;
+        let mut work = Vec::with_capacity(max_items);
+        while work.len() < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            work.push(entry?);
+        }
+        drop(iter);
+        if work.is_empty() {
+            epoch.phase = GcEpochPhaseV2::MarkNodes;
+            return Ok(0);
+        }
+        for (queue_key, encoded) in &work {
+            let item: GcCommitWorkV2 = decode_canonical(encoded)?;
+            let already_marked = index
+                .engine
+                .get(tree, &gc_v2_commit_mark_key(item.commit))
+                .await?
+                .is_some();
+            let mut mutations = vec![Mutation::Delete {
+                key: queue_key.clone(),
+            }];
+            if !already_marked || item.scan_versions {
+                let commit = self.load_commit(item.commit).await?;
+                mutations.push(Mutation::Upsert {
+                    key: gc_v2_commit_mark_key(item.commit),
+                    val: Vec::new(),
+                });
+                mutations.push(Mutation::Upsert {
+                    key: gc_v2_path_mark_key(&commit_path(
+                        &self.options.repository_prefix,
+                        item.commit,
+                    )?),
+                    val: Vec::new(),
+                });
+                if item.scan_versions {
+                    if let Some(key) = gc_v2_version_queue_key(&commit.state.versions) {
+                        mutations.push(Mutation::Upsert {
+                            key,
+                            val: encode_canonical(&GcVersionWorkV2 {
+                                root: commit.state.versions.clone(),
+                                after: None,
+                            })?,
+                        });
+                    }
+                    for root in [
+                        &commit.state.objects,
+                        &commit.state.versions,
+                        &commit.state.operations,
+                    ] {
+                        if let Some(cid) = root.root.as_ref() {
+                            mutations.push(Mutation::Upsert {
+                                key: gc_v2_node_queue_key(cid),
+                                val: cid.as_bytes().to_vec(),
+                            });
+                        }
+                    }
+                }
+                for parent in commit.parents {
+                    if index
+                        .engine
+                        .get(tree, &gc_v2_commit_mark_key(parent))
+                        .await?
+                        .is_none()
+                    {
+                        let queue_key = gc_v2_commit_queue_key(parent);
+                        let queued_direct_root = index
+                            .engine
+                            .get(tree, &queue_key)
+                            .await?
+                            .map(|bytes| decode_canonical::<GcCommitWorkV2>(&bytes))
+                            .transpose()?
+                            .is_some_and(|work| work.scan_versions);
+                        if !queued_direct_root {
+                            mutations.push(Mutation::Upsert {
+                                key: queue_key,
+                                val: encode_canonical(&GcCommitWorkV2 {
+                                    commit: parent,
+                                    scan_versions: false,
+                                })?,
+                            });
+                        }
+                    }
+                }
+                if !already_marked {
+                    epoch.marked_commits = epoch.marked_commits.saturating_add(1);
+                }
+            }
+            *tree = index.engine.batch(tree, mutations).await?;
+        }
+        Ok(work.len())
+    }
+
+    async fn gc_v2_mark_versions(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        let mut queue = index.engine.prefix(tree, b"qv/").await?;
+        let Some(entry) = queue.next().await else {
+            epoch.phase = GcEpochPhaseV2::ScanCandidates;
+            epoch.source_continuation = None;
+            return Ok(0);
+        };
+        let (queue_key, encoded) = entry?;
+        drop(queue);
+        let mut work: GcVersionWorkV2 = decode_canonical(&encoded)?;
+        let versions = self.tree_from_root(&work.root, &self.format.state_tree_format)?;
+        let start = work.after.as_deref().unwrap_or(&[]);
+        let mut iter = self.engine.range(&versions, start, None).await?;
+        let mut mutations = Vec::with_capacity(max_items + 1);
+        let mut processed = 0usize;
+        let mut last = None;
+        while processed < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (encoded_key, value) = entry?;
+            if work
+                .after
+                .as_ref()
+                .is_some_and(|after| encoded_key.as_slice() <= after.as_slice())
+            {
+                continue;
+            }
+            let version: ObjectVersionV1 = decode_canonical(&value)?;
+            let key = decode_version_tree_logical_key(&encoded_key)?;
+            let path =
+                ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                    Error::new(ErrorCode::CorruptCommit, "logical key is not UTF-8")
+                })?)?;
+            let version_id = match version.binding {
+                crate::PhysicalObjectBindingV1::Live { version_id, .. }
+                | crate::PhysicalObjectBindingV1::DeleteMarker { version_id } => version_id,
+            };
+            mutations.push(Mutation::Upsert {
+                key: gc_v2_physical_mark_key(&path, &version_id),
+                val: Vec::new(),
+            });
+            last = Some(encoded_key);
+            processed += 1;
+        }
+        if processed < max_items {
+            mutations.push(Mutation::Delete { key: queue_key });
+        } else {
+            work.after = last;
+            mutations.push(Mutation::Upsert {
+                key: queue_key,
+                val: encode_canonical(&work)?,
+            });
+        }
+        if !mutations.is_empty() {
+            *tree = index.engine.batch(tree, mutations).await?;
+        }
+        epoch.marked_versions = epoch
+            .marked_versions
+            .saturating_add(u64::try_from(processed).unwrap_or(u64::MAX));
+        Ok(processed)
+    }
+
+    async fn gc_v2_mark_nodes(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        let mut iter = index.engine.prefix(tree, b"qn/").await?;
+        let mut work = Vec::with_capacity(max_items);
+        while work.len() < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            work.push(entry?);
+        }
+        drop(iter);
+        if work.is_empty() {
+            epoch.phase = GcEpochPhaseV2::MarkVersions;
+            return Ok(0);
+        }
+        for (queue_key, encoded_cid) in &work {
+            let cid = prolly::Cid(encoded_cid.as_slice().try_into().map_err(|_| {
+                Error::new(ErrorCode::CorruptNode, "GC node work has an invalid CID")
+            })?);
+            let mark_key = gc_v2_node_mark_key(&cid);
+            if index.engine.get(tree, &mark_key).await?.is_some() {
+                *tree = index
+                    .engine
+                    .batch(
+                        tree,
+                        vec![Mutation::Delete {
+                            key: queue_key.clone(),
+                        }],
+                    )
+                    .await?;
+                continue;
+            }
+            let location = self
+                .node_store
+                .resolve_node_location(&cid)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingCapability,
+                        "GC requires the v2 node index to cover every reachable node; advance the index and retry",
+                    )
+                })?;
+            let bytes = self.node_store.get(cid.as_bytes()).await?.ok_or_else(|| {
+                Error::new(ErrorCode::MissingClosure, "reachable node is missing")
+            })?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("reachable node could not be decoded: {error}"),
+                    )
+                })?;
+            let mut mutations = vec![
+                Mutation::Delete {
+                    key: queue_key.clone(),
+                },
+                Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                },
+                Mutation::Upsert {
+                    key: gc_v2_path_mark_key(&commit_path(
+                        &self.options.repository_prefix,
+                        location.container,
+                    )?),
+                    val: Vec::new(),
+                },
+            ];
+            if !node.leaf {
+                for value in node.vals {
+                    let child = prolly::Cid(value.as_slice().try_into().map_err(|_| {
+                        Error::new(
+                            ErrorCode::CorruptNode,
+                            "internal reachable node contains an invalid child CID",
+                        )
+                    })?);
+                    if index
+                        .engine
+                        .get(tree, &gc_v2_node_mark_key(&child))
+                        .await?
+                        .is_none()
+                    {
+                        mutations.push(Mutation::Upsert {
+                            key: gc_v2_node_queue_key(&child),
+                            val: child.as_bytes().to_vec(),
+                        });
+                    }
+                }
+            }
+            *tree = index.engine.batch(tree, mutations).await?;
+            epoch.marked_nodes = epoch.marked_nodes.saturating_add(1);
+        }
+        Ok(work.len())
+    }
+
+    async fn gc_v2_scan_candidates(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: String::new(),
+                continuation: epoch.source_continuation.clone(),
+                limit: max_items,
+                include_versions: true,
+            })
+            .await?;
+        for listed in &page.entries {
+            let managed_data = is_gc_data_path(&self.options.repository_prefix, &listed.path)
+                || !listed
+                    .path
+                    .as_str()
+                    .starts_with(&format!("{}/", self.options.repository_prefix));
+            if !managed_data || listed.metadata.last_modified_millis > epoch.cutoff_millis {
+                continue;
+            }
+            let retained = if let Some(version_id) = listed.metadata.token.version_id.as_deref() {
+                index
+                    .engine
+                    .get(tree, &gc_v2_physical_mark_key(&listed.path, version_id))
+                    .await?
+                    .is_some()
+                    || index
+                        .engine
+                        .get(tree, &gc_v2_path_mark_key(&listed.path))
+                        .await?
+                        .is_some()
+            } else {
+                index
+                    .engine
+                    .get(tree, &gc_v2_path_mark_key(&listed.path))
+                    .await?
+                    .is_some()
+            };
+            if retained {
+                continue;
+            }
+            let physical_version = listed
+                .metadata
+                .token
+                .version_id
+                .clone()
+                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                .unwrap_or_else(|| PhysicalVersion::Unversioned {
+                    token: Some(listed.metadata.token.clone()),
+                });
+            let candidate = GcCandidateV1 {
+                path: listed.path.clone(),
+                physical_version,
+                len: listed.metadata.len,
+                last_modified_millis: listed.metadata.last_modified_millis,
+            };
+            let candidate_key = gc_v2_candidate_key(&candidate)?;
+            if index.engine.get(tree, &candidate_key).await?.is_none() {
+                *tree = index
+                    .engine
+                    .batch(
+                        tree,
+                        vec![Mutation::Upsert {
+                            key: candidate_key,
+                            val: encode_canonical(&candidate)?,
+                        }],
+                    )
+                    .await?;
+                epoch.candidates = epoch.candidates.saturating_add(1);
+                epoch.candidate_bytes = epoch.candidate_bytes.saturating_add(candidate.len);
+            }
+        }
+        epoch.source_continuation = page.continuation;
+        if epoch.source_continuation.is_none() {
+            epoch.phase = GcEpochPhaseV2::Ready;
+        }
+        Ok(page.entries.len())
+    }
+
+    /// Deletes at most `max_candidates` exact physical versions from a ready
+    /// epoch. Any intervening publication or process restart forces another
+    /// bounded root-discovery pass before deletion can resume.
+    pub async fn sweep_gc_epoch_v2(
+        &self,
+        id: OperationId,
+        max_candidates: usize,
+    ) -> Result<GcEpochStepReport> {
+        if !(1..=1_000).contains(&max_candidates) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC sweep batch must contain between 1 and 1,000 candidates",
+            ));
+        }
+        self.physical_writer_generation_for_mutation().await?;
+        let _publication = self.lock_publication().await;
+        let acquisition = self
+            .performance
+            .publication_acquisitions
+            .load(Ordering::Relaxed);
+        let loaded = self.load_gc_epoch_v2(id).await?;
+        if loaded.value.writer_fence_generation != self.writer_fence_generation()? {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC epoch writer fence no longer matches",
+            ));
+        }
+        if matches!(loaded.value.phase, GcEpochPhaseV2::Completed) {
+            return Ok(GcEpochStepReport {
+                epoch: loaded.value,
+                processed: 0,
+                restarted_for_new_roots: false,
+            });
+        }
+        if matches!(loaded.value.phase, GcEpochPhaseV2::Aborted) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC epoch is aborted",
+            ));
+        }
+        let mut next = loaded.value;
+        let restarted_for_new_roots = next.process_session != self.process_session
+            || acquisition != next.publication_acquisition.saturating_add(1);
+        if restarted_for_new_roots {
+            next.process_session = self.process_session;
+            next.phase = GcEpochPhaseV2::DiscoverRoots;
+            next.root_namespace = 0;
+            next.source_continuation = None;
+            next.sweep_after = None;
+            next.publication_acquisition = acquisition;
+            next.generation = next.generation.saturating_add(1);
+            next.updated_at_millis = self.now_millis()?;
+            match self
+                .plane
+                .compare_exchange(CompareExchange {
+                    path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
+                    expected: Some(loaded.token),
+                    bytes: encode_canonical(&next)?,
+                })
+                .await?
+            {
+                CompareExchangeOutcome::Applied(_) => {
+                    return Ok(GcEpochStepReport {
+                        epoch: next,
+                        processed: 0,
+                        restarted_for_new_roots: true,
+                    });
+                }
+                CompareExchangeOutcome::Conflict(_) => {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "GC epoch changed while restarting root discovery",
+                    )
+                    .retry(RetryAdvice::ReloadHead));
+                }
+            }
+        }
+        if !matches!(next.phase, GcEpochPhaseV2::Ready | GcEpochPhaseV2::Sweeping) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC epoch must finish marking and candidate discovery before sweeping",
+            ));
+        }
+        let index = self.gc_epoch_index(id)?;
+        index.install_root(next.root.root.clone())?;
+        let tree = index.tree()?;
+        let start = next.sweep_after.as_deref().unwrap_or(b"d/");
+        let mut iter = index.engine.range(&tree, start, None).await?;
+        let mut processed = 0usize;
+        let mut exhausted = true;
+        while processed < max_candidates {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(b"d/") {
+                break;
+            }
+            if next
+                .sweep_after
+                .as_ref()
+                .is_some_and(|after| key.as_slice() <= after.as_slice())
+            {
+                continue;
+            }
+            exhausted = false;
+            let candidate: GcCandidateV1 = decode_canonical(&encoded)?;
+            if candidate.last_modified_millis > next.cutoff_millis {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "GC v2 candidate is newer than its cutoff",
+                ));
+            }
+            let version_id = match &candidate.physical_version {
+                PhysicalVersion::Versioned { version_id } => Some(version_id.as_str()),
+                PhysicalVersion::Unversioned { .. } => None,
+            };
+            let retained = index
+                .engine
+                .get(&tree, &gc_v2_path_mark_key(&candidate.path))
+                .await?
+                .is_some()
+                || match version_id {
+                    Some(version_id) => index
+                        .engine
+                        .get(&tree, &gc_v2_physical_mark_key(&candidate.path, version_id))
+                        .await?
+                        .is_some(),
+                    None => false,
+                };
+            if retained {
+                next.skipped_reachable = next.skipped_reachable.saturating_add(1);
+            } else {
+                if self.options.gc_delete_rate_limit_per_second > 0 && processed > 0 {
+                    let millis =
+                        1_000_u64.div_ceil(u64::from(self.options.gc_delete_rate_limit_per_second));
+                    tokio::time::sleep(Duration::from_millis(millis)).await;
+                }
+                match self
+                    .plane
+                    .delete_exact(&candidate.path, candidate.physical_version)
+                    .await?
+                {
+                    DeleteOutcome::Deleted => {
+                        next.deleted_versions = next.deleted_versions.saturating_add(1);
+                        next.deleted_bytes = next.deleted_bytes.saturating_add(candidate.len);
+                    }
+                    DeleteOutcome::NotFound => {
+                        next.already_missing = next.already_missing.saturating_add(1);
+                    }
+                    DeleteOutcome::TokenMismatch => {
+                        return Err(Error::new(
+                            ErrorCode::PreconditionFailed,
+                            "GC v2 candidate physical version no longer matches",
+                        ));
+                    }
+                }
+            }
+            next.sweep_after = Some(key);
+            processed += 1;
+        }
+        // Probe one entry on the next call when the batch fills exactly. This
+        // keeps memory bounded without retaining a lookahead candidate.
+        if processed < max_candidates && (processed == 0 || exhausted) {
+            next.phase = GcEpochPhaseV2::Completed;
+        } else {
+            next.phase = GcEpochPhaseV2::Sweeping;
+        }
+        next.publication_acquisition = acquisition;
+        next.generation = next.generation.checked_add(1).ok_or_else(|| {
+            Error::new(ErrorCode::InternalInvariant, "GC epoch generation overflow")
+        })?;
+        next.updated_at_millis = self.now_millis()?;
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
+                expected: Some(loaded.token),
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(GcEpochStepReport {
+                epoch: next,
+                processed,
+                restarted_for_new_roots: false,
+            }),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC epoch changed while publishing a sweep checkpoint",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+        }
+    }
+
     /// Persist a deterministic, immutable GC dry-run. Only objects older than
     /// `grace_millis` and outside the complete retained set become candidates.
     pub async fn plan_gc(&self, grace_millis: u64, max_candidates: usize) -> Result<GcDryRun> {
@@ -7429,6 +9754,8 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
     if options.max_cached_commits == 0
         || options.max_cached_branches == 0
         || options.max_cached_node_pack_bytes == 0
+        || options.max_cached_node_locations == 0
+        || options.max_cached_node_bytes == 0
     {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
@@ -7616,6 +9943,63 @@ fn version_tree_key(key: &[u8], order: ObjectVersionOrder, version: ObjectVersio
     output
 }
 
+fn ref_catalog_key(tag: bool, name: &str) -> Vec<u8> {
+    let mut key = Vec::with_capacity(name.len() + 2);
+    key.extend_from_slice(if tag { b"t\0" } else { b"h\0" });
+    key.extend_from_slice(name.as_bytes());
+    key
+}
+
+fn commit_id_from_path(path: &ObjectPath) -> Result<CommitId> {
+    let encoded = path.as_str().rsplit('/').next().unwrap_or_default();
+    let raw = hex::decode(encoded)
+        .map_err(|_| Error::new(ErrorCode::CorruptCommit, "commit path has an invalid ID"))?;
+    Ok(CommitId::from_hash(raw.try_into().map_err(|_| {
+        Error::new(ErrorCode::CorruptCommit, "commit ID has the wrong length")
+    })?))
+}
+
+fn gc_v2_commit_queue_key(id: CommitId) -> Vec<u8> {
+    [b"qc/".as_slice(), id.as_bytes()].concat()
+}
+
+fn gc_v2_commit_mark_key(id: CommitId) -> Vec<u8> {
+    [b"mc/".as_slice(), id.as_bytes()].concat()
+}
+
+fn gc_v2_node_queue_key(cid: &prolly::Cid) -> Vec<u8> {
+    [b"qn/".as_slice(), cid.as_bytes()].concat()
+}
+
+fn gc_v2_node_mark_key(cid: &prolly::Cid) -> Vec<u8> {
+    [b"mn/".as_slice(), cid.as_bytes()].concat()
+}
+
+fn gc_v2_version_queue_key(root: &TreeRootV1) -> Option<Vec<u8>> {
+    root.root
+        .as_ref()
+        .map(|cid| [b"qv/".as_slice(), cid.as_bytes()].concat())
+}
+
+fn gc_v2_path_mark_key(path: &ObjectPath) -> Vec<u8> {
+    [b"mp/".as_slice(), path.as_str().as_bytes()].concat()
+}
+
+fn gc_v2_physical_mark_key(path: &ObjectPath, version_id: &str) -> Vec<u8> {
+    let path_bytes = path.as_str().as_bytes();
+    let mut key = Vec::with_capacity(3 + 4 + path_bytes.len() + version_id.len());
+    key.extend_from_slice(b"mv/");
+    key.extend_from_slice(&(path_bytes.len() as u32).to_be_bytes());
+    key.extend_from_slice(path_bytes);
+    key.extend_from_slice(version_id.as_bytes());
+    key
+}
+
+fn gc_v2_candidate_key(candidate: &GcCandidateV1) -> Result<Vec<u8>> {
+    let digest = crate::codec::sha256(&encode_canonical(candidate)?);
+    Ok([b"d/".as_slice(), digest.as_slice()].concat())
+}
+
 fn format_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/format/v1.cbor"))
 }
@@ -7678,6 +10062,18 @@ fn node_index_head_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/node-index/latest.cbor"))
 }
 
+fn node_index_v2_head_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/node-index/v2/head.cbor"))
+}
+
+fn ref_catalog_v2_head_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/ref-catalog/v2/head.cbor"))
+}
+
+fn commit_graph_v2_head_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/commit-graph/v2/head.cbor"))
+}
+
 fn gc_plan_path(prefix: &str, id: GcPlanId) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/gc/plans/{id}.cbor"))
 }
@@ -7691,6 +10087,17 @@ fn gc_mark_run_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
         "{prefix}/gc/mark-runs/{}.cbor",
         hex::encode(id.as_bytes())
     ))
+}
+
+fn gc_epoch_v2_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
+    ObjectPath::new(format!(
+        "{prefix}/gc/v2/epochs/{}/head.cbor",
+        hex::encode(id.as_bytes())
+    ))
+}
+
+fn gc_epoch_v2_tree_path(id: OperationId) -> String {
+    format!("gc/v2/epochs/{}/tree", hex::encode(id.as_bytes()))
 }
 
 fn gc_object_kind(prefix: &str, path: &ObjectPath) -> String {

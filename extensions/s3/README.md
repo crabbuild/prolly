@@ -46,8 +46,8 @@ branch-ref CAS.
 
 See [client/README.md](client/README.md) for setup and concrete API examples,
 [PROLLY-S3-DESIGN.md](PROLLY-S3-DESIGN.md) for the protocol,
-[CACHE-AND-SCALE-DESIGN.md](CACHE-AND-SCALE-DESIGN.md) for the proposed
-cache and unbounded-cardinality architecture,
+[CACHE-AND-SCALE-DESIGN.md](CACHE-AND-SCALE-DESIGN.md) for the implemented v2
+cache/cardinality architecture and its pending AWS scale gates,
 and [OPERATIONS.md](OPERATIONS.md) for deployment constraints.
 
 The frozen, language-neutral contract is
@@ -62,6 +62,8 @@ The checked-in Compose file runs a versioning-capable RustFS endpoint:
 
 ```bash
 docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
+
+extensions/s3/scripts/verify_rustfs_aws_cli.sh
 
 PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml \
