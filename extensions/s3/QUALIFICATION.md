@@ -76,7 +76,7 @@ PROLLY_AWS_PERF_MAX_P99_MS=2000 \
 PROLLY_AWS_PERF_MIN_WRITES_PER_SECOND=10 \
 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test aws_performance_qualification \
-  -- --nocapture
+  -- --ignored --nocapture
 ```
 
 Thresholds are deliberately required rather than baked into the library. Run

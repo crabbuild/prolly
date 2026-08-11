@@ -34,11 +34,12 @@ fn percentile(sorted: &[std::time::Duration], percentile: usize) -> std::time::D
 /// built-in latency or throughput promises: operators must supply thresholds
 /// derived from their target region, traffic model, and SLO.
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+#[ignore = "requires an operator-owned versioned AWS bucket and explicit SLOs"]
 async fn aws_hot_branch_performance_release_gate() {
-    if !enabled() {
-        eprintln!("set PROLLY_S3_AWS_PERF=1 plus the documented AWS performance variables to run");
-        return;
-    }
+    assert!(
+        enabled(),
+        "set PROLLY_S3_AWS_PERF=1 plus the documented AWS performance variables to run"
+    );
 
     let region_name = std::env::var("PROLLY_AWS_REGION").expect("PROLLY_AWS_REGION is required");
     let bucket = std::env::var("PROLLY_AWS_BUCKET_VERSIONED")
