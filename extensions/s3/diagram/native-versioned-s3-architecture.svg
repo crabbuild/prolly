@@ -1,0 +1,155 @@
+<svg viewBox="0 0 1200 860" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title description">
+  <title id="title">Native-versioned S3 client architecture</title>
+  <desc id="description">An exclusive Prolly writer stores each whole file as one native S3 version, packs new Prolly nodes once, writes one immutable bucket commit, and makes the change visible with one branch-reference compare-and-exchange.</desc>
+  <defs>
+    <style>
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 23px; font-weight: 700; fill: #f8fafc; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 400; fill: #94a3b8; }
+      .region { font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.1px; }
+      .box-title { font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 600; fill: #f8fafc; }
+      .box-copy { font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: 400; fill: #cbd5e1; }
+      .mono { font-family: Menlo, Consolas, monospace; font-size: 9px; font-weight: 500; fill: #94a3b8; }
+      .label { font-family: Arial, Helvetica, sans-serif; font-size: 9px; font-weight: 600; }
+      .step-num { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; fill: #f8fafc; }
+      .step-title { font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: 600; fill: #e2e8f0; }
+      .step-copy { font-family: Arial, Helvetica, sans-serif; font-size: 9px; font-weight: 400; fill: #94a3b8; }
+    </style>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#1e293b" stroke-width="0.5" opacity="0.7"/>
+    </pattern>
+    <linearGradient id="writer-fill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#064e3b" stop-opacity="0.62"/>
+      <stop offset="1" stop-color="#0f172a" stop-opacity="0.92"/>
+    </linearGradient>
+    <linearGradient id="bucket-fill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#78350f" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#0f172a" stop-opacity="0.92"/>
+    </linearGradient>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-violet" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#a78bfa"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="860" fill="#0b1120"/>
+  <rect width="1200" height="860" fill="url(#grid)"/>
+
+  <text x="42" y="42" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700" fill="#f8fafc">Native-versioned S3: Prolly owns history, S3 owns whole-file bytes</text>
+  <text x="42" y="65" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">One fenced writer · exact VersionId reads · no repository chunks · four-call warm publication</text>
+
+  <!-- Regions -->
+  <rect x="250" y="96" width="505" height="470" rx="16" fill="#0f172a" fill-opacity="0.18" stroke="#34d399" stroke-width="1.5" stroke-dasharray="8 5"/>
+  <text x="270" y="120" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="1.1" fill="#34d399">EXCLUSIVE WRITER SERVICE</text>
+  <rect x="790" y="96" width="368" height="470" rx="16" fill="#0f172a" fill-opacity="0.18" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8 5"/>
+  <text x="810" y="120" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="1.1" fill="#fbbf24">VERSIONED PHYSICAL BUCKET</text>
+
+  <!-- Connectors behind components -->
+  <path d="M 210 248 L 286 248" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+  <path d="M 495 220 L 495 263" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <path d="M 495 342 L 495 382" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+  <path d="M 696 297 L 774 297 L 774 186 L 824 186" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+  <path d="M 696 417 L 770 417 L 770 302 L 824 302" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+  <path d="M 696 441 L 782 441 L 782 395 L 824 395" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+  <path d="M 696 465 L 806 465 L 806 490 L 824 490" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+  <path d="M 824 225 L 736 225 L 736 327 L 696 327" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Connector labels -->
+  <rect x="213" y="229" width="68" height="15" rx="3" fill="#0b1120"/>
+  <text x="247" y="240" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="600" fill="#22d3ee" text-anchor="middle">S3-shaped API</text>
+  <rect x="713" y="168" width="105" height="15" rx="3" fill="#0b1120"/>
+  <text x="765" y="179" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="600" fill="#a78bfa" text-anchor="middle">whole-object mutation</text>
+  <rect x="716" y="210" width="99" height="15" rx="3" fill="#0b1120"/>
+  <text x="765" y="221" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="600" fill="#22d3ee" text-anchor="middle">exact VersionId read</text>
+
+  <!-- Components: external caller -->
+  <rect x="42" y="197" width="168" height="102" rx="10" fill="#082f49" fill-opacity="0.66" stroke="#22d3ee" stroke-width="1.6"/>
+  <text x="126" y="228" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Application</text>
+  <text x="126" y="252" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">put · get · copy · delete</text>
+  <text x="126" y="271" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">multipart · versions · branches</text>
+
+  <!-- Components: writer -->
+  <rect x="286" y="148" width="418" height="72" rx="10" fill="url(#writer-fill)" stroke="#34d399" stroke-width="1.6"/>
+  <text x="495" y="177" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Fenced writer gate + commit sequencer</text>
+  <text x="495" y="199" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">one writer generation · concurrent callers queue · stale writer fails closed</text>
+
+  <rect x="286" y="263" width="418" height="79" rx="10" fill="url(#writer-fill)" stroke="#34d399" stroke-width="1.6"/>
+  <text x="495" y="293" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Native object adapter</text>
+  <text x="495" y="315" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">streams whole file · captures VersionId · verifies checksum</text>
+  <text x="495" y="330" font-family="Menlo, Consolas, monospace" font-size="9" font-weight="500" fill="#94a3b8" text-anchor="middle">GetObject(key, version_id)</text>
+
+  <rect x="286" y="382" width="418" height="118" rx="10" fill="#2e1065" fill-opacity="0.54" stroke="#a78bfa" stroke-width="1.6"/>
+  <text x="495" y="412" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Prolly logical-bucket engine</text>
+  <text x="495" y="435" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">objects tree · versions tree · operations tree</text>
+  <text x="495" y="455" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">logical ObjectVersionId ↔ exact native VersionId binding</text>
+  <text x="495" y="478" font-family="Menlo, Consolas, monospace" font-size="9" font-weight="500" fill="#94a3b8" text-anchor="middle">one node pack + one bucket commit + one branch-ref CAS</text>
+
+  <rect x="304" y="518" width="382" height="30" rx="7" fill="#0f172a" stroke="#64748b" stroke-width="1" stroke-dasharray="5 4"/>
+  <text x="495" y="538" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">advisory CID locator/checkpoint · rebuildable from commit history</text>
+
+  <!-- Components: physical bucket -->
+  <rect x="824" y="145" width="300" height="96" rx="10" fill="url(#bucket-fill)" stroke="#fbbf24" stroke-width="1.6"/>
+  <text x="974" y="174" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Original object keys</text>
+  <text x="974" y="197" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">one whole object per native S3 version</text>
+  <text x="974" y="218" font-family="Menlo, Consolas, monospace" font-size="9" font-weight="500" fill="#94a3b8" text-anchor="middle">photos/a.jpg?versionId=3HL…</text>
+
+  <rect x="824" y="268" width="300" height="68" rx="10" fill="#2e1065" fill-opacity="0.54" stroke="#a78bfa" stroke-width="1.6"/>
+  <text x="974" y="296" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Immutable node packs</text>
+  <text x="974" y="317" font-family="Menlo, Consolas, monospace" font-size="9" font-weight="500" fill="#94a3b8" text-anchor="middle">CID → pack offset + verified node bytes</text>
+
+  <rect x="824" y="361" width="300" height="68" rx="10" fill="#2e1065" fill-opacity="0.54" stroke="#a78bfa" stroke-width="1.6"/>
+  <text x="974" y="389" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Immutable bucket commits</text>
+  <text x="974" y="410" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">roots · parents · changes · node-pack ref</text>
+
+  <rect x="824" y="456" width="300" height="68" rx="10" fill="url(#bucket-fill)" stroke="#fbbf24" stroke-width="1.6"/>
+  <text x="974" y="484" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Mutable branch refs</text>
+  <text x="974" y="505" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">one CAS is the only visibility point</text>
+
+  <!-- Publication timeline -->
+  <text x="42" y="620" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc">Warm 64 KiB write: four foreground S3 calls</text>
+  <text x="42" y="641" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">Every immutable dependency is durable before the branch ref changes.</text>
+  <line x1="122" y1="702" x2="1078" y2="702" stroke="#334155" stroke-width="3"/>
+  <path d="M 238 702 L 337 702" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+  <path d="M 477 702 L 576 702" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+  <path d="M 716 702 L 815 702" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-amber)"/>
+
+  <circle cx="122" cy="702" r="28" fill="#0b1120" stroke="#22d3ee" stroke-width="2.5"/>
+  <text x="122" y="707" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#f8fafc" text-anchor="middle">1</text>
+  <text x="122" y="749" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#e2e8f0" text-anchor="middle">PUT whole file</text>
+  <text x="122" y="767" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="400" fill="#94a3b8" text-anchor="middle">capture VersionId</text>
+
+  <circle cx="361" cy="702" r="28" fill="#0b1120" stroke="#a78bfa" stroke-width="2.5"/>
+  <text x="361" y="707" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#f8fafc" text-anchor="middle">2</text>
+  <text x="361" y="749" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#e2e8f0" text-anchor="middle">PUT node pack</text>
+  <text x="361" y="767" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="400" fill="#94a3b8" text-anchor="middle">all new Prolly nodes</text>
+
+  <circle cx="600" cy="702" r="28" fill="#0b1120" stroke="#a78bfa" stroke-width="2.5"/>
+  <text x="600" y="707" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#f8fafc" text-anchor="middle">3</text>
+  <text x="600" y="749" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#e2e8f0" text-anchor="middle">PUT bucket commit</text>
+  <text x="600" y="767" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="400" fill="#94a3b8" text-anchor="middle">immutable roots + binding</text>
+
+  <circle cx="839" cy="702" r="28" fill="#0b1120" stroke="#fbbf24" stroke-width="2.5"/>
+  <text x="839" y="707" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#f8fafc" text-anchor="middle">4</text>
+  <text x="839" y="749" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="#e2e8f0" text-anchor="middle">CAS branch ref</text>
+  <text x="839" y="767" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="400" fill="#94a3b8" text-anchor="middle">atomic visibility point</text>
+
+  <rect x="951" y="671" width="173" height="63" rx="10" fill="#052e16" fill-opacity="0.65" stroke="#34d399" stroke-width="1.5"/>
+  <text x="1037" y="696" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f8fafc" text-anchor="middle">Committed</text>
+  <text x="1037" y="717" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="400" fill="#cbd5e1" text-anchor="middle">readers pin the new commit</text>
+
+  <!-- Legend and caveat -->
+  <circle cx="49" cy="823" r="5" fill="#22d3ee"/>
+  <text x="62" y="827" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">native payload/read</text>
+  <circle cx="180" cy="823" r="5" fill="#a78bfa"/>
+  <text x="193" y="827" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">immutable repository data</text>
+  <circle cx="378" cy="823" r="5" fill="#fbbf24"/>
+  <text x="391" y="827" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">mutable/fenced authority</text>
+  <text x="1158" y="827" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="400" fill="#94a3b8" text-anchor="end">Cold reopen, retries, checkpoints, GC, and multipart parts are budgeted separately.</text>
+</svg>

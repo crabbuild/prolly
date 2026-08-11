@@ -33,6 +33,7 @@ Use this client when your application needs repository semantics across objects.
 | Check supported S3 fields | [Compatibility contract](compatibility-v1.json) |
 | Deploy, recover, or run garbage collection | [Operations runbook](OPERATIONS.md) |
 | Review measured evidence | [Qualification record](QUALIFICATION.md) |
+| Review the proposed thin-wrapper architecture | [Native-versioned S3 design](NATIVE-VERSIONED-S3-DESIGN.md) |
 
 ## How the repository works
 
@@ -314,6 +315,7 @@ Each document has one job:
 | [Compatibility contract](compatibility-v1.json) | Machine-readable supported fields and fail-closed behavior |
 | [Operations runbook](OPERATIONS.md) | Deployment, recovery, integrity, GC, backup, and key rotation |
 | [Qualification record](QUALIFICATION.md) | Dated test evidence, performance measurements, and open release gates |
+| [Native-versioned S3 design](NATIVE-VERSIONED-S3-DESIGN.md) | Proposed exclusive-writer profile using whole native S3 versions and packed Prolly nodes |
 | [Completion audit](COMPLETION-AUDIT.md) | Requirement-by-requirement evidence status |
 | [Technical design and phased plan](../plans/020-versioned-s3-client-adapter.md) | Design decisions, durable formats, algorithms, phase gates, and rollback boundaries |
 | [Canonical fixtures](fixtures/canonical-v1.json) | Language-neutral CBOR and identifier compatibility examples |
