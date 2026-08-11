@@ -1,4 +1,4 @@
-# Native-versioned S3 qualification
+# Prolly S3 qualification
 
 Status: local protocol qualification passes; production AWS qualification is
 incomplete.
@@ -12,7 +12,7 @@ Core tests verify:
 - four calls per write with 1, 8, and 32 queued callers;
 - five-call two-object atomic publication;
 - three-call merge and restore;
-- `N + 5` provider-native multipart publication;
+- `N + 5` provider-managed multipart publication;
 - idempotent replay and lost put/copy/delete response reconciliation;
 - exclusive writer takeover fencing;
 - clone, fetch, push, repair, and provider-ID rebinding;
@@ -26,7 +26,7 @@ Run them with:
 
 ```bash
 cargo test --manifest-path extensions/s3/Cargo.toml \
-  -p prolly-s3-core --test native_versioned_profile
+  -p prolly-s3-core --test prolly_s3_profile
 
 PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml \

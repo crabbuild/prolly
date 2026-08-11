@@ -16,15 +16,14 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use md5::Md5;
 use prolly_s3_core::{
     Checksums, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
-    GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, NativeCopy, NativeDelete,
-    NativeFileGet, NativeFileGetResult, NativeFilePut, NativeMultipartAbort,
-    NativeMultipartComplete, NativeMultipartCreate, NativeMultipartFilePart,
-    NativeMultipartListParts, NativeMultipartListPartsPage, NativeMultipartListUploads,
-    NativeMultipartListUploadsPage, NativeMultipartPartResult, NativeMultipartUploadEntry,
-    NativeMultipartUploadPart, NativeMultipartUploadPartCopy, NativeObjectBindingV1,
-    NativeObjectWriteResult, NativePut, ObjectPath, ObjectPlane, PhysicalListEntry,
-    PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken, StoredMetadata,
-    StoredObject,
+    GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath, ObjectPlane,
+    PhysicalCopy, PhysicalDelete, PhysicalFileGet, PhysicalFileGetResult, PhysicalFilePut,
+    PhysicalListEntry, PhysicalListPage, PhysicalMultipartAbort, PhysicalMultipartComplete,
+    PhysicalMultipartCreate, PhysicalMultipartFilePart, PhysicalMultipartListParts,
+    PhysicalMultipartListPartsPage, PhysicalMultipartListUploads, PhysicalMultipartListUploadsPage,
+    PhysicalMultipartPartResult, PhysicalMultipartUploadEntry, PhysicalMultipartUploadPart,
+    PhysicalMultipartUploadPartCopy, PhysicalObjectBindingV1, PhysicalObjectWriteResult,
+    PhysicalPut, PhysicalVersion, Result, RetryAdvice, StorageToken, StoredMetadata, StoredObject,
 };
 use sha2::{Digest, Sha256};
 
@@ -456,7 +455,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         }
     }
 
-    async fn put_native(&self, request: NativePut) -> Result<NativeObjectWriteResult> {
+    async fn put_physical(&self, request: PhysicalPut) -> Result<PhysicalObjectWriteResult> {
         self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
         let size = request.bytes.len() as u64;
         self.metrics
@@ -465,7 +464,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         let checksum_sha256: [u8; 32] = Sha256::digest(&request.bytes).into();
         let checksum_md5: [u8; 16] = Md5::digest(&request.bytes).into();
         let logical_etag = format!("\"{}\"", hex::encode(checksum_md5));
-        let metadata = native_metadata(
+        let metadata = physical_metadata(
             request.user_metadata,
             request.repository.to_string(),
             request.operation.to_string(),
@@ -496,11 +495,11 @@ impl ObjectPlane for AwsS3ObjectPlane {
         let output = operation
             .send()
             .await
-            .map_err(|error| map_sdk_error("PutObject native", error))?;
+            .map_err(|error| map_sdk_error("PutObject physical", error))?;
         let version_id = required_version_id("PutObject", output.version_id())?;
         let provider_etag = output.e_tag().unwrap_or_default().to_string();
-        Ok(NativeObjectWriteResult {
-            binding: NativeObjectBindingV1::Live {
+        Ok(PhysicalObjectWriteResult {
+            binding: PhysicalObjectBindingV1::Live {
                 version_id,
                 provider_etag,
                 checksum_sha256,
@@ -515,12 +514,15 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn put_native_file(&self, request: NativeFilePut) -> Result<NativeObjectWriteResult> {
+    async fn put_physical_file(
+        &self,
+        request: PhysicalFilePut,
+    ) -> Result<PhysicalObjectWriteResult> {
         self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
         self.metrics
             .uploaded_body_bytes
             .fetch_add(request.size, Ordering::Relaxed);
-        let metadata = native_metadata(
+        let metadata = physical_metadata(
             request.user_metadata,
             request.repository.to_string(),
             request.operation.to_string(),
@@ -530,7 +532,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         let logical_etag = format!("\"{}\"", hex::encode(request.checksum_md5));
         let body = ByteStream::from_path(&request.body_path)
             .await
-            .map_err(|error| transport_error("native spool open", error))?;
+            .map_err(|error| transport_error("physical spool open", error))?;
         let mut operation = self
             .client
             .put_object()
@@ -555,9 +557,9 @@ impl ObjectPlane for AwsS3ObjectPlane {
         let output = operation
             .send()
             .await
-            .map_err(|error| map_sdk_error("PutObject native spool", error))?;
-        Ok(NativeObjectWriteResult {
-            binding: NativeObjectBindingV1::Live {
+            .map_err(|error| map_sdk_error("PutObject physical spool", error))?;
+        Ok(PhysicalObjectWriteResult {
+            binding: PhysicalObjectBindingV1::Live {
                 version_id: required_version_id("PutObject", output.version_id())?,
                 provider_etag: output.e_tag().unwrap_or_default().to_string(),
                 checksum_sha256: request.checksum_sha256,
@@ -572,7 +574,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn get_native_file(&self, request: NativeFileGet) -> Result<NativeFileGetResult> {
+    async fn get_physical_file(&self, request: PhysicalFileGet) -> Result<PhysicalFileGetResult> {
         self.metrics.get_object.fetch_add(1, Ordering::Relaxed);
         let output = self
             .client
@@ -582,17 +584,17 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .version_id(&request.version_id)
             .send()
             .await
-            .map_err(|error| map_sdk_error("GetObject native transfer", error))?;
+            .map_err(|error| map_sdk_error("GetObject physical transfer", error))?;
         if output.version_id() != Some(request.version_id.as_str()) {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native transfer GET omitted or changed the requested VersionId",
+                "physical transfer GET omitted or changed the requested VersionId",
             ));
         }
         let mut file = std::fs::File::create(&request.body_path).map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native transfer spool could not be created: {error}"),
+                format!("physical transfer spool could not be created: {error}"),
             )
         })?;
         let mut body = output.body;
@@ -600,14 +602,17 @@ impl ObjectPlane for AwsS3ObjectPlane {
         let mut sha256 = Sha256::new();
         let mut md5 = Md5::new();
         while let Some(chunk) = body.next().await {
-            let chunk = chunk.map_err(|error| transport_error("native transfer body", error))?;
+            let chunk = chunk.map_err(|error| transport_error("physical transfer body", error))?;
             size = size.checked_add(chunk.len() as u64).ok_or_else(|| {
-                Error::new(ErrorCode::EntityTooLarge, "native transfer length overflow")
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "physical transfer length overflow",
+                )
             })?;
             file.write_all(&chunk).map_err(|error| {
                 Error::new(
                     ErrorCode::Transport,
-                    format!("native transfer spool write failed: {error}"),
+                    format!("physical transfer spool write failed: {error}"),
                 )
             })?;
             sha256.update(&chunk);
@@ -616,22 +621,22 @@ impl ObjectPlane for AwsS3ObjectPlane {
         file.flush().map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native transfer spool flush failed: {error}"),
+                format!("physical transfer spool flush failed: {error}"),
             )
         })?;
         self.metrics
             .downloaded_body_bytes
             .fetch_add(size, Ordering::Relaxed);
-        Ok(NativeFileGetResult {
+        Ok(PhysicalFileGetResult {
             size,
             checksum_sha256: sha256.finalize().into(),
             checksum_md5: md5.finalize().into(),
         })
     }
 
-    async fn copy_native(&self, request: NativeCopy) -> Result<NativeObjectWriteResult> {
+    async fn copy_physical(&self, request: PhysicalCopy) -> Result<PhysicalObjectWriteResult> {
         self.metrics.copy_object.fetch_add(1, Ordering::Relaxed);
-        let metadata = native_metadata(
+        let metadata = physical_metadata(
             request.user_metadata,
             request.repository.to_string(),
             request.operation.to_string(),
@@ -667,15 +672,15 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .checksum_algorithm(aws_sdk_s3::types::ChecksumAlgorithm::Sha256)
             .send()
             .await
-            .map_err(|error| map_sdk_error("CopyObject native", error))?;
+            .map_err(|error| map_sdk_error("CopyObject physical", error))?;
         let version_id = required_version_id("CopyObject", output.version_id())?;
         let provider_etag = output
             .copy_object_result()
             .and_then(|result| result.e_tag())
             .unwrap_or_default()
             .to_string();
-        Ok(NativeObjectWriteResult {
-            binding: NativeObjectBindingV1::Live {
+        Ok(PhysicalObjectWriteResult {
+            binding: PhysicalObjectBindingV1::Live {
                 version_id,
                 provider_etag,
                 checksum_sha256: request.checksum_sha256,
@@ -686,7 +691,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn delete_native(&self, request: NativeDelete) -> Result<NativeObjectBindingV1> {
+    async fn delete_physical(&self, request: PhysicalDelete) -> Result<PhysicalObjectBindingV1> {
         self.metrics.delete_object.fetch_add(1, Ordering::Relaxed);
         let output = self
             .client
@@ -695,23 +700,23 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .key(request.path.as_str())
             .send()
             .await
-            .map_err(|error| map_sdk_error("DeleteObject native", error))?;
+            .map_err(|error| map_sdk_error("DeleteObject physical", error))?;
         if output.delete_marker() != Some(true) {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "DeleteObject did not create a native delete marker",
+                "DeleteObject did not create a physical delete marker",
             ));
         }
-        Ok(NativeObjectBindingV1::DeleteMarker {
+        Ok(PhysicalObjectBindingV1::DeleteMarker {
             version_id: required_version_id("DeleteObject", output.version_id())?,
         })
     }
 
-    async fn create_native_multipart(&self, request: NativeMultipartCreate) -> Result<String> {
+    async fn create_physical_multipart(&self, request: PhysicalMultipartCreate) -> Result<String> {
         self.metrics
             .create_multipart_upload
             .fetch_add(1, Ordering::Relaxed);
-        let metadata = native_metadata(
+        let metadata = physical_metadata(
             request.user_metadata,
             request.repository.to_string(),
             request.operation.to_string(),
@@ -739,7 +744,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .checksum_algorithm(aws_sdk_s3::types::ChecksumAlgorithm::Sha256)
             .send()
             .await
-            .map_err(|error| map_sdk_error("CreateMultipartUpload native", error))?;
+            .map_err(|error| map_sdk_error("CreateMultipartUpload physical", error))?;
         output
             .upload_id()
             .filter(|value| !value.is_empty())
@@ -752,10 +757,10 @@ impl ObjectPlane for AwsS3ObjectPlane {
             })
     }
 
-    async fn upload_native_multipart_part(
+    async fn upload_physical_multipart_part(
         &self,
-        request: NativeMultipartUploadPart,
-    ) -> Result<NativeMultipartPartResult> {
+        request: PhysicalMultipartUploadPart,
+    ) -> Result<PhysicalMultipartPartResult> {
         self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
         let size = request.bytes.len() as u64;
         self.metrics
@@ -778,7 +783,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .body(ByteStream::from(request.bytes))
             .send()
             .await
-            .map_err(|error| map_sdk_error("UploadPart native", error))?;
+            .map_err(|error| map_sdk_error("UploadPart physical", error))?;
         let etag = output
             .e_tag()
             .filter(|value| !value.is_empty())
@@ -796,7 +801,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 "UploadPart returned a different SHA-256 checksum",
             ));
         }
-        Ok(NativeMultipartPartResult {
+        Ok(PhysicalMultipartPartResult {
             part_number: request.part_number,
             etag: etag.to_string(),
             checksum_sha256: Some(checksum_sha256),
@@ -804,17 +809,17 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn upload_native_multipart_file_part(
+    async fn upload_physical_multipart_file_part(
         &self,
-        request: NativeMultipartFilePart,
-    ) -> Result<NativeMultipartPartResult> {
+        request: PhysicalMultipartFilePart,
+    ) -> Result<PhysicalMultipartPartResult> {
         self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
         self.metrics
             .uploaded_body_bytes
             .fetch_add(request.size, Ordering::Relaxed);
         let body = ByteStream::from_path(&request.body_path)
             .await
-            .map_err(|error| transport_error("native multipart spool open", error))?;
+            .map_err(|error| transport_error("physical multipart spool open", error))?;
         let output = self
             .client
             .upload_part()
@@ -831,7 +836,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .body(body)
             .send()
             .await
-            .map_err(|error| map_sdk_error("UploadPart native spool", error))?;
+            .map_err(|error| map_sdk_error("UploadPart physical spool", error))?;
         let etag = output
             .e_tag()
             .filter(|value| !value.is_empty())
@@ -849,7 +854,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 "UploadPart returned a different SHA-256 checksum",
             ));
         }
-        Ok(NativeMultipartPartResult {
+        Ok(PhysicalMultipartPartResult {
             part_number: request.part_number,
             etag: etag.to_string(),
             checksum_sha256: Some(request.checksum_sha256),
@@ -857,10 +862,10 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn upload_native_multipart_part_copy(
+    async fn upload_physical_multipart_part_copy(
         &self,
-        request: NativeMultipartUploadPartCopy,
-    ) -> Result<NativeMultipartPartResult> {
+        request: PhysicalMultipartUploadPartCopy,
+    ) -> Result<PhysicalMultipartPartResult> {
         self.metrics
             .upload_part_copy
             .fetch_add(1, Ordering::Relaxed);
@@ -889,7 +894,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         let output = operation
             .send()
             .await
-            .map_err(|error| map_sdk_error("UploadPartCopy native", error))?;
+            .map_err(|error| map_sdk_error("UploadPartCopy physical", error))?;
         let result = output.copy_part_result().ok_or_else(|| {
             Error::new(
                 ErrorCode::ProviderNotQualified,
@@ -912,7 +917,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                     "UploadPartCopy returned an invalid SHA-256 checksum",
                 )
             })?;
-        Ok(NativeMultipartPartResult {
+        Ok(PhysicalMultipartPartResult {
             part_number: request.part_number,
             etag: result.e_tag().unwrap_or_default().to_string(),
             checksum_sha256: Some(checksum_sha256),
@@ -920,10 +925,10 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn complete_native_multipart(
+    async fn complete_physical_multipart(
         &self,
-        request: NativeMultipartComplete,
-    ) -> Result<NativeObjectWriteResult> {
+        request: PhysicalMultipartComplete,
+    ) -> Result<PhysicalObjectWriteResult> {
         self.metrics
             .complete_multipart_upload
             .fetch_add(1, Ordering::Relaxed);
@@ -956,11 +961,11 @@ impl ObjectPlane for AwsS3ObjectPlane {
             )
             .send()
             .await
-            .map_err(|error| map_sdk_error("CompleteMultipartUpload native", error))?;
+            .map_err(|error| map_sdk_error("CompleteMultipartUpload physical", error))?;
         let version_id = required_version_id("CompleteMultipartUpload", output.version_id())?;
         let provider_etag = output.e_tag().unwrap_or_default().to_string();
-        Ok(NativeObjectWriteResult {
-            binding: NativeObjectBindingV1::Live {
+        Ok(PhysicalObjectWriteResult {
+            binding: PhysicalObjectBindingV1::Live {
                 version_id,
                 provider_etag: provider_etag.clone(),
                 checksum_sha256: request.checksum_sha256,
@@ -975,7 +980,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn abort_native_multipart(&self, request: NativeMultipartAbort) -> Result<()> {
+    async fn abort_physical_multipart(&self, request: PhysicalMultipartAbort) -> Result<()> {
         self.metrics
             .abort_multipart_upload
             .fetch_add(1, Ordering::Relaxed);
@@ -986,14 +991,14 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .upload_id(request.upload_id)
             .send()
             .await
-            .map_err(|error| map_sdk_error("AbortMultipartUpload native", error))?;
+            .map_err(|error| map_sdk_error("AbortMultipartUpload physical", error))?;
         Ok(())
     }
 
-    async fn list_native_multipart_parts(
+    async fn list_physical_multipart_parts(
         &self,
-        request: NativeMultipartListParts,
-    ) -> Result<NativeMultipartListPartsPage> {
+        request: PhysicalMultipartListParts,
+    ) -> Result<PhysicalMultipartListPartsPage> {
         self.metrics.list_parts.fetch_add(1, Ordering::Relaxed);
         let output = self
             .client
@@ -1005,7 +1010,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .max_parts(i32::try_from(request.limit.min(1_000)).unwrap_or(1_000))
             .send()
             .await
-            .map_err(|error| map_sdk_error("ListParts native", error))?;
+            .map_err(|error| map_sdk_error("ListParts physical", error))?;
         let parts = output
             .parts()
             .iter()
@@ -1034,7 +1039,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                             })
                     })
                     .transpose()?;
-                Ok(NativeMultipartPartResult {
+                Ok(PhysicalMultipartPartResult {
                     part_number,
                     etag: part.e_tag().unwrap_or_default().to_string(),
                     checksum_sha256,
@@ -1050,7 +1055,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(NativeMultipartListPartsPage {
+        Ok(PhysicalMultipartListPartsPage {
             parts,
             next_part_number: output
                 .next_part_number_marker()
@@ -1058,10 +1063,10 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
-    async fn list_native_multipart_uploads(
+    async fn list_physical_multipart_uploads(
         &self,
-        request: NativeMultipartListUploads,
-    ) -> Result<NativeMultipartListUploadsPage> {
+        request: PhysicalMultipartListUploads,
+    ) -> Result<PhysicalMultipartListUploadsPage> {
         self.metrics
             .list_multipart_uploads
             .fetch_add(1, Ordering::Relaxed);
@@ -1075,7 +1080,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .max_uploads(i32::try_from(request.limit.min(1_000)).unwrap_or(1_000))
             .send()
             .await
-            .map_err(|error| map_sdk_error("ListMultipartUploads native", error))?;
+            .map_err(|error| map_sdk_error("ListMultipartUploads physical", error))?;
         let uploads = output
             .uploads()
             .iter()
@@ -1087,14 +1092,14 @@ impl ObjectPlane for AwsS3ObjectPlane {
                     .and_then(|value| u64::try_from(value.secs()).ok())
                     .and_then(|seconds| seconds.checked_mul(1_000))
                     .unwrap_or_default();
-                Some(NativeMultipartUploadEntry {
+                Some(PhysicalMultipartUploadEntry {
                     path,
                     upload_id,
                     initiated_at_millis,
                 })
             })
             .collect();
-        Ok(NativeMultipartListUploadsPage {
+        Ok(PhysicalMultipartListUploadsPage {
             uploads,
             next_key_marker: output.next_key_marker().map(ToString::to_string),
             next_upload_id_marker: output.next_upload_id_marker().map(ToString::to_string),
@@ -1198,7 +1203,7 @@ impl AwsS3ObjectPlane {
     }
 }
 
-fn native_metadata(
+fn physical_metadata(
     user_metadata: std::collections::BTreeMap<String, String>,
     repository: String,
     operation: String,
@@ -1236,7 +1241,7 @@ fn required_version_id(operation: &str, version_id: Option<&str>) -> Result<Stri
         .ok_or_else(|| {
             Error::new(
                 ErrorCode::ProviderNotQualified,
-                format!("{operation} succeeded without a native S3 VersionId"),
+                format!("{operation} succeeded without a S3 VersionId"),
             )
         })
 }

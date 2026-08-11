@@ -5,7 +5,7 @@ reference verifier for registry, hashing, paths, and repository source defaults.
 Run it from any directory:
 
 ```sh
-python3 extensions/s3/spec/native-versioned-s3/v1/conformance/verify.py
+python3 extensions/s3/spec/prolly-s3/v1/conformance/verify.py
 ```
 
 Each language implementation MUST additionally feed `invalid_cbor` to its v1

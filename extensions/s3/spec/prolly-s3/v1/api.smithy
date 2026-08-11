@@ -1,9 +1,9 @@
 $version: "2"
 
-namespace prolly.native.s3.v1
+namespace prolly.s3.v1
 
 @documentation("Semantic in-process API model. It does not replace canonical CBOR persistence.")
-service NativeVersionedS3 {
+service ProllyS3 {
     version: "1"
     operations: [
         Initialize, Open, PutObject, GetObject, HeadObject, DeleteObject,

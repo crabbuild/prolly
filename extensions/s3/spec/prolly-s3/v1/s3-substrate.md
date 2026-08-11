@@ -1,6 +1,6 @@
 # Required S3 substrate
 
-V1 is defined over a bucket whose physical versioning state is `Enabled`.
+V1 is defined over a bucket whose S3 Versioning state is `Enabled`.
 `Suspended` and unversioned buckets are not conforming.
 
 ## Required operations
@@ -17,9 +17,9 @@ AWS S3, a compatible service, or an emulator:
 | compare exchange | conditional PUT using the observed current ETag/token |
 | list | paginated lexicographic listing; optionally include all versions and delete markers |
 | exact delete | permanently delete the named physical VersionId |
-| native put | PUT user object; return provider VersionId, ETag, and checksums |
-| native delete | DELETE without VersionId; return the created delete-marker VersionId |
-| native copy | copy an exact source VersionId; return destination VersionId |
+| physical put | PUT user object; return provider VersionId, ETag, and checksums |
+| physical delete | DELETE without VersionId; return the created delete-marker VersionId |
+| physical copy | copy an exact source VersionId; return destination VersionId |
 | multipart | create, upload/copy parts, list, complete, abort; completion returns VersionId |
 
 The adapter MUST preserve opaque VersionId and ETag strings exactly. It MUST
@@ -54,7 +54,7 @@ HTTP status codes are adapter details; the portable result is semantic:
   readable, otherwise `Conflict(null)`;
 - timeouts after a possibly accepted mutation are `OutcomeUnknown`, never a
   blind `Timeout`; reconciliation is required before retrying;
-- provider request IDs and native codes are retained as diagnostic metadata but
+- provider request IDs and physical codes are retained as diagnostic metadata but
   do not replace the stable error code.
 
 ## Multipart

@@ -1,15 +1,15 @@
-# Native-versioned S3 extension
+# Prolly S3 extension
 
 This extension turns a versioned S3 bucket into a file repository with commits,
 snapshots, branches, tags, diffs, merges, restore, and exact historical reads.
-It is a thin wrapper around Prolly: file bytes stay as whole native S3 object
+It is a thin wrapper around Prolly: file bytes stay as whole S3 object
 versions at their original keys, while Prolly records which exact `VersionId`
 belongs to each logical commit.
 
 There is one architecture. The former repository-chunked storage profile and
 its compatibility surface have been removed.
 
-![Native-versioned S3 architecture](diagram/native-versioned-s3-architecture.svg)
+![Prolly S3 architecture](diagram/prolly-s3-architecture.svg)
 
 ## What a write does
 
@@ -20,7 +20,7 @@ A warm single-object write uses four foreground S3 operations:
 3. Upload one immutable bucket commit.
 4. Compare-and-exchange the branch ref; this is the visibility point.
 
-![Four-call write path](diagram/native-versioned-s3-write-path.svg)
+![Four-call write path](diagram/prolly-s3-write-path.svg)
 
 No content chunks, content manifests, publication leases, durable staging
 workspaces, or post-CAS readback are created. A two-object atomic commit uses
@@ -31,7 +31,7 @@ branch-ref CAS.
 
 - Prolly is the logical authority. Applications must read and write through
   this client.
-- The bucket must have native versioning enabled.
+- The bucket must have S3 Versioning enabled.
 - The wrapper must be the exclusive writer for managed object keys.
 - One fenced writer service owns mutations. Concurrent calls queue inside that
   service; independent writers need an explicit takeover.
@@ -45,12 +45,12 @@ branch-ref CAS.
 - `prolly-s3-core`: provider-neutral repository engine and object-plane trait.
 
 See [client/README.md](client/README.md) for setup and concrete API examples,
-[NATIVE-VERSIONED-S3-DESIGN.md](NATIVE-VERSIONED-S3-DESIGN.md) for the protocol,
+[PROLLY-S3-DESIGN.md](PROLLY-S3-DESIGN.md) for the protocol,
 and [OPERATIONS.md](OPERATIONS.md) for deployment constraints.
 
 The frozen, language-neutral contract is
-[Native-Versioned S3 Protocol v1](spec/native-versioned-s3/v1/README.md). It
-includes CDDL, deterministic CBOR and hashing rules, the physical S3 layout,
+[Prolly S3 Protocol v1](spec/prolly-s3/v1/README.md). It
+includes CDDL, deterministic CBOR and hashing rules, the S3 layout,
 state machines, a Smithy semantic API, and executable conformance vectors for
 implementing compatible Java, Go, TypeScript, and other clients.
 
@@ -82,11 +82,11 @@ four calls per completed whole-object write.
 
 - The client is not a wire-compatible S3 proxy; it is an in-process Rust API.
 - Managed keys cannot be modified by another S3 client.
-- Native S3 `VersionId` values are provider-local and are rebound during clone,
+- S3 `VersionId` values are provider-local and are rebound during clone,
   fetch, push, repair, or restore to another bucket.
 - Atomic commit sessions buffer staged bodies in process until publication.
 - Multipart session bookkeeping in the high-level client is process-local;
-  completed native object versions and committed history are durable.
+  completed S3 object versions and committed history are durable.
 - Directory buckets and buckets with suspended versioning are unsupported.
 - AWS latency, throttling, request-cost, hot-branch, and million-key release
   gates remain to be qualified. See [QUALIFICATION.md](QUALIFICATION.md).

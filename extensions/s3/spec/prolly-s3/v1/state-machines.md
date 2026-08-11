@@ -33,7 +33,7 @@ States: `Prepared → PhysicalWritten → Versioned → ClosureStored → Publis
 
 1. Load branch ref/commit and evaluate logical preconditions.
 2. Canonicalize the input and reserve the OperationId.
-3. Write/copy/delete the native S3 object, obtaining an exact VersionId.
+3. Write/copy/delete the S3 object, obtaining an exact VersionId.
 4. Construct and validate `ObjectVersionV1`; its logical ID excludes binding.
 5. Update object/version/operation Prolly trees and store node closure.
 6. Store `BucketCommitV1` immutably.
@@ -57,9 +57,9 @@ requires provider reconciliation using operation metadata before rewriting.
 
 States: `Open → PhysicalPrepared → Committed | Expired/Aborted`.
 
-The durable `NativeBatchV1` fixes branch, base commit, operation, message, and
+The durable `PhysicalBatchV1` fixes branch, base commit, operation, message, and
 expiry. Mutations have unique logical keys. Provider writes happen first and
-produce `NativePreparedMutationV1` bindings. One commit applies all prepared
+produce `PhysicalPreparedMutationV1` bindings. One commit applies all prepared
 mutations and one ref CAS publishes them atomically. A changed base yields
 `BatchConflict`; physical results remain unreachable and collectible.
 
@@ -67,7 +67,7 @@ mutations and one ref CAS publishes them atomically. A changed base yields
 
 States: `Created → Parts → CompletedPhysical → Published | Aborted`.
 
-The original `NativeMultipartSessionV1` is required for completion; a session
+The original `PhysicalMultipartSessionV1` is required for completion; a session
 discovered by listing is read-only and cannot publish because it lacks the
 original operation/fence authority. Complete validates ordered parts and whole
 checksums, obtains the exact VersionId, then follows Put from `Versioned`.
@@ -106,7 +106,7 @@ offsets point past the 12-byte fixed header and canonical TOC.
 States: `MarkRunning → Planned → SweepRunning ↔ Paused → Completed | Aborted`.
 
 Mark snapshots every live branch, tag, nonexpired retention pin, and the cutoff
-time into `GcFenceV1`; it traces the complete commit/node/native-version graph.
+time into `GcFenceV1`; it traces the complete commit/node/physical-version graph.
 Candidates must be older than the grace cutoff and absent from reachability.
 Sweep reloads roots/fence before each destructive window, rechecks candidate
 reachability, and deletes only the exact VersionId recorded in the plan. It
