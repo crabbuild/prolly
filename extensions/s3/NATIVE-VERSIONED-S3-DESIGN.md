@@ -27,8 +27,8 @@ Related material:
 
 ## Current delivery status
 
-The experimental implementation exercises the core architecture, but the
-profile is not production-qualified. The repository currently supports:
+The implementation exercises the core architecture, but the profile is not
+production-qualified. The repository currently supports:
 
 - persisted profile negotiation and exact native `VersionId` bindings;
 - whole-object put, copy, delete, current reads, and historical reads;
@@ -36,17 +36,30 @@ profile is not production-qualified. The repository currently supports:
 - four-call warm writes at 1, 8, and 32 queued callers;
 - five-call two-object commit sessions and three-call merge or restore;
 - writer fencing, explicit takeover, idempotent replay, lost-put response
-  reconciliation, checkpoints, exact-version garbage collection, and fsck.
+  reconciliation, lost-copy and lost-delete reconciliation, checkpoints,
+  exact-version garbage collection, and fsck;
+- native multipart create, streamed part upload, part copy, listing,
+  restart-safe completion, and abort at the `N + 5` request budget;
+- bounded disk spooling for generic whole-object uploads, multipart parts, and
+  cross-bucket object transfer;
+- logical clone, fetch, push, and repair with destination-issued `VersionId`
+  rebinding and destination-local commit IDs;
+- independent lease renewal for writable AWS-shaped clients, with fail-closed
+  admission after an ambiguous or conflicting renewal.
 
-The implementation fails closed for native multipart and cross-bucket clone,
-fetch, push, or repair. Those paths need the protocols in this design to
-capture or rebind destination `VersionId` values. The current generic put
-adapter also collects the request body before calling the object plane; it
-must use streaming checksums or bounded disk spooling before production use.
-The four-call whole-object path now passes against the pinned RustFS image with
-four SDK executions and four wire transmissions. Broader RustFS failure drills
-and the Amazon Web Services (AWS) scale gates remain release requirements, not
-inferred guarantees.
+The four-call whole-object path, `N + 5` multipart path, and logical
+clone/incremental-push path pass against the pinned RustFS image. RustFS
+beta.10 does not return per-part SHA-256 values from `ListParts`, rejects the
+AWS full-object checksum mode at multipart creation, and can briefly omit a
+new upload from `ListMultipartUploads`; the client therefore persists the
+original signed upload handle, accepts caller-carried completion checksums and
+part sizes after restart, and treats provider listings as discovery rather
+than completion authority.
+
+Automatic checkpoint scheduling, the migration/bootstrap command surface,
+the bounded resumable-transfer batch API, broader crash drills, and the AWS
+scale gates remain release work. None of the local evidence qualifies the
+profile for production or million-object scale.
 
 ## Decision
 
@@ -516,10 +529,20 @@ A transfer follows this protocol:
 7. Verify the complete destination closure before updating destination refs.
 8. Move each destination ref through its local writer fence and branch CAS.
 
-The transfer journal stores source IDs, destination IDs, checksums, and exact
-bindings so retries don't create duplicate destination versions. A repair uses
-the same protocol for missing destination bindings. It never copies a source
-commit whose binding still points at the source bucket.
+Each completed destination commit is also an immutable transfer checkpoint.
+The transfer implementation derives a binding-independent logical commit
+fingerprint, scans both referenced and unreferenced destination commits, and
+uses matching fingerprints as the durable source-to-destination commit map.
+Payload requests carry the source operation ID and checksum, so a response-lost
+payload can be reconciled at its exact key. This self-journaling layout avoids
+adding a mutable journal write to every copied version or commit. A future
+bounded batch API may add a small mutable cursor for discovery progress, but
+that cursor is advisory and does not replace immutable commit checkpoints.
+
+A repair uses the same replay protocol. If fsck finds a missing destination
+binding, repair deliberately forces fresh bindings, rebuilds the selected
+history, verifies it, and moves the destination branch through local CAS. It
+never publishes a commit whose binding still points at the source bucket.
 
 ## Idempotency and outcome reconciliation
 
@@ -620,7 +643,7 @@ from cold-open and background-maintenance budgets.
 | Warm current/historical get | 1 | Exact native-version GET. |
 | Merge or restore | 3 | Reuses existing native bindings. |
 | Multipart, `N` parts | `N + 5` | Native create/parts/complete + publication. |
-| Push, `N` copied object versions | `N + 3` | Native copies + shared publication. |
+| Push, `N` copied object versions in one commit | `N + 3` destination writes | `N` destination payload writes + pack + commit + ref. Source exact GETs and history discovery are reported separately; end-to-end transfer is at least `2N + 3`. |
 
 The implementation records SDK calls by category: payload, node pack, commit,
 ref, cold metadata, provider retry, reconciliation, writer lease, checkpoint,

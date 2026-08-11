@@ -41,7 +41,7 @@ use prolly_s3_core::{
     ObjectVersionId, ObjectVersionKindV1, ObjectWriteConditionV1, OperationId, PhysicalVersion,
     PhysicalVersioning, ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository,
     RepositoryOptions, RepositoryStorageProfile, Result, RetryAdvice, UploadId, VersionSummary,
-    WorkspaceId, WorkspaceManifestV1, MAX_LOGICAL_RETRY_LIMIT,
+    WorkspaceId, WorkspaceManifestV1, WriterLeaseMaintenance, MAX_LOGICAL_RETRY_LIMIT,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -549,6 +549,7 @@ pub struct Client {
     provider_attestation: Arc<RwLock<ProviderAttestationV1>>,
     native_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), NativeMultipartPartResult>>>,
     native_multipart_sessions: Arc<RwLock<BTreeMap<String, NativeMultipartSessionV1>>>,
+    writer_lease_maintenance: Option<Arc<WriterLeaseMaintenance>>,
 }
 
 #[derive(Default)]
@@ -624,6 +625,7 @@ impl Client {
             provider_attestation: self.provider_attestation.clone(),
             native_multipart_parts: self.native_multipart_parts.clone(),
             native_multipart_sessions: self.native_multipart_sessions.clone(),
+            writer_lease_maintenance: self.writer_lease_maintenance.clone(),
         })
     }
 
@@ -1708,6 +1710,9 @@ impl ClientBuilder {
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
+        let maintain_native_writer = options.storage_profile
+            == RepositoryStorageProfile::NativeVersionedV1
+            && !options.read_only;
         let branch = options.default_branch.clone();
         let plane = Arc::new(AwsS3ObjectPlane::new(aws, bucket.clone()));
         let provider_identity = self
@@ -1758,8 +1763,13 @@ impl ClientBuilder {
             validate_profile_capabilities(repository.storage_profile(), &attestation)?;
             (repository, attestation)
         };
+        let repository = Arc::new(repository);
+        let writer_lease_maintenance = maintain_native_writer
+            .then(|| repository.start_writer_lease_maintenance())
+            .transpose()?
+            .map(Arc::new);
         Ok(Client {
-            repository: Arc::new(repository),
+            repository,
             bucket,
             branch,
             token_signer: self.token_signer,
@@ -1771,6 +1781,7 @@ impl ClientBuilder {
             provider_attestation: Arc::new(RwLock::new(attestation)),
             native_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
             native_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
+            writer_lease_maintenance,
         })
     }
 }

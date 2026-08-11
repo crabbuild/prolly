@@ -6096,6 +6096,147 @@ async fn rustfs_native_versioned_whole_object_write_uses_four_calls() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_clone_rebinds_exact_versions_and_preserves_history() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    aws.put_bucket_versioning()
+        .bucket(&bucket)
+        .versioning_configuration(
+            VersioningConfiguration::builder()
+                .status(BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+    let source_prefix = unique_prefix("native-clone-source");
+    let destination_prefix = unique_prefix("native-clone-destination");
+    let key = format!("{}/history.bin", unique_prefix("native-clone-object"));
+    let source_plane = Arc::new(AwsS3ObjectPlane::new(aws.clone(), &bucket));
+    let source = Repository::initialize(
+        source_plane,
+        RepositoryOptions {
+            repository_prefix: source_prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-clone-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let first = source
+        .put_bytes(
+            "main",
+            key.as_bytes().to_vec(),
+            b"first native version".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    source
+        .put_bytes(
+            "main",
+            key.as_bytes().to_vec(),
+            b"second native version".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let destination_plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let clone = source
+        .clone_to(destination_plane.clone(), &destination_prefix)
+        .await
+        .unwrap();
+    assert_eq!(clone.refs, 1);
+    let destination = Repository::open(
+        destination_plane,
+        RepositoryOptions {
+            repository_prefix: destination_prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-clone-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(destination.repository_id(), source.repository_id());
+    assert_eq!(
+        destination
+            .get_current("main", key.as_bytes())
+            .await
+            .unwrap()
+            .bytes,
+        b"second native version"
+    );
+    let source_historical = source
+        .head_version("main", key.as_bytes(), first.object_versions[0])
+        .await
+        .unwrap()
+        .1
+        .version;
+    let destination_historical = destination
+        .head_version("main", key.as_bytes(), first.object_versions[0])
+        .await
+        .unwrap()
+        .1
+        .version;
+    assert_eq!(source_historical.id, destination_historical.id);
+    assert_ne!(
+        source_historical.native_binding,
+        destination_historical.native_binding
+    );
+    assert_eq!(
+        destination
+            .get_version("main", key.as_bytes(), first.object_versions[0])
+            .await
+            .unwrap()
+            .bytes,
+        b"first native version"
+    );
+    let expected_destination = destination.head("main").await.unwrap();
+    source
+        .put_bytes(
+            "main",
+            key.as_bytes().to_vec(),
+            b"third native version".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let push = source
+        .push_to(
+            &destination,
+            "main",
+            "main",
+            expected_destination,
+            "RustFS incremental native push",
+        )
+        .await
+        .unwrap();
+    assert_eq!(push.copied_objects, 3);
+    assert_eq!(push.copied_bytes, b"third native version".len() as u64);
+    assert_eq!(
+        destination
+            .get_current("main", key.as_bytes())
+            .await
+            .unwrap()
+            .bytes,
+        b"third native version"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_native_versioned_multipart_uses_n_plus_five_calls() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");

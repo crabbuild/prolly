@@ -20,7 +20,7 @@ pub use repository::{
     version_cursor_after_key, BranchHead, CloneReport, FsckReport, GcDryRun, GcSweepReport,
     MergeConflict, MergePlan, MergePolicy, MultipartUploadSummary, ObjectDiff, ObjectSummary,
     RefMoveReceipt, RepairReport, Repository, RepositoryOptions, SyncReport, Tag, VersionSummary,
-    MAX_LOGICAL_RETRY_LIMIT,
+    WriterLeaseMaintenance, MAX_LOGICAL_RETRY_LIMIT,
 };
 pub use runtime::*;
 pub use store::ProllyObjectStore;

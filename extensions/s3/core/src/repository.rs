@@ -288,6 +288,16 @@ struct LoadedSyncRun {
     token: StorageToken,
 }
 
+pub struct WriterLeaseMaintenance {
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for WriterLeaseMaintenance {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 pub struct Repository<P: ObjectPlane> {
     plane: Arc<P>,
     options: RepositoryOptions,
@@ -762,16 +772,16 @@ impl<P: ObjectPlane> Repository<P> {
         renewed.expires_at_millis = now
             .checked_add(self.options.writer_lease_millis)
             .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "writer lease expiry overflow"))?;
-        match self
+        let renewal = self
             .plane
             .compare_exchange(CompareExchange {
                 path: writer_lease_path(&self.options.repository_prefix)?,
                 expected: Some(held.token),
                 bytes: encode_canonical(&renewed)?,
             })
-            .await?
-        {
-            CompareExchangeOutcome::Applied(metadata) => {
+            .await;
+        match renewal {
+            Ok(CompareExchangeOutcome::Applied(metadata)) => {
                 *self.writer_lease.write().map_err(|_| {
                     Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned")
                 })? = Some(HeldWriterLease {
@@ -780,11 +790,54 @@ impl<P: ObjectPlane> Repository<P> {
                 });
                 Ok(())
             }
-            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "native writer lease was lost; publication is fenced",
-            )),
+            Ok(CompareExchangeOutcome::Conflict(_)) => {
+                *self.writer_lease.write().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned")
+                })? = None;
+                Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "native writer lease was lost; publication is fenced",
+                ))
+            }
+            Err(error) => {
+                *self.writer_lease.write().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned")
+                })? = None;
+                Err(Error::new(
+                    ErrorCode::OutcomeUnknown,
+                    format!("writer lease renewal outcome is unknown; writer is fenced: {error}"),
+                )
+                .retry(RetryAdvice::ReconcileOperation))
+            }
         }
+    }
+
+    /// Run independent native-writer lease renewal until the returned handle
+    /// is dropped. A failed or ambiguous renewal fences this repository before
+    /// the task exits.
+    pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1
+            || self.options.read_only
+        {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "writer lease maintenance requires a writable native repository",
+            ));
+        }
+        let interval = Duration::from_millis((self.options.writer_lease_millis / 3).max(100));
+        let weak = Arc::downgrade(self);
+        let task = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(interval).await;
+                let Some(repository) = weak.upgrade() else {
+                    break;
+                };
+                if repository.renew_writer_lease().await.is_err() {
+                    break;
+                }
+            }
+        });
+        Ok(WriterLeaseMaintenance { task })
     }
 
     /// Explicitly take over an expired or credential-revoked native writer.
@@ -1094,10 +1147,7 @@ impl<P: ObjectPlane> Repository<P> {
         destination_prefix: &str,
     ) -> Result<CloneReport> {
         if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "native-versioned clone requires logical history replay and destination VersionId rebinding",
-            ));
+            return self.clone_native_to(destination, destination_prefix).await;
         }
         let probe_prefix = format!("{destination_prefix}/");
         ObjectPath::new(format!("{destination_prefix}/format/v1.cbor"))?;
@@ -1216,6 +1266,706 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(report)
     }
 
+    async fn clone_native_to<Q: ObjectPlane>(
+        &self,
+        destination: Arc<Q>,
+        destination_prefix: &str,
+    ) -> Result<CloneReport> {
+        let format_path = format_path(destination_prefix)?;
+        let existing_format = destination
+            .get(GetRequest {
+                path: format_path.clone(),
+                range: None,
+                physical_version: None,
+            })
+            .await?;
+        let format_created = if let Some(existing) = existing_format {
+            let format = decode_repository_format(&existing.bytes)?;
+            if format != self.format {
+                return Err(Error::new(
+                    ErrorCode::RepositoryFormatConflict,
+                    "native clone destination has a different repository format",
+                ));
+            }
+            false
+        } else {
+            let prefix = format!("{destination_prefix}/");
+            let mut continuation = None;
+            loop {
+                let page = destination
+                    .list(ListRequest {
+                        prefix: prefix.clone(),
+                        continuation,
+                        limit: 1_000,
+                        include_versions: false,
+                    })
+                    .await?;
+                if page.entries.iter().any(|entry| {
+                    entry
+                        .path
+                        .as_str()
+                        .strip_prefix(&prefix)
+                        .is_some_and(|relative| {
+                            is_portable_clone_path(relative)
+                                || relative.starts_with("node-packs/")
+                                || relative.starts_with("writers/")
+                        })
+                }) {
+                    return Err(Error::new(
+                        ErrorCode::RepositoryFormatConflict,
+                        "native clone destination contains repository data without a format marker",
+                    ));
+                }
+                continuation = page.continuation;
+                if continuation.is_none() {
+                    break;
+                }
+            }
+            match destination
+                .compare_exchange(CompareExchange {
+                    path: format_path,
+                    expected: None,
+                    bytes: encode_canonical(&self.format)?,
+                })
+                .await?
+            {
+                CompareExchangeOutcome::Applied(_) => true,
+                CompareExchangeOutcome::Conflict(Some(existing))
+                    if decode_repository_format(&existing.bytes)? == self.format =>
+                {
+                    false
+                }
+                CompareExchangeOutcome::Conflict(_) => {
+                    return Err(Error::new(
+                        ErrorCode::RepositoryFormatConflict,
+                        "native clone destination format was created concurrently",
+                    ))
+                }
+            }
+        };
+
+        let mut target_options = self.options.clone();
+        target_options.repository_prefix = destination_prefix.to_string();
+        target_options.storage_profile = RepositoryStorageProfile::NativeVersionedV1;
+        target_options.read_only = false;
+        let mut target =
+            Repository::<Q>::from_format(destination, target_options, self.format.clone())?;
+        target.acquire_native_writer().await?;
+        let target = Arc::new(target);
+        let _lease_maintenance = target.start_writer_lease_maintenance()?;
+
+        let branches = self.list_branches().await?;
+        let tags = self.list_tags().await?;
+        let roots = branches
+            .iter()
+            .map(|branch| branch.target)
+            .chain(tags.iter().map(|tag| tag.target))
+            .collect::<Vec<_>>();
+        let (commit_map, sync) = self
+            .replay_native_history_to(target.as_ref(), &roots, false)
+            .await?;
+        let writer_fence_generation = target.native_writer_generation_for_mutation().await?;
+        let mut report = CloneReport {
+            immutable_objects: sync.copied_objects + usize::from(format_created),
+            immutable_bytes: sync.copied_bytes,
+            refs: 0,
+        };
+
+        for branch in branches {
+            let target_id = *commit_map.get(&branch.target).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "native clone branch target was not replayed",
+                )
+            })?;
+            let path = branch_path(destination_prefix, &branch.name)?;
+            if let Some(existing) = target.plane.load_mutable(&path).await? {
+                let value: crate::RefValueV1 = decode_canonical(&existing.bytes)?;
+                if value.target != target_id || value.tombstone {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "native clone destination branch has a divergent target",
+                    ));
+                }
+                report.refs += 1;
+                continue;
+            }
+            let operation = target.new_operation();
+            let created_at_millis = target.now_millis()?;
+            let reflog = ReflogEntryV1 {
+                branch: branch.name.clone(),
+                old_target: None,
+                new_target: target_id,
+                operation,
+                actor: target.options.writer.clone(),
+                message: "native logical clone".to_string(),
+                created_at_millis,
+            };
+            let value = crate::RefValueV1 {
+                target: target_id,
+                previous_target: None,
+                generation: branch.generation,
+                operation,
+                reflog: reflog.id()?,
+                writer: target.options.writer.clone(),
+                updated_at_millis: created_at_millis,
+                tombstone: false,
+                native: Some(crate::NativeRefExtensionV1 {
+                    writer_fence_generation,
+                    inline_reflog: reflog,
+                }),
+            };
+            match target
+                .plane
+                .compare_exchange(CompareExchange {
+                    path,
+                    expected: None,
+                    bytes: encode_canonical(&value)?,
+                })
+                .await?
+            {
+                CompareExchangeOutcome::Applied(metadata) => {
+                    let commit = target.load_commit(target_id).await?;
+                    target.cache_branch(&branch.name, value, metadata.token, commit)?;
+                    report.refs += 1;
+                }
+                CompareExchangeOutcome::Conflict(Some(existing)) => {
+                    let current: crate::RefValueV1 = decode_canonical(&existing.bytes)?;
+                    if current.target != target_id || current.tombstone {
+                        return Err(Error::new(
+                            ErrorCode::RefConflict,
+                            "native clone destination branch was created concurrently",
+                        ));
+                    }
+                    report.refs += 1;
+                }
+                CompareExchangeOutcome::Conflict(None) => {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "native clone branch create returned an empty conflict",
+                    ))
+                }
+            }
+        }
+        for tag in tags {
+            let target_id = *commit_map.get(&tag.target).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "native clone tag target was not replayed",
+                )
+            })?;
+            let path = tag_path(destination_prefix, &tag.name)?;
+            if let Some(existing) = target.plane.load_mutable(&path).await? {
+                let value: crate::TagValueV1 = decode_canonical(&existing.bytes)?;
+                if value.target != target_id || value.tombstone {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "native clone destination tag has a divergent target",
+                    ));
+                }
+                report.refs += 1;
+                continue;
+            }
+            let operation = target.new_operation();
+            let created_at_millis = target.now_millis()?;
+            let reflog = ReflogEntryV1 {
+                branch: tag.name.clone(),
+                old_target: None,
+                new_target: target_id,
+                operation,
+                actor: target.options.writer.clone(),
+                message: "native logical clone tag".to_string(),
+                created_at_millis,
+            };
+            let reflog_id = target.store_tag_reflog(&reflog).await?;
+            report.immutable_objects += 1;
+            let value = crate::TagValueV1 {
+                target: target_id,
+                previous_target: None,
+                generation: RefGeneration(0),
+                operation,
+                reflog: reflog_id,
+                writer: target.options.writer.clone(),
+                created_at_millis,
+                tombstone: false,
+            };
+            match target
+                .plane
+                .compare_exchange(CompareExchange {
+                    path,
+                    expected: None,
+                    bytes: encode_canonical(&value)?,
+                })
+                .await?
+            {
+                CompareExchangeOutcome::Applied(_) => report.refs += 1,
+                CompareExchangeOutcome::Conflict(Some(existing)) => {
+                    let current: crate::TagValueV1 = decode_canonical(&existing.bytes)?;
+                    if current.target != target_id || current.tombstone {
+                        return Err(Error::new(
+                            ErrorCode::RefConflict,
+                            "native clone destination tag was created concurrently",
+                        ));
+                    }
+                    report.refs += 1;
+                }
+                CompareExchangeOutcome::Conflict(None) => {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "native clone tag create returned an empty conflict",
+                    ))
+                }
+            }
+        }
+        target.fsck().await?;
+        Ok(report)
+    }
+
+    async fn clone_native_version_binding<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        key: &[u8],
+        version: &ObjectVersionV1,
+        operation: OperationId,
+        writer_fence_generation: u64,
+    ) -> Result<crate::NativeObjectBindingV1> {
+        let path =
+            ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
+                Error::new(ErrorCode::CorruptCommit, "native clone key is not UTF-8")
+            })?)?;
+        match (&version.body.kind, &version.native_binding) {
+            (
+                ObjectVersionKindV1::Live {
+                    size,
+                    headers,
+                    checksums,
+                    user_metadata,
+                    ..
+                },
+                Some(crate::NativeObjectBindingV1::Live {
+                    version_id,
+                    checksum_sha256,
+                    ..
+                }),
+            ) => {
+                let spool = tempfile::NamedTempFile::new().map_err(|error| {
+                    Error::new(
+                        ErrorCode::Transport,
+                        format!("could not create native clone spool: {error}"),
+                    )
+                })?;
+                let source = self
+                    .plane
+                    .get_native_file(crate::NativeFileGet {
+                        path: path.clone(),
+                        version_id: version_id.clone(),
+                        body_path: spool.path().to_path_buf(),
+                    })
+                    .await?;
+                if source.size != *size
+                    || source.checksum_sha256 != *checksum_sha256
+                    || checksums.sha256 != Some(*checksum_sha256)
+                {
+                    return Err(Error::new(
+                        ErrorCode::ChecksumMismatch,
+                        "native clone source object failed logical checksum verification",
+                    ));
+                }
+                let write = target
+                    .plane
+                    .put_native_file(crate::NativeFilePut {
+                        path,
+                        body_path: spool.path().to_path_buf(),
+                        size: source.size,
+                        checksum_sha256: source.checksum_sha256,
+                        checksum_md5: source.checksum_md5,
+                        headers: headers.clone(),
+                        user_metadata: user_metadata.clone(),
+                        repository: target.format.repository_id,
+                        operation,
+                        writer_fence_generation,
+                    })
+                    .await?;
+                if write.size != *size
+                    || write.checksums.sha256 != Some(*checksum_sha256)
+                    || !matches!(write.binding, crate::NativeObjectBindingV1::Live { .. })
+                {
+                    return Err(Error::new(
+                        ErrorCode::ChecksumMismatch,
+                        "native clone destination object failed logical checksum verification",
+                    ));
+                }
+                Ok(write.binding)
+            }
+            (
+                ObjectVersionKindV1::DeleteMarker,
+                Some(crate::NativeObjectBindingV1::DeleteMarker { .. }),
+            ) => {
+                match target
+                    .plane
+                    .delete_native(crate::NativeDelete {
+                        path: path.clone(),
+                        repository: target.format.repository_id,
+                        operation,
+                        writer_fence_generation,
+                    })
+                    .await
+                {
+                    Ok(binding) => Ok(binding),
+                    Err(error) => match target.reconcile_native_delete(&path).await? {
+                        Some(binding) => Ok(binding),
+                        None => Err(error),
+                    },
+                }
+            }
+            _ => Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "native clone source version has an invalid binding",
+            )),
+        }
+    }
+
+    async fn ordered_native_commit_closure(
+        &self,
+        roots: &[CommitId],
+    ) -> Result<Vec<(CommitId, BucketCommitV1)>> {
+        let mut pending = roots.to_vec();
+        let mut commits = BTreeMap::new();
+        while let Some(id) = pending.pop() {
+            if commits.contains_key(&id) {
+                continue;
+            }
+            if commits.len() >= self.options.history_traversal_limit {
+                return Err(Error::new(
+                    ErrorCode::HistoryLimitExceeded,
+                    "native transfer commit closure exceeded its configured history limit",
+                ));
+            }
+            let commit = self.load_commit(id).await?;
+            pending.extend(commit.parents.iter().copied());
+            commits.insert(id, commit);
+        }
+        let mut ordered = commits.into_iter().collect::<Vec<_>>();
+        ordered.sort_by(|(left_id, left), (right_id, right)| {
+            left.generation
+                .cmp(&right.generation)
+                .then_with(|| left_id.cmp(right_id))
+        });
+        Ok(ordered)
+    }
+
+    async fn all_native_commits(&self) -> Result<Vec<(CommitId, BucketCommitV1)>> {
+        let prefix = format!("{}/commits/sha256/", self.options.repository_prefix);
+        let mut continuation = None;
+        let mut commits = BTreeMap::new();
+        loop {
+            let page = self
+                .plane
+                .list(ListRequest {
+                    prefix: prefix.clone(),
+                    continuation,
+                    limit: 1_000,
+                    include_versions: false,
+                })
+                .await?;
+            for entry in page.entries {
+                let encoded = entry.path.as_str().rsplit('/').next().unwrap_or_default();
+                let raw = hex::decode(encoded).map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "native transfer commit path is not canonical hex",
+                    )
+                })?;
+                let id = CommitId::from_hash(raw.try_into().map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "native transfer commit path has the wrong ID length",
+                    )
+                })?);
+                let commit = self.load_commit(id).await?;
+                commits.insert(id, commit);
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        let mut ordered = commits.into_iter().collect::<Vec<_>>();
+        ordered.sort_by(|(left_id, left), (right_id, right)| {
+            left.generation
+                .cmp(&right.generation)
+                .then_with(|| left_id.cmp(right_id))
+        });
+        Ok(ordered)
+    }
+
+    async fn native_logical_commit_fingerprints(
+        &self,
+        ordered: &[(CommitId, BucketCommitV1)],
+    ) -> Result<BTreeMap<CommitId, [u8; 32]>> {
+        let mut fingerprints: BTreeMap<CommitId, [u8; 32]> = BTreeMap::new();
+        for (id, commit) in ordered {
+            let mut parent_bytes = Vec::with_capacity(commit.parents.len() * 32);
+            for parent in &commit.parents {
+                parent_bytes.extend_from_slice(fingerprints.get(parent).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "native logical fingerprint encountered a child before its parent",
+                    )
+                })?);
+            }
+            let objects = encode_canonical(&commit.state.objects)?;
+            let operations = encode_canonical(&commit.state.operations)?;
+            let generation = commit.generation.0.to_be_bytes();
+            let delta = commit.delta.as_bytes();
+            let message = encode_canonical(&commit.message)?;
+            let metadata = encode_canonical(&commit.metadata)?;
+            let fingerprint = derive_input_digest(&[
+                b"native-logical-commit-v1",
+                &parent_bytes,
+                &objects,
+                &operations,
+                &generation,
+                delta,
+                commit.author.as_bytes(),
+                &message,
+                &commit.created_at_millis.to_be_bytes(),
+                &metadata,
+            ]);
+            fingerprints.insert(*id, fingerprint);
+        }
+        Ok(fingerprints)
+    }
+
+    async fn replay_native_history_to<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        source_roots: &[CommitId],
+        force_rebind: bool,
+    ) -> Result<(BTreeMap<CommitId, CommitId>, SyncReport)> {
+        let source_ordered = self.ordered_native_commit_closure(source_roots).await?;
+        let source_fingerprints = self
+            .native_logical_commit_fingerprints(&source_ordered)
+            .await?;
+        let target_by_fingerprint = if force_rebind {
+            BTreeMap::new()
+        } else {
+            let target_ordered = target.all_native_commits().await?;
+            let target_fingerprints = target
+                .native_logical_commit_fingerprints(&target_ordered)
+                .await?;
+            target_fingerprints
+                .into_iter()
+                .map(|(id, fingerprint)| (fingerprint, id))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let mut commit_map = BTreeMap::new();
+        let mut report = SyncReport::default();
+        for (source_id, _) in &source_ordered {
+            if let Some(target_id) = target_by_fingerprint.get(
+                source_fingerprints
+                    .get(source_id)
+                    .expect("source fingerprint exists"),
+            ) {
+                commit_map.insert(*source_id, *target_id);
+                report.already_present += 1;
+            }
+        }
+        let writer_fence_generation = target.native_writer_generation_for_mutation().await?;
+        let mut binding_map: BTreeMap<(Vec<u8>, ObjectVersionId), crate::NativeObjectBindingV1> =
+            BTreeMap::new();
+        for (source_id, source_commit) in source_ordered {
+            if commit_map.contains_key(&source_id) {
+                continue;
+            }
+            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+            for parent in &source_commit.parents {
+                mapped_parents.push(*commit_map.get(parent).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "native transfer parent was not mapped",
+                    )
+                })?);
+            }
+            let base = match mapped_parents.first() {
+                Some(parent) => Some(target.load_commit(*parent).await?),
+                None => None,
+            };
+            let empty = target.engine.create();
+            let mut objects = match &base {
+                Some(commit) => target
+                    .tree_from_root(&commit.state.objects, &target.format.state_tree_format)?,
+                None => empty.clone(),
+            };
+            let mut versions = match &base {
+                Some(commit) => target
+                    .tree_from_root(&commit.state.versions, &target.format.state_tree_format)?,
+                None => empty.clone(),
+            };
+            let mut operations = match &base {
+                Some(commit) => target
+                    .tree_from_root(&commit.state.operations, &target.format.state_tree_format)?,
+                None => empty,
+            };
+            let source_operations = self.tree_from_root(
+                &source_commit.state.operations,
+                &self.format.state_tree_format,
+            )?;
+            let delta = self.load_commit_delta(&source_commit).await?;
+            let physical_operation = delta.operation_ids.first().copied().unwrap_or_else(|| {
+                let mut bytes = [0_u8; 16];
+                bytes.copy_from_slice(&source_id.as_bytes()[..16]);
+                OperationId(uuid::Uuid::from_bytes(bytes))
+            });
+            for transition in &delta.changes {
+                let mut version = self
+                    .find_version(&source_commit, &transition.key, transition.next)
+                    .await?;
+                let binding_key = (transition.key.clone(), version.id);
+                let (binding, copied_payload) = if let Some(binding) = binding_map.get(&binding_key)
+                {
+                    (binding.clone(), false)
+                } else if let Some(base) = &base {
+                    match target
+                        .find_version(base, &transition.key, transition.next)
+                        .await
+                    {
+                        Ok(existing) => (
+                            existing.native_binding.ok_or_else(|| {
+                                Error::new(
+                                    ErrorCode::CorruptCommit,
+                                    "native transfer base version omitted its binding",
+                                )
+                            })?,
+                            false,
+                        ),
+                        Err(error) if error.code == ErrorCode::NoSuchVersion => (
+                            self.clone_native_version_binding(
+                                target,
+                                &transition.key,
+                                &version,
+                                physical_operation,
+                                writer_fence_generation,
+                            )
+                            .await?,
+                            true,
+                        ),
+                        Err(error) => return Err(error),
+                    }
+                } else {
+                    (
+                        self.clone_native_version_binding(
+                            target,
+                            &transition.key,
+                            &version,
+                            physical_operation,
+                            writer_fence_generation,
+                        )
+                        .await?,
+                        true,
+                    )
+                };
+                if copied_payload {
+                    let size = match &version.body.kind {
+                        ObjectVersionKindV1::Live { size, .. } => *size,
+                        ObjectVersionKindV1::DeleteMarker => 0,
+                    };
+                    report.copied_bytes =
+                        report.copied_bytes.checked_add(size).ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::EntityTooLarge,
+                                "native transfer byte count overflow",
+                            )
+                        })?;
+                    report.copied_objects += 1;
+                }
+                binding_map.insert(binding_key, binding.clone());
+                version.native_binding = Some(binding);
+                version.validate_native()?;
+                versions = target
+                    .engine
+                    .put(
+                        &versions,
+                        version_tree_key(&transition.key, version.body.order, version.id),
+                        encode_canonical(&version)?,
+                    )
+                    .await?;
+                objects = if transition.delete_marker {
+                    target.engine.delete(&objects, &transition.key).await?
+                } else {
+                    target
+                        .engine
+                        .put(
+                            &objects,
+                            transition.key.clone(),
+                            encode_canonical(&CurrentObjectV1 {
+                                version: transition.next,
+                            })?,
+                        )
+                        .await?
+                };
+            }
+            for operation in &delta.operation_ids {
+                let record = self
+                    .engine
+                    .get(&source_operations, operation.as_bytes())
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::CorruptCommit,
+                            "native transfer delta names a missing operation",
+                        )
+                    })?;
+                operations = target
+                    .engine
+                    .put(&operations, operation.as_bytes().to_vec(), record)
+                    .await?;
+            }
+            let state = BucketStateV1 {
+                objects: TreeRootV1::from_tree(&objects)?,
+                versions: TreeRootV1::from_tree(&versions)?,
+                operations: TreeRootV1::from_tree(&operations)?,
+            };
+            if state.objects != source_commit.state.objects
+                || state.operations != source_commit.state.operations
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "native transfer replay did not reproduce the logical commit state",
+                ));
+            }
+            let node_pack = target
+                .node_store
+                .flush_node_pack(
+                    tree_format_digest(&target.format.state_tree_format)?,
+                    Vec::new(),
+                )
+                .await?;
+            if node_pack.is_some() {
+                report.copied_objects += 1;
+            }
+            let destination_commit = BucketCommitV1 {
+                state,
+                parents: mapped_parents,
+                generation: source_commit.generation,
+                delta: delta.id()?,
+                author: source_commit.author,
+                message: source_commit.message,
+                created_at_millis: source_commit.created_at_millis,
+                metadata: source_commit.metadata,
+                native: Some(crate::NativeCommitExtensionV1 {
+                    node_pack,
+                    inline_delta: delta,
+                    writer_fence_generation,
+                }),
+            };
+            let destination_id = target.store_commit(&destination_commit).await?;
+            report.copied_objects += 1;
+            commit_map.insert(source_id, destination_id);
+        }
+        Ok((commit_map, report))
+    }
+
     /// Import portable immutable repository objects without moving a local
     /// ref. The returned source head may then be inspected or merged.
     pub async fn fetch_from<Q: ObjectPlane>(
@@ -1224,6 +1974,20 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
+        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let _publication = self.native_publication.lock().await;
+            let source_head = source.head(source_branch).await?;
+            let (mapped, mut report) = source
+                .replay_native_history_to(self, &[source_head], false)
+                .await?;
+            report.source_head = Some(*mapped.get(&source_head).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "native fetch did not map its selected source head",
+                )
+            })?);
+            return Ok(report);
+        }
         let source_head = source.head(source_branch).await?;
         let mut report = source
             .copy_commit_closure_to(
@@ -1254,6 +2018,12 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.validate_sync_identity(destination)?;
+        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "native resumable sync requires the logical transfer journal API",
+            ));
+        }
         let id = run.unwrap_or_else(|| self.new_operation());
         let path = sync_run_path(&destination.options.repository_prefix, id)?;
         let existing = destination.load_sync_run_optional(id).await?;
@@ -1461,6 +2231,37 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
         let source_head = self.head(source_branch).await?;
+        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let _publication = destination.native_publication.lock().await;
+            let (mapped, mut report) = self
+                .replay_native_history_to(destination, &[source_head], false)
+                .await?;
+            let mapped_head = *mapped.get(&source_head).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "native push did not map its selected source head",
+                )
+            })?;
+            if reason.trim().is_empty() {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "administrative ref movement requires a non-empty reason",
+                ));
+            }
+            let loaded = destination.load_ref(destination_branch).await?;
+            if loaded.value.target != expected_destination {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "branch head does not match push expectation",
+                ));
+            }
+            let movement = destination
+                .move_ref_inner(destination_branch, loaded, mapped_head, reason)
+                .await?;
+            report.source_head = Some(mapped_head);
+            report.ref_move = Some(movement);
+            return Ok(report);
+        }
         let mut report = self
             .copy_commit_closure_to(
                 destination.plane.clone(),
@@ -1482,12 +2283,10 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     fn validate_sync_identity<Q: ObjectPlane>(&self, other: &Repository<Q>) -> Result<()> {
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1
-            || other.storage_profile() == RepositoryStorageProfile::NativeVersionedV1
-        {
+        if self.storage_profile() != other.storage_profile() {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
-                "native-versioned fetch, push, and repair require destination VersionId rebinding",
+                "sync cannot cross repository storage profiles",
             ));
         }
         if self.format != other.format {
@@ -2028,6 +2827,17 @@ impl<P: ObjectPlane> Repository<P> {
         } else {
             None
         };
+        self.move_ref_inner(branch, loaded, target, reason).await
+    }
+
+    async fn move_ref_inner(
+        &self,
+        branch: &str,
+        loaded: LoadedRef,
+        target: CommitId,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
         let writer_fence_generation = if native_profile {
             self.native_writer_generation_for_mutation().await?
         } else {
@@ -4681,15 +5491,22 @@ impl<P: ObjectPlane> Repository<P> {
                     let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                         Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
                     })?)?;
-                    let binding = self
+                    let binding = match self
                         .plane
                         .delete_native(crate::NativeDelete {
-                            path,
+                            path: path.clone(),
                             repository: self.format.repository_id,
                             operation: batch.operation,
                             writer_fence_generation,
                         })
-                        .await?;
+                        .await
+                    {
+                        Ok(binding) => binding,
+                        Err(error) => match self.reconcile_native_delete(&path).await? {
+                            Some(binding) => binding,
+                            None => return Err(error),
+                        },
+                    };
                     batch.mutations.insert(
                         key.clone(),
                         WorkspaceMutationV1::NativeDelete { key, binding },
@@ -4812,15 +5629,22 @@ impl<P: ObjectPlane> Repository<P> {
             let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
-            let binding = self
+            let binding = match self
                 .plane
                 .delete_native(crate::NativeDelete {
-                    path,
+                    path: path.clone(),
                     repository: self.format.repository_id,
                     operation: manifest.operation,
                     writer_fence_generation,
                 })
-                .await?;
+                .await
+            {
+                Ok(binding) => binding,
+                Err(error) => match self.reconcile_native_delete(&path).await? {
+                    Some(binding) => binding,
+                    None => return Err(error),
+                },
+            };
             return self
                 .update_workspace_mutation(
                     workspace,
@@ -5096,7 +5920,7 @@ impl<P: ObjectPlane> Repository<P> {
             match self
                 .plane
                 .delete_native(crate::NativeDelete {
-                    path,
+                    path: path.clone(),
                     repository: self.format.repository_id,
                     operation,
                     writer_fence_generation,
@@ -5104,7 +5928,10 @@ impl<P: ObjectPlane> Repository<P> {
                 .await
             {
                 Ok(binding) => Some(binding),
-                Err(error) => return Err(error),
+                Err(error) => match self.reconcile_native_delete(&path).await? {
+                    Some(binding) => Some(binding),
+                    None => return Err(error),
+                },
             }
         } else {
             None
@@ -5431,15 +6258,22 @@ impl<P: ObjectPlane> Repository<P> {
             let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
-            let binding = self
+            let binding = match self
                 .plane
                 .delete_native(crate::NativeDelete {
-                    path,
+                    path: path.clone(),
                     repository: self.format.repository_id,
                     operation,
                     writer_fence_generation,
                 })
-                .await?;
+                .await
+            {
+                Ok(binding) => binding,
+                Err(error) => match self.reconcile_native_delete(&path).await? {
+                    Some(binding) => binding,
+                    None => return Err(error),
+                },
+            };
             let body = ObjectVersionBodyV1 {
                 order: ObjectVersionOrder {
                     commit_generation: generation,
@@ -5672,7 +6506,7 @@ impl<P: ObjectPlane> Repository<P> {
                 .copy_native(crate::NativeCopy {
                     source: source_path,
                     source_version_id: version_id,
-                    destination: destination_path,
+                    destination: destination_path.clone(),
                     headers: headers.clone(),
                     user_metadata: user_metadata.clone(),
                     repository: self.format.repository_id,
@@ -5686,7 +6520,13 @@ impl<P: ObjectPlane> Repository<P> {
                 .await
             {
                 Ok(result) => Some(result.binding),
-                Err(error) => return Err(error),
+                Err(error) => match self
+                    .reconcile_native_payload(&destination_path, operation, checksum_sha256)
+                    .await?
+                {
+                    Some(result) => Some(result.binding),
+                    None => return Err(error),
+                },
             }
         } else {
             None
@@ -7213,14 +8053,24 @@ impl<P: ObjectPlane> Repository<P> {
                                         )
                                     })?,
                                 )?;
-                                self.plane
+                                match self
+                                    .plane
                                     .delete_native(crate::NativeDelete {
-                                        path,
+                                        path: path.clone(),
                                         repository: self.format.repository_id,
                                         operation,
                                         writer_fence_generation,
                                     })
-                                    .await?
+                                    .await
+                                {
+                                    Ok(binding) => binding,
+                                    Err(error) => {
+                                        match self.reconcile_native_delete(&path).await? {
+                                            Some(binding) => binding,
+                                            None => return Err(error),
+                                        }
+                                    }
+                                }
                             }
                         };
                         ObjectVersionV1::derive_native(
@@ -7464,14 +8314,24 @@ impl<P: ObjectPlane> Repository<P> {
                                         )
                                     })?)?;
                                 Some(
-                                    self.plane
+                                    match self
+                                        .plane
                                         .delete_native(crate::NativeDelete {
-                                            path,
+                                            path: path.clone(),
                                             repository: self.format.repository_id,
                                             operation,
                                             writer_fence_generation,
                                         })
-                                        .await?,
+                                        .await
+                                    {
+                                        Ok(binding) => binding,
+                                        Err(error) => {
+                                            match self.reconcile_native_delete(&path).await? {
+                                                Some(binding) => binding,
+                                                None => return Err(error),
+                                            }
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -7863,6 +8723,49 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<RepairReport> {
         self.validate_sync_identity(source)?;
+        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let current = self.head(source_branch).await?;
+            if let Ok(fsck) = self.fsck_commit(current).await {
+                return Ok(RepairReport {
+                    sync: SyncReport {
+                        source_head: Some(current),
+                        already_present: 1,
+                        ..SyncReport::default()
+                    },
+                    fsck,
+                });
+            }
+            let _publication = self.native_publication.lock().await;
+            let source_head = source.head(source_branch).await?;
+            let (mapped, mut sync) = source
+                .replay_native_history_to(self, &[source_head], true)
+                .await?;
+            let repaired_head = *mapped.get(&source_head).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "native repair did not return a mapped head",
+                )
+            })?;
+            let loaded = self.load_ref(source_branch).await?;
+            if loaded.value.target != current {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "destination branch moved during native repair",
+                ));
+            }
+            let movement = self
+                .move_ref_inner(
+                    source_branch,
+                    loaded,
+                    repaired_head,
+                    "repair native bindings from qualified source",
+                )
+                .await?;
+            sync.source_head = Some(repaired_head);
+            sync.ref_move = Some(movement);
+            let fsck = self.fsck_commit(repaired_head).await?;
+            return Ok(RepairReport { sync, fsck });
+        }
         let head = source.head(source_branch).await?;
         let mut sync = source
             .copy_commit_closure_to(self.plane.clone(), &self.options.repository_prefix, head)
@@ -8132,6 +9035,48 @@ impl<P: ObjectPlane> Repository<P> {
             )
             .retry(RetryAdvice::ReconcileOperation)
             .operation(operation.to_string())),
+        }
+    }
+
+    async fn reconcile_native_delete(
+        &self,
+        path: &ObjectPath,
+    ) -> Result<Option<crate::NativeObjectBindingV1>> {
+        let mut continuation = None;
+        let mut matches = Vec::new();
+        loop {
+            let page = self
+                .plane
+                .list(ListRequest {
+                    prefix: path.as_str().to_string(),
+                    continuation,
+                    limit: 1_000,
+                    include_versions: true,
+                })
+                .await?;
+            for entry in page.entries {
+                if entry.path != *path || !entry.metadata.delete_marker || !entry.is_latest {
+                    continue;
+                }
+                if let Some(version_id) = entry.metadata.token.version_id {
+                    matches.push(version_id);
+                }
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        match matches.as_slice() {
+            [] => Ok(None),
+            [version_id] => Ok(Some(crate::NativeObjectBindingV1::DeleteMarker {
+                version_id: version_id.clone(),
+            })),
+            _ => Err(Error::new(
+                ErrorCode::OutcomeUnknown,
+                "native delete reconciliation found multiple current delete markers",
+            )
+            .retry(RetryAdvice::ReconcileOperation)),
         }
     }
 

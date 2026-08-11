@@ -22,7 +22,7 @@ fn native_options(prefix: &str) -> RepositoryOptions {
 }
 
 #[tokio::test]
-async fn unfinished_native_protocols_fail_closed() {
+async fn legacy_native_multipart_protocol_fails_closed() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -41,12 +41,319 @@ async fn unfinished_native_protocols_fail_closed() {
         .await
         .unwrap_err();
     assert_eq!(multipart.code, ErrorCode::MissingCapability);
+}
 
-    let clone = repository
-        .clone_to(plane, ".prolly/native-versioned/clone")
+#[tokio::test]
+async fn native_clone_replays_history_and_rebinds_physical_versions() {
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
+    let source = Repository::initialize(
+        source_plane,
+        native_options(".prolly/native-versioned/clone-source"),
+    )
+    .await
+    .unwrap();
+    let first = source
+        .put_bytes(
+            "main",
+            b"history.txt".to_vec(),
+            b"first".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
         .await
-        .unwrap_err();
-    assert_eq!(clone.code, ErrorCode::MissingCapability);
+        .unwrap();
+    source
+        .put_bytes(
+            "main",
+            b"history.txt".to_vec(),
+            b"second".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let destination_plane = Arc::new(MemoryObjectPlane::new(true));
+    let report = source
+        .clone_to(
+            destination_plane.clone(),
+            ".prolly/native-versioned/clone-destination",
+        )
+        .await
+        .unwrap();
+    assert!(report.immutable_objects >= 7);
+    assert_eq!(report.refs, 1);
+    let resumed = source
+        .clone_to(
+            destination_plane.clone(),
+            ".prolly/native-versioned/clone-destination",
+        )
+        .await
+        .unwrap();
+    assert_eq!(resumed.immutable_objects, 0);
+    assert_eq!(resumed.immutable_bytes, 0);
+    assert_eq!(resumed.refs, 1);
+
+    let destination = Repository::open(
+        destination_plane,
+        native_options(".prolly/native-versioned/clone-destination"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(destination.repository_id(), source.repository_id());
+    assert_eq!(
+        destination
+            .get_current("main", b"history.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"second"
+    );
+    assert_eq!(
+        destination
+            .get_version("main", b"history.txt", first.object_versions[0])
+            .await
+            .unwrap()
+            .bytes,
+        b"first"
+    );
+    let source_version = source
+        .head_version("main", b"history.txt", first.object_versions[0])
+        .await
+        .unwrap()
+        .1
+        .version;
+    let destination_version = destination
+        .head_version("main", b"history.txt", first.object_versions[0])
+        .await
+        .unwrap()
+        .1
+        .version;
+    assert_eq!(source_version.id, destination_version.id);
+    assert_ne!(
+        source_version.native_binding,
+        destination_version.native_binding
+    );
+}
+
+#[tokio::test]
+async fn native_push_replays_only_new_history_and_moves_destination_ref() {
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
+    let source = Repository::initialize(
+        source_plane,
+        native_options(".prolly/native-versioned/push-source"),
+    )
+    .await
+    .unwrap();
+    source
+        .put_bytes(
+            "main",
+            b"sync.txt".to_vec(),
+            b"base".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let destination_plane = Arc::new(MemoryObjectPlane::new(true));
+    source
+        .clone_to(
+            destination_plane.clone(),
+            ".prolly/native-versioned/push-destination",
+        )
+        .await
+        .unwrap();
+    let destination = Repository::open(
+        destination_plane,
+        native_options(".prolly/native-versioned/push-destination"),
+    )
+    .await
+    .unwrap();
+    let expected_destination = destination.head("main").await.unwrap();
+    let next = source
+        .put_bytes(
+            "main",
+            b"sync.txt".to_vec(),
+            b"incremental".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let report = source
+        .push_to(
+            &destination,
+            "main",
+            "main",
+            expected_destination,
+            "incremental native push",
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.copied_objects, 3);
+    assert_eq!(report.copied_bytes, b"incremental".len() as u64);
+    assert_eq!(
+        destination
+            .get_current("main", b"sync.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"incremental"
+    );
+    assert_eq!(
+        destination
+            .head_current("main", b"sync.txt")
+            .await
+            .unwrap()
+            .version
+            .id,
+        next.object_versions[0]
+    );
+}
+
+#[tokio::test]
+async fn native_repair_rebinds_a_missing_destination_payload() {
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
+    let source = Repository::initialize(
+        source_plane,
+        native_options(".prolly/native-versioned/repair-source"),
+    )
+    .await
+    .unwrap();
+    source
+        .put_bytes(
+            "main",
+            b"repair.txt".to_vec(),
+            b"recoverable".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let destination_plane = Arc::new(MemoryObjectPlane::new(true));
+    source
+        .clone_to(
+            destination_plane.clone(),
+            ".prolly/native-versioned/repair-destination",
+        )
+        .await
+        .unwrap();
+    let destination = Repository::open(
+        destination_plane.clone(),
+        native_options(".prolly/native-versioned/repair-destination"),
+    )
+    .await
+    .unwrap();
+    let damaged = destination
+        .head_current("main", b"repair.txt")
+        .await
+        .unwrap()
+        .version;
+    let NativeObjectBindingV1::Live { version_id, .. } = damaged.native_binding.clone().unwrap()
+    else {
+        panic!("expected live native binding")
+    };
+    destination_plane
+        .delete_exact(
+            &ObjectPath::new("repair.txt").unwrap(),
+            PhysicalVersion::Versioned { version_id },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        destination
+            .get_current("main", b"repair.txt")
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::MissingClosure
+    );
+
+    let repaired = destination
+        .repair_missing_from(&source, "main")
+        .await
+        .unwrap();
+    assert!(repaired.sync.ref_move.is_some());
+    assert_eq!(
+        destination
+            .get_current("main", b"repair.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"recoverable"
+    );
+}
+
+#[tokio::test]
+async fn native_fetch_returns_a_destination_local_mapped_head() {
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
+    let source = Repository::initialize(
+        source_plane,
+        native_options(".prolly/native-versioned/fetch-source"),
+    )
+    .await
+    .unwrap();
+    source
+        .put_bytes(
+            "main",
+            b"base.txt".to_vec(),
+            b"base".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let destination_plane = Arc::new(MemoryObjectPlane::new(true));
+    source
+        .clone_to(
+            destination_plane.clone(),
+            ".prolly/native-versioned/fetch-destination",
+        )
+        .await
+        .unwrap();
+    let destination = Repository::open(
+        destination_plane,
+        native_options(".prolly/native-versioned/fetch-destination"),
+    )
+    .await
+    .unwrap();
+    let source_base = source.head("main").await.unwrap();
+    source.create_branch("feature", source_base).await.unwrap();
+    source
+        .put_bytes(
+            "feature",
+            b"feature.txt".to_vec(),
+            b"feature".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let fetched = destination.fetch_from(&source, "feature").await.unwrap();
+    let mapped_head = fetched.source_head.unwrap();
+    assert_ne!(mapped_head, source.head("feature").await.unwrap());
+    destination.fsck_commit(mapped_head).await.unwrap();
+    destination
+        .create_branch("imported", mapped_head)
+        .await
+        .unwrap();
+    assert_eq!(
+        destination
+            .get_current("imported", b"feature.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"feature"
+    );
 }
 
 #[tokio::test]
@@ -363,6 +670,102 @@ async fn lost_native_payload_response_is_reconciled_without_duplicate_upload() {
         .await
         .unwrap();
     assert_eq!(versions.entries.len(), 1);
+}
+
+#[tokio::test]
+async fn lost_native_copy_response_is_reconciled_without_duplicate_upload() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        native_options(".prolly/native-versioned/lost-copy"),
+    )
+    .await
+    .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"source.txt".to_vec(),
+            b"copy me".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let operation = OperationId::new();
+    plane.lose_next_native_put_response();
+    let copied = repository
+        .copy_object(
+            "main",
+            b"source.txt",
+            None,
+            b"destination.txt".to_vec(),
+            Some(operation),
+        )
+        .await
+        .unwrap();
+    assert_eq!(copied.operation, operation);
+    assert_eq!(
+        repository
+            .get_current("main", b"destination.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"copy me"
+    );
+    let replay = repository
+        .copy_object(
+            "main",
+            b"source.txt",
+            None,
+            b"destination.txt".to_vec(),
+            Some(operation),
+        )
+        .await
+        .unwrap();
+    assert!(replay.idempotent_replay);
+}
+
+#[tokio::test]
+async fn lost_native_delete_response_is_reconciled_to_the_current_marker() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        native_options(".prolly/native-versioned/lost-delete"),
+    )
+    .await
+    .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"deleted.txt".to_vec(),
+            b"delete me".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let operation = OperationId::new();
+    plane.lose_next_native_delete_response();
+    let deleted = repository
+        .delete_object("main", b"deleted.txt".to_vec(), Some(operation))
+        .await
+        .unwrap();
+    assert_eq!(deleted.operation, operation);
+    assert_eq!(
+        repository
+            .get_current("main", b"deleted.txt")
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::NoSuchKey
+    );
+    let replay = repository
+        .delete_object("main", b"deleted.txt".to_vec(), Some(operation))
+        .await
+        .unwrap();
+    assert!(replay.idempotent_replay);
 }
 
 #[tokio::test]
@@ -865,6 +1268,77 @@ async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
 }
 
 #[tokio::test]
+async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = native_options(".prolly/native-versioned/checkpoint-corrupt");
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"rebuild.bin".to_vec(),
+            b"canonical".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    repository
+        .create_node_index_checkpoint("main")
+        .await
+        .unwrap();
+    let listed = plane
+        .list(prolly_s3_core::ListRequest {
+            prefix: format!("{}/node-index/checkpoints/", options.repository_prefix),
+            continuation: None,
+            limit: 10,
+            include_versions: false,
+        })
+        .await
+        .unwrap();
+    let checkpoint = listed.entries.into_iter().next().unwrap();
+    plane
+        .delete_exact(
+            &checkpoint.path,
+            PhysicalVersion::Versioned {
+                version_id: checkpoint.metadata.token.version_id.clone().unwrap(),
+            },
+        )
+        .await
+        .unwrap();
+    plane
+        .put_immutable(prolly_s3_core::ImmutablePut {
+            path: checkpoint.path,
+            bytes: b"not canonical cbor".to_vec(),
+            expected_sha256: Sha256::digest(b"not canonical cbor").into(),
+        })
+        .await
+        .unwrap();
+
+    let reopened = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    plane.reset_request_counts();
+    assert_eq!(
+        reopened
+            .get_current("main", b"rebuild.bin")
+            .await
+            .unwrap()
+            .bytes,
+        b"canonical"
+    );
+    assert!(plane.request_snapshot().list > 0);
+}
+
+#[tokio::test]
 async fn explicit_takeover_barrier_fences_the_old_writer() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let options = native_options(".prolly/native-versioned/takeover");
@@ -884,7 +1358,7 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
         .unwrap();
 
     let mut new_writer = Repository::open(
-        plane,
+        plane.clone(),
         RepositoryOptions {
             writer: "replacement-writer".to_string(),
             read_only: true,
@@ -916,6 +1390,12 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
         .await
         .unwrap();
 
+    assert_eq!(
+        old_writer.renew_writer_lease().await.unwrap_err().code,
+        ErrorCode::PreconditionFailed
+    );
+    plane.reset_request_counts();
+
     let stale = old_writer
         .put_bytes(
             "main",
@@ -928,4 +1408,5 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
         .await
         .unwrap_err();
     assert_eq!(stale.code, ErrorCode::PreconditionFailed);
+    assert_eq!(plane.request_snapshot().native_put, 0);
 }

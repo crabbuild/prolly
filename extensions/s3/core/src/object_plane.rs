@@ -115,6 +115,20 @@ pub struct NativeFilePut {
 }
 
 #[derive(Clone, Debug)]
+pub struct NativeFileGet {
+    pub path: ObjectPath,
+    pub version_id: String,
+    pub body_path: PathBuf,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeFileGetResult {
+    pub size: u64,
+    pub checksum_sha256: [u8; 32],
+    pub checksum_md5: [u8; 16],
+}
+
+#[derive(Clone, Debug)]
 pub struct NativeCopy {
     pub source: ObjectPath,
     pub source_version_id: String,
@@ -284,6 +298,7 @@ pub struct ListRequest {
 pub struct PhysicalListEntry {
     pub path: ObjectPath,
     pub metadata: StoredMetadata,
+    pub is_latest: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -347,6 +362,35 @@ pub trait ObjectPlane: Send + Sync + 'static {
             writer_fence_generation: request.writer_fence_generation,
         })
         .await
+    }
+
+    async fn get_native_file(&self, request: NativeFileGet) -> Result<NativeFileGetResult> {
+        let object = self
+            .get(GetRequest {
+                path: request.path,
+                range: None,
+                physical_version: Some(PhysicalVersion::Versioned {
+                    version_id: request.version_id,
+                }),
+            })
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "native source object version is missing",
+                )
+            })?;
+        std::fs::write(&request.body_path, &object.bytes).map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("native transfer spool could not be written: {error}"),
+            )
+        })?;
+        Ok(NativeFileGetResult {
+            size: object.bytes.len() as u64,
+            checksum_sha256: sha256(&object.bytes),
+            checksum_md5: Md5::digest(&object.bytes).into(),
+        })
     }
 
     async fn copy_native(&self, _request: NativeCopy) -> Result<NativeObjectWriteResult> {
@@ -459,6 +503,7 @@ pub struct MemoryObjectPlane {
     versioned: bool,
     requests: Arc<MemoryRequestCounters>,
     lose_next_native_put_response: Arc<AtomicBool>,
+    lose_next_native_delete_response: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -549,11 +594,17 @@ impl MemoryObjectPlane {
             versioned,
             requests: Arc::new(MemoryRequestCounters::default()),
             lose_next_native_put_response: Arc::new(AtomicBool::new(false)),
+            lose_next_native_delete_response: Arc::new(AtomicBool::new(false)),
         }
     }
 
     pub fn lose_next_native_put_response(&self) {
         self.lose_next_native_put_response
+            .store(true, Ordering::Relaxed);
+    }
+
+    pub fn lose_next_native_delete_response(&self) {
+        self.lose_next_native_delete_response
             .store(true, Ordering::Relaxed);
     }
 
@@ -808,6 +859,9 @@ impl ObjectPlane for MemoryObjectPlane {
                     entries.push(PhysicalListEntry {
                         path: path.clone(),
                         metadata: version.metadata.clone(),
+                        is_latest: versions
+                            .last()
+                            .is_some_and(|latest| latest.metadata.token == version.metadata.token),
                     });
                 }
                 if entries.len() == limit {
@@ -1009,6 +1063,15 @@ impl ObjectPlane for MemoryObjectPlane {
                 bytes: None,
                 metadata,
             });
+        if self
+            .lose_next_native_delete_response
+            .swap(false, Ordering::Relaxed)
+        {
+            return Err(Error::new(
+                ErrorCode::Transport,
+                "injected lost native DeleteObject response",
+            ));
+        }
         Ok(NativeObjectBindingV1::DeleteMarker { version_id })
     }
 

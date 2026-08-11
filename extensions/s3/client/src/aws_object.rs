@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    io::Write as _,
     ops::RangeInclusive,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -16,13 +17,14 @@ use md5::Md5;
 use prolly_s3_core::{
     Checksums, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
     GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, NativeCopy, NativeDelete,
-    NativeFilePut, NativeMultipartAbort, NativeMultipartComplete, NativeMultipartCreate,
-    NativeMultipartFilePart, NativeMultipartListParts, NativeMultipartListPartsPage,
-    NativeMultipartListUploads, NativeMultipartListUploadsPage, NativeMultipartPartResult,
-    NativeMultipartUploadEntry, NativeMultipartUploadPart, NativeMultipartUploadPartCopy,
-    NativeObjectBindingV1, NativeObjectWriteResult, NativePut, ObjectPath, ObjectPlane,
-    PhysicalListEntry, PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken,
-    StoredMetadata, StoredObject,
+    NativeFileGet, NativeFileGetResult, NativeFilePut, NativeMultipartAbort,
+    NativeMultipartComplete, NativeMultipartCreate, NativeMultipartFilePart,
+    NativeMultipartListParts, NativeMultipartListPartsPage, NativeMultipartListUploads,
+    NativeMultipartListUploadsPage, NativeMultipartPartResult, NativeMultipartUploadEntry,
+    NativeMultipartUploadPart, NativeMultipartUploadPartCopy, NativeObjectBindingV1,
+    NativeObjectWriteResult, NativePut, ObjectPath, ObjectPlane, PhysicalListEntry,
+    PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken, StoredMetadata,
+    StoredObject,
 };
 use sha2::{Digest, Sha256};
 
@@ -420,6 +422,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                         delete_marker: false,
                         user_metadata: BTreeMap::new(),
                     },
+                    is_latest: true,
                 })
             })
             .collect();
@@ -566,6 +569,63 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 sha256: Some(request.checksum_sha256),
                 algorithm_values: Default::default(),
             },
+        })
+    }
+
+    async fn get_native_file(&self, request: NativeFileGet) -> Result<NativeFileGetResult> {
+        self.metrics.get_object.fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .version_id(&request.version_id)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("GetObject native transfer", error))?;
+        if output.version_id() != Some(request.version_id.as_str()) {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native transfer GET omitted or changed the requested VersionId",
+            ));
+        }
+        let mut file = std::fs::File::create(&request.body_path).map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("native transfer spool could not be created: {error}"),
+            )
+        })?;
+        let mut body = output.body;
+        let mut size = 0_u64;
+        let mut sha256 = Sha256::new();
+        let mut md5 = Md5::new();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk.map_err(|error| transport_error("native transfer body", error))?;
+            size = size.checked_add(chunk.len() as u64).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "native transfer length overflow")
+            })?;
+            file.write_all(&chunk).map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native transfer spool write failed: {error}"),
+                )
+            })?;
+            sha256.update(&chunk);
+            md5.update(&chunk);
+        }
+        file.flush().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("native transfer spool flush failed: {error}"),
+            )
+        })?;
+        self.metrics
+            .downloaded_body_bytes
+            .fetch_add(size, Ordering::Relaxed);
+        Ok(NativeFileGetResult {
+            size,
+            checksum_sha256: sha256.finalize().into(),
+            checksum_md5: md5.finalize().into(),
         })
     }
 
@@ -1092,6 +1152,7 @@ impl AwsS3ObjectPlane {
                     delete_marker: false,
                     user_metadata: BTreeMap::new(),
                 },
+                is_latest: version.is_latest().unwrap_or(false),
             });
         }
         for marker in output.delete_markers() {
@@ -1119,6 +1180,7 @@ impl AwsS3ObjectPlane {
                     delete_marker: true,
                     user_metadata: BTreeMap::new(),
                 },
+                is_latest: marker.is_latest().unwrap_or(false),
             });
         }
         let continuation = if output.is_truncated().unwrap_or(false) {

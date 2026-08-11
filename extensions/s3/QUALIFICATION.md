@@ -21,17 +21,42 @@ no retry. The probe then replaced the same key and read the first logical
 version through its exact RustFS `VersionId`, proving that the measured path
 retained historical bytes without repository content chunks.
 
-The deterministic memory-plane suite separately passed 16 native-profile
-cases. It covers exact current and historical access, copy, delete markers,
-four-call writes at 1, 8, and 32 queued callers, a five-call two-object commit,
-three-call merge and restore, writer takeover fencing, idempotent replay,
-lost-put response reconciliation, checkpoints, exact-version garbage
-collection, and fail-closed native multipart and cross-bucket transfer.
+The deterministic memory-plane suite now covers exact current and historical
+access, copy, delete markers, four-call writes at 1, 8, and 32 queued callers,
+a five-call two-object commit, three-call merge and restore, writer takeover
+fencing, idempotent replay, lost put/copy/delete response reconciliation,
+checkpoints, exact-version garbage collection, native multipart, logical
+clone/fetch/push, and missing-binding repair.
+
+Native multipart passed both the deterministic object plane and live RustFS at
+exactly `N + 5` calls. The live two-part fixture issued create + two part
+uploads + completion + pack + commit + ref, for seven SDK executions and seven
+wire transmissions. A separate AWS-shaped client fixture completed after a
+client reopen using the durable upload handle, caller-carried part checksums,
+and explicit part sizes; list and abort also passed.
+
+The live native transfer fixture replayed two historical logical versions into
+a new repository prefix, proved that logical `ObjectVersionId` values stayed
+the same while RustFS `VersionId` bindings changed, reread current and
+historical bytes exactly, then transferred one incremental version and moved
+the destination ref. Source downloads and destination uploads use bounded disk
+spools rather than materializing an entire transfer body in memory.
+
+RustFS `1.0.0-beta.10` exposed three multipart compatibility constraints:
+
+- `CreateMultipartUpload` rejects the AWS full-object checksum type;
+- `ListParts` omits per-part SHA-256 values even when uploads supplied them;
+- `ListMultipartUploads` may briefly omit an upload immediately after create.
+
+The client does not infer correctness from those fields. Completion requires
+the original signed handle plus exact whole-object and per-part evidence, and
+provider listings remain discovery surfaces.
 
 This focused result supersedes the old 22-call distributed-profile baseline
-only for the new native profile. It does not qualify multipart, clone, push,
-streaming-body memory bounds, AWS latency or cost, outage recovery, or the
-million-key scale target.
+only for the new native profile. It locally qualifies the exercised multipart,
+transfer, and bounded-spooling paths against RustFS; it does not qualify AWS
+latency or cost, automatic checkpoint policy, transfer at million-version
+scale, outage recovery for every new boundary, or the million-key target.
 
 ## Local qualification — 2026-08-09
 
