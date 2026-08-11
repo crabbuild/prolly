@@ -1,558 +1,529 @@
 # prolly-dynamodb-client
 
-An in-process Rust client that keeps the familiar AWS SDK DynamoDB fluent shape
-while storing logical tables as immutable, versioned Prolly maps. It does not
-run or require a compatibility service.
+`prolly-dynamodb-client` is an in-process Rust client for logical DynamoDB tables stored as immutable, versioned Prolly maps. It follows the AWS SDK for Rust's fluent builder style and adds historical reads, diffs, durable commits, optimistic head checks, audited maintenance, and explicit workers.
 
-The caller owns and configures the underlying `aws_sdk_dynamodb::Client`. Use a
-dedicated physical node table/root table namespace; native DynamoDB item clients
-cannot interpret the physical representation.
+Use the [DynamoDB extension overview](../README.md) first if you need the architecture, physical table model, use cases, or adoption limits.
 
-Production deployment, authority separation, worker lifecycle, incident, and
-rollback procedures are defined in [`OPERATIONS.md`](OPERATIONS.md).
-The mandatory threat model and exact-table AWS policy templates are in
-[`SECURITY.md`](SECURITY.md) and [`deploy/aws`](deploy/aws).
-The exact Rust/format contract is in [`COMPATIBILITY.md`](COMPATIBILITY.md),
-the measurement and scale contract is in [`PERFORMANCE.md`](PERFORMANCE.md),
-publication failure qualification is in
-[`FAULT_INJECTION.md`](FAULT_INJECTION.md), and recovery exercises are in
-[`RECOVERY.md`](RECOVERY.md). Multi-process stress and process-death evidence is
-defined in [`SOAK.md`](SOAK.md).
-Current evidence and remaining production blockers are tracked in
-[`RELEASE_STATUS.md`](RELEASE_STATUS.md).
-The complete reviewed Rust signature/trait surface is frozen in
-[`public-api.txt`](public-api.txt) and checked by
-`scripts/verify_dynamodb_client_public_api.sh`.
-The packaged `rolling_compatibility_probe` example and
-`scripts/run_dynamodb_rolling_compatibility.py` qualify independently built
-release pairs; an identical-binary smoke is explicitly diagnostic only.
+## Decide whether the client fits your application
 
-```rust,no_run
-use aws_sdk_dynamodb::types::{AttributeValue, ReturnValue};
+Choose this client when you need:
+
+- AWS SDK-shaped Rust builders for logical DynamoDB operations
+- immutable table versions and structural diffs
+- atomic transitions across logical tables
+- durable request replay after ambiguous responses
+- explicit retention, backup, import, stream, time-to-live (TTL), and garbage-collection workflows
+
+This client is not a DynamoDB-compatible network service. Other DynamoDB SDKs and native item tools cannot read its private physical representation.
+
+Your application owns the underlying `aws_sdk_dynamodb::Client`, Tokio runtime, credentials, region, retry policy, and endpoint configuration. Use dedicated physical tables or a unique non-empty key prefix for each tenant or environment.
+
+## Review the production contracts
+
+Read these documents before deploying the client:
+
+| Document | What it defines |
+| --- | --- |
+| [`COMPATIBILITY.md`](COMPATIBILITY.md) | Supported operations, fields, and durable format contract |
+| [`OPERATIONS.md`](OPERATIONS.md) | Deployment, authority separation, incidents, and rollback |
+| [`SECURITY.md`](SECURITY.md) | Threat model and exact-table AWS Identity and Access Management (IAM) policies |
+| [`PERFORMANCE.md`](PERFORMANCE.md) | Measurement and scaling contract |
+| [`FAULT_INJECTION.md`](FAULT_INJECTION.md) | Publication failure qualification |
+| [`RECOVERY.md`](RECOVERY.md) | Recovery exercises |
+| [`SOAK.md`](SOAK.md) | Multi-process and process-death qualification |
+| [`RELEASE_STATUS.md`](RELEASE_STATUS.md) | Current evidence and production blockers |
+| [`public-api.txt`](public-api.txt) | Reviewed Rust signature and trait surface |
+
+The `rolling_compatibility_probe` example and `scripts/run_dynamodb_rolling_compatibility.py` test independently built release pairs. An identical-binary smoke test is diagnostic only.
+
+## Open a client
+
+Create the physical schema explicitly, then open the logical client. `Client::open` validates both physical tables and the database format without provisioning or upgrading them.
+
+```rust
 use prolly_dynamodb_client::Client;
 use prolly_store_dynamodb::DynamoDbBackend;
 
-# async fn example(physical: aws_sdk_dynamodb::Client) -> Result<(), Box<dyn std::error::Error>> {
-let backend = DynamoDbBackend::new(physical, "prolly-versioned")
-    .with_root_table_name("prolly-versioned-roots")
-    .with_key_prefix(b"orders-prod:".to_vec());
-backend.initialize_schema().await?;
-let client = Client::open(backend).await?;
+async fn open_client(
+    physical: aws_sdk_dynamodb::Client,
+) -> Result<Client, Box<dyn std::error::Error>> {
+    let backend = DynamoDbBackend::new(physical, "prolly-versioned")
+        .with_root_table_name("prolly-versioned-roots")
+        .with_key_prefix(b"orders-prod:".to_vec());
 
-// Frozen, serializable deployment contract for the audited operation subset.
-println!("{}", client.capabilities().to_json()?);
-
-client.put_item()
-    .table_name("Orders")
-    .item("accountId", AttributeValue::S("acct-1".into()))
-    .send().await?;
-
-let updated = client.update_item()
-    .table_name("Orders")
-    .key("accountId", AttributeValue::S("acct-1".into()))
-    .update_expression("SET #status = :closed")
-    .expression_attribute_names("#status", "status")
-    .expression_attribute_values(":closed", AttributeValue::S("CLOSED".into()))
-    .return_values(ReturnValue::AllNew)
-    .send_with_metadata().await?;
-assert!(updated.output.attributes().is_some());
-
-let head = client.table("Orders").head().await?;
-let old = client.table("Orders").at(head.id.clone()).get_item()
-    .key("accountId", AttributeValue::S("acct-1".into()))
-    .send().await?;
-
-// Whole-table optimistic control; a changed head fails with HeadConflict.
-client.table("Orders").if_head(head.id).put_item()
-    .item("accountId", AttributeValue::S("acct-2".into()))
-    .send().await?;
-# Ok(()) }
-```
-
-For explicit adapter policy, use the mutually exclusive construction builder:
-
-```rust,no_run
-# use prolly::RemoteStoreConfig;
-# use prolly_dynamodb_client::Client;
-# use prolly_store_dynamodb::{DynamoDbBackend, DynamoDbStore};
-# async fn open(backend: DynamoDbBackend, store: DynamoDbStore) -> Result<(), prolly_dynamodb_client::Error> {
-let from_backend = Client::builder()
-    .backend(backend)
-    .remote_store_config(RemoteStoreConfig { verify_node_cids: true })
-    .logical_retry_limit(7)
-    .node_cache_max_nodes(100_000)
-    .node_cache_max_bytes(64 * 1024 * 1024)
-    .open()
-    .await?;
-
-// An existing store already owns its RemoteStoreConfig and cannot be combined
-// with either `.backend(...)` or `.remote_store_config(...)`.
-let from_store = Client::builder().store(store).open().await?;
-assert_eq!(
-    from_backend.backend().table_name(),
-    from_store.backend().table_name(),
-);
-# Ok(()) }
-```
-
-These are process-local resource controls, not persisted database settings.
-`logical_retry_limit` counts optimistic retries after the first attempt: zero
-means one attempt, the default seven means at most eight attempts, and values
-above 63 are rejected before any provider request. Node caching is bounded by
-64 MiB of retained serialized-node weight by default; the optional node-count
-and byte limits are both enforced,
-and zero disables caching. Correctness pins may temporarily exceed a cache cap
-until they are unpinned. `client.cache_usage()` returns one internally
-consistent snapshot of entry count, retained serialized-node weight, and the
-pinned portions of both. This is the quantity governed by the cache ceiling;
-it is deliberately distinct from process RSS, which also includes decoded
-objects, AWS SDK buffers, allocator overhead, and unrelated application state.
-The effective values are exported by `client.capabilities()`.
-Changing any of these controls leaves the negotiated database-format record
-unchanged.
-
-Clones of one `Client` also share process-local admission for point and
-transaction writes. Admission occurs before speculative Prolly tree work, so
-concurrent tasks do not repeatedly build against the same stale table head.
-Reuse one opened client per physical namespace in a process. Independently
-opened clients and other processes remain safe through provider CAS and the
-configured logical retry budget, but they do not share this optimization.
-
-The client emits `tracing` spans at `debug` level for open, every supported
-data-plane operation, and explicit worker/maintenance lifecycle calls. Stable
-span fields identify only the logical operation (`db_system` and
-`db_operation`); builders, keys, items, expressions, credentials, physical
-table names, and results are skipped so ordinary telemetry does not copy
-financial or legal record content. Applications choose and configure the
-subscriber; the crate installs no global subscriber.
-
-`Client` owns no runtime thread, HTTP server, or implicit worker. It is a cheap
-`Arc`-backed handle over the caller-supplied DynamoDB adapter. Cloning or
-dropping it does not shut down, reconfigure, or invalidate the caller's shared
-`aws_sdk_dynamodb::Client`. There is therefore no general client shutdown call.
-Explicit stream, TTL, and maintenance workers have their own idempotent,
-durably reconciled `shutdown`/release workflows; dropping a worker never
-guesses that an in-flight provider operation was rolled back.
-
-Unsupported operation fields are intentionally absent or rejected. Physical
-schema creation remains explicit through `DynamoDbBackend::initialize_schema`;
-`Client::open` validates both configured tables without provisioning them.
-Canonical items larger than 64 KiB are stored through the provider's verified,
-chunked content-addressed blob path. That threshold is part of durable format
-negotiation, so clients configured incompatibly fail closed during open.
-The current database format is version 12; it binds canonical table/index
-descriptors, table schema-version records, bounded active index state, compact
-snapshot locators and their detached immutable manifest trees, current-only
-commit roots, append-only successful-blob registries,
-maintenance/import/index audit, fail-closed maintenance fences, durable GC execution, and worker
-lease/checkpoint/release codecs. A namespace initialized with another format version
-must go through an explicit verified migration and is never silently upgraded.
-
-## Collection reads
-
-`Query` and `Scan` expose explicit paginators. A current-head paginator may
-observe a newer table version on a later page, matching ordinary moving-head
-pagination. Construct it through `client.table(name).at(version)` when every
-page must remain on one immutable historical version. `next_page` returns
-`WithMetadata`, including the exact version used by that page.
-
-```rust,no_run
-# use aws_sdk_dynamodb::types::AttributeValue;
-# use prolly_dynamodb_client::Client;
-# async fn pages(client: &Client) -> Result<(), prolly_dynamodb_client::Error> {
-let mut pages = client.query()
-    .table_name("Orders")
-    .key_condition_expression("#account = :account")
-    .expression_attribute_names("#account", "accountId")
-    .expression_attribute_values(":account", AttributeValue::S("acct-1".into()))
-    .limit(100)
-    .into_paginator();
-while let Some(page) = pages.next_page().await? {
-    let version = page.version_id.as_ref().expect("Query always resolves a version");
-    println!("{} items from {version}", page.output.count());
+    backend.initialize_schema().await?;
+    let client = Client::open(backend).await?;
+    println!("{}", client.capabilities().to_json()?);
+    Ok(client)
 }
-# Ok(()) }
 ```
 
-For stream combinators, consume the same paginator with `.into_stream()`; its
-item type is `Result<WithMetadata<QueryOutput>, Error>` (and equivalently for
-`Scan`). Pin the returned stream before calling `StreamExt::next`.
+Provision physical tables outside the runtime process when production IAM policy separates control-plane and data-plane authority. In that setup, call `validate_initialized_schema` or run the admin CLI's `verify` command before serving traffic.
 
-`BatchGetItem` accepts the official `KeysAndAttributes` model, validates the
-100-key limit and canonical duplicate keys before item-tree reads, and performs
-one ordered multi-get on one immutable snapshot per table. It enforces the
-1-MiB-per-partition and 16-MiB response boundaries and returns remaining keys
-through the official `UnprocessedKeys` shape. Use `.at(table_versions)` for a
-repeatable multi-table historical read; `table_versions` in returned metadata
-records every snapshot actually used. Response item order is deliberately not
-an API contract, just as with DynamoDB.
+## Configure retries and caching
 
-`BatchWriteItem` accepts the official `WriteRequest` model and preserves
-DynamoDB's non-atomic batch contract: every item is a separate conditional head
-transition, and global validation (including the 25-operation limit and
-canonical duplicate targets) finishes before the first write. Metadata lists
-every transition the client knows was accepted. A safely retryable,
-definitely-not-applied failure is returned through official
-`UnprocessedItems`; a transport failure whose transaction outcome is unknown is
-instead a structured `Error::BatchWrite`. That error keeps the uncertain
-request separate from definitely unattempted work and exposes the provider's
-idempotency token for reconciliation. Applications must not blindly replay an
-outcome-unknown request.
+Use `Client::builder` when you need explicit retry or cache limits:
 
-Expression processing is resource-bounded before storage access: each
-expression is at most 4 KiB, the shared name/value binding set is at most 2
-MiB, placeholders are at most 255 bytes, and document paths are at most 32
-elements. Parenthesized/`NOT` and recursive `list_append` syntax is limited to
-64 levels; constructed core ASTs have a separate 512-level defensive ceiling.
-Invalid deserialized paths, empty or overlapping projections/update plans, and
-excessive recursion return typed validation errors rather than panicking.
-These are compatibility limits when generating expressions programmatically.
+```rust
+use prolly::RemoteStoreConfig;
+use prolly_dynamodb_client::{Client, Error};
+use prolly_store_dynamodb::DynamoDbBackend;
 
-## Transactions and durable history
-
-`TransactGetItems` reads every requested slot from one validated root read set.
-`TransactWriteItems` evaluates all conditions and updates against the original
-table heads and publishes every participating table atomically. The client
-matches the AWS Rust SDK's safety behavior by generating a random request token
-when one is omitted. An explicit `client_request_token` is stored only as a
-domain-separated hash and supports safe retry across process restart for ten
-minutes. Reusing it with a changed canonical request is rejected.
-
-Every accepted mutation has a durable `CommitId`, including identical puts,
-deletes of absent items, condition-only transactions, restores to the current
-state, and table lifecycle changes. `send()` continues to return the official
-AWS output. Use `send_with_metadata()` to obtain commit and transition data:
-
-```rust,no_run
-# use aws_sdk_dynamodb::types::AttributeValue;
-# use prolly_dynamodb_client::Client;
-# async fn history(client: &Client) -> Result<(), prolly_dynamodb_client::Error> {
-let written = client.put_item()
-    .table_name("Orders")
-    .item("accountId", AttributeValue::S("acct-1".into()))
-    .send_with_metadata()
-    .await?;
-let commit_id = written.commit_id.expect("accepted writes have a commit ID");
-
-let orders = client.table("Orders");
-let commit = orders.commit(&commit_id).await?.expect("durable commit");
-assert_eq!(commit.commit_id, commit_id);
-
-let first_page = orders.commits(None, 100).await?;
-for event in first_page.commits {
-    println!("{} {}", event.sequence, event.commit_id);
+async fn open_with_limits(
+    backend: DynamoDbBackend,
+) -> Result<Client, Error> {
+    Client::builder()
+        .backend(backend)
+        .remote_store_config(RemoteStoreConfig {
+            verify_node_cids: true,
+        })
+        .logical_retry_limit(7)
+        .node_cache_max_nodes(100_000)
+        .node_cache_max_bytes(64 * 1024 * 1024)
+        .open()
+        .await
 }
-# Ok(()) }
 ```
 
-Table history is ordered by a monotonically increasing per-incarnation
-sequence. Pages are bounded to 1,000 records and use the exclusive
-`last_sequence` continuation. Each transition includes the immutable table
-incarnation ID; a commit from a deleted and recreated table with the same name
-cannot be mistaken for the current table.
+These controls apply to one process. They do not change the persistent database format.
 
-`PutItem`, `DeleteItem`, and `UpdateItem` also expose the additive
-`.request_token(...)` method. Supplying it routes the operation through the
-same durable ten-minute replay protocol as transactions, including canonical
-payload and expected-head fingerprinting. Replays return the original commit
-and reconstruct the original old/new images from immutable versions—even from
-a fresh process and after the logical table name has been deleted. Response-only
-`ReturnValues` selection is intentionally not part of the mutation fingerprint;
-the selected response is derived from those preserved images.
+Use `.store(existing_store)` instead of `.backend(...)` when you already own a `DynamoDbStore`. An existing store owns its `RemoteStoreConfig`, so you cannot combine `.store(...)` with `.backend(...)` or `.remote_store_config(...)`.
 
-Logical `CreateTable` and `DeleteTable` builders accept the same
-`.request_token(...)` extension. Restore is an explicit CAS builder, so callers
-cannot accidentally restore over an unobserved concurrent write:
+- `logical_retry_limit(0)` allows one attempt
+- the default limit of `7` allows eight attempts
+- values above `63` fail before any provider request
+- the default cache retains up to 64 MiB of serialized node weight
+- a zero node or byte limit disables that cache dimension
 
-```rust,no_run
-# use prolly_dynamodb_client::Client;
-# async fn restore(client: &Client) -> Result<(), prolly_dynamodb_client::Error> {
-let orders = client.table("Orders");
-let current = orders.head().await?;
-let target = orders.collect_versions().await?.into_iter()
-    .find(|version| version.id != current.id)
-    .expect("retained target");
-let restored = orders
-    .restore(target.id)
-    .expected_head(current.id)
-    .request_token("restore-orders-2026-08-08")
-    .send_with_metadata()
-    .await?;
-assert!(restored.commit_id.is_some());
-# Ok(()) }
+`client.cache_usage()` reports retained entries, serialized bytes, and pinned portions. Process resident set size also includes decoded objects, AWS SDK buffers, allocator overhead, and unrelated application memory.
+
+Clone and reuse one open `Client` for each physical namespace in a process. Clones share write admission and avoid rebuilding against the same stale head. Separate clients and processes remain safe through provider compare-and-swap (CAS), but they do not share this optimization.
+
+## Write and read items
+
+The builders accept official AWS `AttributeValue` types and return official AWS output types. Call `send_with_metadata()` when you also need the accepted commit or resolved version.
+
+```rust
+use aws_sdk_dynamodb::types::AttributeValue;
+use prolly_dynamodb_client::{Client, Error};
+async fn close_order(client: &Client) -> Result<(), Error> {
+    client.put_item()
+        .table_name("Orders")
+        .item("accountId", AttributeValue::S("acct-1".into()))
+        .item("status", AttributeValue::S("OPEN".into()))
+        .send()
+        .await?;
+
+    let updated = client.update_item()
+        .table_name("Orders")
+        .key("accountId", AttributeValue::S("acct-1".into()))
+        .update_expression("SET #status = :closed")
+        .expression_attribute_names("#status", "status")
+        .expression_attribute_values(
+            ":closed",
+            AttributeValue::S("CLOSED".into()),
+        )
+        .send_with_metadata()
+        .await?;
+
+    println!("commit={:?}", updated.commit_id);
+    Ok(())
+}
 ```
 
-Administrative replay resolves the original immutable table descriptor by its
-incarnation ID. Replaying an old delete token therefore cannot delete a newer
-table that reused the same logical name.
+Unsupported fields are absent or return a typed validation error. The client does not approximate behavior it cannot guarantee.
 
-Version discovery and diff traversal are bounded by default. `versions()`
-returns a paginator in stable version-ID order; its serializable cursor is
-bound to the exact table incarnation. `diff(from, to)` returns a structural
-diff paginator whose serializable cursor is bound to both immutable roots:
+## Protect writes with an expected head
 
-```rust,no_run
-# use prolly_dynamodb_client::Client;
-# async fn history(client: &Client, from: prolly::MapVersionId, to: prolly::MapVersionId) -> Result<(), prolly_dynamodb_client::Error> {
-let orders = client.table("Orders");
-let mut versions = orders.versions().page_size(100);
-while let Some(page) = versions.next_page().await? {
-    for version in page.versions {
-        println!("{}", version.id);
+Use `if_head` when a write must fail after any unobserved table transition:
+
+```rust
+use aws_sdk_dynamodb::types::AttributeValue;
+use prolly_dynamodb_client::{Client, Error};
+
+async fn insert_if_unchanged(client: &Client) -> Result<(), Error> {
+    let orders = client.table("Orders");
+    let observed = orders.head().await?;
+
+    orders.if_head(observed.id)
+        .put_item()
+        .item("accountId", AttributeValue::S("acct-2".into()))
+        .send()
+        .await?;
+    Ok(())
+}
+```
+
+A changed head returns `HeadConflict`. This check covers the whole logical table, not one item.
+
+## Read collections
+
+`Query` and `Scan` expose explicit paginators. Each page from `next_page()` includes the exact version used for that page.
+
+```rust
+use aws_sdk_dynamodb::types::AttributeValue;
+use prolly_dynamodb_client::{Client, Error};
+
+async fn query_orders(client: &Client) -> Result<(), Error> {
+    let mut pages = client.query()
+        .table_name("Orders")
+        .key_condition_expression("#account = :account")
+        .expression_attribute_names("#account", "accountId")
+        .expression_attribute_values(
+            ":account",
+            AttributeValue::S("acct-1".into()),
+        )
+        .limit(100)
+        .into_paginator();
+
+    while let Some(page) = pages.next_page().await? {
+        let version = page.version_id.expect("query resolves a version");
+        println!("{} items from {version}", page.output.count());
     }
+    Ok(())
 }
+```
 
-let mut changes = orders.diff(from, to).page_size(256);
-while let Some(page) = changes.next_page().await? {
-    for change in page.diffs {
-        println!("{change:?}");
+A current-head paginator may use a newer version on a later page. Start the operation with `client.table(name).at(version)` when every page must use one immutable snapshot.
+
+Use `.into_stream()` when stream combinators fit your application. Pin the returned stream before calling `StreamExt::next`.
+
+### Batch reads
+
+`BatchGetItem` accepts the official `KeysAndAttributes` model. It validates the 100-key limit and duplicate canonical keys before reading item trees.
+
+Each logical table uses one immutable snapshot for the batch. Use `.at(table_versions)` for a repeatable historical read across tables. Returned metadata records every version used.
+
+The response enforces these DynamoDB boundaries:
+
+- 1 MiB per partition
+- 16 MiB for the complete response
+- no item-order guarantee
+
+Remaining keys use the official `UnprocessedKeys` shape.
+
+### Batch writes
+
+`BatchWriteItem` validates the complete request before its first write. It preserves DynamoDB's non-atomic batch contract, so each item becomes a separate conditional head transition.
+
+The client returns a definitely-not-applied request through `UnprocessedItems`. An outcome-unknown transport failure returns `Error::BatchWrite` with the uncertain request, unattempted work, and provider idempotency token. Do not blindly replay that uncertain request.
+
+### Expression limits
+
+The client validates expression resources before storage access:
+
+| Resource | Limit |
+| --- | ---: |
+| One expression | 4 KiB |
+| Shared name and value bindings | 2 MiB |
+| One placeholder | 255 bytes |
+| One document path | 32 elements |
+| Parentheses, `NOT`, or recursive `list_append` | 64 levels |
+| Constructed core abstract syntax tree | 512 levels |
+
+Invalid paths, overlapping update plans, and excessive recursion return typed validation errors instead of panicking.
+
+## Use transactions and durable request tokens
+
+`TransactGetItems` reads one validated root set. `TransactWriteItems` evaluates every condition against the original heads and atomically advances all participating tables.
+
+The client generates a random request token when you omit one. An explicit `client_request_token` supports safe retry across process restarts for ten minutes. Reusing the token with a different canonical request fails.
+
+Point writes and logical table lifecycle builders also accept `.request_token(...)`. Replays return the original commit and reconstruct the requested old or new images from immutable history.
+
+## Inspect commits and versions
+
+Every accepted mutation receives a durable `CommitId`. This includes identical puts, deletion of an absent item, condition-only transactions, restores to the current state, and table lifecycle changes.
+
+```rust
+use aws_sdk_dynamodb::types::AttributeValue;
+use prolly_dynamodb_client::{Client, Error};
+
+async fn list_commits(client: &Client) -> Result<(), Error> {
+    let written = client.put_item()
+        .table_name("Orders")
+        .item("accountId", AttributeValue::S("acct-1".into()))
+        .send_with_metadata()
+        .await?;
+    let id = written.commit_id.expect("write has a commit ID");
+
+    let orders = client.table("Orders");
+    let commit = orders.commit(&id).await?.expect("commit exists");
+    assert_eq!(commit.commit_id, id);
+
+    for event in orders.commits(None, 100).await?.commits {
+        println!("{} {}", event.sequence, event.commit_id);
     }
+    Ok(())
 }
-# Ok(()) }
 ```
 
-`collect_versions()` and `collect_diff()` are convenience methods only. They
-fail closed above their advertised 10,000-entry collection ceilings instead of
-allowing unbounded memory growth.
+Commit history uses a monotonically increasing sequence for each table incarnation. A commit from a deleted table cannot match a recreated table with the same logical name.
 
-## Retention safety
+Use bounded paginators for large histories and diffs:
 
-Retention is always a two-step administrative operation. `plan()` performs a
-read-only scan and returns at most 80 exact version IDs for one atomic provider
-transaction. Applying the plan requires explicit actor and reason attribution:
+```rust
+use prolly::MapVersionId;
+use prolly_dynamodb_client::{Client, Error};
 
-```rust,no_run
-# use prolly_dynamodb_client::{Client, MaintenanceContext, RetentionPolicy};
-# async fn retention(client: &Client) -> Result<(), prolly_dynamodb_client::Error> {
-let evidence = client.table("Evidence");
-let plan = evidence
-    .retention(RetentionPolicy::keep_last(365))
-    .plan()
-    .await?;
+async fn inspect_diff(
+    client: &Client,
+    from: MapVersionId,
+    to: MapVersionId,
+) -> Result<(), Error> {
+    let orders = client.table("Orders");
+    let mut changes = orders.diff(from, to).page_size(256);
 
-// Persist/review `plan` under the application's change-control process first.
-let result = evidence
-    .apply_retention(
-        &plan,
-        MaintenanceContext::new("records-officer", "approved annual schedule")
-            .change_ticket("LEGAL-2026-0042"),
-    )
-    .await?;
-assert_eq!(result.removed, plan.remove);
-# Ok(()) }
+    while let Some(page) = changes.next_page().await? {
+        for change in page.diffs {
+            println!("{change:?}");
+        }
+    }
+    Ok(())
+}
 ```
 
-The plan identity covers its complete canonical contents. Execution
-revalidates the logical table incarnation, immutable head, and durable commit
-sequence, then atomically deletes the exact roots and writes a durable audit
-record. Concurrent writes, head ABA, missing candidates, plan tampering, or
-wrong-table use fail closed. Reapplying the same plan and operator context
-returns the original audit result; changing the context is an idempotency
-mismatch. When `more_removable` is true, create and review another plan after
-the first batch succeeds.
+`versions()` uses a stable version-ID order. Its cursor is bound to one table incarnation. `diff(from, to)` binds its cursor to both immutable roots.
 
-Retention deletes only version catalog roots. It does not reclaim immutable
-nodes or blobs; GC remains a separate planned and authorized maintenance step.
+`collect_versions()` and `collect_diff()` allocate the complete result. Both fail above 10,000 entries. Use paginators when the result can exceed that ceiling.
 
-## Bounded backup and audited import
+## Restore a retained version
 
-Backups pin one immutable version and require an explicit memory/resource
-envelope. The canonical archive contains the logical table descriptor, exact
-`MapVersionId`, database/tree format record, every reachable Prolly node, and
-every externally stored large-value blob. Verification rejects missing, extra,
-duplicate, length-mismatched, noncanonical, or content-hash-mismatched objects.
+Restore requires the head you observed. The operation fails instead of replacing a concurrent write.
 
-```rust,no_run
-# use prolly_dynamodb_client::{Client, MaintenanceContext, TableArchive, TableArchiveLimits};
-# async fn backup_import(client: &Client) -> Result<(), prolly_dynamodb_client::Error> {
-let limits = TableArchiveLimits::new(
-    1_000_000,            // nodes
-    512 * 1024 * 1024,    // node bytes
-    100_000,              // blobs
-    512 * 1024 * 1024,    // blob bytes
-    1024 * 1024 * 1024,   // encoded archive bytes
-);
-let version = client.table("Evidence").head().await?.id;
-let archive = client.table("Evidence").at(version.clone()).export(limits).await?;
-let bytes = archive.to_bytes(limits)?;
+```rust
+use prolly_dynamodb_client::{Client, Error};
 
-// Decode performs complete verification before returning an archive.
-let archive = TableArchive::from_bytes(&bytes, limits)?;
-let import = client.import(archive, "EvidenceRecovered", limits);
-let plan = import.plan().await?; // read-only: the target remains absent
+async fn restore_previous(client: &Client) -> Result<(), Error> {
+    let orders = client.table("Orders");
+    let current = orders.head().await?;
+    let target = orders.collect_versions().await?
+        .into_iter()
+        .find(|version| version.id != current.id)
+        .expect("a retained version exists");
 
-// Persist/review `plan` through change control before applying it.
-let result = import.apply(
-    &plan,
-    MaintenanceContext::new("recovery-officer", "approved evidence recovery")
-        .change_ticket("LEGAL-2026-0088"),
-).await?;
-assert_eq!(result.version, version);
-# Ok(()) }
+    let restored = orders.restore(target.id)
+        .expected_head(current.id)
+        .request_token("restore-orders-2026-08-08")
+        .send_with_metadata()
+        .await?;
+    assert!(restored.commit_id.is_some());
+    Ok(())
+}
 ```
 
-The plan binds the canonical archive digest, source identity/version, fresh
-target incarnation, target name, and exact destination format. Import first
-verifies all content, then may prepublish immutable blobs and nodes. It exposes
-the target catalog entry, descriptor, exact version root and head, lifecycle
-commit, and operator audit together in one strict transaction. A failed or
-conflicting transaction can leave only unreachable content-addressed objects,
-never a partially visible logical table. Retrying the same plan and context,
-including from a fresh process after an ambiguous provider response, resolves
-the original durable audit and returns the original result.
+Replay resolves the original table incarnation. An old delete or restore token cannot mutate a newer table that reused the same name.
 
-Archives currently require an exact database-format match. Cross-format
-migration is deliberately separate from restore and must use a versioned,
-verified migration workflow rather than silently rewriting evidence during
-import.
+## Retain versions with a reviewed plan
 
-The separate [`prolly-dynamodb-admin`](../admin/README.md) package exposes the
-same backup/import and retention workflows as JSON-emitting commands with
-create-new output files. It keeps CLI and AWS configuration dependencies out of
-normal application binaries.
+Retention separates discovery from mutation. `plan()` performs a read-only scan and returns at most 80 exact version IDs for one provider transaction.
 
-## Explicit stream and TTL workers
-
-`Client::open` never starts background work. A process must deliberately create
-a worker through `client.workers()`, supply a stable logical subscription or TTL
-configuration, and run it with a cancellation token. Job identity binds the
-table incarnation, so deleting and recreating a table cannot accidentally
-resume an old table's checkpoint.
-
-```rust,no_run
+```rust
 use prolly_dynamodb_client::{
-    CancellationToken, Client, StreamWorkerOptions, TtlWorkerOptions,
+    Client, Error, MaintenanceContext, RetentionPolicy,
 };
 
-# async fn workers(client: Client) -> Result<(), prolly_dynamodb_client::Error> {
-let cancellation = CancellationToken::new();
-let mut stream = client.workers().stream(StreamWorkerOptions::new(
-    "Orders",
-    "legal-audit-ledger",
-    "worker-host-a",
-)).await?;
+async fn retain_versions(client: &Client) -> Result<(), Error> {
+    let table = client.table("Evidence");
+    let plan = table.retention(RetentionPolicy::keep_last(365))
+        .plan()
+        .await?;
 
-// Delivery is sequential and bounded by the configured page. Persist the
-// stable commit_id in the destination's deduplication record.
-let page = stream.run_once(&mut |commit| async move {
-    println!("{} {}", commit.commit_id, commit.sequence);
-    Ok::<_, std::io::Error>(())
-}).await?;
-println!("delivered={}", page.delivered);
-// A daemon normally calls `stream.run(&cancellation, sink)`. Its shutdown
-// controller calls `cancellation.cancel()` from another task.
-cancellation.cancel();
-let exit = stream.shutdown().await?;
-assert!(!exit.release.replayed);
-
-let mut ttl = client.workers().ttl(TtlWorkerOptions::new(
-    "Orders",
-    "expiresAt",
-    "worker-host-a",
-)).await?;
-let page = ttl.run_once().await?;
-println!("evaluated={}, deleted={}", page.evaluated, page.deleted);
-ttl.shutdown().await?;
-# Ok(()) }
+    let context = MaintenanceContext::new(
+        "records-officer",
+        "approved annual schedule",
+    ).change_ticket("LEGAL-2026-0042");
+    let result = table.apply_retention(&plan, context).await?;
+    assert_eq!(result.removed, plan.remove);
+    Ok(())
+}
 ```
 
-Stream delivery is at-least-once. The worker checkpoints a sequence only after
-the sink returns success while the exact fencing generation is still live. A
-crash after the external effect but before its checkpoint can redeliver the
-same stable `CommitId`; a sink that needs effectively-once effects must make
-that ID unique in its own transaction. The worker renews its lease during slow
-sink calls and idle waits. Cancellation is observed between records, allowing
-an in-flight sink result to be checkpointed before the lease is durably
-released.
+Persist and review the plan before applying it. Execution revalidates the table incarnation, head, commit sequence, plan identity, candidates, and operator context.
 
-The TTL worker accepts only integer Number attributes containing Unix epoch
-seconds. It ignores future values, non-numbers, fractional/negative values, and
-timestamps more than five 365-day years old, matching DynamoDB's documented
-eligibility window. Every expiry uses a conditional delete that requires the
-currently stored TTL attribute to equal the value observed by the scan. A
-concurrent refresh, removal, or type change therefore prevents deletion. TTL
-pages and cumulative acknowledged counters are durably checkpointed; a crash
-may rescan a page but cannot make the conditional delete unsafe.
+Retention removes version catalog roots. It does not reclaim immutable nodes or blobs. Run physical garbage collection as a separate maintenance workflow.
 
-Worker leases are single-owner, renewable, and protected by monotonically
-increasing fencing tokens. Takeover is allowed only after expiry. A stale
-process cannot renew, checkpoint, or release a newer generation. Runtime tuning
-such as page size, polling delay, and lease duration does not change job
-identity, so operators can tune or relocate a worker without abandoning its
-checkpoint.
+## Export and import a verified archive
 
-Physical GC is also available as an explicit
-`client.workers().maintenance(context, duration_millis)` session. The returned
-`MaintenanceWorker` only binds the global fence to `plan_gc`, `apply_gc`, and
-an explicit attributed `shutdown`; it never scans, deletes, or releases on
-construction or drop. This preserves the reviewed dry-run/apply boundary and
-the fail-closed recovery model described below.
+An export pins one version and requires explicit resource limits. The archive includes the table descriptor, version, format record, reachable Prolly nodes, and referenced large-value blobs.
 
-## Fail-closed maintenance fence
+```rust
+use prolly_dynamodb_client::{
+    Client, Error, TableArchiveLimits,
+};
 
-Destructive physical maintenance must first acquire the namespace-wide writer
-fence with an attributed `MaintenanceContext`. Every logical write transaction
-reads the fence root, so a lease acquired after a writer begins invalidates that
-writer's commit condition. Already-completed idempotent replays remain readable.
+async fn export_table(client: &Client) -> Result<Vec<u8>, Error> {
+    let limits = TableArchiveLimits::new(
+        1_000_000,
+        512 * 1024 * 1024,
+        100_000,
+        512 * 1024 * 1024,
+        1024 * 1024 * 1024,
+    );
+    let table = client.table("Evidence");
+    let version = table.head().await?.id;
+    let archive = table.at(version).export(limits).await?;
+    Ok(archive.to_bytes(limits)?)
+}
+```
 
-Lease expiry never automatically admits writers: a paused or crashed sweeper
-could still be deleting objects. The holder must explicitly release the lease,
-or an operator may force-break it only after expiry. Release/break changes the
-control root and writes durable operator evidence atomically. This deliberately
-prefers a recoverable write outage over a race that could delete reachable
-financial or legal records.
+Decode verifies canonical encoding, object hashes, lengths, duplicates, and completeness before returning an archive. Import also separates a read-only plan from an attributed apply step:
 
-The current public fence API is `maintenance_lease()`,
-`acquire_maintenance_lease(...)`, `release_maintenance_lease(...)`, and
-`break_expired_maintenance_lease(...)`. The administrative CLI provides the
-equivalent `lease-status`, `lease-acquire`, `lease-release`, and
-`lease-break-expired` commands.
+```rust
+use prolly_dynamodb_client::{
+    Client, Error, MaintenanceContext, TableArchive,
+    TableArchiveLimits,
+};
 
-`plan_gc(lease_id, cursor, limits)` is the read-only half of that workflow. It
-enumerates every retained named root under an explicit cap, expands immutable
-snapshot catalogs into their referenced base/source/index trees, merges the
-per-table successful-blob registries, and computes bounded node and
-large-value-blob reachability,
-and evaluates at most 1,000 physical
-DynamoDB items per candidate scan page. The plan binds the lease ID, complete
-root-set digest, input/output cursors, exact reclaimable CIDs, and the exact
-numbers of tree nodes and leaf values inspected by blob reachability. It samples
-the lease and full root digest again after candidate scans and fails if either
-moved. Empty pages with a continuation are valid because DynamoDB applies a
-`Scan` limit before the namespace filter. A dry run never deletes the reported
-candidates.
+async fn import_table(client: &Client, bytes: &[u8]) -> Result<(), Error> {
+    let limits = TableArchiveLimits::new(
+        1_000_000,
+        512 * 1024 * 1024,
+        100_000,
+        512 * 1024 * 1024,
+        1024 * 1024 * 1024,
+    );
+    let archive = TableArchive::from_bytes(bytes, limits)?;
+    let import = client.import(archive, "EvidenceRecovered", limits);
+    let plan = import.plan().await?;
+    let context = MaintenanceContext::new(
+        "recovery-officer",
+        "approved evidence recovery",
+    ).change_ticket("LEGAL-2026-0088");
+    import.apply(&plan, context).await?;
+    Ok(())
+}
+```
 
-`apply_gc(plan, context, options)` rechecks the canonical plan identity, exact
-lease, full root digest, bounded reachability summary (including
-`protected_trees`, `scanned_blob_nodes`, and `scanned_values`), and that every
-candidate is still
-unreachable. It then durably records and pins that exact plan before
-performing bounded idempotent node/blob deletes. Partial failure keeps the fence
-pinned; retrying the same plan and context resumes safely. Completion is
-durable and replayable, and lease release or expired-lease break is rejected
-while any execution remains in progress. The client never releases the lease
-implicitly. Each successful physical node-deletion chunk also invalidates the
-engine's decoded-node, rightmost-path, recent-leaf, and branch-lineage caches
-before later work can reuse a swept CID.
+Import may prepublish immutable content before one strict transaction exposes the new table, root, commit, and audit record. A failed transaction cannot expose a partial logical table.
 
-The blob registry is append-only in format 12. This deliberately favors
-evidence safety: failed or prepublished orphan blobs are reclaimable, while a
-blob introduced by any successful write/import remains protected even after
-all referencing history is removed. Reclaiming that conservative residue
-requires a future explicit, audited exact-registry compaction; GC never guesses.
+Archives require an exact database-format match. Cross-format migration is a separate verified workflow. Use the [`prolly-dynamodb-admin`](../admin/README.md) package when you need JSON plans and create-new output files for change control.
 
-## DynamoDB Local starter
+## Run explicit workers
 
-The repository compose file exposes DynamoDB Local on port 8000. The example
-initializes the physical schema explicitly and then opens the logical client:
+`Client::open` starts no background work. Create each worker with a stable job identity, run it with a cancellation token, then call its explicit shutdown method.
+
+### Consume the commit stream
+
+The stream worker delivers commits sequentially and at least once. Deduplicate the stable `CommitId` in the destination transaction when you need effectively-once effects.
+
+```rust
+use prolly_dynamodb_client::{
+    CancellationToken, Client, Error, StreamWorkerOptions,
+};
+
+async fn consume_commits(client: Client) -> Result<(), Error> {
+    let cancel = CancellationToken::new();
+    let options = StreamWorkerOptions::new(
+        "Orders",
+        "audit-ledger",
+        "worker-host-a",
+    );
+    let mut worker = client.workers().stream(options).await?;
+    let page = worker.run_once(&mut |commit| async move {
+        println!("{} {}", commit.commit_id, commit.sequence);
+        Ok::<_, std::io::Error>(())
+    }).await?;
+    println!("delivered={}", page.delivered);
+
+    cancel.cancel();
+    worker.shutdown().await?;
+    Ok(())
+}
+```
+
+The worker checkpoints only after the sink succeeds while the same fencing generation remains live. A crash after the external effect can redeliver the commit.
+
+### Delete expired items
+
+The TTL worker accepts integer Number attributes containing Unix epoch seconds:
+
+```rust
+use prolly_dynamodb_client::{
+    Client, Error, TtlWorkerOptions,
+};
+
+async fn expire_items(client: Client) -> Result<(), Error> {
+    let options = TtlWorkerOptions::new(
+        "Orders",
+        "expiresAt",
+        "worker-host-a",
+    );
+    let mut worker = client.workers().ttl(options).await?;
+    let page = worker.run_once().await?;
+    println!("evaluated={}", page.evaluated);
+    println!("deleted={}", page.deleted);
+    worker.shutdown().await?;
+    Ok(())
+}
+```
+
+The worker ignores future, fractional, negative, non-number, and stale values outside DynamoDB's five-year eligibility window. Each delete requires the current TTL value to match the scanned value, so a concurrent refresh prevents deletion.
+
+Worker leases use one owner and a monotonically increasing fencing token. Another process can take over only after expiry. Tuning page size, polling delay, or lease duration does not change the durable job identity.
+
+## Run physical maintenance behind the writer fence
+
+Garbage collection requires a namespace-wide writer fence. Every logical write checks that fence before commit.
+
+The maintenance lifecycle is:
+
+1. Acquire a lease with `MaintenanceContext`
+2. Create and review a bounded `plan_gc` result
+3. Apply that exact plan with operator attribution
+4. Continue through provider pages until no cursor remains
+5. Release the lease explicitly
+
+Lease expiry does not admit writers. A paused sweeper could still delete objects, so the holder must release the lease. An operator can break it only after expiry and only when no garbage-collection execution remains in progress.
+
+Each plan binds these inputs:
+
+- lease ID
+- complete named-root digest
+- input and output provider cursors
+- reclaimable content identifiers
+- bounded reachability counts
+
+`apply_gc` rechecks the plan, lease, root digest, reachability, and candidates. It records the execution before deletion, resumes after partial failure, and keeps the fence pinned until completion.
+
+The format 12 blob registry is append-only. Garbage collection protects every blob introduced by a successful write or import, even after version retention removes its last visible reference. A future audited registry-compaction workflow must reclaim that conservative residue.
+
+Use `client.workers().maintenance(context, duration_millis)` when a process needs a lease-bound maintenance session. Construction and drop never scan, delete, release, or infer the outcome of an in-flight request.
+
+## Understand runtime and format behavior
+
+`Client` is an `Arc`-backed handle over the caller-supplied adapter. Cloning or dropping it does not stop a runtime, close the AWS client, or shut down workers.
+
+The client emits `tracing` spans at `debug` level for open, data-plane operations, and worker or maintenance lifecycle calls. Stable fields include only `db_system` and `db_operation`. The client excludes keys, items, expressions, credentials, physical table names, and results, and it does not install a global subscriber.
+
+Canonical items larger than 64 KiB use the verified chunked blob path. That threshold forms part of format negotiation.
+
+The current persistent database format is version 12. It includes:
+
+- canonical table and index descriptors
+- table schema versions and active index state
+- immutable snapshot locators and manifests
+- current commit roots and durable commit history
+- successful-blob registries
+- maintenance, import, and index audit records
+- maintenance fences and garbage-collection executions
+- worker leases, checkpoints, and releases
+
+Opening a namespace with another format version fails. Run an explicit verified migration instead of mixing format versions.
+
+## Run against DynamoDB Local
+
+Start DynamoDB Local, set the client environment, and run the packaged example:
 
 ```bash
 docker compose -f docker-compose.store-services.yml up -d dynamodb
-export AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=local
+export AWS_SECRET_ACCESS_KEY=local
+export AWS_REGION=us-east-1
 export PROLLY_STORE_DYNAMODB_ENDPOINT=http://127.0.0.1:8000
 export PROLLY_STORE_DYNAMODB_TABLE=prolly-versioned-example
-cargo run --manifest-path extensions/dynamodb/client/Cargo.toml --example direct_crud
+cargo run --manifest-path extensions/dynamodb/client/Cargo.toml \
+  --example direct_crud
 ```
 
-Use a unique non-empty key prefix for every test or tenant. DynamoDB Local is a
-contract-test environment, not evidence of AWS service latency or durability.
+DynamoDB Local supports contract tests. Its latency, durability, and capacity do not represent AWS DynamoDB.
