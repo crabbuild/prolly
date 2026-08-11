@@ -31,7 +31,6 @@ struct PackedNodeState {
 pub struct ProllyObjectStore<P> {
     plane: Arc<P>,
     repository_prefix: String,
-    protection: Option<Arc<dyn crate::ProtectionSink>>,
     packed: Option<Arc<PackedNodeState>>,
 }
 
@@ -40,7 +39,6 @@ impl<P> Clone for ProllyObjectStore<P> {
         Self {
             plane: self.plane.clone(),
             repository_prefix: self.repository_prefix.clone(),
-            protection: self.protection.clone(),
             packed: self.packed.clone(),
         }
     }
@@ -51,7 +49,6 @@ impl<P> ProllyObjectStore<P> {
         Self {
             plane,
             repository_prefix: repository_prefix.into(),
-            protection: None,
             packed: None,
         }
     }
@@ -60,14 +57,8 @@ impl<P> ProllyObjectStore<P> {
         Self {
             plane,
             repository_prefix: repository_prefix.into(),
-            protection: None,
             packed: Some(Arc::new(PackedNodeState::default())),
         }
-    }
-
-    pub fn with_protection_sink(mut self, sink: Arc<dyn crate::ProtectionSink>) -> Self {
-        self.protection = Some(sink);
-        self
     }
 
     fn path_for_key(&self, key: &[u8]) -> Result<ObjectPath> {
@@ -524,9 +515,6 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
                 expected_sha256: sha256(value),
             })
             .await?;
-        if let Some(sink) = &self.protection {
-            sink.protect(path).await?;
-        }
         Ok(())
     }
 

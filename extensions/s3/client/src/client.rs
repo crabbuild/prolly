@@ -34,14 +34,13 @@ use futures_util::stream::BoxStream;
 use hmac::{Hmac, Mac};
 use http_body::{Body, Frame, SizeHint};
 use prolly_s3_core::{
-    decode_canonical, encode_canonical, version_cursor_after_key, ChecksumExpectation, CommitId,
-    CommitReceipt, Error, ErrorCode, EtagPredicateV1, GetRequest, ListRequest,
-    MultipartCatalogSnapshotId, NativeMultipartCompletedPart, NativeMultipartPartResult,
-    NativeMultipartSessionV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectSummary,
-    ObjectVersionId, ObjectVersionKindV1, ObjectWriteConditionV1, OperationId, PhysicalVersion,
+    decode_canonical, encode_canonical, version_cursor_after_key, BatchId, ChecksumExpectation,
+    CommitId, CommitReceipt, Error, ErrorCode, EtagPredicateV1, GetRequest, ListRequest,
+    LogicalObjectVersionKindV1, NativeBatchV1, NativeMultipartCompletedPart,
+    NativeMultipartPartResult, NativeMultipartSessionV1, ObjectHeaders, ObjectPath, ObjectPlane,
+    ObjectSummary, ObjectVersionId, ObjectWriteConditionV1, OperationId, PhysicalVersion,
     PhysicalVersioning, ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository,
-    RepositoryOptions, RepositoryStorageProfile, Result, RetryAdvice, UploadId, VersionSummary,
-    WorkspaceId, WorkspaceManifestV1, WriterLeaseMaintenance, MAX_LOGICAL_RETRY_LIMIT,
+    RepositoryOptions, Result, RetryAdvice, VersionSummary, WriterLeaseMaintenance,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -187,31 +186,19 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
-        relative_pattern: "nodes/sha256/<2>/<2>/<cid>",
+        relative_pattern: "node-packs/sha256/<2>/<2>/<pack-id>.pack",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: true,
         gc_managed: true,
     },
     PhysicalPathFamily {
-        relative_pattern: "chunks/sha256/<2>/<2>/<cid>",
+        relative_pattern: "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
         discipline: PhysicalPathDiscipline::Immutable,
-        portable_clone: true,
-        gc_managed: true,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "content-manifests/sha256/<2>/<2>/<cid>",
-        discipline: PhysicalPathDiscipline::Immutable,
-        portable_clone: true,
-        gc_managed: true,
+        portable_clone: false,
+        gc_managed: false,
     },
     PhysicalPathFamily {
         relative_pattern: "commits/sha256/<2>/<2>/<commit-id>",
-        discipline: PhysicalPathDiscipline::Immutable,
-        portable_clone: true,
-        gc_managed: true,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "deltas/sha256/<2>/<2>/<delta-id>",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: true,
         gc_managed: true,
@@ -223,38 +210,14 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
-        relative_pattern: "reflogs/{heads,tags}/<name-hex>/<entry-id>",
+        relative_pattern: "reflogs/tags/<name-hex>/<entry-id>",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: true,
         gc_managed: false,
     },
     PhysicalPathFamily {
-        relative_pattern: "multipart/uploads/<upload-id>",
+        relative_pattern: "writers/lease.cbor",
         discipline: PhysicalPathDiscipline::MutableCas,
-        portable_clone: false,
-        gc_managed: false,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "multipart/catalog-snapshots/<2>/<2>/<snapshot-id>.cbor",
-        discipline: PhysicalPathDiscipline::Immutable,
-        portable_clone: false,
-        gc_managed: true,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "workspaces/<workspace-id>",
-        discipline: PhysicalPathDiscipline::MutableCas,
-        portable_clone: false,
-        gc_managed: false,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "publications/<operation-id>/lease",
-        discipline: PhysicalPathDiscipline::MutableCas,
-        portable_clone: false,
-        gc_managed: false,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "publications/segments/<segment-id>.cbor",
-        discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: false,
         gc_managed: false,
     },
@@ -267,12 +230,6 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
     PhysicalPathFamily {
         relative_pattern: "probes/<operation-id>/{mutable,listed}",
         discipline: PhysicalPathDiscipline::EphemeralProbe,
-        portable_clone: false,
-        gc_managed: false,
-    },
-    PhysicalPathFamily {
-        relative_pattern: "sync/runs/<operation-id-hex>",
-        discipline: PhysicalPathDiscipline::MutableCas,
         portable_clone: false,
         gc_managed: false,
     },
@@ -305,7 +262,6 @@ pub struct ReadOptions {
 pub struct WriteOptions {
     pub operation_id: Option<OperationId>,
     pub expected_head: Option<CommitId>,
-    pub logical_retry_limit: Option<u8>,
     pub deadline: Option<Instant>,
 }
 
@@ -515,20 +471,6 @@ struct ListingCursor {
 }
 
 #[derive(Serialize, Deserialize)]
-struct MultipartListingCursor {
-    version: u8,
-    kind: String,
-    repository: prolly_s3_core::RepositoryId,
-    bucket: String,
-    branch: String,
-    snapshot: MultipartCatalogSnapshotId,
-    prefix: String,
-    next_offset: u64,
-    last_key: Vec<u8>,
-    expires_at_millis: u64,
-}
-
-#[derive(Serialize, Deserialize)]
 struct SignedCursor {
     key_id: String,
     payload: Vec<u8>,
@@ -559,10 +501,8 @@ pub struct ClientBuilder {
     repository_prefix: Option<String>,
     default_branch: Option<String>,
     writer: Option<String>,
-    storage_profile: Option<RepositoryStorageProfile>,
     writer_lease_duration: Option<Duration>,
     read_only: bool,
-    logical_retry_limit: Option<u8>,
     gc_delete_rate_limit_per_second: Option<u32>,
     token_signer: Option<Arc<dyn TokenSigner>>,
     cursor_ttl: Option<Duration>,
@@ -727,21 +667,6 @@ impl Client {
             message: "atomic bucket commit".to_string(),
             expires_after: Duration::from_secs(60 * 60),
         }
-    }
-    pub async fn resume_commit(&self, workspace: WorkspaceId) -> Result<CommitSession> {
-        self.ensure_provider_qualified()?;
-        let manifest = self.repository.resume_workspace(workspace).await?;
-        if manifest.branch != self.branch {
-            return Err(Error::new(
-                ErrorCode::NoSuchWorkspace,
-                "workspace belongs to another branch",
-            ));
-        }
-        Ok(CommitSession {
-            client: self.clone(),
-            manifest,
-            native_mutations: None,
-        })
     }
     pub async fn at(&self, commit: CommitId) -> Result<Snapshot> {
         self.ensure_provider_qualified()?;
@@ -1012,23 +937,6 @@ impl Client {
             .fetch_from(source.repository.as_ref(), &source.branch)
             .await
     }
-    pub async fn fetch_from_resumable(
-        &self,
-        source: &Client,
-        run: Option<OperationId>,
-        max_objects: usize,
-    ) -> Result<prolly_s3_core::SyncRunV1> {
-        self.ensure_provider_qualified()?;
-        source.ensure_provider_qualified()?;
-        source
-            .repository
-            .sync_closure_batch_to(self.repository.as_ref(), &source.branch, run, max_objects)
-            .await
-    }
-    pub async fn sync_run(&self, run: OperationId) -> Result<prolly_s3_core::SyncRunV1> {
-        self.ensure_provider_qualified()?;
-        self.repository.sync_run(run).await
-    }
     pub async fn push_to(
         &self,
         destination: &Client,
@@ -1158,7 +1066,7 @@ impl Client {
             None,
         )
         .await?;
-        validate_profile_capabilities(self.repository.storage_profile(), &attestation)?;
+        validate_native_capabilities(&attestation)?;
         let id = attestation.id;
         *self
             .provider_attestation
@@ -1203,7 +1111,6 @@ impl Client {
             checksum_sha256: input.checksum_sha256,
             expected_head: options.expected_head,
             operation_id: options.operation_id,
-            logical_retry_limit: options.logical_retry_limit,
             deadline: options.deadline,
         }
         .send()
@@ -1328,11 +1235,6 @@ impl Client {
     pub fn abort_multipart_upload(&self) -> AbortMultipartUploadBuilder {
         AbortMultipartUploadBuilder::new(self.clone())
     }
-    pub async fn expire_multipart_uploads(&self, limit: usize) -> Result<usize> {
-        self.ensure_provider_qualified()?;
-        self.repository.expire_multipart_uploads(limit).await
-    }
-
     fn validate_bucket(&self, bucket: Option<&str>) -> Result<()> {
         self.ensure_provider_qualified()?;
         let bucket = required(bucket, "bucket")?;
@@ -1351,7 +1253,7 @@ impl Client {
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "attestation lock poisoned"))?;
         ensure_attestation_current(&attestation)?;
-        validate_profile_capabilities(self.repository.storage_profile(), &attestation)
+        validate_native_capabilities(&attestation)
     }
 
     fn ensure_native_version_recovery_supported(&self) -> Result<()> {
@@ -1440,73 +1342,6 @@ impl Client {
         Ok(cursor)
     }
 
-    fn encode_multipart_cursor(&self, cursor: &MultipartListingCursor) -> Result<String> {
-        let signer = self.token_signer.as_ref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::MissingCapability,
-                "paginated multipart listing requires a shared token signer",
-            )
-        })?;
-        let payload = serde_cbor::to_vec(cursor).map_err(|error| {
-            Error::new(
-                ErrorCode::InternalInvariant,
-                format!("multipart cursor encoding failed: {error}"),
-            )
-        })?;
-        let (key_id, signature) = signer.sign(&payload)?;
-        let envelope = serde_cbor::to_vec(&SignedCursor {
-            key_id,
-            payload,
-            signature,
-        })
-        .map_err(|error| {
-            Error::new(
-                ErrorCode::InternalInvariant,
-                format!("signed multipart cursor encoding failed: {error}"),
-            )
-        })?;
-        Ok(URL_SAFE_NO_PAD.encode(envelope))
-    }
-
-    fn decode_multipart_cursor(&self, token: &str) -> Result<MultipartListingCursor> {
-        let signer = self.token_signer.as_ref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::MissingCapability,
-                "multipart continuation verification requires a shared token signer",
-            )
-        })?;
-        let envelope = URL_SAFE_NO_PAD.decode(token).map_err(|_| {
-            Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart continuation is not canonical base64url",
-            )
-        })?;
-        let signed: SignedCursor = serde_cbor::from_slice(&envelope).map_err(|_| {
-            Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart continuation envelope is malformed",
-            )
-        })?;
-        signer.verify(&signed.key_id, &signed.payload, &signed.signature)?;
-        let cursor: MultipartListingCursor =
-            serde_cbor::from_slice(&signed.payload).map_err(|_| {
-                Error::new(
-                    ErrorCode::InvalidContinuationToken,
-                    "multipart continuation payload is malformed",
-                )
-            })?;
-        if cursor.version != 1
-            || cursor.kind != "multipart-uploads"
-            || cursor.expires_at_millis < now_millis_client()?
-        {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart continuation is expired or unsupported",
-            ));
-        }
-        Ok(cursor)
-    }
-
     async fn record_advisory(&self, receipt: &CommitReceipt) {
         if let Some(index) = &self.advisory_index {
             // Publication is already committed; advisory failure cannot reverse success.
@@ -1567,24 +1402,12 @@ impl ClientBuilder {
         self.writer = Some(writer.into());
         self
     }
-    pub fn storage_profile(mut self, profile: RepositoryStorageProfile) -> Self {
-        self.storage_profile = Some(profile);
-        self
-    }
-    pub fn native_versioned(mut self) -> Self {
-        self.storage_profile = Some(RepositoryStorageProfile::NativeVersionedV1);
-        self
-    }
     pub fn writer_lease_duration(mut self, duration: Duration) -> Self {
         self.writer_lease_duration = Some(duration);
         self
     }
     pub fn read_only(mut self, value: bool) -> Self {
         self.read_only = value;
-        self
-    }
-    pub fn logical_retry_limit(mut self, attempts: u8) -> Self {
-        self.logical_retry_limit = Some(attempts);
         self
     }
     pub fn gc_delete_rate_limit_per_second(mut self, deletes: u32) -> Self {
@@ -1658,7 +1481,6 @@ impl ClientBuilder {
     }
 
     async fn finish(self, initialize: bool) -> Result<Client> {
-        validate_logical_retry_limit(self.logical_retry_limit)?;
         if initialize && self.read_only {
             return Err(invalid(
                 "repository initialization requires a writable client",
@@ -1696,23 +1518,15 @@ impl ClientBuilder {
         if let Some(value) = self.writer {
             options.writer = value;
         }
-        if let Some(value) = self.storage_profile {
-            options.storage_profile = value;
-        }
         if let Some(value) = self.writer_lease_duration {
             options.writer_lease_millis = u64::try_from(value.as_millis())
                 .map_err(|_| invalid("writer lease duration exceeds u64 milliseconds"))?;
         }
         options.read_only = self.read_only;
-        if let Some(value) = self.logical_retry_limit {
-            options.logical_retry_limit = value;
-        }
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
-        let maintain_native_writer = options.storage_profile
-            == RepositoryStorageProfile::NativeVersionedV1
-            && !options.read_only;
+        let maintain_native_writer = !options.read_only;
         let branch = options.default_branch.clone();
         let plane = Arc::new(AwsS3ObjectPlane::new(aws, bucket.clone()));
         let provider_identity = self
@@ -1748,7 +1562,7 @@ impl ClientBuilder {
                 }
                 Err(error) => return Err(error),
             };
-            validate_profile_capabilities(options.storage_profile, &attestation)?;
+            validate_native_capabilities(&attestation)?;
             (Repository::initialize(plane, options).await?, attestation)
         } else {
             let repository = Repository::open(plane.clone(), options).await?;
@@ -1760,7 +1574,7 @@ impl ClientBuilder {
                 selected_attestation,
             )
             .await?;
-            validate_profile_capabilities(repository.storage_profile(), &attestation)?;
+            validate_native_capabilities(&attestation)?;
             (repository, attestation)
         };
         let repository = Arc::new(repository);
@@ -1803,35 +1617,27 @@ impl CommitBuilder {
     pub async fn start(self) -> Result<CommitSession> {
         self.client.ensure_provider_qualified()?;
         let millis = u64::try_from(self.expires_after.as_millis())
-            .map_err(|_| invalid("workspace expiry exceeds u64 milliseconds"))?;
-        let native =
-            self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let manifest = if native {
-            self.client
-                .repository
-                .begin_native_batch(&self.client.branch, self.message, millis)
-                .await?
-        } else {
-            self.client
-                .repository
-                .begin_workspace(&self.client.branch, self.message, millis)
-                .await?
-        };
+            .map_err(|_| invalid("batch expiry exceeds u64 milliseconds"))?;
+        let manifest = self
+            .client
+            .repository
+            .begin_native_batch(&self.client.branch, self.message, millis)
+            .await?;
         Ok(CommitSession {
             client: self.client,
             manifest,
-            native_mutations: native.then(BTreeMap::new),
+            native_mutations: BTreeMap::new(),
         })
     }
 }
 
 pub struct CommitSession {
     client: Client,
-    manifest: WorkspaceManifestV1,
-    native_mutations: Option<BTreeMap<Vec<u8>, prolly_s3_core::NativeBatchMutationV1>>,
+    manifest: NativeBatchV1,
+    native_mutations: BTreeMap<Vec<u8>, prolly_s3_core::NativeBatchMutationV1>,
 }
 impl CommitSession {
-    pub fn id(&self) -> WorkspaceId {
+    pub fn id(&self) -> BatchId {
         self.manifest.id
     }
     pub fn base_commit(&self) -> CommitId {
@@ -1856,29 +1662,17 @@ impl CommitSession {
     }
     pub async fn publish(self) -> Result<CommitReceipt> {
         self.client.ensure_provider_qualified()?;
-        let receipt = if let Some(mutations) = self.native_mutations {
-            self.client
-                .repository
-                .publish_native_batch(self.manifest, mutations.into_values().collect())
-                .await?
-        } else {
-            self.client
-                .repository
-                .publish_workspace(self.manifest.id)
-                .await?
-        };
+        let receipt = self
+            .client
+            .repository
+            .publish_native_batch(self.manifest, self.native_mutations.into_values().collect())
+            .await?;
         self.client.record_advisory(&receipt).await;
         Ok(receipt)
     }
     pub async fn abort(self) -> Result<()> {
         self.client.ensure_provider_qualified()?;
-        if self.native_mutations.is_some() {
-            return Ok(());
-        }
-        self.client
-            .repository
-            .abort_workspace(self.manifest.id)
-            .await
+        Ok(())
     }
 }
 
@@ -1919,45 +1713,21 @@ impl<'a> StagedPutObjectBuilder<'a> {
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let body = self.body.ok_or_else(|| invalid("body is required"))?;
-        if let Some(mutations) = self.session.native_mutations.as_mut() {
-            let bytes = body.collect().await.map_err(|error| {
-                Error::new(
-                    ErrorCode::Transport,
-                    format!("native staged body failed: {error}"),
-                )
-            })?;
-            mutations.insert(
-                key.as_bytes().to_vec(),
-                prolly_s3_core::NativeBatchMutationV1::Put {
-                    key: key.as_bytes().to_vec(),
-                    bytes: bytes.into_bytes().to_vec(),
-                    headers: ObjectHeaders {
-                        content_type: self.content_type,
-                        ..ObjectHeaders::default()
-                    },
-                    user_metadata: self.metadata.unwrap_or_default().into_iter().collect(),
-                },
-            );
-            return Ok(());
-        }
-        let stream = futures_util::stream::unfold(body, |mut body| async move {
-            body.next().await.map(|item| (item, body))
-        });
-        self.session.manifest = self
-            .session
-            .client
-            .repository
-            .workspace_put_stream(
-                self.session.manifest.id,
-                key.as_bytes().to_vec(),
-                stream,
-                ObjectHeaders {
+        let bytes = body.collect().await.map_err(|error| {
+            Error::new(ErrorCode::Transport, format!("staged body failed: {error}"))
+        })?;
+        self.session.native_mutations.insert(
+            key.as_bytes().to_vec(),
+            prolly_s3_core::NativeBatchMutationV1::Put {
+                key: key.as_bytes().to_vec(),
+                bytes: bytes.into_bytes().to_vec(),
+                headers: ObjectHeaders {
                     content_type: self.content_type,
                     ..ObjectHeaders::default()
                 },
-                self.metadata.unwrap_or_default().into_iter().collect(),
-            )
-            .await?;
+                user_metadata: self.metadata.unwrap_or_default().into_iter().collect(),
+            },
+        );
         Ok(())
     }
 }
@@ -1981,21 +1751,12 @@ impl<'a> StagedDeleteObjectBuilder<'a> {
             .client
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
-        if let Some(mutations) = self.session.native_mutations.as_mut() {
-            mutations.insert(
-                key.as_bytes().to_vec(),
-                prolly_s3_core::NativeBatchMutationV1::Delete {
-                    key: key.as_bytes().to_vec(),
-                },
-            );
-            return Ok(());
-        }
-        self.session.manifest = self
-            .session
-            .client
-            .repository
-            .workspace_delete(self.session.manifest.id, key.as_bytes().to_vec())
-            .await?;
+        self.session.native_mutations.insert(
+            key.as_bytes().to_vec(),
+            prolly_s3_core::NativeBatchMutationV1::Delete {
+                key: key.as_bytes().to_vec(),
+            },
+        );
         Ok(())
     }
 }
@@ -2017,7 +1778,6 @@ pub struct PutObjectBuilder {
     checksum_sha256: Option<String>,
     expected_head: Option<CommitId>,
     operation_id: Option<OperationId>,
-    logical_retry_limit: Option<u8>,
     deadline: Option<Instant>,
 }
 
@@ -2040,7 +1800,6 @@ impl PutObjectBuilder {
             checksum_sha256: None,
             expected_head: None,
             operation_id: None,
-            logical_retry_limit: None,
             deadline: None,
         }
     }
@@ -2134,17 +1893,12 @@ impl PutObjectBuilder {
         self.operation_id = Some(v);
         self
     }
-    pub fn logical_retry_limit(mut self, value: u8) -> Self {
-        self.logical_retry_limit = Some(value);
-        self
-    }
     pub fn deadline(mut self, value: Instant) -> Self {
         self.deadline = Some(value);
         self
     }
 
     pub async fn send(mut self) -> Result<Versioned<PutObjectOutput>> {
-        validate_logical_retry_limit(self.logical_retry_limit)?;
         let operation = self.operation_id.unwrap_or_default();
         self.operation_id = Some(operation);
         let deadline = self.deadline;
@@ -2175,7 +1929,7 @@ impl PutObjectBuilder {
         let receipt = self
             .client
             .repository
-            .put_stream_checked_with_retry_limit(
+            .put_stream_checked(
                 &self.client.branch,
                 key,
                 body,
@@ -2207,7 +1961,6 @@ impl PutObjectBuilder {
                         .map(|value| decode_checksum::<32>(value, "checksum_sha256"))
                         .transpose()?,
                 },
-                self.logical_retry_limit,
             )
             .await?;
         self.client.record_advisory(&receipt).await;
@@ -2368,7 +2121,7 @@ impl GetObjectBuilder {
         )?;
         validate_checksum_mode(self.checksum_mode.as_ref())?;
         let (body, response_len, content_range) = match &summary.version.body.kind {
-            ObjectVersionKindV1::Live { size, .. } => {
+            LogicalObjectVersionKindV1::Live { size, .. } => {
                 let selected_range = self
                     .range
                     .as_deref()
@@ -2390,7 +2143,7 @@ impl GetObjectBuilder {
                     content_range,
                 )
             }
-            ObjectVersionKindV1::DeleteMarker => {
+            LogicalObjectVersionKindV1::DeleteMarker => {
                 if self.range.is_some() {
                     return Err(Error::new(
                         ErrorCode::InvalidRange,
@@ -2408,7 +2161,7 @@ impl GetObjectBuilder {
             .accept_ranges("bytes")
             .set_content_range(content_range);
         match &summary.version.body.kind {
-            ObjectVersionKindV1::Live {
+            LogicalObjectVersionKindV1::Live {
                 logical_etag,
                 headers,
                 checksums,
@@ -2430,7 +2183,7 @@ impl GetObjectBuilder {
                     )
                     .set_metadata(Some(user_metadata.clone().into_iter().collect()));
             }
-            ObjectVersionKindV1::DeleteMarker => {
+            LogicalObjectVersionKindV1::DeleteMarker => {
                 output = output.delete_marker(true);
             }
         }
@@ -2548,7 +2301,7 @@ impl HeadObjectBuilder {
             .last_modified(datetime(summary.version.body.created_at_millis)?)
             .accept_ranges("bytes");
         match &summary.version.body.kind {
-            ObjectVersionKindV1::Live {
+            LogicalObjectVersionKindV1::Live {
                 size,
                 logical_etag,
                 headers,
@@ -2572,7 +2325,7 @@ impl HeadObjectBuilder {
                     )
                     .set_metadata(Some(user_metadata.clone().into_iter().collect()));
             }
-            ObjectVersionKindV1::DeleteMarker => {
+            LogicalObjectVersionKindV1::DeleteMarker => {
                 output = output.delete_marker(true);
             }
         }
@@ -2885,219 +2638,89 @@ impl ListMultipartUploadsBuilder {
                 .set_uploads(Some(Vec::new()))
                 .build());
         }
-        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let page = self
-                .client
-                .repository
-                .plane()
-                .list_native_multipart_uploads(prolly_s3_core::NativeMultipartListUploads {
-                    prefix: prefix.clone(),
-                    key_marker: self.key_marker.clone(),
-                    upload_id_marker: self.upload_id_marker.clone(),
-                    limit,
-                })
-                .await?;
-            let mut uploads = page
-                .uploads
-                .iter()
-                .map(|upload| {
-                    let key = upload.path.as_str().to_string();
-                    let handle = encode_native_multipart_session(&NativeMultipartSessionV1 {
-                        repository: self.client.repository_id(),
-                        branch: self.client.branch.clone(),
-                        key: key.as_bytes().to_vec(),
-                        headers: ObjectHeaders::default(),
-                        user_metadata: BTreeMap::new(),
-                        provider_upload_id: upload.upload_id.clone(),
-                        operation: OperationId::nil(),
-                        writer_fence_generation: 0,
-                        created_at_millis: upload.initiated_at_millis,
-                        discovered: true,
-                    })?;
-                    Ok(MultipartUpload::builder()
-                        .key(key)
-                        .upload_id(handle)
-                        .initiated(datetime(upload.initiated_at_millis)?)
-                        .build())
-                })
-                .collect::<Result<Vec<_>>>()?;
-            if page.next_key_marker.is_none() {
-                let sessions = self.client.native_multipart_sessions.read().map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart session cache lock poisoned",
-                    )
-                })?;
-                for (handle, session) in sessions.iter() {
-                    let key = std::str::from_utf8(&session.key).map_err(|_| {
-                        Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-                    })?;
-                    if session.branch == self.client.branch
-                        && key.starts_with(&prefix)
-                        && !page.uploads.iter().any(|upload| {
-                            upload.path.as_str() == key
-                                && upload.upload_id == session.provider_upload_id
-                        })
-                    {
-                        uploads.push(
-                            MultipartUpload::builder()
-                                .key(key)
-                                .upload_id(handle)
-                                .initiated(datetime(session.created_at_millis)?)
-                                .build(),
-                        );
-                    }
-                }
-            }
-            uploads.sort_by(|left, right| {
-                (
-                    left.key().unwrap_or_default(),
-                    left.upload_id().unwrap_or_default(),
-                )
-                    .cmp(&(
-                        right.key().unwrap_or_default(),
-                        right.upload_id().unwrap_or_default(),
-                    ))
-            });
-            uploads.truncate(limit);
-            return Ok(ListMultipartUploadsOutput::builder()
-                .bucket(&self.client.bucket)
-                .prefix(prefix)
-                .max_uploads(i32::try_from(limit).unwrap_or(i32::MAX))
-                .is_truncated(page.next_key_marker.is_some())
-                .set_key_marker(self.key_marker)
-                .set_upload_id_marker(self.upload_id_marker)
-                .set_next_key_marker(page.next_key_marker)
-                .set_next_upload_id_marker(page.next_upload_id_marker)
-                .set_uploads(Some(uploads))
-                .build());
-        }
-
-        let (snapshot, offset, expires_at_millis) =
-            match (self.key_marker.as_deref(), self.upload_id_marker.as_deref()) {
-                (Some(key), Some(marker)) if UploadId::from_str(marker).is_err() => {
-                    let cursor = self.client.decode_multipart_cursor(marker)?;
-                    validate_multipart_listing_cursor(&cursor, &self.client, &prefix, key)?;
-                    (
-                        cursor.snapshot,
-                        cursor.next_offset,
-                        cursor.expires_at_millis,
-                    )
-                }
-                (key_marker, upload_marker) => {
-                    let expires_at_millis = now_millis_client()?
-                        .checked_add(self.client.cursor_ttl.as_millis() as u64)
-                        .ok_or_else(|| {
-                            Error::new(ErrorCode::InternalInvariant, "cursor expiry overflow")
-                        })?;
-                    let snapshot = self
-                        .client
-                        .repository
-                        .create_multipart_catalog_snapshot(
-                            &self.client.branch,
-                            prefix.as_bytes(),
-                            expires_at_millis,
-                        )
-                        .await?;
-                    let raw_upload = upload_marker.map(UploadId::from_str).transpose()?;
-                    let offset = snapshot
-                        .body
-                        .entries
-                        .partition_point(|entry| match raw_upload {
-                            Some(upload) => {
-                                (entry.key.as_slice(), entry.id)
-                                    <= (key_marker.unwrap_or_default().as_bytes(), upload)
-                            }
-                            None => {
-                                key_marker.is_some_and(|key| entry.key.as_slice() <= key.as_bytes())
-                            }
-                        });
-                    (
-                        snapshot.id,
-                        u64::try_from(offset).map_err(|_| {
-                            Error::new(
-                                ErrorCode::InternalInvariant,
-                                "multipart catalog offset overflow",
-                            )
-                        })?,
-                        expires_at_millis,
-                    )
-                }
-            };
-        let (summaries, truncated) = self
+        let page = self
             .client
             .repository
-            .list_multipart_catalog_snapshot(
-                snapshot,
-                &self.client.branch,
-                prefix.as_bytes(),
-                expires_at_millis,
-                offset,
+            .plane()
+            .list_native_multipart_uploads(prolly_s3_core::NativeMultipartListUploads {
+                prefix: prefix.clone(),
+                key_marker: self.key_marker.clone(),
+                upload_id_marker: self.upload_id_marker.clone(),
                 limit,
-            )
+            })
             .await?;
-        let next_key_marker = truncated
-            .then(|| summaries.last())
-            .flatten()
-            .map(|upload| utf8_key(&upload.key))
-            .transpose()?;
-        let next_upload_id_marker = if truncated {
-            let last = summaries.last().ok_or_else(|| {
-                Error::new(
-                    ErrorCode::InternalInvariant,
-                    "truncated multipart catalog page is empty",
-                )
-            })?;
-            let next_offset = offset
-                .checked_add(u64::try_from(summaries.len()).map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "multipart page length overflow",
-                    )
-                })?)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "multipart catalog offset overflow",
-                    )
-                })?;
-            Some(
-                self.client
-                    .encode_multipart_cursor(&MultipartListingCursor {
-                        version: 1,
-                        kind: "multipart-uploads".to_string(),
-                        repository: self.client.repository_id(),
-                        bucket: self.client.bucket.clone(),
-                        branch: self.client.branch.clone(),
-                        snapshot,
-                        prefix: prefix.clone(),
-                        next_offset,
-                        last_key: last.key.clone(),
-                        expires_at_millis,
-                    })?,
-            )
-        } else {
-            None
-        };
-        let uploads = summaries
-            .into_iter()
+        let mut uploads = page
+            .uploads
+            .iter()
             .map(|upload| {
+                let key = upload.path.as_str().to_string();
+                let handle = encode_native_multipart_session(&NativeMultipartSessionV1 {
+                    repository: self.client.repository_id(),
+                    branch: self.client.branch.clone(),
+                    key: key.as_bytes().to_vec(),
+                    headers: ObjectHeaders::default(),
+                    user_metadata: BTreeMap::new(),
+                    provider_upload_id: upload.upload_id.clone(),
+                    operation: OperationId::nil(),
+                    writer_fence_generation: 0,
+                    created_at_millis: upload.initiated_at_millis,
+                    discovered: true,
+                })?;
                 Ok(MultipartUpload::builder()
-                    .key(utf8_key(&upload.key)?)
-                    .upload_id(upload.id.to_string())
-                    .initiated(datetime(upload.created_at_millis)?)
+                    .key(key)
+                    .upload_id(handle)
+                    .initiated(datetime(upload.initiated_at_millis)?)
                     .build())
             })
             .collect::<Result<Vec<_>>>()?;
+        if page.next_key_marker.is_none() {
+            let sessions = self.client.native_multipart_sessions.read().map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart session cache lock poisoned",
+                )
+            })?;
+            for (handle, session) in sessions.iter() {
+                let key = std::str::from_utf8(&session.key).map_err(|_| {
+                    Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+                })?;
+                if session.branch == self.client.branch
+                    && key.starts_with(&prefix)
+                    && !page.uploads.iter().any(|upload| {
+                        upload.path.as_str() == key
+                            && upload.upload_id == session.provider_upload_id
+                    })
+                {
+                    uploads.push(
+                        MultipartUpload::builder()
+                            .key(key)
+                            .upload_id(handle)
+                            .initiated(datetime(session.created_at_millis)?)
+                            .build(),
+                    );
+                }
+            }
+        }
+        uploads.sort_by(|left, right| {
+            (
+                left.key().unwrap_or_default(),
+                left.upload_id().unwrap_or_default(),
+            )
+                .cmp(&(
+                    right.key().unwrap_or_default(),
+                    right.upload_id().unwrap_or_default(),
+                ))
+        });
+        uploads.truncate(limit);
         Ok(ListMultipartUploadsOutput::builder()
             .bucket(&self.client.bucket)
             .prefix(prefix)
             .max_uploads(i32::try_from(limit).unwrap_or(i32::MAX))
-            .is_truncated(truncated)
+            .is_truncated(page.next_key_marker.is_some())
             .set_key_marker(self.key_marker)
             .set_upload_id_marker(self.upload_id_marker)
-            .set_next_key_marker(next_key_marker)
-            .set_next_upload_id_marker(next_upload_id_marker)
+            .set_next_key_marker(page.next_key_marker)
+            .set_next_upload_id_marker(page.next_upload_id_marker)
             .set_uploads(Some(uploads))
             .build())
     }
@@ -3143,44 +2766,28 @@ impl CreateMultipartUploadBuilder {
             ..ObjectHeaders::default()
         };
         let metadata = self.metadata.unwrap_or_default().into_iter().collect();
-        let upload_id = if self.client.repository.storage_profile()
-            == RepositoryStorageProfile::NativeVersionedV1
-        {
-            let session = self
-                .client
-                .repository
-                .create_native_multipart_upload(
-                    &self.client.branch,
-                    key.as_bytes().to_vec(),
-                    headers,
-                    metadata,
-                    self.operation_id,
+        let session = self
+            .client
+            .repository
+            .create_native_multipart_upload(
+                &self.client.branch,
+                key.as_bytes().to_vec(),
+                headers,
+                metadata,
+                self.operation_id,
+            )
+            .await?;
+        let upload_id = encode_native_multipart_session(&session)?;
+        self.client
+            .native_multipart_sessions
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart session cache lock poisoned",
                 )
-                .await?;
-            let handle = encode_native_multipart_session(&session)?;
-            self.client
-                .native_multipart_sessions
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart session cache lock poisoned",
-                    )
-                })?
-                .insert(handle.clone(), session);
-            handle
-        } else {
-            self.client
-                .repository
-                .create_multipart_upload(
-                    &self.client.branch,
-                    key.as_bytes().to_vec(),
-                    headers,
-                    metadata,
-                )
-                .await?
-                .to_string()
-        };
+            })?
+            .insert(upload_id.clone(), session);
         Ok(CreateMultipartUploadOutput::builder()
             .bucket(&self.client.bucket)
             .key(key)
@@ -3271,48 +2878,12 @@ impl UploadPartCopyBuilder {
         } else {
             None
         };
-        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let session = decode_native_multipart_session(&self.client, upload_text, destination)?;
-            let part = self
-                .client
-                .repository
-                .upload_native_multipart_part_copy(
-                    &session,
-                    part_number,
-                    &self.client.branch,
-                    source_key.as_bytes(),
-                    source_version,
-                    range,
-                )
-                .await?;
-            self.client
-                .native_multipart_parts
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart part cache lock poisoned",
-                    )
-                })?
-                .insert((upload_text.to_string(), part_number), part.clone());
-            return Ok(UploadPartCopyOutput::builder()
-                .copy_part_result(
-                    CopyPartResult::builder()
-                        .e_tag(part.etag)
-                        .set_checksum_sha256(
-                            part.checksum_sha256.map(|value| STANDARD.encode(value)),
-                        )
-                        .build(),
-                )
-                .build());
-        }
-        let upload = UploadId::from_str(upload_text)?;
-        validate_upload_binding(&self.client, upload, destination).await?;
+        let session = decode_native_multipart_session(&self.client, upload_text, destination)?;
         let part = self
             .client
             .repository
-            .upload_part_copy(
-                upload,
+            .upload_native_multipart_part_copy(
+                &session,
                 part_number,
                 &self.client.branch,
                 source_key.as_bytes(),
@@ -3320,11 +2891,21 @@ impl UploadPartCopyBuilder {
                 range,
             )
             .await?;
+        self.client
+            .native_multipart_parts
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart part cache lock poisoned",
+                )
+            })?
+            .insert((upload_text.to_string(), part_number), part.clone());
         Ok(UploadPartCopyOutput::builder()
             .copy_part_result(
                 CopyPartResult::builder()
                     .e_tag(part.etag)
-                    .last_modified(datetime(part.updated_at_millis)?)
+                    .set_checksum_sha256(part.checksum_sha256.map(|value| STANDARD.encode(value)))
                     .build(),
             )
             .build())
@@ -3380,42 +2961,29 @@ impl UploadPartBuilder {
         )
         .map_err(|_| invalid("part_number must be positive"))?;
         let body = self.body.ok_or_else(|| invalid("body is required"))?;
-        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
-            let stream = futures_util::stream::unfold(body, |mut body| async move {
-                body.next().await.map(|item| (item, body))
-            });
-            let part = self
-                .client
-                .repository
-                .upload_native_multipart_part_stream(&session, part_number, stream)
-                .await?;
-            self.client
-                .native_multipart_parts
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart part cache lock poisoned",
-                    )
-                })?
-                .insert((upload_text.to_string(), part_number), part.clone());
-            return Ok(UploadPartOutput::builder()
-                .e_tag(part.etag)
-                .set_checksum_sha256(part.checksum_sha256.map(|value| STANDARD.encode(value)))
-                .build());
-        }
-        let upload = UploadId::from_str(upload_text)?;
-        validate_upload_binding(&self.client, upload, key).await?;
+        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
         let stream = futures_util::stream::unfold(body, |mut body| async move {
             body.next().await.map(|item| (item, body))
         });
         let part = self
             .client
             .repository
-            .upload_part_stream(upload, part_number, stream)
+            .upload_native_multipart_part_stream(&session, part_number, stream)
             .await?;
-        Ok(UploadPartOutput::builder().e_tag(part.etag).build())
+        self.client
+            .native_multipart_parts
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart part cache lock poisoned",
+                )
+            })?
+            .insert((upload_text.to_string(), part_number), part.clone());
+        Ok(UploadPartOutput::builder()
+            .e_tag(part.etag)
+            .set_checksum_sha256(part.checksum_sha256.map(|value| STANDARD.encode(value)))
+            .build())
     }
 }
 
@@ -3462,69 +3030,7 @@ impl ListPartsBuilder {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
-        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
-            let marker = self
-                .part_number_marker
-                .as_deref()
-                .map(str::parse::<u32>)
-                .transpose()
-                .map_err(|_| invalid("part_number_marker must be an integer"))?
-                .unwrap_or(0);
-            let limit = validate_limit(self.max_parts)?;
-            let page = self
-                .client
-                .repository
-                .plane()
-                .list_native_multipart_parts(prolly_s3_core::NativeMultipartListParts {
-                    path: ObjectPath::new(key)?,
-                    upload_id: session.provider_upload_id,
-                    after_part_number: marker,
-                    limit,
-                })
-                .await?;
-            let mut cache = self.client.native_multipart_parts.write().map_err(|_| {
-                Error::new(
-                    ErrorCode::InternalInvariant,
-                    "native multipart part cache lock poisoned",
-                )
-            })?;
-            for part in &page.parts {
-                let key = (upload_text.to_string(), part.part_number);
-                let mut merged = part.clone();
-                if merged.checksum_sha256.is_none() {
-                    merged.checksum_sha256 = cache.get(&key).and_then(|part| part.checksum_sha256);
-                }
-                cache.insert(key, merged);
-            }
-            drop(cache);
-            let parts = page
-                .parts
-                .into_iter()
-                .map(|part| {
-                    Part::builder()
-                        .part_number(i32::try_from(part.part_number).unwrap_or(i32::MAX))
-                        .e_tag(part.etag)
-                        .set_checksum_sha256(
-                            part.checksum_sha256.map(|value| STANDARD.encode(value)),
-                        )
-                        .size(i64_len(part.size).expect("provider part size is valid"))
-                        .build()
-                })
-                .collect();
-            return Ok(ListPartsOutput::builder()
-                .bucket(&self.client.bucket)
-                .key(key)
-                .upload_id(upload_text)
-                .set_part_number_marker(self.part_number_marker)
-                .set_next_part_number_marker(page.next_part_number.map(|value| value.to_string()))
-                .max_parts(i32::try_from(limit).unwrap_or(i32::MAX))
-                .is_truncated(page.next_part_number.is_some())
-                .set_parts(Some(parts))
-                .build());
-        }
-        let upload = UploadId::from_str(upload_text)?;
-        validate_upload_binding(&self.client, upload, key).await?;
+        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
         let marker = self
             .part_number_marker
             .as_deref()
@@ -3533,32 +3039,41 @@ impl ListPartsBuilder {
             .map_err(|_| invalid("part_number_marker must be an integer"))?
             .unwrap_or(0);
         let limit = validate_limit(self.max_parts)?;
-        let all = self.client.repository.list_parts(upload).await?;
-        let mut selected: Vec<_> = if limit == 0 {
-            Vec::new()
-        } else {
-            all.into_iter()
-                .filter(|part| part.part_number > marker)
-                .take(limit + 1)
-                .collect()
-        };
-        let truncated = selected.len() > limit;
-        selected.truncate(limit);
-        let next = if truncated {
-            selected.last().map(|part| part.part_number.to_string())
-        } else {
-            None
-        };
-        let parts = selected
+        let page = self
+            .client
+            .repository
+            .plane()
+            .list_native_multipart_parts(prolly_s3_core::NativeMultipartListParts {
+                path: ObjectPath::new(key)?,
+                upload_id: session.provider_upload_id,
+                after_part_number: marker,
+                limit,
+            })
+            .await?;
+        let mut cache = self.client.native_multipart_parts.write().map_err(|_| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "native multipart part cache lock poisoned",
+            )
+        })?;
+        for part in &page.parts {
+            let key = (upload_text.to_string(), part.part_number);
+            let mut merged = part.clone();
+            if merged.checksum_sha256.is_none() {
+                merged.checksum_sha256 = cache.get(&key).and_then(|part| part.checksum_sha256);
+            }
+            cache.insert(key, merged);
+        }
+        drop(cache);
+        let parts = page
+            .parts
             .into_iter()
             .map(|part| {
                 Part::builder()
                     .part_number(i32::try_from(part.part_number).unwrap_or(i32::MAX))
-                    .last_modified(
-                        datetime(part.updated_at_millis).expect("stored timestamp is valid"),
-                    )
                     .e_tag(part.etag)
-                    .size(i64_len(part.content.size).expect("stored size is valid"))
+                    .set_checksum_sha256(part.checksum_sha256.map(|value| STANDARD.encode(value)))
+                    .size(i64_len(part.size).expect("provider part size is valid"))
                     .build()
             })
             .collect();
@@ -3567,9 +3082,9 @@ impl ListPartsBuilder {
             .key(key)
             .upload_id(upload_text)
             .set_part_number_marker(self.part_number_marker)
-            .set_next_part_number_marker(next)
+            .set_next_part_number_marker(page.next_part_number.map(|value| value.to_string()))
             .max_parts(i32::try_from(limit).unwrap_or(i32::MAX))
-            .is_truncated(truncated)
+            .is_truncated(page.next_part_number.is_some())
             .set_parts(Some(parts))
             .build())
     }
@@ -3645,127 +3160,99 @@ impl CompleteMultipartUploadBuilder {
         let completed = self
             .multipart_upload
             .ok_or_else(|| invalid("multipart_upload is required"))?;
-        let mut requested = Vec::with_capacity(completed.parts().len());
-        for part in completed.parts() {
-            let number = u32::try_from(
-                part.part_number()
-                    .ok_or_else(|| invalid("completed part_number is required"))?,
-            )
-            .map_err(|_| invalid("completed part_number must be positive"))?;
-            let etag = required(part.e_tag(), "completed e_tag")?.to_string();
-            requested.push((number, etag));
-        }
-        let receipt = if self.client.repository.storage_profile()
-            == RepositoryStorageProfile::NativeVersionedV1
-        {
-            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
-            let checksum_sha256 = decode_checksum::<32>(
-                required(self.checksum_sha256.as_deref(), "checksum_sha256")?,
-                "checksum_sha256",
-            )?;
-            let checksum_md5 = decode_checksum::<16>(
-                required(self.checksum_md5.as_deref(), "checksum_md5")?,
-                "checksum_md5",
-            )?;
-            let expected_size = self
-                .expected_size
-                .ok_or_else(|| invalid("expected_size is required for native multipart"))?;
-            let native_parts = {
-                let cached = self.client.native_multipart_parts.read().map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart part cache lock poisoned",
-                    )
-                })?;
-                let mut native_parts = Vec::with_capacity(completed.parts().len());
-                for part in completed.parts() {
-                    let part_number = u32::try_from(
-                        part.part_number()
-                            .ok_or_else(|| invalid("completed part_number is required"))?,
-                    )
-                    .map_err(|_| invalid("completed part_number must be positive"))?;
-                    let etag = required(part.e_tag(), "completed e_tag")?.to_string();
-                    let cached_part = cached.get(&(upload_text.to_string(), part_number));
-                    let checksum = match part.checksum_sha256() {
-                        Some(value) => decode_checksum::<32>(value, "completed checksum_sha256")?,
-                        None => cached_part
-                            .and_then(|part| part.checksum_sha256)
-                            .ok_or_else(|| {
-                                invalid(
-                                    "completed checksum_sha256 is required after a process restart",
-                                )
-                            })?,
-                    };
-                    let size = self
-                        .part_sizes
-                        .get(&part_number)
-                        .copied()
-                        .or_else(|| cached_part.map(|part| part.size))
-                        .ok_or_else(|| {
-                            invalid(
-                                "part_size is required after a native multipart process restart",
-                            )
-                        })?;
-                    if cached_part.is_some_and(|part| {
-                        part.etag != etag
-                            || part.checksum_sha256 != Some(checksum)
-                            || part.size != size
-                    }) {
-                        return Err(Error::new(
-                            ErrorCode::ChecksumMismatch,
-                            "completed native multipart part differs from its upload receipt",
-                        ));
-                    }
-                    native_parts.push(NativeMultipartCompletedPart {
-                        part_number,
-                        etag,
-                        checksum_sha256: checksum,
-                        size,
-                    });
-                }
-                native_parts
-            };
-            let receipt = self
-                .client
-                .repository
-                .complete_native_multipart_upload(
-                    session,
-                    native_parts,
-                    checksum_sha256,
-                    checksum_md5,
-                    expected_size,
-                    self.operation_id,
+        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+        let checksum_sha256 = decode_checksum::<32>(
+            required(self.checksum_sha256.as_deref(), "checksum_sha256")?,
+            "checksum_sha256",
+        )?;
+        let checksum_md5 = decode_checksum::<16>(
+            required(self.checksum_md5.as_deref(), "checksum_md5")?,
+            "checksum_md5",
+        )?;
+        let expected_size = self
+            .expected_size
+            .ok_or_else(|| invalid("expected_size is required for native multipart"))?;
+        let native_parts = {
+            let cached = self.client.native_multipart_parts.read().map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart part cache lock poisoned",
                 )
-                .await?;
-            self.client
-                .native_multipart_parts
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart part cache lock poisoned",
-                    )
-                })?
-                .retain(|(upload, _), _| upload != upload_text);
-            self.client
-                .native_multipart_sessions
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart session cache lock poisoned",
-                    )
-                })?
-                .remove(upload_text);
-            receipt
-        } else {
-            let upload = UploadId::from_str(upload_text)?;
-            validate_upload_binding(&self.client, upload, key).await?;
-            self.client
-                .repository
-                .complete_multipart_upload(upload, requested, self.operation_id)
-                .await?
+            })?;
+            let mut native_parts = Vec::with_capacity(completed.parts().len());
+            for part in completed.parts() {
+                let part_number = u32::try_from(
+                    part.part_number()
+                        .ok_or_else(|| invalid("completed part_number is required"))?,
+                )
+                .map_err(|_| invalid("completed part_number must be positive"))?;
+                let etag = required(part.e_tag(), "completed e_tag")?.to_string();
+                let cached_part = cached.get(&(upload_text.to_string(), part_number));
+                let checksum = match part.checksum_sha256() {
+                    Some(value) => decode_checksum::<32>(value, "completed checksum_sha256")?,
+                    None => cached_part
+                        .and_then(|part| part.checksum_sha256)
+                        .ok_or_else(|| {
+                            invalid("completed checksum_sha256 is required after a process restart")
+                        })?,
+                };
+                let size = self
+                    .part_sizes
+                    .get(&part_number)
+                    .copied()
+                    .or_else(|| cached_part.map(|part| part.size))
+                    .ok_or_else(|| {
+                        invalid("part_size is required after a native multipart process restart")
+                    })?;
+                if cached_part.is_some_and(|part| {
+                    part.etag != etag || part.checksum_sha256 != Some(checksum) || part.size != size
+                }) {
+                    return Err(Error::new(
+                        ErrorCode::ChecksumMismatch,
+                        "completed native multipart part differs from its upload receipt",
+                    ));
+                }
+                native_parts.push(NativeMultipartCompletedPart {
+                    part_number,
+                    etag,
+                    checksum_sha256: checksum,
+                    size,
+                });
+            }
+            native_parts
         };
+        let receipt = self
+            .client
+            .repository
+            .complete_native_multipart_upload(
+                session,
+                native_parts,
+                checksum_sha256,
+                checksum_md5,
+                expected_size,
+                self.operation_id,
+            )
+            .await?;
+        self.client
+            .native_multipart_parts
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart part cache lock poisoned",
+                )
+            })?
+            .retain(|(upload, _), _| upload != upload_text);
+        self.client
+            .native_multipart_sessions
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart session cache lock poisoned",
+                )
+            })?
+            .remove(upload_text);
         self.client.record_advisory(&receipt).await;
         let summary = self
             .client
@@ -3824,40 +3311,31 @@ impl AbortMultipartUploadBuilder {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
-        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
-            self.client
-                .repository
-                .abort_native_multipart_upload(&session)
-                .await?;
-            self.client
-                .native_multipart_parts
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart part cache lock poisoned",
-                    )
-                })?
-                .retain(|(upload, _), _| upload != upload_text);
-            self.client
-                .native_multipart_sessions
-                .write()
-                .map_err(|_| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native multipart session cache lock poisoned",
-                    )
-                })?
-                .remove(upload_text);
-        } else {
-            let upload = UploadId::from_str(upload_text)?;
-            validate_upload_binding(&self.client, upload, key).await?;
-            self.client
-                .repository
-                .abort_multipart_upload(upload)
-                .await?;
-        }
+        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+        self.client
+            .repository
+            .abort_native_multipart_upload(&session)
+            .await?;
+        self.client
+            .native_multipart_parts
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart part cache lock poisoned",
+                )
+            })?
+            .retain(|(upload, _), _| upload != upload_text);
+        self.client
+            .native_multipart_sessions
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart session cache lock poisoned",
+                )
+            })?
+            .remove(upload_text);
         Ok(AbortMultipartUploadOutput::builder().build())
     }
 }
@@ -4182,7 +3660,7 @@ impl ListObjectVersionsBuilder {
             let is_latest = latest.insert(key.clone());
             let when = datetime(version.body.created_at_millis)?;
             match version.body.kind {
-                ObjectVersionKindV1::Live {
+                LogicalObjectVersionKindV1::Live {
                     size, logical_etag, ..
                 } => versions.push(
                     ObjectVersion::builder()
@@ -4194,7 +3672,7 @@ impl ListObjectVersionsBuilder {
                         .e_tag(logical_etag)
                         .build(),
                 ),
-                ObjectVersionKindV1::DeleteMarker => markers.push(
+                LogicalObjectVersionKindV1::DeleteMarker => markers.push(
                     DeleteMarkerEntry::builder()
                         .key(key)
                         .version_id(version.id.to_string())
@@ -4442,18 +3920,7 @@ fn validate_deadline(deadline: Option<Instant>) -> Result<()> {
     Ok(())
 }
 fn validate_write_options(options: &WriteOptions) -> Result<()> {
-    validate_logical_retry_limit(options.logical_retry_limit)?;
     validate_deadline(options.deadline)?;
-    Ok(())
-}
-
-fn validate_logical_retry_limit(limit: Option<u8>) -> Result<()> {
-    if limit.is_some_and(|limit| limit > MAX_LOGICAL_RETRY_LIMIT) {
-        return Err(Error::new(
-            ErrorCode::InvalidLimit,
-            "logical retry limit must be at most 16",
-        ));
-    }
     Ok(())
 }
 
@@ -4497,18 +3964,8 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::InvalidRequest, message)
 }
 
-fn validate_profile_capabilities(
-    profile: RepositoryStorageProfile,
-    attestation: &ProviderAttestationV1,
-) -> Result<()> {
-    match profile {
-        RepositoryStorageProfile::DistributedContentAddressedV1 => {
-            attestation.body.capabilities.validate_distributed()
-        }
-        RepositoryStorageProfile::NativeVersionedV1 => {
-            attestation.body.capabilities.validate_native_versioned()
-        }
-    }
+fn validate_native_capabilities(attestation: &ProviderAttestationV1) -> Result<()> {
+    attestation.body.capabilities.validate_native_versioned()
 }
 fn validate_branch_name(branch: &str) -> Result<()> {
     if branch.is_empty()
@@ -4579,25 +4036,6 @@ fn validate_listing_cursor(
     }
     Ok(())
 }
-fn validate_multipart_listing_cursor(
-    cursor: &MultipartListingCursor,
-    client: &Client,
-    prefix: &str,
-    key_marker: &str,
-) -> Result<()> {
-    if cursor.repository != client.repository_id()
-        || cursor.bucket != client.bucket
-        || cursor.branch != client.branch
-        || cursor.prefix != prefix
-        || cursor.last_key.as_slice() != key_marker.as_bytes()
-    {
-        return Err(Error::new(
-            ErrorCode::InvalidContinuationToken,
-            "multipart continuation does not match this listing request",
-        ));
-    }
-    Ok(())
-}
 fn parse_copy_source(value: &str) -> Result<(String, String, Option<ObjectVersionId>)> {
     let value = value.trim_start_matches('/');
     let (path, query) = value
@@ -4625,17 +4063,6 @@ fn parse_copy_source(value: &str) -> Result<(String, String, Option<ObjectVersio
     }
     Ok((bucket.to_string(), key, version))
 }
-async fn validate_upload_binding(client: &Client, upload: UploadId, key: &str) -> Result<()> {
-    let manifest = client.repository.multipart_upload(upload).await?;
-    if manifest.branch != client.branch || manifest.key != key.as_bytes() {
-        return Err(Error::new(
-            ErrorCode::NoSuchUpload,
-            "multipart upload does not belong to this branch and key",
-        ));
-    }
-    Ok(())
-}
-
 const NATIVE_MULTIPART_HANDLE_PREFIX: &str = "nmu1_";
 
 fn encode_native_multipart_session(session: &NativeMultipartSessionV1) -> Result<String> {
@@ -4698,10 +4125,10 @@ fn i64_len(len: u64) -> Result<i64> {
 }
 fn live_etag_size(summary: &ObjectSummary) -> Result<(String, u64)> {
     match &summary.version.body.kind {
-        ObjectVersionKindV1::Live {
+        LogicalObjectVersionKindV1::Live {
             logical_etag, size, ..
         } => Ok((logical_etag.clone(), *size)),
-        ObjectVersionKindV1::DeleteMarker => Err(Error::new(
+        LogicalObjectVersionKindV1::DeleteMarker => Err(Error::new(
             ErrorCode::NoSuchKey,
             "current version is a delete marker",
         )),
@@ -4709,8 +4136,8 @@ fn live_etag_size(summary: &ObjectSummary) -> Result<(String, u64)> {
 }
 fn live_sha256(summary: &ObjectSummary) -> Result<Option<[u8; 32]>> {
     match &summary.version.body.kind {
-        ObjectVersionKindV1::Live { checksums, .. } => Ok(checksums.sha256),
-        ObjectVersionKindV1::DeleteMarker => Err(Error::new(
+        LogicalObjectVersionKindV1::Live { checksums, .. } => Ok(checksums.sha256),
+        LogicalObjectVersionKindV1::DeleteMarker => Err(Error::new(
             ErrorCode::NoSuchKey,
             "current version is a delete marker",
         )),
@@ -4760,8 +4187,8 @@ fn validate_read_conditions(
     if_unmodified_since: Option<&DateTime>,
 ) -> Result<()> {
     let current_etag = match &summary.version.body.kind {
-        ObjectVersionKindV1::Live { logical_etag, .. } => Some(logical_etag.as_str()),
-        ObjectVersionKindV1::DeleteMarker => None,
+        LogicalObjectVersionKindV1::Live { logical_etag, .. } => Some(logical_etag.as_str()),
+        LogicalObjectVersionKindV1::DeleteMarker => None,
     };
     let modified_seconds =
         i64::try_from(summary.version.body.created_at_millis / 1_000).map_err(|_| {
@@ -4924,28 +4351,16 @@ mod tests {
     }
 
     #[test]
-    fn logical_retry_limit_is_bounded_before_execution() {
-        validate_logical_retry_limit(Some(MAX_LOGICAL_RETRY_LIMIT)).unwrap();
-        let error = validate_logical_retry_limit(Some(MAX_LOGICAL_RETRY_LIMIT + 1)).unwrap_err();
-        assert_eq!(error.code, ErrorCode::InvalidLimit);
-        assert_eq!(error.retry, RetryAdvice::Never);
-    }
-
-    #[test]
     fn physical_layout_classifies_every_stable_namespace_family() {
-        assert_eq!(PHYSICAL_PATH_FAMILIES.len(), 21);
+        assert_eq!(PHYSICAL_PATH_FAMILIES.len(), 14);
         for required in [
             "format/v1.cbor",
             "providers/<provider-profile-id>.cbor",
-            "nodes/sha256/<2>/<2>/<cid>",
-            "chunks/sha256/<2>/<2>/<cid>",
-            "content-manifests/sha256/<2>/<2>/<cid>",
+            "node-packs/sha256/<2>/<2>/<pack-id>.pack",
+            "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
             "commits/sha256/<2>/<2>/<commit-id>",
-            "deltas/sha256/<2>/<2>/<delta-id>",
             "refs/{heads,tags}/<name-hex>",
-            "multipart/uploads/<upload-id>",
-            "workspaces/<workspace-id>",
-            "sync/runs/<operation-id-hex>",
+            "writers/lease.cbor",
             "gc/plans/<plan-id>.cbor",
             "gc/runs/<plan-id>.cbor",
         ] {

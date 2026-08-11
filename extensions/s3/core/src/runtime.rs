@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
-use crate::{Error, ErrorCode, OperationId, Result, UploadId, WorkspaceId};
+use crate::{BatchId, Error, ErrorCode, OperationId, Result};
 
 pub trait Clock: Send + Sync + 'static {
     fn now_millis(&self) -> Result<u64>;
@@ -56,8 +56,7 @@ impl Clock for FixedClock {
 
 pub trait IdSource: Send + Sync + 'static {
     fn operation(&self) -> OperationId;
-    fn workspace(&self) -> WorkspaceId;
-    fn upload(&self) -> UploadId;
+    fn batch(&self) -> BatchId;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -68,12 +67,8 @@ impl IdSource for RandomIdSource {
         OperationId::new()
     }
 
-    fn workspace(&self) -> WorkspaceId {
-        WorkspaceId::new()
-    }
-
-    fn upload(&self) -> UploadId {
-        UploadId::new()
+    fn batch(&self) -> BatchId {
+        BatchId::new()
     }
 }
 
@@ -102,11 +97,7 @@ impl IdSource for SequenceIdSource {
         OperationId(self.next_uuid())
     }
 
-    fn workspace(&self) -> WorkspaceId {
-        WorkspaceId(self.next_uuid())
-    }
-
-    fn upload(&self) -> UploadId {
-        UploadId(self.next_uuid())
+    fn batch(&self) -> BatchId {
+        BatchId(self.next_uuid())
     }
 }

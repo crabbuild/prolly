@@ -8,8 +8,7 @@ cargo deny --manifest-path "$security_root/Cargo.toml" \
 
 for lockfile in \
   "$security_root/Cargo.lock" \
-  "$security_root/qualification/downstream-client/Cargo.lock" \
-  "$security_root/qualification/rolling-client/Cargo.lock"
+  "$security_root/qualification/downstream-client/Cargo.lock"
 do
   if rg -n \
     '^name = "(bincode|paste|foyer|foyer-common|foyer-memory|foyer-storage|prolly-store-slatedb)"$|version = "0\.21\.12"|version = "0\.101\.7"|version = "0\.24\.2"' \

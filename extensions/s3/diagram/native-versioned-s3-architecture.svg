@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 650" role="img" aria-labelledby="title desc">
+  <title id="title">Native-versioned S3 architecture</title>
+  <desc id="desc">An application uses the Prolly S3 client. Whole files are stored at original keys as native S3 versions, while Prolly metadata records exact version identifiers and publishes commits through a branch reference.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08111f"/><stop offset="1" stop-color="#111b34"/></linearGradient>
+    <marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0 0 9 3.5 0 7Z" fill="#6ee7f9"/></marker>
+    <style>.h{font:700 22px ui-sans-serif,system-ui;fill:#f8fafc}.s{font:400 13px ui-sans-serif,system-ui;fill:#9fb0c8}.t{font:700 16px ui-sans-serif,system-ui;fill:#f8fafc}.b{font:400 13px ui-sans-serif,system-ui;fill:#c7d2e3}.k{font:600 12px ui-monospace,SFMono-Regular,monospace;fill:#7dd3fc}.box{fill:#12223b;stroke:#385173;stroke-width:1.5}.data{fill:#102f35;stroke:#2dd4bf;stroke-width:1.5}.meta{fill:#241d42;stroke:#a78bfa;stroke-width:1.5}.line{fill:none;stroke:#6ee7f9;stroke-width:2;marker-end:url(#arrow)}</style>
+  </defs>
+  <rect width="1120" height="650" rx="18" fill="url(#bg)"/>
+  <text x="50" y="55" class="h">Prolly is the history; versioned S3 holds whole files</text>
+  <text x="50" y="82" class="s">One authoritative writer · exact VersionId reads · no repository chunks</text>
+  <rect x="50" y="160" width="210" height="150" rx="14" class="box"/>
+  <text x="155" y="200" text-anchor="middle" class="t">Application</text>
+  <text x="155" y="230" text-anchor="middle" class="b">AWS-shaped Rust API</text>
+  <text x="155" y="255" text-anchor="middle" class="b">put · get · list · multipart</text>
+  <text x="155" y="280" text-anchor="middle" class="b">branch · diff · merge · restore</text>
+  <rect x="350" y="125" width="300" height="220" rx="14" class="box"/>
+  <text x="500" y="168" text-anchor="middle" class="t">Native-versioned client</text>
+  <text x="500" y="201" text-anchor="middle" class="b">exclusive writer queue + fence</text>
+  <text x="500" y="228" text-anchor="middle" class="b">logical conditions + idempotency</text>
+  <rect x="390" y="260" width="220" height="58" rx="10" class="meta"/>
+  <text x="500" y="285" text-anchor="middle" class="t">Prolly engine</text>
+  <text x="500" y="305" text-anchor="middle" class="s">state · versions · operations</text>
+  <rect x="755" y="110" width="315" height="180" rx="14" class="data"/>
+  <text x="912" y="150" text-anchor="middle" class="t">Managed object keys</text>
+  <text x="785" y="190" class="k">reports/q3.parquet</text>
+  <text x="785" y="218" class="b">VersionId A · VersionId B · …</text>
+  <text x="785" y="252" class="k">photos/launch.jpg</text>
+  <text x="785" y="276" class="b">whole native S3 object versions</text>
+  <rect x="755" y="345" width="315" height="225" rx="14" class="meta"/>
+  <text x="912" y="385" text-anchor="middle" class="t">Repository metadata</text>
+  <text x="785" y="423" class="k">.prolly/v1/</text>
+  <text x="785" y="453" class="b">node packs + immutable commits</text>
+  <text x="785" y="480" class="b">branch and tag CAS refs</text>
+  <text x="785" y="507" class="b">writer fence + provider attestation</text>
+  <text x="785" y="534" class="b">retention pins + exact-version GC</text>
+  <path d="M260 235H350" class="line"/><text x="305" y="222" text-anchor="middle" class="s">calls</text>
+  <path d="M650 185H755" class="line"/><text x="702" y="169" text-anchor="middle" class="s">whole bytes</text>
+  <path d="M650 290C705 290 700 440 755 440" class="line"/><text x="690" y="365" text-anchor="middle" class="s">history</text>
+  <rect x="50" y="430" width="600" height="140" rx="14" fill="#0c192c" stroke="#334a69"/>
+  <text x="80" y="468" class="t">Canonical read</text>
+  <text x="80" y="500" class="b">1. Pin a Prolly commit and resolve the logical key.</text>
+  <text x="80" y="528" class="b">2. Load the recorded physical binding.</text>
+  <text x="80" y="556" class="b">3. GetObject(key, version_id) returns the exact historical bytes.</text>
+</svg>

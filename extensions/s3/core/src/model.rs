@@ -83,21 +83,16 @@ macro_rules! hash_id {
 hash_id!(RepositoryId, "pr1_");
 hash_id!(CommitId, "pbc1_");
 hash_id!(ObjectVersionId, "pov1_");
-hash_id!(DeltaId, "pdl1_");
 hash_id!(ReflogEntryId, "prl1_");
-hash_id!(ContentManifestRef, "pcm1_");
 hash_id!(TreeFormatDigest, "ptf1_");
 hash_id!(ProviderProfileId, "ppf1_");
-hash_id!(ProtectionSegmentId, "pps1_");
 hash_id!(GcPlanId, "pgc1_");
-hash_id!(MultipartCatalogSnapshotId, "pmc1_");
 hash_id!(NodePackId, "pnp1_");
 hash_id!(NodeIndexCheckpointId, "nic1_");
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct UploadId(pub Uuid);
-
-impl UploadId {
+pub struct BatchId(pub Uuid);
+impl BatchId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -106,68 +101,29 @@ impl UploadId {
     }
 }
 
-impl Default for UploadId {
+impl Default for BatchId {
     fn default() -> Self {
         Self::new()
     }
 }
-
-impl fmt::Debug for UploadId {
+impl fmt::Debug for BatchId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
-impl fmt::Display for UploadId {
+impl fmt::Display for BatchId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "pu1_{}", self.0.simple())
+        write!(f, "pb1_{}", self.0.simple())
     }
 }
-impl FromStr for UploadId {
+impl FromStr for BatchId {
     type Err = Error;
     fn from_str(value: &str) -> Result<Self> {
         let value = value
-            .strip_prefix("pu1_")
-            .ok_or_else(|| Error::new(ErrorCode::InvalidRequest, "invalid upload ID prefix"))?;
+            .strip_prefix("pb1_")
+            .ok_or_else(|| Error::new(ErrorCode::InvalidRequest, "invalid batch ID prefix"))?;
         Ok(Self(Uuid::parse_str(value).map_err(|_| {
-            Error::new(ErrorCode::InvalidRequest, "invalid upload ID")
-        })?))
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct WorkspaceId(pub Uuid);
-impl WorkspaceId {
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn as_bytes(&self) -> &[u8; 16] {
-        self.0.as_bytes()
-    }
-}
-
-impl Default for WorkspaceId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-impl fmt::Debug for WorkspaceId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
-impl fmt::Display for WorkspaceId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "pws1_{}", self.0.simple())
-    }
-}
-impl FromStr for WorkspaceId {
-    type Err = Error;
-    fn from_str(value: &str) -> Result<Self> {
-        let value = value
-            .strip_prefix("pws1_")
-            .ok_or_else(|| Error::new(ErrorCode::InvalidRequest, "invalid workspace ID prefix"))?;
-        Ok(Self(Uuid::parse_str(value).map_err(|_| {
-            Error::new(ErrorCode::InvalidRequest, "invalid workspace ID")
+            Error::new(ErrorCode::InvalidRequest, "invalid batch ID")
         })?))
     }
 }
@@ -231,49 +187,6 @@ pub struct CanonicalLimits {
     pub max_delete_objects: u16,
     pub max_mutations_per_commit: u16,
     pub max_object_bytes: u64,
-    pub content_chunk_bytes: u32,
-}
-
-/// Persisted storage and writer topology selected when a repository is
-/// created. Repositories never switch profiles in place.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RepositoryStorageProfile {
-    #[default]
-    DistributedContentAddressedV1,
-    NativeVersionedV1,
-}
-
-impl RepositoryStorageProfile {
-    pub const fn capability_profile(self) -> u16 {
-        match self {
-            Self::DistributedContentAddressedV1 => {
-                RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE
-            }
-            Self::NativeVersionedV1 => RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE,
-        }
-    }
-
-    pub fn from_capability_profile(value: u16) -> Result<Self> {
-        match value {
-            RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE => {
-                Ok(Self::DistributedContentAddressedV1)
-            }
-            RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE => {
-                Ok(Self::NativeVersionedV1)
-            }
-            _ => Err(Error::new(
-                ErrorCode::UnsupportedRepositoryFormat,
-                format!("unknown repository capability profile {value}"),
-            )),
-        }
-    }
-
-    pub const fn minimum_protocol_version(self) -> u32 {
-        match self {
-            Self::DistributedContentAddressedV1 => RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
-            Self::NativeVersionedV1 => RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION,
-        }
-    }
 }
 
 impl Default for CanonicalLimits {
@@ -284,7 +197,6 @@ impl Default for CanonicalLimits {
             max_delete_objects: 1_000,
             max_mutations_per_commit: 10_000,
             max_object_bytes: 5 * 1024 * 1024 * 1024 * 1024,
-            content_chunk_bytes: 8 * 1024 * 1024,
         }
     }
 }
@@ -294,50 +206,19 @@ pub struct RepositoryFormatV1 {
     pub repository_id: RepositoryId,
     pub format_version: u16,
     pub state_tree_format: TreeFormat,
-    pub content_index_format: TreeFormat,
     pub canonical_limits: CanonicalLimits,
     pub min_reader_version: u32,
     pub min_writer_version: u32,
     pub created_at_millis: u64,
-    /// Appended to the original v1 marker. Missing means the v1 distributed
-    /// S3 profile so previously written packed-CBOR maps remain readable.
-    #[cfg(not(prolly_s3_legacy_v1_codec))]
-    #[serde(
-        default = "default_required_capability_profile",
-        skip_serializing_if = "is_default_required_capability_profile"
-    )]
     pub required_capability_profile: u16,
 }
 
 impl RepositoryFormatV1 {
     pub const VERSION: u16 = 1;
-    pub const DISTRIBUTED_S3_CAPABILITY_PROFILE: u16 = 1;
-    pub const NATIVE_VERSIONED_S3_CAPABILITY_PROFILE: u16 = 2;
-    pub const DISTRIBUTED_PROTOCOL_VERSION: u32 = 1;
-    pub const NATIVE_VERSIONED_PROTOCOL_VERSION: u32 = 2;
-    pub const CURRENT_READER_VERSION: u32 = 2;
-    pub const CURRENT_WRITER_VERSION: u32 = 2;
-
-    pub fn storage_profile(&self) -> Result<RepositoryStorageProfile> {
-        #[cfg(not(prolly_s3_legacy_v1_codec))]
-        {
-            RepositoryStorageProfile::from_capability_profile(self.required_capability_profile)
-        }
-        #[cfg(prolly_s3_legacy_v1_codec)]
-        {
-            Ok(RepositoryStorageProfile::DistributedContentAddressedV1)
-        }
-    }
-}
-
-#[cfg(not(prolly_s3_legacy_v1_codec))]
-fn default_required_capability_profile() -> u16 {
-    RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE
-}
-
-#[cfg(not(prolly_s3_legacy_v1_codec))]
-fn is_default_required_capability_profile(value: &u16) -> bool {
-    *value == RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE
+    pub const NATIVE_VERSIONED_S3_CAPABILITY_PROFILE: u16 = 1;
+    pub const NATIVE_VERSIONED_PROTOCOL_VERSION: u32 = 1;
+    pub const CURRENT_READER_VERSION: u32 = 1;
+    pub const CURRENT_WRITER_VERSION: u32 = 1;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -379,7 +260,7 @@ pub struct ProviderCapabilities {
 }
 
 impl ProviderCapabilities {
-    pub fn validate_distributed(&self) -> Result<()> {
+    pub fn validate_required(&self) -> Result<()> {
         let required = [
             ("conditional_create", self.conditional_create),
             ("conditional_update", self.conditional_update),
@@ -413,7 +294,7 @@ impl ProviderCapabilities {
     }
 
     pub fn validate_native_versioned(&self) -> Result<()> {
-        self.validate_distributed()?;
+        self.validate_required()?;
         if self.physical_versioning != PhysicalVersioning::Enabled {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
@@ -460,44 +341,6 @@ pub struct ProviderAttestationV1 {
     pub signature: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProtectionSegmentV1 {
-    pub operation: OperationId,
-    pub previous: Option<ProtectionSegmentId>,
-    pub paths: Vec<ObjectPath>,
-    pub created_at_millis: u64,
-}
-
-impl ProtectionSegmentV1 {
-    pub fn id(&self) -> Result<ProtectionSegmentId> {
-        let bytes = encode_canonical(self)?;
-        Ok(ProtectionSegmentId(domain_hash(
-            b"prolly-s3/protection-segment/v1",
-            &[&bytes],
-        )))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PublicationLeaseStateV1 {
-    Active,
-    Completed { commit: CommitId },
-    Abandoned,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PublicationLeaseV1 {
-    pub operation: OperationId,
-    pub writer: String,
-    pub generation: u64,
-    pub expires_at_millis: u64,
-    pub protection_head: Option<ProtectionSegmentId>,
-    pub proposal: Option<CommitId>,
-    pub state: PublicationLeaseStateV1,
-    pub created_at_millis: u64,
-    pub updated_at_millis: u64,
-}
-
 impl ProviderAttestationV1 {
     pub fn validate_id(&self) -> Result<()> {
         if self.id != self.body.id()? {
@@ -538,32 +381,6 @@ pub struct BucketStateV1 {
     pub objects: TreeRootV1,
     pub versions: TreeRootV1,
     pub operations: TreeRootV1,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ContentRef {
-    Empty,
-    Chunks(ContentManifestRef),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ContentLayoutV1 {
-    CanonicalFixed,
-    Composed,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContentManifestV1 {
-    pub total_len: u64,
-    pub chunk_count: u64,
-    pub layout: ContentLayoutV1,
-    pub chunk_index: TreeRootV1,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContentChunkRef {
-    pub cid: Cid,
-    pub len: u32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -632,7 +449,7 @@ pub enum NativeObjectBindingV1 {
 // the public persisted model only to reduce its in-memory enum size.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LogicalObjectVersionKindV2 {
+pub enum LogicalObjectVersionKindV1 {
     Live {
         size: u64,
         logical_etag: String,
@@ -645,34 +462,34 @@ pub enum LogicalObjectVersionKindV2 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LogicalObjectVersionBodyV2 {
+pub struct LogicalObjectVersionBodyV1 {
     pub order: ObjectVersionOrder,
     pub created_at_millis: u64,
-    pub kind: LogicalObjectVersionKindV2,
+    pub kind: LogicalObjectVersionKindV1,
 }
 
 /// Native-profile object version. Its logical ID excludes the provider
 /// binding so a verified clone may preserve logical identity while rebinding
 /// to destination-issued S3 VersionIds.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObjectVersionV2 {
+pub struct ObjectVersionV1 {
     pub id: ObjectVersionId,
-    pub body: LogicalObjectVersionBodyV2,
+    pub body: LogicalObjectVersionBodyV1,
     pub binding: NativeObjectBindingV1,
 }
 
-impl ObjectVersionV2 {
+impl ObjectVersionV1 {
     pub fn derive(
         repository: RepositoryId,
         key: &[u8],
         operation: OperationId,
-        body: LogicalObjectVersionBodyV2,
+        body: LogicalObjectVersionBodyV1,
         binding: NativeObjectBindingV1,
     ) -> Result<Self> {
         validate_native_object_version(&body, &binding)?;
         let body_bytes = encode_canonical(&body)?;
         let id = ObjectVersionId(domain_hash(
-            b"prolly-s3/object-version/v2",
+            b"prolly-s3/object-version/v1",
             &[
                 repository.as_bytes(),
                 key,
@@ -689,12 +506,12 @@ impl ObjectVersionV2 {
 }
 
 fn validate_native_object_version(
-    body: &LogicalObjectVersionBodyV2,
+    body: &LogicalObjectVersionBodyV1,
     binding: &NativeObjectBindingV1,
 ) -> Result<()> {
     let valid = match (&body.kind, binding) {
         (
-            LogicalObjectVersionKindV2::Live { checksums, .. },
+            LogicalObjectVersionKindV1::Live { checksums, .. },
             NativeObjectBindingV1::Live {
                 version_id,
                 checksum_sha256,
@@ -707,7 +524,7 @@ fn validate_native_object_version(
                     .is_some_and(|logical| logical == *checksum_sha256)
         }
         (
-            LogicalObjectVersionKindV2::DeleteMarker,
+            LogicalObjectVersionKindV1::DeleteMarker,
             NativeObjectBindingV1::DeleteMarker { version_id },
         ) => !version_id.is_empty(),
         _ => false,
@@ -719,153 +536,6 @@ fn validate_native_object_version(
         ));
     }
     Ok(())
-}
-
-// Keep the canonical model direct and language-neutral. Boxing only one
-// variant would complicate every binding without changing persisted size.
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ObjectVersionKindV1 {
-    Live {
-        content: ContentRef,
-        size: u64,
-        logical_etag: String,
-        headers: ObjectHeaders,
-        checksums: Checksums,
-        user_metadata: BTreeMap<String, String>,
-        tags: BTreeMap<String, String>,
-    },
-    DeleteMarker,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObjectVersionBodyV1 {
-    pub order: ObjectVersionOrder,
-    pub created_at_millis: u64,
-    pub kind: ObjectVersionKindV1,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObjectVersionV1 {
-    pub id: ObjectVersionId,
-    pub body: ObjectVersionBodyV1,
-    /// Present only for the native-versioned profile. Keeping the binding
-    /// outside `body` prevents a destination-assigned VersionId from changing
-    /// the logical object-version identity.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native_binding: Option<NativeObjectBindingV1>,
-}
-
-impl ObjectVersionV1 {
-    pub fn derive(
-        repository: RepositoryId,
-        key: &[u8],
-        operation: OperationId,
-        body: ObjectVersionBodyV1,
-    ) -> Result<Self> {
-        let body_bytes = encode_canonical(&body)?;
-        let id = ObjectVersionId(domain_hash(
-            b"prolly-s3/object-version/v1",
-            &[
-                repository.as_bytes(),
-                key,
-                operation.as_bytes(),
-                &body_bytes,
-            ],
-        ));
-        Ok(Self {
-            id,
-            body,
-            native_binding: None,
-        })
-    }
-
-    pub fn derive_native(
-        repository: RepositoryId,
-        key: &[u8],
-        operation: OperationId,
-        body: ObjectVersionBodyV1,
-        binding: NativeObjectBindingV1,
-    ) -> Result<Self> {
-        let logical_kind = match &body.kind {
-            ObjectVersionKindV1::Live {
-                content,
-                size,
-                logical_etag,
-                headers,
-                checksums,
-                user_metadata,
-                tags,
-            } if *content == ContentRef::Empty => LogicalObjectVersionKindV2::Live {
-                size: *size,
-                logical_etag: logical_etag.clone(),
-                headers: headers.clone(),
-                checksums: checksums.clone(),
-                user_metadata: user_metadata.clone(),
-                tags: tags.clone(),
-            },
-            ObjectVersionKindV1::DeleteMarker => LogicalObjectVersionKindV2::DeleteMarker,
-            ObjectVersionKindV1::Live { .. } => {
-                return Err(Error::new(
-                    ErrorCode::InternalInvariant,
-                    "native object version must not contain a repository content reference",
-                ))
-            }
-        };
-        let logical_body = LogicalObjectVersionBodyV2 {
-            order: body.order,
-            created_at_millis: body.created_at_millis,
-            kind: logical_kind,
-        };
-        let native = ObjectVersionV2::derive(repository, key, operation, logical_body, binding)?;
-        Ok(Self {
-            id: native.id,
-            body,
-            native_binding: Some(native.binding),
-        })
-    }
-
-    pub fn validate_native(&self) -> Result<()> {
-        let binding = self.native_binding.as_ref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::CorruptCommit,
-                "native object version is missing its provider binding",
-            )
-        })?;
-        let logical_kind = match &self.body.kind {
-            ObjectVersionKindV1::Live {
-                content,
-                size,
-                logical_etag,
-                headers,
-                checksums,
-                user_metadata,
-                tags,
-            } if *content == ContentRef::Empty => LogicalObjectVersionKindV2::Live {
-                size: *size,
-                logical_etag: logical_etag.clone(),
-                headers: headers.clone(),
-                checksums: checksums.clone(),
-                user_metadata: user_metadata.clone(),
-                tags: tags.clone(),
-            },
-            ObjectVersionKindV1::DeleteMarker => LogicalObjectVersionKindV2::DeleteMarker,
-            ObjectVersionKindV1::Live { .. } => {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native object version contains a repository content reference",
-                ))
-            }
-        };
-        validate_native_object_version(
-            &LogicalObjectVersionBodyV2 {
-                order: self.body.order,
-                created_at_millis: self.body.created_at_millis,
-                kind: logical_kind,
-            },
-            binding,
-        )
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1124,7 +794,7 @@ impl NodePackV1 {
                 .ok_or_else(|| {
                     Error::new(ErrorCode::CorruptNode, "node-pack entry range overflow")
                 })?;
-            if end > toc.payload_len || entry.cid.as_bytes() != entry.sha256 {
+            if entry.len == 0 || end > toc.payload_len || entry.cid.as_bytes() != entry.sha256 {
                 return Err(Error::new(
                     ErrorCode::CorruptNode,
                     "node-pack table of contents contains an invalid node range",
@@ -1143,6 +813,7 @@ impl NodePackV1 {
                 ));
             }
         }
+        validate_node_pack_ranges(&toc.entries, &toc.attachments, toc.payload_len)?;
         Ok(toc)
     }
 
@@ -1174,6 +845,12 @@ impl NodePackV1 {
                 ));
             }
         }
+        validate_node_pack_ranges(
+            &self.entries,
+            &self.attachments,
+            u64::try_from(self.payload.len())
+                .map_err(|_| Error::new(ErrorCode::CorruptNode, "node-pack payload exceeds u64"))?,
+        )?;
         for entry in &self.entries {
             let bytes = self.payload_slice(entry.offset, entry.len)?;
             if sha256(bytes) != entry.sha256 || entry.cid.as_bytes() != entry.sha256 {
@@ -1216,38 +893,49 @@ impl NodePackV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BucketChangeSummaryV2 {
-    Inline(BucketDeltaV1),
-    Packed { digest: [u8; 32], len: u32 },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BucketCommitV2 {
-    pub state: BucketStateV1,
-    pub parents: Vec<CommitId>,
-    pub generation: CommitGeneration,
-    pub changes: BucketChangeSummaryV2,
-    pub node_pack: Option<NodePackRefV1>,
-    pub writer_fence_generation: u64,
-    pub author: String,
-    pub message: Option<String>,
-    pub created_at_millis: u64,
-    pub metadata: BTreeMap<String, Vec<u8>>,
-}
-
-impl BucketCommitV2 {
-    pub fn id(&self) -> Result<CommitId> {
-        let bytes = encode_canonical(self)?;
-        Ok(CommitId(domain_hash(b"prolly-s3/commit/v2", &[&bytes])))
+fn validate_node_pack_ranges(
+    entries: &[NodePackEntryV1],
+    attachments: &[NodePackAttachmentV1],
+    payload_len: u64,
+) -> Result<()> {
+    let mut ranges = Vec::with_capacity(entries.len() + attachments.len());
+    for entry in entries {
+        if entry.len == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-pack entries must be nonempty",
+            ));
+        }
+        let end = entry
+            .offset
+            .checked_add(u64::from(entry.len))
+            .filter(|end| *end <= payload_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptNode, "node-pack node range is invalid"))?;
+        ranges.push((entry.offset, end));
     }
-}
-
-impl BucketDeltaV1 {
-    pub fn id(&self) -> Result<DeltaId> {
-        let bytes = encode_canonical(self)?;
-        Ok(DeltaId(domain_hash(b"prolly-s3/delta/v1", &[&bytes])))
+    for attachment in attachments {
+        let end = attachment
+            .offset
+            .checked_add(u64::from(attachment.len))
+            .filter(|end| *end <= payload_len)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptNode,
+                    "node-pack attachment range is invalid",
+                )
+            })?;
+        if attachment.len != 0 {
+            ranges.push((attachment.offset, end));
+        }
     }
+    ranges.sort_unstable();
+    if ranges.windows(2).any(|pair| pair[0].1 > pair[1].0) {
+        return Err(Error::new(
+            ErrorCode::CorruptNode,
+            "node-pack payload ranges overlap",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1255,20 +943,20 @@ pub struct BucketCommitV1 {
     pub state: BucketStateV1,
     pub parents: Vec<CommitId>,
     pub generation: CommitGeneration,
-    pub delta: DeltaId,
+    pub delta: BucketDeltaV1,
+    pub node_pack: Option<NodePackRefV1>,
+    pub writer_fence_generation: u64,
     pub author: String,
     pub message: Option<String>,
     pub created_at_millis: u64,
     pub metadata: BTreeMap<String, Vec<u8>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<NativeCommitExtensionV1>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NativeCommitExtensionV1 {
-    pub node_pack: Option<NodePackRefV1>,
-    pub inline_delta: BucketDeltaV1,
-    pub writer_fence_generation: u64,
+impl BucketCommitV1 {
+    pub fn id(&self) -> Result<CommitId> {
+        let bytes = encode_canonical(self)?;
+        Ok(CommitId(domain_hash(b"prolly-s3/commit/v1", &[&bytes])))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1346,14 +1034,14 @@ pub enum GcRunStateV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GcRunV1 {
     pub plan: GcPlanId,
-    pub next_index: usize,
+    pub next_index: u64,
     pub generation: u64,
     pub state: GcRunStateV1,
-    pub deleted_versions: usize,
+    pub deleted_versions: u64,
     pub deleted_bytes: u64,
-    pub skipped_reachable: usize,
-    pub already_missing: usize,
-    pub deleted_by_kind: BTreeMap<String, usize>,
+    pub skipped_reachable: u64,
+    pub already_missing: u64,
+    pub deleted_by_kind: BTreeMap<String, u64>,
     pub deleted_bytes_by_kind: BTreeMap<String, u64>,
     pub updated_at_millis: u64,
     #[serde(default)]
@@ -1362,30 +1050,6 @@ pub struct GcRunV1 {
     pub delete_rate_limit_per_second: u32,
     #[serde(default)]
     pub last_delete_at_millis: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SyncRunStateV1 {
-    Running,
-    Completed,
-}
-
-/// Destination-local checkpoint for a reachable-closure transfer. The sorted
-/// closure is recomputed from `source_head` on resume, so the checkpoint stays
-/// bounded regardless of object count.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SyncRunV1 {
-    pub id: OperationId,
-    pub repository: RepositoryId,
-    pub source_head: CommitId,
-    pub source_branch: String,
-    pub after_relative_path: Option<String>,
-    pub generation: u64,
-    pub state: SyncRunStateV1,
-    pub copied_objects: u64,
-    pub copied_bytes: u64,
-    pub already_present: u64,
-    pub updated_at_millis: u64,
 }
 
 impl GcPlanV1 {
@@ -1402,13 +1066,6 @@ impl GcPlanV1 {
             return Err(Error::new(ErrorCode::CorruptCommit, "GC plan ID mismatch"));
         }
         Ok(())
-    }
-}
-
-impl BucketCommitV1 {
-    pub fn id(&self) -> Result<CommitId> {
-        let bytes = encode_canonical(self)?;
-        Ok(CommitId(domain_hash(b"prolly-s3/commit/v1", &[&bytes])))
     }
 }
 
@@ -1443,26 +1100,8 @@ pub struct RefValueV1 {
     pub generation: RefGeneration,
     pub operation: OperationId,
     pub reflog: ReflogEntryId,
-    pub writer: String,
-    pub updated_at_millis: u64,
-    pub tombstone: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<NativeRefExtensionV1>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NativeRefExtensionV1 {
-    pub writer_fence_generation: u64,
     pub inline_reflog: ReflogEntryV1,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RefValueV2 {
-    pub target: CommitId,
-    pub previous_target: Option<CommitId>,
-    pub generation: RefGeneration,
-    pub operation: OperationId,
-    pub writer_id: String,
+    pub writer: String,
     pub writer_fence_generation: u64,
     pub updated_at_millis: u64,
     pub tombstone: bool,
@@ -1518,47 +1157,6 @@ pub struct CommitReceipt {
     pub idempotent_replay: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MultipartPartV1 {
-    pub part_number: u32,
-    pub content: crate::StoredContent,
-    pub etag: String,
-    pub updated_at_millis: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MultipartStateV1 {
-    Active,
-    Completing {
-        operation: OperationId,
-        request_digest: [u8; 32],
-    },
-    Completed {
-        operation: OperationId,
-        request_digest: [u8; 32],
-        receipt: CommitReceipt,
-    },
-    Aborted,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MultipartUploadV1 {
-    pub id: UploadId,
-    pub branch: String,
-    pub key: Vec<u8>,
-    pub headers: ObjectHeaders,
-    pub user_metadata: BTreeMap<String, String>,
-    pub parts: BTreeMap<u32, MultipartPartV1>,
-    pub generation: u64,
-    pub state: MultipartStateV1,
-    pub created_at_millis: u64,
-    pub updated_at_millis: u64,
-    /// Zero is reserved for uploads written before expiry was introduced and
-    /// means "no automatic expiry".
-    #[serde(default)]
-    pub expires_at_millis: u64,
-}
-
 /// Durable caller-held handle for native provider multipart state. The handle
 /// contains no secret credentials; callers must persist the exact value
 /// returned by create if they intend to complete after a process restart.
@@ -1604,73 +1202,15 @@ impl NativeMultipartSessionV1 {
     }
 }
 
-/// Immutable entry captured for stable pagination of active multipart uploads.
-/// Upload manifests remain authoritative for lifecycle operations; this entry
-/// is only a time-bounded listing projection.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MultipartCatalogEntryV1 {
-    pub id: UploadId,
-    pub key: Vec<u8>,
-    pub created_at_millis: u64,
-    pub expires_at_millis: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MultipartCatalogSnapshotBodyV1 {
-    pub repository: RepositoryId,
-    pub branch: String,
-    pub key_prefix: Vec<u8>,
-    pub created_at_millis: u64,
-    pub expires_at_millis: u64,
-    pub entries: Vec<MultipartCatalogEntryV1>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MultipartCatalogSnapshotV1 {
-    pub id: MultipartCatalogSnapshotId,
-    pub body: MultipartCatalogSnapshotBodyV1,
-}
-
-impl MultipartCatalogSnapshotV1 {
-    pub fn derive(body: MultipartCatalogSnapshotBodyV1) -> Result<Self> {
-        let bytes = encode_canonical(&body)?;
-        Ok(Self {
-            id: MultipartCatalogSnapshotId(domain_hash(
-                b"prolly-s3/multipart-catalog-snapshot/v1",
-                &[&bytes],
-            )),
-            body,
-        })
-    }
-
-    pub fn validate_id(&self) -> Result<()> {
-        if Self::derive(self.body.clone())?.id != self.id {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "multipart catalog snapshot ID mismatch",
-            ));
-        }
-        Ok(())
-    }
-}
-
-// Workspace manifests are durable wire objects; direct fields keep their
-// schema symmetric with ordinary mutation inputs.
+// Prepared native mutations bind logical versions to provider version IDs.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum WorkspaceMutationV1 {
-    Put {
-        key: Vec<u8>,
-        content: crate::StoredContent,
-        headers: ObjectHeaders,
-        user_metadata: BTreeMap<String, String>,
-    },
-    Delete {
-        key: Vec<u8>,
-    },
+pub enum NativePreparedMutationV1 {
     NativePut {
         key: Vec<u8>,
-        content: crate::StoredContent,
+        size: u64,
+        logical_etag: String,
+        checksums: Checksums,
         headers: ObjectHeaders,
         user_metadata: BTreeMap<String, String>,
         binding: NativeObjectBindingV1,
@@ -1702,42 +1242,22 @@ impl NativeBatchMutationV1 {
     }
 }
 
-impl WorkspaceMutationV1 {
+impl NativePreparedMutationV1 {
     pub fn key(&self) -> &[u8] {
         match self {
-            Self::Put { key, .. }
-            | Self::Delete { key }
-            | Self::NativePut { key, .. }
-            | Self::NativeDelete { key, .. } => key,
+            Self::NativePut { key, .. } | Self::NativeDelete { key, .. } => key,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum WorkspaceStateV1 {
-    Active,
-    Publishing {
-        request_digest: [u8; 32],
-    },
-    Completed {
-        request_digest: [u8; 32],
-        receipt: CommitReceipt,
-    },
-    Aborted,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorkspaceManifestV1 {
-    pub id: WorkspaceId,
+pub struct NativeBatchV1 {
+    pub id: BatchId,
     pub branch: String,
     pub base_commit: CommitId,
     pub operation: OperationId,
     pub message: String,
-    pub mutations: BTreeMap<Vec<u8>, WorkspaceMutationV1>,
-    pub generation: u64,
-    pub state: WorkspaceStateV1,
     pub created_at_millis: u64,
-    pub updated_at_millis: u64,
     pub expires_at_millis: u64,
 }
 
@@ -1754,10 +1274,6 @@ pub(crate) fn derive_repository_id(operation: OperationId) -> RepositoryId {
         b"prolly-s3/repository/v1",
         &[operation.as_bytes()],
     ))
-}
-
-pub(crate) fn derive_content_manifest_id(bytes: &[u8]) -> ContentManifestRef {
-    ContentManifestRef(domain_hash(b"prolly-s3/content-manifest/v1", &[bytes]))
 }
 
 pub(crate) fn derive_input_digest(parts: &[&[u8]]) -> [u8; 32] {

@@ -3,44 +3,21 @@ use std::{collections::BTreeMap, sync::Arc};
 use md5::Md5;
 use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
-    tree_format_digest, Checksums, CommitGeneration, ContentRef, ErrorCode,
-    LogicalObjectVersionKindV2, MemoryObjectPlane, MergePolicy, NativeBatchMutationV1,
+    tree_format_digest, Checksums, CommitGeneration, ErrorCode, LogicalObjectVersionBodyV1,
+    LogicalObjectVersionKindV1, MemoryObjectPlane, MergePolicy, NativeBatchMutationV1,
     NativeMultipartCompletedPart, NativeObjectBindingV1, NativePut, NodePackEntryV1, NodePackV1,
-    ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionBodyV1, ObjectVersionKindV1,
-    ObjectVersionOrder, ObjectVersionV1, OperationId, PhysicalVersion, PhysicalVersioning,
-    ProviderCapabilities, Repository, RepositoryId, RepositoryOptions, RepositoryStorageProfile,
+    ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionOrder, ObjectVersionV1, OperationId,
+    PhysicalVersion, PhysicalVersioning, ProviderCapabilities, Repository, RepositoryId,
+    RepositoryOptions,
 };
 use sha2::{Digest as _, Sha256};
 
 fn native_options(prefix: &str) -> RepositoryOptions {
     RepositoryOptions {
         repository_prefix: prefix.to_string(),
-        storage_profile: RepositoryStorageProfile::NativeVersionedV1,
         writer: "native-writer".to_string(),
         ..RepositoryOptions::default()
     }
-}
-
-#[tokio::test]
-async fn legacy_native_multipart_protocol_fails_closed() {
-    let plane = Arc::new(MemoryObjectPlane::new(true));
-    let repository = Repository::initialize(
-        plane.clone(),
-        native_options(".prolly/native-versioned/fail-closed"),
-    )
-    .await
-    .unwrap();
-
-    let multipart = repository
-        .create_multipart_upload(
-            "main",
-            b"large.bin".to_vec(),
-            ObjectHeaders::default(),
-            BTreeMap::new(),
-        )
-        .await
-        .unwrap_err();
-    assert_eq!(multipart.code, ErrorCode::MissingCapability);
 }
 
 #[tokio::test]
@@ -132,10 +109,7 @@ async fn native_clone_replays_history_and_rebinds_physical_versions() {
         .1
         .version;
     assert_eq!(source_version.id, destination_version.id);
-    assert_ne!(
-        source_version.native_binding,
-        destination_version.native_binding
-    );
+    assert_ne!(source_version.binding, destination_version.binding);
 }
 
 #[tokio::test]
@@ -255,8 +229,7 @@ async fn native_repair_rebinds_a_missing_destination_payload() {
         .await
         .unwrap()
         .version;
-    let NativeObjectBindingV1::Live { version_id, .. } = damaged.native_binding.clone().unwrap()
-    else {
+    let NativeObjectBindingV1::Live { version_id, .. } = damaged.binding.clone() else {
         panic!("expected live native binding")
     };
     destination_plane
@@ -806,16 +779,15 @@ async fn native_idempotent_replay_does_not_upload_again() {
     assert_eq!(plane.request_snapshot().total(), 0);
 }
 
-fn native_live_body(bytes: &[u8]) -> ObjectVersionBodyV1 {
+fn native_live_body(bytes: &[u8]) -> LogicalObjectVersionBodyV1 {
     let sha256 = Cid::from_bytes(bytes).0;
-    ObjectVersionBodyV1 {
+    LogicalObjectVersionBodyV1 {
         order: ObjectVersionOrder {
             commit_generation: CommitGeneration(1),
             mutation_ordinal: 0,
         },
         created_at_millis: 7,
-        kind: ObjectVersionKindV1::Live {
-            content: ContentRef::Empty,
+        kind: LogicalObjectVersionKindV1::Live {
             size: bytes.len() as u64,
             logical_etag: "\"logical\"".to_string(),
             headers: ObjectHeaders::default(),
@@ -837,7 +809,7 @@ fn native_object_identity_excludes_provider_binding() {
     let operation = OperationId::new();
     let body = native_live_body(bytes);
     let checksum_sha256 = Cid::from_bytes(bytes).0;
-    let first = ObjectVersionV1::derive_native(
+    let first = ObjectVersionV1::derive(
         repository,
         b"asset.bin",
         operation,
@@ -849,7 +821,7 @@ fn native_object_identity_excludes_provider_binding() {
         },
     )
     .unwrap();
-    let second = ObjectVersionV1::derive_native(
+    let second = ObjectVersionV1::derive(
         repository,
         b"asset.bin",
         operation,
@@ -863,14 +835,14 @@ fn native_object_identity_excludes_provider_binding() {
     .unwrap();
 
     assert_eq!(first.id, second.id);
-    assert_ne!(first.native_binding, second.native_binding);
-    first.validate_native().unwrap();
-    second.validate_native().unwrap();
+    assert_ne!(first.binding, second.binding);
+    first.validate().unwrap();
+    second.validate().unwrap();
 }
 
 #[test]
 fn native_binding_rejects_kind_and_checksum_mismatch() {
-    let error = ObjectVersionV1::derive_native(
+    let error = ObjectVersionV1::derive(
         RepositoryId::from_hash([4; 32]),
         b"asset.bin",
         OperationId::new(),
@@ -883,8 +855,8 @@ fn native_binding_rejects_kind_and_checksum_mismatch() {
     .unwrap();
     assert_eq!(error.code, ErrorCode::CorruptCommit);
 
-    let logical = LogicalObjectVersionKindV2::DeleteMarker;
-    assert!(matches!(logical, LogicalObjectVersionKindV2::DeleteMarker));
+    let logical = LogicalObjectVersionKindV1::DeleteMarker;
+    assert!(matches!(logical, LogicalObjectVersionKindV1::DeleteMarker));
 }
 
 #[test]
@@ -956,11 +928,6 @@ async fn native_repository_round_trips_exact_physical_versions() {
     let repository = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
-    assert_eq!(
-        repository.storage_profile(),
-        RepositoryStorageProfile::NativeVersionedV1
-    );
-
     let first = repository
         .put_bytes(
             "main",
@@ -1039,8 +1006,8 @@ async fn native_repository_round_trips_exact_physical_versions() {
         .unwrap()
         .1;
     assert!(matches!(
-        marker.version.native_binding,
-        Some(NativeObjectBindingV1::DeleteMarker { .. })
+        marker.version.binding,
+        NativeObjectBindingV1::DeleteMarker { .. }
     ));
 
     let reserved = repository
@@ -1055,18 +1022,6 @@ async fn native_repository_round_trips_exact_physical_versions() {
         .await
         .unwrap_err();
     assert_eq!(reserved.code, ErrorCode::InvalidKey);
-
-    let mismatch = Repository::open(
-        plane,
-        RepositoryOptions {
-            repository_prefix: options.repository_prefix,
-            ..RepositoryOptions::default()
-        },
-    )
-    .await
-    .err()
-    .unwrap();
-    assert_eq!(mismatch.code, ErrorCode::RepositoryFormatConflict);
 }
 
 #[tokio::test]

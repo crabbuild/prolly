@@ -1,0 +1,57 @@
+{
+  "schema": "prolly-native-versioned-s3-conformance/v1",
+  "version": 1,
+  "hashes": [
+    {
+      "name": "sha256-empty",
+      "algorithm": "sha256",
+      "input_hex": "",
+      "expected_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "sha256-hello",
+      "algorithm": "sha256",
+      "input_hex": "68656c6c6f",
+      "expected_hex": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    },
+    {
+      "name": "repository-id-framing",
+      "algorithm": "domain_hash",
+      "domain_utf8": "prolly-s3/repository/v1",
+      "parts_hex": ["00112233445566778899aabbccddeeff"],
+      "expected_hex": "4b4d850ca6de4e18a45d74a5bfc225f020d174add39f9154080ba7c207cc7cfe"
+    },
+    {
+      "name": "multiple-part-framing",
+      "algorithm": "domain_hash",
+      "domain_utf8": "prolly-test/v1",
+      "parts_hex": ["68656c6c6f", "776f726c64"],
+      "expected_hex": "a47e887056c140663bff6a29ad7b33ec843d5f7a0217dc2806949bfcb3e0badd"
+    }
+  ],
+  "paths": [
+    {"name": "format", "prefix": ".prolly/v1", "kind": "format", "expected": ".prolly/v1/format/v1.cbor"},
+    {"name": "branch-main", "prefix": ".prolly/v1", "kind": "branch", "name_utf8": "main", "expected": ".prolly/v1/refs/heads/6d61696e"},
+    {"name": "tag-release", "prefix": ".prolly/v1", "kind": "tag", "name_utf8": "release/1", "expected": ".prolly/v1/refs/tags/72656c656173652f31"},
+    {"name": "commit-shard", "prefix": ".prolly/v1", "kind": "commit", "digest_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "expected": ".prolly/v1/commits/sha256/00/11/00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"},
+    {"name": "node-pack-shard", "prefix": ".prolly/v1", "kind": "node_pack", "digest_hex": "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100", "expected": ".prolly/v1/node-packs/sha256/ff/ee/ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100.pack"},
+    {"name": "checkpoint", "prefix": ".prolly/v1", "kind": "checkpoint", "generation": "42", "digest_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "expected": ".prolly/v1/node-index/checkpoints/00000000000000000042-00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff.cbor"}
+  ],
+  "invalid_cbor": [
+    {"name": "negative-integer", "hex": "20", "reason": "negative values are forbidden"},
+    {"name": "float", "hex": "f93c00", "reason": "floating point is forbidden"},
+    {"name": "semantic-tag", "hex": "c100", "reason": "tags are forbidden"},
+    {"name": "indefinite-array", "hex": "9f01ff", "reason": "indefinite lengths are forbidden"},
+    {"name": "nonminimal-zero", "hex": "1800", "reason": "integers use shortest form"},
+    {"name": "map-key-order", "hex": "a201000001", "reason": "map keys are canonically ordered"},
+    {"name": "duplicate-map-key", "hex": "a200010002", "reason": "duplicate keys are forbidden"},
+    {"name": "trailing-data", "hex": "0000", "reason": "one complete item is required"}
+  ],
+  "publication_scenarios": [
+    {"name": "before-ref-cas", "physical": true, "version_record": true, "commit": true, "ref": false, "visible": false},
+    {"name": "after-ref-cas", "physical": true, "version_record": true, "commit": true, "ref": true, "visible": true},
+    {"name": "ref-with-missing-closure", "physical": false, "version_record": true, "commit": true, "ref": true, "valid": false},
+    {"name": "cas-conflict", "physical": true, "version_record": true, "commit": true, "ref": false, "visible": false, "retry": "ReloadHead"},
+    {"name": "unknown-ref-outcome", "physical": true, "version_record": true, "commit": true, "ref": null, "retry": "ReconcileOperation"}
+  ]
+}

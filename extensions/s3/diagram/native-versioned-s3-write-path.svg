@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 430" role="img" aria-labelledby="title desc">
+  <title id="title">Four-call native-versioned S3 write path</title>
+  <desc id="desc">A whole-object put is followed by a node-pack put, commit put, and conditional branch reference update. Only the final update makes the write visible.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08111f"/><stop offset="1" stop-color="#111b34"/></linearGradient>
+    <marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0 0 9 3.5 0 7Z" fill="#67e8f9"/></marker>
+    <style>.h{font:700 22px ui-sans-serif,system-ui;fill:#f8fafc}.s{font:400 13px ui-sans-serif,system-ui;fill:#9fb0c8}.n{font:700 18px ui-sans-serif,system-ui;fill:#08111f}.t{font:700 14px ui-sans-serif,system-ui;fill:#f8fafc}.b{font:400 12px ui-sans-serif,system-ui;fill:#bac8da}.line{stroke:#67e8f9;stroke-width:2;marker-end:url(#arrow)}.box{fill:#14243d;stroke:#426184;stroke-width:1.5}</style>
+  </defs>
+  <rect width="1120" height="430" rx="18" fill="url(#bg)"/>
+  <text x="50" y="55" class="h">Warm whole-object write: four foreground S3 calls</text>
+  <text x="50" y="82" class="s">Prepared objects are unreachable until the final branch-ref CAS</text>
+  <line x1="170" y1="205" x2="950" y2="205" class="line"/>
+  <g transform="translate(90 130)"><rect width="190" height="150" rx="14" class="box"/><circle cx="30" cy="30" r="18" fill="#2dd4bf"/><text x="30" y="36" text-anchor="middle" class="n">1</text><text x="25" y="75" class="t">Put whole file</text><text x="25" y="101" class="b">original object key</text><text x="25" y="124" class="b">capture VersionId</text></g>
+  <g transform="translate(340 130)"><rect width="190" height="150" rx="14" class="box"/><circle cx="30" cy="30" r="18" fill="#a78bfa"/><text x="30" y="36" text-anchor="middle" class="n">2</text><text x="25" y="75" class="t">Put node pack</text><text x="25" y="101" class="b">one immutable pack</text><text x="25" y="124" class="b">for new Prolly nodes</text></g>
+  <g transform="translate(590 130)"><rect width="190" height="150" rx="14" class="box"/><circle cx="30" cy="30" r="18" fill="#a78bfa"/><text x="30" y="36" text-anchor="middle" class="n">3</text><text x="25" y="75" class="t">Put commit</text><text x="25" y="101" class="b">embedded delta</text><text x="25" y="124" class="b">exact VersionId binding</text></g>
+  <g transform="translate(840 130)"><rect width="190" height="150" rx="14" fill="#183148" stroke="#fbbf24" stroke-width="2"/><circle cx="30" cy="30" r="18" fill="#fbbf24"/><text x="30" y="36" text-anchor="middle" class="n">4</text><text x="25" y="75" class="t">CAS branch ref</text><text x="25" y="101" class="b">expected storage token</text><text x="25" y="124" class="b">visibility point</text></g>
+  <text x="185" y="330" text-anchor="middle" class="s">bytes durable</text><text x="435" y="330" text-anchor="middle" class="s">metadata durable</text><text x="685" y="330" text-anchor="middle" class="s">commit durable</text><text x="935" y="330" text-anchor="middle" fill="#fbbf24" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="700">logically visible</text>
+  <text x="50" y="390" class="s">Conflict: return an error; never rebase silently. Ambiguous response: reconcile with the stable OperationId.</text>
+</svg>
