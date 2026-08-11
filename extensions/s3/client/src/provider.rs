@@ -213,7 +213,7 @@ pub(crate) async fn qualify_and_store(
         )
         .ok_or_else(|| invalid("provider attestation expiry overflow"))?;
     let capabilities = probe_provider(plane.clone(), repository_prefix).await?;
-    capabilities.validate_distributed()?;
+    capabilities.validate_native_versioned()?;
     let body = ProviderAttestationBodyV1 {
         endpoint_fingerprint: identity.endpoint_fingerprint()?,
         bucket_fingerprint: identity.bucket_fingerprint(plane.bucket())?,
@@ -325,7 +325,7 @@ pub(crate) async fn load_valid_attestation(
             }
             continue;
         }
-        candidate.body.capabilities.validate_distributed()?;
+        candidate.body.capabilities.validate_native_versioned()?;
         valid.push(candidate);
     }
     valid
@@ -741,13 +741,13 @@ mod tests {
         let mut missing_cas = capabilities();
         missing_cas.conditional_update = false;
         assert_eq!(
-            missing_cas.validate_distributed().unwrap_err().code,
+            missing_cas.validate_required().unwrap_err().code,
             ErrorCode::MissingCapability
         );
         let mut lifecycle = capabilities();
         lifecycle.conflicting_lifecycle_rule = true;
         assert_eq!(
-            lifecycle.validate_distributed().unwrap_err().code,
+            lifecycle.validate_required().unwrap_err().code,
             ErrorCode::ProviderNotQualified
         );
     }

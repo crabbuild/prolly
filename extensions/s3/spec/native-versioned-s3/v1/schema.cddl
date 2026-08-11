@@ -1,0 +1,269 @@
+; Native-Versioned S3 Protocol v1 persisted schema.
+; Maps are closed. Every listed field is required, including null/defaults.
+; Map-key and collection ordering is defined by encoding.md and state-machines.md.
+; The path/tree dispatch table in protocol.json selects one production. `top`
+; is a tooling convenience only; records do not carry an implicit type tag.
+
+top = repository-format-v1
+    / initialization-intent-v1
+    / provider-attestation-v1
+    / object-version-v1
+    / current-object-v1
+    / operation-record-v1
+    / bucket-delta-v1
+    / node-pack-toc-v1
+    / node-index-checkpoint-v1
+    / bucket-commit-v1
+    / gc-plan-v1
+    / gc-mark-run-v1
+    / gc-run-v1
+    / retention-pin-v1
+    / ref-value-v1
+    / exclusive-writer-lease-v1
+    / tag-value-v1
+    / native-multipart-session-v1
+    / native-prepared-mutation-v1
+    / native-batch-mutation-v1
+    / native-batch-v1
+
+uint8 = 0..255
+uint16 = 0..65535
+uint32 = 0..4294967295
+uint64 = 0..18446744073709551615
+digest16 = [16*16 uint8]
+digest32 = [32*32 uint8]
+uuid16 = bstr .size 16
+bytes = [* uint8]
+
+repository-id = digest32
+commit-id = digest32
+object-version-id = digest32
+reflog-entry-id = digest32
+tree-format-digest = digest32
+provider-profile-id = digest32
+gc-plan-id = digest32
+node-pack-id = digest32
+node-index-checkpoint-id = digest32
+cid = digest32
+operation-id = uuid16
+batch-id = uuid16
+object-path = tstr
+
+; RepositoryFormatV1
+repository-format-v1 = {
+  0: repository-id,
+  1: 1,
+  2: tree-format,
+  3: canonical-limits,
+  4: 1,
+  5: 1,
+  6: uint64,
+  7: 1
+}
+canonical-limits = {
+  0: uint16,
+  1: uint16,
+  2: uint16,
+  3: uint16,
+  4: uint64
+}
+initialization-intent-v1 = { 0: repository-id, 1: repository-format-v1, 2: operation-id }
+
+; Embedded Prolly TreeFormat. Variant ordinals are frozen with this profile.
+tree-format = { 0: chunking-spec, 1: node-layout-spec, 2: value-encoding }
+chunking-spec = {
+  0: chunk-measure,
+  1: boundary-input,
+  2: hash-algorithm,
+  3: boundary-rule,
+  4: uint64,
+  5: uint64,
+  6: uint64,
+  7: uint64,
+  8: bool,
+  9: uint64
+}
+chunk-measure = 0 / 1 / 2                 ; EntryCount, LogicalBytes, EncodedBytes
+boundary-input = 0 / 1                    ; Key, KeyValue
+hash-algorithm = 0                        ; XxHash64
+boundary-rule = { 0: { 0: uint32 } }      ; HashThreshold.factor
+              / { 1: { 0: uint32 } }      ; Weibull.shape
+              / { 2: { 0: uint16 } }      ; RollingBuzHash.window
+node-layout-spec = 0 / 1 / 2              ; PrefixCompressed, Plain, OffsetTable
+                 / { 3: { 0: tstr, 1: bytes } }
+value-encoding = 0 / 1 / 2 / { 3: tstr }  ; Raw, Cbor, Json, Custom
+
+bucket-class = 0 / 1                      ; GeneralPurpose, S3Compatible
+physical-versioning = 0 / 1 / 2           ; Unversioned, Enabled, Suspended
+provider-capabilities = {
+  0: bool, 1: bool, 2: bool, 3: bool, 4: bool,
+  5: bool, 6: bool, 7: bool, 8: bool,
+  9: physical-versioning,
+  10: bool, 11: bool, 12: uint64, 13: uint64
+}
+provider-attestation-body-v1 = {
+  0: digest32,
+  1: digest32,
+  2: bucket-class,
+  3: provider-capabilities,
+  4: uint32,
+  5: tstr,
+  6: uint64,
+  7: uint64,
+  8: tstr
+}
+provider-attestation-v1 = { 0: provider-profile-id, 1: provider-attestation-body-v1, 2: bytes }
+
+tree-root-v1 = { 0: cid / null, 1: tree-format-digest }
+bucket-state-v1 = { 0: tree-root-v1, 1: tree-root-v1, 2: tree-root-v1 }
+object-headers = {
+  0: tstr / null,
+  1: tstr / null,
+  2: tstr / null,
+  3: tstr / null,
+  4: tstr / null,
+  5: uint64 / null
+}
+checksums = { 0: digest16 / null, 1: digest32 / null, 2: {* tstr => bytes} }
+etag-predicate-v1 = 0 / { 1: [* tstr] }    ; Any, OneOf (strictly sorted unique)
+object-write-condition-v1 = {
+  0: etag-predicate-v1 / null,
+  1: etag-predicate-v1 / null,
+  2: commit-id / null
+}
+commit-generation = uint64
+ref-generation = uint64
+object-version-order = { 0: commit-generation, 1: uint32 }
+
+native-object-binding-v1 = {
+  0: { 0: tstr, 1: tstr, 2: digest32 }
+} / {
+  1: { 0: tstr }
+}
+logical-object-version-kind-v1 = {
+  0: {
+    0: uint64,
+    1: tstr,
+    2: object-headers,
+    3: checksums,
+    4: {* tstr => tstr},
+    5: {* tstr => tstr}
+  }
+} / 1
+logical-object-version-body-v1 = { 0: object-version-order, 1: uint64, 2: logical-object-version-kind-v1 }
+object-version-v1 = { 0: object-version-id, 1: logical-object-version-body-v1, 2: native-object-binding-v1 }
+current-object-v1 = { 0: object-version-id }
+
+operation-kind = 0 / 1 / 2 / 3 / 4 / 5 / 6
+; Put, Delete, Copy, MultiDelete, CommitSession, Merge, Restore
+canonical-operation-result = { 0: operation-kind, 1: [* object-version-id], 2: uint64 }
+operation-record-v1 = { 0: digest32, 1: canonical-operation-result, 2: commit-generation, 3: uint64 }
+object-transition = { 0: bytes, 1: object-version-id / null, 2: object-version-id, 3: bool }
+bucket-delta-v1 = { 0: [* operation-id], 1: [* object-transition] }
+
+node-pack-entry-v1 = { 0: cid, 1: uint64, 2: uint32, 3: digest32 }
+node-pack-attachment-kind-v1 = 0 / 1      ; BucketDelta, Reflog
+node-pack-attachment-v1 = { 0: node-pack-attachment-kind-v1, 1: digest32, 2: uint64, 3: uint32 }
+node-pack-toc-v1 = {
+  0: tree-format-digest,
+  1: [* node-pack-entry-v1],
+  2: [* node-pack-attachment-v1],
+  3: uint64
+}
+node-pack-ref-v1 = { 0: node-pack-id, 1: uint64, 2: uint32 }
+node-index-entry-v1 = { 0: cid, 1: node-pack-id, 2: uint64, 3: uint32, 4: digest32 }
+node-index-checkpoint-v1 = {
+  0: node-index-checkpoint-id,
+  1: repository-id,
+  2: tstr,
+  3: commit-id,
+  4: commit-generation,
+  5: [* node-index-entry-v1],
+  6: uint64
+}
+
+bucket-commit-v1 = {
+  0: bucket-state-v1,
+  1: [* commit-id],
+  2: commit-generation,
+  3: bucket-delta-v1,
+  4: node-pack-ref-v1 / null,
+  5: uint64,
+  6: tstr,
+  7: tstr / null,
+  8: uint64,
+  9: {* tstr => bytes}
+}
+
+storage-token = { 0: tstr, 1: tstr / null }
+physical-version = { 0: { 0: storage-token / null } } / { 1: { 0: tstr } }
+gc-fence-v1 = { 0: {* tstr => commit-id}, 1: {* tstr => commit-id}, 2: uint64, 3: uint64 }
+gc-candidate-v1 = { 0: object-path, 1: physical-version, 2: uint64, 3: uint64 }
+gc-plan-body-v1 = { 0: repository-id, 1: gc-fence-v1, 2: [* gc-candidate-v1] }
+gc-plan-v1 = { 0: gc-plan-id, 1: gc-plan-body-v1 }
+retention-pin-v1 = { 0: tstr, 1: commit-id, 2: tstr, 3: tstr, 4: uint64, 5: uint64, 6: uint64, 7: bool }
+gc-mark-run-state-v1 = 0 / 1              ; Running, Completed
+gc-mark-run-v1 = {
+  0: operation-id, 1: repository-id, 2: uint64, 3: uint64, 4: uint64,
+  5: uint64, 6: gc-mark-run-state-v1, 7: gc-plan-id / null, 8: uint64
+}
+gc-run-state-v1 = 0 / 1 / 2 / 3           ; Running, Paused, Completed, Aborted
+gc-run-v1 = {
+  0: gc-plan-id,
+  1: uint64,
+  2: uint64,
+  3: gc-run-state-v1,
+  4: uint64,
+  5: uint64,
+  6: uint64,
+  7: uint64,
+  8: {* tstr => uint64},
+  9: {* tstr => uint64},
+  10: uint64,
+  11: tstr / null,
+  12: uint32,
+  13: uint64
+}
+
+reflog-entry-v1 = { 0: tstr, 1: commit-id / null, 2: commit-id, 3: operation-id, 4: tstr, 5: tstr, 6: uint64 }
+ref-value-v1 = {
+  0: commit-id,
+  1: commit-id / null,
+  2: ref-generation,
+  3: operation-id,
+  4: reflog-entry-id,
+  5: reflog-entry-v1,
+  6: tstr,
+  7: uint64,
+  8: uint64,
+  9: bool
+}
+exclusive-writer-lease-v1 = { 0: repository-id, 1: tstr, 2: uint64, 3: digest32, 4: uint64, 5: uint64 }
+tag-value-v1 = { 0: commit-id, 1: commit-id / null, 2: ref-generation, 3: operation-id, 4: reflog-entry-id, 5: tstr, 6: uint64, 7: bool }
+
+native-multipart-session-v1 = {
+  0: repository-id,
+  1: tstr,
+  2: bytes,
+  3: object-headers,
+  4: {* tstr => tstr},
+  5: tstr,
+  6: operation-id,
+  7: uint64,
+  8: uint64,
+  9: bool
+}
+native-prepared-mutation-v1 = {
+  0: {
+    0: bytes, 1: uint64, 2: tstr, 3: checksums, 4: object-headers,
+    5: {* tstr => tstr}, 6: native-object-binding-v1
+  }
+} / {
+  1: { 0: bytes, 1: native-object-binding-v1 }
+}
+native-batch-mutation-v1 = {
+  0: { 0: bytes, 1: bytes, 2: object-headers, 3: {* tstr => tstr} }
+} / {
+  1: { 0: bytes }
+}
+native-batch-v1 = { 0: batch-id, 1: tstr, 2: commit-id, 3: operation-id, 4: tstr, 5: uint64, 6: uint64 }

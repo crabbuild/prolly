@@ -7,52 +7,43 @@ use std::{
 
 use crate::{
     decode_canonical, derive_input_digest, derive_repository_id, encode_canonical,
-    tree_format_digest, BucketCommitV1, BucketDeltaV1, BucketStateV1, CanonicalLimits,
+    tree_format_digest, BatchId, BucketCommitV1, BucketDeltaV1, BucketStateV1, CanonicalLimits,
     CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitId,
-    CommitReceipt, CompareExchange, CompareExchangeOutcome, ContentStore, CurrentObjectV1,
-    DeleteOutcome, DeltaId, Error, ErrorCode, EtagPredicateV1, GcCandidateV1, GcFenceV1,
-    GcMarkRunStateV1, GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1,
-    GetRequest, IdSource, ImmutablePut, ImmutablePutOutcome, InitializationIntentV1, ListRequest,
-    MultipartCatalogEntryV1, MultipartCatalogSnapshotBodyV1, MultipartCatalogSnapshotId,
-    MultipartCatalogSnapshotV1, MultipartPartV1, MultipartStateV1, MultipartUploadV1, ObjectData,
-    ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition, ObjectVersionBodyV1, ObjectVersionId,
-    ObjectVersionKindV1, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1, OperationId,
-    OperationKind, OperationRecordV1, PhysicalVersion, ProllyObjectStore, ProtectionSink,
-    PublicationLease, RandomIdSource, RefGeneration, ReflogEntryV1, RepositoryFormatV1,
-    RepositoryId, RepositoryStorageProfile, Result, RetentionPinV1, RetryAdvice, StorageToken,
-    StoredContent, SyncRunStateV1, SyncRunV1, SystemClock, TreeRootV1, UploadId, WorkspaceId,
-    WorkspaceManifestV1, WorkspaceMutationV1, WorkspaceStateV1,
+    CommitReceipt, CompareExchange, CompareExchangeOutcome, CurrentObjectV1, DeleteOutcome, Error,
+    ErrorCode, EtagPredicateV1, GcCandidateV1, GcFenceV1, GcMarkRunStateV1, GcMarkRunV1,
+    GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GetRequest, IdSource, ImmutablePut,
+    InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    NativeBatchV1, NativePreparedMutationV1, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
+    ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1,
+    OperationId, OperationKind, OperationRecordV1, PhysicalVersion, ProllyObjectStore,
+    RandomIdSource, RefGeneration, ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result,
+    RetentionPinV1, RetryAdvice, StorageToken, SystemClock, TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
-use prolly::{AsyncProlly, Cid, Config, RuntimeConfig, Tree, TreeFormat};
+use prolly::{AsyncProlly, Config, RuntimeConfig, Tree, TreeFormat};
 use sha2::Sha256;
 
 const MIN_NONFINAL_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024 * 1024;
-pub const MAX_LOGICAL_RETRY_LIMIT: u8 = 16;
+const MAX_GC_CAS_RETRIES: usize = 16;
 
 #[derive(Clone)]
 pub struct RepositoryOptions {
     pub repository_prefix: String,
     pub default_branch: String,
     pub writer: String,
-    pub storage_profile: RepositoryStorageProfile,
-    pub logical_retry_limit: u8,
     pub limits: CanonicalLimits,
     pub state_tree_format: TreeFormat,
-    pub content_index_format: TreeFormat,
-    pub publication_lease_millis: u64,
     /// Duration of the repository-scoped native writer lease. Renewal is
     /// amortized and is not part of an ordinary operation's foreground calls.
     pub writer_lease_millis: u64,
     /// Open without acquiring mutation authority.
     pub read_only: bool,
-    pub multipart_upload_ttl_millis: u64,
     pub reflog_retention_millis: u64,
     pub history_traversal_limit: usize,
     /// Maximum exact physical deletions per second during GC. Zero disables
-    /// pacing. V1 accepts 1..=1,000 when configured.
+    /// pacing. The native format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
     pub clock: Arc<dyn Clock>,
     pub ids: Arc<dyn IdSource>,
@@ -64,15 +55,10 @@ impl Default for RepositoryOptions {
             repository_prefix: ".prolly/v1".to_string(),
             default_branch: "main".to_string(),
             writer: "anonymous".to_string(),
-            storage_profile: RepositoryStorageProfile::DistributedContentAddressedV1,
-            logical_retry_limit: 3,
             limits: CanonicalLimits::default(),
             state_tree_format: TreeFormat::default(),
-            content_index_format: TreeFormat::default(),
-            publication_lease_millis: 60 * 60 * 1_000,
             writer_lease_millis: 60_000,
             read_only: false,
-            multipart_upload_ttl_millis: 7 * 24 * 60 * 60 * 1_000,
             reflog_retention_millis: 90 * 24 * 60 * 60 * 1_000,
             history_traversal_limit: 100_000,
             gc_delete_rate_limit_per_second: 0,
@@ -93,15 +79,6 @@ pub struct VersionSummary {
     pub key: Vec<u8>,
     pub version: ObjectVersionV1,
     pub cursor: Vec<u8>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MultipartUploadSummary {
-    pub id: UploadId,
-    pub branch: String,
-    pub key: Vec<u8>,
-    pub created_at_millis: u64,
-    pub expires_at_millis: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,13 +148,13 @@ pub struct GcDryRun {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GcSweepReport {
     pub plan: GcPlanId,
-    pub deleted_versions: usize,
+    pub deleted_versions: u64,
     pub deleted_bytes: u64,
-    pub skipped_reachable: usize,
-    pub already_missing: usize,
+    pub skipped_reachable: u64,
+    pub already_missing: u64,
     pub complete: bool,
-    pub next_index: usize,
-    pub deleted_by_kind: BTreeMap<String, usize>,
+    pub next_index: u64,
+    pub deleted_by_kind: BTreeMap<String, u64>,
     pub deleted_bytes_by_kind: BTreeMap<String, u64>,
 }
 
@@ -206,7 +183,6 @@ pub struct FsckReport {
     pub reachable_nodes: usize,
     pub reachable_node_bytes: usize,
     pub logical_versions: usize,
-    pub content_manifests: usize,
     pub content_bytes_verified: u64,
 }
 
@@ -263,16 +239,6 @@ impl RetainedClosure {
     }
 }
 
-struct LoadedUpload {
-    value: MultipartUploadV1,
-    token: StorageToken,
-}
-
-struct LoadedWorkspace {
-    value: WorkspaceManifestV1,
-    token: StorageToken,
-}
-
 struct LoadedGcRun {
     value: GcRunV1,
     token: StorageToken,
@@ -280,11 +246,6 @@ struct LoadedGcRun {
 
 struct LoadedGcMarkRun {
     value: GcMarkRunV1,
-    token: StorageToken,
-}
-
-struct LoadedSyncRun {
-    value: SyncRunV1,
     token: StorageToken,
 }
 
@@ -304,7 +265,6 @@ pub struct Repository<P: ObjectPlane> {
     format: RepositoryFormatV1,
     node_store: ProllyObjectStore<P>,
     engine: AsyncProlly<ProllyObjectStore<P>>,
-    content: ContentStore<P>,
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
     warm_branches: Arc<RwLock<BTreeMap<String, WarmBranchState>>>,
     commit_cache: Arc<RwLock<BTreeMap<CommitId, BucketCommitV1>>>,
@@ -329,13 +289,11 @@ impl<P: ObjectPlane> Repository<P> {
             repository_id,
             format_version: RepositoryFormatV1::VERSION,
             state_tree_format: options.state_tree_format.clone(),
-            content_index_format: options.content_index_format.clone(),
             canonical_limits: options.limits.clone(),
-            min_reader_version: options.storage_profile.minimum_protocol_version(),
-            min_writer_version: options.storage_profile.minimum_protocol_version(),
+            min_reader_version: RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION,
+            min_writer_version: RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION,
             created_at_millis,
-            #[cfg(not(prolly_s3_legacy_v1_codec))]
-            required_capability_profile: options.storage_profile.capability_profile(),
+            required_capability_profile: RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE,
         };
         let proposed_intent = InitializationIntentV1 {
             repository_id,
@@ -375,27 +333,18 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: Vec::new(),
             changes: Vec::new(),
         };
-        let native_profile = options.storage_profile == RepositoryStorageProfile::NativeVersionedV1;
-        let delta_id = if native_profile {
-            delta.id()?
-        } else {
-            repository.store_delta(&delta).await?
-        };
         let writer_fence_generation = repository.writer_fence_generation()?;
         let commit = BucketCommitV1 {
             state: empty_state,
             parents: Vec::new(),
             generation: CommitGeneration(0),
-            delta: delta_id,
+            delta,
+            node_pack: None,
+            writer_fence_generation,
             author: options.writer.clone(),
             message: Some("initialize versioned S3 repository".to_string()),
             created_at_millis: intent.format.created_at_millis,
             metadata: BTreeMap::new(),
-            native: native_profile.then(|| crate::NativeCommitExtensionV1 {
-                node_pack: None,
-                inline_delta: delta.clone(),
-                writer_fence_generation,
-            }),
         };
         let commit_id = repository.store_commit(&commit).await?;
 
@@ -408,11 +357,7 @@ impl<P: ObjectPlane> Repository<P> {
             message: "initialize".to_string(),
             created_at_millis: intent.format.created_at_millis,
         };
-        let reflog_id = if native_profile {
-            reflog.id()?
-        } else {
-            repository.store_reflog(&reflog).await?
-        };
+        let reflog_id = reflog.id()?;
 
         let format_bytes = encode_canonical(&intent.format)?;
         match plane
@@ -442,10 +387,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer: options.writer.clone(),
             updated_at_millis: intent.format.created_at_millis,
             tombstone: false,
-            native: native_profile.then_some(crate::NativeRefExtensionV1 {
-                writer_fence_generation,
-                inline_reflog: reflog,
-            }),
+            writer_fence_generation,
+            inline_reflog: reflog,
         };
         let initial_ref_bytes = encode_canonical(&initial_ref)?;
         match plane
@@ -523,28 +466,15 @@ impl<P: ObjectPlane> Repository<P> {
             format: format.state_tree_format.clone(),
             runtime: RuntimeConfig::default(),
         };
-        let node_store = match format.storage_profile()? {
-            RepositoryStorageProfile::DistributedContentAddressedV1 => {
-                ProllyObjectStore::new(plane.clone(), options.repository_prefix.clone())
-            }
-            RepositoryStorageProfile::NativeVersionedV1 => {
-                ProllyObjectStore::new_packed(plane.clone(), options.repository_prefix.clone())
-            }
-        };
+        let node_store =
+            ProllyObjectStore::new_packed(plane.clone(), options.repository_prefix.clone());
         let engine = AsyncProlly::new(node_store.clone(), config);
-        let content = ContentStore::new(
-            plane.clone(),
-            options.repository_prefix.clone(),
-            format.canonical_limits.content_chunk_bytes as usize,
-            format.content_index_format.clone(),
-        );
         Ok(Self {
             plane,
             options,
             format,
             node_store,
             engine,
-            content,
             writer_lease: Arc::new(RwLock::new(None)),
             warm_branches: Arc::new(RwLock::new(BTreeMap::new())),
             commit_cache: Arc::new(RwLock::new(BTreeMap::new())),
@@ -560,12 +490,6 @@ impl<P: ObjectPlane> Repository<P> {
         &self.format
     }
 
-    pub fn storage_profile(&self) -> RepositoryStorageProfile {
-        self.format
-            .storage_profile()
-            .expect("repository format was validated before construction")
-    }
-
     pub fn plane(&self) -> Arc<P> {
         self.plane.clone()
     }
@@ -576,12 +500,6 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         branch: &str,
     ) -> Result<crate::NodeIndexCheckpointV1> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "node-index checkpoints apply only to native-versioned repositories",
-            ));
-        }
         validate_branch(branch)?;
         self.node_store.rebuild_node_index().await?;
         let head = self.head(branch).await?;
@@ -608,9 +526,6 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     async fn load_latest_node_index_checkpoint(&self) -> Result<()> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Ok(());
-        }
         let prefix = format!("{}/node-index/checkpoints/", self.options.repository_prefix);
         let mut continuation = None;
         let mut paths = Vec::new();
@@ -662,9 +577,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     async fn acquire_native_writer(&mut self) -> Result<()> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1
-            || self.options.read_only
-        {
+        if self.options.read_only {
             return Ok(());
         }
         let path = writer_lease_path(&self.options.repository_prefix)?;
@@ -746,9 +659,6 @@ impl<P: ObjectPlane> Repository<P> {
     /// call this from an independent maintenance loop; mutations also renew
     /// opportunistically near the deadline.
     pub async fn renew_writer_lease(&self) -> Result<()> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Ok(());
-        }
         let held = self
             .writer_lease
             .read()
@@ -816,9 +726,7 @@ impl<P: ObjectPlane> Repository<P> {
     /// is dropped. A failed or ambiguous renewal fences this repository before
     /// the task exits.
     pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1
-            || self.options.read_only
-        {
+        if self.options.read_only {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
                 "writer lease maintenance requires a writable native repository",
@@ -849,12 +757,6 @@ impl<P: ObjectPlane> Repository<P> {
         expected_generation: u64,
         handoff_evidence: &str,
     ) -> Result<u64> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "exclusive writer takeover applies only to native-versioned repositories",
-            ));
-        }
         if !self.options.read_only || handoff_evidence.trim().is_empty() {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
@@ -927,17 +829,13 @@ impl<P: ObjectPlane> Repository<P> {
 
         for branch in self.list_branches().await? {
             let loaded = self.load_ref_including_tombstone(&branch.name).await?;
-            let observed_fence = loaded
-                .value
-                .native
-                .as_ref()
-                .map(|native| native.writer_fence_generation)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "native branch ref is missing its writer fence",
-                    )
-                })?;
+            let observed_fence = loaded.value.writer_fence_generation;
+            if observed_fence == 0 {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "branch ref has a zero writer fence",
+                ));
+            }
             if observed_fence == next_generation {
                 continue;
             }
@@ -966,12 +864,10 @@ impl<P: ObjectPlane> Repository<P> {
                 })?);
             barrier.operation = operation;
             barrier.reflog = reflog.id()?;
+            barrier.inline_reflog = reflog;
             barrier.writer = self.options.writer.clone();
             barrier.updated_at_millis = now;
-            barrier.native = Some(crate::NativeRefExtensionV1 {
-                writer_fence_generation: next_generation,
-                inline_reflog: reflog,
-            });
+            barrier.writer_fence_generation = next_generation;
             match self
                 .plane
                 .compare_exchange(CompareExchange {
@@ -1031,9 +927,6 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     fn writer_fence_generation(&self) -> Result<u64> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Ok(0);
-        }
         self.writer_lease
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
@@ -1129,141 +1022,18 @@ impl<P: ObjectPlane> Repository<P> {
         self.options.ids.operation()
     }
 
-    fn new_workspace(&self) -> WorkspaceId {
-        self.options.ids.workspace()
+    fn new_batch(&self) -> BatchId {
+        self.options.ids.batch()
     }
 
-    fn new_upload(&self) -> UploadId {
-        self.options.ids.upload()
-    }
-
-    /// Copy the complete portable repository into an empty object namespace.
-    /// Provider attestations, probes, leases, maintenance state, uploads, and
-    /// workspaces are deliberately excluded. Refs are created last through
-    /// destination-local CAS so no source storage token crosses providers.
+    /// Replay the complete logical history into an empty native-versioned
+    /// destination. Provider attestations and maintenance state remain local.
     pub async fn clone_to<Q: ObjectPlane>(
         &self,
         destination: Arc<Q>,
         destination_prefix: &str,
     ) -> Result<CloneReport> {
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            return self.clone_native_to(destination, destination_prefix).await;
-        }
-        let probe_prefix = format!("{destination_prefix}/");
-        ObjectPath::new(format!("{destination_prefix}/format/v1.cbor"))?;
-        let mut destination_continuation = None;
-        loop {
-            let page = destination
-                .list(ListRequest {
-                    prefix: probe_prefix.clone(),
-                    continuation: destination_continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            if page.entries.iter().any(|entry| {
-                entry
-                    .path
-                    .as_str()
-                    .strip_prefix(&probe_prefix)
-                    .is_some_and(is_portable_clone_path)
-            }) {
-                return Err(Error::new(
-                    ErrorCode::RepositoryFormatConflict,
-                    "clone destination portable namespace is not empty",
-                ));
-            }
-            destination_continuation = page.continuation;
-            if destination_continuation.is_none() {
-                break;
-            }
-        }
-        let mut report = CloneReport::default();
-        for refs_only in [false, true] {
-            let mut continuation = None;
-            let source_prefix = format!("{}/", self.options.repository_prefix);
-            loop {
-                let page = self
-                    .plane
-                    .list(ListRequest {
-                        prefix: source_prefix.clone(),
-                        continuation,
-                        limit: 1_000,
-                        include_versions: false,
-                    })
-                    .await?;
-                for listed in page.entries {
-                    let relative = listed
-                        .path
-                        .as_str()
-                        .strip_prefix(&source_prefix)
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::InternalInvariant,
-                                "clone listing escaped its source prefix",
-                            )
-                        })?
-                        .to_string();
-                    let is_ref = relative.starts_with("refs/");
-                    if is_ref != refs_only || !is_portable_clone_path(&relative) {
-                        continue;
-                    }
-                    let source = self
-                        .plane
-                        .get(GetRequest {
-                            path: listed.path,
-                            range: None,
-                            physical_version: None,
-                        })
-                        .await?
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::MissingClosure,
-                                "clone source object disappeared during copy",
-                            )
-                        })?;
-                    let path = ObjectPath::new(format!("{destination_prefix}/{relative}"))?;
-                    if is_ref {
-                        match destination
-                            .compare_exchange(CompareExchange {
-                                path,
-                                expected: None,
-                                bytes: source.bytes,
-                            })
-                            .await?
-                        {
-                            CompareExchangeOutcome::Applied(_) => report.refs += 1,
-                            CompareExchangeOutcome::Conflict(_) => {
-                                return Err(Error::new(
-                                    ErrorCode::RefConflict,
-                                    "clone destination ref was created concurrently",
-                                ))
-                            }
-                        }
-                    } else {
-                        report.immutable_bytes = report
-                            .immutable_bytes
-                            .checked_add(source.bytes.len() as u64)
-                            .ok_or_else(|| {
-                                Error::new(ErrorCode::EntityTooLarge, "clone byte count overflow")
-                            })?;
-                        destination
-                            .put_immutable(ImmutablePut {
-                                path,
-                                expected_sha256: crate::codec::sha256(&source.bytes),
-                                bytes: source.bytes,
-                            })
-                            .await?;
-                        report.immutable_objects += 1;
-                    }
-                }
-                continuation = page.continuation;
-                if continuation.is_none() {
-                    break;
-                }
-            }
-        }
-        Ok(report)
+        self.clone_native_to(destination, destination_prefix).await
     }
 
     async fn clone_native_to<Q: ObjectPlane>(
@@ -1346,7 +1116,6 @@ impl<P: ObjectPlane> Repository<P> {
 
         let mut target_options = self.options.clone();
         target_options.repository_prefix = destination_prefix.to_string();
-        target_options.storage_profile = RepositoryStorageProfile::NativeVersionedV1;
         target_options.read_only = false;
         let mut target =
             Repository::<Q>::from_format(destination, target_options, self.format.clone())?;
@@ -1410,10 +1179,8 @@ impl<P: ObjectPlane> Repository<P> {
                 writer: target.options.writer.clone(),
                 updated_at_millis: created_at_millis,
                 tombstone: false,
-                native: Some(crate::NativeRefExtensionV1 {
-                    writer_fence_generation,
-                    inline_reflog: reflog,
-                }),
+                writer_fence_generation,
+                inline_reflog: reflog,
             };
             match target
                 .plane
@@ -1533,20 +1300,20 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
                 Error::new(ErrorCode::CorruptCommit, "native clone key is not UTF-8")
             })?)?;
-        match (&version.body.kind, &version.native_binding) {
+        match (&version.body.kind, &version.binding) {
             (
-                ObjectVersionKindV1::Live {
+                LogicalObjectVersionKindV1::Live {
                     size,
                     headers,
                     checksums,
                     user_metadata,
                     ..
                 },
-                Some(crate::NativeObjectBindingV1::Live {
+                crate::NativeObjectBindingV1::Live {
                     version_id,
                     checksum_sha256,
                     ..
-                }),
+                },
             ) => {
                 let spool = tempfile::NamedTempFile::new().map_err(|error| {
                     Error::new(
@@ -1598,8 +1365,8 @@ impl<P: ObjectPlane> Repository<P> {
                 Ok(write.binding)
             }
             (
-                ObjectVersionKindV1::DeleteMarker,
-                Some(crate::NativeObjectBindingV1::DeleteMarker { .. }),
+                LogicalObjectVersionKindV1::DeleteMarker,
+                crate::NativeObjectBindingV1::DeleteMarker { .. },
             ) => {
                 match target
                     .plane
@@ -1717,7 +1484,7 @@ impl<P: ObjectPlane> Repository<P> {
             let objects = encode_canonical(&commit.state.objects)?;
             let operations = encode_canonical(&commit.state.operations)?;
             let generation = commit.generation.0.to_be_bytes();
-            let delta = commit.delta.as_bytes();
+            let delta = encode_canonical(&commit.delta)?;
             let message = encode_canonical(&commit.message)?;
             let metadata = encode_canonical(&commit.metadata)?;
             let fingerprint = derive_input_digest(&[
@@ -1726,7 +1493,7 @@ impl<P: ObjectPlane> Repository<P> {
                 &objects,
                 &operations,
                 &generation,
-                delta,
+                &delta,
                 commit.author.as_bytes(),
                 &message,
                 &commit.created_at_millis.to_be_bytes(),
@@ -1830,15 +1597,7 @@ impl<P: ObjectPlane> Repository<P> {
                         .find_version(base, &transition.key, transition.next)
                         .await
                     {
-                        Ok(existing) => (
-                            existing.native_binding.ok_or_else(|| {
-                                Error::new(
-                                    ErrorCode::CorruptCommit,
-                                    "native transfer base version omitted its binding",
-                                )
-                            })?,
-                            false,
-                        ),
+                        Ok(existing) => (existing.binding, false),
                         Err(error) if error.code == ErrorCode::NoSuchVersion => (
                             self.clone_native_version_binding(
                                 target,
@@ -1867,8 +1626,8 @@ impl<P: ObjectPlane> Repository<P> {
                 };
                 if copied_payload {
                     let size = match &version.body.kind {
-                        ObjectVersionKindV1::Live { size, .. } => *size,
-                        ObjectVersionKindV1::DeleteMarker => 0,
+                        LogicalObjectVersionKindV1::Live { size, .. } => *size,
+                        LogicalObjectVersionKindV1::DeleteMarker => 0,
                     };
                     report.copied_bytes =
                         report.copied_bytes.checked_add(size).ok_or_else(|| {
@@ -1880,8 +1639,8 @@ impl<P: ObjectPlane> Repository<P> {
                     report.copied_objects += 1;
                 }
                 binding_map.insert(binding_key, binding.clone());
-                version.native_binding = Some(binding);
-                version.validate_native()?;
+                version.binding = binding;
+                version.validate()?;
                 versions = target
                     .engine
                     .put(
@@ -1948,16 +1707,13 @@ impl<P: ObjectPlane> Repository<P> {
                 state,
                 parents: mapped_parents,
                 generation: source_commit.generation,
-                delta: delta.id()?,
+                delta,
+                node_pack,
+                writer_fence_generation,
                 author: source_commit.author,
                 message: source_commit.message,
                 created_at_millis: source_commit.created_at_millis,
                 metadata: source_commit.metadata,
-                native: Some(crate::NativeCommitExtensionV1 {
-                    node_pack,
-                    inline_delta: delta,
-                    writer_fence_generation,
-                }),
             };
             let destination_id = target.store_commit(&destination_commit).await?;
             report.copied_objects += 1;
@@ -1974,253 +1730,20 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let _publication = self.native_publication.lock().await;
-            let source_head = source.head(source_branch).await?;
-            let (mapped, mut report) = source
-                .replay_native_history_to(self, &[source_head], false)
-                .await?;
-            report.source_head = Some(*mapped.get(&source_head).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::MissingClosure,
-                    "native fetch did not map its selected source head",
-                )
-            })?);
-            return Ok(report);
-        }
+        let _publication = self.native_publication.lock().await;
         let source_head = source.head(source_branch).await?;
-        let mut report = source
-            .copy_commit_closure_to(
-                self.plane.clone(),
-                &self.options.repository_prefix,
-                source_head,
-            )
+        let (mapped, mut report) = source
+            .replay_native_history_to(self, &[source_head], false)
             .await?;
-        report.source_head = Some(source_head);
+        report.source_head = Some(*mapped.get(&source_head).ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "fetch did not map its selected source head",
+            )
+        })?);
         Ok(report)
     }
 
-    /// Copies a bounded portion of one immutable reachable closure and stores
-    /// a destination-local CAS checkpoint. Repeating the same run after a
-    /// crash safely rechecks already-created immutable objects and resumes
-    /// after the last checkpointed relative path.
-    pub async fn sync_closure_batch_to<Q: ObjectPlane>(
-        &self,
-        destination: &Repository<Q>,
-        source_branch: &str,
-        run: Option<OperationId>,
-        max_objects: usize,
-    ) -> Result<SyncRunV1> {
-        if max_objects == 0 {
-            return Err(Error::new(
-                ErrorCode::InvalidLimit,
-                "sync checkpoint batch must contain at least one object",
-            ));
-        }
-        self.validate_sync_identity(destination)?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "native resumable sync requires the logical transfer journal API",
-            ));
-        }
-        let id = run.unwrap_or_else(|| self.new_operation());
-        let path = sync_run_path(&destination.options.repository_prefix, id)?;
-        let existing = destination.load_sync_run_optional(id).await?;
-        let source_head = match &existing {
-            Some(loaded) => loaded.value.source_head,
-            None => self.head(source_branch).await?,
-        };
-        let mut loaded = match existing {
-            Some(loaded) => loaded,
-            None => {
-                let initial = SyncRunV1 {
-                    id,
-                    repository: self.format.repository_id,
-                    source_head,
-                    source_branch: source_branch.to_string(),
-                    after_relative_path: None,
-                    generation: 0,
-                    state: SyncRunStateV1::Running,
-                    copied_objects: 0,
-                    copied_bytes: 0,
-                    already_present: 0,
-                    updated_at_millis: destination.now_millis()?,
-                };
-                match destination
-                    .plane
-                    .compare_exchange(CompareExchange {
-                        path: path.clone(),
-                        expected: None,
-                        bytes: encode_canonical(&initial)?,
-                    })
-                    .await
-                {
-                    Ok(CompareExchangeOutcome::Applied(metadata)) => LoadedSyncRun {
-                        value: initial,
-                        token: metadata.token,
-                    },
-                    Ok(CompareExchangeOutcome::Conflict(_)) => {
-                        destination.load_sync_run(id).await?
-                    }
-                    Err(error) => {
-                        if let Some(current) = destination.load_sync_run_optional(id).await? {
-                            current
-                        } else {
-                            return Err(Error::new(
-                                ErrorCode::OutcomeUnknown,
-                                format!("sync checkpoint creation outcome is unknown: {error}"),
-                            )
-                            .retry(RetryAdvice::ReconcileOperation)
-                            .operation(id.to_string()));
-                        }
-                    }
-                }
-            }
-        };
-        validate_sync_run(
-            &loaded.value,
-            id,
-            self.format.repository_id,
-            source_branch,
-            source_head,
-        )?;
-        if matches!(loaded.value.state, SyncRunStateV1::Completed) {
-            return Ok(loaded.value);
-        }
-
-        let source_prefix = format!("{}/", self.options.repository_prefix);
-        let mut next = loaded.value.clone();
-        let mut processed = 0usize;
-        let mut has_more = false;
-        let closure = self.commit_closure_paths(source_head).await?;
-        if let Some(after) = next.after_relative_path.as_deref() {
-            let checkpoint_exists = closure.iter().any(|path| {
-                path.as_str()
-                    .strip_prefix(&source_prefix)
-                    .is_some_and(|relative| relative == after)
-            });
-            if !checkpoint_exists {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "sync checkpoint path is absent from its pinned closure",
-                )
-                .operation(id.to_string()));
-            }
-        }
-        for source_path in closure {
-            let relative = source_path
-                .as_str()
-                .strip_prefix(&source_prefix)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "sync checkpoint closure escaped its source prefix",
-                    )
-                })?
-                .to_string();
-            if next
-                .after_relative_path
-                .as_ref()
-                .is_some_and(|after| relative <= *after)
-            {
-                continue;
-            }
-            if processed == max_objects {
-                has_more = true;
-                break;
-            }
-            let source = self
-                .plane
-                .get(GetRequest {
-                    path: source_path,
-                    range: None,
-                    physical_version: None,
-                })
-                .await?
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::MissingClosure,
-                        "sync checkpoint source object is missing",
-                    )
-                })?;
-            let destination_path = ObjectPath::new(format!(
-                "{}/{relative}",
-                destination.options.repository_prefix
-            ))?;
-            match destination
-                .plane
-                .put_immutable(ImmutablePut {
-                    path: destination_path,
-                    expected_sha256: crate::codec::sha256(&source.bytes),
-                    bytes: source.bytes,
-                })
-                .await?
-            {
-                ImmutablePutOutcome::Created(metadata) => {
-                    next.copied_objects = next.copied_objects.checked_add(1).ok_or_else(|| {
-                        Error::new(ErrorCode::EntityTooLarge, "sync object count overflow")
-                    })?;
-                    next.copied_bytes =
-                        next.copied_bytes.checked_add(metadata.len).ok_or_else(|| {
-                            Error::new(ErrorCode::EntityTooLarge, "sync byte count overflow")
-                        })?;
-                }
-                ImmutablePutOutcome::AlreadyPresent(_) => {
-                    next.already_present =
-                        next.already_present.checked_add(1).ok_or_else(|| {
-                            Error::new(ErrorCode::EntityTooLarge, "sync existing count overflow")
-                        })?;
-                }
-            }
-            next.after_relative_path = Some(relative);
-            processed += 1;
-        }
-        if !has_more {
-            next.state = SyncRunStateV1::Completed;
-        }
-        next.generation = next
-            .generation
-            .checked_add(1)
-            .ok_or_else(|| Error::new(ErrorCode::InternalInvariant, "sync generation overflow"))?;
-        next.updated_at_millis = destination.now_millis()?;
-        match destination
-            .plane
-            .compare_exchange(CompareExchange {
-                path,
-                expected: Some(loaded.token),
-                bytes: encode_canonical(&next)?,
-            })
-            .await
-        {
-            Ok(CompareExchangeOutcome::Applied(_)) => Ok(next),
-            Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
-                ErrorCode::RefConflict,
-                "sync checkpoint changed concurrently",
-            )
-            .retry(RetryAdvice::ReloadHead)),
-            Err(error) => {
-                loaded = destination.load_sync_run(id).await?;
-                if loaded.value == next {
-                    Ok(next)
-                } else {
-                    Err(Error::new(
-                        ErrorCode::OutcomeUnknown,
-                        format!("sync checkpoint update outcome is unknown: {error}"),
-                    )
-                    .retry(RetryAdvice::ReconcileOperation)
-                    .operation(id.to_string()))
-                }
-            }
-        }
-    }
-
-    pub async fn sync_run(&self, id: OperationId) -> Result<SyncRunV1> {
-        Ok(self.load_sync_run(id).await?.value)
-    }
-
-    /// Copy immutable objects, then move an existing destination branch only
-    /// when its exact expected head still matches.
     pub async fn push_to<Q: ObjectPlane>(
         &self,
         destination: &Repository<Q>,
@@ -2231,64 +1754,38 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
         let source_head = self.head(source_branch).await?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let _publication = destination.native_publication.lock().await;
-            let (mapped, mut report) = self
-                .replay_native_history_to(destination, &[source_head], false)
-                .await?;
-            let mapped_head = *mapped.get(&source_head).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::MissingClosure,
-                    "native push did not map its selected source head",
-                )
-            })?;
-            if reason.trim().is_empty() {
-                return Err(Error::new(
-                    ErrorCode::InvalidRequest,
-                    "administrative ref movement requires a non-empty reason",
-                ));
-            }
-            let loaded = destination.load_ref(destination_branch).await?;
-            if loaded.value.target != expected_destination {
-                return Err(Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "branch head does not match push expectation",
-                ));
-            }
-            let movement = destination
-                .move_ref_inner(destination_branch, loaded, mapped_head, reason)
-                .await?;
-            report.source_head = Some(mapped_head);
-            report.ref_move = Some(movement);
-            return Ok(report);
+        let _publication = destination.native_publication.lock().await;
+        let (mapped, mut report) = self
+            .replay_native_history_to(destination, &[source_head], false)
+            .await?;
+        let mapped_head = *mapped.get(&source_head).ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "native push did not map its selected source head",
+            )
+        })?;
+        if reason.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "administrative ref movement requires a non-empty reason",
+            ));
         }
-        let mut report = self
-            .copy_commit_closure_to(
-                destination.plane.clone(),
-                &destination.options.repository_prefix,
-                source_head,
-            )
-            .await?;
+        let loaded = destination.load_ref(destination_branch).await?;
+        if loaded.value.target != expected_destination {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch head does not match push expectation",
+            ));
+        }
         let movement = destination
-            .reset_branch(
-                destination_branch,
-                source_head,
-                expected_destination,
-                reason,
-            )
+            .move_ref_inner(destination_branch, loaded, mapped_head, reason)
             .await?;
-        report.source_head = Some(source_head);
+        report.source_head = Some(mapped_head);
         report.ref_move = Some(movement);
         Ok(report)
     }
 
     fn validate_sync_identity<Q: ObjectPlane>(&self, other: &Repository<Q>) -> Result<()> {
-        if self.storage_profile() != other.storage_profile() {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "sync cannot cross repository storage profiles",
-            ));
-        }
         if self.format != other.format {
             return Err(Error::new(
                 ErrorCode::RepositoryFormatConflict,
@@ -2296,117 +1793,6 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         Ok(())
-    }
-
-    async fn copy_commit_closure_to<Q: ObjectPlane>(
-        &self,
-        destination: Arc<Q>,
-        destination_prefix: &str,
-        head: CommitId,
-    ) -> Result<SyncReport> {
-        let mut report = SyncReport::default();
-        let source_prefix = format!("{}/", self.options.repository_prefix);
-        for source_path in self.commit_closure_paths(head).await? {
-            let relative = source_path
-                .as_str()
-                .strip_prefix(&source_prefix)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "commit closure escaped its source prefix",
-                    )
-                })?
-                .to_string();
-            let source = self
-                .plane
-                .get(GetRequest {
-                    path: source_path,
-                    range: None,
-                    physical_version: None,
-                })
-                .await?
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::MissingClosure,
-                        "sync source closure object is missing",
-                    )
-                })?;
-            let path = ObjectPath::new(format!("{destination_prefix}/{relative}"))?;
-            match destination
-                .put_immutable(ImmutablePut {
-                    path,
-                    expected_sha256: crate::codec::sha256(&source.bytes),
-                    bytes: source.bytes,
-                })
-                .await?
-            {
-                ImmutablePutOutcome::Created(metadata) => {
-                    report.copied_objects += 1;
-                    report.copied_bytes = report
-                        .copied_bytes
-                        .checked_add(metadata.len)
-                        .ok_or_else(|| {
-                            Error::new(ErrorCode::EntityTooLarge, "sync byte count overflow")
-                        })?;
-                }
-                ImmutablePutOutcome::AlreadyPresent(_) => report.already_present += 1,
-            }
-        }
-        Ok(report)
-    }
-
-    async fn commit_closure_paths(&self, head: CommitId) -> Result<BTreeSet<ObjectPath>> {
-        let mut paths = BTreeSet::new();
-        let mut commits = vec![head];
-        let mut seen = BTreeSet::new();
-        let mut state_roots = Vec::new();
-        let mut content = BTreeSet::new();
-        while let Some(id) = commits.pop() {
-            if !seen.insert(id) {
-                continue;
-            }
-            if seen.len() > self.options.history_traversal_limit {
-                return Err(Error::new(
-                    ErrorCode::HistoryLimitExceeded,
-                    "sync commit closure exceeded its configured history limit",
-                ));
-            }
-            let commit = self.load_commit(id).await?;
-            paths.insert(commit_path(&self.options.repository_prefix, id)?);
-            paths.insert(delta_path(&self.options.repository_prefix, commit.delta)?);
-            let objects =
-                self.tree_from_root(&commit.state.objects, &self.format.state_tree_format)?;
-            let versions =
-                self.tree_from_root(&commit.state.versions, &self.format.state_tree_format)?;
-            let operations =
-                self.tree_from_root(&commit.state.operations, &self.format.state_tree_format)?;
-            state_roots.extend([objects, versions.clone(), operations]);
-            let mut entries = self.engine.range(&versions, &[], None).await?;
-            while let Some(entry) = entries.next().await {
-                let (_, value) = entry?;
-                let version: ObjectVersionV1 = decode_canonical(&value)?;
-                if let ObjectVersionKindV1::Live {
-                    content: crate::ContentRef::Chunks(reference),
-                    ..
-                } = version.body.kind
-                {
-                    content.insert(reference);
-                }
-            }
-            commits.extend(commit.parents);
-        }
-        let nodes = self.engine.mark_reachable(&state_roots).await?;
-        for cid in nodes.cids() {
-            paths.insert(node_path(&self.options.repository_prefix, cid)?);
-        }
-        for reference in content {
-            paths.extend(
-                self.content
-                    .retained_paths(&crate::ContentRef::Chunks(reference))
-                    .await?,
-            );
-        }
-        Ok(paths)
     }
 
     pub async fn head(&self, branch: &str) -> Result<CommitId> {
@@ -2417,24 +1803,8 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(name)?;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
-        };
-        let lease = if native_profile {
-            None
-        } else {
-            let lease = self.publication_lease(operation).await?;
-            lease.set_proposal(from).await?;
-            Some(lease)
-        };
+        let _native_publication = self.native_publication.lock().await;
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
             branch: name.to_string(),
@@ -2445,7 +1815,7 @@ impl<P: ObjectPlane> Repository<P> {
             message: "create branch".to_string(),
             created_at_millis,
         };
-        let reflog_id = self.store_reflog(&reflog).await?;
+        let reflog_id = reflog.id()?;
         let value = crate::RefValueV1 {
             target: from,
             previous_target: None,
@@ -2455,14 +1825,9 @@ impl<P: ObjectPlane> Repository<P> {
             writer: self.options.writer.clone(),
             updated_at_millis: created_at_millis,
             tombstone: false,
-            native: native_profile.then_some(crate::NativeRefExtensionV1 {
-                writer_fence_generation,
-                inline_reflog: reflog,
-            }),
+            writer_fence_generation,
+            inline_reflog: reflog,
         };
-        if let Some(lease) = &lease {
-            self.ensure_publication_allowed(lease).await?;
-        }
         let publication = self
             .plane
             .compare_exchange(CompareExchange {
@@ -2473,12 +1838,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         match publication {
             Ok(CompareExchangeOutcome::Applied(metadata)) => {
-                if native_profile {
-                    self.cache_branch(name, value.clone(), metadata.token, commit)?;
-                }
-                if let Some(lease) = &lease {
-                    let _ = lease.complete(from).await;
-                }
+                self.cache_branch(name, value.clone(), metadata.token, commit)?;
                 Ok(BranchHead {
                     name: name.to_string(),
                     target: from,
@@ -2512,17 +1872,8 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_branch(&self, name: &str, expected: CommitId) -> Result<()> {
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
-        };
+        let _native_publication = self.native_publication.lock().await;
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let loaded = self.load_ref(name).await?;
         if loaded.value.target != expected {
             return Err(Error::new(
@@ -2541,7 +1892,7 @@ impl<P: ObjectPlane> Repository<P> {
             message: "delete branch".to_string(),
             created_at_millis,
         };
-        let reflog = self.store_reflog(&reflog_entry).await?;
+        let reflog = reflog_entry.id()?;
         let value = crate::RefValueV1 {
             target: expected,
             previous_target: Some(expected),
@@ -2553,10 +1904,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer: self.options.writer.clone(),
             updated_at_millis: created_at_millis,
             tombstone: true,
-            native: native_profile.then_some(crate::NativeRefExtensionV1 {
-                writer_fence_generation,
-                inline_reflog: reflog_entry,
-            }),
+            writer_fence_generation,
+            inline_reflog: reflog_entry,
         };
         let publication = self
             .plane
@@ -2661,33 +2010,13 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn reflog(&self, branch: &str, id: crate::ReflogEntryId) -> Result<ReflogEntryV1> {
-        let object = self
-            .plane
-            .get(GetRequest {
-                path: reflog_path(&self.options.repository_prefix, branch, id)?,
-                range: None,
-                physical_version: None,
-            })
-            .await?;
-        if let Some(object) = object {
-            let entry: ReflogEntryV1 = decode_canonical(&object.bytes)?;
-            if entry.id()? != id || entry.branch != branch {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "reflog entry identity mismatch",
-                ));
-            }
+        if let Some((_, entry)) = self
+            .native_reflog_history(branch)
+            .await?
+            .into_iter()
+            .find(|(entry_id, _)| *entry_id == id)
+        {
             return Ok(entry);
-        }
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            if let Some((_, entry)) = self
-                .native_reflog_history(branch)
-                .await?
-                .into_iter()
-                .find(|(entry_id, _)| *entry_id == id)
-            {
-                return Ok(entry);
-            }
         }
         Err(Error::new(
             ErrorCode::InvalidRevision,
@@ -2699,60 +2028,7 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         branch: &str,
     ) -> Result<Vec<(crate::ReflogEntryId, ReflogEntryV1)>> {
-        validate_branch(branch)?;
-        let prefix = format!(
-            "{}/reflogs/heads/{}/",
-            self.options.repository_prefix,
-            hex::encode(branch.as_bytes())
-        );
-        let mut continuation = None;
-        let mut entries = if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            self.native_reflog_history(branch).await?
-        } else {
-            Vec::new()
-        };
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for listed in page.entries {
-                let object = self
-                    .plane
-                    .get(GetRequest {
-                        path: listed.path,
-                        range: None,
-                        physical_version: None,
-                    })
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(
-                            ErrorCode::MissingClosure,
-                            "listed reflog entry disappeared during read",
-                        )
-                    })?;
-                let entry: ReflogEntryV1 = decode_canonical(&object.bytes)?;
-                if entry.branch != branch {
-                    return Err(Error::new(
-                        ErrorCode::CorruptCommit,
-                        "reflog entry escaped its branch namespace",
-                    ));
-                }
-                let id = entry.id()?;
-                if !entries.iter().any(|(existing, _)| *existing == id) {
-                    entries.push((id, entry));
-                }
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
+        let mut entries = self.native_reflog_history(branch).await?;
         entries.sort_by(|left, right| {
             left.1
                 .created_at_millis
@@ -2769,17 +2045,15 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         let loaded = self.load_ref_including_tombstone(branch).await?;
         let mut entries = BTreeMap::new();
-        if let Some(native) = &loaded.value.native {
-            if native.inline_reflog.branch != branch
-                || native.inline_reflog.id()? != loaded.value.reflog
-            {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native ref inline reflog identity mismatch",
-                ));
-            }
-            entries.insert(loaded.value.reflog, native.inline_reflog.clone());
+        if loaded.value.inline_reflog.branch != branch
+            || loaded.value.inline_reflog.id()? != loaded.value.reflog
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "ref inline reflog identity mismatch",
+            ));
         }
+        entries.insert(loaded.value.reflog, loaded.value.inline_reflog.clone());
         let mut next = Some(loaded.value.target);
         let mut seen = BTreeSet::new();
         while let Some(id) = next {
@@ -2821,12 +2095,7 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
+        let _native_publication = self.native_publication.lock().await;
         self.move_ref_inner(branch, loaded, target, reason).await
     }
 
@@ -2837,23 +2106,9 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
-        };
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
-        let lease = if native_profile {
-            None
-        } else {
-            let lease = self.publication_lease(operation).await?;
-            lease
-                .protect(commit_path(&self.options.repository_prefix, target)?)
-                .await?;
-            Some(lease)
-        };
         let reflog_entry = ReflogEntryV1 {
             branch: branch.to_string(),
             old_target: Some(loaded.value.target),
@@ -2863,16 +2118,7 @@ impl<P: ObjectPlane> Repository<P> {
             message: reason.to_string(),
             created_at_millis,
         };
-        let reflog = self.store_reflog(&reflog_entry).await?;
-        if let Some(lease) = &lease {
-            lease
-                .protect(reflog_path(
-                    &self.options.repository_prefix,
-                    branch,
-                    reflog,
-                )?)
-                .await?;
-        }
+        let reflog = reflog_entry.id()?;
         let generation =
             RefGeneration(loaded.value.generation.0.checked_add(1).ok_or_else(|| {
                 Error::new(ErrorCode::InternalInvariant, "ref generation overflow")
@@ -2886,15 +2132,9 @@ impl<P: ObjectPlane> Repository<P> {
             writer: self.options.writer.clone(),
             updated_at_millis: created_at_millis,
             tombstone: false,
-            native: native_profile.then_some(crate::NativeRefExtensionV1 {
-                writer_fence_generation,
-                inline_reflog: reflog_entry,
-            }),
+            writer_fence_generation,
+            inline_reflog: reflog_entry,
         };
-        if let Some(lease) = &lease {
-            lease.set_proposal(target).await?;
-            self.ensure_publication_allowed(lease).await?;
-        }
         let publication = self
             .plane
             .compare_exchange(CompareExchange {
@@ -2905,13 +2145,8 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         match publication {
             Ok(CompareExchangeOutcome::Applied(metadata)) => {
-                if native_profile {
-                    let commit = self.load_commit(target).await?;
-                    self.cache_branch(branch, value, metadata.token, commit)?;
-                }
-                if let Some(lease) = &lease {
-                    let _ = lease.complete(target).await;
-                }
+                let commit = self.load_commit(target).await?;
+                self.cache_branch(branch, value, metadata.token, commit)?;
                 Ok(RefMoveReceipt {
                     branch: branch.to_string(),
                     old_target: Some(loaded.value.target),
@@ -2931,9 +2166,6 @@ impl<P: ObjectPlane> Repository<P> {
                     && current.value.target == target
                     && !current.value.tombstone
                 {
-                    if let Some(lease) = &lease {
-                        let _ = lease.complete(target).await;
-                    }
                     return Ok(RefMoveReceipt {
                         branch: branch.to_string(),
                         old_target: Some(loaded.value.target),
@@ -3001,9 +2233,9 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         validate_branch(name)?;
         self.load_commit(target).await?;
+        let _publication = self.native_publication.lock().await;
+        self.native_writer_generation_for_mutation().await?;
         let operation = self.new_operation();
-        let lease = self.publication_lease(operation).await?;
-        lease.set_proposal(target).await?;
         let created_at_millis = self.now_millis()?;
         let reflog = self
             .store_tag_reflog(&ReflogEntryV1 {
@@ -3026,7 +2258,6 @@ impl<P: ObjectPlane> Repository<P> {
             created_at_millis,
             tombstone: false,
         };
-        self.ensure_publication_allowed(&lease).await?;
         let publication = self
             .plane
             .compare_exchange(CompareExchange {
@@ -3036,13 +2267,10 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await;
         match publication {
-            Ok(CompareExchangeOutcome::Applied(_)) => {
-                let _ = lease.complete(target).await;
-                Ok(Tag {
-                    name: name.to_string(),
-                    target,
-                })
-            }
+            Ok(CompareExchangeOutcome::Applied(_)) => Ok(Tag {
+                name: name.to_string(),
+                target,
+            }),
             Ok(CompareExchangeOutcome::Conflict(_)) => {
                 Err(Error::new(ErrorCode::RefConflict, "tag already exists"))
             }
@@ -3207,9 +2435,8 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.load_commit(target).await?;
-        let operation = self.new_operation();
-        let lease = self.publication_lease(operation).await?;
-        lease.set_proposal(target).await?;
+        let _publication = self.native_publication.lock().await;
+        self.native_writer_generation_for_mutation().await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
         let now = self.now_millis()?;
@@ -3248,7 +2475,6 @@ impl<P: ObjectPlane> Repository<P> {
             generation,
             tombstone: false,
         };
-        self.ensure_publication_allowed(&lease).await?;
         match self
             .plane
             .compare_exchange(CompareExchange {
@@ -3258,10 +2484,7 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
         {
-            CompareExchangeOutcome::Applied(_) => {
-                let _ = lease.complete(target).await;
-                Ok(pin)
-            }
+            CompareExchangeOutcome::Applied(_) => Ok(pin),
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "retention pin changed concurrently",
@@ -3529,53 +2752,20 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<CommitReceipt> {
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            return self
-                .put_native_bytes_checked(
-                    branch,
-                    key,
-                    bytes,
-                    headers,
-                    user_metadata,
-                    operation,
-                    ObjectWriteConditionV1::default(),
-                    ChecksumExpectation::default(),
-                    None,
-                )
-                .await;
-        }
-        let lease = self.publication_lease(operation).await?;
-        let stored = self
-            .content
-            .clone()
-            .with_protection_sink(Arc::new(lease.clone()))
-            .write_stream(
-                futures_util::stream::once(async move { Ok::<_, std::convert::Infallible>(bytes) }),
-                self.format.canonical_limits.max_object_bytes,
-            )
-            .await;
-        let stored = match stored {
-            Ok(value) => value,
-            Err(error) => {
-                let _ = lease.abandon().await;
-                return Err(error);
-            }
-        };
-        self.put_stored(
+        self.put_native_bytes_checked(
             branch,
             key,
-            stored,
+            bytes,
             headers,
             user_metadata,
             operation,
-            Some(lease),
             ObjectWriteConditionV1::default(),
-            None,
+            ChecksumExpectation::default(),
         )
         .await
     }
 
-    /// Stage a body once; ref-conflict retries reuse its immutable content reference.
+    /// Spool a stream once, then upload it as one native S3 object version.
     pub async fn put_stream<S, B, E>(
         &self,
         branch: &str,
@@ -3620,136 +2810,64 @@ impl<P: ObjectPlane> Repository<P> {
         B: AsRef<[u8]>,
         E: std::fmt::Display,
     {
-        self.put_stream_checked_with_retry_limit(
+        self.validate_key(&key)?;
+        let operation = operation.unwrap_or_else(|| self.new_operation());
+        futures_util::pin_mut!(stream);
+        let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("could not create native upload spool: {error}"),
+            )
+        })?;
+        let mut size = 0_u64;
+        let mut sha256 = Sha256::new();
+        let mut md5 = Md5::new();
+        while let Some(next) = stream.next().await {
+            let next = next.map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native object input stream failed: {error}"),
+                )
+            })?;
+            let next = next.as_ref();
+            size = size.checked_add(next.len() as u64).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "native object length overflow")
+            })?;
+            if size > self.format.canonical_limits.max_object_bytes {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "native object exceeds the repository size limit",
+                ));
+            }
+            spool.write_all(next).map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native upload spool write failed: {error}"),
+                )
+            })?;
+            sha256.update(next);
+            md5.update(next);
+        }
+        spool.flush().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("native upload spool flush failed: {error}"),
+            )
+        })?;
+        let checksum_sha256: [u8; 32] = sha256.finalize().into();
+        let checksum_md5: [u8; 16] = md5.finalize().into();
+        self.put_native_file_checked(
             branch,
             key,
-            stream,
+            spool.path().to_path_buf(),
+            size,
+            checksum_sha256,
+            checksum_md5,
             headers,
             user_metadata,
             operation,
             condition,
             expected_checksums,
-            None,
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub async fn put_stream_checked_with_retry_limit<S, B, E>(
-        &self,
-        branch: &str,
-        key: Vec<u8>,
-        stream: S,
-        headers: ObjectHeaders,
-        user_metadata: BTreeMap<String, String>,
-        operation: Option<OperationId>,
-        condition: ObjectWriteConditionV1,
-        expected_checksums: ChecksumExpectation,
-        logical_retry_limit: Option<u8>,
-    ) -> Result<CommitReceipt>
-    where
-        S: Stream<Item = std::result::Result<B, E>>,
-        B: AsRef<[u8]>,
-        E: std::fmt::Display,
-    {
-        if logical_retry_limit.is_some_and(|limit| limit > MAX_LOGICAL_RETRY_LIMIT) {
-            return Err(Error::new(
-                ErrorCode::InvalidLimit,
-                "logical retry limit must be at most 16",
-            ));
-        }
-        self.validate_key(&key)?;
-        let operation = operation.unwrap_or_else(|| self.new_operation());
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            futures_util::pin_mut!(stream);
-            let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
-                Error::new(
-                    ErrorCode::Transport,
-                    format!("could not create native upload spool: {error}"),
-                )
-            })?;
-            let mut size = 0_u64;
-            let mut sha256 = Sha256::new();
-            let mut md5 = Md5::new();
-            while let Some(next) = stream.next().await {
-                let next = next.map_err(|error| {
-                    Error::new(
-                        ErrorCode::Transport,
-                        format!("native object input stream failed: {error}"),
-                    )
-                })?;
-                let next = next.as_ref();
-                size = size.checked_add(next.len() as u64).ok_or_else(|| {
-                    Error::new(ErrorCode::EntityTooLarge, "native object length overflow")
-                })?;
-                if size > self.format.canonical_limits.max_object_bytes {
-                    return Err(Error::new(
-                        ErrorCode::EntityTooLarge,
-                        "native object exceeds the repository size limit",
-                    ));
-                }
-                spool.write_all(next).map_err(|error| {
-                    Error::new(
-                        ErrorCode::Transport,
-                        format!("native upload spool write failed: {error}"),
-                    )
-                })?;
-                sha256.update(next);
-                md5.update(next);
-            }
-            spool.flush().map_err(|error| {
-                Error::new(
-                    ErrorCode::Transport,
-                    format!("native upload spool flush failed: {error}"),
-                )
-            })?;
-            let checksum_sha256: [u8; 32] = sha256.finalize().into();
-            let checksum_md5: [u8; 16] = md5.finalize().into();
-            return self
-                .put_native_file_checked(
-                    branch,
-                    key,
-                    spool.path().to_path_buf(),
-                    size,
-                    checksum_sha256,
-                    checksum_md5,
-                    headers,
-                    user_metadata,
-                    operation,
-                    condition,
-                    expected_checksums,
-                    logical_retry_limit,
-                )
-                .await;
-        }
-        let lease = self.publication_lease(operation).await?;
-        let stored = self
-            .content
-            .clone()
-            .with_protection_sink(Arc::new(lease.clone()))
-            .write_stream(stream, self.format.canonical_limits.max_object_bytes)
-            .await;
-        let stored = match stored {
-            Ok(value) => value,
-            Err(error) => {
-                let _ = lease.abandon().await;
-                return Err(error);
-            }
-        };
-        if let Err(error) = validate_expected_checksums(&stored, &expected_checksums) {
-            let _ = lease.abandon().await;
-            return Err(error);
-        }
-        self.put_stored(
-            branch,
-            key,
-            stored,
-            headers,
-            user_metadata,
-            operation,
-            Some(lease),
-            condition,
-            logical_retry_limit,
         )
         .await
     }
@@ -3765,7 +2883,6 @@ impl<P: ObjectPlane> Repository<P> {
         operation: OperationId,
         condition: ObjectWriteConditionV1,
         expected_checksums: ChecksumExpectation,
-        logical_retry_limit: Option<u8>,
     ) -> Result<CommitReceipt> {
         let _publication = self.native_publication.lock().await;
         let expected_size = bytes.len() as u64;
@@ -3783,8 +2900,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "request checksum does not match the native object body",
             ));
         }
-        let kind = ObjectVersionKindV1::Live {
-            content: crate::ContentRef::Empty,
+        let kind = LogicalObjectVersionKindV1::Live {
             size: expected_size,
             logical_etag: format!("\"{}\"", hex::encode(expected_md5)),
             headers: headers.clone(),
@@ -3850,14 +2966,12 @@ impl<P: ObjectPlane> Repository<P> {
             branch,
             key,
             kind,
-            Some(native.binding),
+            native.binding,
             OperationKind::Put,
             operation,
             input_digest,
             "PutObject",
-            None,
             condition,
-            logical_retry_limit,
         )
         .await
     }
@@ -3876,7 +2990,6 @@ impl<P: ObjectPlane> Repository<P> {
         operation: OperationId,
         condition: ObjectWriteConditionV1,
         expected_checksums: ChecksumExpectation,
-        logical_retry_limit: Option<u8>,
     ) -> Result<CommitReceipt> {
         let _publication = self.native_publication.lock().await;
         if expected_checksums
@@ -3891,8 +3004,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "request checksum does not match the native object body",
             ));
         }
-        let kind = ObjectVersionKindV1::Live {
-            content: crate::ContentRef::Empty,
+        let kind = LogicalObjectVersionKindV1::Live {
             size: expected_size,
             logical_etag: format!("\"{}\"", hex::encode(expected_md5)),
             headers: headers.clone(),
@@ -3961,75 +3073,14 @@ impl<P: ObjectPlane> Repository<P> {
             branch,
             key,
             kind,
-            Some(native.binding),
+            native.binding,
             OperationKind::Put,
             operation,
             input_digest,
             "PutObject",
-            None,
             condition,
-            logical_retry_limit,
         )
         .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn put_stored(
-        &self,
-        branch: &str,
-        key: Vec<u8>,
-        stored: StoredContent,
-        headers: ObjectHeaders,
-        user_metadata: BTreeMap<String, String>,
-        operation: OperationId,
-        lease: Option<PublicationLease<P>>,
-        condition: ObjectWriteConditionV1,
-        logical_retry_limit: Option<u8>,
-    ) -> Result<CommitReceipt> {
-        let lease = match lease {
-            Some(value) => value,
-            None => self.publication_lease(operation).await?,
-        };
-        let kind = ObjectVersionKindV1::Live {
-            content: stored.reference,
-            size: stored.size,
-            logical_etag: stored.logical_etag,
-            headers,
-            checksums: stored.checksums,
-            user_metadata,
-            tags: BTreeMap::new(),
-        };
-        let kind_bytes = encode_canonical(&kind)?;
-        let input_digest = derive_input_digest(&[
-            self.format.repository_id.as_bytes(),
-            branch.as_bytes(),
-            b"put",
-            &key,
-            &kind_bytes,
-            &encode_canonical(&condition)?,
-        ]);
-        self.commit_one(
-            branch,
-            key,
-            kind,
-            None,
-            OperationKind::Put,
-            operation,
-            input_digest,
-            "PutObject",
-            Some(lease),
-            condition,
-            logical_retry_limit,
-        )
-        .await
-    }
-
-    pub fn read_content_stream(
-        &self,
-        reference: crate::ContentRef,
-        range: Option<(u64, u64)>,
-    ) -> BoxStream<'static, Result<bytes::Bytes>> {
-        self.content.read_stream(reference, range)
     }
 
     pub fn read_version_stream(
@@ -4038,18 +3089,18 @@ impl<P: ObjectPlane> Repository<P> {
         version: ObjectVersionV1,
         range: Option<(u64, u64)>,
     ) -> BoxStream<'static, Result<bytes::Bytes>> {
-        let Some(crate::NativeObjectBindingV1::Live {
+        let crate::NativeObjectBindingV1::Live {
             version_id,
             checksum_sha256,
             ..
-        }) = version.native_binding
+        } = version.binding
         else {
-            return match version.body.kind {
-                ObjectVersionKindV1::Live { content, .. } => {
-                    self.content.read_stream(content, range)
-                }
-                ObjectVersionKindV1::DeleteMarker => Box::pin(futures_util::stream::empty()),
-            };
+            return Box::pin(futures_util::stream::once(async {
+                Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "live object version is missing its provider binding",
+                ))
+            }));
         };
         let plane = self.plane.clone();
         let path = ObjectPath::new(String::from_utf8_lossy(key).into_owned());
@@ -4073,59 +3124,6 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    pub async fn create_multipart_upload(
-        &self,
-        branch: &str,
-        key: Vec<u8>,
-        headers: ObjectHeaders,
-        user_metadata: BTreeMap<String, String>,
-    ) -> Result<UploadId> {
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "native-versioned multipart requires direct provider multipart completion and VersionId capture",
-            ));
-        }
-        validate_branch(branch)?;
-        self.validate_key(&key)?;
-        let id = self.new_upload();
-        let now = self.now_millis()?;
-        let upload = MultipartUploadV1 {
-            id,
-            branch: branch.to_string(),
-            key,
-            headers,
-            user_metadata,
-            parts: BTreeMap::new(),
-            generation: 0,
-            state: MultipartStateV1::Active,
-            created_at_millis: now,
-            updated_at_millis: now,
-            expires_at_millis: if self.options.multipart_upload_ttl_millis == 0 {
-                0
-            } else {
-                now.checked_add(self.options.multipart_upload_ttl_millis)
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::InvalidRequest, "multipart expiry overflows")
-                    })?
-            },
-        };
-        match self
-            .plane
-            .compare_exchange(CompareExchange {
-                path: upload_path(&self.options.repository_prefix, id)?,
-                expected: None,
-                bytes: encode_canonical(&upload)?,
-            })
-            .await?
-        {
-            CompareExchangeOutcome::Applied(_) => Ok(id),
-            CompareExchangeOutcome::Conflict(_) => {
-                Err(Error::new(ErrorCode::UploadConflict, "upload ID collision"))
-            }
-        }
-    }
-
     pub async fn create_native_multipart_upload(
         &self,
         branch: &str,
@@ -4134,12 +3132,6 @@ impl<P: ObjectPlane> Repository<P> {
         user_metadata: BTreeMap<String, String>,
         operation: Option<OperationId>,
     ) -> Result<crate::NativeMultipartSessionV1> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "direct native multipart requires the native-versioned profile",
-            ));
-        }
         validate_branch(branch)?;
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
@@ -4181,12 +3173,6 @@ impl<P: ObjectPlane> Repository<P> {
         part_number: u32,
         bytes: Vec<u8>,
     ) -> Result<crate::NativeMultipartPartResult> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "direct native multipart requires the native-versioned profile",
-            ));
-        }
         session.validate_address(self.format.repository_id)?;
         if !(1..=10_000).contains(&part_number) || bytes.len() as u64 > MAX_MULTIPART_PART_BYTES {
             return Err(Error::new(
@@ -4219,12 +3205,6 @@ impl<P: ObjectPlane> Repository<P> {
         B: AsRef<[u8]>,
         E: std::fmt::Display,
     {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "direct native multipart requires the native-versioned profile",
-            ));
-        }
         session.validate_address(self.format.repository_id)?;
         if !(1..=10_000).contains(&part_number) {
             return Err(Error::new(
@@ -4297,12 +3277,6 @@ impl<P: ObjectPlane> Repository<P> {
         source_version: Option<ObjectVersionId>,
         range: Option<(u64, u64)>,
     ) -> Result<crate::NativeMultipartPartResult> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "direct native multipart requires the native-versioned profile",
-            ));
-        }
         session.validate_address(self.format.repository_id)?;
         if !(1..=10_000).contains(&part_number) {
             return Err(Error::new(
@@ -4317,7 +3291,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
             None => self.head_current_at(source_branch, source_key).await?,
         };
-        let ObjectVersionKindV1::Live {
+        let LogicalObjectVersionKindV1::Live {
             size, checksums, ..
         } = &source.version.body.kind
         else {
@@ -4326,14 +3300,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "multipart copy source is a delete marker",
             ));
         };
-        let crate::NativeObjectBindingV1::Live { version_id, .. } =
-            source.version.native_binding.as_ref().ok_or_else(|| {
-                Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native multipart copy source has no provider binding",
-                )
-            })?
-        else {
+        let crate::NativeObjectBindingV1::Live { version_id, .. } = &source.version.binding else {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "native multipart live source has a delete-marker binding",
@@ -4406,12 +3373,6 @@ impl<P: ObjectPlane> Repository<P> {
         size: u64,
         operation: Option<OperationId>,
     ) -> Result<CommitReceipt> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "direct native multipart requires the native-versioned profile",
-            ));
-        }
         session.validate(self.format.repository_id)?;
         if operation.is_some_and(|operation| operation != session.operation) {
             return Err(Error::new(
@@ -4448,8 +3409,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "native multipart declared size does not match its part receipts",
             ));
         }
-        let kind = ObjectVersionKindV1::Live {
-            content: crate::ContentRef::Empty,
+        let kind = LogicalObjectVersionKindV1::Live {
             size,
             logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
             headers: session.headers.clone(),
@@ -4522,14 +3482,12 @@ impl<P: ObjectPlane> Repository<P> {
             &session.branch,
             session.key,
             kind,
-            Some(completed.binding),
+            completed.binding,
             OperationKind::Put,
             session.operation,
             input_digest,
             "CompleteMultipartUpload",
-            None,
             ObjectWriteConditionV1::default(),
-            None,
         )
         .await
     }
@@ -4538,12 +3496,6 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         session: &crate::NativeMultipartSessionV1,
     ) -> Result<()> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "direct native multipart requires the native-versioned profile",
-            ));
-        }
         session.validate_address(self.format.repository_id)?;
         let path =
             ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
@@ -4557,847 +3509,22 @@ impl<P: ObjectPlane> Repository<P> {
             .await
     }
 
-    pub async fn upload_part_stream<S, B, E>(
-        &self,
-        upload: UploadId,
-        part_number: u32,
-        stream: S,
-    ) -> Result<MultipartPartV1>
-    where
-        S: Stream<Item = std::result::Result<B, E>>,
-        B: AsRef<[u8]>,
-        E: std::fmt::Display,
-    {
-        if !(1..=10_000).contains(&part_number) {
-            return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "part number must be between 1 and 10000",
-            ));
-        }
-        let content = self
-            .content
-            .write_stream(stream, MAX_MULTIPART_PART_BYTES)
-            .await?;
-        let part = MultipartPartV1 {
-            part_number,
-            etag: content.logical_etag.clone(),
-            content,
-            updated_at_millis: self.now_millis()?,
-        };
-        self.store_multipart_part(upload, part).await
-    }
-
-    /// Uses an existing logical object's content as a multipart part. A full
-    /// source copy reuses the immutable content reference; a byte range is
-    /// streamed into a canonical new content value.
-    pub async fn upload_part_copy(
-        &self,
-        upload: UploadId,
-        part_number: u32,
-        source_branch: &str,
-        source_key: &[u8],
-        source_version: Option<ObjectVersionId>,
-        range: Option<(u64, u64)>,
-    ) -> Result<MultipartPartV1> {
-        if !(1..=10_000).contains(&part_number) {
-            return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "part number must be between 1 and 10000",
-            ));
-        }
-        let (snapshot, source) = match source_version {
-            Some(version) => {
-                self.head_version(source_branch, source_key, version)
-                    .await?
-            }
-            None => self.head_current_at(source_branch, source_key).await?,
-        };
-        let ObjectVersionKindV1::Live {
-            content,
-            size,
-            logical_etag,
-            checksums,
-            ..
-        } = source.version.body.kind
-        else {
-            return Err(Error::new(
-                ErrorCode::NoSuchKey,
-                "multipart copy source is a delete marker",
-            ));
-        };
-        let source = StoredContent {
-            reference: content,
-            size,
-            logical_etag,
-            checksums,
-        };
-        let operation = self.new_operation();
-        let lease = self.publication_lease(operation).await?;
-        lease.set_proposal(snapshot).await?;
-        let stored = match range {
-            None if source.size <= MAX_MULTIPART_PART_BYTES => source,
-            None => {
-                return Err(Error::new(
-                    ErrorCode::EntityTooLarge,
-                    "multipart part exceeds 5 GiB",
-                ));
-            }
-            Some((start, end)) if start <= end && end < source.size => {
-                let range_len = end
-                    .checked_sub(start)
-                    .and_then(|value| value.checked_add(1))
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::EntityTooLarge, "multipart copy range overflow")
-                    })?;
-                if range_len > MAX_MULTIPART_PART_BYTES {
-                    return Err(Error::new(
-                        ErrorCode::EntityTooLarge,
-                        "multipart copy part exceeds 5 GiB",
-                    ));
-                }
-                self.content
-                    .clone()
-                    .with_protection_sink(Arc::new(lease.clone()))
-                    .write_stream(
-                        self.content
-                            .read_stream(source.reference, Some((start, end))),
-                        MAX_MULTIPART_PART_BYTES,
-                    )
-                    .await?
-            }
-            Some(_) => {
-                return Err(Error::new(
-                    ErrorCode::InvalidRequest,
-                    "multipart copy range is not satisfiable",
-                ));
-            }
-        };
-        self.ensure_publication_allowed(&lease).await?;
-        let part = MultipartPartV1 {
-            part_number,
-            etag: stored.logical_etag.clone(),
-            content: stored,
-            updated_at_millis: self.now_millis()?,
-        };
-        let result = self.store_multipart_part(upload, part).await;
-        if result.is_ok() {
-            let _ = lease.complete(snapshot).await;
-        }
-        result
-    }
-
-    async fn store_multipart_part(
-        &self,
-        upload: UploadId,
-        part: MultipartPartV1,
-    ) -> Result<MultipartPartV1> {
-        for _ in 0..=self.options.logical_retry_limit {
-            let loaded = self.load_upload(upload).await?;
-            if !matches!(loaded.value.state, MultipartStateV1::Active) {
-                return Err(Error::new(
-                    ErrorCode::UploadConflict,
-                    "multipart upload is not active",
-                ));
-            }
-            let mut next = loaded.value;
-            next.parts.insert(part.part_number, part.clone());
-            next.generation = next.generation.checked_add(1).ok_or_else(|| {
-                Error::new(ErrorCode::InternalInvariant, "upload generation overflow")
-            })?;
-            next.updated_at_millis = self.now_millis()?;
-            let publication = self
-                .plane
-                .compare_exchange(CompareExchange {
-                    path: upload_path(&self.options.repository_prefix, upload)?,
-                    expected: Some(loaded.token),
-                    bytes: encode_canonical(&next)?,
-                })
-                .await;
-            match publication {
-                Ok(CompareExchangeOutcome::Applied(_)) => return Ok(part),
-                Ok(CompareExchangeOutcome::Conflict(_)) => continue,
-                Err(error) => {
-                    let current = self.load_upload(upload).await?;
-                    if current.value.parts.get(&part.part_number) == Some(&part) {
-                        return Ok(part);
-                    }
-                    return Err(Error::new(
-                        ErrorCode::OutcomeUnknown,
-                        format!("multipart part CAS outcome is unknown: {error}"),
-                    )
-                    .retry(RetryAdvice::Safe));
-                }
-            }
-        }
-        Err(Error::new(
-            ErrorCode::UploadConflict,
-            "upload changed beyond retry budget",
-        )
-        .retry(RetryAdvice::ReloadHead))
-    }
-
-    pub async fn list_parts(&self, upload: UploadId) -> Result<Vec<MultipartPartV1>> {
-        let loaded = self.load_upload(upload).await?;
-        if matches!(loaded.value.state, MultipartStateV1::Aborted) {
-            return Err(Error::new(
-                ErrorCode::NoSuchUpload,
-                "multipart upload is aborted",
-            ));
-        }
-        Ok(loaded.value.parts.into_values().collect())
-    }
-
-    pub async fn multipart_upload(&self, upload: UploadId) -> Result<MultipartUploadV1> {
-        Ok(self.load_upload(upload).await?.value)
-    }
-
-    /// Lists active, unexpired uploads in stable `(key, upload_id)` order.
-    /// The `after` tuple is exclusive and can be formed from the final item of
-    /// the prior page. Completed and aborted records remain durable for
-    /// idempotency but are deliberately absent from this catalog.
-    pub async fn list_multipart_uploads(
-        &self,
-        branch: &str,
-        key_prefix: &[u8],
-        after: Option<(&[u8], UploadId)>,
-        limit: usize,
-    ) -> Result<(Vec<MultipartUploadSummary>, bool)> {
-        validate_branch(branch)?;
-        std::str::from_utf8(key_prefix)
-            .map_err(|_| Error::new(ErrorCode::InvalidKey, "prefix is not valid UTF-8"))?;
-        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
-        if limit == 0 {
-            return Ok((Vec::new(), false));
-        }
-        let mut uploads = self
-            .collect_multipart_uploads(branch, key_prefix, self.now_millis()?)
-            .await?;
-        if let Some((key, id)) = after {
-            uploads.retain(|upload| (upload.key.as_slice(), upload.id) > (key, id));
-        }
-        let truncated = uploads.len() > limit;
-        uploads.truncate(limit);
-        Ok((uploads, truncated))
-    }
-
-    /// Captures the active upload catalog in an immutable, content-addressed
-    /// object. This projection is used only for stable pagination; mutable
-    /// upload manifests remain authoritative for upload lifecycle operations.
-    pub async fn create_multipart_catalog_snapshot(
-        &self,
-        branch: &str,
-        key_prefix: &[u8],
-        expires_at_millis: u64,
-    ) -> Result<MultipartCatalogSnapshotV1> {
-        validate_branch(branch)?;
-        std::str::from_utf8(key_prefix)
-            .map_err(|_| Error::new(ErrorCode::InvalidKey, "prefix is not valid UTF-8"))?;
-        let now = self.now_millis()?;
-        if expires_at_millis <= now {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart catalog snapshot expiry must be in the future",
-            ));
-        }
-        let uploads = self
-            .collect_multipart_uploads(branch, key_prefix, now)
-            .await?;
-        if uploads.len() > self.options.history_traversal_limit {
-            return Err(Error::new(
-                ErrorCode::HistoryLimitExceeded,
-                "multipart catalog snapshot exceeds its configured entry bound",
-            ));
-        }
-        let snapshot = MultipartCatalogSnapshotV1::derive(MultipartCatalogSnapshotBodyV1 {
-            repository: self.format.repository_id,
-            branch: branch.to_string(),
-            key_prefix: key_prefix.to_vec(),
-            created_at_millis: now,
-            expires_at_millis,
-            entries: uploads
-                .into_iter()
-                .map(|upload| MultipartCatalogEntryV1 {
-                    id: upload.id,
-                    key: upload.key,
-                    created_at_millis: upload.created_at_millis,
-                    expires_at_millis: upload.expires_at_millis,
-                })
-                .collect(),
-        })?;
-        self.store_immutable(
-            multipart_catalog_snapshot_path(&self.options.repository_prefix, snapshot.id)?,
-            encode_canonical(&snapshot)?,
-        )
-        .await?;
-        Ok(snapshot)
-    }
-
-    /// Reads a stable page from an immutable multipart catalog snapshot.
-    pub async fn list_multipart_catalog_snapshot(
-        &self,
-        id: MultipartCatalogSnapshotId,
-        branch: &str,
-        key_prefix: &[u8],
-        expires_at_millis: u64,
-        offset: u64,
-        limit: usize,
-    ) -> Result<(Vec<MultipartUploadSummary>, bool)> {
-        let snapshot = self.load_multipart_catalog_snapshot(id).await?;
-        if snapshot.body.branch != branch
-            || snapshot.body.key_prefix != key_prefix
-            || snapshot.body.expires_at_millis != expires_at_millis
-        {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart catalog snapshot does not match the listing request",
-            ));
-        }
-        if snapshot.body.expires_at_millis < self.now_millis()? {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart catalog snapshot is expired",
-            ));
-        }
-        let offset = usize::try_from(offset).map_err(|_| {
-            Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart catalog cursor offset is out of range",
-            )
-        })?;
-        if offset > snapshot.body.entries.len() {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "multipart catalog cursor offset exceeds the snapshot",
-            ));
-        }
-        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
-        if limit == 0 {
-            return Ok((Vec::new(), false));
-        }
-        let end = offset
-            .saturating_add(limit)
-            .min(snapshot.body.entries.len());
-        let uploads = snapshot.body.entries[offset..end]
-            .iter()
-            .map(|entry| MultipartUploadSummary {
-                id: entry.id,
-                branch: snapshot.body.branch.clone(),
-                key: entry.key.clone(),
-                created_at_millis: entry.created_at_millis,
-                expires_at_millis: entry.expires_at_millis,
-            })
-            .collect();
-        Ok((uploads, end < snapshot.body.entries.len()))
-    }
-
-    pub async fn load_multipart_catalog_snapshot(
-        &self,
-        id: MultipartCatalogSnapshotId,
-    ) -> Result<MultipartCatalogSnapshotV1> {
-        let object = self
-            .plane
-            .get(GetRequest {
-                path: multipart_catalog_snapshot_path(&self.options.repository_prefix, id)?,
-                range: None,
-                physical_version: None,
-            })
-            .await?
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::MissingClosure,
-                    "multipart catalog snapshot is missing",
-                )
-            })?;
-        let snapshot: MultipartCatalogSnapshotV1 = decode_canonical(&object.bytes)?;
-        snapshot.validate_id()?;
-        if snapshot.id != id || snapshot.body.repository != self.format.repository_id {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "multipart catalog snapshot belongs to another repository",
-            ));
-        }
-        validate_branch(&snapshot.body.branch)?;
-        std::str::from_utf8(&snapshot.body.key_prefix).map_err(|_| {
-            Error::new(
-                ErrorCode::CorruptCommit,
-                "multipart catalog snapshot prefix is not UTF-8",
-            )
-        })?;
-        if snapshot.body.expires_at_millis <= snapshot.body.created_at_millis
-            || snapshot.body.entries.len() > self.options.history_traversal_limit
-            || snapshot.body.entries.iter().any(|entry| {
-                !entry.key.starts_with(&snapshot.body.key_prefix)
-                    || (entry.expires_at_millis != 0
-                        && entry.expires_at_millis <= snapshot.body.created_at_millis)
-            })
-            || snapshot.body.entries.windows(2).any(|entries| {
-                (entries[0].key.as_slice(), entries[0].id)
-                    >= (entries[1].key.as_slice(), entries[1].id)
-            })
-        {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "multipart catalog snapshot violates its canonical invariants",
-            ));
-        }
-        Ok(snapshot)
-    }
-
-    async fn collect_multipart_uploads(
-        &self,
-        branch: &str,
-        key_prefix: &[u8],
-        now: u64,
-    ) -> Result<Vec<MultipartUploadSummary>> {
-        let prefix = format!("{}/multipart/uploads/", self.options.repository_prefix);
-        let mut continuation = None;
-        let mut uploads = Vec::new();
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let Some(object) = self
-                    .plane
-                    .get(GetRequest {
-                        path: entry.path,
-                        range: None,
-                        physical_version: None,
-                    })
-                    .await?
-                else {
-                    continue;
-                };
-                let upload: MultipartUploadV1 = decode_canonical(&object.bytes)?;
-                let unexpired = upload.expires_at_millis == 0 || upload.expires_at_millis > now;
-                if upload.branch == branch
-                    && upload.key.starts_with(key_prefix)
-                    && matches!(upload.state, MultipartStateV1::Active)
-                    && unexpired
-                {
-                    uploads.push(MultipartUploadSummary {
-                        id: upload.id,
-                        branch: upload.branch,
-                        key: upload.key,
-                        created_at_millis: upload.created_at_millis,
-                        expires_at_millis: upload.expires_at_millis,
-                    });
-                    if uploads.len() > self.options.history_traversal_limit {
-                        return Err(Error::new(
-                            ErrorCode::HistoryLimitExceeded,
-                            "multipart catalog scan exceeds its configured entry bound",
-                        ));
-                    }
-                }
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-        uploads.sort_by(|left, right| {
-            (left.key.as_slice(), left.id).cmp(&(right.key.as_slice(), right.id))
-        });
-        Ok(uploads)
-    }
-
-    /// Atomically marks at most `limit` expired active uploads as aborted.
-    /// It is safe for multiple sweepers to race: each transition is fenced by
-    /// the mutable object's storage token.
-    pub async fn expire_multipart_uploads(&self, limit: usize) -> Result<usize> {
-        let now = self.now_millis()?;
-        let prefix = format!("{}/multipart/uploads/", self.options.repository_prefix);
-        let mut continuation = None;
-        let mut expired = Vec::new();
-        while expired.len() < limit {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let Some(object) = self
-                    .plane
-                    .get(GetRequest {
-                        path: entry.path,
-                        range: None,
-                        physical_version: None,
-                    })
-                    .await?
-                else {
-                    continue;
-                };
-                let upload: MultipartUploadV1 = decode_canonical(&object.bytes)?;
-                if matches!(upload.state, MultipartStateV1::Active)
-                    && upload.expires_at_millis != 0
-                    && upload.expires_at_millis <= now
-                {
-                    expired.push(upload.id);
-                    if expired.len() == limit {
-                        break;
-                    }
-                }
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-        let mut transitioned = 0;
-        for id in expired {
-            let loaded = self.load_upload(id).await?;
-            if !matches!(loaded.value.state, MultipartStateV1::Active)
-                || loaded.value.expires_at_millis == 0
-                || loaded.value.expires_at_millis > now
-            {
-                continue;
-            }
-            let mut aborted = loaded.value;
-            aborted.state = MultipartStateV1::Aborted;
-            aborted.generation = aborted.generation.checked_add(1).ok_or_else(|| {
-                Error::new(ErrorCode::InternalInvariant, "upload generation overflow")
-            })?;
-            aborted.updated_at_millis = now;
-            if matches!(
-                self.plane
-                    .compare_exchange(CompareExchange {
-                        path: upload_path(&self.options.repository_prefix, id)?,
-                        expected: Some(loaded.token),
-                        bytes: encode_canonical(&aborted)?,
-                    })
-                    .await?,
-                CompareExchangeOutcome::Applied(_)
-            ) {
-                transitioned += 1;
-            }
-        }
-        Ok(transitioned)
-    }
-
-    pub async fn complete_multipart_upload(
-        &self,
-        upload: UploadId,
-        requested: Vec<(u32, String)>,
-        operation: Option<OperationId>,
-    ) -> Result<CommitReceipt> {
-        if requested.is_empty() {
-            return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "multipart completion has no parts",
-            ));
-        }
-        if requested.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
-            return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "completed parts must be strictly increasing",
-            ));
-        }
-        if requested.len() > 10_000 {
-            return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "multipart completion exceeds 10000 parts",
-            ));
-        }
-        let operation = operation.unwrap_or_else(|| self.new_operation());
-        let request_digest =
-            derive_input_digest(&[b"complete-multipart", &encode_canonical(&requested)?]);
-        let mut loaded = self.load_upload(upload).await?;
-        match &loaded.value.state {
-            MultipartStateV1::Completed {
-                operation: prior,
-                request_digest: prior_digest,
-                receipt,
-            } if *prior == operation && *prior_digest == request_digest => {
-                return Ok(receipt.clone())
-            }
-            MultipartStateV1::Completed {
-                operation: prior, ..
-            } if *prior == operation => {
-                return Err(Error::new(
-                    ErrorCode::IdempotencyConflict,
-                    "multipart completion operation was reused with different input",
-                )
-                .operation(operation.to_string()));
-            }
-            MultipartStateV1::Completed { .. } | MultipartStateV1::Aborted => {
-                return Err(Error::new(
-                    ErrorCode::NoSuchUpload,
-                    "multipart upload is no longer active",
-                ));
-            }
-            MultipartStateV1::Completing {
-                operation: prior,
-                request_digest: prior_digest,
-            } if *prior == operation && *prior_digest != request_digest => {
-                return Err(Error::new(
-                    ErrorCode::IdempotencyConflict,
-                    "multipart completion operation was reused with different input",
-                )
-                .operation(operation.to_string()));
-            }
-            MultipartStateV1::Completing {
-                operation: prior, ..
-            } if *prior != operation => {
-                return Err(Error::new(
-                    ErrorCode::UploadConflict,
-                    "another completion owns this upload",
-                ));
-            }
-            MultipartStateV1::Completing { .. } => {}
-            MultipartStateV1::Active => {
-                validate_completed_multipart_parts(
-                    &loaded.value,
-                    &requested,
-                    self.format.canonical_limits.max_object_bytes,
-                )?;
-                let mut completing = loaded.value.clone();
-                completing.state = MultipartStateV1::Completing {
-                    operation,
-                    request_digest,
-                };
-                completing.generation = completing.generation.checked_add(1).ok_or_else(|| {
-                    Error::new(ErrorCode::InternalInvariant, "upload generation overflow")
-                })?;
-                completing.updated_at_millis = self.now_millis()?;
-                match self
-                    .plane
-                    .compare_exchange(CompareExchange {
-                        path: upload_path(&self.options.repository_prefix, upload)?,
-                        expected: Some(loaded.token),
-                        bytes: encode_canonical(&completing)?,
-                    })
-                    .await?
-                {
-                    CompareExchangeOutcome::Applied(_) => loaded = self.load_upload(upload).await?,
-                    CompareExchangeOutcome::Conflict(_) => {
-                        loaded = self.load_upload(upload).await?;
-                        if !matches!(loaded.value.state, MultipartStateV1::Completing { operation: prior, request_digest: prior_digest } if prior == operation && prior_digest == request_digest)
-                        {
-                            return Err(Error::new(
-                                ErrorCode::UploadConflict,
-                                "multipart completion race lost",
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-        let parts = validate_completed_multipart_parts(
-            &loaded.value,
-            &requested,
-            self.format.canonical_limits.max_object_bytes,
-        )?;
-        let lease = self.publication_lease(operation).await?;
-        let stored = self
-            .content
-            .clone()
-            .with_protection_sink(Arc::new(lease.clone()))
-            .compose(&parts)
-            .await?;
-        let receipt = self
-            .put_stored(
-                &loaded.value.branch,
-                loaded.value.key.clone(),
-                stored,
-                loaded.value.headers.clone(),
-                loaded.value.user_metadata.clone(),
-                operation,
-                Some(lease),
-                ObjectWriteConditionV1::default(),
-                None,
-            )
-            .await?;
-        for _ in 0..=self.options.logical_retry_limit {
-            let current = self.load_upload(upload).await?;
-            if let MultipartStateV1::Completed {
-                operation: prior,
-                request_digest: prior_digest,
-                receipt: prior_receipt,
-            } = &current.value.state
-            {
-                if *prior == operation && *prior_digest == request_digest {
-                    return Ok(prior_receipt.clone());
-                }
-                return Err(Error::new(
-                    ErrorCode::UploadConflict,
-                    "upload completed with a different request",
-                ));
-            }
-            if !matches!(current.value.state, MultipartStateV1::Completing { operation: prior, request_digest: prior_digest } if prior == operation && prior_digest == request_digest)
-            {
-                return Err(Error::new(
-                    ErrorCode::UploadConflict,
-                    "upload state changed after publication",
-                ));
-            }
-            let mut completed = current.value;
-            completed.state = MultipartStateV1::Completed {
-                operation,
-                request_digest,
-                receipt: receipt.clone(),
-            };
-            completed.generation = completed.generation.checked_add(1).ok_or_else(|| {
-                Error::new(ErrorCode::InternalInvariant, "upload generation overflow")
-            })?;
-            completed.updated_at_millis = self.now_millis()?;
-            let publication = self
-                .plane
-                .compare_exchange(CompareExchange {
-                    path: upload_path(&self.options.repository_prefix, upload)?,
-                    expected: Some(current.token),
-                    bytes: encode_canonical(&completed)?,
-                })
-                .await;
-            match publication {
-                Ok(CompareExchangeOutcome::Applied(_)) => return Ok(receipt),
-                Ok(CompareExchangeOutcome::Conflict(_)) => continue,
-                Err(error) => {
-                    let observed = self.load_upload(upload).await?;
-                    if let MultipartStateV1::Completed {
-                        operation: prior,
-                        request_digest: prior_digest,
-                        receipt: prior_receipt,
-                    } = observed.value.state
-                    {
-                        if prior == operation && prior_digest == request_digest {
-                            return Ok(prior_receipt);
-                        }
-                    }
-                    return Err(Error::new(
-                        ErrorCode::OutcomeUnknown,
-                        format!("multipart completion marker outcome is unknown: {error}"),
-                    )
-                    .retry(RetryAdvice::ReconcileOperation)
-                    .operation(operation.to_string()));
-                }
-            }
-        }
-        Err(Error::new(
-            ErrorCode::OutcomeUnknown,
-            "bucket commit succeeded but upload completion marker did not converge",
-        )
-        .retry(RetryAdvice::ReconcileOperation)
-        .operation(operation.to_string()))
-    }
-
-    pub async fn abort_multipart_upload(&self, upload: UploadId) -> Result<()> {
-        for _ in 0..=self.options.logical_retry_limit {
-            let loaded = self.load_upload(upload).await?;
-            match loaded.value.state {
-                MultipartStateV1::Aborted => return Ok(()),
-                MultipartStateV1::Active => {}
-                _ => {
-                    return Err(Error::new(
-                        ErrorCode::UploadConflict,
-                        "cannot abort an upload during or after completion",
-                    ))
-                }
-            }
-            let mut aborted = loaded.value;
-            aborted.state = MultipartStateV1::Aborted;
-            aborted.generation = aborted.generation.checked_add(1).ok_or_else(|| {
-                Error::new(ErrorCode::InternalInvariant, "upload generation overflow")
-            })?;
-            aborted.updated_at_millis = self.now_millis()?;
-            if matches!(
-                self.plane
-                    .compare_exchange(CompareExchange {
-                        path: upload_path(&self.options.repository_prefix, upload)?,
-                        expected: Some(loaded.token),
-                        bytes: encode_canonical(&aborted)?,
-                    })
-                    .await?,
-                CompareExchangeOutcome::Applied(_)
-            ) {
-                return Ok(());
-            }
-        }
-        Err(Error::new(
-            ErrorCode::UploadConflict,
-            "upload changed beyond retry budget",
-        ))
-    }
-
-    pub async fn begin_workspace(
-        &self,
-        branch: &str,
-        message: impl Into<String>,
-        expires_after_millis: u64,
-    ) -> Result<WorkspaceManifestV1> {
-        validate_branch(branch)?;
-        let base_commit = self.head(branch).await?;
-        let now = self.now_millis()?;
-        let workspace = WorkspaceManifestV1 {
-            id: self.new_workspace(),
-            branch: branch.to_string(),
-            base_commit,
-            operation: self.new_operation(),
-            message: message.into(),
-            mutations: BTreeMap::new(),
-            generation: 0,
-            state: WorkspaceStateV1::Active,
-            created_at_millis: now,
-            updated_at_millis: now,
-            expires_at_millis: now.checked_add(expires_after_millis).ok_or_else(|| {
-                Error::new(ErrorCode::InvalidRequest, "workspace expiry overflow")
-            })?,
-        };
-        match self
-            .plane
-            .compare_exchange(CompareExchange {
-                path: workspace_path(&self.options.repository_prefix, workspace.id)?,
-                expected: None,
-                bytes: encode_canonical(&workspace)?,
-            })
-            .await?
-        {
-            CompareExchangeOutcome::Applied(_) => Ok(workspace),
-            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
-                ErrorCode::WorkspaceConflict,
-                "workspace ID collision",
-            )),
-        }
-    }
-
-    /// Create an in-memory atomic session descriptor for the native profile.
-    /// Staging remains local so publishing N objects costs N payload calls plus
-    /// one pack, one commit, and one ref CAS.
     pub async fn begin_native_batch(
         &self,
         branch: &str,
         message: impl Into<String>,
         expires_after_millis: u64,
-    ) -> Result<WorkspaceManifestV1> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "ephemeral native batches require the native-versioned profile",
-            ));
-        }
+    ) -> Result<NativeBatchV1> {
         validate_branch(branch)?;
         let base_commit = self.warm_branch_state(branch).await?.reference.target;
         let now = self.now_millis()?;
-        Ok(WorkspaceManifestV1 {
-            id: self.new_workspace(),
+        Ok(NativeBatchV1 {
+            id: self.new_batch(),
             branch: branch.to_string(),
             base_commit,
             operation: self.new_operation(),
             message: message.into(),
-            mutations: BTreeMap::new(),
-            generation: 0,
-            state: WorkspaceStateV1::Active,
             created_at_millis: now,
-            updated_at_millis: now,
             expires_at_millis: now.checked_add(expires_after_millis).ok_or_else(|| {
                 Error::new(ErrorCode::InvalidRequest, "native batch expiry overflow")
             })?,
@@ -5406,23 +3533,16 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn publish_native_batch(
         &self,
-        mut batch: WorkspaceManifestV1,
+        batch: NativeBatchV1,
         mutations: Vec<crate::NativeBatchMutationV1>,
     ) -> Result<CommitReceipt> {
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            return Err(Error::new(
-                ErrorCode::MissingCapability,
-                "native batch publication requires the native-versioned profile",
-            ));
-        }
         if mutations.is_empty()
             || mutations.len() > self.format.canonical_limits.max_mutations_per_commit as usize
             || batch.expires_at_millis < self.now_millis()?
-            || !matches!(batch.state, WorkspaceStateV1::Active)
         {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native batch is empty, expired, closed, or exceeds the mutation limit",
+                "native batch is empty, expired, or exceeds the mutation limit",
             ));
         }
         for mutation in &mutations {
@@ -5443,11 +3563,12 @@ impl<P: ObjectPlane> Repository<P> {
                 return Ok(receipt);
             }
             return Err(Error::new(
-                ErrorCode::WorkspaceConflict,
+                ErrorCode::BatchConflict,
                 "branch moved since native batch creation",
             ));
         }
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let mut prepared = BTreeMap::new();
         for mutation in mutations {
             match mutation {
                 crate::NativeBatchMutationV1::Put {
@@ -5471,16 +3592,13 @@ impl<P: ObjectPlane> Repository<P> {
                             writer_fence_generation,
                         })
                         .await?;
-                    batch.mutations.insert(
+                    prepared.insert(
                         key.clone(),
-                        WorkspaceMutationV1::NativePut {
+                        NativePreparedMutationV1::NativePut {
                             key,
-                            content: StoredContent {
-                                reference: crate::ContentRef::Empty,
-                                size: native.size,
-                                logical_etag: native.logical_etag,
-                                checksums: native.checksums,
-                            },
+                            size: native.size,
+                            logical_etag: native.logical_etag,
+                            checksums: native.checksums,
                             headers,
                             user_metadata,
                             binding: native.binding,
@@ -5507,375 +3625,14 @@ impl<P: ObjectPlane> Repository<P> {
                             None => return Err(error),
                         },
                     };
-                    batch.mutations.insert(
+                    prepared.insert(
                         key.clone(),
-                        WorkspaceMutationV1::NativeDelete { key, binding },
+                        NativePreparedMutationV1::NativeDelete { key, binding },
                     );
                 }
             }
         }
-        batch.state = WorkspaceStateV1::Publishing { request_digest };
-        self.commit_workspace(&batch, request_digest, None).await
-    }
-
-    pub async fn resume_workspace(&self, id: WorkspaceId) -> Result<WorkspaceManifestV1> {
-        let workspace = self.load_workspace(id).await?.value;
-        if workspace.expires_at_millis < self.now_millis()?
-            && matches!(workspace.state, WorkspaceStateV1::Active)
-        {
-            return Err(Error::new(
-                ErrorCode::WorkspaceExpired,
-                "workspace has expired",
-            ));
-        }
-        Ok(workspace)
-    }
-
-    pub async fn workspace_put_stream<S, B, E>(
-        &self,
-        workspace: WorkspaceId,
-        key: Vec<u8>,
-        stream: S,
-        headers: ObjectHeaders,
-        user_metadata: BTreeMap<String, String>,
-    ) -> Result<WorkspaceManifestV1>
-    where
-        S: Stream<Item = std::result::Result<B, E>>,
-        B: AsRef<[u8]>,
-        E: std::fmt::Display,
-    {
-        self.validate_key(&key)?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let manifest = self.resume_workspace(workspace).await?;
-            let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
-            futures_util::pin_mut!(stream);
-            let mut bytes = Vec::new();
-            while let Some(next) = stream.next().await {
-                let next = next.map_err(|error| {
-                    Error::new(
-                        ErrorCode::Transport,
-                        format!("native workspace input stream failed: {error}"),
-                    )
-                })?;
-                let next = next.as_ref();
-                if bytes.len().saturating_add(next.len())
-                    > self.format.canonical_limits.max_object_bytes as usize
-                {
-                    return Err(Error::new(
-                        ErrorCode::EntityTooLarge,
-                        "native workspace object exceeds the repository size limit",
-                    ));
-                }
-                bytes.extend_from_slice(next);
-            }
-            let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
-                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-            })?)?;
-            let native = self
-                .plane
-                .put_native(crate::NativePut {
-                    path,
-                    bytes,
-                    headers: headers.clone(),
-                    user_metadata: user_metadata.clone(),
-                    repository: self.format.repository_id,
-                    operation: manifest.operation,
-                    writer_fence_generation,
-                })
-                .await?;
-            return self
-                .update_workspace_mutation(
-                    workspace,
-                    WorkspaceMutationV1::NativePut {
-                        key,
-                        content: StoredContent {
-                            reference: crate::ContentRef::Empty,
-                            size: native.size,
-                            logical_etag: native.logical_etag,
-                            checksums: native.checksums,
-                        },
-                        headers,
-                        user_metadata,
-                        binding: native.binding,
-                    },
-                )
-                .await;
-        }
-        let content = self
-            .content
-            .write_stream(stream, self.format.canonical_limits.max_object_bytes)
-            .await?;
-        self.update_workspace_mutation(
-            workspace,
-            WorkspaceMutationV1::Put {
-                key,
-                content,
-                headers,
-                user_metadata,
-            },
-        )
-        .await
-    }
-
-    pub async fn workspace_delete(
-        &self,
-        workspace: WorkspaceId,
-        key: Vec<u8>,
-    ) -> Result<WorkspaceManifestV1> {
-        self.validate_key(&key)?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let manifest = self.resume_workspace(workspace).await?;
-            let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
-            let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
-                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-            })?)?;
-            let binding = match self
-                .plane
-                .delete_native(crate::NativeDelete {
-                    path: path.clone(),
-                    repository: self.format.repository_id,
-                    operation: manifest.operation,
-                    writer_fence_generation,
-                })
-                .await
-            {
-                Ok(binding) => binding,
-                Err(error) => match self.reconcile_native_delete(&path).await? {
-                    Some(binding) => binding,
-                    None => return Err(error),
-                },
-            };
-            return self
-                .update_workspace_mutation(
-                    workspace,
-                    WorkspaceMutationV1::NativeDelete { key, binding },
-                )
-                .await;
-        }
-        self.update_workspace_mutation(workspace, WorkspaceMutationV1::Delete { key })
-            .await
-    }
-
-    async fn update_workspace_mutation(
-        &self,
-        workspace: WorkspaceId,
-        mutation: WorkspaceMutationV1,
-    ) -> Result<WorkspaceManifestV1> {
-        for _ in 0..=self.options.logical_retry_limit {
-            let loaded = self.load_workspace(workspace).await?;
-            if loaded.value.expires_at_millis < self.now_millis()? {
-                return Err(Error::new(
-                    ErrorCode::WorkspaceExpired,
-                    "workspace has expired",
-                ));
-            }
-            if !matches!(loaded.value.state, WorkspaceStateV1::Active) {
-                return Err(Error::new(
-                    ErrorCode::WorkspaceConflict,
-                    "workspace is not active",
-                ));
-            }
-            let mut next = loaded.value;
-            next.mutations
-                .insert(mutation.key().to_vec(), mutation.clone());
-            if next.mutations.len() > self.format.canonical_limits.max_mutations_per_commit as usize
-            {
-                return Err(Error::new(
-                    ErrorCode::InvalidLimit,
-                    "workspace mutation limit exceeded",
-                ));
-            }
-            next.generation = next.generation.checked_add(1).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::InternalInvariant,
-                    "workspace generation overflow",
-                )
-            })?;
-            next.updated_at_millis = self.now_millis()?;
-            match self
-                .plane
-                .compare_exchange(CompareExchange {
-                    path: workspace_path(&self.options.repository_prefix, workspace)?,
-                    expected: Some(loaded.token),
-                    bytes: encode_canonical(&next)?,
-                })
-                .await?
-            {
-                CompareExchangeOutcome::Applied(_) => return Ok(next),
-                CompareExchangeOutcome::Conflict(_) => continue,
-            }
-        }
-        Err(Error::new(
-            ErrorCode::WorkspaceConflict,
-            "workspace changed beyond retry budget",
-        ))
-    }
-
-    pub async fn publish_workspace(&self, workspace: WorkspaceId) -> Result<CommitReceipt> {
-        let mut loaded = self.load_workspace(workspace).await?;
-        let request_digest =
-            derive_input_digest(&[b"workspace", &encode_canonical(&loaded.value.mutations)?]);
-        match &loaded.value.state {
-            WorkspaceStateV1::Completed {
-                request_digest: prior,
-                receipt,
-            } if *prior == request_digest => return Ok(receipt.clone()),
-            WorkspaceStateV1::Completed { .. } | WorkspaceStateV1::Aborted => {
-                return Err(Error::new(
-                    ErrorCode::WorkspaceConflict,
-                    "workspace is closed",
-                ))
-            }
-            WorkspaceStateV1::Publishing {
-                request_digest: prior,
-            } if *prior != request_digest => {
-                return Err(Error::new(
-                    ErrorCode::WorkspaceConflict,
-                    "workspace digest changed",
-                ))
-            }
-            WorkspaceStateV1::Publishing { .. } => {}
-            WorkspaceStateV1::Active => {
-                if loaded.value.expires_at_millis < self.now_millis()? {
-                    return Err(Error::new(
-                        ErrorCode::WorkspaceExpired,
-                        "workspace has expired",
-                    ));
-                }
-                if loaded.value.mutations.is_empty() {
-                    return Err(Error::new(
-                        ErrorCode::InvalidRequest,
-                        "workspace has no mutations",
-                    ));
-                }
-                let mut publishing = loaded.value.clone();
-                publishing.state = WorkspaceStateV1::Publishing { request_digest };
-                publishing.generation = publishing.generation.checked_add(1).ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "workspace generation overflow",
-                    )
-                })?;
-                publishing.updated_at_millis = self.now_millis()?;
-                let _ = self
-                    .plane
-                    .compare_exchange(CompareExchange {
-                        path: workspace_path(&self.options.repository_prefix, workspace)?,
-                        expected: Some(loaded.token),
-                        bytes: encode_canonical(&publishing)?,
-                    })
-                    .await?;
-                loaded = self.load_workspace(workspace).await?;
-            }
-        }
-        if !matches!(loaded.value.state, WorkspaceStateV1::Publishing { request_digest: prior } if prior == request_digest)
-        {
-            return Err(Error::new(
-                ErrorCode::WorkspaceConflict,
-                "workspace publication race lost",
-            ));
-        }
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        let lease = if native_profile {
-            None
-        } else {
-            Some(self.publication_lease(loaded.value.operation).await?)
-        };
-        let receipt = self
-            .commit_workspace(&loaded.value, request_digest, lease)
-            .await?;
-        for _ in 0..=self.options.logical_retry_limit {
-            let current = self.load_workspace(workspace).await?;
-            if let WorkspaceStateV1::Completed {
-                request_digest: prior,
-                receipt: prior_receipt,
-            } = &current.value.state
-            {
-                if *prior == request_digest {
-                    return Ok(prior_receipt.clone());
-                }
-                return Err(Error::new(
-                    ErrorCode::WorkspaceConflict,
-                    "workspace completed differently",
-                ));
-            }
-            let mut completed = current.value;
-            completed.state = WorkspaceStateV1::Completed {
-                request_digest,
-                receipt: receipt.clone(),
-            };
-            completed.generation = completed.generation.checked_add(1).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::InternalInvariant,
-                    "workspace generation overflow",
-                )
-            })?;
-            completed.updated_at_millis = self.now_millis()?;
-            if matches!(
-                self.plane
-                    .compare_exchange(CompareExchange {
-                        path: workspace_path(&self.options.repository_prefix, workspace)?,
-                        expected: Some(current.token),
-                        bytes: encode_canonical(&completed)?,
-                    })
-                    .await?,
-                CompareExchangeOutcome::Applied(_)
-            ) {
-                return Ok(receipt);
-            }
-        }
-        Err(Error::new(
-            ErrorCode::OutcomeUnknown,
-            "workspace commit published but marker is ambiguous",
-        )
-        .retry(RetryAdvice::ReconcileOperation)
-        .operation(loaded.value.operation.to_string()))
-    }
-
-    pub async fn abort_workspace(&self, workspace: WorkspaceId) -> Result<()> {
-        for _ in 0..=self.options.logical_retry_limit {
-            let loaded = self.load_workspace(workspace).await?;
-            match loaded.value.state {
-                WorkspaceStateV1::Aborted => return Ok(()),
-                WorkspaceStateV1::Active => {}
-                _ => {
-                    return Err(Error::new(
-                        ErrorCode::WorkspaceConflict,
-                        "cannot abort publishing workspace",
-                    ))
-                }
-            }
-            let mut aborted = loaded.value;
-            aborted.state = WorkspaceStateV1::Aborted;
-            aborted.generation = aborted.generation.checked_add(1).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::InternalInvariant,
-                    "workspace generation overflow",
-                )
-            })?;
-            aborted.updated_at_millis = self.now_millis()?;
-            if matches!(
-                self.plane
-                    .compare_exchange(CompareExchange {
-                        path: workspace_path(&self.options.repository_prefix, workspace)?,
-                        expected: Some(loaded.token),
-                        bytes: encode_canonical(&aborted)?,
-                    })
-                    .await?,
-                CompareExchangeOutcome::Applied(_)
-            ) {
-                return Ok(());
-            }
-        }
-        Err(Error::new(
-            ErrorCode::WorkspaceConflict,
-            "workspace changed beyond retry budget",
-        ))
+        self.commit_batch(&batch, &prepared, request_digest).await
     }
 
     pub async fn delete_object(
@@ -5886,68 +3643,51 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<CommitReceipt> {
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
-        let kind = ObjectVersionKindV1::DeleteMarker;
+        let kind = LogicalObjectVersionKindV1::DeleteMarker;
         let input_digest = derive_input_digest(&[
             self.format.repository_id.as_bytes(),
             branch.as_bytes(),
             b"delete",
             &key,
         ]);
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        if native_profile {
-            if let Some(receipt) = self
-                .replay_warm_operation(branch, operation, input_digest)
-                .await?
-            {
-                return Ok(receipt);
-            }
+        let _native_publication = self.native_publication.lock().await;
+        if let Some(receipt) = self
+            .replay_warm_operation(branch, operation, input_digest)
+            .await?
+        {
+            return Ok(receipt);
         }
-        let lease = if native_profile {
-            None
-        } else {
-            Some(self.publication_lease(operation).await?)
-        };
-        let native_binding = if native_profile {
-            let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
-            let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let path =
+            ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
-            match self
-                .plane
-                .delete_native(crate::NativeDelete {
-                    path: path.clone(),
-                    repository: self.format.repository_id,
-                    operation,
-                    writer_fence_generation,
-                })
-                .await
-            {
-                Ok(binding) => Some(binding),
-                Err(error) => match self.reconcile_native_delete(&path).await? {
-                    Some(binding) => Some(binding),
-                    None => return Err(error),
-                },
-            }
-        } else {
-            None
+        let binding = match self
+            .plane
+            .delete_native(crate::NativeDelete {
+                path: path.clone(),
+                repository: self.format.repository_id,
+                operation,
+                writer_fence_generation,
+            })
+            .await
+        {
+            Ok(binding) => binding,
+            Err(error) => match self.reconcile_native_delete(&path).await? {
+                Some(binding) => binding,
+                None => return Err(error),
+            },
         };
         self.commit_one(
             branch,
             key,
             kind,
-            native_binding,
+            binding,
             OperationKind::Delete,
             operation,
             input_digest,
             "DeleteObject",
-            lease,
             ObjectWriteConditionV1::default(),
-            None,
         )
         .await
     }
@@ -5983,216 +3723,8 @@ impl<P: ObjectPlane> Repository<P> {
             b"multi-delete",
             &encoded_keys,
         ]);
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            return self
-                .delete_objects_native(branch, keys, operation, input_digest)
-                .await;
-        }
-        let lease = self.publication_lease(operation).await?;
-        let engine = self.protected_engine(Arc::new(lease.clone()));
-        let created_at_millis = self.now_millis()?;
-        for _attempt in 0..=self.options.logical_retry_limit {
-            let loaded_ref = self.load_ref(branch).await?;
-            let base = self.load_commit(loaded_ref.value.target).await?;
-            let mut objects =
-                self.tree_from_root(&base.state.objects, &self.format.state_tree_format)?;
-            let mut versions =
-                self.tree_from_root(&base.state.versions, &self.format.state_tree_format)?;
-            let operations =
-                self.tree_from_root(&base.state.operations, &self.format.state_tree_format)?;
-            if let Some(existing) = engine.get(&operations, operation.as_bytes()).await? {
-                let existing: OperationRecordV1 = decode_canonical(&existing)?;
-                if existing.input_digest != input_digest {
-                    return Err(Error::new(
-                        ErrorCode::IdempotencyConflict,
-                        "operation ID was already used with different input",
-                    )
-                    .operation(operation.to_string()));
-                }
-                let receipt = CommitReceipt {
-                    id: loaded_ref.value.target,
-                    operation,
-                    branch: branch.to_string(),
-                    parents: base.parents,
-                    changed_keys: existing.result.changed_keys,
-                    object_versions: existing.result.object_versions,
-                    idempotent_replay: true,
-                };
-                let _ = lease.complete(receipt.id).await;
-                return Ok(receipt);
-            }
-            let generation =
-                CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
-                    Error::new(ErrorCode::InternalInvariant, "commit generation overflow")
-                })?);
-            let mut transitions = Vec::with_capacity(keys.len());
-            let mut object_versions = Vec::with_capacity(keys.len());
-            for (ordinal, key) in keys.iter().enumerate() {
-                let previous = engine
-                    .get(&objects, key)
-                    .await?
-                    .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
-                    .transpose()?
-                    .map(|current| current.version);
-                let body = ObjectVersionBodyV1 {
-                    order: ObjectVersionOrder {
-                        commit_generation: generation,
-                        mutation_ordinal: u32::try_from(ordinal).map_err(|_| {
-                            Error::new(ErrorCode::InvalidLimit, "mutation ordinal overflow")
-                        })?,
-                    },
-                    created_at_millis,
-                    kind: ObjectVersionKindV1::DeleteMarker,
-                };
-                let version =
-                    ObjectVersionV1::derive(self.format.repository_id, key, operation, body)?;
-                objects = engine.delete(&objects, key).await?;
-                versions = engine
-                    .put(
-                        &versions,
-                        version_tree_key(key, version.body.order, version.id),
-                        encode_canonical(&version)?,
-                    )
-                    .await?;
-                transitions.push(ObjectTransition {
-                    key: key.clone(),
-                    previous,
-                    next: version.id,
-                    delete_marker: true,
-                });
-                object_versions.push(version.id);
-            }
-            let result = CanonicalOperationResult {
-                kind: OperationKind::MultiDelete,
-                object_versions: object_versions.clone(),
-                changed_keys: keys.len() as u64,
-            };
-            let operations = engine
-                .put(
-                    &operations,
-                    operation.as_bytes().to_vec(),
-                    encode_canonical(&OperationRecordV1 {
-                        input_digest,
-                        result: result.clone(),
-                        commit_generation: generation,
-                        created_at_millis,
-                    })?,
-                )
-                .await?;
-            let delta_id = self
-                .store_delta(&BucketDeltaV1 {
-                    operation_ids: vec![operation],
-                    changes: transitions,
-                })
-                .await?;
-            lease
-                .protect(delta_path(&self.options.repository_prefix, delta_id)?)
-                .await?;
-            let commit = BucketCommitV1 {
-                state: BucketStateV1 {
-                    objects: TreeRootV1::from_tree(&objects)?,
-                    versions: TreeRootV1::from_tree(&versions)?,
-                    operations: TreeRootV1::from_tree(&operations)?,
-                },
-                parents: vec![loaded_ref.value.target],
-                generation,
-                delta: delta_id,
-                author: self.options.writer.clone(),
-                message: Some("DeleteObjects".to_string()),
-                created_at_millis,
-                metadata: BTreeMap::new(),
-                native: None,
-            };
-            let commit_id = self.store_commit(&commit).await?;
-            lease
-                .protect(commit_path(&self.options.repository_prefix, commit_id)?)
-                .await?;
-            lease.set_proposal(commit_id).await?;
-            let reflog_id = self
-                .store_reflog(&ReflogEntryV1 {
-                    branch: branch.to_string(),
-                    old_target: Some(loaded_ref.value.target),
-                    new_target: commit_id,
-                    operation,
-                    actor: self.options.writer.clone(),
-                    message: "DeleteObjects".to_string(),
-                    created_at_millis,
-                })
-                .await?;
-            lease
-                .protect(reflog_path(
-                    &self.options.repository_prefix,
-                    branch,
-                    reflog_id,
-                )?)
-                .await?;
-            let next_ref = crate::RefValueV1 {
-                target: commit_id,
-                previous_target: Some(loaded_ref.value.target),
-                generation: RefGeneration(
-                    loaded_ref
-                        .value
-                        .generation
-                        .0
-                        .checked_add(1)
-                        .ok_or_else(|| {
-                            Error::new(ErrorCode::InternalInvariant, "ref generation overflow")
-                        })?,
-                ),
-                operation,
-                reflog: reflog_id,
-                writer: self.options.writer.clone(),
-                updated_at_millis: created_at_millis,
-                tombstone: false,
-                native: None,
-            };
-            self.ensure_publication_allowed(&lease).await?;
-            let publication = self
-                .plane
-                .compare_exchange(CompareExchange {
-                    path: branch_path(&self.options.repository_prefix, branch)?,
-                    expected: Some(loaded_ref.token),
-                    bytes: encode_canonical(&next_ref)?,
-                })
-                .await;
-            match publication {
-                Ok(CompareExchangeOutcome::Applied(_)) => {
-                    let receipt = CommitReceipt {
-                        id: commit_id,
-                        operation,
-                        branch: branch.to_string(),
-                        parents: commit.parents.clone(),
-                        changed_keys: keys.len() as u64,
-                        object_versions,
-                        idempotent_replay: false,
-                    };
-                    let _ = lease.complete(commit_id).await;
-                    return Ok(receipt);
-                }
-                Ok(CompareExchangeOutcome::Conflict(_)) => continue,
-                Err(error) => {
-                    if let Some(receipt) = self
-                        .reconcile_operation(branch, operation, input_digest)
-                        .await?
-                    {
-                        let _ = lease.complete(receipt.id).await;
-                        return Ok(receipt);
-                    }
-                    return Err(Error::new(
-                        ErrorCode::OutcomeUnknown,
-                        format!("branch publication outcome is unknown: {error}"),
-                    )
-                    .retry(RetryAdvice::ReconcileOperation)
-                    .operation(operation.to_string()));
-                }
-            }
-        }
-        Err(Error::new(
-            ErrorCode::RefConflict,
-            "branch moved beyond the logical retry budget",
-        )
-        .retry(RetryAdvice::ReloadHead)
-        .operation(operation.to_string()))
+        self.delete_objects_native(branch, keys, operation, input_digest)
+            .await
     }
 
     async fn delete_objects_native(
@@ -6274,7 +3806,7 @@ impl<P: ObjectPlane> Repository<P> {
                     None => return Err(error),
                 },
             };
-            let body = ObjectVersionBodyV1 {
+            let body = LogicalObjectVersionBodyV1 {
                 order: ObjectVersionOrder {
                     commit_generation: generation,
                     mutation_ordinal: u32::try_from(ordinal).map_err(|_| {
@@ -6282,15 +3814,10 @@ impl<P: ObjectPlane> Repository<P> {
                     })?,
                 },
                 created_at_millis,
-                kind: ObjectVersionKindV1::DeleteMarker,
+                kind: LogicalObjectVersionKindV1::DeleteMarker,
             };
-            let version = ObjectVersionV1::derive_native(
-                self.format.repository_id,
-                key,
-                operation,
-                body,
-                binding,
-            )?;
+            let version =
+                ObjectVersionV1::derive(self.format.repository_id, key, operation, body, binding)?;
             objects = engine.delete(&objects, key).await?;
             versions = engine
                 .put(
@@ -6343,16 +3870,13 @@ impl<P: ObjectPlane> Repository<P> {
             },
             parents: vec![loaded_ref.value.target],
             generation,
-            delta: delta.id()?,
+            delta,
+            node_pack,
+            writer_fence_generation,
             author: self.options.writer.clone(),
             message: Some("DeleteObjects".to_string()),
             created_at_millis,
             metadata: BTreeMap::new(),
-            native: Some(crate::NativeCommitExtensionV1 {
-                node_pack,
-                inline_delta: delta,
-                writer_fence_generation,
-            }),
         };
         let commit_id = self.store_commit(&commit).await?;
         let reflog = ReflogEntryV1 {
@@ -6375,10 +3899,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer: self.options.writer.clone(),
             updated_at_millis: created_at_millis,
             tombstone: false,
-            native: Some(crate::NativeRefExtensionV1 {
-                writer_fence_generation,
-                inline_reflog: reflog,
-            }),
+            writer_fence_generation,
+            inline_reflog: reflog,
         };
         if self.native_writer_generation_for_mutation().await? != writer_fence_generation {
             return Err(Error::new(
@@ -6428,7 +3950,7 @@ impl<P: ObjectPlane> Repository<P> {
             Some(version) => self.head_version(branch, source_key, version).await?,
             None => self.head_current_at(branch, source_key).await?,
         };
-        let ObjectVersionKindV1::Live { .. } = &source.version.body.kind else {
+        let LogicalObjectVersionKindV1::Live { .. } = &source.version.body.kind else {
             return Err(Error::new(
                 ErrorCode::NoSuchKey,
                 "copy source is a delete marker",
@@ -6446,103 +3968,81 @@ impl<P: ObjectPlane> Repository<P> {
             &destination_key,
             &kind_bytes,
         ]);
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        if native_profile {
-            if let Some(receipt) = self
-                .replay_warm_operation(branch, operation, input_digest)
-                .await?
-            {
-                return Ok(receipt);
-            }
+        let _publication = self.native_publication.lock().await;
+        if let Some(receipt) = self
+            .replay_warm_operation(branch, operation, input_digest)
+            .await?
+        {
+            return Ok(receipt);
         }
-        let lease = if native_profile {
-            None
-        } else {
-            Some(self.publication_lease(operation).await?)
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let crate::NativeObjectBindingV1::Live {
+            version_id,
+            checksum_sha256,
+            ..
+        } = source.version.binding.clone()
+        else {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "copy source points to a delete marker",
+            ));
         };
-        let native_binding = if native_profile {
-            let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
-            let crate::NativeObjectBindingV1::Live {
-                version_id,
-                checksum_sha256,
-                ..
-            } = source.version.native_binding.clone().ok_or_else(|| {
-                Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native copy source is missing its physical binding",
-                )
-            })?
-            else {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native copy source points to a delete marker",
-                ));
-            };
-            let ObjectVersionKindV1::Live {
-                size,
-                logical_etag,
-                headers,
-                checksums,
-                user_metadata,
-                ..
-            } = &kind
-            else {
-                unreachable!("copy source was validated as live")
-            };
-            let source_path = ObjectPath::new(std::str::from_utf8(source_key).map_err(|_| {
+        let LogicalObjectVersionKindV1::Live {
+            size,
+            logical_etag,
+            headers,
+            checksums,
+            user_metadata,
+            ..
+        } = &kind
+        else {
+            unreachable!("copy source was validated as live")
+        };
+        let source_path =
+            ObjectPath::new(std::str::from_utf8(source_key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
-            let destination_path =
-                ObjectPath::new(std::str::from_utf8(&destination_key).map_err(|_| {
-                    Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-                })?)?;
-            match self
-                .plane
-                .copy_native(crate::NativeCopy {
-                    source: source_path,
-                    source_version_id: version_id,
-                    destination: destination_path.clone(),
-                    headers: headers.clone(),
-                    user_metadata: user_metadata.clone(),
-                    repository: self.format.repository_id,
-                    operation,
-                    writer_fence_generation,
-                    checksum_sha256,
-                    size: *size,
-                    logical_etag: logical_etag.clone(),
-                    checksums: checksums.clone(),
-                })
-                .await
+        let destination_path =
+            ObjectPath::new(std::str::from_utf8(&destination_key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        let binding = match self
+            .plane
+            .copy_native(crate::NativeCopy {
+                source: source_path,
+                source_version_id: version_id,
+                destination: destination_path.clone(),
+                headers: headers.clone(),
+                user_metadata: user_metadata.clone(),
+                repository: self.format.repository_id,
+                operation,
+                writer_fence_generation,
+                checksum_sha256,
+                size: *size,
+                logical_etag: logical_etag.clone(),
+                checksums: checksums.clone(),
+            })
+            .await
+        {
+            Ok(result) => result.binding,
+            Err(error) => match self
+                .reconcile_native_payload(&destination_path, operation, checksum_sha256)
+                .await?
             {
-                Ok(result) => Some(result.binding),
-                Err(error) => match self
-                    .reconcile_native_payload(&destination_path, operation, checksum_sha256)
-                    .await?
-                {
-                    Some(result) => Some(result.binding),
-                    None => return Err(error),
-                },
-            }
-        } else {
-            None
+                Some(result) => result.binding,
+                None => return Err(error),
+            },
         };
         self.commit_one(
             branch,
             destination_key,
             kind,
-            native_binding,
+            binding,
             OperationKind::Copy,
             operation,
             input_digest,
             "CopyObject",
-            lease,
             ObjectWriteConditionV1::default(),
-            None,
         )
         .await
     }
@@ -6552,419 +4052,289 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         branch: &str,
         key: Vec<u8>,
-        kind: ObjectVersionKindV1,
-        native_binding: Option<crate::NativeObjectBindingV1>,
+        kind: LogicalObjectVersionKindV1,
+        binding: crate::NativeObjectBindingV1,
         operation_kind: OperationKind,
         operation: OperationId,
         input_digest: [u8; 32],
         message: &str,
-        lease: Option<PublicationLease<P>>,
         condition: ObjectWriteConditionV1,
-        logical_retry_limit: Option<u8>,
     ) -> Result<CommitReceipt> {
         validate_branch(branch)?;
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        match (self.storage_profile(), native_binding.as_ref()) {
-            (RepositoryStorageProfile::DistributedContentAddressedV1, None)
-            | (RepositoryStorageProfile::NativeVersionedV1, Some(_)) => {}
-            (RepositoryStorageProfile::DistributedContentAddressedV1, Some(_)) => {
-                return Err(Error::new(
-                    ErrorCode::InternalInvariant,
-                    "distributed-profile publication received a native binding",
-                ))
-            }
-            (RepositoryStorageProfile::NativeVersionedV1, None) => {
-                return Err(Error::new(
-                    ErrorCode::InternalInvariant,
-                    "native-profile publication omitted its native binding",
-                ))
-            }
-        }
         let created_at_millis = self.now_millis()?;
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let engine = AsyncProlly::new(
+            self.node_store.clone(),
+            Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        );
+        let warm = self.warm_branch_state(branch).await?;
+        let loaded_ref = LoadedRef {
+            value: warm.reference,
+            token: warm.token,
         };
-        let engine = match lease.as_ref() {
-            Some(lease) => self.protected_engine(Arc::new(lease.clone())),
-            None => AsyncProlly::new(
-                self.node_store.clone(),
-                Config {
-                    format: self.format.state_tree_format.clone(),
-                    runtime: RuntimeConfig::default(),
-                },
-            ),
-        };
-        let retry_limit = if native_profile {
-            0
-        } else {
-            effective_logical_retry_limit(self.options.logical_retry_limit, logical_retry_limit)
-        };
-        for _attempt in 0..=retry_limit {
-            let (loaded_ref, base) = if native_profile {
-                let warm = self.warm_branch_state(branch).await?;
-                (
-                    LoadedRef {
-                        value: warm.reference,
-                        token: warm.token,
-                    },
-                    warm.commit,
-                )
-            } else {
-                let loaded = self.load_ref(branch).await?;
-                let base = self.load_commit(loaded.value.target).await?;
-                (loaded, base)
-            };
-            if condition
-                .expected_head
-                .is_some_and(|expected| expected != loaded_ref.value.target)
-            {
+        let base = warm.commit;
+        if condition
+            .expected_head
+            .is_some_and(|expected| expected != loaded_ref.value.target)
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch head does not match the atomic write expectation",
+            ));
+        }
+        let objects = self.tree_from_root(&base.state.objects, &self.format.state_tree_format)?;
+        let versions = self.tree_from_root(&base.state.versions, &self.format.state_tree_format)?;
+        let operations =
+            self.tree_from_root(&base.state.operations, &self.format.state_tree_format)?;
+
+        if let Some(existing) = engine.get(&operations, operation.as_bytes()).await? {
+            let existing: OperationRecordV1 = decode_canonical(&existing)?;
+            if existing.input_digest != input_digest {
                 return Err(Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "branch head does not match the atomic write expectation",
-                ));
-            }
-            let objects =
-                self.tree_from_root(&base.state.objects, &self.format.state_tree_format)?;
-            let versions =
-                self.tree_from_root(&base.state.versions, &self.format.state_tree_format)?;
-            let operations =
-                self.tree_from_root(&base.state.operations, &self.format.state_tree_format)?;
-
-            if let Some(existing) = engine.get(&operations, operation.as_bytes()).await? {
-                let existing: OperationRecordV1 = decode_canonical(&existing)?;
-                if existing.input_digest != input_digest {
-                    return Err(Error::new(
-                        ErrorCode::IdempotencyConflict,
-                        "operation ID was already used with different input",
-                    )
-                    .operation(operation.to_string()));
-                }
-                let receipt = CommitReceipt {
-                    id: loaded_ref.value.target,
-                    operation,
-                    branch: branch.to_string(),
-                    parents: base.parents,
-                    changed_keys: existing.result.changed_keys,
-                    object_versions: existing.result.object_versions,
-                    idempotent_replay: true,
-                };
-                if let Some(lease) = &lease {
-                    let _ = lease.complete(receipt.id).await;
-                }
-                return Ok(receipt);
-            }
-
-            let generation =
-                CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
-                    Error::new(ErrorCode::InternalInvariant, "commit generation overflow")
-                })?);
-            let previous_current = engine
-                .get(&objects, &key)
-                .await?
-                .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
-                .transpose()?;
-            let current_etag = match previous_current.as_ref() {
-                Some(current) => {
-                    let version = self.find_version(&base, &key, current.version).await?;
-                    match version.body.kind {
-                        ObjectVersionKindV1::Live { logical_etag, .. } => Some(logical_etag),
-                        ObjectVersionKindV1::DeleteMarker => None,
-                    }
-                }
-                None => None,
-            };
-            validate_write_condition(&condition, current_etag.as_deref())?;
-            let previous = previous_current.map(|current| current.version);
-            let body = ObjectVersionBodyV1 {
-                order: ObjectVersionOrder {
-                    commit_generation: generation,
-                    mutation_ordinal: 0,
-                },
-                created_at_millis,
-                kind: kind.clone(),
-            };
-            let version = match native_binding.clone() {
-                Some(binding) => ObjectVersionV1::derive_native(
-                    self.format.repository_id,
-                    &key,
-                    operation,
-                    body,
-                    binding,
-                )?,
-                None => ObjectVersionV1::derive(self.format.repository_id, &key, operation, body)?,
-            };
-            let version_key = version_tree_key(&key, version.body.order, version.id);
-
-            let objects = match &version.body.kind {
-                ObjectVersionKindV1::Live { .. } => {
-                    engine
-                        .put(
-                            &objects,
-                            key.clone(),
-                            encode_canonical(&CurrentObjectV1 {
-                                version: version.id,
-                            })?,
-                        )
-                        .await?
-                }
-                ObjectVersionKindV1::DeleteMarker => engine.delete(&objects, &key).await?,
-            };
-            let versions = engine
-                .put(&versions, version_key, encode_canonical(&version)?)
-                .await?;
-            let operation_result = CanonicalOperationResult {
-                kind: operation_kind.clone(),
-                object_versions: vec![version.id],
-                changed_keys: 1,
-            };
-            let operation_record = OperationRecordV1 {
-                input_digest,
-                result: operation_result.clone(),
-                commit_generation: generation,
-                created_at_millis,
-            };
-            let operations = engine
-                .put(
-                    &operations,
-                    operation.as_bytes().to_vec(),
-                    encode_canonical(&operation_record)?,
+                    ErrorCode::IdempotencyConflict,
+                    "operation ID was already used with different input",
                 )
-                .await?;
+                .operation(operation.to_string()));
+            }
+            let receipt = CommitReceipt {
+                id: loaded_ref.value.target,
+                operation,
+                branch: branch.to_string(),
+                parents: base.parents,
+                changed_keys: existing.result.changed_keys,
+                object_versions: existing.result.object_versions,
+                idempotent_replay: true,
+            };
+            return Ok(receipt);
+        }
 
-            let state = BucketStateV1 {
-                objects: TreeRootV1::from_tree(&objects)?,
-                versions: TreeRootV1::from_tree(&versions)?,
-                operations: TreeRootV1::from_tree(&operations)?,
-            };
-            let delta = BucketDeltaV1 {
-                operation_ids: vec![operation],
-                changes: vec![ObjectTransition {
-                    key: key.clone(),
-                    previous,
-                    next: version.id,
-                    delete_marker: matches!(version.body.kind, ObjectVersionKindV1::DeleteMarker),
-                }],
-            };
-            let delta_id = if native_profile {
-                delta.id()?
-            } else {
-                let id = self.store_delta(&delta).await?;
-                lease
-                    .as_ref()
-                    .expect("distributed publication has a lease")
-                    .protect(delta_path(&self.options.repository_prefix, id)?)
-                    .await?;
-                id
-            };
-            let node_pack = if native_profile {
-                self.node_store
-                    .flush_node_pack(
-                        tree_format_digest(&self.format.state_tree_format)?,
-                        Vec::new(),
+        let generation = CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
+            Error::new(ErrorCode::InternalInvariant, "commit generation overflow")
+        })?);
+        let previous_current = engine
+            .get(&objects, &key)
+            .await?
+            .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
+            .transpose()?;
+        let current_etag = match previous_current.as_ref() {
+            Some(current) => {
+                let version = self.find_version(&base, &key, current.version).await?;
+                match version.body.kind {
+                    LogicalObjectVersionKindV1::Live { logical_etag, .. } => Some(logical_etag),
+                    LogicalObjectVersionKindV1::DeleteMarker => None,
+                }
+            }
+            None => None,
+        };
+        validate_write_condition(&condition, current_etag.as_deref())?;
+        let previous = previous_current.map(|current| current.version);
+        let body = LogicalObjectVersionBodyV1 {
+            order: ObjectVersionOrder {
+                commit_generation: generation,
+                mutation_ordinal: 0,
+            },
+            created_at_millis,
+            kind: kind.clone(),
+        };
+        let version = ObjectVersionV1::derive(
+            self.format.repository_id,
+            &key,
+            operation,
+            body,
+            binding.clone(),
+        )?;
+        let version_key = version_tree_key(&key, version.body.order, version.id);
+
+        let objects = match &version.body.kind {
+            LogicalObjectVersionKindV1::Live { .. } => {
+                engine
+                    .put(
+                        &objects,
+                        key.clone(),
+                        encode_canonical(&CurrentObjectV1 {
+                            version: version.id,
+                        })?,
                     )
                     .await?
-            } else {
-                None
-            };
-            let commit = BucketCommitV1 {
-                state,
-                parents: vec![loaded_ref.value.target],
-                generation,
-                delta: delta_id,
-                author: self.options.writer.clone(),
-                message: Some(message.to_string()),
-                created_at_millis,
-                metadata: BTreeMap::new(),
-                native: native_profile.then(|| crate::NativeCommitExtensionV1 {
-                    node_pack,
-                    inline_delta: delta.clone(),
-                    writer_fence_generation,
-                }),
-            };
-            let commit_id = self.store_commit(&commit).await?;
-            if let Some(lease) = &lease {
-                lease
-                    .protect(commit_path(&self.options.repository_prefix, commit_id)?)
-                    .await?;
-                lease.set_proposal(commit_id).await?;
             }
-            let reflog = ReflogEntryV1 {
-                branch: branch.to_string(),
-                old_target: Some(loaded_ref.value.target),
-                new_target: commit_id,
-                operation,
-                actor: self.options.writer.clone(),
-                message: message.to_string(),
-                created_at_millis,
-            };
-            let reflog_id = if native_profile {
-                reflog.id()?
-            } else {
-                let id = self.store_reflog(&reflog).await?;
-                lease
-                    .as_ref()
-                    .expect("distributed publication has a lease")
-                    .protect(reflog_path(&self.options.repository_prefix, branch, id)?)
-                    .await?;
-                id
-            };
-            let next_ref = crate::RefValueV1 {
-                target: commit_id,
-                previous_target: Some(loaded_ref.value.target),
-                generation: RefGeneration(
-                    loaded_ref
-                        .value
-                        .generation
-                        .0
-                        .checked_add(1)
-                        .ok_or_else(|| {
-                            Error::new(ErrorCode::InternalInvariant, "ref generation overflow")
-                        })?,
+            LogicalObjectVersionKindV1::DeleteMarker => engine.delete(&objects, &key).await?,
+        };
+        let versions = engine
+            .put(&versions, version_key, encode_canonical(&version)?)
+            .await?;
+        let operation_result = CanonicalOperationResult {
+            kind: operation_kind.clone(),
+            object_versions: vec![version.id],
+            changed_keys: 1,
+        };
+        let operation_record = OperationRecordV1 {
+            input_digest,
+            result: operation_result.clone(),
+            commit_generation: generation,
+            created_at_millis,
+        };
+        let operations = engine
+            .put(
+                &operations,
+                operation.as_bytes().to_vec(),
+                encode_canonical(&operation_record)?,
+            )
+            .await?;
+
+        let state = BucketStateV1 {
+            objects: TreeRootV1::from_tree(&objects)?,
+            versions: TreeRootV1::from_tree(&versions)?,
+            operations: TreeRootV1::from_tree(&operations)?,
+        };
+        let delta = BucketDeltaV1 {
+            operation_ids: vec![operation],
+            changes: vec![ObjectTransition {
+                key: key.clone(),
+                previous,
+                next: version.id,
+                delete_marker: matches!(
+                    version.body.kind,
+                    LogicalObjectVersionKindV1::DeleteMarker
                 ),
-                operation,
-                reflog: reflog_id,
-                writer: self.options.writer.clone(),
-                updated_at_millis: created_at_millis,
-                tombstone: false,
-                native: native_profile.then_some(crate::NativeRefExtensionV1 {
-                    writer_fence_generation,
-                    inline_reflog: reflog,
-                }),
-            };
-            if native_profile {
-                let current_fence = self.native_writer_generation_for_mutation().await?;
-                if current_fence != writer_fence_generation {
-                    return Err(Error::new(
-                        ErrorCode::PreconditionFailed,
-                        "native writer fence changed during publication",
-                    ));
-                }
-            } else {
-                self.ensure_publication_allowed(
-                    lease.as_ref().expect("distributed publication has a lease"),
-                )
-                .await?;
+            }],
+        };
+        let node_pack = self
+            .node_store
+            .flush_node_pack(
+                tree_format_digest(&self.format.state_tree_format)?,
+                Vec::new(),
+            )
+            .await?;
+        let commit = BucketCommitV1 {
+            state,
+            parents: vec![loaded_ref.value.target],
+            generation,
+            delta,
+            node_pack,
+            writer_fence_generation,
+            author: self.options.writer.clone(),
+            message: Some(message.to_string()),
+            created_at_millis,
+            metadata: BTreeMap::new(),
+        };
+        let commit_id = self.store_commit(&commit).await?;
+        let reflog = ReflogEntryV1 {
+            branch: branch.to_string(),
+            old_target: Some(loaded_ref.value.target),
+            new_target: commit_id,
+            operation,
+            actor: self.options.writer.clone(),
+            message: message.to_string(),
+            created_at_millis,
+        };
+        let reflog_id = reflog.id()?;
+        let next_ref = crate::RefValueV1 {
+            target: commit_id,
+            previous_target: Some(loaded_ref.value.target),
+            generation: RefGeneration(loaded_ref.value.generation.0.checked_add(1).ok_or_else(
+                || Error::new(ErrorCode::InternalInvariant, "ref generation overflow"),
+            )?),
+            operation,
+            reflog: reflog_id,
+            writer: self.options.writer.clone(),
+            updated_at_millis: created_at_millis,
+            tombstone: false,
+            writer_fence_generation,
+            inline_reflog: reflog,
+        };
+        let current_fence = self.native_writer_generation_for_mutation().await?;
+        if current_fence != writer_fence_generation {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "native writer fence changed during publication",
+            ));
+        }
+        let publication = self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: branch_path(&self.options.repository_prefix, branch)?,
+                expected: Some(loaded_ref.token),
+                bytes: encode_canonical(&next_ref)?,
+            })
+            .await;
+        match publication {
+            Ok(CompareExchangeOutcome::Applied(metadata)) => {
+                let receipt = CommitReceipt {
+                    id: commit_id,
+                    operation,
+                    branch: branch.to_string(),
+                    parents: commit.parents.clone(),
+                    changed_keys: 1,
+                    object_versions: operation_result.object_versions,
+                    idempotent_replay: false,
+                };
+                self.cache_branch(branch, next_ref, metadata.token, commit.clone())?;
+                Ok(receipt)
             }
-            let publication = self
-                .plane
-                .compare_exchange(CompareExchange {
-                    path: branch_path(&self.options.repository_prefix, branch)?,
-                    expected: Some(loaded_ref.token),
-                    bytes: encode_canonical(&next_ref)?,
-                })
-                .await;
-            match publication {
-                Ok(CompareExchangeOutcome::Applied(metadata)) => {
-                    let receipt = CommitReceipt {
-                        id: commit_id,
-                        operation,
-                        branch: branch.to_string(),
-                        parents: commit.parents.clone(),
-                        changed_keys: 1,
-                        object_versions: operation_result.object_versions,
-                        idempotent_replay: false,
-                    };
-                    if native_profile {
-                        self.cache_branch(branch, next_ref, metadata.token, commit.clone())?;
-                    }
-                    if let Some(lease) = &lease {
-                        let _ = lease.complete(commit_id).await;
-                    }
+            Ok(CompareExchangeOutcome::Conflict(_)) => {
+                self.warm_branches
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned")
+                    })?
+                    .remove(branch);
+                Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "native branch CAS conflicted; writer is fenced and must reopen",
+                ))
+            }
+            Err(error) => {
+                if let Some(receipt) = self
+                    .reconcile_operation(branch, operation, input_digest)
+                    .await?
+                {
                     return Ok(receipt);
                 }
-                Ok(CompareExchangeOutcome::Conflict(_)) if native_profile => {
-                    self.warm_branches
-                        .write()
-                        .map_err(|_| {
-                            Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned")
-                        })?
-                        .remove(branch);
-                    return Err(Error::new(
-                        ErrorCode::PreconditionFailed,
-                        "native branch CAS conflicted; writer is fenced and must reopen",
-                    ));
-                }
-                Ok(CompareExchangeOutcome::Conflict(_)) => continue,
-                Err(error) => {
-                    if let Some(receipt) = self
-                        .reconcile_operation(branch, operation, input_digest)
-                        .await?
-                    {
-                        if let Some(lease) = &lease {
-                            let _ = lease.complete(receipt.id).await;
-                        }
-                        return Ok(receipt);
-                    }
-                    return Err(Error::new(
-                        ErrorCode::OutcomeUnknown,
-                        format!("branch publication outcome is unknown: {error}"),
-                    )
-                    .retry(RetryAdvice::ReconcileOperation)
-                    .operation(operation.to_string()));
-                }
+                Err(Error::new(
+                    ErrorCode::OutcomeUnknown,
+                    format!("branch publication outcome is unknown: {error}"),
+                )
+                .retry(RetryAdvice::ReconcileOperation)
+                .operation(operation.to_string()))
             }
         }
-        Err(Error::new(
-            ErrorCode::RefConflict,
-            "branch moved beyond the logical retry budget",
-        )
-        .retry(RetryAdvice::ReloadHead)
-        .operation(operation.to_string()))
     }
 
-    async fn commit_workspace(
+    async fn commit_batch(
         &self,
-        workspace: &WorkspaceManifestV1,
+        batch: &NativeBatchV1,
+        mutations: &BTreeMap<Vec<u8>, NativePreparedMutationV1>,
         input_digest: [u8; 32],
-        lease: Option<PublicationLease<P>>,
     ) -> Result<CommitReceipt> {
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let (loaded_ref, base) = if native_profile {
-            let warm = self.warm_branch_state(&workspace.branch).await?;
-            (
-                LoadedRef {
-                    value: warm.reference,
-                    token: warm.token,
-                },
-                warm.commit,
-            )
-        } else {
-            let loaded = self.load_ref(&workspace.branch).await?;
-            let base = self.load_commit(workspace.base_commit).await?;
-            (loaded, base)
+        let warm = self.warm_branch_state(&batch.branch).await?;
+        let loaded_ref = LoadedRef {
+            value: warm.reference,
+            token: warm.token,
         };
-        if loaded_ref.value.target != workspace.base_commit {
+        let base = warm.commit;
+        if loaded_ref.value.target != batch.base_commit {
             if let Some(receipt) = self
-                .reconcile_operation(&workspace.branch, workspace.operation, input_digest)
+                .reconcile_operation(&batch.branch, batch.operation, input_digest)
                 .await?
             {
-                if let Some(lease) = &lease {
-                    let _ = lease.complete(receipt.id).await;
-                }
                 return Ok(receipt);
             }
             return Err(Error::new(
-                ErrorCode::WorkspaceConflict,
-                "branch moved since workspace creation",
+                ErrorCode::BatchConflict,
+                "branch moved since batch creation",
             ));
         }
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
-        };
-        let engine = match &lease {
-            Some(lease) => self.protected_engine(Arc::new(lease.clone())),
-            None => AsyncProlly::new(
-                self.node_store.clone(),
-                Config {
-                    format: self.format.state_tree_format.clone(),
-                    runtime: RuntimeConfig::default(),
-                },
-            ),
-        };
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let engine = AsyncProlly::new(
+            self.node_store.clone(),
+            Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        );
         let mut objects =
             self.tree_from_root(&base.state.objects, &self.format.state_tree_format)?;
         let mut versions =
@@ -6975,9 +4345,9 @@ impl<P: ObjectPlane> Repository<P> {
             Error::new(ErrorCode::InternalInvariant, "commit generation overflow")
         })?);
         let now = self.now_millis()?;
-        let mut transitions = Vec::with_capacity(workspace.mutations.len());
-        let mut version_ids = Vec::with_capacity(workspace.mutations.len());
-        for (ordinal, mutation) in workspace.mutations.values().enumerate() {
+        let mut transitions = Vec::with_capacity(mutations.len());
+        let mut version_ids = Vec::with_capacity(mutations.len());
+        for (ordinal, mutation) in mutations.values().enumerate() {
             let key = mutation.key();
             let previous = engine
                 .get(&objects, key)
@@ -6985,79 +4355,48 @@ impl<P: ObjectPlane> Repository<P> {
                 .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
                 .transpose()?
                 .map(|current| current.version);
-            let (kind, native_binding) = match mutation {
-                WorkspaceMutationV1::Put {
-                    content,
-                    headers,
-                    user_metadata,
-                    ..
-                } => (
-                    ObjectVersionKindV1::Live {
-                        content: content.reference.clone(),
-                        size: content.size,
-                        logical_etag: content.logical_etag.clone(),
-                        headers: headers.clone(),
-                        checksums: content.checksums.clone(),
-                        user_metadata: user_metadata.clone(),
-                        tags: BTreeMap::new(),
-                    },
-                    None,
-                ),
-                WorkspaceMutationV1::Delete { .. } => (ObjectVersionKindV1::DeleteMarker, None),
-                WorkspaceMutationV1::NativePut {
-                    content,
+            let (kind, binding) = match mutation {
+                NativePreparedMutationV1::NativePut {
+                    size,
+                    logical_etag,
+                    checksums,
                     headers,
                     user_metadata,
                     binding,
                     ..
                 } => (
-                    ObjectVersionKindV1::Live {
-                        content: crate::ContentRef::Empty,
-                        size: content.size,
-                        logical_etag: content.logical_etag.clone(),
+                    LogicalObjectVersionKindV1::Live {
+                        size: *size,
+                        logical_etag: logical_etag.clone(),
                         headers: headers.clone(),
-                        checksums: content.checksums.clone(),
+                        checksums: checksums.clone(),
                         user_metadata: user_metadata.clone(),
                         tags: BTreeMap::new(),
                     },
-                    Some(binding.clone()),
+                    binding.clone(),
                 ),
-                WorkspaceMutationV1::NativeDelete { binding, .. } => {
-                    (ObjectVersionKindV1::DeleteMarker, Some(binding.clone()))
+                NativePreparedMutationV1::NativeDelete { binding, .. } => {
+                    (LogicalObjectVersionKindV1::DeleteMarker, binding.clone())
                 }
             };
-            let body = ObjectVersionBodyV1 {
+            let body = LogicalObjectVersionBodyV1 {
                 order: ObjectVersionOrder {
                     commit_generation: generation,
                     mutation_ordinal: u32::try_from(ordinal).map_err(|_| {
-                        Error::new(ErrorCode::InvalidLimit, "workspace ordinal overflow")
+                        Error::new(ErrorCode::InvalidLimit, "batch ordinal overflow")
                     })?,
                 },
                 created_at_millis: now,
                 kind,
             };
-            let version = match (native_profile, native_binding) {
-                (true, Some(binding)) => ObjectVersionV1::derive_native(
-                    self.format.repository_id,
-                    key,
-                    workspace.operation,
-                    body,
-                    binding,
-                )?,
-                (false, None) => ObjectVersionV1::derive(
-                    self.format.repository_id,
-                    key,
-                    workspace.operation,
-                    body,
-                )?,
-                _ => {
-                    return Err(Error::new(
-                        ErrorCode::CorruptCommit,
-                        "workspace mutation does not match the repository storage profile",
-                    ))
-                }
-            };
-            objects = if matches!(version.body.kind, ObjectVersionKindV1::DeleteMarker) {
+            let version = ObjectVersionV1::derive(
+                self.format.repository_id,
+                key,
+                batch.operation,
+                body,
+                binding,
+            )?;
+            objects = if matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker) {
                 engine.delete(&objects, key).await?
             } else {
                 engine
@@ -7081,19 +4420,22 @@ impl<P: ObjectPlane> Repository<P> {
                 key: key.to_vec(),
                 previous,
                 next: version.id,
-                delete_marker: matches!(version.body.kind, ObjectVersionKindV1::DeleteMarker),
+                delete_marker: matches!(
+                    version.body.kind,
+                    LogicalObjectVersionKindV1::DeleteMarker
+                ),
             });
             version_ids.push(version.id);
         }
         let result = CanonicalOperationResult {
             kind: OperationKind::CommitSession,
             object_versions: version_ids.clone(),
-            changed_keys: workspace.mutations.len() as u64,
+            changed_keys: mutations.len() as u64,
         };
         let operations = engine
             .put(
                 &operations,
-                workspace.operation.as_bytes().to_vec(),
+                batch.operation.as_bytes().to_vec(),
                 encode_canonical(&OperationRecordV1 {
                     input_digest,
                     result: result.clone(),
@@ -7102,58 +4444,16 @@ impl<P: ObjectPlane> Repository<P> {
                 })?,
             )
             .await?;
-        if native_profile {
-            let delta = BucketDeltaV1 {
-                operation_ids: vec![workspace.operation],
-                changes: transitions.clone(),
-            };
-            let node_pack = self
-                .node_store
-                .flush_node_pack(
-                    tree_format_digest(&self.format.state_tree_format)?,
-                    Vec::new(),
-                )
-                .await?;
-            let commit = BucketCommitV1 {
-                state: BucketStateV1 {
-                    objects: TreeRootV1::from_tree(&objects)?,
-                    versions: TreeRootV1::from_tree(&versions)?,
-                    operations: TreeRootV1::from_tree(&operations)?,
-                },
-                parents: vec![workspace.base_commit],
-                generation,
-                delta: delta.id()?,
-                author: self.options.writer.clone(),
-                message: Some(workspace.message.clone()),
-                created_at_millis: now,
-                metadata: BTreeMap::new(),
-                native: Some(crate::NativeCommitExtensionV1 {
-                    node_pack,
-                    inline_delta: delta,
-                    writer_fence_generation,
-                }),
-            };
-            return self
-                .publish_prepared_commit(
-                    &workspace.branch,
-                    loaded_ref,
-                    workspace.operation,
-                    commit,
-                    result,
-                    None,
-                    &workspace.message,
-                )
-                .await;
-        }
-        let lease = lease.expect("distributed workspace has a publication lease");
-        let delta = self
-            .store_delta(&BucketDeltaV1 {
-                operation_ids: vec![workspace.operation],
-                changes: transitions,
-            })
-            .await?;
-        lease
-            .protect(delta_path(&self.options.repository_prefix, delta)?)
+        let delta = BucketDeltaV1 {
+            operation_ids: vec![batch.operation],
+            changes: transitions,
+        };
+        let node_pack = self
+            .node_store
+            .flush_node_pack(
+                tree_format_digest(&self.format.state_tree_format)?,
+                Vec::new(),
+            )
             .await?;
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
@@ -7161,105 +4461,25 @@ impl<P: ObjectPlane> Repository<P> {
                 versions: TreeRootV1::from_tree(&versions)?,
                 operations: TreeRootV1::from_tree(&operations)?,
             },
-            parents: vec![workspace.base_commit],
+            parents: vec![batch.base_commit],
             generation,
             delta,
+            node_pack,
+            writer_fence_generation,
             author: self.options.writer.clone(),
-            message: Some(workspace.message.clone()),
+            message: Some(batch.message.clone()),
             created_at_millis: now,
             metadata: BTreeMap::new(),
-            native: None,
         };
-        let commit_id = self.store_commit(&commit).await?;
-        lease
-            .protect(commit_path(&self.options.repository_prefix, commit_id)?)
-            .await?;
-        lease.set_proposal(commit_id).await?;
-        let reflog = self
-            .store_reflog(&ReflogEntryV1 {
-                branch: workspace.branch.clone(),
-                old_target: Some(workspace.base_commit),
-                new_target: commit_id,
-                operation: workspace.operation,
-                actor: self.options.writer.clone(),
-                message: workspace.message.clone(),
-                created_at_millis: now,
-            })
-            .await?;
-        lease
-            .protect(reflog_path(
-                &self.options.repository_prefix,
-                &workspace.branch,
-                reflog,
-            )?)
-            .await?;
-        let next_ref = crate::RefValueV1 {
-            target: commit_id,
-            previous_target: Some(workspace.base_commit),
-            generation: RefGeneration(loaded_ref.value.generation.0.checked_add(1).ok_or_else(
-                || Error::new(ErrorCode::InternalInvariant, "ref generation overflow"),
-            )?),
-            operation: workspace.operation,
-            reflog,
-            writer: self.options.writer.clone(),
-            updated_at_millis: now,
-            tombstone: false,
-            native: None,
-        };
-        self.ensure_publication_allowed(&lease).await?;
-        let publication = self
-            .plane
-            .compare_exchange(CompareExchange {
-                path: branch_path(&self.options.repository_prefix, &workspace.branch)?,
-                expected: Some(loaded_ref.token),
-                bytes: encode_canonical(&next_ref)?,
-            })
-            .await;
-        match publication {
-            Ok(CompareExchangeOutcome::Applied(_)) => {
-                let receipt = CommitReceipt {
-                    id: commit_id,
-                    operation: workspace.operation,
-                    branch: workspace.branch.clone(),
-                    parents: commit.parents,
-                    changed_keys: workspace.mutations.len() as u64,
-                    object_versions: version_ids,
-                    idempotent_replay: false,
-                };
-                let _ = lease.complete(commit_id).await;
-                Ok(receipt)
-            }
-            Ok(CompareExchangeOutcome::Conflict(_)) => {
-                if let Some(receipt) = self
-                    .reconcile_operation(&workspace.branch, workspace.operation, input_digest)
-                    .await?
-                {
-                    let _ = lease.complete(receipt.id).await;
-                    Ok(receipt)
-                } else {
-                    Err(Error::new(
-                        ErrorCode::WorkspaceConflict,
-                        "branch moved during workspace publication",
-                    ))
-                }
-            }
-            Err(error) => {
-                if let Some(receipt) = self
-                    .reconcile_operation(&workspace.branch, workspace.operation, input_digest)
-                    .await?
-                {
-                    let _ = lease.complete(receipt.id).await;
-                    Ok(receipt)
-                } else {
-                    Err(Error::new(
-                        ErrorCode::OutcomeUnknown,
-                        format!("workspace branch publication outcome is unknown: {error}"),
-                    )
-                    .retry(RetryAdvice::ReconcileOperation)
-                    .operation(workspace.operation.to_string()))
-                }
-            }
-        }
+        self.publish_prepared_commit(
+            &batch.branch,
+            loaded_ref,
+            batch.operation,
+            commit,
+            result,
+            &batch.message,
+        )
+        .await
     }
 
     pub async fn reconcile_operation(
@@ -7302,7 +4522,7 @@ impl<P: ObjectPlane> Repository<P> {
 
     /// Resolve an operation whose caller lost or canceled the publication
     /// response. The operation ID is the durable handle; no request body is
-    /// required and a matching lease is terminalized when present.
+    /// required.
     pub async fn lookup_operation(
         &self,
         branch: &str,
@@ -7325,17 +4545,6 @@ impl<P: ObjectPlane> Repository<P> {
                         object_versions: record.result.object_versions,
                         idempotent_replay: true,
                     };
-                    if crate::load_publication_lease(
-                        self.plane.as_ref(),
-                        &self.options.repository_prefix,
-                        operation,
-                    )
-                    .await?
-                    .is_some()
-                    {
-                        let lease = self.publication_lease(operation).await?;
-                        let _ = lease.complete(id).await;
-                    }
                     return Ok(Some(receipt));
                 }
             }
@@ -7441,14 +4650,14 @@ impl<P: ObjectPlane> Repository<P> {
             let current: CurrentObjectV1 = decode_canonical(&current)?;
             self.find_version(&commit, key, current.version).await?
         };
-        let bytes = match (&version.body.kind, &version.native_binding) {
+        let bytes = match (&version.body.kind, &version.binding) {
             (
-                ObjectVersionKindV1::Live { .. },
-                Some(crate::NativeObjectBindingV1::Live {
+                LogicalObjectVersionKindV1::Live { .. },
+                crate::NativeObjectBindingV1::Live {
                     version_id,
                     checksum_sha256,
                     ..
-                }),
+                },
             ) => {
                 let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
                     Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -7477,17 +4686,14 @@ impl<P: ObjectPlane> Repository<P> {
                 }
                 object.bytes
             }
-            (ObjectVersionKindV1::Live { content, .. }, None) => {
-                self.content.read_all(content).await?
-            }
-            (ObjectVersionKindV1::Live { .. }, Some(_)) => {
+            (LogicalObjectVersionKindV1::Live { .. }, _) => {
                 return Err(Error::new(
                     ErrorCode::CorruptCommit,
-                    "live logical object has a delete-marker native binding",
+                    "live logical object has an invalid provider binding",
                 ))
             }
-            (ObjectVersionKindV1::DeleteMarker, _) if selected.is_some() => Vec::new(),
-            (ObjectVersionKindV1::DeleteMarker, _) => {
+            (LogicalObjectVersionKindV1::DeleteMarker, _) if selected.is_some() => Vec::new(),
+            (LogicalObjectVersionKindV1::DeleteMarker, _) => {
                 return Err(Error::new(
                     ErrorCode::NoSuchKey,
                     "current version is a delete marker",
@@ -7933,40 +5139,15 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
-            if let Some(receipt) = self
-                .reconcile_operation(target, operation, input_digest)
-                .await?
-            {
-                return Ok(receipt);
-            }
-        }
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
-        };
-        let lease = if native_profile {
-            None
-        } else {
-            Some(self.publication_lease(operation).await?)
-        };
-        let engine = match &lease {
-            Some(lease) => self.protected_engine(Arc::new(lease.clone())),
-            None => AsyncProlly::new(
-                self.node_store.clone(),
-                Config {
-                    format: self.format.state_tree_format.clone(),
-                    runtime: RuntimeConfig::default(),
-                },
-            ),
-        };
+        let _native_publication = self.native_publication.lock().await;
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let engine = AsyncProlly::new(
+            self.node_store.clone(),
+            Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        );
         let ours_objects =
             self.tree_from_root(&ours_commit.state.objects, &self.format.state_tree_format)?;
         let ours_versions =
@@ -8028,7 +5209,7 @@ impl<P: ObjectPlane> Repository<P> {
                 }
                 None => {
                     objects = engine.delete(&objects, &change.key).await?;
-                    let body = ObjectVersionBodyV1 {
+                    let body = LogicalObjectVersionBodyV1 {
                         order: ObjectVersionOrder {
                             commit_generation: generation,
                             mutation_ordinal: u32::try_from(ordinal).map_err(|_| {
@@ -8036,58 +5217,47 @@ impl<P: ObjectPlane> Repository<P> {
                             })?,
                         },
                         created_at_millis,
-                        kind: ObjectVersionKindV1::DeleteMarker,
+                        kind: LogicalObjectVersionKindV1::DeleteMarker,
                     };
-                    let version = if native_profile {
-                        let binding = match self
-                            .latest_native_delete_binding(&theirs_commit, &change.key)
-                            .await?
-                        {
-                            Some(binding) => binding,
-                            None => {
-                                let path = ObjectPath::new(
-                                    std::str::from_utf8(&change.key).map_err(|_| {
-                                        Error::new(
-                                            ErrorCode::InvalidKey,
-                                            "logical key is not valid UTF-8",
-                                        )
-                                    })?,
-                                )?;
-                                match self
-                                    .plane
-                                    .delete_native(crate::NativeDelete {
-                                        path: path.clone(),
-                                        repository: self.format.repository_id,
-                                        operation,
-                                        writer_fence_generation,
-                                    })
-                                    .await
-                                {
-                                    Ok(binding) => binding,
-                                    Err(error) => {
-                                        match self.reconcile_native_delete(&path).await? {
-                                            Some(binding) => binding,
-                                            None => return Err(error),
-                                        }
-                                    }
-                                }
+                    let binding = match self
+                        .latest_native_delete_binding(&theirs_commit, &change.key)
+                        .await?
+                    {
+                        Some(binding) => binding,
+                        None => {
+                            let path = ObjectPath::new(std::str::from_utf8(&change.key).map_err(
+                                |_| {
+                                    Error::new(
+                                        ErrorCode::InvalidKey,
+                                        "logical key is not valid UTF-8",
+                                    )
+                                },
+                            )?)?;
+                            match self
+                                .plane
+                                .delete_native(crate::NativeDelete {
+                                    path: path.clone(),
+                                    repository: self.format.repository_id,
+                                    operation,
+                                    writer_fence_generation,
+                                })
+                                .await
+                            {
+                                Ok(binding) => binding,
+                                Err(error) => match self.reconcile_native_delete(&path).await? {
+                                    Some(binding) => binding,
+                                    None => return Err(error),
+                                },
                             }
-                        };
-                        ObjectVersionV1::derive_native(
-                            self.format.repository_id,
-                            &change.key,
-                            operation,
-                            body,
-                            binding,
-                        )?
-                    } else {
-                        ObjectVersionV1::derive(
-                            self.format.repository_id,
-                            &change.key,
-                            operation,
-                            body,
-                        )?
+                        }
                     };
+                    let version = ObjectVersionV1::derive(
+                        self.format.repository_id,
+                        &change.key,
+                        operation,
+                        body,
+                        binding,
+                    )?;
                     versions = engine
                         .put(
                             &versions,
@@ -8127,27 +5297,13 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let delta_id = if native_profile {
-            delta.id()?
-        } else {
-            let id = self.store_delta(&delta).await?;
-            lease
-                .as_ref()
-                .expect("distributed merge has a lease")
-                .protect(delta_path(&self.options.repository_prefix, id)?)
-                .await?;
-            id
-        };
-        let node_pack = if native_profile {
-            self.node_store
-                .flush_node_pack(
-                    tree_format_digest(&self.format.state_tree_format)?,
-                    Vec::new(),
-                )
-                .await?
-        } else {
-            None
-        };
+        let node_pack = self
+            .node_store
+            .flush_node_pack(
+                tree_format_digest(&self.format.state_tree_format)?,
+                Vec::new(),
+            )
+            .await?;
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
                 objects: TreeRootV1::from_tree(&objects)?,
@@ -8156,16 +5312,13 @@ impl<P: ObjectPlane> Repository<P> {
             },
             parents: vec![plan.ours, plan.theirs],
             generation,
-            delta: delta_id,
+            delta,
+            node_pack,
+            writer_fence_generation,
             author: self.options.writer.clone(),
             message: Some(message.unwrap_or_else(|| "merge".to_string())),
             created_at_millis,
             metadata: BTreeMap::new(),
-            native: native_profile.then_some(crate::NativeCommitExtensionV1 {
-                node_pack,
-                inline_delta: delta,
-                writer_fence_generation,
-            }),
         };
         self.publish_prepared_commit(
             target,
@@ -8173,7 +5326,6 @@ impl<P: ObjectPlane> Repository<P> {
             operation,
             commit,
             operation_result,
-            lease,
             "merge",
         )
         .await
@@ -8201,9 +5353,7 @@ impl<P: ObjectPlane> Repository<P> {
             source.as_bytes(),
             expected_head.as_bytes(),
         ]);
-        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1
-            || supplied_operation.is_some()
-        {
+        if supplied_operation.is_some() {
             if let Some(receipt) = self
                 .reconcile_operation(branch, operation, input_digest)
                 .await?
@@ -8228,32 +5378,15 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let _native_publication = if native_profile {
-            Some(self.native_publication.lock().await)
-        } else {
-            None
-        };
-        let writer_fence_generation = if native_profile {
-            self.native_writer_generation_for_mutation().await?
-        } else {
-            0
-        };
-        let lease = if native_profile {
-            None
-        } else {
-            Some(self.publication_lease(operation).await?)
-        };
-        let engine = match &lease {
-            Some(lease) => self.protected_engine(Arc::new(lease.clone())),
-            None => AsyncProlly::new(
-                self.node_store.clone(),
-                Config {
-                    format: self.format.state_tree_format.clone(),
-                    runtime: RuntimeConfig::default(),
-                },
-            ),
-        };
+        let _native_publication = self.native_publication.lock().await;
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let engine = AsyncProlly::new(
+            self.node_store.clone(),
+            Config {
+                format: self.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        );
         let mut objects =
             self.tree_from_root(&ours_commit.state.objects, &self.format.state_tree_format)?;
         let mut versions =
@@ -8280,17 +5413,17 @@ impl<P: ObjectPlane> Repository<P> {
         let mut transitions = Vec::with_capacity(changed.len());
         let mut version_ids = Vec::with_capacity(changed.len());
         for (ordinal, key) in changed.iter().enumerate() {
-            let (kind, native_binding) = match source_map.get(key).copied() {
+            let (kind, binding) = match source_map.get(key).copied() {
                 Some(source_version) => {
                     let source_version = self
                         .find_version(&source_commit, key, source_version)
                         .await?;
                     match &source_version.body.kind {
-                        ObjectVersionKindV1::Live { .. } => (
+                        LogicalObjectVersionKindV1::Live { .. } => (
                             source_version.body.kind.clone(),
-                            source_version.native_binding.clone(),
+                            source_version.binding.clone(),
                         ),
-                        ObjectVersionKindV1::DeleteMarker => {
+                        LogicalObjectVersionKindV1::DeleteMarker => {
                             return Err(Error::new(
                                 ErrorCode::CorruptCommit,
                                 "source current-object root points to a delete marker",
@@ -8299,49 +5432,41 @@ impl<P: ObjectPlane> Repository<P> {
                     }
                 }
                 None => {
-                    let binding = if native_profile {
-                        match self
-                            .latest_native_delete_binding(&source_commit, key)
-                            .await?
-                        {
-                            Some(binding) => Some(binding),
-                            None => {
-                                let path =
-                                    ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
-                                        Error::new(
-                                            ErrorCode::InvalidKey,
-                                            "logical key is not valid UTF-8",
-                                        )
-                                    })?)?;
-                                Some(
-                                    match self
-                                        .plane
-                                        .delete_native(crate::NativeDelete {
-                                            path: path.clone(),
-                                            repository: self.format.repository_id,
-                                            operation,
-                                            writer_fence_generation,
-                                        })
-                                        .await
-                                    {
-                                        Ok(binding) => binding,
-                                        Err(error) => {
-                                            match self.reconcile_native_delete(&path).await? {
-                                                Some(binding) => binding,
-                                                None => return Err(error),
-                                            }
-                                        }
-                                    },
-                                )
+                    let binding = match self
+                        .latest_native_delete_binding(&source_commit, key)
+                        .await?
+                    {
+                        Some(binding) => binding,
+                        None => {
+                            let path =
+                                ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
+                                    Error::new(
+                                        ErrorCode::InvalidKey,
+                                        "logical key is not valid UTF-8",
+                                    )
+                                })?)?;
+                            match self
+                                .plane
+                                .delete_native(crate::NativeDelete {
+                                    path: path.clone(),
+                                    repository: self.format.repository_id,
+                                    operation,
+                                    writer_fence_generation,
+                                })
+                                .await
+                            {
+                                Ok(binding) => binding,
+                                Err(error) => match self.reconcile_native_delete(&path).await? {
+                                    Some(binding) => binding,
+                                    None => return Err(error),
+                                },
                             }
                         }
-                    } else {
-                        None
                     };
-                    (ObjectVersionKindV1::DeleteMarker, binding)
+                    (LogicalObjectVersionKindV1::DeleteMarker, binding)
                 }
             };
-            let body = ObjectVersionBodyV1 {
+            let body = LogicalObjectVersionBodyV1 {
                 order: ObjectVersionOrder {
                     commit_generation: generation,
                     mutation_ordinal: u32::try_from(ordinal).map_err(|_| {
@@ -8351,23 +5476,9 @@ impl<P: ObjectPlane> Repository<P> {
                 created_at_millis,
                 kind,
             };
-            let version = if native_profile {
-                ObjectVersionV1::derive_native(
-                    self.format.repository_id,
-                    key,
-                    operation,
-                    body,
-                    native_binding.ok_or_else(|| {
-                        Error::new(
-                            ErrorCode::CorruptCommit,
-                            "native restore source omitted its physical binding",
-                        )
-                    })?,
-                )?
-            } else {
-                ObjectVersionV1::derive(self.format.repository_id, key, operation, body)?
-            };
-            objects = if matches!(version.body.kind, ObjectVersionKindV1::DeleteMarker) {
+            let version =
+                ObjectVersionV1::derive(self.format.repository_id, key, operation, body, binding)?;
+            objects = if matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker) {
                 engine.delete(&objects, key).await?
             } else {
                 engine
@@ -8391,7 +5502,10 @@ impl<P: ObjectPlane> Repository<P> {
                 key: key.clone(),
                 previous: ours_map.get(key).copied(),
                 next: version.id,
-                delete_marker: matches!(version.body.kind, ObjectVersionKindV1::DeleteMarker),
+                delete_marker: matches!(
+                    version.body.kind,
+                    LogicalObjectVersionKindV1::DeleteMarker
+                ),
             });
             version_ids.push(version.id);
         }
@@ -8416,27 +5530,13 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let delta_id = if native_profile {
-            delta.id()?
-        } else {
-            let id = self.store_delta(&delta).await?;
-            lease
-                .as_ref()
-                .expect("distributed restore has a lease")
-                .protect(delta_path(&self.options.repository_prefix, id)?)
-                .await?;
-            id
-        };
-        let node_pack = if native_profile {
-            self.node_store
-                .flush_node_pack(
-                    tree_format_digest(&self.format.state_tree_format)?,
-                    Vec::new(),
-                )
-                .await?
-        } else {
-            None
-        };
+        let node_pack = self
+            .node_store
+            .flush_node_pack(
+                tree_format_digest(&self.format.state_tree_format)?,
+                Vec::new(),
+            )
+            .await?;
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
                 objects: TreeRootV1::from_tree(&objects)?,
@@ -8445,16 +5545,13 @@ impl<P: ObjectPlane> Repository<P> {
             },
             parents: vec![expected_head],
             generation,
-            delta: delta_id,
+            delta,
+            node_pack,
+            writer_fence_generation,
             author: self.options.writer.clone(),
             message: Some(message.unwrap_or_else(|| format!("restore {source}"))),
             created_at_millis,
             metadata: BTreeMap::new(),
-            native: native_profile.then_some(crate::NativeCommitExtensionV1 {
-                node_pack,
-                inline_delta: delta,
-                writer_fence_generation,
-            }),
         };
         self.publish_prepared_commit(
             branch,
@@ -8462,7 +5559,6 @@ impl<P: ObjectPlane> Repository<P> {
             operation,
             commit,
             operation_result,
-            lease,
             "restore",
         )
         .await
@@ -8559,37 +5655,16 @@ impl<P: ObjectPlane> Repository<P> {
         operation: OperationId,
         commit: BucketCommitV1,
         operation_result: CanonicalOperationResult,
-        lease: Option<PublicationLease<P>>,
         reflog_message: &str,
     ) -> Result<CommitReceipt> {
-        let native_profile = self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
-        let writer_fence_generation = if native_profile {
-            commit
-                .native
-                .as_ref()
-                .map(|native| native.writer_fence_generation)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::InternalInvariant,
-                        "native prepared commit omitted its publication extension",
-                    )
-                })?
-        } else {
-            if commit.native.is_some() {
-                return Err(Error::new(
-                    ErrorCode::InternalInvariant,
-                    "distributed prepared commit contains a native extension",
-                ));
-            }
-            0
-        };
-        let commit_id = self.store_commit(&commit).await?;
-        if let Some(lease) = &lease {
-            lease
-                .protect(commit_path(&self.options.repository_prefix, commit_id)?)
-                .await?;
-            lease.set_proposal(commit_id).await?;
+        let writer_fence_generation = commit.writer_fence_generation;
+        if writer_fence_generation == 0 {
+            return Err(Error::new(
+                ErrorCode::InternalInvariant,
+                "prepared commit has a zero writer fence generation",
+            ));
         }
+        let commit_id = self.store_commit(&commit).await?;
         let reflog = ReflogEntryV1 {
             branch: branch.to_string(),
             old_target: Some(loaded_ref.value.target),
@@ -8599,17 +5674,7 @@ impl<P: ObjectPlane> Repository<P> {
             message: reflog_message.to_string(),
             created_at_millis: commit.created_at_millis,
         };
-        let reflog_id = if native_profile {
-            reflog.id()?
-        } else {
-            let id = self.store_reflog(&reflog).await?;
-            lease
-                .as_ref()
-                .expect("distributed prepared publication has a lease")
-                .protect(reflog_path(&self.options.repository_prefix, branch, id)?)
-                .await?;
-            id
-        };
+        let reflog_id = reflog.id()?;
         let next_ref = crate::RefValueV1 {
             target: commit_id,
             previous_target: Some(loaded_ref.value.target),
@@ -8621,25 +5686,14 @@ impl<P: ObjectPlane> Repository<P> {
             writer: self.options.writer.clone(),
             updated_at_millis: commit.created_at_millis,
             tombstone: false,
-            native: native_profile.then_some(crate::NativeRefExtensionV1 {
-                writer_fence_generation,
-                inline_reflog: reflog,
-            }),
+            writer_fence_generation,
+            inline_reflog: reflog,
         };
-        if native_profile {
-            if self.native_writer_generation_for_mutation().await? != writer_fence_generation {
-                return Err(Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "native writer fence changed during prepared publication",
-                ));
-            }
-        } else {
-            self.ensure_publication_allowed(
-                lease
-                    .as_ref()
-                    .expect("distributed prepared publication has a lease"),
-            )
-            .await?;
+        if self.native_writer_generation_for_mutation().await? != writer_fence_generation {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "native writer fence changed during prepared publication",
+            ));
         }
         let publication = self
             .plane
@@ -8660,25 +5714,12 @@ impl<P: ObjectPlane> Repository<P> {
                     object_versions: operation_result.object_versions,
                     idempotent_replay: false,
                 };
-                if native_profile {
-                    self.cache_branch(branch, next_ref, metadata.token, commit)?;
-                }
-                if let Some(lease) = &lease {
-                    let _ = lease.complete(commit_id).await;
-                }
+                self.cache_branch(branch, next_ref, metadata.token, commit)?;
                 Ok(receipt)
             }
             Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
-                if native_profile {
-                    ErrorCode::PreconditionFailed
-                } else {
-                    ErrorCode::RefConflict
-                },
-                if native_profile {
-                    "native branch CAS conflicted; writer is fenced and must reopen"
-                } else {
-                    "branch moved during publication"
-                },
+                ErrorCode::PreconditionFailed,
+                "native branch CAS conflicted; writer is fenced and must reopen",
             )
             .retry(RetryAdvice::ReloadHead)
             .operation(operation.to_string())),
@@ -8723,55 +5764,46 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<RepairReport> {
         self.validate_sync_identity(source)?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            let current = self.head(source_branch).await?;
-            if let Ok(fsck) = self.fsck_commit(current).await {
-                return Ok(RepairReport {
-                    sync: SyncReport {
-                        source_head: Some(current),
-                        already_present: 1,
-                        ..SyncReport::default()
-                    },
-                    fsck,
-                });
-            }
-            let _publication = self.native_publication.lock().await;
-            let source_head = source.head(source_branch).await?;
-            let (mapped, mut sync) = source
-                .replay_native_history_to(self, &[source_head], true)
-                .await?;
-            let repaired_head = *mapped.get(&source_head).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::MissingClosure,
-                    "native repair did not return a mapped head",
-                )
-            })?;
-            let loaded = self.load_ref(source_branch).await?;
-            if loaded.value.target != current {
-                return Err(Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "destination branch moved during native repair",
-                ));
-            }
-            let movement = self
-                .move_ref_inner(
-                    source_branch,
-                    loaded,
-                    repaired_head,
-                    "repair native bindings from qualified source",
-                )
-                .await?;
-            sync.source_head = Some(repaired_head);
-            sync.ref_move = Some(movement);
-            let fsck = self.fsck_commit(repaired_head).await?;
-            return Ok(RepairReport { sync, fsck });
+        let current = self.head(source_branch).await?;
+        if let Ok(fsck) = self.fsck_commit(current).await {
+            return Ok(RepairReport {
+                sync: SyncReport {
+                    source_head: Some(current),
+                    already_present: 1,
+                    ..SyncReport::default()
+                },
+                fsck,
+            });
         }
-        let head = source.head(source_branch).await?;
-        let mut sync = source
-            .copy_commit_closure_to(self.plane.clone(), &self.options.repository_prefix, head)
+        let _publication = self.native_publication.lock().await;
+        let source_head = source.head(source_branch).await?;
+        let (mapped, mut sync) = source
+            .replay_native_history_to(self, &[source_head], true)
             .await?;
-        sync.source_head = Some(head);
-        let fsck = self.fsck_commit(head).await?;
+        let repaired_head = *mapped.get(&source_head).ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "native repair did not return a mapped head",
+            )
+        })?;
+        let loaded = self.load_ref(source_branch).await?;
+        if loaded.value.target != current {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination branch moved during native repair",
+            ));
+        }
+        let movement = self
+            .move_ref_inner(
+                source_branch,
+                loaded,
+                repaired_head,
+                "repair native bindings from qualified source",
+            )
+            .await?;
+        sync.source_head = Some(repaired_head);
+        sync.ref_move = Some(movement);
+        let fsck = self.fsck_commit(repaired_head).await?;
         Ok(RepairReport { sync, fsck })
     }
 
@@ -8810,7 +5842,6 @@ impl<P: ObjectPlane> Repository<P> {
         report.reachable_node_bytes = reachability.live_bytes;
 
         let mut versions_seen = BTreeSet::new();
-        let mut content_seen = BTreeSet::new();
         for root in root_ids {
             let commit = self.load_commit(root).await?;
             let versions =
@@ -8823,56 +5854,16 @@ impl<P: ObjectPlane> Repository<P> {
                     continue;
                 }
                 report.logical_versions += 1;
-                if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-                    let key = decode_version_tree_logical_key(&encoded_key)?;
-                    let verified = self.verify_native_version(&key, &version).await?;
-                    report.content_bytes_verified = report
-                        .content_bytes_verified
-                        .checked_add(verified)
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::EntityTooLarge,
-                                "fsck native byte counter overflow",
-                            )
-                        })?;
-                    continue;
-                }
-                let ObjectVersionKindV1::Live { content, size, .. } = version.body.kind else {
-                    continue;
-                };
-                let crate::ContentRef::Chunks(reference) = content else {
-                    if size != 0 {
-                        return Err(Error::new(
-                            ErrorCode::CorruptContent,
-                            "empty content has nonzero size",
-                        ));
-                    }
-                    continue;
-                };
-                if !content_seen.insert(reference) {
-                    continue;
-                }
-                report.content_manifests += 1;
-                let mut stream = self
-                    .content
-                    .read_stream(crate::ContentRef::Chunks(reference), None);
-                let mut verified = 0u64;
-                while let Some(chunk) = stream.next().await {
-                    verified = verified.checked_add(chunk?.len() as u64).ok_or_else(|| {
-                        Error::new(ErrorCode::EntityTooLarge, "fsck byte counter overflow")
-                    })?;
-                }
-                if verified != size {
-                    return Err(Error::new(
-                        ErrorCode::CorruptContent,
-                        "logical size disagrees with verified content",
-                    ));
-                }
+                let key = decode_version_tree_logical_key(&encoded_key)?;
+                let verified = self.verify_native_version(&key, &version).await?;
                 report.content_bytes_verified = report
                     .content_bytes_verified
                     .checked_add(verified)
                     .ok_or_else(|| {
-                        Error::new(ErrorCode::EntityTooLarge, "fsck byte counter overflow")
+                        Error::new(
+                            ErrorCode::EntityTooLarge,
+                            "fsck provider byte counter overflow",
+                        )
                     })?;
             }
         }
@@ -8880,11 +5871,11 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     async fn verify_native_version(&self, key: &[u8], version: &ObjectVersionV1) -> Result<u64> {
-        version.validate_native()?;
+        version.validate()?;
         let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
             Error::new(ErrorCode::CorruptCommit, "native logical key is not UTF-8")
         })?)?;
-        match version.native_binding.as_ref().expect("validated binding") {
+        match &version.binding {
             crate::NativeObjectBindingV1::Live {
                 version_id,
                 checksum_sha256,
@@ -8913,8 +5904,10 @@ impl<P: ObjectPlane> Repository<P> {
                     ));
                 }
                 let expected_size = match version.body.kind {
-                    ObjectVersionKindV1::Live { size, .. } => size,
-                    ObjectVersionKindV1::DeleteMarker => unreachable!("binding was validated"),
+                    LogicalObjectVersionKindV1::Live { size, .. } => size,
+                    LogicalObjectVersionKindV1::DeleteMarker => {
+                        unreachable!("binding was validated")
+                    }
                 };
                 if object.bytes.len() as u64 != expected_size {
                     return Err(Error::new(
@@ -9089,19 +6082,15 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     fn validate_gc_plan_limits(&self, grace_millis: u64, max_candidates: usize) -> Result<()> {
-        let lease_window = if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1
-        {
-            self.options.writer_lease_millis
-        } else {
-            self.options.publication_lease_millis
-        };
-        let minimum_grace = lease_window
+        let minimum_grace = self
+            .options
+            .writer_lease_millis
             .checked_mul(2)
             .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "GC grace overflow"))?;
         if grace_millis < minimum_grace || max_candidates == 0 {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
-                "GC requires a nonzero candidate limit and grace at least twice the publication lease",
+                "GC requires a nonzero candidate limit and grace at least twice the writer lease",
             ));
         }
         Ok(())
@@ -9119,11 +6108,7 @@ impl<P: ObjectPlane> Repository<P> {
         let (retained, branches, tags) = self.retained_paths(planned_at_millis).await?;
         let mut candidates = Vec::new();
         let mut continuation = None;
-        let prefix = if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            String::new()
-        } else {
-            format!("{}/", self.options.repository_prefix)
-        };
+        let prefix = String::new();
         loop {
             let page = self
                 .plane
@@ -9137,11 +6122,10 @@ impl<P: ObjectPlane> Repository<P> {
             for entry in page.entries {
                 let version_id = entry.metadata.token.version_id.as_deref();
                 let managed_data = is_gc_data_path(&self.options.repository_prefix, &entry.path)
-                    || (self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1
-                        && !entry
-                            .path
-                            .as_str()
-                            .starts_with(&format!("{}/", self.options.repository_prefix)));
+                    || !entry
+                        .path
+                        .as_str()
+                        .starts_with(&format!("{}/", self.options.repository_prefix));
                 if !managed_data
                     || retained.contains(&entry.path, version_id)
                     || entry.metadata.last_modified_millis > cutoff_millis
@@ -9396,11 +6380,12 @@ impl<P: ObjectPlane> Repository<P> {
                 })
                 .await?;
         }
-        let initial_index = self.load_gc_run(id).await?.value.next_index;
+        let initial_index = usize::try_from(self.load_gc_run(id).await?.value.next_index)
+            .map_err(|_| Error::new(ErrorCode::CorruptCommit, "GC cursor exceeds usize"))?;
         let invocation_end = initial_index
             .saturating_add(max_candidates)
             .min(plan.body.candidates.len());
-        for _ in 0..=self.options.logical_retry_limit {
+        for _ in 0..=MAX_GC_CAS_RETRIES {
             let loaded = self.load_gc_run(id).await?;
             if matches!(loaded.value.state, GcRunStateV1::Completed) {
                 return Ok(gc_report(&loaded.value));
@@ -9452,14 +6437,14 @@ impl<P: ObjectPlane> Repository<P> {
                     "GC ref fence changed after planning; create a new dry-run",
                 ));
             }
-            if loaded.value.next_index >= invocation_end
-                && loaded.value.next_index < plan.body.candidates.len()
-            {
+            let next_index = usize::try_from(loaded.value.next_index)
+                .map_err(|_| Error::new(ErrorCode::CorruptCommit, "GC cursor exceeds usize"))?;
+            if next_index >= invocation_end && next_index < plan.body.candidates.len() {
                 return Ok(gc_report(&loaded.value));
             }
             let end = invocation_end;
             let mut next = loaded.value;
-            for candidate in &plan.body.candidates[next.next_index..end] {
+            for candidate in &plan.body.candidates[next_index..end] {
                 if candidate.last_modified_millis > plan.body.fence.cutoff_millis {
                     return Err(Error::new(
                         ErrorCode::CorruptCommit,
@@ -9511,12 +6496,17 @@ impl<P: ObjectPlane> Repository<P> {
                     }
                 }
             }
-            next.next_index = end;
+            next.next_index = u64::try_from(end)
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "GC cursor exceeds u64"))?;
             next.generation = next.generation.checked_add(1).ok_or_else(|| {
                 Error::new(ErrorCode::InternalInvariant, "GC run generation overflow")
             })?;
             next.updated_at_millis = self.now_millis()?;
-            if next.next_index == plan.body.candidates.len() {
+            if next.next_index
+                == u64::try_from(plan.body.candidates.len()).map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "GC plan length exceeds u64")
+                })?
+            {
                 next.state = GcRunStateV1::Completed;
             } else {
                 next.state = GcRunStateV1::Paused;
@@ -9662,7 +6652,6 @@ impl<P: ObjectPlane> Repository<P> {
         let mut commit_roots = Vec::new();
         commit_roots.extend(branches.values().copied());
         commit_roots.extend(tags.values().copied());
-        let mut content = BTreeSet::new();
         let prefix = format!("{}/", self.options.repository_prefix);
         let mut continuation = None;
         loop {
@@ -9717,85 +6706,6 @@ impl<P: ObjectPlane> Repository<P> {
                         commit_roots.push(value.new_target);
                         commit_roots.extend(value.old_target);
                     }
-                } else if path.contains("/multipart/uploads/") {
-                    let value: MultipartUploadV1 = decode_canonical(&object.bytes)?;
-                    for part in value.parts.values() {
-                        if let crate::ContentRef::Chunks(reference) = part.content.reference {
-                            content.insert(reference);
-                        }
-                    }
-                } else if path.contains("/multipart/catalog-snapshots/") {
-                    let value: MultipartCatalogSnapshotV1 = decode_canonical(&object.bytes)?;
-                    value.validate_id()?;
-                    if value.body.repository != self.format.repository_id {
-                        return Err(Error::new(
-                            ErrorCode::CorruptCommit,
-                            "multipart catalog snapshot belongs to another repository",
-                        ));
-                    }
-                    if value.body.expires_at_millis >= at_millis {
-                        retained.paths.insert(listed.path.clone());
-                    }
-                } else if path.contains("/workspaces/") {
-                    let value: WorkspaceManifestV1 = decode_canonical(&object.bytes)?;
-                    commit_roots.push(value.base_commit);
-                    for mutation in value.mutations.values() {
-                        match mutation {
-                            WorkspaceMutationV1::Put {
-                                content: stored, ..
-                            } => {
-                                if let crate::ContentRef::Chunks(reference) = stored.reference {
-                                    content.insert(reference);
-                                }
-                            }
-                            WorkspaceMutationV1::NativePut { key, binding, .. }
-                            | WorkspaceMutationV1::NativeDelete { key, binding } => {
-                                let path =
-                                    ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
-                                        Error::new(
-                                            ErrorCode::CorruptCommit,
-                                            "native workspace key is not UTF-8",
-                                        )
-                                    })?)?;
-                                let version_id = match binding {
-                                    crate::NativeObjectBindingV1::Live { version_id, .. }
-                                    | crate::NativeObjectBindingV1::DeleteMarker { version_id } => {
-                                        version_id
-                                    }
-                                };
-                                retained.native_versions.insert((path, version_id.clone()));
-                            }
-                            WorkspaceMutationV1::Delete { .. } => {}
-                        }
-                    }
-                } else if path.ends_with("/lease") && path.contains("/publications/") {
-                    let lease: crate::PublicationLeaseV1 = decode_canonical(&object.bytes)?;
-                    if matches!(lease.state, crate::PublicationLeaseStateV1::Active)
-                        && lease.expires_at_millis > at_millis
-                    {
-                        commit_roots.extend(lease.proposal);
-                        let mut segment = lease.protection_head;
-                        while let Some(id) = segment {
-                            retained.paths.insert(publication_segment_path(
-                                &self.options.repository_prefix,
-                                id,
-                            )?);
-                            let loaded = crate::load_protection_segment(
-                                self.plane.as_ref(),
-                                &self.options.repository_prefix,
-                                id,
-                            )
-                            .await?
-                            .ok_or_else(|| {
-                                Error::new(
-                                    ErrorCode::MissingClosure,
-                                    "active publication lease segment is missing",
-                                )
-                            })?;
-                            retained.paths.extend(loaded.paths);
-                            segment = loaded.previous;
-                        }
-                    }
                 }
             }
             continuation = page.continuation;
@@ -9820,22 +6730,16 @@ impl<P: ObjectPlane> Repository<P> {
             retained
                 .paths
                 .insert(commit_path(&self.options.repository_prefix, id)?);
-            if let Some(native) = &commit.native {
-                if native.inline_delta.id()? != commit.delta {
-                    return Err(Error::new(
-                        ErrorCode::CorruptCommit,
-                        "native commit inline delta identity mismatch",
-                    ));
-                }
-                if let Some(pack) = &native.node_pack {
-                    retained
-                        .paths
-                        .insert(node_pack_path(&self.options.repository_prefix, pack.id)?);
-                }
-            } else {
+            if commit.writer_fence_generation == 0 {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "commit has a zero writer fence generation",
+                ));
+            }
+            if let Some(pack) = &commit.node_pack {
                 retained
                     .paths
-                    .insert(delta_path(&self.options.repository_prefix, commit.delta)?);
+                    .insert(node_pack_path(&self.options.repository_prefix, pack.id)?);
             }
             let objects =
                 self.tree_from_root(&commit.state.objects, &self.format.state_tree_format)?;
@@ -9848,43 +6752,20 @@ impl<P: ObjectPlane> Repository<P> {
             while let Some(entry) = iter.next().await {
                 let (encoded_key, value) = entry?;
                 let version: ObjectVersionV1 = decode_canonical(&value)?;
-                if let Some(binding) = &version.native_binding {
-                    let key = decode_version_tree_logical_key(&encoded_key)?;
-                    let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
-                        Error::new(ErrorCode::CorruptCommit, "native logical key is not UTF-8")
-                    })?)?;
-                    let version_id = match binding {
-                        crate::NativeObjectBindingV1::Live { version_id, .. }
-                        | crate::NativeObjectBindingV1::DeleteMarker { version_id } => version_id,
-                    };
-                    retained.native_versions.insert((path, version_id.clone()));
-                    continue;
-                }
-                if let ObjectVersionKindV1::Live {
-                    content: crate::ContentRef::Chunks(reference),
-                    ..
-                } = version.body.kind
-                {
-                    content.insert(reference);
-                }
+                let key = decode_version_tree_logical_key(&encoded_key)?;
+                let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                    Error::new(ErrorCode::CorruptCommit, "logical key is not UTF-8")
+                })?)?;
+                let version_id = match &version.binding {
+                    crate::NativeObjectBindingV1::Live { version_id, .. }
+                    | crate::NativeObjectBindingV1::DeleteMarker { version_id } => version_id,
+                };
+                retained.native_versions.insert((path, version_id.clone()));
             }
             commit_roots.extend(commit.parents);
         }
         let nodes = self.engine.mark_reachable(&state_roots).await?;
-        if self.storage_profile() == RepositoryStorageProfile::DistributedContentAddressedV1 {
-            for cid in nodes.cids() {
-                retained
-                    .paths
-                    .insert(node_path(&self.options.repository_prefix, cid)?);
-            }
-        }
-        for reference in content {
-            retained.paths.extend(
-                self.content
-                    .retained_paths(&crate::ContentRef::Chunks(reference))
-                    .await?,
-            );
-        }
+        let _ = nodes;
         Ok((retained, branches, tags))
     }
 
@@ -9902,17 +6783,7 @@ impl<P: ObjectPlane> Repository<P> {
             let (_, value) = entry?;
             let version: ObjectVersionV1 = decode_canonical(&value)?;
             if version.id == selected {
-                match self.storage_profile() {
-                    RepositoryStorageProfile::DistributedContentAddressedV1 => {
-                        if version.native_binding.is_some() {
-                            return Err(Error::new(
-                                ErrorCode::CorruptCommit,
-                                "distributed-profile object version contains a native binding",
-                            ));
-                        }
-                    }
-                    RepositoryStorageProfile::NativeVersionedV1 => version.validate_native()?,
-                }
+                version.validate()?;
                 return Ok(version);
             }
         }
@@ -9936,9 +6807,9 @@ impl<P: ObjectPlane> Repository<P> {
         while let Some(entry) = iter.next().await {
             let (_, value) = entry?;
             let version: ObjectVersionV1 = decode_canonical(&value)?;
-            if matches!(version.body.kind, ObjectVersionKindV1::DeleteMarker) {
-                version.validate_native()?;
-                return Ok(version.native_binding);
+            if matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker) {
+                version.validate()?;
+                return Ok(Some(version.binding));
             }
         }
         Ok(None)
@@ -9954,21 +6825,17 @@ impl<P: ObjectPlane> Repository<P> {
 
     async fn load_ref_including_tombstone(&self, branch: &str) -> Result<LoadedRef> {
         validate_branch(branch)?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
-            if let Some(warm) = self
-                .warm_branches
-                .read()
-                .map_err(|_| {
-                    Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned")
-                })?
-                .get(branch)
-                .cloned()
-            {
-                return Ok(LoadedRef {
-                    value: warm.reference,
-                    token: warm.token,
-                });
-            }
+        if let Some(warm) = self
+            .warm_branches
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned"))?
+            .get(branch)
+            .cloned()
+        {
+            return Ok(LoadedRef {
+                value: warm.reference,
+                token: warm.token,
+            });
         }
         let object = self
             .plane
@@ -9982,27 +6849,6 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    async fn load_upload(&self, id: UploadId) -> Result<LoadedUpload> {
-        let object = self
-            .plane
-            .load_mutable(&upload_path(&self.options.repository_prefix, id)?)
-            .await?
-            .ok_or_else(|| {
-                Error::new(ErrorCode::NoSuchUpload, "multipart upload does not exist")
-            })?;
-        let value: MultipartUploadV1 = decode_canonical(&object.bytes)?;
-        if value.id != id {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "multipart upload ID mismatch",
-            ));
-        }
-        Ok(LoadedUpload {
-            value,
-            token: object.metadata.token,
-        })
-    }
-
     async fn load_gc_run(&self, id: GcPlanId) -> Result<LoadedGcRun> {
         let object = self
             .plane
@@ -10010,7 +6856,12 @@ impl<P: ObjectPlane> Repository<P> {
             .await?
             .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "GC run does not exist"))?;
         let value: GcRunV1 = decode_canonical(&object.bytes)?;
-        if value.plan != id || value.next_index > self.load_gc_plan(id).await?.body.candidates.len()
+        let candidate_count = self.load_gc_plan(id).await?.body.candidates.len();
+        if value.plan != id
+            || value.next_index
+                > u64::try_from(candidate_count).map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "GC plan length exceeds u64")
+                })?
         {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
@@ -10051,53 +6902,6 @@ impl<P: ObjectPlane> Repository<P> {
             .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "GC mark run does not exist"))
     }
 
-    async fn load_sync_run_optional(&self, id: OperationId) -> Result<Option<LoadedSyncRun>> {
-        let Some(object) = self
-            .plane
-            .load_mutable(&sync_run_path(&self.options.repository_prefix, id)?)
-            .await?
-        else {
-            return Ok(None);
-        };
-        let value: SyncRunV1 = decode_canonical(&object.bytes)?;
-        if value.id != id || value.repository != self.format.repository_id {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "sync checkpoint identity mismatch",
-            ));
-        }
-        validate_sync_run_shape(&value)?;
-        Ok(Some(LoadedSyncRun {
-            value,
-            token: object.metadata.token,
-        }))
-    }
-
-    async fn load_sync_run(&self, id: OperationId) -> Result<LoadedSyncRun> {
-        self.load_sync_run_optional(id)
-            .await?
-            .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "sync checkpoint does not exist"))
-    }
-
-    async fn load_workspace(&self, id: WorkspaceId) -> Result<LoadedWorkspace> {
-        let object = self
-            .plane
-            .load_mutable(&workspace_path(&self.options.repository_prefix, id)?)
-            .await?
-            .ok_or_else(|| Error::new(ErrorCode::NoSuchWorkspace, "workspace does not exist"))?;
-        let value: WorkspaceManifestV1 = decode_canonical(&object.bytes)?;
-        if value.id != id {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "workspace ID mismatch",
-            ));
-        }
-        Ok(LoadedWorkspace {
-            value,
-            token: object.metadata.token,
-        })
-    }
-
     async fn load_commit(&self, id: CommitId) -> Result<BucketCommitV1> {
         if let Some(commit) = self
             .commit_cache
@@ -10128,40 +6932,14 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(commit)
     }
 
-    async fn load_delta(&self, id: DeltaId) -> Result<BucketDeltaV1> {
-        let object = self
-            .plane
-            .get(GetRequest {
-                path: delta_path(&self.options.repository_prefix, id)?,
-                range: None,
-                physical_version: None,
-            })
-            .await?
-            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "delta object is missing"))?;
-        let delta: BucketDeltaV1 = decode_canonical(&object.bytes)?;
-        if delta.id()? != id {
-            return Err(Error::new(ErrorCode::CorruptCommit, "delta ID mismatch"));
-        }
-        Ok(delta)
-    }
-
     async fn load_commit_delta(&self, commit: &BucketCommitV1) -> Result<BucketDeltaV1> {
-        if let Some(native) = &commit.native {
-            if native.inline_delta.id()? != commit.delta {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native commit inline delta identity mismatch",
-                ));
-            }
-            if native.writer_fence_generation == 0 {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "native commit has a zero writer fence generation",
-                ));
-            }
-            return Ok(native.inline_delta.clone());
+        if commit.writer_fence_generation == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit has a zero writer fence generation",
+            ));
         }
-        self.load_delta(commit.delta).await
+        Ok(commit.delta.clone())
     }
 
     async fn store_commit(&self, commit: &BucketCommitV1) -> Result<CommitId> {
@@ -10173,25 +6951,6 @@ impl<P: ObjectPlane> Repository<P> {
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
             .insert(id, commit.clone());
-        Ok(id)
-    }
-
-    async fn store_delta(&self, delta: &BucketDeltaV1) -> Result<DeltaId> {
-        let bytes = encode_canonical(delta)?;
-        let id = delta.id()?;
-        self.store_immutable(delta_path(&self.options.repository_prefix, id)?, bytes)
-            .await?;
-        Ok(id)
-    }
-
-    async fn store_reflog(&self, entry: &ReflogEntryV1) -> Result<crate::ReflogEntryId> {
-        let bytes = encode_canonical(entry)?;
-        let id = entry.id()?;
-        self.store_immutable(
-            reflog_path(&self.options.repository_prefix, &entry.branch, id)?,
-            bytes,
-        )
-        .await?;
         Ok(id)
     }
 
@@ -10233,77 +6992,6 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    async fn publication_lease(&self, operation: OperationId) -> Result<PublicationLease<P>> {
-        PublicationLease::create_or_resume_with_clock(
-            self.plane.clone(),
-            self.options.repository_prefix.clone(),
-            operation,
-            self.options.writer.clone(),
-            self.options.publication_lease_millis,
-            self.options.clock.clone(),
-        )
-        .await
-    }
-
-    async fn ensure_publication_allowed(&self, lease: &PublicationLease<P>) -> Result<()> {
-        lease.flush_protection().await?;
-        self.ensure_gc_idle().await?;
-        lease.ensure_active().await
-    }
-
-    async fn ensure_gc_idle(&self) -> Result<()> {
-        let prefix = format!("{}/gc/runs/", self.options.repository_prefix);
-        let mut continuation = None;
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
-                    continue;
-                };
-                let run: GcRunV1 = decode_canonical(&stored.bytes)?;
-                if matches!(run.state, GcRunStateV1::Running) {
-                    return Err(Error::new(
-                        ErrorCode::PreconditionFailed,
-                        "a garbage-collection sweep currently fences ref publication",
-                    )
-                    .retry(RetryAdvice::ReloadHead));
-                }
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                return Ok(());
-            }
-        }
-    }
-
-    fn protected_engine(&self, sink: Arc<dyn ProtectionSink>) -> AsyncProlly<ProllyObjectStore<P>> {
-        if self.node_store.is_packed() {
-            return AsyncProlly::new(
-                self.node_store.clone(),
-                Config {
-                    format: self.format.state_tree_format.clone(),
-                    runtime: RuntimeConfig::default(),
-                },
-            );
-        }
-        AsyncProlly::new(
-            ProllyObjectStore::new(self.plane.clone(), self.options.repository_prefix.clone())
-                .with_protection_sink(sink),
-            Config {
-                format: self.format.state_tree_format.clone(),
-                runtime: RuntimeConfig::default(),
-            },
-        )
-    }
-
     fn validate_key(&self, key: &[u8]) -> Result<()> {
         if key.is_empty() || key.len() > self.format.canonical_limits.max_key_bytes as usize {
             return Err(Error::new(
@@ -10313,9 +7001,8 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let key = std::str::from_utf8(key)
             .map_err(|_| Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8"))?;
-        if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1
-            && (key == self.options.repository_prefix
-                || key.starts_with(&format!("{}/", self.options.repository_prefix)))
+        if key == self.options.repository_prefix
+            || key.starts_with(&format!("{}/", self.options.repository_prefix))
         {
             return Err(Error::new(
                 ErrorCode::InvalidKey,
@@ -10324,25 +7011,6 @@ impl<P: ObjectPlane> Repository<P> {
         }
         Ok(())
     }
-}
-
-fn validate_expected_checksums(
-    stored: &StoredContent,
-    expected: &ChecksumExpectation,
-) -> Result<()> {
-    if expected
-        .md5
-        .is_some_and(|expected| stored.checksums.md5 != Some(expected))
-        || expected
-            .sha256
-            .is_some_and(|expected| stored.checksums.sha256 != Some(expected))
-    {
-        return Err(Error::new(
-            ErrorCode::ChecksumMismatch,
-            "request checksum does not match the staged logical body",
-        ));
-    }
-    Ok(())
 }
 
 fn predicate_matches(predicate: &EtagPredicateV1, current: Option<&str>) -> bool {
@@ -10389,20 +7057,7 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
         ));
     }
     validate_branch(&options.default_branch)?;
-    if options.logical_retry_limit > MAX_LOGICAL_RETRY_LIMIT {
-        return Err(Error::new(
-            ErrorCode::InvalidLimit,
-            "logical retry limit must be at most 16",
-        ));
-    }
     options.state_tree_format.validate()?;
-    options.content_index_format.validate()?;
-    if !(5 * 60 * 1_000..=24 * 60 * 60 * 1_000).contains(&options.publication_lease_millis) {
-        return Err(Error::new(
-            ErrorCode::InvalidLimit,
-            "publication lease must be between 5 minutes and 24 hours",
-        ));
-    }
     if !(10_000..=24 * 60 * 60 * 1_000).contains(&options.writer_lease_millis) {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
@@ -10419,90 +7074,6 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
             "GC delete rate limit must be zero or at most 1,000 per second",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_completed_multipart_parts(
-    upload: &MultipartUploadV1,
-    requested: &[(u32, String)],
-    max_object_bytes: u64,
-) -> Result<Vec<StoredContent>> {
-    let mut total = 0_u64;
-    let mut parts = Vec::with_capacity(requested.len());
-    for (index, (part_number, etag)) in requested.iter().enumerate() {
-        let part = upload
-            .parts
-            .get(part_number)
-            .ok_or_else(|| Error::new(ErrorCode::InvalidRequest, "completed part is missing"))?;
-        if &part.etag != etag {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "completed part ETag mismatch",
-            ));
-        }
-        if part.content.size > MAX_MULTIPART_PART_BYTES {
-            return Err(Error::new(
-                ErrorCode::EntityTooLarge,
-                "multipart part exceeds 5 GiB",
-            ));
-        }
-        if index + 1 < requested.len() && part.content.size < MIN_NONFINAL_MULTIPART_PART_BYTES {
-            return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "nonfinal multipart part is smaller than 5 MiB",
-            ));
-        }
-        total = total.checked_add(part.content.size).ok_or_else(|| {
-            Error::new(
-                ErrorCode::EntityTooLarge,
-                "multipart object length overflow",
-            )
-        })?;
-        if total > max_object_bytes {
-            return Err(Error::new(
-                ErrorCode::EntityTooLarge,
-                "completed multipart object exceeds the repository size limit",
-            ));
-        }
-        parts.push(part.content.clone());
-    }
-    Ok(parts)
-}
-
-fn validate_sync_run(
-    run: &SyncRunV1,
-    id: OperationId,
-    repository: RepositoryId,
-    source_branch: &str,
-    source_head: CommitId,
-) -> Result<()> {
-    if run.id != id
-        || run.repository != repository
-        || run.source_branch != source_branch
-        || run.source_head != source_head
-    {
-        return Err(Error::new(
-            ErrorCode::IdempotencyConflict,
-            "sync checkpoint does not match the selected source closure",
-        )
-        .operation(id.to_string()));
-    }
-    Ok(())
-}
-
-fn validate_sync_run_shape(run: &SyncRunV1) -> Result<()> {
-    if run.source_branch.is_empty()
-        || run
-            .after_relative_path
-            .as_deref()
-            .is_some_and(|path| path.is_empty() || path.starts_with('/') || path.contains("/../"))
-        || (matches!(run.state, SyncRunStateV1::Completed) && run.generation == 0)
-    {
-        return Err(Error::new(
-            ErrorCode::CorruptCommit,
-            "sync checkpoint state is inconsistent",
         ));
     }
     Ok(())
@@ -10561,14 +7132,12 @@ fn validate_format_compatibility(
             ),
         ));
     }
-    let storage_profile = format.storage_profile()?;
-    if storage_profile != options.storage_profile {
+    if format.required_capability_profile
+        != RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE
+    {
         return Err(Error::new(
-            ErrorCode::RepositoryFormatConflict,
-            format!(
-                "repository uses storage profile {storage_profile:?}, requested {requested:?}",
-                requested = options.storage_profile
-            ),
+            ErrorCode::UnsupportedRepositoryFormat,
+            "repository is not a native-versioned S3 repository",
         ));
     }
     if format.min_reader_version == 0
@@ -10588,7 +7157,6 @@ fn validate_format_compatibility(
         ));
     }
     if format.state_tree_format != options.state_tree_format
-        || format.content_index_format != options.content_index_format
         || format.canonical_limits != options.limits
     {
         return Err(Error::new(
@@ -10599,55 +7167,8 @@ fn validate_format_compatibility(
     Ok(())
 }
 
-#[cfg(not(prolly_s3_legacy_v1_codec))]
 fn decode_repository_format(bytes: &[u8]) -> Result<RepositoryFormatV1> {
     decode_canonical(bytes)
-}
-
-#[cfg(prolly_s3_legacy_v1_codec)]
-fn decode_repository_format(bytes: &[u8]) -> Result<RepositoryFormatV1> {
-    match decode_canonical(bytes) {
-        Ok(format) => Ok(format),
-        Err(error) => {
-            if canonical_legacy_format_has_appended_fields(bytes) {
-                return Err(Error::new(
-                    ErrorCode::UnsupportedRepositoryFormat,
-                    "repository format contains fields this client does not support",
-                ));
-            }
-            Err(error)
-        }
-    }
-}
-
-#[cfg(prolly_s3_legacy_v1_codec)]
-fn canonical_legacy_format_has_appended_fields(bytes: &[u8]) -> bool {
-    let Ok(value) = serde_cbor::from_slice::<serde_cbor::Value>(bytes) else {
-        return false;
-    };
-    let Ok(canonical) = serde_cbor::to_vec(&value) else {
-        return false;
-    };
-    if canonical != bytes
-        || serde_cbor::value::from_value::<RepositoryFormatV1>(value.clone()).is_err()
-    {
-        return false;
-    }
-    let serde_cbor::Value::Map(fields) = value else {
-        return false;
-    };
-    let mut known = [false; 8];
-    let mut appended = false;
-    for key in fields.keys() {
-        match key {
-            serde_cbor::Value::Integer(index) if (0..8).contains(index) => {
-                known[*index as usize] = true;
-            }
-            serde_cbor::Value::Integer(index) if *index >= 8 => appended = true,
-            _ => return false,
-        }
-    }
-    appended && known.into_iter().all(|present| present)
 }
 
 pub fn validate_branch(branch: &str) -> Result<()> {
@@ -10760,41 +7281,6 @@ fn tag_path(prefix: &str, tag: &str) -> Result<ObjectPath> {
     ))
 }
 
-fn upload_path(prefix: &str, id: UploadId) -> Result<ObjectPath> {
-    ObjectPath::new(format!(
-        "{prefix}/multipart/uploads/{}",
-        hex::encode(id.as_bytes())
-    ))
-}
-
-fn multipart_catalog_snapshot_path(
-    prefix: &str,
-    id: MultipartCatalogSnapshotId,
-) -> Result<ObjectPath> {
-    let encoded = id.to_string();
-    let digest = encoded
-        .strip_prefix(MultipartCatalogSnapshotId::PREFIX)
-        .ok_or_else(|| {
-            Error::new(
-                ErrorCode::InternalInvariant,
-                "multipart catalog snapshot ID prefix is invalid",
-            )
-        })?;
-    ObjectPath::new(format!(
-        "{prefix}/multipart/catalog-snapshots/{}/{}/{}.cbor",
-        &digest[..2],
-        &digest[2..4],
-        encoded
-    ))
-}
-
-fn workspace_path(prefix: &str, id: WorkspaceId) -> Result<ObjectPath> {
-    ObjectPath::new(format!(
-        "{prefix}/workspaces/{}",
-        hex::encode(id.as_bytes())
-    ))
-}
-
 fn commit_path(prefix: &str, id: CommitId) -> Result<ObjectPath> {
     let encoded = hex::encode(id.as_bytes());
     ObjectPath::new(format!(
@@ -10805,39 +7291,11 @@ fn commit_path(prefix: &str, id: CommitId) -> Result<ObjectPath> {
     ))
 }
 
-fn delta_path(prefix: &str, id: DeltaId) -> Result<ObjectPath> {
-    let encoded = hex::encode(id.as_bytes());
-    ObjectPath::new(format!(
-        "{prefix}/deltas/sha256/{}/{}/{}",
-        &encoded[..2],
-        &encoded[2..4],
-        encoded
-    ))
-}
-
-fn reflog_path(prefix: &str, branch: &str, id: crate::ReflogEntryId) -> Result<ObjectPath> {
-    ObjectPath::new(format!(
-        "{prefix}/reflogs/heads/{}/{}",
-        hex::encode(branch.as_bytes()),
-        hex::encode(id.as_bytes())
-    ))
-}
-
 fn tag_reflog_path(prefix: &str, tag: &str, id: crate::ReflogEntryId) -> Result<ObjectPath> {
     ObjectPath::new(format!(
         "{prefix}/reflogs/tags/{}/{}",
         hex::encode(tag.as_bytes()),
         hex::encode(id.as_bytes())
-    ))
-}
-
-fn node_path(prefix: &str, cid: &Cid) -> Result<ObjectPath> {
-    let encoded = hex::encode(cid.as_bytes());
-    ObjectPath::new(format!(
-        "{prefix}/nodes/sha256/{}/{}/{}",
-        &encoded[..2],
-        &encoded[2..4],
-        encoded
     ))
 }
 
@@ -10863,10 +7321,6 @@ fn node_checkpoint_path(
     ))
 }
 
-fn publication_segment_path(prefix: &str, id: crate::ProtectionSegmentId) -> Result<ObjectPath> {
-    ObjectPath::new(format!("{prefix}/publications/segments/{id}.cbor"))
-}
-
 fn gc_plan_path(prefix: &str, id: GcPlanId) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/gc/plans/{id}.cbor"))
 }
@@ -10880,10 +7334,6 @@ fn gc_mark_run_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
         "{prefix}/gc/mark-runs/{}.cbor",
         hex::encode(id.as_bytes())
     ))
-}
-
-fn sync_run_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
-    ObjectPath::new(format!("{prefix}/sync/runs/{}", hex::encode(id.as_bytes())))
 }
 
 fn gc_object_kind(prefix: &str, path: &ObjectPath) -> String {
@@ -10922,22 +7372,12 @@ fn is_gc_data_path(prefix: &str, path: &ObjectPath) -> bool {
         .as_str()
         .strip_prefix(prefix)
         .and_then(|value| value.strip_prefix('/'));
-    relative.is_some_and(|value| {
-        value.starts_with("nodes/")
-            || value.starts_with("chunks/")
-            || value.starts_with("content-manifests/")
-            || value.starts_with("commits/")
-            || value.starts_with("deltas/")
-            || value.starts_with("multipart/catalog-snapshots/")
-    })
+    relative.is_some_and(|value| value.starts_with("node-packs/") || value.starts_with("commits/"))
 }
 
 fn is_portable_clone_path(relative: &str) -> bool {
     relative.starts_with("format/")
-        || relative.starts_with("chunks/")
-        || relative.starts_with("content-manifests/")
-        || relative.starts_with("nodes/")
-        || relative.starts_with("deltas/")
+        || relative.starts_with("node-packs/")
         || relative.starts_with("commits/")
         || relative.starts_with("reflogs/")
         || relative.starts_with("refs/")
@@ -10951,10 +7391,6 @@ fn physical_version_key(version: &PhysicalVersion) -> String {
         }
         PhysicalVersion::Unversioned { token: None } => "u:".to_string(),
     }
-}
-
-fn effective_logical_retry_limit(default: u8, operation_override: Option<u8>) -> u8 {
-    operation_override.unwrap_or(default)
 }
 
 fn object_diff_from_prolly(diff: prolly::Diff) -> Result<ObjectDiff> {
@@ -10983,112 +7419,5 @@ impl From<prolly::Error> for Error {
             ErrorCode::CorruptNode,
             format!("Prolly operation failed: {error}"),
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn synthetic_upload_with_part(size: u64) -> MultipartUploadV1 {
-        let id = UploadId::new();
-        MultipartUploadV1 {
-            id,
-            branch: "main".to_string(),
-            key: b"boundary".to_vec(),
-            headers: ObjectHeaders::default(),
-            user_metadata: BTreeMap::new(),
-            parts: BTreeMap::from([(
-                1,
-                MultipartPartV1 {
-                    part_number: 1,
-                    content: StoredContent {
-                        reference: crate::ContentRef::Empty,
-                        size,
-                        logical_etag: "\"synthetic\"".to_string(),
-                        checksums: crate::Checksums::default(),
-                    },
-                    etag: "\"synthetic\"".to_string(),
-                    updated_at_millis: 1,
-                },
-            )]),
-            generation: 1,
-            state: MultipartStateV1::Active,
-            created_at_millis: 1,
-            updated_at_millis: 1,
-            expires_at_millis: 0,
-        }
-    }
-
-    #[test]
-    fn multipart_part_upper_bound_is_exact_without_allocating_payload() {
-        let at_limit = synthetic_upload_with_part(MAX_MULTIPART_PART_BYTES);
-        assert!(validate_completed_multipart_parts(
-            &at_limit,
-            &[(1, "\"synthetic\"".to_string())],
-            RepositoryOptions::default().limits.max_object_bytes,
-        )
-        .is_ok());
-
-        let above_limit = synthetic_upload_with_part(MAX_MULTIPART_PART_BYTES + 1);
-        assert_eq!(
-            validate_completed_multipart_parts(
-                &above_limit,
-                &[(1, "\"synthetic\"".to_string())],
-                RepositoryOptions::default().limits.max_object_bytes,
-            )
-            .unwrap_err()
-            .code,
-            ErrorCode::EntityTooLarge
-        );
-    }
-
-    #[test]
-    fn operation_retry_limit_overrides_the_repository_default() {
-        assert_eq!(effective_logical_retry_limit(3, None), 3);
-        assert_eq!(effective_logical_retry_limit(3, Some(0)), 0);
-        assert_eq!(effective_logical_retry_limit(3, Some(16)), 16);
-
-        let options = RepositoryOptions {
-            logical_retry_limit: 17,
-            ..RepositoryOptions::default()
-        };
-        assert_eq!(
-            validate_options(&options).unwrap_err().code,
-            ErrorCode::InvalidLimit
-        );
-    }
-
-    #[cfg(prolly_s3_legacy_v1_codec)]
-    #[test]
-    fn legacy_codec_classifies_canonical_appended_format_fields_as_unsupported() {
-        let options = RepositoryOptions::default();
-        let format = RepositoryFormatV1 {
-            repository_id: RepositoryId::from_hash([0x11; 32]),
-            format_version: RepositoryFormatV1::VERSION,
-            state_tree_format: options.state_tree_format,
-            content_index_format: options.content_index_format,
-            canonical_limits: options.limits,
-            min_reader_version: RepositoryFormatV1::CURRENT_READER_VERSION,
-            min_writer_version: RepositoryFormatV1::CURRENT_WRITER_VERSION,
-            created_at_millis: 1,
-        };
-        let encoded = encode_canonical(&format).unwrap();
-        let serde_cbor::Value::Map(mut fields) =
-            serde_cbor::from_slice::<serde_cbor::Value>(&encoded).unwrap()
-        else {
-            panic!("repository format must be a packed CBOR map");
-        };
-        fields.insert(serde_cbor::Value::Integer(8), serde_cbor::Value::Integer(2));
-        let future = serde_cbor::to_vec(&serde_cbor::Value::Map(fields)).unwrap();
-        assert!(canonical_legacy_format_has_appended_fields(&future));
-        assert_eq!(
-            decode_repository_format(&future).unwrap_err().code,
-            ErrorCode::UnsupportedRepositoryFormat
-        );
-        assert_eq!(
-            decode_repository_format(&[0xff]).unwrap_err().code,
-            ErrorCode::CorruptCommit
-        );
     }
 }

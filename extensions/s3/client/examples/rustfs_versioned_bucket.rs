@@ -61,7 +61,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .key("demo/greeting.txt")
         .body(ByteStream::from_static(b"hello from version one\n"))
         .content_type("text/plain")
-        .logical_retry_limit(3)
         .send()
         .await?;
     let second = client
@@ -70,7 +69,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .key("demo/greeting.txt")
         .body(ByteStream::from_static(b"hello from version two\n"))
         .content_type("text/plain")
-        .logical_retry_limit(3)
         .send()
         .await?;
 
@@ -149,16 +147,25 @@ async fn ensure_bucket(
     bucket: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match aws.create_bucket().bucket(bucket).send().await {
-        Ok(_) => Ok(()),
+        Ok(_) => {}
         Err(error) => {
             let description = format!("{error:?}");
             if description.contains("BucketAlreadyOwnedByYou")
                 || description.contains("BucketAlreadyExists")
             {
-                Ok(())
             } else {
-                Err(error.into())
+                return Err(error.into());
             }
         }
     }
+    aws.put_bucket_versioning()
+        .bucket(bucket)
+        .versioning_configuration(
+            aws_sdk_s3::types::VersioningConfiguration::builder()
+                .status(aws_sdk_s3::types::BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await?;
+    Ok(())
 }

@@ -1,79 +1,14 @@
 use std::{
     collections::BTreeMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use prolly_s3_core::{
-    CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode, FixedClock,
-    GcRunStateV1, GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, MemoryObjectPlane,
-    ObjectHeaders, ObjectPath, ObjectPlane, PhysicalListPage, PhysicalVersion, Repository,
-    RepositoryOptions, Result, StoredMetadata, StoredObject,
+    ErrorCode, FixedClock, ImmutablePut, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath,
+    ObjectPlane, Repository, RepositoryOptions,
 };
 use sha2::{Digest, Sha256};
-
-#[derive(Clone)]
-struct FailNextDeletePlane {
-    inner: MemoryObjectPlane,
-    fail_next_delete: Arc<AtomicBool>,
-}
-
-impl FailNextDeletePlane {
-    fn new() -> Self {
-        Self {
-            inner: MemoryObjectPlane::new(true),
-            fail_next_delete: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    fn arm_delete_failure(&self) {
-        self.fail_next_delete.store(true, Ordering::SeqCst);
-    }
-}
-
-#[async_trait::async_trait]
-impl ObjectPlane for FailNextDeletePlane {
-    async fn get(&self, request: GetRequest) -> Result<Option<StoredObject>> {
-        self.inner.get(request).await
-    }
-
-    async fn head(&self, path: &ObjectPath) -> Result<Option<StoredMetadata>> {
-        self.inner.head(path).await
-    }
-
-    async fn put_immutable(&self, request: ImmutablePut) -> Result<ImmutablePutOutcome> {
-        self.inner.put_immutable(request).await
-    }
-
-    async fn load_mutable(&self, path: &ObjectPath) -> Result<Option<StoredObject>> {
-        self.inner.load_mutable(path).await
-    }
-
-    async fn compare_exchange(&self, request: CompareExchange) -> Result<CompareExchangeOutcome> {
-        self.inner.compare_exchange(request).await
-    }
-
-    async fn list(&self, request: ListRequest) -> Result<PhysicalListPage> {
-        self.inner.list(request).await
-    }
-
-    async fn delete_exact(
-        &self,
-        path: &ObjectPath,
-        version: PhysicalVersion,
-    ) -> Result<DeleteOutcome> {
-        if self.fail_next_delete.swap(false, Ordering::SeqCst) {
-            return Err(Error::new(
-                ErrorCode::Transport,
-                "injected GC worker failure before physical deletion",
-            ));
-        }
-        self.inner.delete_exact(path, version).await
-    }
-}
 
 #[tokio::test]
 async fn pins_are_explicit_gc_roots_after_reflog_retention_expires() {
@@ -155,7 +90,7 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
         plane
             .put_immutable(ImmutablePut {
                 path: ObjectPath::new(format!(
-                    "gc-resume/chunks/sha256/{ordinal:02}/{ordinal:02}/{}",
+                    "gc-resume/node-packs/sha256/{ordinal:02}/{ordinal:02}/{}",
                     format!("{ordinal:02}").repeat(32)
                 ))
                 .unwrap(),
@@ -166,7 +101,7 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
             .unwrap();
     }
     let dry_run = repository.plan_gc(2 * 60 * 60 * 1_000, 100).await.unwrap();
-    assert_eq!(dry_run.candidates_by_kind.get("chunks"), Some(&3));
+    assert_eq!(dry_run.candidates_by_kind.get("node-packs"), Some(&3));
 
     let first = repository.sweep_gc_batch(dry_run.plan.id, 1).await.unwrap();
     assert_eq!(first.next_index, 1);
@@ -178,7 +113,7 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
     assert!(final_report.complete);
     assert_eq!(final_report.next_index, 3);
     assert_eq!(final_report.deleted_versions, 3);
-    assert_eq!(final_report.deleted_by_kind.get("chunks"), Some(&3));
+    assert_eq!(final_report.deleted_by_kind.get("node-packs"), Some(&3));
     assert_eq!(
         repository.gc_run(dry_run.plan.id).await.unwrap().next_index,
         3
@@ -187,96 +122,6 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
         repository.sweep_gc_batch(dry_run.plan.id, 1).await.unwrap(),
         final_report
     );
-}
-
-#[tokio::test]
-async fn interrupted_gc_fails_closed_until_generation_checked_operator_abort() {
-    let plane = Arc::new(FailNextDeletePlane::new());
-    let repository = Repository::initialize(
-        plane.clone(),
-        RepositoryOptions {
-            repository_prefix: "gc-fail-closed".to_string(),
-            ..RepositoryOptions::default()
-        },
-    )
-    .await
-    .unwrap();
-    let bytes = b"orphan".to_vec();
-    plane
-        .put_immutable(ImmutablePut {
-            path: ObjectPath::new(format!(
-                "gc-fail-closed/chunks/sha256/00/00/{}",
-                "00".repeat(32)
-            ))
-            .unwrap(),
-            expected_sha256: Sha256::digest(&bytes).into(),
-            bytes,
-        })
-        .await
-        .unwrap();
-    let dry_run = repository.plan_gc(2 * 60 * 60 * 1_000, 100).await.unwrap();
-    assert_eq!(dry_run.plan.body.candidates.len(), 1);
-
-    plane.arm_delete_failure();
-    let failure = repository
-        .sweep_gc_batch(dry_run.plan.id, 1)
-        .await
-        .unwrap_err();
-    assert_eq!(failure.code, ErrorCode::Transport);
-    let stranded = repository.gc_run(dry_run.plan.id).await.unwrap();
-    assert_eq!(stranded.state, GcRunStateV1::Running);
-    assert_eq!(stranded.next_index, 0);
-
-    let publication = repository
-        .put_bytes(
-            "main",
-            b"blocked".to_vec(),
-            b"body staged before the publication fence".to_vec(),
-            ObjectHeaders::default(),
-            BTreeMap::new(),
-            None,
-        )
-        .await
-        .unwrap_err();
-    assert_eq!(publication.code, ErrorCode::PreconditionFailed);
-
-    let aborted = repository
-        .abort_gc_run(
-            dry_run.plan.id,
-            stranded.generation,
-            "confirmed worker crash before delete",
-        )
-        .await
-        .unwrap();
-    assert_eq!(aborted.state, GcRunStateV1::Aborted);
-    assert_eq!(
-        aborted.abort_reason.as_deref(),
-        Some("confirmed worker crash before delete")
-    );
-    assert_eq!(aborted.generation, stranded.generation + 1);
-
-    let stale_abort = repository
-        .abort_gc_run(dry_run.plan.id, stranded.generation, "stale retry")
-        .await
-        .unwrap_err();
-    assert_eq!(stale_abort.code, ErrorCode::PreconditionFailed);
-    let resume_aborted = repository
-        .sweep_gc_batch(dry_run.plan.id, 1)
-        .await
-        .unwrap_err();
-    assert_eq!(resume_aborted.code, ErrorCode::PreconditionFailed);
-
-    repository
-        .put_bytes(
-            "main",
-            b"allowed".to_vec(),
-            b"publication resumes only after explicit abort".to_vec(),
-            ObjectHeaders::default(),
-            BTreeMap::new(),
-            None,
-        )
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
@@ -310,7 +155,7 @@ async fn gc_delete_rate_is_bound_to_the_run_and_paces_exact_deletes() {
         plane
             .put_immutable(ImmutablePut {
                 path: ObjectPath::new(format!(
-                    "gc-rate/chunks/sha256/{ordinal:02}/{ordinal:02}/{}",
+                    "gc-rate/node-packs/sha256/{ordinal:02}/{ordinal:02}/{}",
                     format!("{ordinal:02}").repeat(32)
                 ))
                 .unwrap(),
@@ -379,7 +224,7 @@ async fn gc_conservatively_preserves_every_native_ref_version() {
     plane
         .put_immutable(ImmutablePut {
             path: ObjectPath::new(format!(
-                "gc-native-refs/chunks/sha256/ff/ff/{}",
+                "gc-native-refs/node-packs/sha256/ff/ff/{}",
                 "ff".repeat(32)
             ))
             .unwrap(),
