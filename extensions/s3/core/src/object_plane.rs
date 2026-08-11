@@ -12,8 +12,8 @@ use md5::{Digest as _, Md5};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    codec::sha256, Checksums, Error, ErrorCode, NativeObjectBindingV1, ObjectHeaders, OperationId,
-    RepositoryId, Result,
+    codec::sha256, Checksums, Error, ErrorCode, ObjectHeaders, OperationId,
+    PhysicalObjectBindingV1, RepositoryId, Result,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -90,7 +90,7 @@ pub struct ImmutablePut {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativePut {
+pub struct PhysicalPut {
     pub path: ObjectPath,
     pub bytes: Vec<u8>,
     pub headers: ObjectHeaders,
@@ -101,7 +101,7 @@ pub struct NativePut {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeFilePut {
+pub struct PhysicalFilePut {
     pub path: ObjectPath,
     pub body_path: PathBuf,
     pub size: u64,
@@ -115,21 +115,21 @@ pub struct NativeFilePut {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeFileGet {
+pub struct PhysicalFileGet {
     pub path: ObjectPath,
     pub version_id: String,
     pub body_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeFileGetResult {
+pub struct PhysicalFileGetResult {
     pub size: u64,
     pub checksum_sha256: [u8; 32],
     pub checksum_md5: [u8; 16],
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeCopy {
+pub struct PhysicalCopy {
     pub source: ObjectPath,
     pub source_version_id: String,
     pub destination: ObjectPath,
@@ -145,7 +145,7 @@ pub struct NativeCopy {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeDelete {
+pub struct PhysicalDelete {
     pub path: ObjectPath,
     pub repository: RepositoryId,
     pub operation: OperationId,
@@ -153,7 +153,7 @@ pub struct NativeDelete {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartCreate {
+pub struct PhysicalMultipartCreate {
     pub path: ObjectPath,
     pub headers: ObjectHeaders,
     pub user_metadata: BTreeMap<String, String>,
@@ -163,7 +163,7 @@ pub struct NativeMultipartCreate {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartUploadPart {
+pub struct PhysicalMultipartUploadPart {
     pub path: ObjectPath,
     pub upload_id: String,
     pub part_number: u32,
@@ -171,7 +171,7 @@ pub struct NativeMultipartUploadPart {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartFilePart {
+pub struct PhysicalMultipartFilePart {
     pub path: ObjectPath,
     pub upload_id: String,
     pub part_number: u32,
@@ -181,7 +181,7 @@ pub struct NativeMultipartFilePart {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartUploadPartCopy {
+pub struct PhysicalMultipartUploadPartCopy {
     pub source: ObjectPath,
     pub source_version_id: String,
     pub destination: ObjectPath,
@@ -192,7 +192,7 @@ pub struct NativeMultipartUploadPartCopy {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NativeMultipartCompletedPart {
+pub struct PhysicalMultipartCompletedPart {
     pub part_number: u32,
     pub etag: String,
     pub checksum_sha256: [u8; 32],
@@ -200,7 +200,7 @@ pub struct NativeMultipartCompletedPart {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeMultipartPartResult {
+pub struct PhysicalMultipartPartResult {
     pub part_number: u32,
     pub etag: String,
     pub checksum_sha256: Option<[u8; 32]>,
@@ -208,23 +208,23 @@ pub struct NativeMultipartPartResult {
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartComplete {
+pub struct PhysicalMultipartComplete {
     pub path: ObjectPath,
     pub upload_id: String,
-    pub parts: Vec<NativeMultipartCompletedPart>,
+    pub parts: Vec<PhysicalMultipartCompletedPart>,
     pub checksum_sha256: [u8; 32],
     pub checksum_md5: [u8; 16],
     pub size: u64,
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartAbort {
+pub struct PhysicalMultipartAbort {
     pub path: ObjectPath,
     pub upload_id: String,
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartListParts {
+pub struct PhysicalMultipartListParts {
     pub path: ObjectPath,
     pub upload_id: String,
     pub after_part_number: u32,
@@ -232,13 +232,13 @@ pub struct NativeMultipartListParts {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeMultipartListPartsPage {
-    pub parts: Vec<NativeMultipartPartResult>,
+pub struct PhysicalMultipartListPartsPage {
+    pub parts: Vec<PhysicalMultipartPartResult>,
     pub next_part_number: Option<u32>,
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeMultipartListUploads {
+pub struct PhysicalMultipartListUploads {
     pub prefix: String,
     pub key_marker: Option<String>,
     pub upload_id_marker: Option<String>,
@@ -246,22 +246,22 @@ pub struct NativeMultipartListUploads {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeMultipartUploadEntry {
+pub struct PhysicalMultipartUploadEntry {
     pub path: ObjectPath,
     pub upload_id: String,
     pub initiated_at_millis: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeMultipartListUploadsPage {
-    pub uploads: Vec<NativeMultipartUploadEntry>,
+pub struct PhysicalMultipartListUploadsPage {
+    pub uploads: Vec<PhysicalMultipartUploadEntry>,
     pub next_key_marker: Option<String>,
     pub next_upload_id_marker: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeObjectWriteResult {
-    pub binding: NativeObjectBindingV1,
+pub struct PhysicalObjectWriteResult {
+    pub binding: PhysicalObjectBindingV1,
     pub size: u64,
     pub logical_etag: String,
     pub checksums: Checksums,
@@ -329,18 +329,21 @@ pub trait ObjectPlane: Send + Sync + 'static {
         version: PhysicalVersion,
     ) -> Result<DeleteOutcome>;
 
-    async fn put_native(&self, _request: NativePut) -> Result<NativeObjectWriteResult> {
+    async fn put_physical(&self, _request: PhysicalPut) -> Result<PhysicalObjectWriteResult> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native object writes",
+            "object plane does not support physical object writes",
         ))
     }
 
-    async fn put_native_file(&self, request: NativeFilePut) -> Result<NativeObjectWriteResult> {
+    async fn put_physical_file(
+        &self,
+        request: PhysicalFilePut,
+    ) -> Result<PhysicalObjectWriteResult> {
         let bytes = std::fs::read(&request.body_path).map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native spool could not be read: {error}"),
+                format!("physical spool could not be read: {error}"),
             )
         })?;
         if bytes.len() as u64 != request.size
@@ -349,10 +352,10 @@ pub trait ObjectPlane: Send + Sync + 'static {
         {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "native spool identity changed before upload",
+                "physical spool identity changed before upload",
             ));
         }
-        self.put_native(NativePut {
+        self.put_physical(PhysicalPut {
             path: request.path,
             bytes,
             headers: request.headers,
@@ -364,7 +367,7 @@ pub trait ObjectPlane: Send + Sync + 'static {
         .await
     }
 
-    async fn get_native_file(&self, request: NativeFileGet) -> Result<NativeFileGetResult> {
+    async fn get_physical_file(&self, request: PhysicalFileGet) -> Result<PhysicalFileGetResult> {
         let object = self
             .get(GetRequest {
                 path: request.path,
@@ -377,70 +380,70 @@ pub trait ObjectPlane: Send + Sync + 'static {
             .ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
-                    "native source object version is missing",
+                    "physical source object version is missing",
                 )
             })?;
         std::fs::write(&request.body_path, &object.bytes).map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native transfer spool could not be written: {error}"),
+                format!("physical transfer spool could not be written: {error}"),
             )
         })?;
-        Ok(NativeFileGetResult {
+        Ok(PhysicalFileGetResult {
             size: object.bytes.len() as u64,
             checksum_sha256: sha256(&object.bytes),
             checksum_md5: Md5::digest(&object.bytes).into(),
         })
     }
 
-    async fn copy_native(&self, _request: NativeCopy) -> Result<NativeObjectWriteResult> {
+    async fn copy_physical(&self, _request: PhysicalCopy) -> Result<PhysicalObjectWriteResult> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native object copies",
+            "object plane does not support physical object copies",
         ))
     }
 
-    async fn delete_native(&self, _request: NativeDelete) -> Result<NativeObjectBindingV1> {
+    async fn delete_physical(&self, _request: PhysicalDelete) -> Result<PhysicalObjectBindingV1> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native delete markers",
+            "object plane does not support physical delete markers",
         ))
     }
 
-    async fn create_native_multipart(&self, _request: NativeMultipartCreate) -> Result<String> {
+    async fn create_physical_multipart(&self, _request: PhysicalMultipartCreate) -> Result<String> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart creation",
+            "object plane does not support physical multipart creation",
         ))
     }
 
-    async fn upload_native_multipart_part(
+    async fn upload_physical_multipart_part(
         &self,
-        _request: NativeMultipartUploadPart,
-    ) -> Result<NativeMultipartPartResult> {
+        _request: PhysicalMultipartUploadPart,
+    ) -> Result<PhysicalMultipartPartResult> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart parts",
+            "object plane does not support physical multipart parts",
         ))
     }
 
-    async fn upload_native_multipart_file_part(
+    async fn upload_physical_multipart_file_part(
         &self,
-        request: NativeMultipartFilePart,
-    ) -> Result<NativeMultipartPartResult> {
+        request: PhysicalMultipartFilePart,
+    ) -> Result<PhysicalMultipartPartResult> {
         let bytes = std::fs::read(&request.body_path).map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native multipart spool could not be read: {error}"),
+                format!("physical multipart spool could not be read: {error}"),
             )
         })?;
         if bytes.len() as u64 != request.size || sha256(&bytes) != request.checksum_sha256 {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "native multipart spool identity changed before upload",
+                "physical multipart spool identity changed before upload",
             ));
         }
-        self.upload_native_multipart_part(NativeMultipartUploadPart {
+        self.upload_physical_multipart_part(PhysicalMultipartUploadPart {
             path: request.path,
             upload_id: request.upload_id,
             part_number: request.part_number,
@@ -449,50 +452,50 @@ pub trait ObjectPlane: Send + Sync + 'static {
         .await
     }
 
-    async fn upload_native_multipart_part_copy(
+    async fn upload_physical_multipart_part_copy(
         &self,
-        _request: NativeMultipartUploadPartCopy,
-    ) -> Result<NativeMultipartPartResult> {
+        _request: PhysicalMultipartUploadPartCopy,
+    ) -> Result<PhysicalMultipartPartResult> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart part copy",
+            "object plane does not support physical multipart part copy",
         ))
     }
 
-    async fn complete_native_multipart(
+    async fn complete_physical_multipart(
         &self,
-        _request: NativeMultipartComplete,
-    ) -> Result<NativeObjectWriteResult> {
+        _request: PhysicalMultipartComplete,
+    ) -> Result<PhysicalObjectWriteResult> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart completion",
+            "object plane does not support physical multipart completion",
         ))
     }
 
-    async fn abort_native_multipart(&self, _request: NativeMultipartAbort) -> Result<()> {
+    async fn abort_physical_multipart(&self, _request: PhysicalMultipartAbort) -> Result<()> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart abort",
+            "object plane does not support physical multipart abort",
         ))
     }
 
-    async fn list_native_multipart_parts(
+    async fn list_physical_multipart_parts(
         &self,
-        _request: NativeMultipartListParts,
-    ) -> Result<NativeMultipartListPartsPage> {
+        _request: PhysicalMultipartListParts,
+    ) -> Result<PhysicalMultipartListPartsPage> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart part listing",
+            "object plane does not support physical multipart part listing",
         ))
     }
 
-    async fn list_native_multipart_uploads(
+    async fn list_physical_multipart_uploads(
         &self,
-        _request: NativeMultipartListUploads,
-    ) -> Result<NativeMultipartListUploadsPage> {
+        _request: PhysicalMultipartListUploads,
+    ) -> Result<PhysicalMultipartListUploadsPage> {
         Err(Error::new(
             ErrorCode::MissingCapability,
-            "object plane does not support native multipart upload listing",
+            "object plane does not support physical multipart upload listing",
         ))
     }
 }
@@ -502,8 +505,8 @@ pub struct MemoryObjectPlane {
     inner: Arc<RwLock<MemoryState>>,
     versioned: bool,
     requests: Arc<MemoryRequestCounters>,
-    lose_next_native_put_response: Arc<AtomicBool>,
-    lose_next_native_delete_response: Arc<AtomicBool>,
+    lose_next_physical_put_response: Arc<AtomicBool>,
+    lose_next_physical_delete_response: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -514,16 +517,16 @@ struct MemoryRequestCounters {
     compare_exchange: AtomicU64,
     list: AtomicU64,
     delete_exact: AtomicU64,
-    native_put: AtomicU64,
-    native_copy: AtomicU64,
-    native_delete: AtomicU64,
-    native_multipart_create: AtomicU64,
-    native_multipart_upload_part: AtomicU64,
-    native_multipart_upload_part_copy: AtomicU64,
-    native_multipart_complete: AtomicU64,
-    native_multipart_abort: AtomicU64,
-    native_multipart_list_parts: AtomicU64,
-    native_multipart_list_uploads: AtomicU64,
+    physical_put: AtomicU64,
+    physical_copy: AtomicU64,
+    physical_delete: AtomicU64,
+    physical_multipart_create: AtomicU64,
+    physical_multipart_upload_part: AtomicU64,
+    physical_multipart_upload_part_copy: AtomicU64,
+    physical_multipart_complete: AtomicU64,
+    physical_multipart_abort: AtomicU64,
+    physical_multipart_list_parts: AtomicU64,
+    physical_multipart_list_uploads: AtomicU64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -534,16 +537,16 @@ pub struct MemoryRequestSnapshot {
     pub compare_exchange: u64,
     pub list: u64,
     pub delete_exact: u64,
-    pub native_put: u64,
-    pub native_copy: u64,
-    pub native_delete: u64,
-    pub native_multipart_create: u64,
-    pub native_multipart_upload_part: u64,
-    pub native_multipart_upload_part_copy: u64,
-    pub native_multipart_complete: u64,
-    pub native_multipart_abort: u64,
-    pub native_multipart_list_parts: u64,
-    pub native_multipart_list_uploads: u64,
+    pub physical_put: u64,
+    pub physical_copy: u64,
+    pub physical_delete: u64,
+    pub physical_multipart_create: u64,
+    pub physical_multipart_upload_part: u64,
+    pub physical_multipart_upload_part_copy: u64,
+    pub physical_multipart_complete: u64,
+    pub physical_multipart_abort: u64,
+    pub physical_multipart_list_parts: u64,
+    pub physical_multipart_list_uploads: u64,
 }
 
 impl MemoryRequestSnapshot {
@@ -554,16 +557,16 @@ impl MemoryRequestSnapshot {
             + self.compare_exchange
             + self.list
             + self.delete_exact
-            + self.native_put
-            + self.native_copy
-            + self.native_delete
-            + self.native_multipart_create
-            + self.native_multipart_upload_part
-            + self.native_multipart_upload_part_copy
-            + self.native_multipart_complete
-            + self.native_multipart_abort
-            + self.native_multipart_list_parts
-            + self.native_multipart_list_uploads
+            + self.physical_put
+            + self.physical_copy
+            + self.physical_delete
+            + self.physical_multipart_create
+            + self.physical_multipart_upload_part
+            + self.physical_multipart_upload_part_copy
+            + self.physical_multipart_complete
+            + self.physical_multipart_abort
+            + self.physical_multipart_list_parts
+            + self.physical_multipart_list_uploads
     }
 }
 
@@ -576,7 +579,7 @@ struct MemoryState {
 
 #[derive(Clone)]
 struct MemoryMultipartUpload {
-    request: NativeMultipartCreate,
+    request: PhysicalMultipartCreate,
     parts: BTreeMap<u32, Vec<u8>>,
     initiated_at_millis: u64,
 }
@@ -593,18 +596,18 @@ impl MemoryObjectPlane {
             inner: Arc::new(RwLock::new(MemoryState::default())),
             versioned,
             requests: Arc::new(MemoryRequestCounters::default()),
-            lose_next_native_put_response: Arc::new(AtomicBool::new(false)),
-            lose_next_native_delete_response: Arc::new(AtomicBool::new(false)),
+            lose_next_physical_put_response: Arc::new(AtomicBool::new(false)),
+            lose_next_physical_delete_response: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    pub fn lose_next_native_put_response(&self) {
-        self.lose_next_native_put_response
+    pub fn lose_next_physical_put_response(&self) {
+        self.lose_next_physical_put_response
             .store(true, Ordering::Relaxed);
     }
 
-    pub fn lose_next_native_delete_response(&self) {
-        self.lose_next_native_delete_response
+    pub fn lose_next_physical_delete_response(&self) {
+        self.lose_next_physical_delete_response
             .store(true, Ordering::Relaxed);
     }
 
@@ -617,18 +620,18 @@ impl MemoryObjectPlane {
             compare_exchange: load(&self.requests.compare_exchange),
             list: load(&self.requests.list),
             delete_exact: load(&self.requests.delete_exact),
-            native_put: load(&self.requests.native_put),
-            native_copy: load(&self.requests.native_copy),
-            native_delete: load(&self.requests.native_delete),
-            native_multipart_create: load(&self.requests.native_multipart_create),
-            native_multipart_upload_part: load(&self.requests.native_multipart_upload_part),
-            native_multipart_upload_part_copy: load(
-                &self.requests.native_multipart_upload_part_copy,
+            physical_put: load(&self.requests.physical_put),
+            physical_copy: load(&self.requests.physical_copy),
+            physical_delete: load(&self.requests.physical_delete),
+            physical_multipart_create: load(&self.requests.physical_multipart_create),
+            physical_multipart_upload_part: load(&self.requests.physical_multipart_upload_part),
+            physical_multipart_upload_part_copy: load(
+                &self.requests.physical_multipart_upload_part_copy,
             ),
-            native_multipart_complete: load(&self.requests.native_multipart_complete),
-            native_multipart_abort: load(&self.requests.native_multipart_abort),
-            native_multipart_list_parts: load(&self.requests.native_multipart_list_parts),
-            native_multipart_list_uploads: load(&self.requests.native_multipart_list_uploads),
+            physical_multipart_complete: load(&self.requests.physical_multipart_complete),
+            physical_multipart_abort: load(&self.requests.physical_multipart_abort),
+            physical_multipart_list_parts: load(&self.requests.physical_multipart_list_parts),
+            physical_multipart_list_uploads: load(&self.requests.physical_multipart_list_uploads),
         }
     }
 
@@ -640,16 +643,16 @@ impl MemoryObjectPlane {
             &self.requests.compare_exchange,
             &self.requests.list,
             &self.requests.delete_exact,
-            &self.requests.native_put,
-            &self.requests.native_copy,
-            &self.requests.native_delete,
-            &self.requests.native_multipart_create,
-            &self.requests.native_multipart_upload_part,
-            &self.requests.native_multipart_upload_part_copy,
-            &self.requests.native_multipart_complete,
-            &self.requests.native_multipart_abort,
-            &self.requests.native_multipart_list_parts,
-            &self.requests.native_multipart_list_uploads,
+            &self.requests.physical_put,
+            &self.requests.physical_copy,
+            &self.requests.physical_delete,
+            &self.requests.physical_multipart_create,
+            &self.requests.physical_multipart_upload_part,
+            &self.requests.physical_multipart_upload_part_copy,
+            &self.requests.physical_multipart_complete,
+            &self.requests.physical_multipart_abort,
+            &self.requests.physical_multipart_list_parts,
+            &self.requests.physical_multipart_list_uploads,
         ] {
             counter.store(0, Ordering::Relaxed);
         }
@@ -920,12 +923,12 @@ impl ObjectPlane for MemoryObjectPlane {
         Ok(DeleteOutcome::Deleted)
     }
 
-    async fn put_native(&self, request: NativePut) -> Result<NativeObjectWriteResult> {
-        self.requests.native_put.fetch_add(1, Ordering::Relaxed);
+    async fn put_physical(&self, request: PhysicalPut) -> Result<PhysicalObjectWriteResult> {
+        self.requests.physical_put.fetch_add(1, Ordering::Relaxed);
         if !self.versioned {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native writes require a versioned memory object plane",
+                "physical writes require a versioned memory object plane",
             ));
         }
         let size = request.bytes.len() as u64;
@@ -968,8 +971,8 @@ impl ObjectPlane for MemoryObjectPlane {
                 bytes: Some(request.bytes),
                 metadata,
             });
-        let result = NativeObjectWriteResult {
-            binding: NativeObjectBindingV1::Live {
+        let result = PhysicalObjectWriteResult {
+            binding: PhysicalObjectBindingV1::Live {
                 version_id,
                 provider_etag,
                 checksum_sha256: sha256,
@@ -983,23 +986,23 @@ impl ObjectPlane for MemoryObjectPlane {
             },
         };
         if self
-            .lose_next_native_put_response
+            .lose_next_physical_put_response
             .swap(false, Ordering::Relaxed)
         {
             return Err(Error::new(
                 ErrorCode::Transport,
-                "injected lost native PutObject response",
+                "injected lost physical PutObject response",
             ));
         }
         Ok(result)
     }
 
-    async fn copy_native(&self, request: NativeCopy) -> Result<NativeObjectWriteResult> {
-        self.requests.native_copy.fetch_add(1, Ordering::Relaxed);
+    async fn copy_physical(&self, request: PhysicalCopy) -> Result<PhysicalObjectWriteResult> {
+        self.requests.physical_copy.fetch_add(1, Ordering::Relaxed);
         if !self.versioned {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native copies require a versioned memory object plane",
+                "physical copies require a versioned memory object plane",
             ));
         }
         let bytes = {
@@ -1017,10 +1020,12 @@ impl ObjectPlane for MemoryObjectPlane {
                     })
                 })
                 .and_then(|version| version.bytes.clone())
-                .ok_or_else(|| Error::new(ErrorCode::NoSuchVersion, "native copy source missing"))?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::NoSuchVersion, "physical copy source missing")
+                })?
         };
         let result = self
-            .put_native(NativePut {
+            .put_physical(PhysicalPut {
                 path: request.destination,
                 bytes,
                 headers: request.headers,
@@ -1030,16 +1035,18 @@ impl ObjectPlane for MemoryObjectPlane {
                 writer_fence_generation: request.writer_fence_generation,
             })
             .await;
-        self.requests.native_put.fetch_sub(1, Ordering::Relaxed);
+        self.requests.physical_put.fetch_sub(1, Ordering::Relaxed);
         result
     }
 
-    async fn delete_native(&self, request: NativeDelete) -> Result<NativeObjectBindingV1> {
-        self.requests.native_delete.fetch_add(1, Ordering::Relaxed);
+    async fn delete_physical(&self, request: PhysicalDelete) -> Result<PhysicalObjectBindingV1> {
+        self.requests
+            .physical_delete
+            .fetch_add(1, Ordering::Relaxed);
         if !self.versioned {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native delete markers require a versioned memory object plane",
+                "physical delete markers require a versioned memory object plane",
             ));
         }
         let mut state = self
@@ -1064,25 +1071,25 @@ impl ObjectPlane for MemoryObjectPlane {
                 metadata,
             });
         if self
-            .lose_next_native_delete_response
+            .lose_next_physical_delete_response
             .swap(false, Ordering::Relaxed)
         {
             return Err(Error::new(
                 ErrorCode::Transport,
-                "injected lost native DeleteObject response",
+                "injected lost physical DeleteObject response",
             ));
         }
-        Ok(NativeObjectBindingV1::DeleteMarker { version_id })
+        Ok(PhysicalObjectBindingV1::DeleteMarker { version_id })
     }
 
-    async fn create_native_multipart(&self, request: NativeMultipartCreate) -> Result<String> {
+    async fn create_physical_multipart(&self, request: PhysicalMultipartCreate) -> Result<String> {
         self.requests
-            .native_multipart_create
+            .physical_multipart_create
             .fetch_add(1, Ordering::Relaxed);
         if !self.versioned {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native multipart requires a versioned memory object plane",
+                "physical multipart requires a versioned memory object plane",
             ));
         }
         let mut state = self
@@ -1103,12 +1110,12 @@ impl ObjectPlane for MemoryObjectPlane {
         Ok(upload_id)
     }
 
-    async fn upload_native_multipart_part(
+    async fn upload_physical_multipart_part(
         &self,
-        request: NativeMultipartUploadPart,
-    ) -> Result<NativeMultipartPartResult> {
+        request: PhysicalMultipartUploadPart,
+    ) -> Result<PhysicalMultipartPartResult> {
         self.requests
-            .native_multipart_upload_part
+            .physical_multipart_upload_part
             .fetch_add(1, Ordering::Relaxed);
         if !(1..=10_000).contains(&request.part_number) {
             return Err(Error::new(
@@ -1128,10 +1135,10 @@ impl ObjectPlane for MemoryObjectPlane {
             .get_mut(&request.upload_id)
             .filter(|upload| upload.request.path == request.path)
             .ok_or_else(|| {
-                Error::new(ErrorCode::NoSuchUpload, "native multipart upload missing")
+                Error::new(ErrorCode::NoSuchUpload, "physical multipart upload missing")
             })?;
         upload.parts.insert(request.part_number, request.bytes);
-        Ok(NativeMultipartPartResult {
+        Ok(PhysicalMultipartPartResult {
             part_number: request.part_number,
             etag: format!("\"{}\"", hex::encode(md5)),
             checksum_sha256: Some(checksum_sha256),
@@ -1139,12 +1146,12 @@ impl ObjectPlane for MemoryObjectPlane {
         })
     }
 
-    async fn upload_native_multipart_part_copy(
+    async fn upload_physical_multipart_part_copy(
         &self,
-        request: NativeMultipartUploadPartCopy,
-    ) -> Result<NativeMultipartPartResult> {
+        request: PhysicalMultipartUploadPartCopy,
+    ) -> Result<PhysicalMultipartPartResult> {
         self.requests
-            .native_multipart_upload_part_copy
+            .physical_multipart_upload_part_copy
             .fetch_add(1, Ordering::Relaxed);
         let bytes = {
             let state = self
@@ -1164,7 +1171,7 @@ impl ObjectPlane for MemoryObjectPlane {
                 .ok_or_else(|| {
                     Error::new(
                         ErrorCode::NoSuchVersion,
-                        "native multipart copy source missing",
+                        "physical multipart copy source missing",
                     )
                 })?;
             match request.range {
@@ -1179,7 +1186,7 @@ impl ObjectPlane for MemoryObjectPlane {
                 Some(_) => {
                     return Err(Error::new(
                         ErrorCode::InvalidRange,
-                        "native multipart copy range is unsatisfiable",
+                        "physical multipart copy range is unsatisfiable",
                     ))
                 }
                 None => bytes,
@@ -1197,10 +1204,10 @@ impl ObjectPlane for MemoryObjectPlane {
             .get_mut(&request.upload_id)
             .filter(|upload| upload.request.path == request.destination)
             .ok_or_else(|| {
-                Error::new(ErrorCode::NoSuchUpload, "native multipart upload missing")
+                Error::new(ErrorCode::NoSuchUpload, "physical multipart upload missing")
             })?;
         upload.parts.insert(request.part_number, bytes);
-        Ok(NativeMultipartPartResult {
+        Ok(PhysicalMultipartPartResult {
             part_number: request.part_number,
             etag: format!("\"{}\"", hex::encode(md5)),
             checksum_sha256: Some(checksum_sha256),
@@ -1208,12 +1215,12 @@ impl ObjectPlane for MemoryObjectPlane {
         })
     }
 
-    async fn complete_native_multipart(
+    async fn complete_physical_multipart(
         &self,
-        request: NativeMultipartComplete,
-    ) -> Result<NativeObjectWriteResult> {
+        request: PhysicalMultipartComplete,
+    ) -> Result<PhysicalObjectWriteResult> {
         self.requests
-            .native_multipart_complete
+            .physical_multipart_complete
             .fetch_add(1, Ordering::Relaxed);
         let upload = {
             let state = self
@@ -1226,7 +1233,7 @@ impl ObjectPlane for MemoryObjectPlane {
                 .filter(|upload| upload.request.path == request.path)
                 .cloned()
                 .ok_or_else(|| {
-                    Error::new(ErrorCode::NoSuchUpload, "native multipart upload missing")
+                    Error::new(ErrorCode::NoSuchUpload, "physical multipart upload missing")
                 })?
         };
         let mut bytes = Vec::new();
@@ -1258,7 +1265,7 @@ impl ObjectPlane for MemoryObjectPlane {
             ));
         }
         let result = self
-            .put_native(NativePut {
+            .put_physical(PhysicalPut {
                 path: request.path,
                 bytes,
                 headers: upload.request.headers,
@@ -1268,7 +1275,7 @@ impl ObjectPlane for MemoryObjectPlane {
                 writer_fence_generation: upload.request.writer_fence_generation,
             })
             .await;
-        self.requests.native_put.fetch_sub(1, Ordering::Relaxed);
+        self.requests.physical_put.fetch_sub(1, Ordering::Relaxed);
         if result.is_ok() {
             let mut state = self
                 .inner
@@ -1279,9 +1286,9 @@ impl ObjectPlane for MemoryObjectPlane {
         result
     }
 
-    async fn abort_native_multipart(&self, request: NativeMultipartAbort) -> Result<()> {
+    async fn abort_physical_multipart(&self, request: PhysicalMultipartAbort) -> Result<()> {
         self.requests
-            .native_multipart_abort
+            .physical_multipart_abort
             .fetch_add(1, Ordering::Relaxed);
         let mut state = self
             .inner
@@ -1294,17 +1301,17 @@ impl ObjectPlane for MemoryObjectPlane {
             }
             _ => Err(Error::new(
                 ErrorCode::NoSuchUpload,
-                "native multipart upload missing",
+                "physical multipart upload missing",
             )),
         }
     }
 
-    async fn list_native_multipart_parts(
+    async fn list_physical_multipart_parts(
         &self,
-        request: NativeMultipartListParts,
-    ) -> Result<NativeMultipartListPartsPage> {
+        request: PhysicalMultipartListParts,
+    ) -> Result<PhysicalMultipartListPartsPage> {
         self.requests
-            .native_multipart_list_parts
+            .physical_multipart_list_parts
             .fetch_add(1, Ordering::Relaxed);
         let state = self
             .inner
@@ -1315,7 +1322,7 @@ impl ObjectPlane for MemoryObjectPlane {
             .get(&request.upload_id)
             .filter(|upload| upload.request.path == request.path)
             .ok_or_else(|| {
-                Error::new(ErrorCode::NoSuchUpload, "native multipart upload missing")
+                Error::new(ErrorCode::NoSuchUpload, "physical multipart upload missing")
             })?;
         let limit = request.limit.min(1_000);
         let mut parts = upload
@@ -1325,7 +1332,7 @@ impl ObjectPlane for MemoryObjectPlane {
             .take(limit.saturating_add(1))
             .map(|(part_number, bytes)| {
                 let md5: [u8; 16] = Md5::digest(bytes).into();
-                NativeMultipartPartResult {
+                PhysicalMultipartPartResult {
                     part_number: *part_number,
                     etag: format!("\"{}\"", hex::encode(md5)),
                     checksum_sha256: Some(sha256(bytes)),
@@ -1341,18 +1348,18 @@ impl ObjectPlane for MemoryObjectPlane {
             })
             .flatten();
         parts.truncate(limit);
-        Ok(NativeMultipartListPartsPage {
+        Ok(PhysicalMultipartListPartsPage {
             parts,
             next_part_number,
         })
     }
 
-    async fn list_native_multipart_uploads(
+    async fn list_physical_multipart_uploads(
         &self,
-        request: NativeMultipartListUploads,
-    ) -> Result<NativeMultipartListUploadsPage> {
+        request: PhysicalMultipartListUploads,
+    ) -> Result<PhysicalMultipartListUploadsPage> {
         self.requests
-            .native_multipart_list_uploads
+            .physical_multipart_list_uploads
             .fetch_add(1, Ordering::Relaxed);
         let state = self
             .inner
@@ -1362,7 +1369,7 @@ impl ObjectPlane for MemoryObjectPlane {
             .multipart
             .iter()
             .filter(|(_, upload)| upload.request.path.as_str().starts_with(&request.prefix))
-            .map(|(upload_id, upload)| NativeMultipartUploadEntry {
+            .map(|(upload_id, upload)| PhysicalMultipartUploadEntry {
                 path: upload.request.path.clone(),
                 upload_id: upload_id.clone(),
                 initiated_at_millis: upload.initiated_at_millis,
@@ -1397,7 +1404,7 @@ impl ObjectPlane for MemoryObjectPlane {
         } else {
             (None, None)
         };
-        Ok(NativeMultipartListUploadsPage {
+        Ok(PhysicalMultipartListUploadsPage {
             uploads,
             next_key_marker,
             next_upload_id_marker,

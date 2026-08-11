@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 430" role="img" aria-labelledby="title desc">
-  <title id="title">Four-call native-versioned S3 write path</title>
+  <title id="title">Four-call Prolly S3 write path</title>
   <desc id="desc">A whole-object put is followed by a node-pack put, commit put, and conditional branch reference update. Only the final update makes the write visible.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08111f"/><stop offset="1" stop-color="#111b34"/></linearGradient>

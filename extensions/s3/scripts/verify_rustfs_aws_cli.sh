@@ -62,7 +62,7 @@ aws_s3api list-buckets --query 'Buckets[].Name' --output table
 echo "Checking bucket $bucket"
 aws_s3api head-bucket --bucket "$bucket"
 
-echo "Native bucket versioning configuration"
+echo "Physical bucket versioning configuration"
 if ! aws_s3api get-bucket-versioning --bucket "$bucket" --output json; then
   echo "The provider did not expose GetBucketVersioning for $bucket" >&2
 fi

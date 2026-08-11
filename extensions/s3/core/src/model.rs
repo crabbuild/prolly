@@ -215,8 +215,8 @@ pub struct RepositoryFormatV1 {
 
 impl RepositoryFormatV1 {
     pub const VERSION: u16 = 1;
-    pub const NATIVE_VERSIONED_S3_CAPABILITY_PROFILE: u16 = 1;
-    pub const NATIVE_VERSIONED_PROTOCOL_VERSION: u32 = 1;
+    pub const PROLLY_S3_CAPABILITY_PROFILE: u16 = 1;
+    pub const PROLLY_S3_PROTOCOL_VERSION: u32 = 1;
     pub const CURRENT_READER_VERSION: u32 = 1;
     pub const CURRENT_WRITER_VERSION: u32 = 1;
 }
@@ -293,18 +293,18 @@ impl ProviderCapabilities {
         Ok(())
     }
 
-    pub fn validate_native_versioned(&self) -> Result<()> {
+    pub fn validate_prolly_s3(&self) -> Result<()> {
         self.validate_required()?;
         if self.physical_versioning != PhysicalVersioning::Enabled {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native-versioned repositories require bucket versioning to be enabled",
+                "Prolly S3 repositories require bucket versioning to be enabled",
             ));
         }
         if self.max_single_put_bytes == 0 || self.max_object_bytes == 0 {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
-                "provider did not report usable native object size limits",
+                "provider did not report usable physical object size limits",
             ));
         }
         Ok(())
@@ -430,11 +430,11 @@ pub struct ObjectVersionOrder {
     pub mutation_ordinal: u32,
 }
 
-/// Provider binding for a logical object version in the native-versioned
+/// Provider binding for a logical object version in the prolly-s3
 /// profile. The key is deliberately absent: it is always the logical UTF-8
 /// key under which this record is stored.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NativeObjectBindingV1 {
+pub enum PhysicalObjectBindingV1 {
     Live {
         version_id: String,
         provider_etag: String,
@@ -468,14 +468,14 @@ pub struct LogicalObjectVersionBodyV1 {
     pub kind: LogicalObjectVersionKindV1,
 }
 
-/// Native-profile object version. Its logical ID excludes the provider
+/// Prolly S3 object version. Its logical ID excludes the provider
 /// binding so a verified clone may preserve logical identity while rebinding
 /// to destination-issued S3 VersionIds.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectVersionV1 {
     pub id: ObjectVersionId,
     pub body: LogicalObjectVersionBodyV1,
-    pub binding: NativeObjectBindingV1,
+    pub binding: PhysicalObjectBindingV1,
 }
 
 impl ObjectVersionV1 {
@@ -484,9 +484,9 @@ impl ObjectVersionV1 {
         key: &[u8],
         operation: OperationId,
         body: LogicalObjectVersionBodyV1,
-        binding: NativeObjectBindingV1,
+        binding: PhysicalObjectBindingV1,
     ) -> Result<Self> {
-        validate_native_object_version(&body, &binding)?;
+        validate_physical_object_version(&body, &binding)?;
         let body_bytes = encode_canonical(&body)?;
         let id = ObjectVersionId(domain_hash(
             b"prolly-s3/object-version/v1",
@@ -501,18 +501,18 @@ impl ObjectVersionV1 {
     }
 
     pub fn validate(&self) -> Result<()> {
-        validate_native_object_version(&self.body, &self.binding)
+        validate_physical_object_version(&self.body, &self.binding)
     }
 }
 
-fn validate_native_object_version(
+fn validate_physical_object_version(
     body: &LogicalObjectVersionBodyV1,
-    binding: &NativeObjectBindingV1,
+    binding: &PhysicalObjectBindingV1,
 ) -> Result<()> {
     let valid = match (&body.kind, binding) {
         (
             LogicalObjectVersionKindV1::Live { checksums, .. },
-            NativeObjectBindingV1::Live {
+            PhysicalObjectBindingV1::Live {
                 version_id,
                 checksum_sha256,
                 ..
@@ -525,14 +525,14 @@ fn validate_native_object_version(
         }
         (
             LogicalObjectVersionKindV1::DeleteMarker,
-            NativeObjectBindingV1::DeleteMarker { version_id },
+            PhysicalObjectBindingV1::DeleteMarker { version_id },
         ) => !version_id.is_empty(),
         _ => false,
     };
     if !valid {
         return Err(Error::new(
             ErrorCode::CorruptCommit,
-            "native object version has an invalid logical-to-physical binding",
+            "physical object version has an invalid logical-to-physical binding",
         ));
     }
     Ok(())
@@ -1157,11 +1157,11 @@ pub struct CommitReceipt {
     pub idempotent_replay: bool,
 }
 
-/// Durable caller-held handle for native provider multipart state. The handle
+/// Durable caller-held handle for provider-managed multipart state. The handle
 /// contains no secret credentials; callers must persist the exact value
 /// returned by create if they intend to complete after a process restart.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NativeMultipartSessionV1 {
+pub struct PhysicalMultipartSessionV1 {
     pub repository: RepositoryId,
     pub branch: String,
     pub key: Vec<u8>,
@@ -1175,7 +1175,7 @@ pub struct NativeMultipartSessionV1 {
     pub discovered: bool,
 }
 
-impl NativeMultipartSessionV1 {
+impl PhysicalMultipartSessionV1 {
     pub fn validate_address(&self, repository: RepositoryId) -> Result<()> {
         crate::repository::validate_branch(&self.branch)?;
         if self.repository != repository
@@ -1184,7 +1184,7 @@ impl NativeMultipartSessionV1 {
         {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native multipart session is malformed or belongs to another repository",
+                "physical multipart session is malformed or belongs to another repository",
             ));
         }
         Ok(())
@@ -1195,34 +1195,34 @@ impl NativeMultipartSessionV1 {
         if self.discovered || self.operation.is_nil() || self.writer_fence_generation == 0 {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native multipart completion requires the original create handle",
+                "physical multipart completion requires the original create handle",
             ));
         }
         Ok(())
     }
 }
 
-// Prepared native mutations bind logical versions to provider version IDs.
+// Prepared physical mutations bind logical versions to provider version IDs.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NativePreparedMutationV1 {
-    NativePut {
+pub enum PhysicalPreparedMutationV1 {
+    PhysicalPut {
         key: Vec<u8>,
         size: u64,
         logical_etag: String,
         checksums: Checksums,
         headers: ObjectHeaders,
         user_metadata: BTreeMap<String, String>,
-        binding: NativeObjectBindingV1,
+        binding: PhysicalObjectBindingV1,
     },
-    NativeDelete {
+    PhysicalDelete {
         key: Vec<u8>,
-        binding: NativeObjectBindingV1,
+        binding: PhysicalObjectBindingV1,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NativeBatchMutationV1 {
+pub enum PhysicalBatchMutationV1 {
     Put {
         key: Vec<u8>,
         bytes: Vec<u8>,
@@ -1234,7 +1234,7 @@ pub enum NativeBatchMutationV1 {
     },
 }
 
-impl NativeBatchMutationV1 {
+impl PhysicalBatchMutationV1 {
     pub fn key(&self) -> &[u8] {
         match self {
             Self::Put { key, .. } | Self::Delete { key } => key,
@@ -1242,16 +1242,16 @@ impl NativeBatchMutationV1 {
     }
 }
 
-impl NativePreparedMutationV1 {
+impl PhysicalPreparedMutationV1 {
     pub fn key(&self) -> &[u8] {
         match self {
-            Self::NativePut { key, .. } | Self::NativeDelete { key, .. } => key,
+            Self::PhysicalPut { key, .. } | Self::PhysicalDelete { key, .. } => key,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NativeBatchV1 {
+pub struct PhysicalBatchV1 {
     pub id: BatchId,
     pub branch: String,
     pub base_commit: CommitId,

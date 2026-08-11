@@ -13,11 +13,11 @@ use crate::{
     ErrorCode, EtagPredicateV1, GcCandidateV1, GcFenceV1, GcMarkRunStateV1, GcMarkRunV1,
     GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GetRequest, IdSource, ImmutablePut,
     InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
-    NativeBatchV1, NativePreparedMutationV1, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1,
-    OperationId, OperationKind, OperationRecordV1, PhysicalVersion, ProllyObjectStore,
-    RandomIdSource, RefGeneration, ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result,
-    RetentionPinV1, RetryAdvice, StorageToken, SystemClock, TreeRootV1,
+    ObjectData, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition, ObjectVersionId,
+    ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1, OperationId, OperationKind,
+    OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1, PhysicalVersion,
+    ProllyObjectStore, RandomIdSource, RefGeneration, ReflogEntryV1, RepositoryFormatV1,
+    RepositoryId, Result, RetentionPinV1, RetryAdvice, StorageToken, SystemClock, TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
@@ -35,7 +35,7 @@ pub struct RepositoryOptions {
     pub writer: String,
     pub limits: CanonicalLimits,
     pub state_tree_format: TreeFormat,
-    /// Duration of the repository-scoped native writer lease. Renewal is
+    /// Duration of the repository-scoped writer lease. Renewal is
     /// amortized and is not part of an ordinary operation's foreground calls.
     pub writer_lease_millis: u64,
     /// Open without acquiring mutation authority.
@@ -43,7 +43,7 @@ pub struct RepositoryOptions {
     pub reflog_retention_millis: u64,
     pub history_traversal_limit: usize,
     /// Maximum exact physical deletions per second during GC. Zero disables
-    /// pacing. The native format accepts 1..=1,000 when configured.
+    /// pacing. The physical format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
     pub clock: Arc<dyn Clock>,
     pub ids: Arc<dyn IdSource>,
@@ -222,20 +222,20 @@ struct WarmBranchState {
 #[derive(Default)]
 struct RetainedClosure {
     paths: BTreeSet<ObjectPath>,
-    native_versions: BTreeSet<(ObjectPath, String)>,
+    physical_versions: BTreeSet<(ObjectPath, String)>,
 }
 
 impl RetainedClosure {
     fn contains(&self, path: &ObjectPath, version: Option<&str>) -> bool {
         self.paths.contains(path)
             || version.is_some_and(|version| {
-                self.native_versions
+                self.physical_versions
                     .contains(&(path.clone(), version.to_string()))
             })
     }
 
     fn len(&self) -> usize {
-        self.paths.len() + self.native_versions.len()
+        self.paths.len() + self.physical_versions.len()
     }
 }
 
@@ -268,7 +268,7 @@ pub struct Repository<P: ObjectPlane> {
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
     warm_branches: Arc<RwLock<BTreeMap<String, WarmBranchState>>>,
     commit_cache: Arc<RwLock<BTreeMap<CommitId, BucketCommitV1>>>,
-    native_publication: Arc<tokio::sync::Mutex<()>>,
+    physical_publication: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl<P: ObjectPlane> Repository<P> {
@@ -290,10 +290,10 @@ impl<P: ObjectPlane> Repository<P> {
             format_version: RepositoryFormatV1::VERSION,
             state_tree_format: options.state_tree_format.clone(),
             canonical_limits: options.limits.clone(),
-            min_reader_version: RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION,
-            min_writer_version: RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION,
+            min_reader_version: RepositoryFormatV1::PROLLY_S3_PROTOCOL_VERSION,
+            min_writer_version: RepositoryFormatV1::PROLLY_S3_PROTOCOL_VERSION,
             created_at_millis,
-            required_capability_profile: RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE,
+            required_capability_profile: RepositoryFormatV1::PROLLY_S3_CAPABILITY_PROFILE,
         };
         let proposed_intent = InitializationIntentV1 {
             repository_id,
@@ -321,7 +321,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_format_compatibility(&intent.format, &options)?;
         let mut repository =
             Self::from_format(plane.clone(), options.clone(), intent.format.clone())?;
-        repository.acquire_native_writer().await?;
+        repository.acquire_writer().await?;
 
         let empty = repository.engine.create();
         let empty_state = BucketStateV1 {
@@ -453,7 +453,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_format_compatibility(&format, &options)?;
         let mut repository = Self::from_format(plane, options, format)?;
         repository.load_latest_node_index_checkpoint().await?;
-        repository.acquire_native_writer().await?;
+        repository.acquire_writer().await?;
         Ok(repository)
     }
 
@@ -478,7 +478,7 @@ impl<P: ObjectPlane> Repository<P> {
             writer_lease: Arc::new(RwLock::new(None)),
             warm_branches: Arc::new(RwLock::new(BTreeMap::new())),
             commit_cache: Arc::new(RwLock::new(BTreeMap::new())),
-            native_publication: Arc::new(tokio::sync::Mutex::new(())),
+            physical_publication: Arc::new(tokio::sync::Mutex::new(())),
         })
     }
 
@@ -576,7 +576,7 @@ impl<P: ObjectPlane> Repository<P> {
         self.options.clock.now_millis()
     }
 
-    async fn acquire_native_writer(&mut self) -> Result<()> {
+    async fn acquire_writer(&mut self) -> Result<()> {
         if self.options.read_only {
             return Ok(());
         }
@@ -615,13 +615,13 @@ impl<P: ObjectPlane> Repository<P> {
                 if current.writer_id != self.options.writer {
                     return Err(Error::new(
                         ErrorCode::PreconditionFailed,
-                        "native repository is owned by another writer; takeover requires an explicit credential-isolated handoff",
+                        "repository is owned by another writer; takeover requires an explicit credential-isolated handoff",
                     ));
                 }
                 if current.expires_at_millis <= now {
                     return Err(Error::new(
                         ErrorCode::PreconditionFailed,
-                        "native writer lease expired; automatic reacquisition is forbidden",
+                        "writer lease expired; automatic reacquisition is forbidden",
                     ));
                 }
                 let mut renewed = current;
@@ -650,7 +650,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native writer lease changed during acquisition",
+                "writer lease changed during acquisition",
             )),
         }
     }
@@ -674,7 +674,7 @@ impl<P: ObjectPlane> Repository<P> {
         if held.value.expires_at_millis <= now {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native writer lease expired; publication is fenced",
+                "writer lease expired; publication is fenced",
             ));
         }
         let mut renewed = held.value;
@@ -706,7 +706,7 @@ impl<P: ObjectPlane> Repository<P> {
                 })? = None;
                 Err(Error::new(
                     ErrorCode::PreconditionFailed,
-                    "native writer lease was lost; publication is fenced",
+                    "writer lease was lost; publication is fenced",
                 ))
             }
             Err(error) => {
@@ -722,14 +722,14 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    /// Run independent native-writer lease renewal until the returned handle
+    /// Run independent exclusive-writer lease renewal until the returned handle
     /// is dropped. A failed or ambiguous renewal fences this repository before
     /// the task exits.
     pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
         if self.options.read_only {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
-                "writer lease maintenance requires a writable native repository",
+                "writer lease maintenance requires a writable repository",
             ));
         }
         let interval = Duration::from_millis((self.options.writer_lease_millis / 3).max(100));
@@ -748,10 +748,10 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(WriterLeaseMaintenance { task })
     }
 
-    /// Explicitly take over an expired or credential-revoked native writer.
+    /// Explicitly take over an expired or credential-revoked writer.
     /// The caller must have independently stopped/revoked the old writer; S3
     /// cannot make ref CAS conditional on this separate lease object.
-    pub async fn takeover_native_writer(
+    pub async fn takeover_writer(
         &mut self,
         expected_writer: &str,
         expected_generation: u64,
@@ -764,9 +764,11 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let path = writer_lease_path(&self.options.repository_prefix)?;
-        let stored = self.plane.load_mutable(&path).await?.ok_or_else(|| {
-            Error::new(ErrorCode::MissingClosure, "native writer lease is missing")
-        })?;
+        let stored = self
+            .plane
+            .load_mutable(&path)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "writer lease is missing"))?;
         let current: crate::ExclusiveWriterLeaseV1 = decode_canonical(&stored.bytes)?;
         current.validate(self.format.repository_id)?;
         let next_generation = expected_generation.checked_add(1).ok_or_else(|| {
@@ -897,7 +899,7 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(next_generation)
     }
 
-    async fn native_writer_generation_for_mutation(&self) -> Result<u64> {
+    async fn writer_generation_for_mutation(&self) -> Result<u64> {
         let held = self
             .writer_lease
             .read()
@@ -906,14 +908,14 @@ impl<P: ObjectPlane> Repository<P> {
             .ok_or_else(|| {
                 Error::new(
                     ErrorCode::PreconditionFailed,
-                    "native repository has no exclusive writer authority",
+                    "repository has no exclusive writer authority",
                 )
             })?;
         let now = self.now_millis()?;
         if held.value.expires_at_millis <= now {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native writer lease expired; publication is fenced",
+                "writer lease expired; publication is fenced",
             ));
         }
         let renew_at = held
@@ -935,7 +937,7 @@ impl<P: ObjectPlane> Repository<P> {
             .ok_or_else(|| {
                 Error::new(
                     ErrorCode::PreconditionFailed,
-                    "native repository has no exclusive writer authority",
+                    "repository has no exclusive writer authority",
                 )
             })
     }
@@ -1026,17 +1028,18 @@ impl<P: ObjectPlane> Repository<P> {
         self.options.ids.batch()
     }
 
-    /// Replay the complete logical history into an empty native-versioned
+    /// Replay the complete logical history into an empty prolly-s3
     /// destination. Provider attestations and maintenance state remain local.
     pub async fn clone_to<Q: ObjectPlane>(
         &self,
         destination: Arc<Q>,
         destination_prefix: &str,
     ) -> Result<CloneReport> {
-        self.clone_native_to(destination, destination_prefix).await
+        self.clone_physical_to(destination, destination_prefix)
+            .await
     }
 
-    async fn clone_native_to<Q: ObjectPlane>(
+    async fn clone_physical_to<Q: ObjectPlane>(
         &self,
         destination: Arc<Q>,
         destination_prefix: &str,
@@ -1054,7 +1057,7 @@ impl<P: ObjectPlane> Repository<P> {
             if format != self.format {
                 return Err(Error::new(
                     ErrorCode::RepositoryFormatConflict,
-                    "native clone destination has a different repository format",
+                    "repository clone destination has a different repository format",
                 ));
             }
             false
@@ -1083,7 +1086,7 @@ impl<P: ObjectPlane> Repository<P> {
                 }) {
                     return Err(Error::new(
                         ErrorCode::RepositoryFormatConflict,
-                        "native clone destination contains repository data without a format marker",
+                        "repository clone destination contains repository data without a format marker",
                     ));
                 }
                 continuation = page.continuation;
@@ -1108,7 +1111,7 @@ impl<P: ObjectPlane> Repository<P> {
                 CompareExchangeOutcome::Conflict(_) => {
                     return Err(Error::new(
                         ErrorCode::RepositoryFormatConflict,
-                        "native clone destination format was created concurrently",
+                        "repository clone destination format was created concurrently",
                     ))
                 }
             }
@@ -1119,7 +1122,7 @@ impl<P: ObjectPlane> Repository<P> {
         target_options.read_only = false;
         let mut target =
             Repository::<Q>::from_format(destination, target_options, self.format.clone())?;
-        target.acquire_native_writer().await?;
+        target.acquire_writer().await?;
         let target = Arc::new(target);
         let _lease_maintenance = target.start_writer_lease_maintenance()?;
 
@@ -1131,9 +1134,9 @@ impl<P: ObjectPlane> Repository<P> {
             .chain(tags.iter().map(|tag| tag.target))
             .collect::<Vec<_>>();
         let (commit_map, sync) = self
-            .replay_native_history_to(target.as_ref(), &roots, false)
+            .replay_physical_history_to(target.as_ref(), &roots, false)
             .await?;
-        let writer_fence_generation = target.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = target.writer_generation_for_mutation().await?;
         let mut report = CloneReport {
             immutable_objects: sync.copied_objects + usize::from(format_created),
             immutable_bytes: sync.copied_bytes,
@@ -1144,7 +1147,7 @@ impl<P: ObjectPlane> Repository<P> {
             let target_id = *commit_map.get(&branch.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
-                    "native clone branch target was not replayed",
+                    "repository clone branch target was not replayed",
                 )
             })?;
             let path = branch_path(destination_prefix, &branch.name)?;
@@ -1153,7 +1156,7 @@ impl<P: ObjectPlane> Repository<P> {
                 if value.target != target_id || value.tombstone {
                     return Err(Error::new(
                         ErrorCode::RefConflict,
-                        "native clone destination branch has a divergent target",
+                        "repository clone destination branch has a divergent target",
                     ));
                 }
                 report.refs += 1;
@@ -1167,7 +1170,7 @@ impl<P: ObjectPlane> Repository<P> {
                 new_target: target_id,
                 operation,
                 actor: target.options.writer.clone(),
-                message: "native logical clone".to_string(),
+                message: "logical clone".to_string(),
                 created_at_millis,
             };
             let value = crate::RefValueV1 {
@@ -1201,7 +1204,7 @@ impl<P: ObjectPlane> Repository<P> {
                     if current.target != target_id || current.tombstone {
                         return Err(Error::new(
                             ErrorCode::RefConflict,
-                            "native clone destination branch was created concurrently",
+                            "repository clone destination branch was created concurrently",
                         ));
                     }
                     report.refs += 1;
@@ -1209,7 +1212,7 @@ impl<P: ObjectPlane> Repository<P> {
                 CompareExchangeOutcome::Conflict(None) => {
                     return Err(Error::new(
                         ErrorCode::RefConflict,
-                        "native clone branch create returned an empty conflict",
+                        "repository clone branch create returned an empty conflict",
                     ))
                 }
             }
@@ -1218,7 +1221,7 @@ impl<P: ObjectPlane> Repository<P> {
             let target_id = *commit_map.get(&tag.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
-                    "native clone tag target was not replayed",
+                    "repository clone tag target was not replayed",
                 )
             })?;
             let path = tag_path(destination_prefix, &tag.name)?;
@@ -1227,7 +1230,7 @@ impl<P: ObjectPlane> Repository<P> {
                 if value.target != target_id || value.tombstone {
                     return Err(Error::new(
                         ErrorCode::RefConflict,
-                        "native clone destination tag has a divergent target",
+                        "repository clone destination tag has a divergent target",
                     ));
                 }
                 report.refs += 1;
@@ -1241,7 +1244,7 @@ impl<P: ObjectPlane> Repository<P> {
                 new_target: target_id,
                 operation,
                 actor: target.options.writer.clone(),
-                message: "native logical clone tag".to_string(),
+                message: "logical clone tag".to_string(),
                 created_at_millis,
             };
             let reflog_id = target.store_tag_reflog(&reflog).await?;
@@ -1271,7 +1274,7 @@ impl<P: ObjectPlane> Repository<P> {
                     if current.target != target_id || current.tombstone {
                         return Err(Error::new(
                             ErrorCode::RefConflict,
-                            "native clone destination tag was created concurrently",
+                            "repository clone destination tag was created concurrently",
                         ));
                     }
                     report.refs += 1;
@@ -1279,7 +1282,7 @@ impl<P: ObjectPlane> Repository<P> {
                 CompareExchangeOutcome::Conflict(None) => {
                     return Err(Error::new(
                         ErrorCode::RefConflict,
-                        "native clone tag create returned an empty conflict",
+                        "repository clone tag create returned an empty conflict",
                     ))
                 }
             }
@@ -1288,18 +1291,20 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(report)
     }
 
-    async fn clone_native_version_binding<Q: ObjectPlane>(
+    async fn clone_physical_version_binding<Q: ObjectPlane>(
         &self,
         target: &Repository<Q>,
         key: &[u8],
         version: &ObjectVersionV1,
         operation: OperationId,
         writer_fence_generation: u64,
-    ) -> Result<crate::NativeObjectBindingV1> {
-        let path =
-            ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
-                Error::new(ErrorCode::CorruptCommit, "native clone key is not UTF-8")
-            })?)?;
+    ) -> Result<crate::PhysicalObjectBindingV1> {
+        let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "repository clone key is not UTF-8",
+            )
+        })?)?;
         match (&version.body.kind, &version.binding) {
             (
                 LogicalObjectVersionKindV1::Live {
@@ -1309,7 +1314,7 @@ impl<P: ObjectPlane> Repository<P> {
                     user_metadata,
                     ..
                 },
-                crate::NativeObjectBindingV1::Live {
+                crate::PhysicalObjectBindingV1::Live {
                     version_id,
                     checksum_sha256,
                     ..
@@ -1318,12 +1323,12 @@ impl<P: ObjectPlane> Repository<P> {
                 let spool = tempfile::NamedTempFile::new().map_err(|error| {
                     Error::new(
                         ErrorCode::Transport,
-                        format!("could not create native clone spool: {error}"),
+                        format!("could not create repository clone spool: {error}"),
                     )
                 })?;
                 let source = self
                     .plane
-                    .get_native_file(crate::NativeFileGet {
+                    .get_physical_file(crate::PhysicalFileGet {
                         path: path.clone(),
                         version_id: version_id.clone(),
                         body_path: spool.path().to_path_buf(),
@@ -1335,12 +1340,12 @@ impl<P: ObjectPlane> Repository<P> {
                 {
                     return Err(Error::new(
                         ErrorCode::ChecksumMismatch,
-                        "native clone source object failed logical checksum verification",
+                        "repository clone source object failed logical checksum verification",
                     ));
                 }
                 let write = target
                     .plane
-                    .put_native_file(crate::NativeFilePut {
+                    .put_physical_file(crate::PhysicalFilePut {
                         path,
                         body_path: spool.path().to_path_buf(),
                         size: source.size,
@@ -1355,22 +1360,22 @@ impl<P: ObjectPlane> Repository<P> {
                     .await?;
                 if write.size != *size
                     || write.checksums.sha256 != Some(*checksum_sha256)
-                    || !matches!(write.binding, crate::NativeObjectBindingV1::Live { .. })
+                    || !matches!(write.binding, crate::PhysicalObjectBindingV1::Live { .. })
                 {
                     return Err(Error::new(
                         ErrorCode::ChecksumMismatch,
-                        "native clone destination object failed logical checksum verification",
+                        "repository clone destination object failed logical checksum verification",
                     ));
                 }
                 Ok(write.binding)
             }
             (
                 LogicalObjectVersionKindV1::DeleteMarker,
-                crate::NativeObjectBindingV1::DeleteMarker { .. },
+                crate::PhysicalObjectBindingV1::DeleteMarker { .. },
             ) => {
                 match target
                     .plane
-                    .delete_native(crate::NativeDelete {
+                    .delete_physical(crate::PhysicalDelete {
                         path: path.clone(),
                         repository: target.format.repository_id,
                         operation,
@@ -1379,7 +1384,7 @@ impl<P: ObjectPlane> Repository<P> {
                     .await
                 {
                     Ok(binding) => Ok(binding),
-                    Err(error) => match target.reconcile_native_delete(&path).await? {
+                    Err(error) => match target.reconcile_physical_delete(&path).await? {
                         Some(binding) => Ok(binding),
                         None => Err(error),
                     },
@@ -1387,12 +1392,12 @@ impl<P: ObjectPlane> Repository<P> {
             }
             _ => Err(Error::new(
                 ErrorCode::CorruptCommit,
-                "native clone source version has an invalid binding",
+                "repository clone source version has an invalid binding",
             )),
         }
     }
 
-    async fn ordered_native_commit_closure(
+    async fn ordered_physical_commit_closure(
         &self,
         roots: &[CommitId],
     ) -> Result<Vec<(CommitId, BucketCommitV1)>> {
@@ -1405,7 +1410,7 @@ impl<P: ObjectPlane> Repository<P> {
             if commits.len() >= self.options.history_traversal_limit {
                 return Err(Error::new(
                     ErrorCode::HistoryLimitExceeded,
-                    "native transfer commit closure exceeded its configured history limit",
+                    "cross-repository transfer commit closure exceeded its configured history limit",
                 ));
             }
             let commit = self.load_commit(id).await?;
@@ -1421,7 +1426,7 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(ordered)
     }
 
-    async fn all_native_commits(&self) -> Result<Vec<(CommitId, BucketCommitV1)>> {
+    async fn all_physical_commits(&self) -> Result<Vec<(CommitId, BucketCommitV1)>> {
         let prefix = format!("{}/commits/sha256/", self.options.repository_prefix);
         let mut continuation = None;
         let mut commits = BTreeMap::new();
@@ -1440,13 +1445,13 @@ impl<P: ObjectPlane> Repository<P> {
                 let raw = hex::decode(encoded).map_err(|_| {
                     Error::new(
                         ErrorCode::CorruptCommit,
-                        "native transfer commit path is not canonical hex",
+                        "cross-repository transfer commit path is not canonical hex",
                     )
                 })?;
                 let id = CommitId::from_hash(raw.try_into().map_err(|_| {
                     Error::new(
                         ErrorCode::CorruptCommit,
-                        "native transfer commit path has the wrong ID length",
+                        "cross-repository transfer commit path has the wrong ID length",
                     )
                 })?);
                 let commit = self.load_commit(id).await?;
@@ -1466,7 +1471,7 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(ordered)
     }
 
-    async fn native_logical_commit_fingerprints(
+    async fn physical_logical_commit_fingerprints(
         &self,
         ordered: &[(CommitId, BucketCommitV1)],
     ) -> Result<BTreeMap<CommitId, [u8; 32]>> {
@@ -1477,7 +1482,7 @@ impl<P: ObjectPlane> Repository<P> {
                 parent_bytes.extend_from_slice(fingerprints.get(parent).ok_or_else(|| {
                     Error::new(
                         ErrorCode::CorruptCommit,
-                        "native logical fingerprint encountered a child before its parent",
+                        "logical fingerprint encountered a child before its parent",
                     )
                 })?);
             }
@@ -1488,7 +1493,7 @@ impl<P: ObjectPlane> Repository<P> {
             let message = encode_canonical(&commit.message)?;
             let metadata = encode_canonical(&commit.metadata)?;
             let fingerprint = derive_input_digest(&[
-                b"native-logical-commit-v1",
+                b"prolly-s3/logical-commit/v1",
                 &parent_bytes,
                 &objects,
                 &operations,
@@ -1504,22 +1509,22 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(fingerprints)
     }
 
-    async fn replay_native_history_to<Q: ObjectPlane>(
+    async fn replay_physical_history_to<Q: ObjectPlane>(
         &self,
         target: &Repository<Q>,
         source_roots: &[CommitId],
         force_rebind: bool,
     ) -> Result<(BTreeMap<CommitId, CommitId>, SyncReport)> {
-        let source_ordered = self.ordered_native_commit_closure(source_roots).await?;
+        let source_ordered = self.ordered_physical_commit_closure(source_roots).await?;
         let source_fingerprints = self
-            .native_logical_commit_fingerprints(&source_ordered)
+            .physical_logical_commit_fingerprints(&source_ordered)
             .await?;
         let target_by_fingerprint = if force_rebind {
             BTreeMap::new()
         } else {
-            let target_ordered = target.all_native_commits().await?;
+            let target_ordered = target.all_physical_commits().await?;
             let target_fingerprints = target
-                .native_logical_commit_fingerprints(&target_ordered)
+                .physical_logical_commit_fingerprints(&target_ordered)
                 .await?;
             target_fingerprints
                 .into_iter()
@@ -1538,8 +1543,8 @@ impl<P: ObjectPlane> Repository<P> {
                 report.already_present += 1;
             }
         }
-        let writer_fence_generation = target.native_writer_generation_for_mutation().await?;
-        let mut binding_map: BTreeMap<(Vec<u8>, ObjectVersionId), crate::NativeObjectBindingV1> =
+        let writer_fence_generation = target.writer_generation_for_mutation().await?;
+        let mut binding_map: BTreeMap<(Vec<u8>, ObjectVersionId), crate::PhysicalObjectBindingV1> =
             BTreeMap::new();
         for (source_id, source_commit) in source_ordered {
             if commit_map.contains_key(&source_id) {
@@ -1550,7 +1555,7 @@ impl<P: ObjectPlane> Repository<P> {
                 mapped_parents.push(*commit_map.get(parent).ok_or_else(|| {
                     Error::new(
                         ErrorCode::MissingClosure,
-                        "native transfer parent was not mapped",
+                        "cross-repository transfer parent was not mapped",
                     )
                 })?);
             }
@@ -1599,7 +1604,7 @@ impl<P: ObjectPlane> Repository<P> {
                     {
                         Ok(existing) => (existing.binding, false),
                         Err(error) if error.code == ErrorCode::NoSuchVersion => (
-                            self.clone_native_version_binding(
+                            self.clone_physical_version_binding(
                                 target,
                                 &transition.key,
                                 &version,
@@ -1613,7 +1618,7 @@ impl<P: ObjectPlane> Repository<P> {
                     }
                 } else {
                     (
-                        self.clone_native_version_binding(
+                        self.clone_physical_version_binding(
                             target,
                             &transition.key,
                             &version,
@@ -1633,7 +1638,7 @@ impl<P: ObjectPlane> Repository<P> {
                         report.copied_bytes.checked_add(size).ok_or_else(|| {
                             Error::new(
                                 ErrorCode::EntityTooLarge,
-                                "native transfer byte count overflow",
+                                "cross-repository transfer byte count overflow",
                             )
                         })?;
                     report.copied_objects += 1;
@@ -1672,7 +1677,7 @@ impl<P: ObjectPlane> Repository<P> {
                     .ok_or_else(|| {
                         Error::new(
                             ErrorCode::CorruptCommit,
-                            "native transfer delta names a missing operation",
+                            "cross-repository transfer delta names a missing operation",
                         )
                     })?;
                 operations = target
@@ -1690,7 +1695,7 @@ impl<P: ObjectPlane> Repository<P> {
             {
                 return Err(Error::new(
                     ErrorCode::CorruptCommit,
-                    "native transfer replay did not reproduce the logical commit state",
+                    "cross-repository transfer replay did not reproduce the logical commit state",
                 ));
             }
             let node_pack = target
@@ -1730,10 +1735,10 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut report) = source
-            .replay_native_history_to(self, &[source_head], false)
+            .replay_physical_history_to(self, &[source_head], false)
             .await?;
         report.source_head = Some(*mapped.get(&source_head).ok_or_else(|| {
             Error::new(
@@ -1754,14 +1759,14 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
         let source_head = self.head(source_branch).await?;
-        let _publication = destination.native_publication.lock().await;
+        let _publication = destination.physical_publication.lock().await;
         let (mapped, mut report) = self
-            .replay_native_history_to(destination, &[source_head], false)
+            .replay_physical_history_to(destination, &[source_head], false)
             .await?;
         let mapped_head = *mapped.get(&source_head).ok_or_else(|| {
             Error::new(
                 ErrorCode::MissingClosure,
-                "native push did not map its selected source head",
+                "push did not map its selected source head",
             )
         })?;
         if reason.trim().is_empty() {
@@ -1803,8 +1808,8 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(name)?;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let _native_publication = self.native_publication.lock().await;
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let _physical_publication = self.physical_publication.lock().await;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
             branch: name.to_string(),
@@ -1872,8 +1877,8 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_branch(&self, name: &str, expected: CommitId) -> Result<()> {
-        let _native_publication = self.native_publication.lock().await;
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let _physical_publication = self.physical_publication.lock().await;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let loaded = self.load_ref(name).await?;
         if loaded.value.target != expected {
             return Err(Error::new(
@@ -2011,7 +2016,7 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn reflog(&self, branch: &str, id: crate::ReflogEntryId) -> Result<ReflogEntryV1> {
         if let Some((_, entry)) = self
-            .native_reflog_history(branch)
+            .physical_reflog_history(branch)
             .await?
             .into_iter()
             .find(|(entry_id, _)| *entry_id == id)
@@ -2028,7 +2033,7 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         branch: &str,
     ) -> Result<Vec<(crate::ReflogEntryId, ReflogEntryV1)>> {
-        let mut entries = self.native_reflog_history(branch).await?;
+        let mut entries = self.physical_reflog_history(branch).await?;
         entries.sort_by(|left, right| {
             left.1
                 .created_at_millis
@@ -2038,7 +2043,7 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(entries)
     }
 
-    async fn native_reflog_history(
+    async fn physical_reflog_history(
         &self,
         branch: &str,
     ) -> Result<Vec<(crate::ReflogEntryId, ReflogEntryV1)>> {
@@ -2060,13 +2065,13 @@ impl<P: ObjectPlane> Repository<P> {
             if !seen.insert(id) {
                 return Err(Error::new(
                     ErrorCode::CorruptCommit,
-                    "native first-parent history contains a cycle",
+                    "physical first-parent history contains a cycle",
                 ));
             }
             if seen.len() > self.options.history_traversal_limit {
                 return Err(Error::new(
                     ErrorCode::HistoryLimitExceeded,
-                    "native reflog traversal exceeded its configured limit",
+                    "reflog traversal exceeded its configured limit",
                 ));
             }
             let commit = self.load_commit(id).await?;
@@ -2095,7 +2100,7 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let _native_publication = self.native_publication.lock().await;
+        let _physical_publication = self.physical_publication.lock().await;
         self.move_ref_inner(branch, loaded, target, reason).await
     }
 
@@ -2106,7 +2111,7 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
         let reflog_entry = ReflogEntryV1 {
@@ -2233,8 +2238,8 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         validate_branch(name)?;
         self.load_commit(target).await?;
-        let _publication = self.native_publication.lock().await;
-        self.native_writer_generation_for_mutation().await?;
+        let _publication = self.physical_publication.lock().await;
+        self.writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
         let reflog = self
@@ -2418,7 +2423,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     /// Creates a named retention root. Pins are mutable tombstoned records so
-    /// deleting one never reveals an older physical S3 version.
+    /// deleting one never reveals an older S3 version.
     pub async fn create_retention_pin(
         &self,
         name: &str,
@@ -2435,8 +2440,8 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.load_commit(target).await?;
-        let _publication = self.native_publication.lock().await;
-        self.native_writer_generation_for_mutation().await?;
+        let _publication = self.physical_publication.lock().await;
+        self.writer_generation_for_mutation().await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
         let now = self.now_millis()?;
@@ -2752,7 +2757,7 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<CommitReceipt> {
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
-        self.put_native_bytes_checked(
+        self.put_physical_bytes_checked(
             branch,
             key,
             bytes,
@@ -2765,7 +2770,7 @@ impl<P: ObjectPlane> Repository<P> {
         .await
     }
 
-    /// Spool a stream once, then upload it as one native S3 object version.
+    /// Spool a stream once, then upload it as one S3 object version.
     pub async fn put_stream<S, B, E>(
         &self,
         branch: &str,
@@ -2816,7 +2821,7 @@ impl<P: ObjectPlane> Repository<P> {
         let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("could not create native upload spool: {error}"),
+                format!("could not create physical upload spool: {error}"),
             )
         })?;
         let mut size = 0_u64;
@@ -2826,23 +2831,23 @@ impl<P: ObjectPlane> Repository<P> {
             let next = next.map_err(|error| {
                 Error::new(
                     ErrorCode::Transport,
-                    format!("native object input stream failed: {error}"),
+                    format!("physical object input stream failed: {error}"),
                 )
             })?;
             let next = next.as_ref();
             size = size.checked_add(next.len() as u64).ok_or_else(|| {
-                Error::new(ErrorCode::EntityTooLarge, "native object length overflow")
+                Error::new(ErrorCode::EntityTooLarge, "physical object length overflow")
             })?;
             if size > self.format.canonical_limits.max_object_bytes {
                 return Err(Error::new(
                     ErrorCode::EntityTooLarge,
-                    "native object exceeds the repository size limit",
+                    "physical object exceeds the repository size limit",
                 ));
             }
             spool.write_all(next).map_err(|error| {
                 Error::new(
                     ErrorCode::Transport,
-                    format!("native upload spool write failed: {error}"),
+                    format!("physical upload spool write failed: {error}"),
                 )
             })?;
             sha256.update(next);
@@ -2851,12 +2856,12 @@ impl<P: ObjectPlane> Repository<P> {
         spool.flush().map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native upload spool flush failed: {error}"),
+                format!("physical upload spool flush failed: {error}"),
             )
         })?;
         let checksum_sha256: [u8; 32] = sha256.finalize().into();
         let checksum_md5: [u8; 16] = md5.finalize().into();
-        self.put_native_file_checked(
+        self.put_physical_file_checked(
             branch,
             key,
             spool.path().to_path_buf(),
@@ -2873,7 +2878,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn put_native_bytes_checked(
+    async fn put_physical_bytes_checked(
         &self,
         branch: &str,
         key: Vec<u8>,
@@ -2884,7 +2889,7 @@ impl<P: ObjectPlane> Repository<P> {
         condition: ObjectWriteConditionV1,
         expected_checksums: ChecksumExpectation,
     ) -> Result<CommitReceipt> {
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         let expected_size = bytes.len() as u64;
         let expected_sha256 = crate::codec::sha256(&bytes);
         let expected_md5: [u8; 16] = Md5::digest(&bytes).into();
@@ -2897,7 +2902,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "request checksum does not match the native object body",
+                "request checksum does not match the physical object body",
             ));
         }
         let kind = LogicalObjectVersionKindV1::Live {
@@ -2926,14 +2931,14 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
-        let native = self
+        let physical = self
             .plane
-            .put_native(crate::NativePut {
+            .put_physical(crate::PhysicalPut {
                 path: path.clone(),
                 bytes,
                 headers: headers.clone(),
@@ -2943,30 +2948,30 @@ impl<P: ObjectPlane> Repository<P> {
                 writer_fence_generation,
             })
             .await;
-        let native = match native {
+        let physical = match physical {
             Ok(value) => value,
             Err(error) => match self
-                .reconcile_native_payload(&path, operation, expected_sha256)
+                .reconcile_physical_payload(&path, operation, expected_sha256)
                 .await?
             {
                 Some(value) => value,
                 None => return Err(error),
             },
         };
-        if native.size != expected_size
-            || native.checksums.sha256 != Some(expected_sha256)
-            || native.checksums.md5 != Some(expected_md5)
+        if physical.size != expected_size
+            || physical.checksums.sha256 != Some(expected_sha256)
+            || physical.checksums.md5 != Some(expected_md5)
         {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native provider result disagrees with the uploaded object identity",
+                "provider result disagrees with the uploaded object identity",
             ));
         }
         self.commit_one(
             branch,
             key,
             kind,
-            native.binding,
+            physical.binding,
             OperationKind::Put,
             operation,
             input_digest,
@@ -2977,7 +2982,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn put_native_file_checked(
+    async fn put_physical_file_checked(
         &self,
         branch: &str,
         key: Vec<u8>,
@@ -2991,7 +2996,7 @@ impl<P: ObjectPlane> Repository<P> {
         condition: ObjectWriteConditionV1,
         expected_checksums: ChecksumExpectation,
     ) -> Result<CommitReceipt> {
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         if expected_checksums
             .md5
             .is_some_and(|expected| expected != expected_md5)
@@ -3001,7 +3006,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "request checksum does not match the native object body",
+                "request checksum does not match the physical object body",
             ));
         }
         let kind = LogicalObjectVersionKindV1::Live {
@@ -3030,14 +3035,14 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
-        let native = self
+        let physical = self
             .plane
-            .put_native_file(crate::NativeFilePut {
+            .put_physical_file(crate::PhysicalFilePut {
                 path: path.clone(),
                 body_path,
                 size: expected_size,
@@ -3050,30 +3055,30 @@ impl<P: ObjectPlane> Repository<P> {
                 writer_fence_generation,
             })
             .await;
-        let native = match native {
+        let physical = match physical {
             Ok(value) => value,
             Err(error) => match self
-                .reconcile_native_payload(&path, operation, expected_sha256)
+                .reconcile_physical_payload(&path, operation, expected_sha256)
                 .await?
             {
                 Some(value) => value,
                 None => return Err(error),
             },
         };
-        if native.size != expected_size
-            || native.checksums.sha256 != Some(expected_sha256)
-            || native.checksums.md5 != Some(expected_md5)
+        if physical.size != expected_size
+            || physical.checksums.sha256 != Some(expected_sha256)
+            || physical.checksums.md5 != Some(expected_md5)
         {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native provider result disagrees with the uploaded object identity",
+                "provider result disagrees with the uploaded object identity",
             ));
         }
         self.commit_one(
             branch,
             key,
             kind,
-            native.binding,
+            physical.binding,
             OperationKind::Put,
             operation,
             input_digest,
@@ -3089,7 +3094,7 @@ impl<P: ObjectPlane> Repository<P> {
         version: ObjectVersionV1,
         range: Option<(u64, u64)>,
     ) -> BoxStream<'static, Result<bytes::Bytes>> {
-        let crate::NativeObjectBindingV1::Live {
+        let crate::PhysicalObjectBindingV1::Live {
             version_id,
             checksum_sha256,
             ..
@@ -3113,36 +3118,36 @@ impl<P: ObjectPlane> Repository<P> {
                     physical_version: Some(PhysicalVersion::Versioned { version_id }),
                 })
                 .await?
-                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "native object version is missing"))?;
+                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "physical object version is missing"))?;
             if range.is_none() && object.metadata.sha256 != checksum_sha256 {
                 Err(Error::new(
                     ErrorCode::CorruptContent,
-                    "native object bytes do not match the committed checksum",
+                    "physical object bytes do not match the committed checksum",
                 ))?;
             }
             yield bytes::Bytes::from(object.bytes);
         })
     }
 
-    pub async fn create_native_multipart_upload(
+    pub async fn create_physical_multipart_upload(
         &self,
         branch: &str,
         key: Vec<u8>,
         headers: ObjectHeaders,
         user_metadata: BTreeMap<String, String>,
         operation: Option<OperationId>,
-    ) -> Result<crate::NativeMultipartSessionV1> {
+    ) -> Result<crate::PhysicalMultipartSessionV1> {
         validate_branch(branch)?;
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
         let provider_upload_id = self
             .plane
-            .create_native_multipart(crate::NativeMultipartCreate {
+            .create_physical_multipart(crate::PhysicalMultipartCreate {
                 path,
                 headers: headers.clone(),
                 user_metadata: user_metadata.clone(),
@@ -3151,7 +3156,7 @@ impl<P: ObjectPlane> Repository<P> {
                 writer_fence_generation,
             })
             .await?;
-        let session = crate::NativeMultipartSessionV1 {
+        let session = crate::PhysicalMultipartSessionV1 {
             repository: self.format.repository_id,
             branch: branch.to_string(),
             key,
@@ -3167,17 +3172,17 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(session)
     }
 
-    pub async fn upload_native_multipart_part(
+    pub async fn upload_physical_multipart_part(
         &self,
-        session: &crate::NativeMultipartSessionV1,
+        session: &crate::PhysicalMultipartSessionV1,
         part_number: u32,
         bytes: Vec<u8>,
-    ) -> Result<crate::NativeMultipartPartResult> {
+    ) -> Result<crate::PhysicalMultipartPartResult> {
         session.validate_address(self.format.repository_id)?;
         if !(1..=10_000).contains(&part_number) || bytes.len() as u64 > MAX_MULTIPART_PART_BYTES {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native multipart part number or size is invalid",
+                "physical multipart part number or size is invalid",
             ));
         }
         let path =
@@ -3185,7 +3190,7 @@ impl<P: ObjectPlane> Repository<P> {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
         self.plane
-            .upload_native_multipart_part(crate::NativeMultipartUploadPart {
+            .upload_physical_multipart_part(crate::PhysicalMultipartUploadPart {
                 path,
                 upload_id: session.provider_upload_id.clone(),
                 part_number,
@@ -3194,12 +3199,12 @@ impl<P: ObjectPlane> Repository<P> {
             .await
     }
 
-    pub async fn upload_native_multipart_part_stream<S, B, E>(
+    pub async fn upload_physical_multipart_part_stream<S, B, E>(
         &self,
-        session: &crate::NativeMultipartSessionV1,
+        session: &crate::PhysicalMultipartSessionV1,
         part_number: u32,
         stream: S,
-    ) -> Result<crate::NativeMultipartPartResult>
+    ) -> Result<crate::PhysicalMultipartPartResult>
     where
         S: Stream<Item = std::result::Result<B, E>>,
         B: AsRef<[u8]>,
@@ -3216,7 +3221,7 @@ impl<P: ObjectPlane> Repository<P> {
         let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("could not create native multipart spool: {error}"),
+                format!("could not create physical multipart spool: {error}"),
             )
         })?;
         let mut size = 0_u64;
@@ -3225,7 +3230,7 @@ impl<P: ObjectPlane> Repository<P> {
             let next = next.map_err(|error| {
                 Error::new(
                     ErrorCode::Transport,
-                    format!("native multipart part body failed: {error}"),
+                    format!("physical multipart part body failed: {error}"),
                 )
             })?;
             let next = next.as_ref();
@@ -3241,7 +3246,7 @@ impl<P: ObjectPlane> Repository<P> {
             spool.write_all(next).map_err(|error| {
                 Error::new(
                     ErrorCode::Transport,
-                    format!("native multipart spool write failed: {error}"),
+                    format!("physical multipart spool write failed: {error}"),
                 )
             })?;
             checksum.update(next);
@@ -3249,7 +3254,7 @@ impl<P: ObjectPlane> Repository<P> {
         spool.flush().map_err(|error| {
             Error::new(
                 ErrorCode::Transport,
-                format!("native multipart spool flush failed: {error}"),
+                format!("physical multipart spool flush failed: {error}"),
             )
         })?;
         let path =
@@ -3257,7 +3262,7 @@ impl<P: ObjectPlane> Repository<P> {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
         self.plane
-            .upload_native_multipart_file_part(crate::NativeMultipartFilePart {
+            .upload_physical_multipart_file_part(crate::PhysicalMultipartFilePart {
                 path,
                 upload_id: session.provider_upload_id.clone(),
                 part_number,
@@ -3268,15 +3273,15 @@ impl<P: ObjectPlane> Repository<P> {
             .await
     }
 
-    pub async fn upload_native_multipart_part_copy(
+    pub async fn upload_physical_multipart_part_copy(
         &self,
-        session: &crate::NativeMultipartSessionV1,
+        session: &crate::PhysicalMultipartSessionV1,
         part_number: u32,
         source_branch: &str,
         source_key: &[u8],
         source_version: Option<ObjectVersionId>,
         range: Option<(u64, u64)>,
-    ) -> Result<crate::NativeMultipartPartResult> {
+    ) -> Result<crate::PhysicalMultipartPartResult> {
         session.validate_address(self.format.repository_id)?;
         if !(1..=10_000).contains(&part_number) {
             return Err(Error::new(
@@ -3300,10 +3305,11 @@ impl<P: ObjectPlane> Repository<P> {
                 "multipart copy source is a delete marker",
             ));
         };
-        let crate::NativeObjectBindingV1::Live { version_id, .. } = &source.version.binding else {
+        let crate::PhysicalObjectBindingV1::Live { version_id, .. } = &source.version.binding
+        else {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
-                "native multipart live source has a delete-marker binding",
+                "physical multipart live source has a delete-marker binding",
             ));
         };
         let (physical_range, part_size) = match range {
@@ -3338,7 +3344,7 @@ impl<P: ObjectPlane> Repository<P> {
         };
         let result = self
             .plane
-            .upload_native_multipart_part_copy(crate::NativeMultipartUploadPartCopy {
+            .upload_physical_multipart_part_copy(crate::PhysicalMultipartUploadPartCopy {
                 source: ObjectPath::new(std::str::from_utf8(source_key).map_err(|_| {
                     Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
                 })?)?,
@@ -3358,16 +3364,16 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "native multipart copied part checksum differs from its source",
+                "physical multipart copied part checksum differs from its source",
             ));
         }
         Ok(result)
     }
 
-    pub async fn complete_native_multipart_upload(
+    pub async fn complete_physical_multipart_upload(
         &self,
-        session: crate::NativeMultipartSessionV1,
-        parts: Vec<crate::NativeMultipartCompletedPart>,
+        session: crate::PhysicalMultipartSessionV1,
+        parts: Vec<crate::PhysicalMultipartCompletedPart>,
         checksum_sha256: [u8; 32],
         checksum_md5: [u8; 16],
         size: u64,
@@ -3377,7 +3383,7 @@ impl<P: ObjectPlane> Repository<P> {
         if operation.is_some_and(|operation| operation != session.operation) {
             return Err(Error::new(
                 ErrorCode::IdempotencyConflict,
-                "native multipart completion must reuse its create operation ID",
+                "physical multipart completion must reuse its create operation ID",
             ));
         }
         if parts.is_empty()
@@ -3392,7 +3398,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native multipart completion has invalid ordering, count, or nonfinal part size",
+                "physical multipart completion has invalid ordering, count, or nonfinal part size",
             ));
         }
         let summed_size = parts.iter().try_fold(0_u64, |total, part| {
@@ -3406,7 +3412,7 @@ impl<P: ObjectPlane> Repository<P> {
         if summed_size != size || size > self.format.canonical_limits.max_object_bytes {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native multipart declared size does not match its part receipts",
+                "physical multipart declared size does not match its part receipts",
             ));
         }
         let kind = LogicalObjectVersionKindV1::Live {
@@ -3424,23 +3430,23 @@ impl<P: ObjectPlane> Repository<P> {
         let input_digest = derive_input_digest(&[
             self.format.repository_id.as_bytes(),
             session.branch.as_bytes(),
-            b"native-multipart-complete",
+            b"prolly-s3/multipart-complete/v1",
             &session.key,
             session.provider_upload_id.as_bytes(),
             &encode_canonical(&parts)?,
             &encode_canonical(&kind)?,
         ]);
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(&session.branch, session.operation, input_digest)
             .await?
         {
             return Ok(receipt);
         }
-        if self.native_writer_generation_for_mutation().await? != session.writer_fence_generation {
+        if self.writer_generation_for_mutation().await? != session.writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native multipart upload belongs to an older writer fence",
+                "physical multipart upload belongs to an older writer fence",
             ));
         }
         let path =
@@ -3449,7 +3455,7 @@ impl<P: ObjectPlane> Repository<P> {
             })?)?;
         let completed = self
             .plane
-            .complete_native_multipart(crate::NativeMultipartComplete {
+            .complete_physical_multipart(crate::PhysicalMultipartComplete {
                 path: path.clone(),
                 upload_id: session.provider_upload_id,
                 parts,
@@ -3461,7 +3467,7 @@ impl<P: ObjectPlane> Repository<P> {
         let completed = match completed {
             Ok(value) => value,
             Err(error) => match self
-                .reconcile_native_payload(&path, session.operation, checksum_sha256)
+                .reconcile_physical_payload(&path, session.operation, checksum_sha256)
                 .await?
             {
                 Some(value) => value,
@@ -3475,7 +3481,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
-                "native multipart result disagrees with its declared object identity",
+                "physical multipart result disagrees with its declared object identity",
             ));
         }
         self.commit_one(
@@ -3492,9 +3498,9 @@ impl<P: ObjectPlane> Repository<P> {
         .await
     }
 
-    pub async fn abort_native_multipart_upload(
+    pub async fn abort_physical_multipart_upload(
         &self,
-        session: &crate::NativeMultipartSessionV1,
+        session: &crate::PhysicalMultipartSessionV1,
     ) -> Result<()> {
         session.validate_address(self.format.repository_id)?;
         let path =
@@ -3502,23 +3508,23 @@ impl<P: ObjectPlane> Repository<P> {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
         self.plane
-            .abort_native_multipart(crate::NativeMultipartAbort {
+            .abort_physical_multipart(crate::PhysicalMultipartAbort {
                 path,
                 upload_id: session.provider_upload_id.clone(),
             })
             .await
     }
 
-    pub async fn begin_native_batch(
+    pub async fn begin_physical_batch(
         &self,
         branch: &str,
         message: impl Into<String>,
         expires_after_millis: u64,
-    ) -> Result<NativeBatchV1> {
+    ) -> Result<PhysicalBatchV1> {
         validate_branch(branch)?;
         let base_commit = self.warm_branch_state(branch).await?.reference.target;
         let now = self.now_millis()?;
-        Ok(NativeBatchV1 {
+        Ok(PhysicalBatchV1 {
             id: self.new_batch(),
             branch: branch.to_string(),
             base_commit,
@@ -3526,15 +3532,15 @@ impl<P: ObjectPlane> Repository<P> {
             message: message.into(),
             created_at_millis: now,
             expires_at_millis: now.checked_add(expires_after_millis).ok_or_else(|| {
-                Error::new(ErrorCode::InvalidRequest, "native batch expiry overflow")
+                Error::new(ErrorCode::InvalidRequest, "atomic batch expiry overflow")
             })?,
         })
     }
 
-    pub async fn publish_native_batch(
+    pub async fn publish_physical_batch(
         &self,
-        batch: NativeBatchV1,
-        mutations: Vec<crate::NativeBatchMutationV1>,
+        batch: PhysicalBatchV1,
+        mutations: Vec<crate::PhysicalBatchMutationV1>,
     ) -> Result<CommitReceipt> {
         if mutations.is_empty()
             || mutations.len() > self.format.canonical_limits.max_mutations_per_commit as usize
@@ -3542,18 +3548,18 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
-                "native batch is empty, expired, or exceeds the mutation limit",
+                "atomic batch is empty, expired, or exceeds the mutation limit",
             ));
         }
         for mutation in &mutations {
             self.validate_key(mutation.key())?;
         }
         let request_digest = derive_input_digest(&[
-            b"native-batch",
+            b"prolly-s3/batch/v1",
             &encode_canonical(&mutations)?,
             batch.base_commit.as_bytes(),
         ]);
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         let warm = self.warm_branch_state(&batch.branch).await?;
         if warm.reference.target != batch.base_commit {
             if let Some(receipt) = self
@@ -3564,14 +3570,14 @@ impl<P: ObjectPlane> Repository<P> {
             }
             return Err(Error::new(
                 ErrorCode::BatchConflict,
-                "branch moved since native batch creation",
+                "branch moved since atomic batch creation",
             ));
         }
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let mut prepared = BTreeMap::new();
         for mutation in mutations {
             match mutation {
-                crate::NativeBatchMutationV1::Put {
+                crate::PhysicalBatchMutationV1::Put {
                     key,
                     bytes,
                     headers,
@@ -3580,9 +3586,9 @@ impl<P: ObjectPlane> Repository<P> {
                     let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                         Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
                     })?)?;
-                    let native = self
+                    let physical = self
                         .plane
-                        .put_native(crate::NativePut {
+                        .put_physical(crate::PhysicalPut {
                             path,
                             bytes,
                             headers: headers.clone(),
@@ -3594,24 +3600,24 @@ impl<P: ObjectPlane> Repository<P> {
                         .await?;
                     prepared.insert(
                         key.clone(),
-                        NativePreparedMutationV1::NativePut {
+                        PhysicalPreparedMutationV1::PhysicalPut {
                             key,
-                            size: native.size,
-                            logical_etag: native.logical_etag,
-                            checksums: native.checksums,
+                            size: physical.size,
+                            logical_etag: physical.logical_etag,
+                            checksums: physical.checksums,
                             headers,
                             user_metadata,
-                            binding: native.binding,
+                            binding: physical.binding,
                         },
                     );
                 }
-                crate::NativeBatchMutationV1::Delete { key } => {
+                crate::PhysicalBatchMutationV1::Delete { key } => {
                     let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                         Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
                     })?)?;
                     let binding = match self
                         .plane
-                        .delete_native(crate::NativeDelete {
+                        .delete_physical(crate::PhysicalDelete {
                             path: path.clone(),
                             repository: self.format.repository_id,
                             operation: batch.operation,
@@ -3620,14 +3626,14 @@ impl<P: ObjectPlane> Repository<P> {
                         .await
                     {
                         Ok(binding) => binding,
-                        Err(error) => match self.reconcile_native_delete(&path).await? {
+                        Err(error) => match self.reconcile_physical_delete(&path).await? {
                             Some(binding) => binding,
                             None => return Err(error),
                         },
                     };
                     prepared.insert(
                         key.clone(),
-                        NativePreparedMutationV1::NativeDelete { key, binding },
+                        PhysicalPreparedMutationV1::PhysicalDelete { key, binding },
                     );
                 }
             }
@@ -3650,21 +3656,21 @@ impl<P: ObjectPlane> Repository<P> {
             b"delete",
             &key,
         ]);
-        let _native_publication = self.native_publication.lock().await;
+        let _physical_publication = self.physical_publication.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(branch, operation, input_digest)
             .await?
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
         let binding = match self
             .plane
-            .delete_native(crate::NativeDelete {
+            .delete_physical(crate::PhysicalDelete {
                 path: path.clone(),
                 repository: self.format.repository_id,
                 operation,
@@ -3673,7 +3679,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await
         {
             Ok(binding) => binding,
-            Err(error) => match self.reconcile_native_delete(&path).await? {
+            Err(error) => match self.reconcile_physical_delete(&path).await? {
                 Some(binding) => binding,
                 None => return Err(error),
             },
@@ -3723,19 +3729,19 @@ impl<P: ObjectPlane> Repository<P> {
             b"multi-delete",
             &encoded_keys,
         ]);
-        self.delete_objects_native(branch, keys, operation, input_digest)
+        self.delete_objects_physical(branch, keys, operation, input_digest)
             .await
     }
 
-    async fn delete_objects_native(
+    async fn delete_objects_physical(
         &self,
         branch: &str,
         keys: Vec<Vec<u8>>,
         operation: OperationId,
         input_digest: [u8; 32],
     ) -> Result<CommitReceipt> {
-        let _publication = self.native_publication.lock().await;
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let _publication = self.physical_publication.lock().await;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let warm = self.warm_branch_state(branch).await?;
         let loaded_ref = LoadedRef {
             value: warm.reference,
@@ -3792,7 +3798,7 @@ impl<P: ObjectPlane> Repository<P> {
             })?)?;
             let binding = match self
                 .plane
-                .delete_native(crate::NativeDelete {
+                .delete_physical(crate::PhysicalDelete {
                     path: path.clone(),
                     repository: self.format.repository_id,
                     operation,
@@ -3801,7 +3807,7 @@ impl<P: ObjectPlane> Repository<P> {
                 .await
             {
                 Ok(binding) => binding,
-                Err(error) => match self.reconcile_native_delete(&path).await? {
+                Err(error) => match self.reconcile_physical_delete(&path).await? {
                     Some(binding) => binding,
                     None => return Err(error),
                 },
@@ -3902,10 +3908,10 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        if self.native_writer_generation_for_mutation().await? != writer_fence_generation {
+        if self.writer_generation_for_mutation().await? != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native writer fence changed during multi-delete publication",
+                "writer fence changed during multi-delete publication",
             ));
         }
         match self
@@ -3931,7 +3937,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native branch CAS conflicted; writer is fenced and must reopen",
+                "branch CAS conflicted; writer is fenced and must reopen",
             )),
         }
     }
@@ -3968,15 +3974,15 @@ impl<P: ObjectPlane> Repository<P> {
             &destination_key,
             &kind_bytes,
         ]);
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(branch, operation, input_digest)
             .await?
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
-        let crate::NativeObjectBindingV1::Live {
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
+        let crate::PhysicalObjectBindingV1::Live {
             version_id,
             checksum_sha256,
             ..
@@ -4008,7 +4014,7 @@ impl<P: ObjectPlane> Repository<P> {
             })?)?;
         let binding = match self
             .plane
-            .copy_native(crate::NativeCopy {
+            .copy_physical(crate::PhysicalCopy {
                 source: source_path,
                 source_version_id: version_id,
                 destination: destination_path.clone(),
@@ -4026,7 +4032,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             Ok(result) => result.binding,
             Err(error) => match self
-                .reconcile_native_payload(&destination_path, operation, checksum_sha256)
+                .reconcile_physical_payload(&destination_path, operation, checksum_sha256)
                 .await?
             {
                 Some(result) => result.binding,
@@ -4053,7 +4059,7 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
         key: Vec<u8>,
         kind: LogicalObjectVersionKindV1,
-        binding: crate::NativeObjectBindingV1,
+        binding: crate::PhysicalObjectBindingV1,
         operation_kind: OperationKind,
         operation: OperationId,
         input_digest: [u8; 32],
@@ -4062,7 +4068,7 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<CommitReceipt> {
         validate_branch(branch)?;
         let created_at_millis = self.now_millis()?;
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let engine = AsyncProlly::new(
             self.node_store.clone(),
             Config {
@@ -4245,11 +4251,11 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        let current_fence = self.native_writer_generation_for_mutation().await?;
+        let current_fence = self.writer_generation_for_mutation().await?;
         if current_fence != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native writer fence changed during publication",
+                "writer fence changed during publication",
             ));
         }
         let publication = self
@@ -4283,7 +4289,7 @@ impl<P: ObjectPlane> Repository<P> {
                     .remove(branch);
                 Err(Error::new(
                     ErrorCode::PreconditionFailed,
-                    "native branch CAS conflicted; writer is fenced and must reopen",
+                    "branch CAS conflicted; writer is fenced and must reopen",
                 ))
             }
             Err(error) => {
@@ -4305,8 +4311,8 @@ impl<P: ObjectPlane> Repository<P> {
 
     async fn commit_batch(
         &self,
-        batch: &NativeBatchV1,
-        mutations: &BTreeMap<Vec<u8>, NativePreparedMutationV1>,
+        batch: &PhysicalBatchV1,
+        mutations: &BTreeMap<Vec<u8>, PhysicalPreparedMutationV1>,
         input_digest: [u8; 32],
     ) -> Result<CommitReceipt> {
         let warm = self.warm_branch_state(&batch.branch).await?;
@@ -4327,7 +4333,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "branch moved since batch creation",
             ));
         }
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let engine = AsyncProlly::new(
             self.node_store.clone(),
             Config {
@@ -4356,7 +4362,7 @@ impl<P: ObjectPlane> Repository<P> {
                 .transpose()?
                 .map(|current| current.version);
             let (kind, binding) = match mutation {
-                NativePreparedMutationV1::NativePut {
+                PhysicalPreparedMutationV1::PhysicalPut {
                     size,
                     logical_etag,
                     checksums,
@@ -4375,7 +4381,7 @@ impl<P: ObjectPlane> Repository<P> {
                     },
                     binding.clone(),
                 ),
-                NativePreparedMutationV1::NativeDelete { binding, .. } => {
+                PhysicalPreparedMutationV1::PhysicalDelete { binding, .. } => {
                     (LogicalObjectVersionKindV1::DeleteMarker, binding.clone())
                 }
             };
@@ -4653,7 +4659,7 @@ impl<P: ObjectPlane> Repository<P> {
         let bytes = match (&version.body.kind, &version.binding) {
             (
                 LogicalObjectVersionKindV1::Live { .. },
-                crate::NativeObjectBindingV1::Live {
+                crate::PhysicalObjectBindingV1::Live {
                     version_id,
                     checksum_sha256,
                     ..
@@ -4675,13 +4681,13 @@ impl<P: ObjectPlane> Repository<P> {
                     .ok_or_else(|| {
                         Error::new(
                             ErrorCode::MissingClosure,
-                            "native object version is missing",
+                            "physical object version is missing",
                         )
                     })?;
                 if object.metadata.sha256 != *checksum_sha256 {
                     return Err(Error::new(
                         ErrorCode::CorruptContent,
-                        "native object bytes do not match the committed checksum",
+                        "physical object bytes do not match the committed checksum",
                     ));
                 }
                 object.bytes
@@ -5139,8 +5145,8 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        let _native_publication = self.native_publication.lock().await;
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let _physical_publication = self.physical_publication.lock().await;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let engine = AsyncProlly::new(
             self.node_store.clone(),
             Config {
@@ -5220,7 +5226,7 @@ impl<P: ObjectPlane> Repository<P> {
                         kind: LogicalObjectVersionKindV1::DeleteMarker,
                     };
                     let binding = match self
-                        .latest_native_delete_binding(&theirs_commit, &change.key)
+                        .latest_physical_delete_binding(&theirs_commit, &change.key)
                         .await?
                     {
                         Some(binding) => binding,
@@ -5235,7 +5241,7 @@ impl<P: ObjectPlane> Repository<P> {
                             )?)?;
                             match self
                                 .plane
-                                .delete_native(crate::NativeDelete {
+                                .delete_physical(crate::PhysicalDelete {
                                     path: path.clone(),
                                     repository: self.format.repository_id,
                                     operation,
@@ -5244,7 +5250,7 @@ impl<P: ObjectPlane> Repository<P> {
                                 .await
                             {
                                 Ok(binding) => binding,
-                                Err(error) => match self.reconcile_native_delete(&path).await? {
+                                Err(error) => match self.reconcile_physical_delete(&path).await? {
                                     Some(binding) => binding,
                                     None => return Err(error),
                                 },
@@ -5378,8 +5384,8 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let _native_publication = self.native_publication.lock().await;
-        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let _physical_publication = self.physical_publication.lock().await;
+        let writer_fence_generation = self.writer_generation_for_mutation().await?;
         let engine = AsyncProlly::new(
             self.node_store.clone(),
             Config {
@@ -5433,7 +5439,7 @@ impl<P: ObjectPlane> Repository<P> {
                 }
                 None => {
                     let binding = match self
-                        .latest_native_delete_binding(&source_commit, key)
+                        .latest_physical_delete_binding(&source_commit, key)
                         .await?
                     {
                         Some(binding) => binding,
@@ -5447,7 +5453,7 @@ impl<P: ObjectPlane> Repository<P> {
                                 })?)?;
                             match self
                                 .plane
-                                .delete_native(crate::NativeDelete {
+                                .delete_physical(crate::PhysicalDelete {
                                     path: path.clone(),
                                     repository: self.format.repository_id,
                                     operation,
@@ -5456,7 +5462,7 @@ impl<P: ObjectPlane> Repository<P> {
                                 .await
                             {
                                 Ok(binding) => binding,
-                                Err(error) => match self.reconcile_native_delete(&path).await? {
+                                Err(error) => match self.reconcile_physical_delete(&path).await? {
                                     Some(binding) => binding,
                                     None => return Err(error),
                                 },
@@ -5689,10 +5695,10 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        if self.native_writer_generation_for_mutation().await? != writer_fence_generation {
+        if self.writer_generation_for_mutation().await? != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native writer fence changed during prepared publication",
+                "writer fence changed during prepared publication",
             ));
         }
         let publication = self
@@ -5719,7 +5725,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
             Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "native branch CAS conflicted; writer is fenced and must reopen",
+                "branch CAS conflicted; writer is fenced and must reopen",
             )
             .retry(RetryAdvice::ReloadHead)
             .operation(operation.to_string())),
@@ -5775,22 +5781,22 @@ impl<P: ObjectPlane> Repository<P> {
                 fsck,
             });
         }
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.physical_publication.lock().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut sync) = source
-            .replay_native_history_to(self, &[source_head], true)
+            .replay_physical_history_to(self, &[source_head], true)
             .await?;
         let repaired_head = *mapped.get(&source_head).ok_or_else(|| {
             Error::new(
                 ErrorCode::MissingClosure,
-                "native repair did not return a mapped head",
+                "repair did not return a mapped head",
             )
         })?;
         let loaded = self.load_ref(source_branch).await?;
         if loaded.value.target != current {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "destination branch moved during native repair",
+                "destination branch moved during repair",
             ));
         }
         let movement = self
@@ -5798,7 +5804,7 @@ impl<P: ObjectPlane> Repository<P> {
                 source_branch,
                 loaded,
                 repaired_head,
-                "repair native bindings from qualified source",
+                "repair physical bindings from qualified source",
             )
             .await?;
         sync.source_head = Some(repaired_head);
@@ -5855,7 +5861,7 @@ impl<P: ObjectPlane> Repository<P> {
                 }
                 report.logical_versions += 1;
                 let key = decode_version_tree_logical_key(&encoded_key)?;
-                let verified = self.verify_native_version(&key, &version).await?;
+                let verified = self.verify_physical_version(&key, &version).await?;
                 report.content_bytes_verified = report
                     .content_bytes_verified
                     .checked_add(verified)
@@ -5870,13 +5876,14 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(report)
     }
 
-    async fn verify_native_version(&self, key: &[u8], version: &ObjectVersionV1) -> Result<u64> {
+    async fn verify_physical_version(&self, key: &[u8], version: &ObjectVersionV1) -> Result<u64> {
         version.validate()?;
-        let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
-            Error::new(ErrorCode::CorruptCommit, "native logical key is not UTF-8")
-        })?)?;
+        let path = ObjectPath::new(
+            std::str::from_utf8(key)
+                .map_err(|_| Error::new(ErrorCode::CorruptCommit, "logical key is not UTF-8"))?,
+        )?;
         match &version.binding {
-            crate::NativeObjectBindingV1::Live {
+            crate::PhysicalObjectBindingV1::Live {
                 version_id,
                 checksum_sha256,
                 ..
@@ -5894,13 +5901,13 @@ impl<P: ObjectPlane> Repository<P> {
                     .ok_or_else(|| {
                         Error::new(
                             ErrorCode::MissingClosure,
-                            "retained native object version is missing",
+                            "retained physical object version is missing",
                         )
                     })?;
                 if crate::codec::sha256(&object.bytes) != *checksum_sha256 {
                     return Err(Error::new(
                         ErrorCode::CorruptContent,
-                        "retained native object version checksum mismatch",
+                        "retained physical object version checksum mismatch",
                     ));
                 }
                 let expected_size = match version.body.kind {
@@ -5912,12 +5919,12 @@ impl<P: ObjectPlane> Repository<P> {
                 if object.bytes.len() as u64 != expected_size {
                     return Err(Error::new(
                         ErrorCode::CorruptContent,
-                        "retained native object version size mismatch",
+                        "retained physical object version size mismatch",
                     ));
                 }
                 Ok(expected_size)
             }
-            crate::NativeObjectBindingV1::DeleteMarker { version_id } => {
+            crate::PhysicalObjectBindingV1::DeleteMarker { version_id } => {
                 let mut continuation = None;
                 loop {
                     let page = self
@@ -5941,7 +5948,7 @@ impl<P: ObjectPlane> Repository<P> {
                     if continuation.is_none() {
                         return Err(Error::new(
                             ErrorCode::MissingClosure,
-                            "retained native delete marker is missing",
+                            "retained physical delete marker is missing",
                         ));
                     }
                 }
@@ -5949,12 +5956,12 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    async fn reconcile_native_payload(
+    async fn reconcile_physical_payload(
         &self,
         path: &ObjectPath,
         operation: OperationId,
         expected_sha256: [u8; 32],
-    ) -> Result<Option<crate::NativeObjectWriteResult>> {
+    ) -> Result<Option<crate::PhysicalObjectWriteResult>> {
         let mut continuation = None;
         let mut matches = Vec::new();
         loop {
@@ -5999,8 +6006,8 @@ impl<P: ObjectPlane> Repository<P> {
                     continue;
                 }
                 let md5: [u8; 16] = Md5::digest(&object.bytes).into();
-                matches.push(crate::NativeObjectWriteResult {
-                    binding: crate::NativeObjectBindingV1::Live {
+                matches.push(crate::PhysicalObjectWriteResult {
+                    binding: crate::PhysicalObjectBindingV1::Live {
                         version_id,
                         provider_etag: object.metadata.token.etag,
                         checksum_sha256: expected_sha256,
@@ -6024,17 +6031,17 @@ impl<P: ObjectPlane> Repository<P> {
             1 => Ok(matches.pop()),
             _ => Err(Error::new(
                 ErrorCode::OutcomeUnknown,
-                "multiple native versions match one operation; manual repair is required",
+                "multiple physical versions match one operation; manual repair is required",
             )
             .retry(RetryAdvice::ReconcileOperation)
             .operation(operation.to_string())),
         }
     }
 
-    async fn reconcile_native_delete(
+    async fn reconcile_physical_delete(
         &self,
         path: &ObjectPath,
-    ) -> Result<Option<crate::NativeObjectBindingV1>> {
+    ) -> Result<Option<crate::PhysicalObjectBindingV1>> {
         let mut continuation = None;
         let mut matches = Vec::new();
         loop {
@@ -6062,12 +6069,12 @@ impl<P: ObjectPlane> Repository<P> {
         }
         match matches.as_slice() {
             [] => Ok(None),
-            [version_id] => Ok(Some(crate::NativeObjectBindingV1::DeleteMarker {
+            [version_id] => Ok(Some(crate::PhysicalObjectBindingV1::DeleteMarker {
                 version_id: version_id.clone(),
             })),
             _ => Err(Error::new(
                 ErrorCode::OutcomeUnknown,
-                "native delete reconciliation found multiple current delete markers",
+                "physical delete reconciliation found multiple current delete markers",
             )
             .retry(RetryAdvice::ReconcileOperation)),
         }
@@ -6757,10 +6764,12 @@ impl<P: ObjectPlane> Repository<P> {
                     Error::new(ErrorCode::CorruptCommit, "logical key is not UTF-8")
                 })?)?;
                 let version_id = match &version.binding {
-                    crate::NativeObjectBindingV1::Live { version_id, .. }
-                    | crate::NativeObjectBindingV1::DeleteMarker { version_id } => version_id,
+                    crate::PhysicalObjectBindingV1::Live { version_id, .. }
+                    | crate::PhysicalObjectBindingV1::DeleteMarker { version_id } => version_id,
                 };
-                retained.native_versions.insert((path, version_id.clone()));
+                retained
+                    .physical_versions
+                    .insert((path, version_id.clone()));
             }
             commit_roots.extend(commit.parents);
         }
@@ -6793,11 +6802,11 @@ impl<P: ObjectPlane> Repository<P> {
         ))
     }
 
-    async fn latest_native_delete_binding(
+    async fn latest_physical_delete_binding(
         &self,
         commit: &BucketCommitV1,
         key: &[u8],
-    ) -> Result<Option<crate::NativeObjectBindingV1>> {
+    ) -> Result<Option<crate::PhysicalObjectBindingV1>> {
         let versions =
             self.tree_from_root(&commit.state.versions, &self.format.state_tree_format)?;
         let mut iter = self
@@ -7006,7 +7015,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Err(Error::new(
                 ErrorCode::InvalidKey,
-                "logical key overlaps the native-versioned repository metadata prefix",
+                "logical key overlaps the Prolly S3 repository metadata prefix",
             ));
         }
         Ok(())
@@ -7132,12 +7141,10 @@ fn validate_format_compatibility(
             ),
         ));
     }
-    if format.required_capability_profile
-        != RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE
-    {
+    if format.required_capability_profile != RepositoryFormatV1::PROLLY_S3_CAPABILITY_PROFILE {
         return Err(Error::new(
             ErrorCode::UnsupportedRepositoryFormat,
-            "repository is not a native-versioned S3 repository",
+            "repository is not a Prolly S3 repository",
         ));
     }
     if format.min_reader_version == 0

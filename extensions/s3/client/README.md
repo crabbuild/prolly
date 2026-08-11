@@ -1,4 +1,4 @@
-# Prolly native-versioned S3 client
+# Prolly Prolly S3 client
 
 `prolly-s3-client` keeps files as normal, whole objects in a versioned S3
 bucket and adds Git-like history through Prolly commits. It deliberately does
@@ -105,7 +105,7 @@ provider's raw S3 `VersionId`.
 
 ## Read an old snapshot
 
-Every snapshot resolves the exact physical S3 version recorded at that commit:
+Every snapshot resolves the exact S3 version recorded at that commit:
 
 ```rust
 use aws_sdk_s3::primitives::ByteStream;
@@ -246,7 +246,7 @@ serializes local callers; a stale expected head fails explicitly.
 - No repository-level deduplication, chunking, or partial-file updates.
 - Commit sessions buffer bodies in memory.
 - High-level multipart session state is process-local until completion.
-- Provider-native version IDs cannot be preserved across buckets.
+- Provider-issued version IDs cannot be preserved across buckets.
 - Raw S3 listing shows physical state, not a branch or historical snapshot.
 - Production AWS scale and throttling qualification is still pending.
 

@@ -1,4 +1,4 @@
-# Native-versioned S3 API guide
+# Prolly S3 API guide
 
 The supported public API is documented with executable-shaped examples in
 [client/README.md](client/README.md). That guide covers initialization, whole
@@ -16,7 +16,7 @@ branches, diffs, conditional publication, and idempotency.
 | Read current object | `client.get_object().send()` |
 | Read commit snapshot | `client.at(commit).await?` |
 | Atomic multi-key commit | `client.begin_commit().start()` |
-| Create native multipart upload | `client.create_multipart_upload().send()` |
+| Create multipart upload | `client.create_multipart_upload().send()` |
 | List current objects | `client.list_objects_v2().send()` |
 | List logical versions | `client.list_object_versions().send()` |
 | Branch/tag/history | `create_branch`, `create_tag`, `log_page` |

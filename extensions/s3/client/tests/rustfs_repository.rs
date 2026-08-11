@@ -12,7 +12,7 @@ use aws_sdk_s3::{
 };
 use md5::{Digest as _, Md5};
 use prolly_s3_client::{
-    core::{NativeMultipartCompletedPart, ObjectHeaders, Repository, RepositoryOptions},
+    core::{ObjectHeaders, PhysicalMultipartCompletedPart, Repository, RepositoryOptions},
     AwsS3ObjectPlane,
 };
 use sha2::Sha256;
@@ -89,7 +89,7 @@ async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
         plane.clone(),
         RepositoryOptions {
             repository_prefix: unique_name("four-call-repository"),
-            writer: "rustfs-native-writer".to_string(),
+            writer: "rustfs-prolly-s3-writer".to_string(),
             ..RepositoryOptions::default()
         },
     )
@@ -163,7 +163,7 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
         plane.clone(),
         RepositoryOptions {
             repository_prefix: unique_name("multipart-repository"),
-            writer: "rustfs-native-multipart-writer".to_string(),
+            writer: "rustfs-prolly-s3-multipart-writer".to_string(),
             ..RepositoryOptions::default()
         },
     )
@@ -191,7 +191,7 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
 
     plane.reset_metrics();
     let session = repository
-        .create_native_multipart_upload(
+        .create_physical_multipart_upload(
             "main",
             key.as_bytes().to_vec(),
             ObjectHeaders::default(),
@@ -201,16 +201,16 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
         .await
         .unwrap();
     let first = repository
-        .upload_native_multipart_part(&session, 1, first_bytes)
+        .upload_physical_multipart_part(&session, 1, first_bytes)
         .await
         .unwrap();
     let second = repository
-        .upload_native_multipart_part(&session, 2, second_bytes)
+        .upload_physical_multipart_part(&session, 2, second_bytes)
         .await
         .unwrap();
     let parts = [&first, &second]
         .into_iter()
-        .map(|part| NativeMultipartCompletedPart {
+        .map(|part| PhysicalMultipartCompletedPart {
             part_number: part.part_number,
             etag: part.etag.clone(),
             checksum_sha256: part.checksum_sha256.unwrap(),
@@ -218,7 +218,7 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
         })
         .collect();
     repository
-        .complete_native_multipart_upload(
+        .complete_physical_multipart_upload(
             session.clone(),
             parts,
             checksum_sha256,

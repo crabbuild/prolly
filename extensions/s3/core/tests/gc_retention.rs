@@ -181,13 +181,13 @@ async fn gc_delete_rate_is_bound_to_the_run_and_paces_exact_deletes() {
 }
 
 #[tokio::test]
-async fn gc_conservatively_preserves_every_native_ref_version() {
+async fn gc_conservatively_preserves_every_physical_ref_version() {
     let clock = Arc::new(FixedClock::new(10_000_000));
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
         RepositoryOptions {
-            repository_prefix: "gc-native-refs".to_string(),
+            repository_prefix: "gc-physical-refs".to_string(),
             clock,
             ..RepositoryOptions::default()
         },
@@ -207,7 +207,7 @@ async fn gc_conservatively_preserves_every_native_ref_version() {
             .await
             .unwrap();
     }
-    let ref_prefix = "gc-native-refs/refs/heads/".to_string();
+    let ref_prefix = "gc-physical-refs/refs/heads/".to_string();
     let before = plane
         .list(ListRequest {
             prefix: ref_prefix.clone(),
@@ -220,11 +220,11 @@ async fn gc_conservatively_preserves_every_native_ref_version() {
         .entries;
     assert_eq!(before.len(), 4);
 
-    let orphan_bytes = b"collect me, but not native ref history".to_vec();
+    let orphan_bytes = b"collect me, but not physical ref history".to_vec();
     plane
         .put_immutable(ImmutablePut {
             path: ObjectPath::new(format!(
-                "gc-native-refs/node-packs/sha256/ff/ff/{}",
+                "gc-physical-refs/node-packs/sha256/ff/ff/{}",
                 "ff".repeat(32)
             ))
             .unwrap(),

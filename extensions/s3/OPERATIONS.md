@@ -1,4 +1,4 @@
-# Native-versioned S3 operations
+# Prolly S3 operations
 
 ## Deployment contract
 
@@ -12,7 +12,7 @@
 
 ## IAM capabilities
 
-The writer needs object-version reads, whole-object writes, native multipart,
+The writer needs object-version reads, whole-object writes, S3 multipart,
 version listing for recovery/GC, exact-version deletion for explicit GC, and
 conditional metadata writes under `.prolly/v1/`. Readers need exact-version
 gets plus repository metadata reads.
@@ -38,7 +38,7 @@ Track separately:
 - Smithy wire attempts and provider throttling;
 - writer queue depth and wait time;
 - lease renewal latency, ambiguity, and fencing events;
-- unreachable native versions and node packs;
+- unreachable physical versions and node packs;
 - GC candidate bytes, exact-version deletes, and failures;
 - node-index checkpoint age and rebuild fallbacks.
 
@@ -59,7 +59,7 @@ attempts. Alert on either dimension independently.
 
 A physical backup must retain every object version and delete marker for both
 managed user keys and `.prolly/v1/`. A current-key-only copy is insufficient.
-Restore repository metadata and native versions together, then open read-only,
+Restore repository metadata and physical versions together, then open read-only,
 run `fsck`, and only then allow writer takeover.
 
 Cross-bucket logical clone is different from physical restore: it copies

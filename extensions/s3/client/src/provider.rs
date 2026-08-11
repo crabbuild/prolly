@@ -213,7 +213,7 @@ pub(crate) async fn qualify_and_store(
         )
         .ok_or_else(|| invalid("provider attestation expiry overflow"))?;
     let capabilities = probe_provider(plane.clone(), repository_prefix).await?;
-    capabilities.validate_native_versioned()?;
+    capabilities.validate_prolly_s3()?;
     let body = ProviderAttestationBodyV1 {
         endpoint_fingerprint: identity.endpoint_fingerprint()?,
         bucket_fingerprint: identity.bucket_fingerprint(plane.bucket())?,
@@ -325,7 +325,7 @@ pub(crate) async fn load_valid_attestation(
             }
             continue;
         }
-        candidate.body.capabilities.validate_native_versioned()?;
+        candidate.body.capabilities.validate_prolly_s3()?;
         valid.push(candidate);
     }
     valid

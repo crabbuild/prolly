@@ -1,6 +1,6 @@
 # Deterministic CBOR profile
 
-The media type is `application/vnd.prolly.native-s3.v1+cbor`. All persisted
+The media type is `application/vnd.prolly.s3.v1+cbor`. All persisted
 records in [schema.cddl](schema.cddl) use the `prolly-packed-cbor/v1` profile.
 
 ## Encoder requirements
