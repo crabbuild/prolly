@@ -1400,7 +1400,23 @@ async fn future_reader_or_writer_requirement_fails_before_any_open_write() {
         .unwrap();
     let format_path = ObjectPath::new("repo-rolling-version/format/v1.cbor").unwrap();
 
-    for (reader, writer, capability_profile) in [(2, 1, 1), (1, 2, 1), (1, 1, 2)] {
+    for (reader, writer, capability_profile) in [
+        (
+            RepositoryFormatV1::CURRENT_READER_VERSION + 1,
+            RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
+            RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE,
+        ),
+        (
+            RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
+            RepositoryFormatV1::CURRENT_WRITER_VERSION + 1,
+            RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE,
+        ),
+        (
+            RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
+            RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
+            RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE + 1,
+        ),
+    ] {
         let current = plane.load_mutable(&format_path).await.unwrap().unwrap();
         let mut format: RepositoryFormatV1 = decode_canonical(&current.bytes).unwrap();
         format.min_reader_version = reader;

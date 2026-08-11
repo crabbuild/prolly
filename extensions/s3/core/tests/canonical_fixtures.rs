@@ -43,8 +43,8 @@ fn canonical_v1_fixture_is_stable() {
         state_tree_format: TreeFormat::default(),
         content_index_format: TreeFormat::default(),
         canonical_limits: CanonicalLimits::default(),
-        min_reader_version: RepositoryFormatV1::CURRENT_READER_VERSION,
-        min_writer_version: RepositoryFormatV1::CURRENT_WRITER_VERSION,
+        min_reader_version: RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
+        min_writer_version: RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
         created_at_millis,
         required_capability_profile: RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE,
     };
@@ -68,6 +68,7 @@ fn canonical_v1_fixture_is_stable() {
         message: Some("initialize versioned S3 repository".to_string()),
         created_at_millis,
         metadata: BTreeMap::new(),
+        native: None,
     };
     let initial_commit_id = initial_commit.id().unwrap();
     let initial_reflog = ReflogEntryV1 {
@@ -89,6 +90,7 @@ fn canonical_v1_fixture_is_stable() {
         writer: "fixture-writer".to_string(),
         updated_at_millis: created_at_millis,
         tombstone: false,
+        native: None,
     };
     let actual = json!({
         "schema": "prolly-s3-canonical-fixtures/v1",

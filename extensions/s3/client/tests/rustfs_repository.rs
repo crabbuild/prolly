@@ -23,14 +23,16 @@ use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 #[cfg(feature = "slatedb-index")]
 use futures_util::{StreamExt, TryStreamExt};
+use md5::Md5;
 use prolly_s3_client::{
     core::{
         decode_canonical, encode_canonical, CanonicalLimits, CommitId, CompareExchange,
         CompareExchangeOutcome, ContentStore, DeleteOutcome, Error, ErrorCode, FixedClock,
         GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, MergePolicy, MultipartStateV1,
-        MultipartUploadV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionKindV1,
-        OperationId, PhysicalListPage, PhysicalVersion, PhysicalVersioning, Repository,
-        RepositoryOptions, RetryAdvice, StoredMetadata, StoredObject, MAX_LOGICAL_RETRY_LIMIT,
+        MultipartUploadV1, NativeMultipartCompletedPart, ObjectHeaders, ObjectPath, ObjectPlane,
+        ObjectVersionKindV1, OperationId, PhysicalListPage, PhysicalVersion, PhysicalVersioning,
+        Repository, RepositoryOptions, RepositoryStorageProfile, RetryAdvice, StoredMetadata,
+        StoredObject, MAX_LOGICAL_RETRY_LIMIT,
     },
     AwsS3ObjectPlane, Client, HmacAttestationSigner, HmacTokenSigner, ProviderIdentity,
     S3OperationMetrics, S3WireAttemptInterceptor, S3WireAttemptMetrics, WriteOptions,
@@ -1374,11 +1376,27 @@ fn combine_s3_metrics(left: S3OperationMetrics, right: S3OperationMetrics) -> S3
         get_object: left.get_object.saturating_add(right.get_object),
         head_object: left.head_object.saturating_add(right.head_object),
         put_object: left.put_object.saturating_add(right.put_object),
+        copy_object: left.copy_object.saturating_add(right.copy_object),
         list_objects_v2: left.list_objects_v2.saturating_add(right.list_objects_v2),
         list_object_versions: left
             .list_object_versions
             .saturating_add(right.list_object_versions),
         delete_object: left.delete_object.saturating_add(right.delete_object),
+        create_multipart_upload: left
+            .create_multipart_upload
+            .saturating_add(right.create_multipart_upload),
+        upload_part: left.upload_part.saturating_add(right.upload_part),
+        upload_part_copy: left.upload_part_copy.saturating_add(right.upload_part_copy),
+        complete_multipart_upload: left
+            .complete_multipart_upload
+            .saturating_add(right.complete_multipart_upload),
+        abort_multipart_upload: left
+            .abort_multipart_upload
+            .saturating_add(right.abort_multipart_upload),
+        list_parts: left.list_parts.saturating_add(right.list_parts),
+        list_multipart_uploads: left
+            .list_multipart_uploads
+            .saturating_add(right.list_multipart_uploads),
         uploaded_body_bytes: left
             .uploaded_body_bytes
             .saturating_add(right.uploaded_body_bytes),
@@ -5983,6 +6001,517 @@ fn rustfs_provider_identity() -> ProviderIdentity {
 
 fn test_attestation_signer() -> Arc<HmacAttestationSigner> {
     Arc::new(HmacAttestationSigner::single("integration-attestation-v1", vec![11_u8; 32]).unwrap())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_versioned_whole_object_write_uses_four_calls() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket, wire) = rustfs_client_with_wire_metrics().await;
+    aws.put_bucket_versioning()
+        .bucket(&bucket)
+        .versioning_configuration(
+            VersioningConfiguration::builder()
+                .status(BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+
+    let prefix = unique_prefix("native-versioned-four-calls");
+    let object_root = unique_prefix("native-versioned-objects");
+    let plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    repository
+        .put_bytes(
+            "main",
+            format!("{object_root}/warmup.bin").into_bytes(),
+            vec![1; 64 * 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    plane.reset_metrics();
+    wire.reset();
+    let measured_key = format!("{object_root}/measured.bin");
+    let first = repository
+        .put_bytes(
+            "main",
+            measured_key.as_bytes().to_vec(),
+            vec![2; 64 * 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let sdk = plane.reset_metrics();
+    let wire = wire.reset();
+    assert_eq!(sdk.total_calls(), 4, "unexpected SDK calls: {sdk:?}");
+    assert_eq!(sdk.put_object, 4, "every publication step is one put");
+    assert_eq!(wire.executions, 4, "unexpected SDK executions: {wire:?}");
+    assert_eq!(
+        wire.transmissions, 4,
+        "RustFS should not retry the measured write: {wire:?}"
+    );
+
+    let first_version = first.object_versions[0];
+    repository
+        .put_bytes(
+            "main",
+            measured_key.as_bytes().to_vec(),
+            b"new current value".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .get_version("main", measured_key.as_bytes(), first_version)
+            .await
+            .unwrap()
+            .bytes,
+        vec![2; 64 * 1024]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_clone_rebinds_exact_versions_and_preserves_history() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    aws.put_bucket_versioning()
+        .bucket(&bucket)
+        .versioning_configuration(
+            VersioningConfiguration::builder()
+                .status(BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+    let source_prefix = unique_prefix("native-clone-source");
+    let destination_prefix = unique_prefix("native-clone-destination");
+    let key = format!("{}/history.bin", unique_prefix("native-clone-object"));
+    let source_plane = Arc::new(AwsS3ObjectPlane::new(aws.clone(), &bucket));
+    let source = Repository::initialize(
+        source_plane,
+        RepositoryOptions {
+            repository_prefix: source_prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-clone-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let first = source
+        .put_bytes(
+            "main",
+            key.as_bytes().to_vec(),
+            b"first native version".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    source
+        .put_bytes(
+            "main",
+            key.as_bytes().to_vec(),
+            b"second native version".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let destination_plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let clone = source
+        .clone_to(destination_plane.clone(), &destination_prefix)
+        .await
+        .unwrap();
+    assert_eq!(clone.refs, 1);
+    let destination = Repository::open(
+        destination_plane,
+        RepositoryOptions {
+            repository_prefix: destination_prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-clone-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(destination.repository_id(), source.repository_id());
+    assert_eq!(
+        destination
+            .get_current("main", key.as_bytes())
+            .await
+            .unwrap()
+            .bytes,
+        b"second native version"
+    );
+    let source_historical = source
+        .head_version("main", key.as_bytes(), first.object_versions[0])
+        .await
+        .unwrap()
+        .1
+        .version;
+    let destination_historical = destination
+        .head_version("main", key.as_bytes(), first.object_versions[0])
+        .await
+        .unwrap()
+        .1
+        .version;
+    assert_eq!(source_historical.id, destination_historical.id);
+    assert_ne!(
+        source_historical.native_binding,
+        destination_historical.native_binding
+    );
+    assert_eq!(
+        destination
+            .get_version("main", key.as_bytes(), first.object_versions[0])
+            .await
+            .unwrap()
+            .bytes,
+        b"first native version"
+    );
+    let expected_destination = destination.head("main").await.unwrap();
+    source
+        .put_bytes(
+            "main",
+            key.as_bytes().to_vec(),
+            b"third native version".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let push = source
+        .push_to(
+            &destination,
+            "main",
+            "main",
+            expected_destination,
+            "RustFS incremental native push",
+        )
+        .await
+        .unwrap();
+    assert_eq!(push.copied_objects, 3);
+    assert_eq!(push.copied_bytes, b"third native version".len() as u64);
+    assert_eq!(
+        destination
+            .get_current("main", key.as_bytes())
+            .await
+            .unwrap()
+            .bytes,
+        b"third native version"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_versioned_multipart_uses_n_plus_five_calls() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket, wire) = rustfs_client_with_wire_metrics().await;
+    aws.put_bucket_versioning()
+        .bucket(&bucket)
+        .versioning_configuration(
+            VersioningConfiguration::builder()
+                .status(BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+    let prefix = unique_prefix("native-versioned-multipart");
+    let key = format!(
+        "{}/multipart.bin",
+        unique_prefix("native-versioned-objects")
+    );
+    let plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-multipart-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            format!("{key}.warmup").into_bytes(),
+            b"warm".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let first_bytes = vec![3; 5 * 1024 * 1024];
+    let second_bytes = vec![5; 1024];
+    let mut whole = first_bytes.clone();
+    whole.extend_from_slice(&second_bytes);
+    let checksum_sha256: [u8; 32] = Sha256::digest(&whole).into();
+    let checksum_md5: [u8; 16] = Md5::digest(&whole).into();
+
+    plane.reset_metrics();
+    wire.reset();
+    let session = repository
+        .create_native_multipart_upload(
+            "main",
+            key.as_bytes().to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let first = repository
+        .upload_native_multipart_part(&session, 1, first_bytes)
+        .await
+        .unwrap();
+    let second = repository
+        .upload_native_multipart_part(&session, 2, second_bytes)
+        .await
+        .unwrap();
+    let parts = [&first, &second]
+        .into_iter()
+        .map(|part| NativeMultipartCompletedPart {
+            part_number: part.part_number,
+            etag: part.etag.clone(),
+            checksum_sha256: part.checksum_sha256.unwrap(),
+            size: part.size,
+        })
+        .collect();
+    repository
+        .complete_native_multipart_upload(
+            session.clone(),
+            parts,
+            checksum_sha256,
+            checksum_md5,
+            whole.len() as u64,
+            Some(session.operation),
+        )
+        .await
+        .unwrap();
+    let sdk = plane.reset_metrics();
+    let wire = wire.reset();
+    assert_eq!(sdk.create_multipart_upload, 1);
+    assert_eq!(sdk.upload_part, 2);
+    assert_eq!(sdk.complete_multipart_upload, 1);
+    assert_eq!(sdk.put_object, 3);
+    assert_eq!(sdk.total_calls(), 7, "unexpected SDK calls: {sdk:?}");
+    assert_eq!(wire.executions, 7, "unexpected SDK executions: {wire:?}");
+    assert_eq!(wire.transmissions, 7, "unexpected wire calls: {wire:?}");
+    assert_eq!(
+        repository
+            .get_current("main", key.as_bytes())
+            .await
+            .unwrap()
+            .bytes,
+        whole
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_multipart_client_lists_completes_and_aborts() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+    let (aws, bucket) = rustfs_client().await;
+    aws.put_bucket_versioning()
+        .bucket(&bucket)
+        .versioning_configuration(
+            VersioningConfiguration::builder()
+                .status(BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+    let repository_prefix = unique_prefix("native-multipart-client");
+    let writer = "native-multipart-client-writer";
+    let client = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer(writer)
+        .native_versioned()
+        .provider_identity(rustfs_provider_identity())
+        .attestation_signer(test_attestation_signer())
+        .initialize()
+        .await
+        .unwrap();
+    let key_root = unique_prefix("native-multipart-client-objects");
+    let key = format!("{key_root}/complete.bin");
+    let create = client
+        .create_multipart_upload()
+        .bucket(&bucket)
+        .key(&key)
+        .send()
+        .await
+        .unwrap();
+    let upload_id = create.upload_id().unwrap();
+    let first_bytes = vec![11; 5 * 1024 * 1024];
+    let second_bytes = vec![13; 1024];
+    let first = client
+        .upload_part()
+        .bucket(&bucket)
+        .key(&key)
+        .upload_id(upload_id)
+        .part_number(1)
+        .body(ByteStream::from(first_bytes.clone()))
+        .send()
+        .await
+        .unwrap();
+    let second = client
+        .upload_part()
+        .bucket(&bucket)
+        .key(&key)
+        .upload_id(upload_id)
+        .part_number(2)
+        .body(ByteStream::from(second_bytes.clone()))
+        .send()
+        .await
+        .unwrap();
+    let listed = client
+        .list_parts()
+        .bucket(&bucket)
+        .key(&key)
+        .upload_id(upload_id)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(listed.parts().len(), 2);
+
+    drop(client);
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer(writer)
+        .native_versioned()
+        .provider_identity(rustfs_provider_identity())
+        .attestation_signer(test_attestation_signer())
+        .open()
+        .await
+        .unwrap();
+
+    let mut whole = first_bytes;
+    whole.extend_from_slice(&second_bytes);
+    client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key(&key)
+        .upload_id(upload_id)
+        .checksum_sha256(STANDARD.encode(Sha256::digest(&whole)))
+        .checksum_md5(STANDARD.encode(Md5::digest(&whole)))
+        .expected_size(whole.len() as u64)
+        .part_size(1, 5 * 1024 * 1024)
+        .part_size(2, 1024)
+        .multipart_upload(
+            CompletedMultipartUpload::builder()
+                .parts(
+                    CompletedPart::builder()
+                        .part_number(1)
+                        .e_tag(first.e_tag().unwrap())
+                        .checksum_sha256(first.checksum_sha256().unwrap())
+                        .build(),
+                )
+                .parts(
+                    CompletedPart::builder()
+                        .part_number(2)
+                        .e_tag(second.e_tag().unwrap())
+                        .checksum_sha256(second.checksum_sha256().unwrap())
+                        .build(),
+                )
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        client
+            .get_object()
+            .bucket(&bucket)
+            .key(&key)
+            .send()
+            .await
+            .unwrap()
+            .output
+            .body
+            .collect()
+            .await
+            .unwrap()
+            .into_bytes(),
+        whole.as_slice()
+    );
+
+    let abort_key = format!("{key_root}/abort.bin");
+    client
+        .create_multipart_upload()
+        .bucket(&bucket)
+        .key(&abort_key)
+        .send()
+        .await
+        .unwrap();
+    let uploads = client
+        .list_multipart_uploads()
+        .bucket(&bucket)
+        .prefix(&key_root)
+        .send()
+        .await
+        .unwrap();
+    let discovered = uploads
+        .uploads()
+        .iter()
+        .find(|upload| upload.key() == Some(abort_key.as_str()))
+        .unwrap_or_else(|| panic!("abort upload missing from listing: {uploads:?}"));
+    client
+        .abort_multipart_upload()
+        .bucket(&bucket)
+        .key(&abort_key)
+        .upload_id(discovered.upload_id().unwrap())
+        .send()
+        .await
+        .unwrap();
 }
 
 async fn rustfs_client() -> (aws_sdk_s3::Client, String) {

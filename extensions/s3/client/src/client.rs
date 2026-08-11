@@ -34,13 +34,14 @@ use futures_util::stream::BoxStream;
 use hmac::{Hmac, Mac};
 use http_body::{Body, Frame, SizeHint};
 use prolly_s3_core::{
-    decode_canonical, version_cursor_after_key, ChecksumExpectation, CommitId, CommitReceipt,
-    Error, ErrorCode, EtagPredicateV1, GetRequest, ListRequest, MultipartCatalogSnapshotId,
-    ObjectHeaders, ObjectPath, ObjectPlane, ObjectSummary, ObjectVersionId, ObjectVersionKindV1,
-    ObjectWriteConditionV1, OperationId, PhysicalVersion, PhysicalVersioning,
-    ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository, RepositoryOptions, Result,
-    RetryAdvice, UploadId, VersionSummary, WorkspaceId, WorkspaceManifestV1,
-    MAX_LOGICAL_RETRY_LIMIT,
+    decode_canonical, encode_canonical, version_cursor_after_key, ChecksumExpectation, CommitId,
+    CommitReceipt, Error, ErrorCode, EtagPredicateV1, GetRequest, ListRequest,
+    MultipartCatalogSnapshotId, NativeMultipartCompletedPart, NativeMultipartPartResult,
+    NativeMultipartSessionV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectSummary,
+    ObjectVersionId, ObjectVersionKindV1, ObjectWriteConditionV1, OperationId, PhysicalVersion,
+    PhysicalVersioning, ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository,
+    RepositoryOptions, RepositoryStorageProfile, Result, RetryAdvice, UploadId, VersionSummary,
+    WorkspaceId, WorkspaceManifestV1, WriterLeaseMaintenance, MAX_LOGICAL_RETRY_LIMIT,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -546,6 +547,9 @@ pub struct Client {
     provider_identity: ProviderIdentity,
     attestation_signer: Arc<dyn AttestationSigner>,
     provider_attestation: Arc<RwLock<ProviderAttestationV1>>,
+    native_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), NativeMultipartPartResult>>>,
+    native_multipart_sessions: Arc<RwLock<BTreeMap<String, NativeMultipartSessionV1>>>,
+    writer_lease_maintenance: Option<Arc<WriterLeaseMaintenance>>,
 }
 
 #[derive(Default)]
@@ -555,6 +559,9 @@ pub struct ClientBuilder {
     repository_prefix: Option<String>,
     default_branch: Option<String>,
     writer: Option<String>,
+    storage_profile: Option<RepositoryStorageProfile>,
+    writer_lease_duration: Option<Duration>,
+    read_only: bool,
     logical_retry_limit: Option<u8>,
     gc_delete_rate_limit_per_second: Option<u32>,
     token_signer: Option<Arc<dyn TokenSigner>>,
@@ -616,6 +623,9 @@ impl Client {
             provider_identity: self.provider_identity.clone(),
             attestation_signer: self.attestation_signer.clone(),
             provider_attestation: self.provider_attestation.clone(),
+            native_multipart_parts: self.native_multipart_parts.clone(),
+            native_multipart_sessions: self.native_multipart_sessions.clone(),
+            writer_lease_maintenance: self.writer_lease_maintenance.clone(),
         })
     }
 
@@ -730,6 +740,7 @@ impl Client {
         Ok(CommitSession {
             client: self.clone(),
             manifest,
+            native_mutations: None,
         })
     }
     pub async fn at(&self, commit: CommitId) -> Result<Snapshot> {
@@ -1147,6 +1158,7 @@ impl Client {
             None,
         )
         .await?;
+        validate_profile_capabilities(self.repository.storage_profile(), &attestation)?;
         let id = attestation.id;
         *self
             .provider_attestation
@@ -1338,7 +1350,8 @@ impl Client {
             .provider_attestation
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "attestation lock poisoned"))?;
-        ensure_attestation_current(&attestation)
+        ensure_attestation_current(&attestation)?;
+        validate_profile_capabilities(self.repository.storage_profile(), &attestation)
     }
 
     fn ensure_native_version_recovery_supported(&self) -> Result<()> {
@@ -1554,6 +1567,22 @@ impl ClientBuilder {
         self.writer = Some(writer.into());
         self
     }
+    pub fn storage_profile(mut self, profile: RepositoryStorageProfile) -> Self {
+        self.storage_profile = Some(profile);
+        self
+    }
+    pub fn native_versioned(mut self) -> Self {
+        self.storage_profile = Some(RepositoryStorageProfile::NativeVersionedV1);
+        self
+    }
+    pub fn writer_lease_duration(mut self, duration: Duration) -> Self {
+        self.writer_lease_duration = Some(duration);
+        self
+    }
+    pub fn read_only(mut self, value: bool) -> Self {
+        self.read_only = value;
+        self
+    }
     pub fn logical_retry_limit(mut self, attempts: u8) -> Self {
         self.logical_retry_limit = Some(attempts);
         self
@@ -1630,6 +1659,11 @@ impl ClientBuilder {
 
     async fn finish(self, initialize: bool) -> Result<Client> {
         validate_logical_retry_limit(self.logical_retry_limit)?;
+        if initialize && self.read_only {
+            return Err(invalid(
+                "repository initialization requires a writable client",
+            ));
+        }
         let cursor_ttl = self.cursor_ttl.unwrap_or(Duration::from_secs(15 * 60));
         let cursor_clock_skew = self
             .cursor_clock_skew
@@ -1662,12 +1696,23 @@ impl ClientBuilder {
         if let Some(value) = self.writer {
             options.writer = value;
         }
+        if let Some(value) = self.storage_profile {
+            options.storage_profile = value;
+        }
+        if let Some(value) = self.writer_lease_duration {
+            options.writer_lease_millis = u64::try_from(value.as_millis())
+                .map_err(|_| invalid("writer lease duration exceeds u64 milliseconds"))?;
+        }
+        options.read_only = self.read_only;
         if let Some(value) = self.logical_retry_limit {
             options.logical_retry_limit = value;
         }
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
+        let maintain_native_writer = options.storage_profile
+            == RepositoryStorageProfile::NativeVersionedV1
+            && !options.read_only;
         let branch = options.default_branch.clone();
         let plane = Arc::new(AwsS3ObjectPlane::new(aws, bucket.clone()));
         let provider_identity = self
@@ -1703,6 +1748,7 @@ impl ClientBuilder {
                 }
                 Err(error) => return Err(error),
             };
+            validate_profile_capabilities(options.storage_profile, &attestation)?;
             (Repository::initialize(plane, options).await?, attestation)
         } else {
             let repository = Repository::open(plane.clone(), options).await?;
@@ -1714,10 +1760,16 @@ impl ClientBuilder {
                 selected_attestation,
             )
             .await?;
+            validate_profile_capabilities(repository.storage_profile(), &attestation)?;
             (repository, attestation)
         };
+        let repository = Arc::new(repository);
+        let writer_lease_maintenance = maintain_native_writer
+            .then(|| repository.start_writer_lease_maintenance())
+            .transpose()?
+            .map(Arc::new);
         Ok(Client {
-            repository: Arc::new(repository),
+            repository,
             bucket,
             branch,
             token_signer: self.token_signer,
@@ -1727,6 +1779,9 @@ impl ClientBuilder {
             provider_identity,
             attestation_signer,
             provider_attestation: Arc::new(RwLock::new(attestation)),
+            native_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
+            native_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
+            writer_lease_maintenance,
         })
     }
 }
@@ -1749,14 +1804,23 @@ impl CommitBuilder {
         self.client.ensure_provider_qualified()?;
         let millis = u64::try_from(self.expires_after.as_millis())
             .map_err(|_| invalid("workspace expiry exceeds u64 milliseconds"))?;
-        let manifest = self
-            .client
-            .repository
-            .begin_workspace(&self.client.branch, self.message, millis)
-            .await?;
+        let native =
+            self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
+        let manifest = if native {
+            self.client
+                .repository
+                .begin_native_batch(&self.client.branch, self.message, millis)
+                .await?
+        } else {
+            self.client
+                .repository
+                .begin_workspace(&self.client.branch, self.message, millis)
+                .await?
+        };
         Ok(CommitSession {
             client: self.client,
             manifest,
+            native_mutations: native.then(BTreeMap::new),
         })
     }
 }
@@ -1764,6 +1828,7 @@ impl CommitBuilder {
 pub struct CommitSession {
     client: Client,
     manifest: WorkspaceManifestV1,
+    native_mutations: Option<BTreeMap<Vec<u8>, prolly_s3_core::NativeBatchMutationV1>>,
 }
 impl CommitSession {
     pub fn id(&self) -> WorkspaceId {
@@ -1791,16 +1856,25 @@ impl CommitSession {
     }
     pub async fn publish(self) -> Result<CommitReceipt> {
         self.client.ensure_provider_qualified()?;
-        let receipt = self
-            .client
-            .repository
-            .publish_workspace(self.manifest.id)
-            .await?;
+        let receipt = if let Some(mutations) = self.native_mutations {
+            self.client
+                .repository
+                .publish_native_batch(self.manifest, mutations.into_values().collect())
+                .await?
+        } else {
+            self.client
+                .repository
+                .publish_workspace(self.manifest.id)
+                .await?
+        };
         self.client.record_advisory(&receipt).await;
         Ok(receipt)
     }
     pub async fn abort(self) -> Result<()> {
         self.client.ensure_provider_qualified()?;
+        if self.native_mutations.is_some() {
+            return Ok(());
+        }
         self.client
             .repository
             .abort_workspace(self.manifest.id)
@@ -1845,6 +1919,27 @@ impl<'a> StagedPutObjectBuilder<'a> {
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let body = self.body.ok_or_else(|| invalid("body is required"))?;
+        if let Some(mutations) = self.session.native_mutations.as_mut() {
+            let bytes = body.collect().await.map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native staged body failed: {error}"),
+                )
+            })?;
+            mutations.insert(
+                key.as_bytes().to_vec(),
+                prolly_s3_core::NativeBatchMutationV1::Put {
+                    key: key.as_bytes().to_vec(),
+                    bytes: bytes.into_bytes().to_vec(),
+                    headers: ObjectHeaders {
+                        content_type: self.content_type,
+                        ..ObjectHeaders::default()
+                    },
+                    user_metadata: self.metadata.unwrap_or_default().into_iter().collect(),
+                },
+            );
+            return Ok(());
+        }
         let stream = futures_util::stream::unfold(body, |mut body| async move {
             body.next().await.map(|item| (item, body))
         });
@@ -1886,6 +1981,15 @@ impl<'a> StagedDeleteObjectBuilder<'a> {
             .client
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
+        if let Some(mutations) = self.session.native_mutations.as_mut() {
+            mutations.insert(
+                key.as_bytes().to_vec(),
+                prolly_s3_core::NativeBatchMutationV1::Delete {
+                    key: key.as_bytes().to_vec(),
+                },
+            );
+            return Ok(());
+        }
         self.session.manifest = self
             .session
             .client
@@ -2264,7 +2368,7 @@ impl GetObjectBuilder {
         )?;
         validate_checksum_mode(self.checksum_mode.as_ref())?;
         let (body, response_len, content_range) = match &summary.version.body.kind {
-            ObjectVersionKindV1::Live { content, size, .. } => {
+            ObjectVersionKindV1::Live { size, .. } => {
                 let selected_range = self
                     .range
                     .as_deref()
@@ -2275,10 +2379,11 @@ impl GetObjectBuilder {
                     .unwrap_or(*size);
                 let content_range =
                     selected_range.map(|(start, end)| format!("bytes {start}-{end}/{size}"));
-                let stream = self
-                    .client
-                    .repository
-                    .read_content_stream(content.clone(), selected_range);
+                let stream = self.client.repository.read_version_stream(
+                    key.as_bytes(),
+                    summary.version.clone(),
+                    selected_range,
+                );
                 (
                     streaming_body(stream, response_len),
                     response_len,
@@ -2719,6 +2824,7 @@ pub struct CreateMultipartUploadBuilder {
     key: Option<String>,
     content_type: Option<String>,
     metadata: Option<HashMap<String, String>>,
+    operation_id: Option<OperationId>,
 }
 
 pub struct ListMultipartUploadsBuilder {
@@ -2777,6 +2883,93 @@ impl ListMultipartUploadsBuilder {
                 .set_key_marker(self.key_marker)
                 .set_upload_id_marker(self.upload_id_marker)
                 .set_uploads(Some(Vec::new()))
+                .build());
+        }
+        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let page = self
+                .client
+                .repository
+                .plane()
+                .list_native_multipart_uploads(prolly_s3_core::NativeMultipartListUploads {
+                    prefix: prefix.clone(),
+                    key_marker: self.key_marker.clone(),
+                    upload_id_marker: self.upload_id_marker.clone(),
+                    limit,
+                })
+                .await?;
+            let mut uploads = page
+                .uploads
+                .iter()
+                .map(|upload| {
+                    let key = upload.path.as_str().to_string();
+                    let handle = encode_native_multipart_session(&NativeMultipartSessionV1 {
+                        repository: self.client.repository_id(),
+                        branch: self.client.branch.clone(),
+                        key: key.as_bytes().to_vec(),
+                        headers: ObjectHeaders::default(),
+                        user_metadata: BTreeMap::new(),
+                        provider_upload_id: upload.upload_id.clone(),
+                        operation: OperationId::nil(),
+                        writer_fence_generation: 0,
+                        created_at_millis: upload.initiated_at_millis,
+                        discovered: true,
+                    })?;
+                    Ok(MultipartUpload::builder()
+                        .key(key)
+                        .upload_id(handle)
+                        .initiated(datetime(upload.initiated_at_millis)?)
+                        .build())
+                })
+                .collect::<Result<Vec<_>>>()?;
+            if page.next_key_marker.is_none() {
+                let sessions = self.client.native_multipart_sessions.read().map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart session cache lock poisoned",
+                    )
+                })?;
+                for (handle, session) in sessions.iter() {
+                    let key = std::str::from_utf8(&session.key).map_err(|_| {
+                        Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+                    })?;
+                    if session.branch == self.client.branch
+                        && key.starts_with(&prefix)
+                        && !page.uploads.iter().any(|upload| {
+                            upload.path.as_str() == key
+                                && upload.upload_id == session.provider_upload_id
+                        })
+                    {
+                        uploads.push(
+                            MultipartUpload::builder()
+                                .key(key)
+                                .upload_id(handle)
+                                .initiated(datetime(session.created_at_millis)?)
+                                .build(),
+                        );
+                    }
+                }
+            }
+            uploads.sort_by(|left, right| {
+                (
+                    left.key().unwrap_or_default(),
+                    left.upload_id().unwrap_or_default(),
+                )
+                    .cmp(&(
+                        right.key().unwrap_or_default(),
+                        right.upload_id().unwrap_or_default(),
+                    ))
+            });
+            uploads.truncate(limit);
+            return Ok(ListMultipartUploadsOutput::builder()
+                .bucket(&self.client.bucket)
+                .prefix(prefix)
+                .max_uploads(i32::try_from(limit).unwrap_or(i32::MAX))
+                .is_truncated(page.next_key_marker.is_some())
+                .set_key_marker(self.key_marker)
+                .set_upload_id_marker(self.upload_id_marker)
+                .set_next_key_marker(page.next_key_marker)
+                .set_next_upload_id_marker(page.next_upload_id_marker)
+                .set_uploads(Some(uploads))
                 .build());
         }
 
@@ -2917,6 +3110,7 @@ impl CreateMultipartUploadBuilder {
             key: None,
             content_type: None,
             metadata: None,
+            operation_id: None,
         }
     }
     pub fn bucket(mut self, value: impl Into<String>) -> Self {
@@ -2937,26 +3131,60 @@ impl CreateMultipartUploadBuilder {
             .insert(key.into(), value.into());
         self
     }
+    pub fn operation_id(mut self, value: OperationId) -> Self {
+        self.operation_id = Some(value);
+        self
+    }
     pub async fn send(self) -> Result<CreateMultipartUploadOutput> {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
-        let upload = self
-            .client
-            .repository
-            .create_multipart_upload(
-                &self.client.branch,
-                key.as_bytes().to_vec(),
-                ObjectHeaders {
-                    content_type: self.content_type,
-                    ..ObjectHeaders::default()
-                },
-                self.metadata.unwrap_or_default().into_iter().collect(),
-            )
-            .await?;
+        let headers = ObjectHeaders {
+            content_type: self.content_type,
+            ..ObjectHeaders::default()
+        };
+        let metadata = self.metadata.unwrap_or_default().into_iter().collect();
+        let upload_id = if self.client.repository.storage_profile()
+            == RepositoryStorageProfile::NativeVersionedV1
+        {
+            let session = self
+                .client
+                .repository
+                .create_native_multipart_upload(
+                    &self.client.branch,
+                    key.as_bytes().to_vec(),
+                    headers,
+                    metadata,
+                    self.operation_id,
+                )
+                .await?;
+            let handle = encode_native_multipart_session(&session)?;
+            self.client
+                .native_multipart_sessions
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart session cache lock poisoned",
+                    )
+                })?
+                .insert(handle.clone(), session);
+            handle
+        } else {
+            self.client
+                .repository
+                .create_multipart_upload(
+                    &self.client.branch,
+                    key.as_bytes().to_vec(),
+                    headers,
+                    metadata,
+                )
+                .await?
+                .to_string()
+        };
         Ok(CreateMultipartUploadOutput::builder()
             .bucket(&self.client.bucket)
             .key(key)
-            .upload_id(upload.to_string())
+            .upload_id(upload_id)
             .build())
     }
 }
@@ -3010,8 +3238,7 @@ impl UploadPartCopyBuilder {
     pub async fn send(self) -> Result<UploadPartCopyOutput> {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let destination = required(self.key.as_deref(), "key")?;
-        let upload = UploadId::from_str(required(self.upload_id.as_deref(), "upload_id")?)?;
-        validate_upload_binding(&self.client, upload, destination).await?;
+        let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
         let part_number = u32::try_from(
             self.part_number
                 .ok_or_else(|| invalid("part_number is required"))?,
@@ -3044,6 +3271,43 @@ impl UploadPartCopyBuilder {
         } else {
             None
         };
+        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let session = decode_native_multipart_session(&self.client, upload_text, destination)?;
+            let part = self
+                .client
+                .repository
+                .upload_native_multipart_part_copy(
+                    &session,
+                    part_number,
+                    &self.client.branch,
+                    source_key.as_bytes(),
+                    source_version,
+                    range,
+                )
+                .await?;
+            self.client
+                .native_multipart_parts
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart part cache lock poisoned",
+                    )
+                })?
+                .insert((upload_text.to_string(), part_number), part.clone());
+            return Ok(UploadPartCopyOutput::builder()
+                .copy_part_result(
+                    CopyPartResult::builder()
+                        .e_tag(part.etag)
+                        .set_checksum_sha256(
+                            part.checksum_sha256.map(|value| STANDARD.encode(value)),
+                        )
+                        .build(),
+                )
+                .build());
+        }
+        let upload = UploadId::from_str(upload_text)?;
+        validate_upload_binding(&self.client, upload, destination).await?;
         let part = self
             .client
             .repository
@@ -3109,14 +3373,40 @@ impl UploadPartBuilder {
     pub async fn send(self) -> Result<UploadPartOutput> {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
-        let upload = UploadId::from_str(required(self.upload_id.as_deref(), "upload_id")?)?;
-        validate_upload_binding(&self.client, upload, key).await?;
+        let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
         let part_number = u32::try_from(
             self.part_number
                 .ok_or_else(|| invalid("part_number is required"))?,
         )
         .map_err(|_| invalid("part_number must be positive"))?;
         let body = self.body.ok_or_else(|| invalid("body is required"))?;
+        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+            let stream = futures_util::stream::unfold(body, |mut body| async move {
+                body.next().await.map(|item| (item, body))
+            });
+            let part = self
+                .client
+                .repository
+                .upload_native_multipart_part_stream(&session, part_number, stream)
+                .await?;
+            self.client
+                .native_multipart_parts
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart part cache lock poisoned",
+                    )
+                })?
+                .insert((upload_text.to_string(), part_number), part.clone());
+            return Ok(UploadPartOutput::builder()
+                .e_tag(part.etag)
+                .set_checksum_sha256(part.checksum_sha256.map(|value| STANDARD.encode(value)))
+                .build());
+        }
+        let upload = UploadId::from_str(upload_text)?;
+        validate_upload_binding(&self.client, upload, key).await?;
         let stream = futures_util::stream::unfold(body, |mut body| async move {
             body.next().await.map(|item| (item, body))
         });
@@ -3172,6 +3462,67 @@ impl ListPartsBuilder {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
+        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+            let marker = self
+                .part_number_marker
+                .as_deref()
+                .map(str::parse::<u32>)
+                .transpose()
+                .map_err(|_| invalid("part_number_marker must be an integer"))?
+                .unwrap_or(0);
+            let limit = validate_limit(self.max_parts)?;
+            let page = self
+                .client
+                .repository
+                .plane()
+                .list_native_multipart_parts(prolly_s3_core::NativeMultipartListParts {
+                    path: ObjectPath::new(key)?,
+                    upload_id: session.provider_upload_id,
+                    after_part_number: marker,
+                    limit,
+                })
+                .await?;
+            let mut cache = self.client.native_multipart_parts.write().map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native multipart part cache lock poisoned",
+                )
+            })?;
+            for part in &page.parts {
+                let key = (upload_text.to_string(), part.part_number);
+                let mut merged = part.clone();
+                if merged.checksum_sha256.is_none() {
+                    merged.checksum_sha256 = cache.get(&key).and_then(|part| part.checksum_sha256);
+                }
+                cache.insert(key, merged);
+            }
+            drop(cache);
+            let parts = page
+                .parts
+                .into_iter()
+                .map(|part| {
+                    Part::builder()
+                        .part_number(i32::try_from(part.part_number).unwrap_or(i32::MAX))
+                        .e_tag(part.etag)
+                        .set_checksum_sha256(
+                            part.checksum_sha256.map(|value| STANDARD.encode(value)),
+                        )
+                        .size(i64_len(part.size).expect("provider part size is valid"))
+                        .build()
+                })
+                .collect();
+            return Ok(ListPartsOutput::builder()
+                .bucket(&self.client.bucket)
+                .key(key)
+                .upload_id(upload_text)
+                .set_part_number_marker(self.part_number_marker)
+                .set_next_part_number_marker(page.next_part_number.map(|value| value.to_string()))
+                .max_parts(i32::try_from(limit).unwrap_or(i32::MAX))
+                .is_truncated(page.next_part_number.is_some())
+                .set_parts(Some(parts))
+                .build());
+        }
         let upload = UploadId::from_str(upload_text)?;
         validate_upload_binding(&self.client, upload, key).await?;
         let marker = self
@@ -3231,6 +3582,10 @@ pub struct CompleteMultipartUploadBuilder {
     upload_id: Option<String>,
     multipart_upload: Option<CompletedMultipartUpload>,
     operation_id: Option<OperationId>,
+    checksum_sha256: Option<String>,
+    checksum_md5: Option<String>,
+    expected_size: Option<u64>,
+    part_sizes: BTreeMap<u32, u64>,
 }
 impl CompleteMultipartUploadBuilder {
     fn new(client: Client) -> Self {
@@ -3241,6 +3596,10 @@ impl CompleteMultipartUploadBuilder {
             upload_id: None,
             multipart_upload: None,
             operation_id: None,
+            checksum_sha256: None,
+            checksum_md5: None,
+            expected_size: None,
+            part_sizes: BTreeMap::new(),
         }
     }
     pub fn bucket(mut self, value: impl Into<String>) -> Self {
@@ -3263,11 +3622,26 @@ impl CompleteMultipartUploadBuilder {
         self.operation_id = Some(value);
         self
     }
+    pub fn checksum_sha256(mut self, value: impl Into<String>) -> Self {
+        self.checksum_sha256 = Some(value.into());
+        self
+    }
+    pub fn checksum_md5(mut self, value: impl Into<String>) -> Self {
+        self.checksum_md5 = Some(value.into());
+        self
+    }
+    pub fn expected_size(mut self, value: u64) -> Self {
+        self.expected_size = Some(value);
+        self
+    }
+    pub fn part_size(mut self, part_number: u32, size: u64) -> Self {
+        self.part_sizes.insert(part_number, size);
+        self
+    }
     pub async fn send(self) -> Result<Versioned<CompleteMultipartUploadOutput>> {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
-        let upload = UploadId::from_str(required(self.upload_id.as_deref(), "upload_id")?)?;
-        validate_upload_binding(&self.client, upload, key).await?;
+        let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
         let completed = self
             .multipart_upload
             .ok_or_else(|| invalid("multipart_upload is required"))?;
@@ -3281,11 +3655,117 @@ impl CompleteMultipartUploadBuilder {
             let etag = required(part.e_tag(), "completed e_tag")?.to_string();
             requested.push((number, etag));
         }
-        let receipt = self
-            .client
-            .repository
-            .complete_multipart_upload(upload, requested, self.operation_id)
-            .await?;
+        let receipt = if self.client.repository.storage_profile()
+            == RepositoryStorageProfile::NativeVersionedV1
+        {
+            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+            let checksum_sha256 = decode_checksum::<32>(
+                required(self.checksum_sha256.as_deref(), "checksum_sha256")?,
+                "checksum_sha256",
+            )?;
+            let checksum_md5 = decode_checksum::<16>(
+                required(self.checksum_md5.as_deref(), "checksum_md5")?,
+                "checksum_md5",
+            )?;
+            let expected_size = self
+                .expected_size
+                .ok_or_else(|| invalid("expected_size is required for native multipart"))?;
+            let native_parts = {
+                let cached = self.client.native_multipart_parts.read().map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart part cache lock poisoned",
+                    )
+                })?;
+                let mut native_parts = Vec::with_capacity(completed.parts().len());
+                for part in completed.parts() {
+                    let part_number = u32::try_from(
+                        part.part_number()
+                            .ok_or_else(|| invalid("completed part_number is required"))?,
+                    )
+                    .map_err(|_| invalid("completed part_number must be positive"))?;
+                    let etag = required(part.e_tag(), "completed e_tag")?.to_string();
+                    let cached_part = cached.get(&(upload_text.to_string(), part_number));
+                    let checksum = match part.checksum_sha256() {
+                        Some(value) => decode_checksum::<32>(value, "completed checksum_sha256")?,
+                        None => cached_part
+                            .and_then(|part| part.checksum_sha256)
+                            .ok_or_else(|| {
+                                invalid(
+                                    "completed checksum_sha256 is required after a process restart",
+                                )
+                            })?,
+                    };
+                    let size = self
+                        .part_sizes
+                        .get(&part_number)
+                        .copied()
+                        .or_else(|| cached_part.map(|part| part.size))
+                        .ok_or_else(|| {
+                            invalid(
+                                "part_size is required after a native multipart process restart",
+                            )
+                        })?;
+                    if cached_part.is_some_and(|part| {
+                        part.etag != etag
+                            || part.checksum_sha256 != Some(checksum)
+                            || part.size != size
+                    }) {
+                        return Err(Error::new(
+                            ErrorCode::ChecksumMismatch,
+                            "completed native multipart part differs from its upload receipt",
+                        ));
+                    }
+                    native_parts.push(NativeMultipartCompletedPart {
+                        part_number,
+                        etag,
+                        checksum_sha256: checksum,
+                        size,
+                    });
+                }
+                native_parts
+            };
+            let receipt = self
+                .client
+                .repository
+                .complete_native_multipart_upload(
+                    session,
+                    native_parts,
+                    checksum_sha256,
+                    checksum_md5,
+                    expected_size,
+                    self.operation_id,
+                )
+                .await?;
+            self.client
+                .native_multipart_parts
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart part cache lock poisoned",
+                    )
+                })?
+                .retain(|(upload, _), _| upload != upload_text);
+            self.client
+                .native_multipart_sessions
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart session cache lock poisoned",
+                    )
+                })?
+                .remove(upload_text);
+            receipt
+        } else {
+            let upload = UploadId::from_str(upload_text)?;
+            validate_upload_binding(&self.client, upload, key).await?;
+            self.client
+                .repository
+                .complete_multipart_upload(upload, requested, self.operation_id)
+                .await?
+        };
         self.client.record_advisory(&receipt).await;
         let summary = self
             .client
@@ -3343,12 +3823,41 @@ impl AbortMultipartUploadBuilder {
     pub async fn send(self) -> Result<AbortMultipartUploadOutput> {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
-        let upload = UploadId::from_str(required(self.upload_id.as_deref(), "upload_id")?)?;
-        validate_upload_binding(&self.client, upload, key).await?;
-        self.client
-            .repository
-            .abort_multipart_upload(upload)
-            .await?;
+        let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
+        if self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
+            let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+            self.client
+                .repository
+                .abort_native_multipart_upload(&session)
+                .await?;
+            self.client
+                .native_multipart_parts
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart part cache lock poisoned",
+                    )
+                })?
+                .retain(|(upload, _), _| upload != upload_text);
+            self.client
+                .native_multipart_sessions
+                .write()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "native multipart session cache lock poisoned",
+                    )
+                })?
+                .remove(upload_text);
+        } else {
+            let upload = UploadId::from_str(upload_text)?;
+            validate_upload_binding(&self.client, upload, key).await?;
+            self.client
+                .repository
+                .abort_multipart_upload(upload)
+                .await?;
+        }
         Ok(AbortMultipartUploadOutput::builder().build())
     }
 }
@@ -3987,6 +4496,20 @@ where
 fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::InvalidRequest, message)
 }
+
+fn validate_profile_capabilities(
+    profile: RepositoryStorageProfile,
+    attestation: &ProviderAttestationV1,
+) -> Result<()> {
+    match profile {
+        RepositoryStorageProfile::DistributedContentAddressedV1 => {
+            attestation.body.capabilities.validate_distributed()
+        }
+        RepositoryStorageProfile::NativeVersionedV1 => {
+            attestation.body.capabilities.validate_native_versioned()
+        }
+    }
+}
 fn validate_branch_name(branch: &str) -> Result<()> {
     if branch.is_empty()
         || branch.contains("..")
@@ -4111,6 +4634,50 @@ async fn validate_upload_binding(client: &Client, upload: UploadId, key: &str) -
         ));
     }
     Ok(())
+}
+
+const NATIVE_MULTIPART_HANDLE_PREFIX: &str = "nmu1_";
+
+fn encode_native_multipart_session(session: &NativeMultipartSessionV1) -> Result<String> {
+    Ok(format!(
+        "{NATIVE_MULTIPART_HANDLE_PREFIX}{}",
+        URL_SAFE_NO_PAD.encode(encode_canonical(session)?)
+    ))
+}
+
+fn decode_native_multipart_session(
+    client: &Client,
+    value: &str,
+    key: &str,
+) -> Result<NativeMultipartSessionV1> {
+    let encoded = value
+        .strip_prefix(NATIVE_MULTIPART_HANDLE_PREFIX)
+        .ok_or_else(|| {
+            Error::new(
+                ErrorCode::NoSuchUpload,
+                "native multipart handle is invalid",
+            )
+        })?;
+    let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|_| {
+        Error::new(
+            ErrorCode::NoSuchUpload,
+            "native multipart handle is not canonical base64url",
+        )
+    })?;
+    let session: NativeMultipartSessionV1 = decode_canonical(&bytes).map_err(|_| {
+        Error::new(
+            ErrorCode::NoSuchUpload,
+            "native multipart handle is malformed",
+        )
+    })?;
+    session.validate_address(client.repository_id())?;
+    if session.branch != client.branch || session.key != key.as_bytes() {
+        return Err(Error::new(
+            ErrorCode::NoSuchUpload,
+            "native multipart upload does not belong to this branch and key",
+        ));
+    }
+    Ok(session)
 }
 fn utf8_key(key: &[u8]) -> Result<String> {
     String::from_utf8(key.to_vec())

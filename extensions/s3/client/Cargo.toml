@@ -23,6 +23,7 @@ base64 = "0.22"
 futures-util = "0.3"
 hmac = "0.12"
 http-body = "1"
+md-5 = "0.10"
 percent-encoding = "2.3"
 hex = "0.4"
 prolly-s3-core = { path = "../core", version = "0.1.0" }
