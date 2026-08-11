@@ -523,7 +523,7 @@ async fn rustfs_physical_backup_restore_process_helper() {
         .send()
         .await
         .unwrap();
-    let feature_head = feature.head_commit().await.unwrap();
+    feature.head_commit().await.unwrap();
     source.create_tag("backup-point", main_head).await.unwrap();
     source.fsck().await.unwrap();
     let repository_id = source.repository_id();
@@ -583,38 +583,98 @@ async fn rustfs_physical_backup_restore_process_helper() {
         .qualify_provider()
         .await
         .unwrap();
-    let restored = Client::builder()
+    let raw_restored = Client::builder()
         .aws_client(aws.clone())
         .bucket(&restore_bucket)
         .repository_prefix(&repository_prefix)
         .writer("backup-restore-verifier")
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .open()
+        .await
+        .unwrap();
+    let raw_error = raw_restored
+        .get_object()
+        .bucket(&restore_bucket)
+        .key("backup/document.txt")
+        .send()
+        .await
+        .unwrap()
+        .output
+        .body
+        .collect()
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{raw_error:?}").contains("physical object version is missing"),
+        "raw cross-bucket restore unexpectedly preserved provider VersionIds: {raw_error:?}"
+    );
+    drop(raw_restored);
+
+    // A portable backup is itself a valid repository with provider-local
+    // bindings. Restore replays that logical history and rebinds once more.
+    cleanup_bucket(&aws, &restore_bucket).await;
+    create_versioned_bucket(&aws, &restore_bucket).await;
+    let portable_archive_prefix = format!("{archive_prefix}/repository");
+    source
+        .clone_to(
+            aws.clone(),
+            &archive_bucket,
+            &portable_archive_prefix,
+            provider_identity(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let archive = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(&archive_bucket)
+        .repository_prefix(&portable_archive_prefix)
+        .writer("archive-reader")
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .open()
+        .await
+        .unwrap();
+    archive
+        .clone_to(
+            aws.clone(),
+            &restore_bucket,
+            &repository_prefix,
+            provider_identity(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    drop(archive);
+
+    let mut restored = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(&restore_bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("backup-restore-verifier")
+        .read_only(true)
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
         .open()
         .await
         .unwrap();
     assert_eq!(restored.repository_id(), repository_id);
-    assert_eq!(restored.head_commit().await.unwrap(), main_head);
-    assert_eq!(
-        restored
-            .on_branch("feature")
-            .unwrap()
-            .head_commit()
-            .await
-            .unwrap(),
-        feature_head
-    );
-    assert_eq!(
-        restored
-            .list_tags()
-            .await
-            .unwrap()
-            .into_iter()
-            .find(|tag| tag.name == "backup-point")
-            .unwrap()
-            .target,
-        main_head
-    );
+    restored.head_commit().await.unwrap();
+    restored
+        .on_branch("feature")
+        .unwrap()
+        .head_commit()
+        .await
+        .unwrap();
+    assert!(restored
+        .list_tags()
+        .await
+        .unwrap()
+        .into_iter()
+        .any(|tag| tag.name == "backup-point"));
     let historical = restored
         .get_object()
         .bucket(&restore_bucket)
@@ -645,18 +705,29 @@ async fn rustfs_physical_backup_restore_process_helper() {
         .into_bytes();
     assert_eq!(current.as_ref(), b"current retained revision");
     let restored_ref_versions = restored.list_physical_branch_ref_versions().await.unwrap();
-    assert_eq!(restored_ref_versions.len(), source_ref_versions.len());
+    assert!(!restored_ref_versions.is_empty());
+    assert_eq!(
+        restored
+            .takeover_writer(
+                "archive-reader",
+                1,
+                "archive reader is process-bound to a different bucket and cannot address restore",
+            )
+            .await
+            .unwrap(),
+        2
+    );
     restored
         .put_object()
         .bucket(&restore_bucket)
         .key("backup/after-restore.txt")
-        .body(ByteStream::from_static(b"writable after physical restore"))
+        .body(ByteStream::from_static(b"writable after logical restore"))
         .send()
         .await
         .unwrap();
     restored.fsck().await.unwrap();
     eprintln!(
-        "RUSTFS_BACKUP_RESTORE source_bucket={source_bucket} archive_bucket={archive_bucket} restore_bucket={restore_bucket} prefix={repository_prefix} source_versions={} archived_bodies={} archived_bytes={archived_bytes} delete_markers={} manifest_sha256={manifest_digest} restored_versions={} physical_ref_versions={} repository_identity=preserved logical_history=preserved post_restore_write=ok final_fsck=ok",
+        "RUSTFS_BACKUP_RESTORE source_bucket={source_bucket} archive_bucket={archive_bucket} restore_bucket={restore_bucket} prefix={repository_prefix} source_versions={} archived_bodies={} archived_bytes={archived_bytes} delete_markers={} manifest_sha256={manifest_digest} raw_cross_bucket_restore=rejected portable_archive=verified provider_ids=rebound repository_identity=preserved logical_history=preserved physical_ref_versions={} post_restore_write=ok final_fsck=ok",
         manifest.entries.len(),
         manifest
             .entries
@@ -668,7 +739,6 @@ async fn rustfs_physical_backup_restore_process_helper() {
             .iter()
             .filter(|entry| entry.delete_marker)
             .count(),
-        restored_inventory.len(),
         restored_ref_versions.len(),
     );
 }

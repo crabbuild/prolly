@@ -1,4 +1,4 @@
-# Prolly Prolly S3 client
+# Prolly S3 client
 
 `prolly-s3-client` keeps files as normal, whole objects in a versioned S3
 bucket and adds Git-like history through Prolly commits. It deliberately does
@@ -46,6 +46,11 @@ async fn create_client(
         .aws_client(aws)
         .bucket(bucket)
         .writer("repository-service")
+        .max_parallel_payload_writes(32)
+        .max_cached_commits(8_192)
+        .max_cached_branches(1_024)
+        .max_cached_node_pack_bytes(128 * 1024 * 1024)
+        .max_staged_batch_bytes(256 * 1024 * 1024)
         .provider_identity(ProviderIdentity::aws_region("us-west-2"))
         .attestation_signer(Arc::new(HmacAttestationSigner::single(
             "provider-key-2026-01",
@@ -67,6 +72,11 @@ writer lease.
 
 The HMAC byte vectors above are illustrative. Load independent, rotated key
 rings from a secret manager in production.
+
+The cache values above are bounded examples, not universal sizing. Tune them
+against your key count and memory budget. Export `performance_snapshot()` for
+publication queue/wait telemetry and `s3_operation_metrics()` for SDK request
+counts.
 
 ## Put and read a file
 
@@ -105,7 +115,7 @@ provider's raw S3 `VersionId`.
 
 ## Read an old snapshot
 
-Every snapshot resolves the exact S3 version recorded at that commit:
+Every snapshot resolves the exact physical S3 version recorded at that commit:
 
 ```rust
 use aws_sdk_s3::primitives::ByteStream;
@@ -173,7 +183,9 @@ let receipt = commit.publish().await?;
 println!("published commit: {}", receipt.id);
 ```
 
-For `N` staged keys, publication uses `N + 3` foreground S3 calls.
+For `N` staged keys, publication uses `N + 2` foreground S3 calls. Payload
+mutations are bounded and parallel; one commit envelope and one branch CAS make
+the batch visible.
 
 ## List, branch, and diff
 
@@ -229,8 +241,9 @@ let result = client
 assert_eq!(result.commit.as_ref().unwrap().operation, operation);
 ```
 
-The client does not retry logical branch conflicts. Its exclusive-writer queue
-serializes local callers; a stale expected head fails explicitly.
+The client does not retry logical branch conflicts. Local payload uploads may
+run concurrently, while the short metadata-publication phase is serialized; a
+stale expected head fails explicitly.
 
 ## Use cases
 
@@ -244,9 +257,11 @@ serializes local callers; a stale expected head fails explicitly.
 
 - No unmanaged or multi-process concurrent writers.
 - No repository-level deduplication, chunking, or partial-file updates.
-- Commit sessions buffer bodies in memory.
-- High-level multipart session state is process-local until completion.
-- Provider-issued version IDs cannot be preserved across buckets.
+- Commit sessions buffer bodies in memory and fail closed at the configured
+  aggregate byte limit; use physical multipart for large individual files.
+- Multipart restart requires the caller to persist the upload handle, each
+  part's ETag/SHA-256/size, and whole-object checksums.
+- Provider-native version IDs cannot be preserved across buckets.
 - Raw S3 listing shows physical state, not a branch or historical snapshot.
 - Production AWS scale and throttling qualification is still pending.
 

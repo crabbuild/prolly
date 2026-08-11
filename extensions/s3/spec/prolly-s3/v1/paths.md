@@ -17,10 +17,10 @@ lowercase UUID hex form. `G20` is a zero-padded 20-digit decimal generation.
 | branch ref | `P/refs/heads/N` |
 | tag ref | `P/refs/tags/N` |
 | tag reflog entry | `P/reflogs/tags/N/H` |
-| commit | `P/commits/sha256/H0/H1/H` |
+| commit envelope | `P/commits/sha256/H0/H1/H` |
 | direct Prolly node | `P/nodes/sha256/H0/H1/H` |
-| node pack | `P/node-packs/sha256/H0/H1/H.pack` |
 | node-index checkpoint | `P/node-index/checkpoints/G20-H.cbor` |
+| current node-index pointer | `P/node-index/latest.cbor` |
 | retention pin | `P/retention/pins/N` |
 | GC plan | `P/gc/plans/pgc1_….cbor` |
 | GC run | `P/gc/runs/pgc1_….cbor` |
@@ -40,10 +40,10 @@ never synthesized from a logical ID.
 
 ## Creation and mutability
 
-- Format, commits, node objects, node packs, reflogs, GC plans, and provider
+- Format, commit envelopes, node objects, reflogs, GC plans, and provider
   attestations are immutable and use create-if-absent semantics.
-- Branch refs, tags, leases, retention pins, GC runs, and mark runs are mutable
-  only through storage-token compare-and-swap.
+- Branch refs, tags, leases, retention pins, the current node-index pointer, GC
+  runs, and mark runs are mutable only through storage-token compare-and-swap.
 - An existing immutable key with identical SHA-256 is idempotent success; the
   same key with different bytes is corruption.
 - Listing is discovery only. It never establishes branch authority.

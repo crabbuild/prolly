@@ -61,7 +61,7 @@ shape.
 ## Authority and publication
 
 The current branch ref is the only authority for branch visibility. An object
-version, node pack, or commit may exist physically without being visible.
+version or commit envelope may exist physically without being visible.
 Visibility changes only when the branch ref compare-and-swap succeeds.
 
 Implementations MUST preserve these invariants:

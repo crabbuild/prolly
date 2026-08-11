@@ -90,7 +90,7 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
         plane
             .put_immutable(ImmutablePut {
                 path: ObjectPath::new(format!(
-                    "gc-resume/node-packs/sha256/{ordinal:02}/{ordinal:02}/{}",
+                    "gc-resume/commits/sha256/{ordinal:02}/{ordinal:02}/{}",
                     format!("{ordinal:02}").repeat(32)
                 ))
                 .unwrap(),
@@ -101,7 +101,7 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
             .unwrap();
     }
     let dry_run = repository.plan_gc(2 * 60 * 60 * 1_000, 100).await.unwrap();
-    assert_eq!(dry_run.candidates_by_kind.get("node-packs"), Some(&3));
+    assert_eq!(dry_run.candidates_by_kind.get("commits"), Some(&3));
 
     let first = repository.sweep_gc_batch(dry_run.plan.id, 1).await.unwrap();
     assert_eq!(first.next_index, 1);
@@ -113,7 +113,7 @@ async fn gc_sweep_checkpoints_each_bounded_batch_and_reports_kinds() {
     assert!(final_report.complete);
     assert_eq!(final_report.next_index, 3);
     assert_eq!(final_report.deleted_versions, 3);
-    assert_eq!(final_report.deleted_by_kind.get("node-packs"), Some(&3));
+    assert_eq!(final_report.deleted_by_kind.get("commits"), Some(&3));
     assert_eq!(
         repository.gc_run(dry_run.plan.id).await.unwrap().next_index,
         3
@@ -155,7 +155,7 @@ async fn gc_delete_rate_is_bound_to_the_run_and_paces_exact_deletes() {
         plane
             .put_immutable(ImmutablePut {
                 path: ObjectPath::new(format!(
-                    "gc-rate/node-packs/sha256/{ordinal:02}/{ordinal:02}/{}",
+                    "gc-rate/commits/sha256/{ordinal:02}/{ordinal:02}/{}",
                     format!("{ordinal:02}").repeat(32)
                 ))
                 .unwrap(),
@@ -224,7 +224,7 @@ async fn gc_conservatively_preserves_every_physical_ref_version() {
     plane
         .put_immutable(ImmutablePut {
             path: ObjectPath::new(format!(
-                "gc-physical-refs/node-packs/sha256/ff/ff/{}",
+                "gc-physical-refs/commits/sha256/ff/ff/{}",
                 "ff".repeat(32)
             ))
             .unwrap(),

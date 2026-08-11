@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
     decode_canonical, encode_canonical, BucketCommitV1, BucketDeltaV1, BucketStateV1,
-    CanonicalLimits, CommitGeneration, CommitId, ErrorCode, ExclusiveWriterLeaseV1,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, NodePackEntryV1, NodePackV1,
-    ObjectHeaders, ObjectTransition, ObjectVersionOrder, ObjectVersionV1, OperationId,
-    PhysicalObjectBindingV1, RefGeneration, RefValueV1, ReflogEntryV1, RepositoryFormatV1,
-    RepositoryId, TreeFormatDigest, TreeRootV1,
+    CanonicalLimits, CommitGeneration, CommitId, CommitObjectV1, CurrentObjectV1, ErrorCode,
+    ExclusiveWriterLeaseV1, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectTransition, ObjectVersionOrder,
+    ObjectVersionV1, OperationId, PhysicalObjectBindingV1, RefGeneration, RefValueV1,
+    ReflogEntryV1, RepositoryFormatV1, RepositoryId, TreeFormatDigest, TreeRootV1,
 };
 use serde::Serialize;
 use serde_json::{json, Value as JsonValue};
@@ -109,6 +109,13 @@ fn actual_fixture() -> JsonValue {
         metadata: BTreeMap::from([("aa".into(), vec![2]), ("z".into(), vec![1])]),
     };
     let commit_id = commit.id().unwrap();
+    let current = CurrentObjectV1 {
+        version: version.clone(),
+    };
+    let commit_object = CommitObjectV1::new(commit.clone(), None)
+        .unwrap()
+        .encode_object()
+        .unwrap();
     let reflog = ReflogEntryV1 {
         branch: "main".into(),
         old_target: None,
@@ -148,10 +155,12 @@ fn actual_fixture() -> JsonValue {
                 "cbor_hex": encoded(&version),
                 "id": version.id.to_string()
             },
+            "current_object_v1": {"cbor_hex": encoded(&current)},
             "bucket_commit_v1": {
                 "cbor_hex": encoded(&commit),
                 "id": commit_id.to_string()
             },
+            "commit_object_v1": {"object_hex": hex::encode(commit_object)},
             "ref_value_v1": {"cbor_hex": encoded(&reference)},
             "exclusive_writer_lease_v1": {"cbor_hex": encoded(&lease)}
         }

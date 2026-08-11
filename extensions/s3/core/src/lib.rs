@@ -15,7 +15,8 @@ pub use object_plane::*;
 pub use repository::{
     version_cursor_after_key, BranchHead, CloneReport, FsckReport, GcDryRun, GcSweepReport,
     MergeConflict, MergePlan, MergePolicy, ObjectDiff, ObjectSummary, RefMoveReceipt, RepairReport,
-    Repository, RepositoryOptions, SyncReport, Tag, VersionSummary, WriterLeaseMaintenance,
+    Repository, RepositoryOptions, RepositoryPerformanceSnapshot, SyncReport, Tag, VersionSummary,
+    WriterLeaseMaintenance,
 };
 pub use runtime::*;
 pub use store::ProllyObjectStore;

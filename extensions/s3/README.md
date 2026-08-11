@@ -2,7 +2,7 @@
 
 This extension turns a versioned S3 bucket into a file repository with commits,
 snapshots, branches, tags, diffs, merges, restore, and exact historical reads.
-It is a thin wrapper around Prolly: file bytes stay as whole S3 object
+It is a thin wrapper around Prolly: file bytes stay as whole physical S3 object
 versions at their original keys, while Prolly records which exact `VersionId`
 belongs to each logical commit.
 
@@ -13,28 +13,28 @@ its compatibility surface have been removed.
 
 ## What a write does
 
-A warm single-object write uses four foreground S3 operations:
+A warm single-object write uses three foreground S3 operations:
 
 1. Upload the whole file to its original key and capture its S3 `VersionId`.
-2. Upload one immutable pack containing the new Prolly nodes.
-3. Upload one immutable bucket commit.
-4. Compare-and-exchange the branch ref; this is the visibility point.
+2. Upload one immutable commit envelope containing the logical commit and its
+   new Prolly nodes.
+3. Compare-and-exchange the branch ref; this is the visibility point.
 
-![Four-call write path](diagram/prolly-s3-write-path.svg)
+![Three-call write path](diagram/prolly-s3-write-path.svg)
 
 No content chunks, content manifests, publication leases, durable staging
 workspaces, or post-CAS readback are created. A two-object atomic commit uses
-five calls: two payload writes followed by one node pack, one commit, and one
+four calls: two parallelizable payload writes, one commit envelope, and one
 branch-ref CAS.
 
 ## Authority model
 
 - Prolly is the logical authority. Applications must read and write through
   this client.
-- The bucket must have S3 Versioning enabled.
+- The bucket must have physical versioning enabled.
 - The wrapper must be the exclusive writer for managed object keys.
-- One fenced writer service owns mutations. Concurrent calls queue inside that
-  service; independent writers need an explicit takeover.
+- One fenced writer service owns mutations. Concurrent payload requests run in
+  parallel; only commit construction and ref publication are serialized.
 - Reads always use the exact S3 `VersionId` recorded by the selected Prolly
   commit. A raw `GetObject` without `version_id` is not a canonical read.
 - Bucket lifecycle rules must not expire versions managed by the repository.
@@ -50,7 +50,7 @@ and [OPERATIONS.md](OPERATIONS.md) for deployment constraints.
 
 The frozen, language-neutral contract is
 [Prolly S3 Protocol v1](spec/prolly-s3/v1/README.md). It
-includes CDDL, deterministic CBOR and hashing rules, the S3 layout,
+includes CDDL, deterministic CBOR and hashing rules, the physical S3 layout,
 state machines, a Smithy semantic API, and executable conformance vectors for
 implementing compatible Java, Go, TypeScript, and other clients.
 
@@ -70,23 +70,27 @@ The integration tests enforce these warm-path budgets:
 
 | Operation | Foreground S3 calls |
 |---|---:|
-| 64 KiB whole-object put | 4 |
-| Two-object atomic commit | 5 |
-| Merge or restore | 3 |
-| Multipart with `N` parts | `N + 5` |
+| 64 KiB whole-object put | 3 |
+| Two-object atomic commit | 4 |
+| Merge or restore | 2 |
+| Multipart with `N` parts | `N + 4` |
+| Warm current or historical read | 1 |
 
 The core contract also exercises 1, 8, and 32 concurrent callers and requires
-four calls per completed whole-object write.
+three calls per completed whole-object write. The RustFS load probe also runs
+32 concurrent 64 KiB writes, checks 96 total calls, and reports latency and
+throughput.
 
 ## Current limits
 
 - The client is not a wire-compatible S3 proxy; it is an in-process Rust API.
 - Managed keys cannot be modified by another S3 client.
-- S3 `VersionId` values are provider-local and are rebound during clone,
+- Physical S3 `VersionId` values are provider-local and are rebound during clone,
   fetch, push, repair, or restore to another bucket.
-- Atomic commit sessions buffer staged bodies in process until publication.
-- Multipart session bookkeeping in the high-level client is process-local;
-  completed S3 object versions and committed history are durable.
+- Atomic commit sessions buffer staged bodies in process until publication;
+  core publication bounds concurrent payload requests.
+- Multipart upload handles are self-contained. To resume after process loss,
+  persist each part's ETag, SHA-256, and size plus the whole-object checksums.
 - Directory buckets and buckets with suspended versioning are unsupported.
 - AWS latency, throttling, request-cost, hot-branch, and million-key release
   gates remain to be qualified. See [QUALIFICATION.md](QUALIFICATION.md).

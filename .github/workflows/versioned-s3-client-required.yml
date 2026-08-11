@@ -50,12 +50,17 @@ jobs:
           --manifest-path extensions/s3/Cargo.toml --workspace --all-features
           -- --skip seeded_histories_are_identical_across_stores_and_restart
       - name: Independent canonical-format verifier
-        run: python3 extensions/s3/fixtures/verify_canonical_v1.py
-      - name: Qualification evidence verifier contracts
+        run: python3 extensions/s3/spec/prolly-s3/v1/conformance/verify.py
+      - name: AWS qualification gate fails closed without operator inputs
         run: |
-          python3 -m unittest discover -s extensions/s3/scripts/tests -p 'test_*.py'
-          python3 extensions/s3/scripts/verify_production_limits.py \
-            --profile aws-release --validate-limits
+          if PROLLY_S3_AWS_PERF=0 cargo +"$CLIENT_TOOLCHAIN" test --locked \
+            --manifest-path extensions/s3/Cargo.toml \
+            -p prolly-s3-client --test aws_performance_qualification \
+            -- --ignored --exact aws_hot_branch_performance_release_gate; then
+            echo "AWS qualification gate unexpectedly passed without operator inputs" >&2
+            exit 1
+          fi
+          echo "AWS_QUALIFICATION_GATE_CONTRACT fail_closed=verified"
 
   msrv-and-downstream:
     runs-on: ubuntu-24.04

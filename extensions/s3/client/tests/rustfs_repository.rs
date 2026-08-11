@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use aws_config::BehaviorVersion;
@@ -77,7 +77,7 @@ async fn rustfs_client() -> (aws_sdk_s3::Client, String) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
+async fn rustfs_whole_object_write_uses_three_s3_calls_and_preserves_history() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
         return;
@@ -88,14 +88,14 @@ async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
     let repository = Repository::initialize(
         plane.clone(),
         RepositoryOptions {
-            repository_prefix: unique_name("four-call-repository"),
-            writer: "rustfs-prolly-s3-writer".to_string(),
+            repository_prefix: unique_name("three-call-repository"),
+            writer: "rustfs-physical-writer".to_string(),
             ..RepositoryOptions::default()
         },
     )
     .await
     .unwrap();
-    let key = unique_name("four-call-object");
+    let key = unique_name("three-call-object");
 
     repository
         .put_bytes(
@@ -122,8 +122,25 @@ async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
         .await
         .unwrap();
     let calls = plane.reset_metrics();
-    assert_eq!(calls.put_object, 4, "unexpected calls: {calls:?}");
-    assert_eq!(calls.total_calls(), 4, "unexpected calls: {calls:?}");
+    assert_eq!(calls.put_object, 3, "unexpected calls: {calls:?}");
+    assert_eq!(calls.total_calls(), 3, "unexpected calls: {calls:?}");
+
+    plane.reset_metrics();
+    assert_eq!(
+        repository
+            .get_current("main", format!("{key}/measured.bin").as_bytes())
+            .await
+            .unwrap()
+            .bytes,
+        vec![2; 64 * 1024]
+    );
+    let calls = plane.reset_metrics();
+    assert_eq!(calls.get_object, 1, "unexpected warm-read calls: {calls:?}");
+    assert_eq!(
+        calls.total_calls(),
+        1,
+        "unexpected warm-read calls: {calls:?}"
+    );
 
     repository
         .put_bytes(
@@ -136,6 +153,7 @@ async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
         )
         .await
         .unwrap();
+    plane.reset_metrics();
     assert_eq!(
         repository
             .get_version(
@@ -148,10 +166,20 @@ async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
             .bytes,
         vec![2; 64 * 1024]
     );
+    let calls = plane.reset_metrics();
+    assert_eq!(
+        calls.get_object, 1,
+        "unexpected warm historical-read calls: {calls:?}"
+    );
+    assert_eq!(
+        calls.total_calls(),
+        1,
+        "unexpected warm historical-read calls: {calls:?}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
+async fn rustfs_two_part_multipart_write_uses_six_s3_calls() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
         return;
@@ -163,7 +191,7 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
         plane.clone(),
         RepositoryOptions {
             repository_prefix: unique_name("multipart-repository"),
-            writer: "rustfs-prolly-s3-multipart-writer".to_string(),
+            writer: "rustfs-physical-multipart-writer".to_string(),
             ..RepositoryOptions::default()
         },
     )
@@ -233,8 +261,8 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
     assert_eq!(calls.create_multipart_upload, 1);
     assert_eq!(calls.upload_part, 2);
     assert_eq!(calls.complete_multipart_upload, 1);
-    assert_eq!(calls.put_object, 3);
-    assert_eq!(calls.total_calls(), 7, "unexpected calls: {calls:?}");
+    assert_eq!(calls.put_object, 2);
+    assert_eq!(calls.total_calls(), 6, "unexpected calls: {calls:?}");
     assert_eq!(
         repository
             .get_current("main", key.as_bytes())
@@ -242,5 +270,82 @@ async fn rustfs_two_part_multipart_write_uses_seven_s3_calls() {
             .unwrap()
             .bytes,
         whole
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn rustfs_32_writer_load_preserves_the_three_call_budget() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: unique_name("load-repository"),
+            writer: "rustfs-load-writer".to_string(),
+            max_parallel_payload_writes: 32,
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            format!("{}/warmup.bin", unique_name("load-object")).into_bytes(),
+            vec![0; 64 * 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    plane.reset_metrics();
+    let started = Instant::now();
+    let writes = (0..32).map(|index| {
+        let repository = &repository;
+        async move {
+            let operation_started = Instant::now();
+            repository
+                .put_bytes(
+                    "main",
+                    format!("load/{index}.bin").into_bytes(),
+                    vec![index as u8; 64 * 1024],
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                    None,
+                )
+                .await
+                .map(|_| operation_started.elapsed())
+        }
+    });
+    let mut latencies = tokio::time::timeout(
+        Duration::from_secs(30),
+        futures_util::future::join_all(writes),
+    )
+    .await
+    .expect("32 RustFS writes exceeded the local 30 second safety timeout")
+    .into_iter()
+    .collect::<Result<Vec<_>, _>>()
+    .unwrap();
+    let wall = started.elapsed();
+    latencies.sort_unstable();
+    let percentile = |percent: usize| latencies[(latencies.len() * percent).div_ceil(100) - 1];
+    let calls = plane.reset_metrics();
+    assert_eq!(calls.put_object, 96, "unexpected calls: {calls:?}");
+    assert_eq!(calls.total_calls(), 96, "unexpected calls: {calls:?}");
+    assert_eq!(repository.performance_snapshot().publication_queue_depth, 0);
+    eprintln!(
+        "rustfs_load writers=32 object_bytes=65536 calls_per_write=3 wall_ms={} p50_ms={} p95_ms={} p99_ms={} writes_per_second={:.2}",
+        wall.as_millis(),
+        percentile(50).as_millis(),
+        percentile(95).as_millis(),
+        percentile(99).as_millis(),
+        32.0 / wall.as_secs_f64(),
     );
 }

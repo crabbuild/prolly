@@ -30,11 +30,11 @@ def derive_path(case: dict[str, object]) -> str:
         segment = "heads" if kind == "branch" else "tags"
         encoded = str(case["name_utf8"]).encode().hex()
         return f"{prefix}/refs/{segment}/{encoded}"
+    if kind == "checkpoint_head":
+        return f"{prefix}/node-index/latest.cbor"
     digest = str(case["digest_hex"])
     if kind == "commit":
         return f"{prefix}/commits/sha256/{digest[:2]}/{digest[2:4]}/{digest}"
-    if kind == "node_pack":
-        return f"{prefix}/node-packs/sha256/{digest[:2]}/{digest[2:4]}/{digest}.pack"
     if kind == "checkpoint":
         generation = int(str(case["generation"]))
         return f"{prefix}/node-index/checkpoints/{generation:020d}-{digest}.cbor"

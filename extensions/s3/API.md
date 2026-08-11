@@ -23,6 +23,9 @@ branches, diffs, conditional publication, and idempotency.
 | Compare commits | `diff_page` |
 | Merge/restore | `merge`, `restore` |
 | Verify repository | `fsck` |
+| Explicit writer handoff | `takeover_writer` |
+| SDK request counters | `s3_operation_metrics` |
+| Publication queue/wait counters | `performance_snapshot` |
 
 ## Semantics to remember
 
@@ -31,5 +34,6 @@ branches, diffs, conditional publication, and idempotency.
 - Provider `VersionId` values remain an internal physical binding.
 - A branch-ref CAS makes a prepared commit visible.
 - Branch conflicts are returned; they are not retried automatically.
-- Commit sessions are atomic but process-local and non-resumable.
+- Commit sessions are atomic, process-local, non-resumable, and bounded by
+  `max_staged_batch_bytes`.
 - Pagination tokens are commit-pinned and cryptographically signed.
