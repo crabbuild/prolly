@@ -28,7 +28,7 @@ Until the crates are published, a consumer inside this repository can use:
 
 ```toml
 [dependencies]
-prolly-s3-client = { path = "s3/client", features = ["slatedb-index"] }
+prolly-s3-client = { path = "extensions/s3/client", features = ["slatedb-index"] }
 aws-config = "1"
 aws-credential-types = "1"
 aws-sdk-s3 = "1"

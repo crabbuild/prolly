@@ -37,19 +37,19 @@ cargo_package() {
 manifests=(
   "${repo_root}/Cargo.toml"
   "${repo_root}/stores/prolly-store-dynamodb/Cargo.toml"
-  "${repo_root}/dynamodb/core/Cargo.toml"
-  "${repo_root}/dynamodb/client/Cargo.toml"
+  "${repo_root}/extensions/dynamodb/core/Cargo.toml"
+  "${repo_root}/extensions/dynamodb/client/Cargo.toml"
 )
 
 for manifest in "${manifests[@]}"; do
-  if [[ "${manifest}" == "${repo_root}/dynamodb/client/Cargo.toml" ]]; then
+  if [[ "${manifest}" == "${repo_root}/extensions/dynamodb/client/Cargo.toml" ]]; then
     # Cargo requires registry visibility of normal dependencies before it will
     # create an archive. During dependency-order release verification the core
     # archive exists locally but is intentionally not published yet.
     CARGO_TARGET_DIR="${package_target}" cargo_package \
       --manifest-path "${manifest}" \
       --no-verify \
-      --config "patch.crates-io.prolly-dynamodb-core.path='${repo_root}/dynamodb/core'"
+      --config "patch.crates-io.prolly-dynamodb-core.path='${repo_root}/extensions/dynamodb/core'"
     continue
   fi
   CARGO_TARGET_DIR="${package_target}" cargo_package \
@@ -85,7 +85,7 @@ done
 # silently omit or substitute it.
 packaged_public_api="${work_dir}/prolly-dynamodb-client-0.1.0/public-api.txt"
 test -s "${packaged_public_api}"
-cmp --silent "${repo_root}/dynamodb/client/public-api.txt" "${packaged_public_api}"
+cmp --silent "${repo_root}/extensions/dynamodb/client/public-api.txt" "${packaged_public_api}"
 
 # Compile the test/example targets from the archives themselves. This catches
 # package-local include paths and dev-only source omissions that a downstream

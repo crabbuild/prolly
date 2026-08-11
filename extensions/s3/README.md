@@ -86,8 +86,8 @@ This command creates the data directory, starts RustFS, and waits for its health
 
 ```bash
 mkdir -p /Volumes/Workspace/prolly-data
-docker compose --env-file s3/.env.example \
-  -f s3/docker-compose.rustfs.yml up -d --wait
+docker compose --env-file extensions/s3/.env.example \
+  -f extensions/s3/docker-compose.rustfs.yml up -d --wait
 curl --fail http://127.0.0.1:9000/health
 ```
 
@@ -96,7 +96,7 @@ curl --fail http://127.0.0.1:9000/health
 This script checks the credentials, bucket access, byte round trip, and exact-version cleanup with AWS CLI `s3api` commands:
 
 ```bash
-bash s3/scripts/verify_rustfs_aws_cli.sh
+bash extensions/s3/scripts/verify_rustfs_aws_cli.sh
 ```
 
 The verifier defaults to `prolly-versioned-s3-demo`. Override the `PROLLY_RUSTFS_*` environment variables when needed. Its probe key stays outside the repository namespace, and the script removes the exact probe version after a successful check.
@@ -110,7 +110,7 @@ PROLLY_RUSTFS_ENDPOINT=http://127.0.0.1:9000 \
 PROLLY_RUSTFS_ACCESS_KEY=prollyadmin \
 PROLLY_RUSTFS_SECRET_KEY=prolly-local-secret-change-me \
 CARGO_TARGET_DIR=/Volumes/Workspace/prolly-build/versioned-s3 \
-  cargo +1.94.1 run --manifest-path s3/Cargo.toml \
+  cargo +1.94.1 run --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --example rustfs_versioned_bucket
 ```
 
@@ -121,7 +121,7 @@ The program prints the bucket, repository prefix, two commit IDs, listed-object 
 This command stops the container without deleting persisted data:
 
 ```bash
-docker compose -f s3/docker-compose.rustfs.yml down
+docker compose -f extensions/s3/docker-compose.rustfs.yml down
 ```
 
 ## Use the client
@@ -286,9 +286,9 @@ The [operations and recovery runbook](OPERATIONS.md) defines IAM roles, health c
 Run the fast workspace checks before opening a pull request:
 
 ```bash
-cargo check --manifest-path s3/Cargo.toml --workspace --all-features
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core
-bash s3/scripts/check_clean_downstream.sh
+cargo check --manifest-path extensions/s3/Cargo.toml --workspace --all-features
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core
+bash extensions/s3/scripts/check_clean_downstream.sh
 ```
 
 Run the live RustFS suite when a change affects provider behavior:
@@ -298,7 +298,7 @@ PROLLY_S3_RUSTFS=1 \
 PROLLY_RUSTFS_ENDPOINT=http://127.0.0.1:9000 \
 PROLLY_RUSTFS_ACCESS_KEY=prollyadmin \
 PROLLY_RUSTFS_SECRET_KEY=prolly-local-secret-change-me \
-  cargo test --manifest-path s3/Cargo.toml \
+  cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository --all-features
 ```
 

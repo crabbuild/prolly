@@ -7,7 +7,7 @@ on:
       - "Cargo.toml"
       - "src/**"
       - "stores/prolly-store-dynamodb/**"
-      - "dynamodb/**"
+      - "extensions/dynamodb/**"
       - "benchmarks/dynamodb-client/**"
       - "scripts/*dynamodb*"
       - "scripts/tests/test_*dynamodb*"
@@ -42,21 +42,21 @@ jobs:
         run: |
           cargo +"$RUST_TOOLCHAIN" fmt --all -- --check
           cargo +"$RUST_TOOLCHAIN" fmt --manifest-path stores/prolly-store-dynamodb/Cargo.toml -- --check
-          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path dynamodb/core/Cargo.toml -- --check
-          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path dynamodb/client/Cargo.toml -- --check
-          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path dynamodb/admin/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path extensions/dynamodb/core/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path extensions/dynamodb/client/Cargo.toml -- --check
+          cargo +"$RUST_TOOLCHAIN" fmt --manifest-path extensions/dynamodb/admin/Cargo.toml -- --check
           cargo +"$RUST_TOOLCHAIN" fmt --manifest-path benchmarks/dynamodb-client/Cargo.toml -- --check
       - name: Strict Clippy
         run: |
           cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path stores/prolly-store-dynamodb/Cargo.toml --all-targets --all-features -- -D warnings
-          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path dynamodb/core/Cargo.toml --all-targets --all-features -- -D warnings
-          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path dynamodb/client/Cargo.toml --all-targets --all-features -- -D warnings
-          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path dynamodb/admin/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path extensions/dynamodb/core/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path extensions/dynamodb/client/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path extensions/dynamodb/admin/Cargo.toml --all-targets --all-features -- -D warnings
           cargo +"$RUST_TOOLCHAIN" clippy --locked --manifest-path benchmarks/dynamodb-client/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Core and client tests
         run: |
-          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path dynamodb/core/Cargo.toml --all-targets
-          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path dynamodb/client/Cargo.toml --all-targets
+          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path extensions/dynamodb/core/Cargo.toml --all-targets
+          cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path extensions/dynamodb/client/Cargo.toml --all-targets
           cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path benchmarks/dynamodb-client/Cargo.toml --all-targets
       - name: Release-script contracts
         run: python3 -m unittest scripts.tests.test_validate_dynamodb_client_benchmark scripts.tests.test_validate_dynamodb_client_matrix scripts.tests.test_run_dynamodb_client_benchmark_matrix scripts.tests.test_run_dynamodb_client_history_matrix scripts.tests.test_run_dynamodb_rolling_compatibility scripts.tests.test_dynamodb_security_policies scripts.tests.test_verify_dynamodb_client_packages
@@ -103,7 +103,7 @@ jobs:
       - name: Provider contracts
         run: cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path stores/prolly-store-dynamodb/Cargo.toml --all-targets
       - name: Client behavioral and differential contracts
-        run: cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path dynamodb/client/Cargo.toml --all-targets
+        run: cargo +"$RUST_TOOLCHAIN" test --locked --manifest-path extensions/dynamodb/client/Cargo.toml --all-targets
       - name: Repeated current-binary multi-process process-death soak
         env:
           PROLLY_DYNAMODB_RUN_SOAK: "1"
@@ -111,7 +111,7 @@ jobs:
           for soak_run in 1 2 3; do
             printf 'multi-process soak run %s/3\n' "$soak_run"
             cargo +"$RUST_TOOLCHAIN" test --locked \
-              --manifest-path dynamodb/client/Cargo.toml \
+              --manifest-path extensions/dynamodb/client/Cargo.toml \
               --test dynamodb_local \
               multi_process_soak_preserves_items_versions_and_commits \
               -- --exact --nocapture --test-threads=1

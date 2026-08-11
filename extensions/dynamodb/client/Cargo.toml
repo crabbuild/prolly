@@ -10,9 +10,9 @@ repository = "https://github.com/crabbuild/prolly"
 [dependencies]
 aws-sdk-dynamodb = "=1.73.0"
 futures-util = "0.3"
-prolly = { package = "prolly-map", path = "../..", version = "0.7.0", features = ["async-store", "tokio"] }
+prolly = { package = "prolly-map", path = "../../..", version = "0.7.0", features = ["async-store", "tokio"] }
 prolly-dynamodb-core = { path = "../core", version = "0.1.0" }
-prolly-store-dynamodb = { path = "../../stores/prolly-store-dynamodb", version = "0.6.0" }
+prolly-store-dynamodb = { path = "../../../stores/prolly-store-dynamodb", version = "0.6.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11"
 serde_json = "1.0"

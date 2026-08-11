@@ -25,33 +25,33 @@ export PROLLY_STORE_DYNAMODB_TABLE=prolly-versioned
 export PROLLY_STORE_DYNAMODB_ROOT_TABLE=prolly-versioned-roots
 export PROLLY_STORE_DYNAMODB_KEY_PREFIX=legal-prod:
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- verify
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- verify
 ```
 
 Physical provisioning is deliberately separate:
 
 ```sh
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- bootstrap
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- bootstrap
 ```
 
 Back up an exact retained version, then verify it offline:
 
 ```sh
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   backup --table Evidence --version "$VERSION_ID" --output evidence.ddba
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   verify-archive --input evidence.ddba
 ```
 
 Import is a reviewed two-command workflow. Output files must not already exist:
 
 ```sh
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   import-plan --archive evidence.ddba --target-table EvidenceRecovered \
   --output import-plan.json
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   import-apply --archive evidence.ddba --plan import-plan.json \
   --actor records-officer --reason "approved recovery" \
   --change-ticket LEGAL-2026-0088
@@ -60,11 +60,11 @@ cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
 Retention follows the same separation:
 
 ```sh
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   retention-plan --table Evidence --keep-last 365 \
   --output retention-plan.json
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   retention-apply --plan retention-plan.json \
   --actor records-officer --reason "approved annual schedule" \
   --change-ticket LEGAL-2026-0042
@@ -74,13 +74,13 @@ Acquire and explicitly release the global writer fence around approved
 physical maintenance:
 
 ```sh
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   lease-acquire --duration-millis 3600000 \
   --actor gc-worker --reason "verified global sweep" --change-ticket OPS-42
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- lease-status
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- lease-status
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   lease-release --lease-id "$LEASE_ID" \
   --actor gc-worker --reason "sweep completed" --change-ticket OPS-42
 ```
@@ -97,10 +97,10 @@ limits evaluated physical items before applying the namespace/family filter;
 continue with `next_cursor` until it is absent.
 
 ```sh
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   gc-plan --lease-id "$LEASE_ID" --output gc-plan-0001.json
 
-cargo run --manifest-path dynamodb/admin/Cargo.toml -- \
+cargo run --manifest-path extensions/dynamodb/admin/Cargo.toml -- \
   gc-apply --plan gc-plan-0001.json \
   --actor gc-worker --reason "apply reviewed sweep page" --change-ticket OPS-42
 ```

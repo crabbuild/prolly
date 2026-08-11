@@ -551,7 +551,7 @@ docker compose -f docker-compose.store-services.yml up -d dynamodb
 export AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1
 export PROLLY_STORE_DYNAMODB_ENDPOINT=http://127.0.0.1:8000
 export PROLLY_STORE_DYNAMODB_TABLE=prolly-versioned-example
-cargo run --manifest-path dynamodb/client/Cargo.toml --example direct_crud
+cargo run --manifest-path extensions/dynamodb/client/Cargo.toml --example direct_crud
 ```
 
 Use a unique non-empty key prefix for every test or tenant. DynamoDB Local is a

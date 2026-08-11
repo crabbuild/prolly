@@ -6,7 +6,7 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
       - "src/**"
-      - "s3/**"
+      - "extensions/s3/**"
       - "plans/020-versioned-s3-client-adapter.md"
       - ".github/workflows/versioned-s3-client-required.yml"
   push:
@@ -37,20 +37,20 @@ jobs:
         run: cargo install cargo-deny --version 0.20.2 --locked
       - name: Format and dependency security
         run: |
-          cargo +"$CLIENT_TOOLCHAIN" fmt --manifest-path s3/Cargo.toml --all -- --check
-          bash s3/scripts/check_dependency_security.sh
+          cargo +"$CLIENT_TOOLCHAIN" fmt --manifest-path extensions/s3/Cargo.toml --all -- --check
+          bash extensions/s3/scripts/check_dependency_security.sh
       - name: Strict Clippy
         run: >-
           cargo +"$CLIENT_TOOLCHAIN" clippy --locked
-          --manifest-path s3/Cargo.toml --workspace --all-targets --all-features
+          --manifest-path extensions/s3/Cargo.toml --workspace --all-targets --all-features
           -- -D warnings
       - name: Behavioral and compatibility suite
         run: >-
           cargo +"$CLIENT_TOOLCHAIN" test --locked
-          --manifest-path s3/Cargo.toml --workspace --all-features
+          --manifest-path extensions/s3/Cargo.toml --workspace --all-features
           -- --skip seeded_histories_are_identical_across_stores_and_restart
       - name: Independent canonical-format verifier
-        run: python3 s3/fixtures/verify_canonical_v1.py
+        run: python3 extensions/s3/fixtures/verify_canonical_v1.py
       - name: Soak evidence verifier contracts
         run: python3 -m unittest s3.scripts.tests.test_verify_soak_evidence
 
@@ -67,10 +67,10 @@ jobs:
       - name: Exact core MSRV
         run: >-
           cargo +"$CORE_TOOLCHAIN" check --locked
-          --manifest-path s3/Cargo.toml -p prolly-s3-core
+          --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core
       - name: Exact client baseline and minimal surface
         run: |
-          cargo +"$CLIENT_TOOLCHAIN" check --locked --manifest-path s3/Cargo.toml --workspace --all-features
-          cargo +"$CLIENT_TOOLCHAIN" check --locked --manifest-path s3/Cargo.toml -p prolly-s3-client --no-default-features
+          cargo +"$CLIENT_TOOLCHAIN" check --locked --manifest-path extensions/s3/Cargo.toml --workspace --all-features
+          cargo +"$CLIENT_TOOLCHAIN" check --locked --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client --no-default-features
       - name: Locked clean-downstream consumers
-        run: bash s3/scripts/check_clean_downstream.sh
+        run: bash extensions/s3/scripts/check_clean_downstream.sh

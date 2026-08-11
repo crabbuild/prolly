@@ -109,7 +109,7 @@ def main():
         [
             "",
             "This is the expanded client/history/index/blob/admin slice, not the complete release matrix.",
-            "See `dynamodb/client/PERFORMANCE.md` for the open workloads and scale dimensions.",
+            "See `extensions/dynamodb/client/PERFORMANCE.md` for the open workloads and scale dimensions.",
             "",
         ]
     )

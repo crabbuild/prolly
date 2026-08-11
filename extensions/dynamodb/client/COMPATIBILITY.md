@@ -90,7 +90,7 @@ backward-compatible reader or migration must add frozen fixtures, mixed-version
 tests, and an explicit state transition before advertising a wider range.
 
 The writable format-12 fixture lives in the repository at
-`dynamodb/core/tests/fixtures/database-format-12.json` and in the published
+`extensions/dynamodb/core/tests/fixtures/database-format-12.json` and in the published
 core source archive at `tests/fixtures/database-format-12.json`. The retained
 format-10 and format-11 fixtures are historical decode guards, not supported
 writable or migration formats. Conformance tests require

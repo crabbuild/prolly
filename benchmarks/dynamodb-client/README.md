@@ -33,7 +33,7 @@ shape, so absence is never presented as a zero-byte response.
 This slice is not the complete release matrix. Production concurrency,
 per-operation memory/CPU, consumed capacity, hosted AWS, deeper history cases,
 and the 10K/1M size matrix remain explicit release gates in
-`dynamodb/client/PERFORMANCE.md`.
+`extensions/dynamodb/client/PERFORMANCE.md`.
 
 Run with the provenance-capturing runner (Docker by default):
 

@@ -26,8 +26,8 @@ the compatibility and clean-downstream gates in Phase 8.
 - [`docs/prolly-vcs-design.md`](../docs/prolly-vcs-design.md)
 - [`plans/019-versioned-dynamodb-client-package.md`](019-versioned-dynamodb-client-package.md)
 - [`examples/filesystem_snapshot.rs`](../examples/filesystem_snapshot.rs)
-- [`s3/QUALIFICATION.md`](../s3/QUALIFICATION.md)
-- [`s3/OPERATIONS.md`](../s3/OPERATIONS.md)
+- [`extensions/s3/QUALIFICATION.md`](../extensions/s3/QUALIFICATION.md)
+- [`extensions/s3/OPERATIONS.md`](../extensions/s3/OPERATIONS.md)
 
 ## Status
 
@@ -59,7 +59,7 @@ corresponding exit gate is complete.
 
 | Phase | Current evidence | Remaining gate before phase completion | Status |
 | --- | --- | --- | --- |
-| 0 | Separate core/client crates, canonical packed-CBOR rejection, domain-separated IDs, explicit AWS 1.140.0 pin, machine-readable [`compatibility-v1.json`](../s3/compatibility-v1.json), checked-in language-neutral format/empty-repository/object-version/delta/ID/tree-format golden fixture, dependency-free Python CBOR/ID verifier, and injected clock/ID sources for deterministic cross-store restart fixtures | None | complete |
+| 0 | Separate core/client crates, canonical packed-CBOR rejection, domain-separated IDs, explicit AWS 1.140.0 pin, machine-readable [`compatibility-v1.json`](../extensions/s3/compatibility-v1.json), checked-in language-neutral format/empty-repository/object-version/delta/ID/tree-format golden fixture, dependency-free Python CBOR/ID verifier, and injected clock/ID sources for deterministic cross-store restart fixtures | None | complete |
 | 1 | Memory and AWS/RustFS object planes; immutable create-only writes; mutable ref CAS; physical current/version listing and exact-version deletion; zero-I/O `physical_layout` inspection API; 32-writer CAS test; signed expiring endpoint/bucket-bound attestations; native-version snapshot proof that ordinary open performs no physical write; mismatch/signature/expiry rejection; RustFS unversioned and versioned qualification; fail-closed AWS directory/access-point/Object Lambda/Outposts/MRAP identifier classification; structured provider code/message/request-ID preservation with a generated-SDK-shaped fixture | None for implementation; each production provider/account is promoted separately in Phase 8 | complete |
 | 2 | Chunked one-pass bodies, hash-verified reads/ranges, three Prolly roots, immutable-first commits/reflogs/ref CAS, initialization recovery, operation idempotency/reconciliation, concurrent disjoint-writer test; renewable CAS publication leases with immutable per-operation protection chains across ordinary, multi-delete, multipart-complete, and workspace publication; body-failure/expiry/no-cross-attribution tests; exhaustive ordinary, merge, and reset prewrite fault matrices; accepted-ref/lost-response and future-cancellation reconciliation across ordinary commits, multi-delete, merge, restore, multipart completion, and workspaces; opt-in million-chunk resource fixture; GC consumption of unexpired lease chains; final-source 10,000-operation deterministic dual-store/multi-restart corpus (1,102.53 s, 9.07 paired logical mutations/s in the debug fixture); refreshed instrumented live sequential 64 KiB RustFS baseline (1.988 puts/s, 106.469 gets/s); final-source live 160 MiB streamed multipart round trip with an 8 MiB canonical chunk budget and a separately measured 102.92 MiB total peak RSS | None | complete |
 | 3 | AWS-shaped fluent put/get/head/list; official-input execution for those four operations; streaming `ByteStream`; signed snapshot-pinned cursors; managed HMAC rotation ledger with TTL-plus-skew retirement enforcement and restart verification; explicit rejection of every field in the pinned inputs; 21-page raw-key corpus with NUL, Unicode, exclusive cursors, and concurrent snapshot advancement; live 1,023/1,024/1,025-byte ASCII/multibyte key boundaries; grouped-prefix resume; multibyte delimiters; `max_keys` 0/1/1,000/1,001 policy; atomic expected-head and ETag write conditions; MD5/SHA-256 request validation; ETag/date condition precedence; precondition-before-range precedence; distinct malformed/unsatisfiable range categories; checksum responses; executable manifest-validator parity test; live native-RustFS payload/checksum/closed/open/suffix range/date/precondition/error/delimiter differential matrix with the raw RustFS range-precedence deviation explicitly pinned; opt-in real-AWS qualification harness | None for implementation; native AWS differential promotion is a Phase 8 release gate | complete |
@@ -529,7 +529,7 @@ expected.
 ### 4.1 Proposed packages
 
 ```text
-s3/core/
+extensions/s3/core/
   src/model.rs          canonical identifiers and durable records
   src/codec.rs          domain-separated canonical v1 encoding
   src/content.rs        chunking, manifests, checksums, and ranged reads
@@ -539,7 +539,7 @@ s3/core/
   src/runtime.rs        injected clocks and ID sources
   src/store.rs          Prolly/ObjectPlane bridge
 
-s3/client/
+extensions/s3/client/
   src/client.rs         Client, Snapshot, sessions, AWS-shaped builders/conversion
   src/aws_object.rs     caller-owned AWS SDK object-plane adapter
   src/provider.rs       qualification and signed capability attestations
@@ -2062,10 +2062,10 @@ This phase establishes those contracts before remote writes exist.
 #### Verification
 
 ```sh
-cargo check --manifest-path s3/core/Cargo.toml --all-targets
-cargo test --manifest-path s3/core/Cargo.toml
-cargo check --manifest-path s3/client/Cargo.toml --all-targets
-python3 s3/fixtures/verify_canonical_v1.py
+cargo check --manifest-path extensions/s3/core/Cargo.toml --all-targets
+cargo test --manifest-path extensions/s3/core/Cargo.toml
+cargo check --manifest-path extensions/s3/client/Cargo.toml --all-targets
+python3 extensions/s3/fixtures/verify_canonical_v1.py
 ```
 
 #### Exit gate
@@ -2150,19 +2150,19 @@ risk.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test repository_contract concurrent_disjoint_writers_do_not_lose_updates
 PROLLY_S3_RUSTFS=1 \
-  cargo test --manifest-path s3/Cargo.toml -p prolly-s3-client --all-features \
+  cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client --all-features \
   --test rustfs_repository rustfs_conditional_object_plane_conformance
 PROLLY_S3_RUSTFS=1 \
-  cargo test --manifest-path s3/Cargo.toml -p prolly-s3-client --all-features \
+  cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client --all-features \
   --test rustfs_repository rustfs_exact_delete_preserves_other_native_versions
 PROLLY_S3_AWS=1 PROLLY_AWS_REGION=us-west-2 \
   PROLLY_AWS_BUCKET_UNVERSIONED=<isolated-bucket> \
   PROLLY_AWS_BUCKET_VERSIONED=<isolated-versioned-bucket> \
   PROLLY_AWS_REJECT_IDENTIFIERS=<comma-separated-real-identifiers> \
-  cargo test --manifest-path s3/Cargo.toml -p prolly-s3-client \
+  cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client \
   --all-features --test aws_qualification -- --nocapture
 ```
 
@@ -2263,16 +2263,16 @@ transitions, and reconciliation of ambiguous outcomes.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test repository_contract
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test multipart_faults
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test deterministic_runtime
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test pagination_and_multipart multipart_range_stream_crosses_three_part_boundaries_without_assembly
 PROLLY_S3_RUSTFS=1 PROLLY_S3_BENCHMARK=1 \
-  cargo test --manifest-path s3/Cargo.toml -p prolly-s3-client \
+  cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client \
   --test rustfs_repository rustfs_ordinary_throughput_probe -- --nocapture
 ```
 
@@ -2350,11 +2350,11 @@ implying concrete AWS client compatibility that the adapter cannot provide.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-client \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client \
   --test compatibility_manifest
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test pagination_and_multipart all_bounded_cursors_are_exclusive_stable_and_complete
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository \
   rustfs_aws_shaped_client_round_trip
 # The complete native-S3 differential matrix is an AWS-account release gate;
@@ -2436,11 +2436,11 @@ queries explicitly.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test repository_contract put_get_delete_and_version_history_are_bucket_atomic
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test repository_contract multi_delete_moves_the_bucket_head_once
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository \
   rustfs_aws_shaped_client_round_trip
 ```
@@ -2528,15 +2528,15 @@ upload.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test pagination_and_multipart
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test multipart_faults
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository \
   rustfs_completing_upload_resumes_in_independent_process
 PROLLY_S3_RUSTFS=1 PROLLY_S3_RESOURCE_TEST=1 \
-  cargo test --manifest-path s3/Cargo.toml -p prolly-s3-client \
+  cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client \
   --test rustfs_repository rustfs_multipart_streaming_resource_probe -- --nocapture
 ```
 
@@ -2618,9 +2618,9 @@ These behaviors must remain explicit so ordinary S3 operations stay simple.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test repository_contract
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository \
   rustfs_branch_tag_and_merge_contend_across_independent_processes
 ```
@@ -2742,17 +2742,17 @@ native physical ref versions, and other proven-unreachable objects.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test repository_contract checkpointed_
-cargo test --manifest-path s3/Cargo.toml -p prolly-s3-core \
+cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
   --test gc_retention
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --all-features --test rustfs_repository \
   rustfs_same_bucket_slatedb_is_advisory_only
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --all-features --test rustfs_repository \
   rustfs_complete_slatedb_cache_loss_rebuilds_from_canonical_s3
-PROLLY_S3_RUSTFS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --all-features --test rustfs_repository \
   rustfs_branch_merge_restore_and_gc_fence
 ```
@@ -2854,30 +2854,30 @@ Release requires measured envelopes and clean downstream packaging.
 #### Verification
 
 ```sh
-cargo test --manifest-path s3/core/Cargo.toml --all-features
-cargo test --manifest-path s3/client/Cargo.toml --all-features
-cargo check --manifest-path s3/client/Cargo.toml --no-default-features
-cargo deny --manifest-path s3/Cargo.toml --config s3/deny.toml check advisories
-bash s3/scripts/check_clean_downstream.sh
+cargo test --manifest-path extensions/s3/core/Cargo.toml --all-features
+cargo test --manifest-path extensions/s3/client/Cargo.toml --all-features
+cargo check --manifest-path extensions/s3/client/Cargo.toml --no-default-features
+cargo deny --manifest-path extensions/s3/Cargo.toml --config extensions/s3/deny.toml check advisories
+bash extensions/s3/scripts/check_clean_downstream.sh
 PROLLY_S3_RUSTFS=1 \
-  cargo test --manifest-path s3/client/Cargo.toml --all-features \
+  cargo test --manifest-path extensions/s3/client/Cargo.toml --all-features \
   --test rustfs_repository
-PROLLY_S3_AWS=1 cargo test --manifest-path s3/Cargo.toml \
+PROLLY_S3_AWS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --all-features --test aws_qualification -- --nocapture
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_restart_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_active_outage_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_contention_matrix.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_cost_matrix.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_slatedb_http_correlation.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_rolling_upgrade.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_restart_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_active_outage_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_contention_matrix.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_cost_matrix.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_slatedb_http_correlation.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_rolling_upgrade.sh
 PROLLY_S3_RUSTFS=1 \
 PROLLY_S3_RELEASE_SIGNING_KEY=/secure/path/release-ed25519-private.pem \
-  bash s3/scripts/run_signed_release_rehearsal.sh
+  bash extensions/s3/scripts/run_signed_release_rehearsal.sh
 PROLLY_S3_RUSTFS=1 \
 PROLLY_S3_SOAK_SECONDS=86400 \
 PROLLY_S3_SOAK_RUN_ID=release-YYYYMMDD \
 PROLLY_S3_SOAK_EVIDENCE_DIR=/Volumes/Workspace/prolly-build/versioned-s3/soak-evidence/release-YYYYMMDD \
-  bash s3/scripts/run_rustfs_soak.sh
+  bash extensions/s3/scripts/run_rustfs_soak.sh
 ```
 
 Release qualification additionally runs the documented soak, chaos, benchmark,

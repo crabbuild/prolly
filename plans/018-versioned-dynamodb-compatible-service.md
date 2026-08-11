@@ -276,7 +276,7 @@ crate. The companion Rust client layout and shared-core boundary are specified
 in plan 019:
 
 ```text
-dynamodb/core/
+extensions/dynamodb/core/
   Cargo.toml
   src/
     model/
@@ -286,7 +286,7 @@ dynamodb/core/
     history/
     worker/
 
-dynamodb/client/                 # owned and phased by plan 019
+extensions/dynamodb/client/                 # owned and phased by plan 019
   Cargo.toml                     # package: prolly-dynamodb-client
   src/
     lib.rs
@@ -1129,9 +1129,9 @@ on a noncanonical model would merely stabilize the wrong behavior.
 
 #### Scope and implementation
 
-**Files:** create `dynamodb/core` with `model`, `catalog`, and `engine` modules
-plus the packaged canonical fixtures under `dynamodb/core/tests/fixtures` and
-`dynamodb/client/src/fixtures`, as refined by plan 019.
+**Files:** create `extensions/dynamodb/core` with `model`, `catalog`, and `engine` modules
+plus the packaged canonical fixtures under `extensions/dynamodb/core/tests/fixtures` and
+`extensions/dynamodb/client/src/fixtures`, as refined by plan 019.
 
 - [ ] Implement `DynamoNumber` parsing, normalization, comparison, addition,
   subtraction, and bounded precision/range validation.
@@ -1156,9 +1156,9 @@ spellings.
 #### Verification
 
 ```text
-cargo test --manifest-path dynamodb/core/Cargo.toml --test model_fixtures
-cargo test --manifest-path dynamodb/core/Cargo.toml --test engine_contract
-cargo run  --manifest-path dynamodb/core/Cargo.toml \
+cargo test --manifest-path extensions/dynamodb/core/Cargo.toml --test model_fixtures
+cargo test --manifest-path extensions/dynamodb/core/Cargo.toml --test engine_contract
+cargo run  --manifest-path extensions/dynamodb/core/Cargo.toml \
   --example embedded_versioned_table
 ```
 
@@ -1187,7 +1187,7 @@ implemented risks silent data corruption, so unsupported fields fail closed.
 
 #### Scope and implementation
 
-**Files:** add shared `dynamodb/core/expression`; add service `protocol`,
+**Files:** add shared `extensions/dynamodb/core/expression`; add service `protocol`,
 `main.rs`, HTTP configuration, SDK contract tests, and a Docker image
 definition.
 
@@ -1218,7 +1218,7 @@ physical DynamoDB adapter for end-to-end tests.
 #### Verification
 
 ```text
-cargo test --manifest-path dynamodb/core/Cargo.toml --test expressions
+cargo test --manifest-path extensions/dynamodb/core/Cargo.toml --test expressions
 cargo test --manifest-path services/prolly-dynamodb/Cargo.toml --test aws_sdk_contract
 docker compose -f docker-compose.store-services.yml up -d dynamodb versioned-dynamodb
 ```
