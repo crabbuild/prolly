@@ -1,0 +1,128 @@
+{
+  "schema": "prolly-s3-production-limits/v1",
+  "description": "Initial fail-closed request, contention, AWS load, and scale gates. Request limits are per logical operation and exclude provider retries.",
+  "request_budgets": {
+    "abort_multipart_upload": { "max_sdk_calls": 5 },
+    "admin_create_branch": { "max_sdk_calls": 10 },
+    "admin_create_retention_pin": { "max_sdk_calls": 10 },
+    "admin_create_tag": { "max_sdk_calls": 10 },
+    "admin_delete_branch": { "max_sdk_calls": 5 },
+    "admin_delete_retention_pin": { "max_sdk_calls": 4 },
+    "admin_delete_tag": { "max_sdk_calls": 5 },
+    "admin_head_commit": { "max_sdk_calls": 2 },
+    "admin_list_branches": { "max_sdk_calls": 4 },
+    "admin_list_native_ref_versions": { "max_sdk_calls": 9 },
+    "admin_list_reflog": { "max_sdk_calls": 9 },
+    "admin_list_retention_pins": { "max_sdk_calls": 3 },
+    "admin_list_tags": { "max_sdk_calls": 3 },
+    "admin_log": { "max_sdk_calls": 5 },
+    "admin_reset_branch": { "max_sdk_calls": 15 },
+    "atomic_commit_session_2_puts": {
+      "max_sdk_calls": 55,
+      "max_request_cost_usd_per_1000_logical_operations": 0.30
+    },
+    "complete_multipart_upload": {
+      "max_sdk_calls": 45,
+      "max_request_cost_usd_per_1000_logical_operations": 0.25
+    },
+    "copy_object": { "max_sdk_calls": 35 },
+    "create_multipart_upload": { "max_sdk_calls": 2 },
+    "delete_object": { "max_sdk_calls": 30 },
+    "delete_objects": { "max_sdk_calls": 35 },
+    "get_object": {
+      "max_sdk_calls": 6,
+      "max_request_cost_usd_per_1000_logical_operations": 0.005
+    },
+    "get_object_version": {
+      "max_sdk_calls": 6,
+      "max_request_cost_usd_per_1000_logical_operations": 0.005
+    },
+    "head_object": { "max_sdk_calls": 3 },
+    "list_multipart_uploads": { "max_sdk_calls": 5 },
+    "list_object_versions": { "max_sdk_calls": 3 },
+    "list_objects_v2": { "max_sdk_calls": 3 },
+    "list_parts": { "max_sdk_calls": 3 },
+    "maintenance_clone_to_qualified_target": { "max_sdk_calls": 80 },
+    "maintenance_diff": { "max_sdk_calls": 3 },
+    "maintenance_fetch_missing_closure": { "max_sdk_calls": 100 },
+    "maintenance_fetch_resumable": { "max_sdk_calls": 130 },
+    "maintenance_fsck_commit": { "max_sdk_calls": 25 },
+    "maintenance_fsck_repository": { "max_sdk_calls": 35 },
+    "maintenance_gc_reclaim_plan": { "max_sdk_calls": 20 },
+    "maintenance_gc_sweep": { "max_sdk_calls": 35 },
+    "maintenance_merge": {
+      "max_sdk_calls": 50,
+      "max_request_cost_usd_per_1000_logical_operations": 0.25
+    },
+    "maintenance_merge_bases": { "max_sdk_calls": 10 },
+    "maintenance_plan_merge": { "max_sdk_calls": 15 },
+    "maintenance_push": {
+      "max_sdk_calls": 150,
+      "max_request_cost_usd_per_1000_logical_operations": 0.40
+    },
+    "maintenance_rebuild_slatedb_advisory_index": { "max_sdk_calls": 15 },
+    "maintenance_restore": {
+      "max_sdk_calls": 40,
+      "max_request_cost_usd_per_1000_logical_operations": 0.25
+    },
+    "put_object": {
+      "max_sdk_calls": 30,
+      "max_request_cost_usd_per_1000_logical_operations": 0.25
+    },
+    "upload_part": { "max_sdk_calls": 12 },
+    "upload_part_copy": { "max_sdk_calls": 12 }
+  },
+  "profiles": {
+    "rustfs-development": {
+      "cost": {
+        "max_wire_retries_per_operation": 0,
+        "require_request_prices": false
+      },
+      "contention": {
+        "logical_retry_limit": 16,
+        "tiers": {
+          "1": { "max_p95_ms": 500, "max_calls_per_write": 30, "max_wire_retry_rate": 0.0 },
+          "8": { "max_p95_ms": 3000, "max_calls_per_write": 110, "max_wire_retry_rate": 0.0 },
+          "32": { "max_p95_ms": 30000, "max_calls_per_write": 350, "max_wire_retry_rate": 0.0 }
+        }
+      }
+    },
+    "aws-release": {
+      "cost": {
+        "max_wire_retries_per_operation": 2,
+        "max_wire_retry_rate": 0.01,
+        "require_request_prices": true
+      },
+      "contention": {
+        "logical_retry_limit": 16,
+        "tiers": {
+          "1": { "max_p95_ms": 2000, "max_calls_per_write": 70, "max_wire_retry_rate": 0.01 },
+          "8": { "max_p95_ms": 20000, "max_calls_per_write": 220, "max_wire_retry_rate": 0.01 },
+          "32": { "max_p95_ms": 60000, "max_calls_per_write": 650, "max_wire_retry_rate": 0.01 }
+        }
+      },
+      "load": {
+        "provider": "aws",
+        "operations": {
+          "put_object": { "min_samples": 1000, "max_p95_ms": 2000, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "get_object": { "min_samples": 1000, "max_p95_ms": 500, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "get_object_version": { "min_samples": 1000, "max_p95_ms": 500, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "atomic_commit_session_2_puts": { "min_samples": 250, "max_p95_ms": 4000, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "complete_multipart_upload": { "min_samples": 250, "max_p95_ms": 4000, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "maintenance_merge": { "min_samples": 100, "max_p95_ms": 5000, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "maintenance_restore": { "min_samples": 100, "max_p95_ms": 5000, "max_error_rate": 0.0, "max_throttle_rate": 0.01 },
+          "maintenance_push": { "min_samples": 100, "max_p95_ms": 10000, "max_error_rate": 0.0, "max_throttle_rate": 0.01 }
+        }
+      },
+      "scale": {
+        "provider": "aws",
+        "min_live_keys": 1000000,
+        "min_retained_versions": 10000000,
+        "max_cold_read_p95_ms": 200,
+        "min_bulk_files_per_second": 10000,
+        "max_writable_reopen_seconds": 30,
+        "max_memory_bytes": 4294967296
+      }
+    }
+  }
+}

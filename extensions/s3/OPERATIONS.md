@@ -75,7 +75,11 @@ Run these against a reopened client:
    `fsck()` explicitly rather than on client open.
 4. Snapshot `s3_operation_metrics()` around representative operations. These
    count object-plane SDK calls and body bytes, not Smithy-internal retries.
-5. Alert on `ProviderNotQualified`, `Corrupt*`, `MissingClosure`, sustained
+5. Compare operation snapshots and wire-attempt metrics with
+   `qualification/production-limits-v1.json`. Alert before sustained traffic
+   reaches a request, retry, or latency release ceiling; do not cancel an
+   in-flight mutation merely because a budget is crossed.
+6. Alert on `ProviderNotQualified`, `Corrupt*`, `MissingClosure`, sustained
    `RefConflict`, `OutcomeUnknown`, or a `Running` GC fence without an owner.
 
 ## Ambiguous mutation outcome
@@ -288,6 +292,28 @@ PROLLY_S3_SOAK_RUN_ID=release-YYYYMMDD \
 PROLLY_S3_SOAK_EVIDENCE_DIR=/Volumes/Workspace/prolly-build/versioned-s3/soak-evidence/release-YYYYMMDD \
   bash extensions/s3/scripts/run_rustfs_soak.sh
 ```
+
+The RustFS cost and contention runners enforce
+`qualification/production-limits-v1.json` automatically. Do not preserve only
+the Cargo result: preserve the `PRODUCTION_COST_LIMITS_VERIFIED` and
+`PRODUCTION_CONTENTION_LIMITS_VERIFIED` records too.
+
+For AWS promotion, provide all five evidence inputs and run the fail-closed
+aggregate verifier:
+
+```bash
+PROLLY_S3_AWS_COST_LOG=/evidence/cost.log \
+PROLLY_S3_AWS_CONTENTION_LOG=/evidence/contention.log \
+PROLLY_S3_AWS_LOAD_LOG=/evidence/load.log \
+PROLLY_S3_AWS_SCALE_LOG=/evidence/scale.log \
+PROLLY_S3_AWS_REQUEST_PRICES=/evidence/request-prices.json \
+  bash extensions/s3/scripts/verify_aws_release_limits.sh
+```
+
+The request-price JSON must contain exactly the numeric keys `get`, `head`,
+`put`, `list`, `list_versions`, and `delete`, expressed in USD per 1,000
+requests for the qualification region. Archive its source and effective date
+with the signed release evidence.
 
 Also attach real-AWS qualification, wire-level retry/request telemetry,
 release-topology cost and SlateDB HTTP-correlation measurements, IAM simulator

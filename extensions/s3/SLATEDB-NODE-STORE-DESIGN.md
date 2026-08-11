@@ -51,8 +51,9 @@ The current S3 store maps each 32-byte node CID to one immutable object:
 
 A one-key versioned write updates the objects, versions, and operations trees,
 and a non-empty payload also builds a content chunk-index tree. At scale, a
-point mutation rewrites a root-to-leaf path in each affected tree. The current
-64 KiB qualification result is 51 object-plane calls for one ordinary write.
+point mutation rewrites a root-to-leaf path in each affected tree. Publication
+batching and CAS readback removal reduced the current 64 KiB qualification
+result from 51 to 22 object-plane calls for one ordinary write.
 
 SlateDB can pack many immutable Prolly nodes into WAL and compacted SST files:
 
@@ -750,9 +751,10 @@ production data until Phase 8 completes.
 
 #### Context
 
-The existing 51-call write result measures the whole S3-shaped operation, not
-only Prolly-node traffic. Without a node-specific baseline, adoption could add
-compaction complexity while failing to improve the dominant cost.
+The former 51-call and current 22-call write results measure the whole
+S3-shaped operation, not only Prolly-node traffic. Without a node-specific
+baseline, adoption could add compaction complexity while failing to improve
+the dominant cost.
 
 #### Work
 

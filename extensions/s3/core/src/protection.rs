@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use tokio::sync::Mutex;
 
@@ -11,12 +11,21 @@ use crate::{
 
 #[async_trait::async_trait]
 pub trait ProtectionSink: Send + Sync {
+    /// Adds a physical path to the current bounded protection segment.
+    ///
+    /// The publication coordinator, which owns the concrete lease, is
+    /// responsible for durably flushing the segment before moving a ref.
     async fn protect(&self, path: ObjectPath) -> Result<()>;
 }
+
+const MAX_PROTECTION_SEGMENT_PATHS: usize = 1_024;
+const PROTECTION_FLUSH_INTERVAL_DIVISOR: u64 = 4;
 
 struct LeaseRuntime {
     value: PublicationLeaseV1,
     token: StorageToken,
+    pending_paths: BTreeSet<ObjectPath>,
+    pending_since_millis: Option<u64>,
 }
 
 pub struct PublicationLease<P: ObjectPlane> {
@@ -124,7 +133,12 @@ impl<P: ObjectPlane> PublicationLease<P> {
             prefix,
             ttl_millis,
             clock,
-            runtime: Arc::new(Mutex::new(LeaseRuntime { value, token })),
+            runtime: Arc::new(Mutex::new(LeaseRuntime {
+                value,
+                token,
+                pending_paths: BTreeSet::new(),
+                pending_since_millis: None,
+            })),
         })
     }
 
@@ -160,6 +174,7 @@ impl<P: ObjectPlane> PublicationLease<P> {
     }
 
     pub async fn complete(&self, commit: CommitId) -> Result<()> {
+        self.flush_protection().await?;
         self.update(|value, _| {
             match value.state {
                 PublicationLeaseStateV1::Completed { commit: existing } if existing == commit => {
@@ -195,6 +210,88 @@ impl<P: ObjectPlane> PublicationLease<P> {
 
     pub async fn snapshot(&self) -> PublicationLeaseV1 {
         self.runtime.lock().await.value.clone()
+    }
+
+    /// Durably links every buffered physical path into the publication lease.
+    ///
+    /// Repository publication must call this before moving a branch ref. The
+    /// regular write path also flushes automatically when a segment reaches
+    /// 1,024 paths or a subsequent path observes that the derived flush
+    /// interval elapsed.
+    pub async fn flush_protection(&self) -> Result<()> {
+        let mut runtime = self.runtime.lock().await;
+        if runtime.pending_paths.is_empty() {
+            return Ok(());
+        }
+        let now = self.clock.now_millis()?;
+        self.ensure_runtime_active(&runtime, now)?;
+        self.flush_locked(&mut runtime, now).await
+    }
+
+    fn ensure_runtime_active(&self, runtime: &LeaseRuntime, now: u64) -> Result<()> {
+        match runtime.value.state {
+            PublicationLeaseStateV1::Completed { .. } => Ok(()),
+            PublicationLeaseStateV1::Active if runtime.value.expires_at_millis > now => Ok(()),
+            PublicationLeaseStateV1::Active | PublicationLeaseStateV1::Abandoned => {
+                Err(Error::new(
+                    ErrorCode::OperationCanceled,
+                    "publication lease is not active while protecting an object",
+                ))
+            }
+        }
+    }
+
+    async fn flush_locked(&self, runtime: &mut LeaseRuntime, now: u64) -> Result<()> {
+        if runtime.pending_paths.is_empty() {
+            return Ok(());
+        }
+        let operation = runtime.value.operation;
+        let segment = ProtectionSegmentV1 {
+            operation,
+            previous: runtime.value.protection_head,
+            paths: runtime.pending_paths.iter().cloned().collect(),
+            created_at_millis: runtime.pending_since_millis.unwrap_or(now),
+        };
+        let id = segment.id()?;
+        let bytes = encode_canonical(&segment)?;
+        self.plane
+            .put_immutable(ImmutablePut {
+                path: segment_path(&self.prefix, id)?,
+                expected_sha256: crate::codec::sha256(&bytes),
+                bytes,
+            })
+            .await?;
+        let mut next = runtime.value.clone();
+        next.protection_head = Some(id);
+        next.expires_at_millis = now
+            .checked_add(self.ttl_millis)
+            .ok_or_else(|| invariant("publication lease expiry overflow"))?;
+        next.generation = next
+            .generation
+            .checked_add(1)
+            .ok_or_else(|| invariant("publication lease generation overflow"))?;
+        next.updated_at_millis = now;
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: lease_path(&self.prefix, operation)?,
+                expected: Some(runtime.token.clone()),
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(metadata) => {
+                runtime.value = next;
+                runtime.token = metadata.token;
+                runtime.pending_paths.clear();
+                runtime.pending_since_millis = None;
+                Ok(())
+            }
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "publication lease changed concurrently",
+            )),
+        }
     }
 
     async fn update(
@@ -237,66 +334,30 @@ impl<P: ObjectPlane> ProtectionSink for PublicationLease<P> {
     async fn protect(&self, path: ObjectPath) -> Result<()> {
         let mut runtime = self.runtime.lock().await;
         let now = self.clock.now_millis()?;
-        match runtime.value.state {
-            // An idempotent replay may restage identical immutable objects
-            // before its operation-tree record proves the prior result. The
-            // committed proposal is already a retained root, so no new lease
-            // links are necessary.
-            PublicationLeaseStateV1::Completed { .. } => return Ok(()),
-            PublicationLeaseStateV1::Active if runtime.value.expires_at_millis > now => {}
-            PublicationLeaseStateV1::Active | PublicationLeaseStateV1::Abandoned => {
-                return Err(Error::new(
-                    ErrorCode::OperationCanceled,
-                    "publication lease is not active while protecting an object",
-                ));
-            }
+        // An idempotent replay may restage identical immutable objects before
+        // its operation-tree record proves the prior result. The committed
+        // proposal is already a retained root, so no new lease links are
+        // necessary.
+        if matches!(
+            runtime.value.state,
+            PublicationLeaseStateV1::Completed { .. }
+        ) {
+            return Ok(());
         }
-        let operation = runtime.value.operation;
-        let previous = runtime.value.protection_head;
-        let segment = ProtectionSegmentV1 {
-            operation,
-            previous,
-            paths: vec![path],
-            created_at_millis: now,
-        };
-        let id = segment.id()?;
-        let bytes = encode_canonical(&segment)?;
-        self.plane
-            .put_immutable(ImmutablePut {
-                path: segment_path(&self.prefix, id)?,
-                expected_sha256: crate::codec::sha256(&bytes),
-                bytes,
-            })
-            .await?;
-        let mut next = runtime.value.clone();
-        next.protection_head = Some(id);
-        next.expires_at_millis = now
-            .checked_add(self.ttl_millis)
-            .ok_or_else(|| invariant("publication lease expiry overflow"))?;
-        next.generation = next
-            .generation
-            .checked_add(1)
-            .ok_or_else(|| invariant("publication lease generation overflow"))?;
-        next.updated_at_millis = now;
-        match self
-            .plane
-            .compare_exchange(CompareExchange {
-                path: lease_path(&self.prefix, operation)?,
-                expected: Some(runtime.token.clone()),
-                bytes: encode_canonical(&next)?,
-            })
-            .await?
-        {
-            CompareExchangeOutcome::Applied(metadata) => {
-                runtime.value = next;
-                runtime.token = metadata.token;
-                Ok(())
-            }
-            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
-                ErrorCode::RefConflict,
-                "publication lease changed concurrently",
-            )),
+        self.ensure_runtime_active(&runtime, now)?;
+        if runtime.pending_paths.is_empty() {
+            runtime.pending_since_millis = Some(now);
         }
+        runtime.pending_paths.insert(path);
+        let flush_interval = self.ttl_millis / PROTECTION_FLUSH_INTERVAL_DIVISOR;
+        let flush_due = runtime.pending_paths.len() >= MAX_PROTECTION_SEGMENT_PATHS
+            || runtime
+                .pending_since_millis
+                .is_some_and(|started| now.saturating_sub(started) >= flush_interval);
+        if flush_due {
+            self.flush_locked(&mut runtime, now).await?;
+        }
+        Ok(())
     }
 }
 

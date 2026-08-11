@@ -6332,6 +6332,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     async fn ensure_publication_allowed(&self, lease: &PublicationLease<P>) -> Result<()> {
+        lease.flush_protection().await?;
         self.ensure_gc_idle().await?;
         lease.ensure_active().await
     }
