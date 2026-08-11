@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     ops::RangeInclusive,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -6,14 +7,18 @@ use std::{
     },
 };
 
-use aws_sdk_s3::{primitives::ByteStream, Client};
+use aws_sdk_s3::{primitives::ByteStream, types::MetadataDirective, Client};
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
+use aws_smithy_types::DateTime;
 use aws_types::request_id::RequestId;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use md5::Md5;
 use prolly_s3_core::{
-    CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode, GetRequest,
-    ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath, ObjectPlane, PhysicalListEntry,
-    PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken, StoredMetadata,
-    StoredObject,
+    Checksums, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
+    GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, NativeCopy, NativeDelete,
+    NativeObjectBindingV1, NativeObjectWriteResult, NativePut, ObjectPath, ObjectPlane,
+    PhysicalListEntry, PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken,
+    StoredMetadata, StoredObject,
 };
 use sha2::{Digest, Sha256};
 
@@ -25,6 +30,7 @@ pub struct S3OperationMetrics {
     pub get_object: u64,
     pub head_object: u64,
     pub put_object: u64,
+    pub copy_object: u64,
     pub list_objects_v2: u64,
     pub list_object_versions: u64,
     pub delete_object: u64,
@@ -37,6 +43,7 @@ impl S3OperationMetrics {
         self.get_object
             + self.head_object
             + self.put_object
+            + self.copy_object
             + self.list_objects_v2
             + self.list_object_versions
             + self.delete_object
@@ -48,6 +55,7 @@ struct AtomicS3OperationMetrics {
     get_object: AtomicU64,
     head_object: AtomicU64,
     put_object: AtomicU64,
+    copy_object: AtomicU64,
     list_objects_v2: AtomicU64,
     list_object_versions: AtomicU64,
     delete_object: AtomicU64,
@@ -61,6 +69,7 @@ impl AtomicS3OperationMetrics {
             get_object: self.get_object.load(Ordering::Relaxed),
             head_object: self.head_object.load(Ordering::Relaxed),
             put_object: self.put_object.load(Ordering::Relaxed),
+            copy_object: self.copy_object.load(Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.load(Ordering::Relaxed),
             list_object_versions: self.list_object_versions.load(Ordering::Relaxed),
             delete_object: self.delete_object.load(Ordering::Relaxed),
@@ -74,6 +83,7 @@ impl AtomicS3OperationMetrics {
             get_object: self.get_object.swap(0, Ordering::Relaxed),
             head_object: self.head_object.swap(0, Ordering::Relaxed),
             put_object: self.put_object.swap(0, Ordering::Relaxed),
+            copy_object: self.copy_object.swap(0, Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.swap(0, Ordering::Relaxed),
             list_object_versions: self.list_object_versions.swap(0, Ordering::Relaxed),
             delete_object: self.delete_object.swap(0, Ordering::Relaxed),
@@ -155,6 +165,12 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .unwrap_or_default();
         let content_length = output.content_length();
         let delete_marker = output.delete_marker().unwrap_or(false);
+        let user_metadata = output
+            .metadata()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         let collected = output
             .body
             .collect()
@@ -174,6 +190,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 sha256: digest,
                 last_modified_millis,
                 delete_marker,
+                user_metadata,
             },
             bytes,
         }))
@@ -215,6 +232,12 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 .and_then(|seconds| seconds.checked_mul(1_000))
                 .unwrap_or_default(),
             delete_marker: output.delete_marker().unwrap_or(false),
+            user_metadata: output
+                .metadata()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
         }))
     }
 
@@ -243,6 +266,10 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 sha256: request.expected_sha256,
                 last_modified_millis: 0,
                 delete_marker: false,
+                user_metadata: BTreeMap::from([(
+                    "prolly-sha256".to_string(),
+                    hex::encode(request.expected_sha256),
+                )]),
             })),
             Err(error) if is_precondition_failed(&error) => {
                 let existing = self.get_current(&request.path).await?.ok_or_else(|| {
@@ -304,6 +331,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                     sha256,
                     last_modified_millis: 0,
                     delete_marker: false,
+                    user_metadata: BTreeMap::new(),
                 }))
             }
             Err(error) if is_precondition_failed(&error) => Ok(CompareExchangeOutcome::Conflict(
@@ -351,6 +379,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
                             .and_then(|seconds| seconds.checked_mul(1_000))
                             .unwrap_or_default(),
                         delete_marker: false,
+                        user_metadata: BTreeMap::new(),
                     },
                 })
             })
@@ -383,6 +412,143 @@ impl ObjectPlane for AwsS3ObjectPlane {
             Err(error) if is_precondition_failed(&error) => Ok(DeleteOutcome::TokenMismatch),
             Err(error) => Err(map_sdk_error("DeleteObject", error)),
         }
+    }
+
+    async fn put_native(&self, request: NativePut) -> Result<NativeObjectWriteResult> {
+        self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
+        let size = request.bytes.len() as u64;
+        self.metrics
+            .uploaded_body_bytes
+            .fetch_add(size, Ordering::Relaxed);
+        let checksum_sha256: [u8; 32] = Sha256::digest(&request.bytes).into();
+        let checksum_md5: [u8; 16] = Md5::digest(&request.bytes).into();
+        let logical_etag = format!("\"{}\"", hex::encode(checksum_md5));
+        let metadata = native_metadata(
+            request.user_metadata,
+            request.repository.to_string(),
+            request.operation.to_string(),
+            request.writer_fence_generation,
+            checksum_sha256,
+        )?;
+        let mut operation = self
+            .client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .set_cache_control(request.headers.cache_control)
+            .set_content_disposition(request.headers.content_disposition)
+            .set_content_encoding(request.headers.content_encoding)
+            .set_content_language(request.headers.content_language)
+            .set_content_type(request.headers.content_type)
+            .set_expires(
+                request
+                    .headers
+                    .expires_at_millis
+                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
+                    .map(DateTime::from_secs),
+            )
+            .set_metadata(Some(metadata))
+            .checksum_sha256(STANDARD.encode(checksum_sha256))
+            .body(ByteStream::from(request.bytes));
+        operation = operation.metadata("prolly-logical-etag", &logical_etag);
+        let output = operation
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("PutObject native", error))?;
+        let version_id = required_version_id("PutObject", output.version_id())?;
+        let provider_etag = output.e_tag().unwrap_or_default().to_string();
+        Ok(NativeObjectWriteResult {
+            binding: NativeObjectBindingV1::Live {
+                version_id,
+                provider_etag,
+                checksum_sha256,
+            },
+            size,
+            logical_etag,
+            checksums: Checksums {
+                md5: Some(checksum_md5),
+                sha256: Some(checksum_sha256),
+                algorithm_values: Default::default(),
+            },
+        })
+    }
+
+    async fn copy_native(&self, request: NativeCopy) -> Result<NativeObjectWriteResult> {
+        self.metrics.copy_object.fetch_add(1, Ordering::Relaxed);
+        let metadata = native_metadata(
+            request.user_metadata,
+            request.repository.to_string(),
+            request.operation.to_string(),
+            request.writer_fence_generation,
+            request.checksum_sha256,
+        )?;
+        let copy_source = format!(
+            "{}/{}?versionId={}",
+            self.bucket,
+            request.source.as_str(),
+            request.source_version_id
+        );
+        let output = self
+            .client
+            .copy_object()
+            .bucket(&self.bucket)
+            .key(request.destination.as_str())
+            .copy_source(copy_source)
+            .metadata_directive(MetadataDirective::Replace)
+            .set_cache_control(request.headers.cache_control)
+            .set_content_disposition(request.headers.content_disposition)
+            .set_content_encoding(request.headers.content_encoding)
+            .set_content_language(request.headers.content_language)
+            .set_content_type(request.headers.content_type)
+            .set_expires(
+                request
+                    .headers
+                    .expires_at_millis
+                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
+                    .map(DateTime::from_secs),
+            )
+            .set_metadata(Some(metadata))
+            .checksum_algorithm(aws_sdk_s3::types::ChecksumAlgorithm::Sha256)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("CopyObject native", error))?;
+        let version_id = required_version_id("CopyObject", output.version_id())?;
+        let provider_etag = output
+            .copy_object_result()
+            .and_then(|result| result.e_tag())
+            .unwrap_or_default()
+            .to_string();
+        Ok(NativeObjectWriteResult {
+            binding: NativeObjectBindingV1::Live {
+                version_id,
+                provider_etag,
+                checksum_sha256: request.checksum_sha256,
+            },
+            size: request.size,
+            logical_etag: request.logical_etag,
+            checksums: request.checksums,
+        })
+    }
+
+    async fn delete_native(&self, request: NativeDelete) -> Result<NativeObjectBindingV1> {
+        self.metrics.delete_object.fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("DeleteObject native", error))?;
+        if output.delete_marker() != Some(true) {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "DeleteObject did not create a native delete marker",
+            ));
+        }
+        Ok(NativeObjectBindingV1::DeleteMarker {
+            version_id: required_version_id("DeleteObject", output.version_id())?,
+        })
     }
 }
 
@@ -434,6 +600,7 @@ impl AwsS3ObjectPlane {
                         .and_then(|seconds| seconds.checked_mul(1_000))
                         .unwrap_or_default(),
                     delete_marker: false,
+                    user_metadata: BTreeMap::new(),
                 },
             });
         }
@@ -460,6 +627,7 @@ impl AwsS3ObjectPlane {
                         .and_then(|seconds| seconds.checked_mul(1_000))
                         .unwrap_or_default(),
                     delete_marker: true,
+                    user_metadata: BTreeMap::new(),
                 },
             });
         }
@@ -476,6 +644,47 @@ impl AwsS3ObjectPlane {
             continuation,
         })
     }
+}
+
+fn native_metadata(
+    user_metadata: std::collections::BTreeMap<String, String>,
+    repository: String,
+    operation: String,
+    writer_fence_generation: u64,
+    checksum_sha256: [u8; 32],
+) -> Result<std::collections::HashMap<String, String>> {
+    if user_metadata
+        .keys()
+        .any(|key| key.to_ascii_lowercase().starts_with("prolly-"))
+    {
+        return Err(Error::new(
+            ErrorCode::InvalidRequest,
+            "user metadata keys beginning with prolly- are reserved",
+        ));
+    }
+    let mut metadata = user_metadata
+        .into_iter()
+        .collect::<std::collections::HashMap<_, _>>();
+    metadata.insert("prolly-repository-id".to_string(), repository);
+    metadata.insert("prolly-operation-id".to_string(), operation);
+    metadata.insert(
+        "prolly-writer-fence".to_string(),
+        writer_fence_generation.to_string(),
+    );
+    metadata.insert("prolly-sha256".to_string(), hex::encode(checksum_sha256));
+    Ok(metadata)
+}
+
+fn required_version_id(operation: &str, version_id: Option<&str>) -> Result<String> {
+    version_id
+        .filter(|value| !value.is_empty() && *value != "null")
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            Error::new(
+                ErrorCode::ProviderNotQualified,
+                format!("{operation} succeeded without a native S3 VersionId"),
+            )
+        })
 }
 
 fn format_range(range: &RangeInclusive<u64>) -> String {

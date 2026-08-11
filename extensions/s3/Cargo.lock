@@ -2228,6 +2228,7 @@ dependencies = [
  "hex",
  "hmac 0.12.1",
  "http-body 1.1.0",
+ "md-5 0.10.6",
  "percent-encoding",
  "prolly-s3-core",
  "serde",

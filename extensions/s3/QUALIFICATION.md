@@ -4,6 +4,35 @@ This record distinguishes executable local evidence from production-release
 evidence that requires an AWS account, elapsed soak time, and operator drills.
 It is not a production attestation.
 
+## Native-versioned architecture probe — 2026-08-11
+
+The experimental `native-versioned-v1` profile passed a focused live probe
+against the pinned RustFS image and an enabled versioned bucket. After one
+warm-up publication, a 64 KiB whole-object put issued exactly four object-plane
+SDK calls:
+
+- one `PutObject` for the payload at its original logical key;
+- one `PutObject` for the commit-scoped Prolly node pack;
+- one `PutObject` for the immutable bucket commit;
+- one conditional `PutObject` for the branch ref.
+
+The Smithy interceptor observed four executions and four transmissions, with
+no retry. The probe then replaced the same key and read the first logical
+version through its exact RustFS `VersionId`, proving that the measured path
+retained historical bytes without repository content chunks.
+
+The deterministic memory-plane suite separately passed 16 native-profile
+cases. It covers exact current and historical access, copy, delete markers,
+four-call writes at 1, 8, and 32 queued callers, a five-call two-object commit,
+three-call merge and restore, writer takeover fencing, idempotent replay,
+lost-put response reconciliation, checkpoints, exact-version garbage
+collection, and fail-closed native multipart and cross-bucket transfer.
+
+This focused result supersedes the old 22-call distributed-profile baseline
+only for the new native profile. It does not qualify multipart, clone, push,
+streaming-body memory bounds, AWS latency or cost, outage recovery, or the
+million-key scale target.
+
 ## Local qualification — 2026-08-09
 
 - Host: Apple arm64 development workstation. The broad workspace/RustFS

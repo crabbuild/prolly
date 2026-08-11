@@ -9,7 +9,10 @@ use prolly::{Cid, Tree, TreeFormat};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{codec::domain_hash, encode_canonical, Error, ErrorCode, ObjectPath, Result};
+use crate::{
+    codec::{domain_hash, sha256},
+    decode_canonical, encode_canonical, Error, ErrorCode, ObjectPath, Result,
+};
 
 macro_rules! hash_id {
     ($name:ident, $prefix:literal) => {
@@ -88,6 +91,8 @@ hash_id!(ProviderProfileId, "ppf1_");
 hash_id!(ProtectionSegmentId, "pps1_");
 hash_id!(GcPlanId, "pgc1_");
 hash_id!(MultipartCatalogSnapshotId, "pmc1_");
+hash_id!(NodePackId, "pnp1_");
+hash_id!(NodeIndexCheckpointId, "nic1_");
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct UploadId(pub Uuid);
@@ -221,6 +226,48 @@ pub struct CanonicalLimits {
     pub content_chunk_bytes: u32,
 }
 
+/// Persisted storage and writer topology selected when a repository is
+/// created. Repositories never switch profiles in place.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RepositoryStorageProfile {
+    #[default]
+    DistributedContentAddressedV1,
+    NativeVersionedV1,
+}
+
+impl RepositoryStorageProfile {
+    pub const fn capability_profile(self) -> u16 {
+        match self {
+            Self::DistributedContentAddressedV1 => {
+                RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE
+            }
+            Self::NativeVersionedV1 => RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE,
+        }
+    }
+
+    pub fn from_capability_profile(value: u16) -> Result<Self> {
+        match value {
+            RepositoryFormatV1::DISTRIBUTED_S3_CAPABILITY_PROFILE => {
+                Ok(Self::DistributedContentAddressedV1)
+            }
+            RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE => {
+                Ok(Self::NativeVersionedV1)
+            }
+            _ => Err(Error::new(
+                ErrorCode::UnsupportedRepositoryFormat,
+                format!("unknown repository capability profile {value}"),
+            )),
+        }
+    }
+
+    pub const fn minimum_protocol_version(self) -> u32 {
+        match self {
+            Self::DistributedContentAddressedV1 => RepositoryFormatV1::DISTRIBUTED_PROTOCOL_VERSION,
+            Self::NativeVersionedV1 => RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION,
+        }
+    }
+}
+
 impl Default for CanonicalLimits {
     fn default() -> Self {
         Self {
@@ -257,8 +304,22 @@ pub struct RepositoryFormatV1 {
 impl RepositoryFormatV1 {
     pub const VERSION: u16 = 1;
     pub const DISTRIBUTED_S3_CAPABILITY_PROFILE: u16 = 1;
-    pub const CURRENT_READER_VERSION: u32 = 1;
-    pub const CURRENT_WRITER_VERSION: u32 = 1;
+    pub const NATIVE_VERSIONED_S3_CAPABILITY_PROFILE: u16 = 2;
+    pub const DISTRIBUTED_PROTOCOL_VERSION: u32 = 1;
+    pub const NATIVE_VERSIONED_PROTOCOL_VERSION: u32 = 2;
+    pub const CURRENT_READER_VERSION: u32 = 2;
+    pub const CURRENT_WRITER_VERSION: u32 = 2;
+
+    pub fn storage_profile(&self) -> Result<RepositoryStorageProfile> {
+        #[cfg(not(prolly_s3_legacy_v1_codec))]
+        {
+            RepositoryStorageProfile::from_capability_profile(self.required_capability_profile)
+        }
+        #[cfg(prolly_s3_legacy_v1_codec)]
+        {
+            Ok(RepositoryStorageProfile::DistributedContentAddressedV1)
+        }
+    }
 }
 
 #[cfg(not(prolly_s3_legacy_v1_codec))]
@@ -338,6 +399,23 @@ impl ProviderCapabilities {
             return Err(Error::new(
                 ErrorCode::ProviderNotQualified,
                 "provider bucket has default Object Lock retention",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn validate_native_versioned(&self) -> Result<()> {
+        self.validate_distributed()?;
+        if self.physical_versioning != PhysicalVersioning::Enabled {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native-versioned repositories require bucket versioning to be enabled",
+            ));
+        }
+        if self.max_single_put_bytes == 0 || self.max_object_bytes == 0 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "provider did not report usable native object size limits",
             ));
         }
         Ok(())
@@ -527,6 +605,114 @@ pub struct ObjectVersionOrder {
     pub mutation_ordinal: u32,
 }
 
+/// Provider binding for a logical object version in the native-versioned
+/// profile. The key is deliberately absent: it is always the logical UTF-8
+/// key under which this record is stored.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NativeObjectBindingV1 {
+    Live {
+        version_id: String,
+        provider_etag: String,
+        checksum_sha256: [u8; 32],
+    },
+    DeleteMarker {
+        version_id: String,
+    },
+}
+
+// Keep the canonical wire shape direct. Boxing the live variant would change
+// the public persisted model only to reduce its in-memory enum size.
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LogicalObjectVersionKindV2 {
+    Live {
+        size: u64,
+        logical_etag: String,
+        headers: ObjectHeaders,
+        checksums: Checksums,
+        user_metadata: BTreeMap<String, String>,
+        tags: BTreeMap<String, String>,
+    },
+    DeleteMarker,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogicalObjectVersionBodyV2 {
+    pub order: ObjectVersionOrder,
+    pub created_at_millis: u64,
+    pub kind: LogicalObjectVersionKindV2,
+}
+
+/// Native-profile object version. Its logical ID excludes the provider
+/// binding so a verified clone may preserve logical identity while rebinding
+/// to destination-issued S3 VersionIds.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObjectVersionV2 {
+    pub id: ObjectVersionId,
+    pub body: LogicalObjectVersionBodyV2,
+    pub binding: NativeObjectBindingV1,
+}
+
+impl ObjectVersionV2 {
+    pub fn derive(
+        repository: RepositoryId,
+        key: &[u8],
+        operation: OperationId,
+        body: LogicalObjectVersionBodyV2,
+        binding: NativeObjectBindingV1,
+    ) -> Result<Self> {
+        validate_native_object_version(&body, &binding)?;
+        let body_bytes = encode_canonical(&body)?;
+        let id = ObjectVersionId(domain_hash(
+            b"prolly-s3/object-version/v2",
+            &[
+                repository.as_bytes(),
+                key,
+                operation.as_bytes(),
+                &body_bytes,
+            ],
+        ));
+        Ok(Self { id, body, binding })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        validate_native_object_version(&self.body, &self.binding)
+    }
+}
+
+fn validate_native_object_version(
+    body: &LogicalObjectVersionBodyV2,
+    binding: &NativeObjectBindingV1,
+) -> Result<()> {
+    let valid = match (&body.kind, binding) {
+        (
+            LogicalObjectVersionKindV2::Live { checksums, .. },
+            NativeObjectBindingV1::Live {
+                version_id,
+                checksum_sha256,
+                ..
+            },
+        ) => {
+            !version_id.is_empty()
+                && checksums
+                    .sha256
+                    .is_some_and(|logical| logical == *checksum_sha256)
+        }
+        (
+            LogicalObjectVersionKindV2::DeleteMarker,
+            NativeObjectBindingV1::DeleteMarker { version_id },
+        ) => !version_id.is_empty(),
+        _ => false,
+    };
+    if !valid {
+        return Err(Error::new(
+            ErrorCode::CorruptCommit,
+            "native object version has an invalid logical-to-physical binding",
+        ));
+    }
+    Ok(())
+}
+
 // Keep the canonical model direct and language-neutral. Boxing only one
 // variant would complicate every binding without changing persisted size.
 #[allow(clippy::large_enum_variant)]
@@ -555,6 +741,11 @@ pub struct ObjectVersionBodyV1 {
 pub struct ObjectVersionV1 {
     pub id: ObjectVersionId,
     pub body: ObjectVersionBodyV1,
+    /// Present only for the native-versioned profile. Keeping the binding
+    /// outside `body` prevents a destination-assigned VersionId from changing
+    /// the logical object-version identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_binding: Option<NativeObjectBindingV1>,
 }
 
 impl ObjectVersionV1 {
@@ -574,7 +765,98 @@ impl ObjectVersionV1 {
                 &body_bytes,
             ],
         ));
-        Ok(Self { id, body })
+        Ok(Self {
+            id,
+            body,
+            native_binding: None,
+        })
+    }
+
+    pub fn derive_native(
+        repository: RepositoryId,
+        key: &[u8],
+        operation: OperationId,
+        body: ObjectVersionBodyV1,
+        binding: NativeObjectBindingV1,
+    ) -> Result<Self> {
+        let logical_kind = match &body.kind {
+            ObjectVersionKindV1::Live {
+                content,
+                size,
+                logical_etag,
+                headers,
+                checksums,
+                user_metadata,
+                tags,
+            } if *content == ContentRef::Empty => LogicalObjectVersionKindV2::Live {
+                size: *size,
+                logical_etag: logical_etag.clone(),
+                headers: headers.clone(),
+                checksums: checksums.clone(),
+                user_metadata: user_metadata.clone(),
+                tags: tags.clone(),
+            },
+            ObjectVersionKindV1::DeleteMarker => LogicalObjectVersionKindV2::DeleteMarker,
+            ObjectVersionKindV1::Live { .. } => {
+                return Err(Error::new(
+                    ErrorCode::InternalInvariant,
+                    "native object version must not contain a repository content reference",
+                ))
+            }
+        };
+        let logical_body = LogicalObjectVersionBodyV2 {
+            order: body.order,
+            created_at_millis: body.created_at_millis,
+            kind: logical_kind,
+        };
+        let native = ObjectVersionV2::derive(repository, key, operation, logical_body, binding)?;
+        Ok(Self {
+            id: native.id,
+            body,
+            native_binding: Some(native.binding),
+        })
+    }
+
+    pub fn validate_native(&self) -> Result<()> {
+        let binding = self.native_binding.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "native object version is missing its provider binding",
+            )
+        })?;
+        let logical_kind = match &self.body.kind {
+            ObjectVersionKindV1::Live {
+                content,
+                size,
+                logical_etag,
+                headers,
+                checksums,
+                user_metadata,
+                tags,
+            } if *content == ContentRef::Empty => LogicalObjectVersionKindV2::Live {
+                size: *size,
+                logical_etag: logical_etag.clone(),
+                headers: headers.clone(),
+                checksums: checksums.clone(),
+                user_metadata: user_metadata.clone(),
+                tags: tags.clone(),
+            },
+            ObjectVersionKindV1::DeleteMarker => LogicalObjectVersionKindV2::DeleteMarker,
+            ObjectVersionKindV1::Live { .. } => {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "native object version contains a repository content reference",
+                ))
+            }
+        };
+        validate_native_object_version(
+            &LogicalObjectVersionBodyV2 {
+                order: self.body.order,
+                created_at_millis: self.body.created_at_millis,
+                kind: logical_kind,
+            },
+            binding,
+        )
     }
 }
 
@@ -623,6 +905,336 @@ pub struct BucketDeltaV1 {
     pub changes: Vec<ObjectTransition>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodePackEntryV1 {
+    pub cid: Cid,
+    pub offset: u64,
+    pub len: u32,
+    pub sha256: [u8; 32],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NodePackAttachmentKindV1 {
+    BucketDelta,
+    Reflog,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodePackAttachmentV1 {
+    pub kind: NodePackAttachmentKindV1,
+    pub digest: [u8; 32],
+    pub offset: u64,
+    pub len: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodePackV1 {
+    pub format_digest: TreeFormatDigest,
+    /// Sorted strictly by CID.
+    pub entries: Vec<NodePackEntryV1>,
+    pub attachments: Vec<NodePackAttachmentV1>,
+    /// Concatenated canonical node and attachment bytes.
+    pub payload: Vec<u8>,
+}
+
+const NODE_PACK_MAGIC: &[u8; 8] = b"PLYPACK1";
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodePackTocV1 {
+    pub format_digest: TreeFormatDigest,
+    pub entries: Vec<NodePackEntryV1>,
+    pub attachments: Vec<NodePackAttachmentV1>,
+    pub payload_len: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodePackRefV1 {
+    pub id: NodePackId,
+    pub object_len: u64,
+    pub node_count: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeIndexEntryV1 {
+    pub cid: Cid,
+    pub pack: NodePackId,
+    pub absolute_offset: u64,
+    pub len: u32,
+    pub sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeIndexCheckpointV1 {
+    pub id: NodeIndexCheckpointId,
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub head: CommitId,
+    pub generation: CommitGeneration,
+    pub entries: Vec<NodeIndexEntryV1>,
+    pub created_at_millis: u64,
+}
+
+impl NodeIndexCheckpointV1 {
+    pub fn derive(
+        repository: RepositoryId,
+        branch: String,
+        head: CommitId,
+        generation: CommitGeneration,
+        entries: Vec<NodeIndexEntryV1>,
+        created_at_millis: u64,
+    ) -> Result<Self> {
+        let body = encode_canonical(&(
+            repository,
+            &branch,
+            head,
+            generation,
+            &entries,
+            created_at_millis,
+        ))?;
+        Ok(Self {
+            id: NodeIndexCheckpointId(domain_hash(b"prolly-s3/node-index-checkpoint/v1", &[&body])),
+            repository,
+            branch,
+            head,
+            generation,
+            entries,
+            created_at_millis,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let expected = Self::derive(
+            self.repository,
+            self.branch.clone(),
+            self.head,
+            self.generation,
+            self.entries.clone(),
+            self.created_at_millis,
+        )?;
+        if expected.id != self.id
+            || self
+                .entries
+                .windows(2)
+                .any(|pair| pair[0].cid >= pair[1].cid)
+            || self.entries.iter().any(|entry| {
+                entry.len == 0 || entry.cid.as_bytes() != entry.sha256 || entry.absolute_offset < 12
+            })
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-index checkpoint is invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl NodePackV1 {
+    /// Encode a range-readable pack: fixed magic and header length, canonical
+    /// CBOR table of contents, then the raw concatenated payload.
+    pub fn encode_object(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        let header = encode_canonical(&NodePackTocV1 {
+            format_digest: self.format_digest,
+            entries: self.entries.clone(),
+            attachments: self.attachments.clone(),
+            payload_len: self.payload.len() as u64,
+        })?;
+        let header_len = u32::try_from(header.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "node-pack header exceeds u32"))?;
+        let mut object = Vec::with_capacity(12 + header.len() + self.payload.len());
+        object.extend_from_slice(NODE_PACK_MAGIC);
+        object.extend_from_slice(&header_len.to_be_bytes());
+        object.extend_from_slice(&header);
+        object.extend_from_slice(&self.payload);
+        Ok(object)
+    }
+
+    pub fn decode_object(object: &[u8]) -> Result<Self> {
+        if object.len() < 12 || &object[..8] != NODE_PACK_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node pack has an invalid wire header",
+            ));
+        }
+        let header_len =
+            u32::from_be_bytes(object[8..12].try_into().expect("fixed range")) as usize;
+        let payload_start = 12usize.checked_add(header_len).ok_or_else(|| {
+            Error::new(ErrorCode::CorruptNode, "node-pack header length overflow")
+        })?;
+        if payload_start > object.len() {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-pack header is truncated",
+            ));
+        }
+        let header: NodePackTocV1 = decode_canonical(&object[12..payload_start])?;
+        let payload = object[payload_start..].to_vec();
+        if payload.len() as u64 != header.payload_len {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-pack payload length mismatch",
+            ));
+        }
+        let pack = Self {
+            format_digest: header.format_digest,
+            entries: header.entries,
+            attachments: header.attachments,
+            payload,
+        };
+        pack.validate()?;
+        Ok(pack)
+    }
+
+    pub fn object_payload_offset(object_prefix: &[u8]) -> Result<u64> {
+        if object_prefix.len() < 12 || &object_prefix[..8] != NODE_PACK_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node pack has an invalid wire header",
+            ));
+        }
+        Ok(12
+            + u64::from(u32::from_be_bytes(
+                object_prefix[8..12].try_into().expect("fixed range"),
+            )))
+    }
+
+    pub fn decode_toc(bytes: &[u8]) -> Result<NodePackTocV1> {
+        let toc: NodePackTocV1 = decode_canonical(bytes)?;
+        for pair in toc.entries.windows(2) {
+            if pair[0].cid >= pair[1].cid {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "node-pack table of contents is not CID-sorted",
+                ));
+            }
+        }
+        for entry in &toc.entries {
+            let end = entry
+                .offset
+                .checked_add(u64::from(entry.len))
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::CorruptNode, "node-pack entry range overflow")
+                })?;
+            if end > toc.payload_len || entry.cid.as_bytes() != entry.sha256 {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "node-pack table of contents contains an invalid node range",
+                ));
+            }
+        }
+        for attachment in &toc.attachments {
+            if attachment
+                .offset
+                .checked_add(u64::from(attachment.len))
+                .is_none_or(|end| end > toc.payload_len)
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "node-pack attachment range is invalid",
+                ));
+            }
+        }
+        Ok(toc)
+    }
+
+    pub fn id(&self) -> Result<NodePackId> {
+        let bytes = self.encode_object()?;
+        Ok(NodePackId(domain_hash(
+            b"prolly-s3/node-pack/v1",
+            &[&bytes],
+        )))
+    }
+
+    pub fn reference(&self) -> Result<NodePackRefV1> {
+        Ok(NodePackRefV1 {
+            id: self.id()?,
+            object_len: u64::try_from(self.encode_object()?.len())
+                .map_err(|_| Error::new(ErrorCode::InvalidLimit, "node pack length exceeds u64"))?,
+            node_count: u32::try_from(self.entries.len()).map_err(|_| {
+                Error::new(ErrorCode::InvalidLimit, "node pack contains too many nodes")
+            })?,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        for pair in self.entries.windows(2) {
+            if pair[0].cid >= pair[1].cid {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "node pack entries are not strictly CID-sorted",
+                ));
+            }
+        }
+        for entry in &self.entries {
+            let bytes = self.payload_slice(entry.offset, entry.len)?;
+            if sha256(bytes) != entry.sha256 || entry.cid.as_bytes() != entry.sha256 {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "node pack entry does not match its CID and checksum",
+                ));
+            }
+        }
+        for attachment in &self.attachments {
+            let bytes = self.payload_slice(attachment.offset, attachment.len)?;
+            if sha256(bytes) != attachment.digest {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "node pack attachment checksum mismatch",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn node(&self, cid: &Cid) -> Result<Option<&[u8]>> {
+        let Ok(index) = self.entries.binary_search_by(|entry| entry.cid.cmp(cid)) else {
+            return Ok(None);
+        };
+        let entry = &self.entries[index];
+        Ok(Some(self.payload_slice(entry.offset, entry.len)?))
+    }
+
+    fn payload_slice(&self, offset: u64, len: u32) -> Result<&[u8]> {
+        let start = usize::try_from(offset)
+            .map_err(|_| Error::new(ErrorCode::CorruptNode, "node pack offset overflow"))?;
+        let end = start
+            .checked_add(len as usize)
+            .filter(|end| *end <= self.payload.len())
+            .ok_or_else(|| {
+                Error::new(ErrorCode::CorruptNode, "node pack range is out of bounds")
+            })?;
+        Ok(&self.payload[start..end])
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BucketChangeSummaryV2 {
+    Inline(BucketDeltaV1),
+    Packed { digest: [u8; 32], len: u32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketCommitV2 {
+    pub state: BucketStateV1,
+    pub parents: Vec<CommitId>,
+    pub generation: CommitGeneration,
+    pub changes: BucketChangeSummaryV2,
+    pub node_pack: Option<NodePackRefV1>,
+    pub writer_fence_generation: u64,
+    pub author: String,
+    pub message: Option<String>,
+    pub created_at_millis: u64,
+    pub metadata: BTreeMap<String, Vec<u8>>,
+}
+
+impl BucketCommitV2 {
+    pub fn id(&self) -> Result<CommitId> {
+        let bytes = encode_canonical(self)?;
+        Ok(CommitId(domain_hash(b"prolly-s3/commit/v2", &[&bytes])))
+    }
+}
+
 impl BucketDeltaV1 {
     pub fn id(&self) -> Result<DeltaId> {
         let bytes = encode_canonical(self)?;
@@ -640,6 +1252,15 @@ pub struct BucketCommitV1 {
     pub message: Option<String>,
     pub created_at_millis: u64,
     pub metadata: BTreeMap<String, Vec<u8>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<NativeCommitExtensionV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeCommitExtensionV1 {
+    pub node_pack: Option<NodePackRefV1>,
+    pub inline_delta: BucketDeltaV1,
+    pub writer_fence_generation: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -817,6 +1438,53 @@ pub struct RefValueV1 {
     pub writer: String,
     pub updated_at_millis: u64,
     pub tombstone: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<NativeRefExtensionV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeRefExtensionV1 {
+    pub writer_fence_generation: u64,
+    pub inline_reflog: ReflogEntryV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefValueV2 {
+    pub target: CommitId,
+    pub previous_target: Option<CommitId>,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub writer_id: String,
+    pub writer_fence_generation: u64,
+    pub updated_at_millis: u64,
+    pub tombstone: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExclusiveWriterLeaseV1 {
+    pub repository: RepositoryId,
+    pub writer_id: String,
+    pub generation: u64,
+    pub fencing_token: [u8; 32],
+    pub expires_at_millis: u64,
+    pub updated_at_millis: u64,
+}
+
+impl ExclusiveWriterLeaseV1 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        if self.repository != repository
+            || self.writer_id.is_empty()
+            || self.generation == 0
+            || self.fencing_token == [0; 32]
+            || self.expires_at_millis <= self.updated_at_millis
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "exclusive writer lease is malformed",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -947,12 +1615,47 @@ pub enum WorkspaceMutationV1 {
     Delete {
         key: Vec<u8>,
     },
+    NativePut {
+        key: Vec<u8>,
+        content: crate::StoredContent,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+        binding: NativeObjectBindingV1,
+    },
+    NativeDelete {
+        key: Vec<u8>,
+        binding: NativeObjectBindingV1,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NativeBatchMutationV1 {
+    Put {
+        key: Vec<u8>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    },
+    Delete {
+        key: Vec<u8>,
+    },
+}
+
+impl NativeBatchMutationV1 {
+    pub fn key(&self) -> &[u8] {
+        match self {
+            Self::Put { key, .. } | Self::Delete { key } => key,
+        }
+    }
 }
 
 impl WorkspaceMutationV1 {
     pub fn key(&self) -> &[u8] {
         match self {
-            Self::Put { key, .. } | Self::Delete { key } => key,
+            Self::Put { key, .. }
+            | Self::Delete { key }
+            | Self::NativePut { key, .. }
+            | Self::NativeDelete { key, .. } => key,
         }
     }
 }

@@ -30,7 +30,8 @@ use prolly_s3_client::{
         GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, MergePolicy, MultipartStateV1,
         MultipartUploadV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionKindV1,
         OperationId, PhysicalListPage, PhysicalVersion, PhysicalVersioning, Repository,
-        RepositoryOptions, RetryAdvice, StoredMetadata, StoredObject, MAX_LOGICAL_RETRY_LIMIT,
+        RepositoryOptions, RepositoryStorageProfile, RetryAdvice, StoredMetadata, StoredObject,
+        MAX_LOGICAL_RETRY_LIMIT,
     },
     AwsS3ObjectPlane, Client, HmacAttestationSigner, HmacTokenSigner, ProviderIdentity,
     S3OperationMetrics, S3WireAttemptInterceptor, S3WireAttemptMetrics, WriteOptions,
@@ -1374,6 +1375,7 @@ fn combine_s3_metrics(left: S3OperationMetrics, right: S3OperationMetrics) -> S3
         get_object: left.get_object.saturating_add(right.get_object),
         head_object: left.head_object.saturating_add(right.head_object),
         put_object: left.put_object.saturating_add(right.put_object),
+        copy_object: left.copy_object.saturating_add(right.copy_object),
         list_objects_v2: left.list_objects_v2.saturating_add(right.list_objects_v2),
         list_object_versions: left
             .list_object_versions
@@ -5983,6 +5985,98 @@ fn rustfs_provider_identity() -> ProviderIdentity {
 
 fn test_attestation_signer() -> Arc<HmacAttestationSigner> {
     Arc::new(HmacAttestationSigner::single("integration-attestation-v1", vec![11_u8; 32]).unwrap())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_versioned_whole_object_write_uses_four_calls() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket, wire) = rustfs_client_with_wire_metrics().await;
+    aws.put_bucket_versioning()
+        .bucket(&bucket)
+        .versioning_configuration(
+            VersioningConfiguration::builder()
+                .status(BucketVersioningStatus::Enabled)
+                .build(),
+        )
+        .send()
+        .await
+        .unwrap();
+
+    let prefix = unique_prefix("native-versioned-four-calls");
+    let object_root = unique_prefix("native-versioned-objects");
+    let plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: prefix,
+            storage_profile: RepositoryStorageProfile::NativeVersionedV1,
+            writer: "rustfs-native-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    repository
+        .put_bytes(
+            "main",
+            format!("{object_root}/warmup.bin").into_bytes(),
+            vec![1; 64 * 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    plane.reset_metrics();
+    wire.reset();
+    let measured_key = format!("{object_root}/measured.bin");
+    let first = repository
+        .put_bytes(
+            "main",
+            measured_key.as_bytes().to_vec(),
+            vec![2; 64 * 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let sdk = plane.reset_metrics();
+    let wire = wire.reset();
+    assert_eq!(sdk.total_calls(), 4, "unexpected SDK calls: {sdk:?}");
+    assert_eq!(sdk.put_object, 4, "every publication step is one put");
+    assert_eq!(wire.executions, 4, "unexpected SDK executions: {wire:?}");
+    assert_eq!(
+        wire.transmissions, 4,
+        "RustFS should not retry the measured write: {wire:?}"
+    );
+
+    let first_version = first.object_versions[0];
+    repository
+        .put_bytes(
+            "main",
+            measured_key.as_bytes().to_vec(),
+            b"new current value".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .get_version("main", measured_key.as_bytes(), first_version)
+            .await
+            .unwrap()
+            .bytes,
+        vec![2; 64 * 1024]
+    );
 }
 
 async fn rustfs_client() -> (aws_sdk_s3::Client, String) {

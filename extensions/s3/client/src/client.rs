@@ -38,9 +38,9 @@ use prolly_s3_core::{
     Error, ErrorCode, EtagPredicateV1, GetRequest, ListRequest, MultipartCatalogSnapshotId,
     ObjectHeaders, ObjectPath, ObjectPlane, ObjectSummary, ObjectVersionId, ObjectVersionKindV1,
     ObjectWriteConditionV1, OperationId, PhysicalVersion, PhysicalVersioning,
-    ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository, RepositoryOptions, Result,
-    RetryAdvice, UploadId, VersionSummary, WorkspaceId, WorkspaceManifestV1,
-    MAX_LOGICAL_RETRY_LIMIT,
+    ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository, RepositoryOptions,
+    RepositoryStorageProfile, Result, RetryAdvice, UploadId, VersionSummary, WorkspaceId,
+    WorkspaceManifestV1, MAX_LOGICAL_RETRY_LIMIT,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -555,6 +555,9 @@ pub struct ClientBuilder {
     repository_prefix: Option<String>,
     default_branch: Option<String>,
     writer: Option<String>,
+    storage_profile: Option<RepositoryStorageProfile>,
+    writer_lease_duration: Option<Duration>,
+    read_only: bool,
     logical_retry_limit: Option<u8>,
     gc_delete_rate_limit_per_second: Option<u32>,
     token_signer: Option<Arc<dyn TokenSigner>>,
@@ -730,6 +733,7 @@ impl Client {
         Ok(CommitSession {
             client: self.clone(),
             manifest,
+            native_mutations: None,
         })
     }
     pub async fn at(&self, commit: CommitId) -> Result<Snapshot> {
@@ -1147,6 +1151,7 @@ impl Client {
             None,
         )
         .await?;
+        validate_profile_capabilities(self.repository.storage_profile(), &attestation)?;
         let id = attestation.id;
         *self
             .provider_attestation
@@ -1338,7 +1343,8 @@ impl Client {
             .provider_attestation
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "attestation lock poisoned"))?;
-        ensure_attestation_current(&attestation)
+        ensure_attestation_current(&attestation)?;
+        validate_profile_capabilities(self.repository.storage_profile(), &attestation)
     }
 
     fn ensure_native_version_recovery_supported(&self) -> Result<()> {
@@ -1554,6 +1560,22 @@ impl ClientBuilder {
         self.writer = Some(writer.into());
         self
     }
+    pub fn storage_profile(mut self, profile: RepositoryStorageProfile) -> Self {
+        self.storage_profile = Some(profile);
+        self
+    }
+    pub fn native_versioned(mut self) -> Self {
+        self.storage_profile = Some(RepositoryStorageProfile::NativeVersionedV1);
+        self
+    }
+    pub fn writer_lease_duration(mut self, duration: Duration) -> Self {
+        self.writer_lease_duration = Some(duration);
+        self
+    }
+    pub fn read_only(mut self, value: bool) -> Self {
+        self.read_only = value;
+        self
+    }
     pub fn logical_retry_limit(mut self, attempts: u8) -> Self {
         self.logical_retry_limit = Some(attempts);
         self
@@ -1630,6 +1652,11 @@ impl ClientBuilder {
 
     async fn finish(self, initialize: bool) -> Result<Client> {
         validate_logical_retry_limit(self.logical_retry_limit)?;
+        if initialize && self.read_only {
+            return Err(invalid(
+                "repository initialization requires a writable client",
+            ));
+        }
         let cursor_ttl = self.cursor_ttl.unwrap_or(Duration::from_secs(15 * 60));
         let cursor_clock_skew = self
             .cursor_clock_skew
@@ -1662,6 +1689,14 @@ impl ClientBuilder {
         if let Some(value) = self.writer {
             options.writer = value;
         }
+        if let Some(value) = self.storage_profile {
+            options.storage_profile = value;
+        }
+        if let Some(value) = self.writer_lease_duration {
+            options.writer_lease_millis = u64::try_from(value.as_millis())
+                .map_err(|_| invalid("writer lease duration exceeds u64 milliseconds"))?;
+        }
+        options.read_only = self.read_only;
         if let Some(value) = self.logical_retry_limit {
             options.logical_retry_limit = value;
         }
@@ -1703,6 +1738,7 @@ impl ClientBuilder {
                 }
                 Err(error) => return Err(error),
             };
+            validate_profile_capabilities(options.storage_profile, &attestation)?;
             (Repository::initialize(plane, options).await?, attestation)
         } else {
             let repository = Repository::open(plane.clone(), options).await?;
@@ -1714,6 +1750,7 @@ impl ClientBuilder {
                 selected_attestation,
             )
             .await?;
+            validate_profile_capabilities(repository.storage_profile(), &attestation)?;
             (repository, attestation)
         };
         Ok(Client {
@@ -1749,14 +1786,23 @@ impl CommitBuilder {
         self.client.ensure_provider_qualified()?;
         let millis = u64::try_from(self.expires_after.as_millis())
             .map_err(|_| invalid("workspace expiry exceeds u64 milliseconds"))?;
-        let manifest = self
-            .client
-            .repository
-            .begin_workspace(&self.client.branch, self.message, millis)
-            .await?;
+        let native =
+            self.client.repository.storage_profile() == RepositoryStorageProfile::NativeVersionedV1;
+        let manifest = if native {
+            self.client
+                .repository
+                .begin_native_batch(&self.client.branch, self.message, millis)
+                .await?
+        } else {
+            self.client
+                .repository
+                .begin_workspace(&self.client.branch, self.message, millis)
+                .await?
+        };
         Ok(CommitSession {
             client: self.client,
             manifest,
+            native_mutations: native.then(BTreeMap::new),
         })
     }
 }
@@ -1764,6 +1810,7 @@ impl CommitBuilder {
 pub struct CommitSession {
     client: Client,
     manifest: WorkspaceManifestV1,
+    native_mutations: Option<BTreeMap<Vec<u8>, prolly_s3_core::NativeBatchMutationV1>>,
 }
 impl CommitSession {
     pub fn id(&self) -> WorkspaceId {
@@ -1791,16 +1838,25 @@ impl CommitSession {
     }
     pub async fn publish(self) -> Result<CommitReceipt> {
         self.client.ensure_provider_qualified()?;
-        let receipt = self
-            .client
-            .repository
-            .publish_workspace(self.manifest.id)
-            .await?;
+        let receipt = if let Some(mutations) = self.native_mutations {
+            self.client
+                .repository
+                .publish_native_batch(self.manifest, mutations.into_values().collect())
+                .await?
+        } else {
+            self.client
+                .repository
+                .publish_workspace(self.manifest.id)
+                .await?
+        };
         self.client.record_advisory(&receipt).await;
         Ok(receipt)
     }
     pub async fn abort(self) -> Result<()> {
         self.client.ensure_provider_qualified()?;
+        if self.native_mutations.is_some() {
+            return Ok(());
+        }
         self.client
             .repository
             .abort_workspace(self.manifest.id)
@@ -1845,6 +1901,27 @@ impl<'a> StagedPutObjectBuilder<'a> {
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let body = self.body.ok_or_else(|| invalid("body is required"))?;
+        if let Some(mutations) = self.session.native_mutations.as_mut() {
+            let bytes = body.collect().await.map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native staged body failed: {error}"),
+                )
+            })?;
+            mutations.insert(
+                key.as_bytes().to_vec(),
+                prolly_s3_core::NativeBatchMutationV1::Put {
+                    key: key.as_bytes().to_vec(),
+                    bytes: bytes.into_bytes().to_vec(),
+                    headers: ObjectHeaders {
+                        content_type: self.content_type,
+                        ..ObjectHeaders::default()
+                    },
+                    user_metadata: self.metadata.unwrap_or_default().into_iter().collect(),
+                },
+            );
+            return Ok(());
+        }
         let stream = futures_util::stream::unfold(body, |mut body| async move {
             body.next().await.map(|item| (item, body))
         });
@@ -1886,6 +1963,15 @@ impl<'a> StagedDeleteObjectBuilder<'a> {
             .client
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
+        if let Some(mutations) = self.session.native_mutations.as_mut() {
+            mutations.insert(
+                key.as_bytes().to_vec(),
+                prolly_s3_core::NativeBatchMutationV1::Delete {
+                    key: key.as_bytes().to_vec(),
+                },
+            );
+            return Ok(());
+        }
         self.session.manifest = self
             .session
             .client
@@ -2264,7 +2350,7 @@ impl GetObjectBuilder {
         )?;
         validate_checksum_mode(self.checksum_mode.as_ref())?;
         let (body, response_len, content_range) = match &summary.version.body.kind {
-            ObjectVersionKindV1::Live { content, size, .. } => {
+            ObjectVersionKindV1::Live { size, .. } => {
                 let selected_range = self
                     .range
                     .as_deref()
@@ -2275,10 +2361,11 @@ impl GetObjectBuilder {
                     .unwrap_or(*size);
                 let content_range =
                     selected_range.map(|(start, end)| format!("bytes {start}-{end}/{size}"));
-                let stream = self
-                    .client
-                    .repository
-                    .read_content_stream(content.clone(), selected_range);
+                let stream = self.client.repository.read_version_stream(
+                    key.as_bytes(),
+                    summary.version.clone(),
+                    selected_range,
+                );
                 (
                     streaming_body(stream, response_len),
                     response_len,
@@ -3986,6 +4073,20 @@ where
 }
 fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::InvalidRequest, message)
+}
+
+fn validate_profile_capabilities(
+    profile: RepositoryStorageProfile,
+    attestation: &ProviderAttestationV1,
+) -> Result<()> {
+    match profile {
+        RepositoryStorageProfile::DistributedContentAddressedV1 => {
+            attestation.body.capabilities.validate_distributed()
+        }
+        RepositoryStorageProfile::NativeVersionedV1 => {
+            attestation.body.capabilities.validate_native_versioned()
+        }
+    }
 }
 fn validate_branch_name(branch: &str) -> Result<()> {
     if branch.is_empty()

@@ -1,12 +1,19 @@
 use std::{
     collections::BTreeMap,
     ops::RangeInclusive,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, RwLock,
+    },
 };
 
+use md5::{Digest as _, Md5};
 use serde::{Deserialize, Serialize};
 
-use crate::{codec::sha256, Error, ErrorCode, Result};
+use crate::{
+    codec::sha256, Checksums, Error, ErrorCode, NativeObjectBindingV1, ObjectHeaders, OperationId,
+    RepositoryId, Result,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ObjectPath(String);
@@ -58,6 +65,7 @@ pub struct StoredMetadata {
     pub sha256: [u8; 32],
     pub last_modified_millis: u64,
     pub delete_marker: bool,
+    pub user_metadata: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +86,49 @@ pub struct ImmutablePut {
     pub path: ObjectPath,
     pub bytes: Vec<u8>,
     pub expected_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug)]
+pub struct NativePut {
+    pub path: ObjectPath,
+    pub bytes: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+    pub repository: RepositoryId,
+    pub operation: OperationId,
+    pub writer_fence_generation: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct NativeCopy {
+    pub source: ObjectPath,
+    pub source_version_id: String,
+    pub destination: ObjectPath,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+    pub repository: RepositoryId,
+    pub operation: OperationId,
+    pub writer_fence_generation: u64,
+    pub checksum_sha256: [u8; 32],
+    pub size: u64,
+    pub logical_etag: String,
+    pub checksums: Checksums,
+}
+
+#[derive(Clone, Debug)]
+pub struct NativeDelete {
+    pub path: ObjectPath,
+    pub repository: RepositoryId,
+    pub operation: OperationId,
+    pub writer_fence_generation: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeObjectWriteResult {
+    pub binding: NativeObjectBindingV1,
+    pub size: u64,
+    pub logical_etag: String,
+    pub checksums: Checksums,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,12 +191,75 @@ pub trait ObjectPlane: Send + Sync + 'static {
         path: &ObjectPath,
         version: PhysicalVersion,
     ) -> Result<DeleteOutcome>;
+
+    async fn put_native(&self, _request: NativePut) -> Result<NativeObjectWriteResult> {
+        Err(Error::new(
+            ErrorCode::MissingCapability,
+            "object plane does not support native object writes",
+        ))
+    }
+
+    async fn copy_native(&self, _request: NativeCopy) -> Result<NativeObjectWriteResult> {
+        Err(Error::new(
+            ErrorCode::MissingCapability,
+            "object plane does not support native object copies",
+        ))
+    }
+
+    async fn delete_native(&self, _request: NativeDelete) -> Result<NativeObjectBindingV1> {
+        Err(Error::new(
+            ErrorCode::MissingCapability,
+            "object plane does not support native delete markers",
+        ))
+    }
 }
 
 #[derive(Clone)]
 pub struct MemoryObjectPlane {
     inner: Arc<RwLock<MemoryState>>,
     versioned: bool,
+    requests: Arc<MemoryRequestCounters>,
+    lose_next_native_put_response: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct MemoryRequestCounters {
+    get: AtomicU64,
+    head: AtomicU64,
+    immutable_put: AtomicU64,
+    compare_exchange: AtomicU64,
+    list: AtomicU64,
+    delete_exact: AtomicU64,
+    native_put: AtomicU64,
+    native_copy: AtomicU64,
+    native_delete: AtomicU64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MemoryRequestSnapshot {
+    pub get: u64,
+    pub head: u64,
+    pub immutable_put: u64,
+    pub compare_exchange: u64,
+    pub list: u64,
+    pub delete_exact: u64,
+    pub native_put: u64,
+    pub native_copy: u64,
+    pub native_delete: u64,
+}
+
+impl MemoryRequestSnapshot {
+    pub fn total(&self) -> u64 {
+        self.get
+            + self.head
+            + self.immutable_put
+            + self.compare_exchange
+            + self.list
+            + self.delete_exact
+            + self.native_put
+            + self.native_copy
+            + self.native_delete
+    }
 }
 
 #[derive(Default)]
@@ -165,6 +279,44 @@ impl MemoryObjectPlane {
         Self {
             inner: Arc::new(RwLock::new(MemoryState::default())),
             versioned,
+            requests: Arc::new(MemoryRequestCounters::default()),
+            lose_next_native_put_response: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn lose_next_native_put_response(&self) {
+        self.lose_next_native_put_response
+            .store(true, Ordering::Relaxed);
+    }
+
+    pub fn request_snapshot(&self) -> MemoryRequestSnapshot {
+        let load = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
+        MemoryRequestSnapshot {
+            get: load(&self.requests.get),
+            head: load(&self.requests.head),
+            immutable_put: load(&self.requests.immutable_put),
+            compare_exchange: load(&self.requests.compare_exchange),
+            list: load(&self.requests.list),
+            delete_exact: load(&self.requests.delete_exact),
+            native_put: load(&self.requests.native_put),
+            native_copy: load(&self.requests.native_copy),
+            native_delete: load(&self.requests.native_delete),
+        }
+    }
+
+    pub fn reset_request_counts(&self) {
+        for counter in [
+            &self.requests.get,
+            &self.requests.head,
+            &self.requests.immutable_put,
+            &self.requests.compare_exchange,
+            &self.requests.list,
+            &self.requests.delete_exact,
+            &self.requests.native_put,
+            &self.requests.native_copy,
+            &self.requests.native_delete,
+        ] {
+            counter.store(0, Ordering::Relaxed);
         }
     }
 
@@ -180,6 +332,7 @@ impl MemoryObjectPlane {
             sha256: digest,
             last_modified_millis: state.sequence,
             delete_marker: false,
+            user_metadata: BTreeMap::new(),
         }
     }
 
@@ -204,6 +357,7 @@ impl Default for MemoryObjectPlane {
 #[async_trait::async_trait]
 impl ObjectPlane for MemoryObjectPlane {
     async fn get(&self, request: GetRequest) -> Result<Option<StoredObject>> {
+        self.requests.get.fetch_add(1, Ordering::Relaxed);
         let state = self
             .inner
             .read()
@@ -244,6 +398,7 @@ impl ObjectPlane for MemoryObjectPlane {
     }
 
     async fn head(&self, path: &ObjectPath) -> Result<Option<StoredMetadata>> {
+        self.requests.head.fetch_add(1, Ordering::Relaxed);
         let state = self
             .inner
             .read()
@@ -257,6 +412,7 @@ impl ObjectPlane for MemoryObjectPlane {
     }
 
     async fn put_immutable(&self, request: ImmutablePut) -> Result<ImmutablePutOutcome> {
+        self.requests.immutable_put.fetch_add(1, Ordering::Relaxed);
         if sha256(&request.bytes) != request.expected_sha256 {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
@@ -304,6 +460,9 @@ impl ObjectPlane for MemoryObjectPlane {
     }
 
     async fn compare_exchange(&self, request: CompareExchange) -> Result<CompareExchangeOutcome> {
+        self.requests
+            .compare_exchange
+            .fetch_add(1, Ordering::Relaxed);
         let mut state = self
             .inner
             .write()
@@ -339,6 +498,7 @@ impl ObjectPlane for MemoryObjectPlane {
     }
 
     async fn list(&self, request: ListRequest) -> Result<PhysicalListPage> {
+        self.requests.list.fetch_add(1, Ordering::Relaxed);
         let state = self
             .inner
             .read()
@@ -358,7 +518,9 @@ impl ObjectPlane for MemoryObjectPlane {
                 Self::current_raw(versions).into_iter().collect()
             };
             for version in candidates {
-                if version.bytes.is_some() {
+                if version.bytes.is_some()
+                    || (request.include_versions && version.metadata.delete_marker)
+                {
                     entries.push(PhysicalListEntry {
                         path: path.clone(),
                         metadata: version.metadata.clone(),
@@ -384,6 +546,7 @@ impl ObjectPlane for MemoryObjectPlane {
         path: &ObjectPath,
         version: PhysicalVersion,
     ) -> Result<DeleteOutcome> {
+        self.requests.delete_exact.fetch_add(1, Ordering::Relaxed);
         let mut state = self
             .inner
             .write()
@@ -417,5 +580,151 @@ impl ObjectPlane for MemoryObjectPlane {
             state.objects.remove(path);
         }
         Ok(DeleteOutcome::Deleted)
+    }
+
+    async fn put_native(&self, request: NativePut) -> Result<NativeObjectWriteResult> {
+        self.requests.native_put.fetch_add(1, Ordering::Relaxed);
+        if !self.versioned {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native writes require a versioned memory object plane",
+            ));
+        }
+        let size = request.bytes.len() as u64;
+        let sha256 = sha256(&request.bytes);
+        let md5: [u8; 16] = Md5::digest(&request.bytes).into();
+        let logical_etag = format!("\"{}\"", hex::encode(md5));
+        let mut state = self
+            .inner
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "memory lock poisoned"))?;
+        let mut metadata = Self::next_metadata(&mut state, &request.bytes, true);
+        metadata.user_metadata = request.user_metadata.clone();
+        metadata.user_metadata.insert(
+            "prolly-repository-id".to_string(),
+            request.repository.to_string(),
+        );
+        metadata.user_metadata.insert(
+            "prolly-operation-id".to_string(),
+            request.operation.to_string(),
+        );
+        metadata.user_metadata.insert(
+            "prolly-writer-fence".to_string(),
+            request.writer_fence_generation.to_string(),
+        );
+        metadata
+            .user_metadata
+            .insert("prolly-sha256".to_string(), hex::encode(sha256));
+        let version_id = metadata.token.version_id.clone().ok_or_else(|| {
+            Error::new(
+                ErrorCode::ProviderNotQualified,
+                "versioned memory object plane omitted VersionId",
+            )
+        })?;
+        let provider_etag = metadata.token.etag.clone();
+        state
+            .objects
+            .entry(request.path)
+            .or_default()
+            .push(MemoryVersion {
+                bytes: Some(request.bytes),
+                metadata,
+            });
+        let result = NativeObjectWriteResult {
+            binding: NativeObjectBindingV1::Live {
+                version_id,
+                provider_etag,
+                checksum_sha256: sha256,
+            },
+            size,
+            logical_etag,
+            checksums: Checksums {
+                md5: Some(md5),
+                sha256: Some(sha256),
+                algorithm_values: BTreeMap::new(),
+            },
+        };
+        if self
+            .lose_next_native_put_response
+            .swap(false, Ordering::Relaxed)
+        {
+            return Err(Error::new(
+                ErrorCode::Transport,
+                "injected lost native PutObject response",
+            ));
+        }
+        Ok(result)
+    }
+
+    async fn copy_native(&self, request: NativeCopy) -> Result<NativeObjectWriteResult> {
+        self.requests.native_copy.fetch_add(1, Ordering::Relaxed);
+        if !self.versioned {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native copies require a versioned memory object plane",
+            ));
+        }
+        let bytes = {
+            let state = self
+                .inner
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "memory lock poisoned"))?;
+            state
+                .objects
+                .get(&request.source)
+                .and_then(|versions| {
+                    versions.iter().find(|version| {
+                        version.metadata.token.version_id.as_deref()
+                            == Some(request.source_version_id.as_str())
+                    })
+                })
+                .and_then(|version| version.bytes.clone())
+                .ok_or_else(|| Error::new(ErrorCode::NoSuchVersion, "native copy source missing"))?
+        };
+        let result = self
+            .put_native(NativePut {
+                path: request.destination,
+                bytes,
+                headers: request.headers,
+                user_metadata: request.user_metadata,
+                repository: request.repository,
+                operation: request.operation,
+                writer_fence_generation: request.writer_fence_generation,
+            })
+            .await;
+        self.requests.native_put.fetch_sub(1, Ordering::Relaxed);
+        result
+    }
+
+    async fn delete_native(&self, request: NativeDelete) -> Result<NativeObjectBindingV1> {
+        self.requests.native_delete.fetch_add(1, Ordering::Relaxed);
+        if !self.versioned {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native delete markers require a versioned memory object plane",
+            ));
+        }
+        let mut state = self
+            .inner
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "memory lock poisoned"))?;
+        let mut metadata = Self::next_metadata(&mut state, &[], true);
+        metadata.delete_marker = true;
+        metadata.len = 0;
+        let version_id = metadata.token.version_id.clone().ok_or_else(|| {
+            Error::new(
+                ErrorCode::ProviderNotQualified,
+                "versioned memory delete omitted VersionId",
+            )
+        })?;
+        state
+            .objects
+            .entry(request.path)
+            .or_default()
+            .push(MemoryVersion {
+                bytes: None,
+                metadata,
+            });
+        Ok(NativeObjectBindingV1::DeleteMarker { version_id })
     }
 }
