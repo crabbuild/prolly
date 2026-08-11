@@ -30,7 +30,7 @@
   <rect x="755" y="345" width="315" height="225" rx="14" class="meta"/>
   <text x="912" y="385" text-anchor="middle" class="t">Repository metadata</text>
   <text x="785" y="423" class="k">.prolly/v1/</text>
-  <text x="785" y="453" class="b">node packs + immutable commits</text>
+  <text x="785" y="453" class="b">commit envelopes + node index</text>
   <text x="785" y="480" class="b">branch and tag CAS refs</text>
   <text x="785" y="507" class="b">writer fence + provider attestation</text>
   <text x="785" y="534" class="b">retention pins + exact-version GC</text>

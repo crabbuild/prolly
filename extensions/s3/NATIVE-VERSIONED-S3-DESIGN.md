@@ -41,7 +41,8 @@ keeps each concern in the layer that owns it:
 2. The client is the only writer to managed data keys and repository paths.
 3. Every successful physical mutation returns a non-empty S3 `VersionId`.
 4. Canonical reads specify both key and recorded physical `VersionId`.
-5. Payload version, node pack, and commit are durable before the ref CAS.
+5. Payload version and the combined commit/node-pack envelope are durable
+   before the ref CAS.
 6. Only the branch-ref CAS changes logical visibility.
 7. A writer-fence generation is carried by refs and commits.
 8. A stale or ambiguous writer lease fails closed.
@@ -76,9 +77,9 @@ photos/launch.jpg                          # S3 version v1, v2, ...
 ├── writers/lease.cbor                     # exclusive writer fence
 ├── refs/heads/<encoded-branch>            # mutable CAS ref + inline reflog
 ├── refs/tags/<encoded-tag>                 # mutable CAS ref
-├── node-packs/sha256/<2>/<2>/<id>.pack     # immutable Prolly nodes
 ├── node-index/checkpoints/...              # rebuildable locator checkpoints
-├── commits/sha256/<2>/<2>/<id>.cbor        # immutable BucketCommitV1
+├── node-index/latest.cbor                   # mutable checkpoint pointer
+├── commits/sha256/<2>/<2>/<id>              # commit + Prolly node envelope
 ├── retention/pins/...                      # explicit GC roots
 └── gc/...                                  # resumable exact-version GC state
 ```
@@ -96,21 +97,21 @@ For a warm writer:
 2. `PutObject(key, body)` creates one native object version.
 3. The returned `VersionId`, checksums, headers, and logical metadata are added
    to the in-memory Prolly state transition.
-4. New tree nodes are publication-batched into one immutable node pack.
-5. One `BucketCommitV1` embeds the delta and references the node pack.
-6. One conditional ref update publishes the commit.
+4. New tree nodes and `BucketCommitV1` are encoded in one immutable commit
+   envelope.
+5. One conditional ref update publishes the commit.
 
-Foreground request budget: exactly four S3 calls. No CAS readback is issued.
+Foreground request budget: exactly three S3 calls. No CAS readback is issued.
 If the ref CAS conflicts, the prepared payload and metadata are unreachable
 orphans until GC; the client reports the conflict and never silently rebases.
 
 ## Atomic multi-object publication
 
 `begin_commit` holds staged puts and deletes in process. At `publish`, the
-writer performs all `N` physical mutations, builds one final Prolly state,
-uploads one node pack and one commit, then performs one ref CAS.
+writer performs all `N` physical mutations with bounded parallelism, builds one
+final Prolly state, uploads one commit envelope, then performs one ref CAS.
 
-Budget: `N + 3` S3 calls. Two keys therefore require five calls.
+Budget: `N + 2` S3 calls. Two keys therefore require four calls.
 
 The session is atomic but not durable before `publish`. Process loss discards
 the in-memory session; any physical versions created during a failed publish
@@ -133,11 +134,11 @@ another branch or an older Prolly snapshot.
 - Delete creates a native S3 delete marker and commits its exact `VersionId`.
 - Same-bucket copy asks S3 to create a new destination version and records it.
 - Merge and restore reuse already-retained physical bindings when possible;
-  they publish one node pack, one commit, and one ref CAS.
+  they publish one commit envelope and one ref CAS.
 - Cross-bucket clone/fetch/push/repair copies each required payload and records
   the new destination `VersionId`; provider IDs never cross bucket boundaries.
 
-Warm merge and restore each use three S3 calls when no payload transfer is
+Warm merge and restore each use two S3 calls when no payload transfer is
 needed.
 
 ## Multipart
@@ -148,19 +149,21 @@ or a chunk index. For `N` parts the foreground protocol is:
 1. create multipart upload;
 2. upload `N` native parts;
 3. complete multipart upload and capture its `VersionId`;
-4. upload one node pack;
-5. upload one commit;
-6. CAS the branch ref.
+4. upload one commit envelope;
+5. CAS the branch ref.
 
-Budget: `N + 5` S3 calls. The high-level client's active multipart catalog is
-currently process-local, so a new process cannot resume an incomplete upload.
+Budget: `N + 4` S3 calls. The upload handle contains the canonical session; a
+new process can complete it when the caller supplies persisted part ETags,
+SHA-256 values, sizes, and whole-object checksums.
 
 ## Concurrency and fencing
 
 The architecture intentionally does not use optimistic multi-writer retry
 loops. A repository-scoped lease grants one process mutation authority.
-Concurrent callers inside that process queue behind a publication mutex.
-This keeps each completed warm write at four calls under 1, 8, or 32 callers.
+Concurrent callers inside that process upload payloads before a short
+publication mutex; batch payload mutations use configurable bounded
+parallelism. This keeps each completed warm write at three calls under 1, 8,
+or 32 callers without serializing network upload time.
 
 An operator may perform an explicit takeover after the old writer is stopped
 or fenced. Commits and refs carry the lease generation, so the old writer
@@ -171,6 +174,8 @@ cannot publish after takeover. Read-only clients do not acquire the lease.
 Callers may supply a stable `OperationId`. The operation tree records the
 input digest and canonical result in the same commit. Retrying the same
 operation returns the committed result without uploading another payload.
+In-process requests sharing an OperationId are singleflighted before the data
+plane, preventing concurrent retries from creating duplicate orphan versions.
 
 If a payload request's response is lost, reconciliation identifies the exact
 native version before publication. If final ref publication is ambiguous,
@@ -180,7 +185,7 @@ under the same operation ID fails with an idempotency conflict.
 ## Garbage collection
 
 Reachability starts from branches, tags, retained reflogs, and explicit pins.
-GC walks commits, node packs, logical versions, and exact native bindings. It
+GC walks commit envelopes, logical versions, and exact native bindings. It
 persists a bounded deletion plan and revalidates roots before each batch.
 
 Deletion always specifies both key and physical `VersionId`. Automatic bucket
@@ -194,11 +199,17 @@ lease renewal, checkpointing, GC, and cross-bucket payload transfer:
 
 | Warm logical operation | S3 calls |
 |---|---:|
-| Whole-object put/copy/delete | 4 |
-| Atomic commit of `N` keys | `N + 3` |
-| Merge or restore without transfer | 3 |
-| Multipart with `N` parts | `N + 5` |
-| Exact current/historical read | provider reads plus metadata cache misses |
+| Whole-object put/copy/delete | 3 |
+| Atomic commit of `N` keys | `N + 2` |
+| Merge or restore without transfer | 2 |
+| Multipart with `N` parts | `N + 4` |
+| Warm exact current/historical read | 1 |
+
+Cold reads additionally load the selected ref/commit and range-read uncached
+Prolly nodes. `CurrentObjectV1` stores the complete current version and binding,
+so a current read needs one tree lookup rather than a second version-tree
+lookup. Commit/branch caches are entry-bounded and packed-node cache is
+byte-bounded.
 
 Request counters are enforced in core contract tests and the whole-object and
 multipart budgets are also exercised against RustFS.
@@ -215,8 +226,8 @@ Required release evidence includes:
 - one million live keys and at least ten million retained versions;
 - crash tests around every physical mutation and ref CAS;
 - backup/restore and exact-version GC drills with lifecycle guardrails;
-- a durable or explicitly unsupported policy for incomplete multipart uploads;
-- bounded memory policy for atomic sessions and large unknown-length bodies.
+- a restart/resume drill for incomplete multipart uploads;
+- workload-specific validation of the enforced atomic-session memory bound.
 
 Local RustFS proves protocol behavior and request shape, not AWS production
 latency, durability, cost, or scale.

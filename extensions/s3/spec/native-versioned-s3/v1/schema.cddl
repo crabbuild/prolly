@@ -13,6 +13,7 @@ top = repository-format-v1
     / bucket-delta-v1
     / node-pack-toc-v1
     / node-index-checkpoint-v1
+    / node-index-head-v1
     / bucket-commit-v1
     / gc-plan-v1
     / gc-mark-run-v1
@@ -152,7 +153,7 @@ logical-object-version-kind-v1 = {
 } / 1
 logical-object-version-body-v1 = { 0: object-version-order, 1: uint64, 2: logical-object-version-kind-v1 }
 object-version-v1 = { 0: object-version-id, 1: logical-object-version-body-v1, 2: native-object-binding-v1 }
-current-object-v1 = { 0: object-version-id }
+current-object-v1 = { 0: object-version-v1 }
 
 operation-kind = 0 / 1 / 2 / 3 / 4 / 5 / 6
 ; Put, Delete, Copy, MultiDelete, CommitSession, Merge, Restore
@@ -171,7 +172,14 @@ node-pack-toc-v1 = {
   3: uint64
 }
 node-pack-ref-v1 = { 0: node-pack-id, 1: uint64, 2: uint32 }
-node-index-entry-v1 = { 0: cid, 1: node-pack-id, 2: uint64, 3: uint32, 4: digest32 }
+node-index-entry-v1 = {
+  0: cid,
+  1: commit-id,       ; physical commit envelope containing the pack
+  2: node-pack-id,
+  3: uint64,
+  4: uint32,
+  5: digest32
+}
 node-index-checkpoint-v1 = {
   0: node-index-checkpoint-id,
   1: repository-id,
@@ -180,6 +188,12 @@ node-index-checkpoint-v1 = {
   4: commit-generation,
   5: [* node-index-entry-v1],
   6: uint64
+}
+node-index-head-v1 = {
+  0: node-index-checkpoint-id,
+  1: commit-id,
+  2: commit-generation,
+  3: uint64
 }
 
 bucket-commit-v1 = {
@@ -194,6 +208,11 @@ bucket-commit-v1 = {
   8: uint64,
   9: {* tstr => bytes}
 }
+
+; CommitObjectV1 is a framed physical object rather than a CBOR production:
+; ASCII "PLYCOM01", u32 big-endian canonical commit length, u64 big-endian
+; framed node-pack length, canonical bucket-commit-v1 bytes, then either zero
+; bytes or one NodePackV1 frame. See encoding.md.
 
 storage-token = { 0: tstr, 1: tstr / null }
 physical-version = { 0: { 0: storage-token / null } } / { 1: { 0: tstr } }

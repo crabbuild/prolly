@@ -34,8 +34,8 @@
     {"name": "branch-main", "prefix": ".prolly/v1", "kind": "branch", "name_utf8": "main", "expected": ".prolly/v1/refs/heads/6d61696e"},
     {"name": "tag-release", "prefix": ".prolly/v1", "kind": "tag", "name_utf8": "release/1", "expected": ".prolly/v1/refs/tags/72656c656173652f31"},
     {"name": "commit-shard", "prefix": ".prolly/v1", "kind": "commit", "digest_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "expected": ".prolly/v1/commits/sha256/00/11/00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"},
-    {"name": "node-pack-shard", "prefix": ".prolly/v1", "kind": "node_pack", "digest_hex": "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100", "expected": ".prolly/v1/node-packs/sha256/ff/ee/ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100.pack"},
-    {"name": "checkpoint", "prefix": ".prolly/v1", "kind": "checkpoint", "generation": "42", "digest_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "expected": ".prolly/v1/node-index/checkpoints/00000000000000000042-00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff.cbor"}
+    {"name": "checkpoint", "prefix": ".prolly/v1", "kind": "checkpoint", "generation": "42", "digest_hex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "expected": ".prolly/v1/node-index/checkpoints/00000000000000000042-00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff.cbor"},
+    {"name": "checkpoint-head", "prefix": ".prolly/v1", "kind": "checkpoint_head", "expected": ".prolly/v1/node-index/latest.cbor"}
   ],
   "invalid_cbor": [
     {"name": "negative-integer", "hex": "20", "reason": "negative values are forbidden"},

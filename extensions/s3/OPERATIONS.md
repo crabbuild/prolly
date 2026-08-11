@@ -36,14 +36,20 @@ Track separately:
 - logical operation latency and errors;
 - object-plane SDK calls from `s3_operation_metrics()`;
 - Smithy wire attempts and provider throttling;
-- writer queue depth and wait time;
+- publication queue depth and wait time from `performance_snapshot()`;
 - lease renewal latency, ambiguity, and fencing events;
-- unreachable native versions and node packs;
+- unreachable native versions and commit envelopes;
 - GC candidate bytes, exact-version deletes, and failures;
 - node-index checkpoint age and rebuild fallbacks.
 
-The four-call write budget counts SDK operations, not internal HTTP retry
+The three-call write budget counts SDK operations, not internal HTTP retry
 attempts. Alert on either dimension independently.
+
+Tune `max_parallel_payload_writes` to the service's connection pool and S3
+request-rate budget. Bound in-process metadata with `max_cached_commits`,
+`max_cached_branches`, and `max_cached_node_pack_bytes`; do not disable these
+bounds in a long-running writer. Alert when publication wait consumes a
+material part of end-to-end latency or max queue depth grows continuously.
 
 ## Conflict and outage handling
 
@@ -57,14 +63,20 @@ attempts. Alert on either dimension independently.
 
 ## Backup and restore
 
-A physical backup must retain every object version and delete marker for both
-managed user keys and `.prolly/v1/`. A current-key-only copy is insufficient.
-Restore repository metadata and native versions together, then open read-only,
-run `fsck`, and only then allow writer takeover.
+A raw cross-bucket copy is not a valid repository restore: S3 assigns new
+provider `VersionId` values while copied commits still reference the source
+IDs. The client fails closed when those stale bindings are read.
 
-Cross-bucket logical clone is different from physical restore: it copies
-reachable content and rebinds provider `VersionId` values, producing
-destination-local commit IDs.
+For a portable backup, use `clone_to` to create a complete logical repository
+in a versioned archive bucket. Restore by opening that archive read-only and
+cloning it to the destination; both hops replay history and bind every logical
+version to the destination provider's exact ID. Open the result read-only, run
+`fsck`, and only then call `takeover_writer` with the previous writer ID, lease
+generation, and auditable credential/process-isolation evidence.
+
+A provider-native physical snapshot is usable in place only when the restore
+mechanism explicitly guarantees preservation of every opaque `VersionId` and
+delete marker. A current-key-only copy is always insufficient.
 
 ## Garbage collection
 

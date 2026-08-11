@@ -540,7 +540,9 @@ fn validate_native_object_version(
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CurrentObjectV1 {
-    pub version: ObjectVersionId,
+    /// Complete current version so ordinary reads need only one Prolly-tree
+    /// lookup before fetching the exact S3 VersionId.
+    pub version: ObjectVersionV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -635,6 +637,8 @@ pub struct NodePackRefV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeIndexEntryV1 {
     pub cid: Cid,
+    /// Immutable commit object that physically contains the node pack.
+    pub container: CommitId,
     pub pack: NodePackId,
     pub absolute_offset: u64,
     pub len: u32,
@@ -650,6 +654,29 @@ pub struct NodeIndexCheckpointV1 {
     pub generation: CommitGeneration,
     pub entries: Vec<NodeIndexEntryV1>,
     pub created_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeIndexHeadV1 {
+    pub checkpoint: NodeIndexCheckpointId,
+    pub head: CommitId,
+    pub generation: CommitGeneration,
+    pub updated_at_millis: u64,
+}
+
+impl NodeIndexHeadV1 {
+    pub fn validate(&self, checkpoint: &NodeIndexCheckpointV1) -> Result<()> {
+        if self.checkpoint != checkpoint.id
+            || self.head != checkpoint.head
+            || self.generation != checkpoint.generation
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-index head does not match its checkpoint",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl NodeIndexCheckpointV1 {
@@ -956,6 +983,106 @@ impl BucketCommitV1 {
     pub fn id(&self) -> Result<CommitId> {
         let bytes = encode_canonical(self)?;
         Ok(CommitId(domain_hash(b"prolly-s3/commit/v1", &[&bytes])))
+    }
+}
+
+const COMMIT_OBJECT_MAGIC: &[u8; 8] = b"PLYCOM01";
+const COMMIT_OBJECT_HEADER_LEN: usize = 20;
+
+/// Physical immutable representation of a commit and the Prolly nodes created
+/// by that commit. Keeping both in one object removes a foreground S3 PUT
+/// without changing the logical, content-addressed commit identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitObjectV1 {
+    pub commit: BucketCommitV1,
+    pub node_pack: Option<NodePackV1>,
+}
+
+impl CommitObjectV1 {
+    pub fn new(commit: BucketCommitV1, node_pack: Option<NodePackV1>) -> Result<Self> {
+        let object = Self { commit, node_pack };
+        object.validate()?;
+        Ok(object)
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match (&self.commit.node_pack, &self.node_pack) {
+            (None, None) => Ok(()),
+            (Some(expected), Some(pack)) if pack.reference()? == *expected => pack.validate(),
+            _ => Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object node pack does not match its logical reference",
+            )),
+        }
+    }
+
+    /// Encode a range-readable object: fixed header, canonical commit bytes,
+    /// then the existing range-readable node-pack wire representation.
+    pub fn encode_object(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        let commit = encode_canonical(&self.commit)?;
+        let pack = self
+            .node_pack
+            .as_ref()
+            .map(NodePackV1::encode_object)
+            .transpose()?
+            .unwrap_or_default();
+        let commit_len = u32::try_from(commit.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "commit exceeds u32"))?;
+        let pack_len = u64::try_from(pack.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "node pack exceeds u64"))?;
+        let mut encoded = Vec::with_capacity(COMMIT_OBJECT_HEADER_LEN + commit.len() + pack.len());
+        encoded.extend_from_slice(COMMIT_OBJECT_MAGIC);
+        encoded.extend_from_slice(&commit_len.to_be_bytes());
+        encoded.extend_from_slice(&pack_len.to_be_bytes());
+        encoded.extend_from_slice(&commit);
+        encoded.extend_from_slice(&pack);
+        Ok(encoded)
+    }
+
+    pub fn decode_object(encoded: &[u8]) -> Result<Self> {
+        let (commit_range, pack_range) = Self::ranges(encoded)?;
+        let commit = decode_canonical::<BucketCommitV1>(&encoded[commit_range])?;
+        let node_pack = if pack_range.is_empty() {
+            None
+        } else {
+            Some(NodePackV1::decode_object(&encoded[pack_range])?)
+        };
+        Self::new(commit, node_pack)
+    }
+
+    /// Absolute offset of the packed-node payload inside the commit object.
+    pub fn node_payload_offset(encoded: &[u8]) -> Result<Option<u64>> {
+        let (_, pack_range) = Self::ranges(encoded)?;
+        if pack_range.is_empty() {
+            return Ok(None);
+        }
+        let relative = NodePackV1::object_payload_offset(&encoded[pack_range.start..])?;
+        Ok(Some(pack_range.start as u64 + relative))
+    }
+
+    fn ranges(encoded: &[u8]) -> Result<(std::ops::Range<usize>, std::ops::Range<usize>)> {
+        if encoded.len() < COMMIT_OBJECT_HEADER_LEN || &encoded[..8] != COMMIT_OBJECT_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object has an invalid wire header",
+            ));
+        }
+        let commit_len =
+            u32::from_be_bytes(encoded[8..12].try_into().expect("fixed range")) as usize;
+        let pack_len = usize::try_from(u64::from_be_bytes(
+            encoded[12..20].try_into().expect("fixed range"),
+        ))
+        .map_err(|_| Error::new(ErrorCode::CorruptCommit, "node-pack length exceeds usize"))?;
+        let commit_start = COMMIT_OBJECT_HEADER_LEN;
+        let commit_end = commit_start
+            .checked_add(commit_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "commit length overflow"))?;
+        let pack_end = commit_end
+            .checked_add(pack_len)
+            .filter(|end| *end == encoded.len())
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "commit object length mismatch"))?;
+        Ok((commit_start..commit_end, commit_end..pack_end))
     }
 }
 

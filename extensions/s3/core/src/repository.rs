@@ -1,23 +1,28 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     io::Write as _,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, RwLock, Weak,
+    },
     time::Duration,
 };
 
+use crate::store::PreparedNodePack;
 use crate::{
     decode_canonical, derive_input_digest, derive_repository_id, encode_canonical,
     tree_format_digest, BatchId, BucketCommitV1, BucketDeltaV1, BucketStateV1, CanonicalLimits,
     CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitId,
-    CommitReceipt, CompareExchange, CompareExchangeOutcome, CurrentObjectV1, DeleteOutcome, Error,
-    ErrorCode, EtagPredicateV1, GcCandidateV1, GcFenceV1, GcMarkRunStateV1, GcMarkRunV1,
-    GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GetRequest, IdSource, ImmutablePut,
-    InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
-    NativeBatchV1, NativePreparedMutationV1, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1,
-    OperationId, OperationKind, OperationRecordV1, PhysicalVersion, ProllyObjectStore,
-    RandomIdSource, RefGeneration, ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result,
-    RetentionPinV1, RetryAdvice, StorageToken, SystemClock, TreeRootV1,
+    CommitObjectV1, CommitReceipt, CompareExchange, CompareExchangeOutcome, CurrentObjectV1,
+    DeleteOutcome, Error, ErrorCode, EtagPredicateV1, GcCandidateV1, GcFenceV1, GcMarkRunStateV1,
+    GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GetRequest, IdSource,
+    ImmutablePut, InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1,
+    LogicalObjectVersionKindV1, NativeBatchV1, NativePreparedMutationV1, ObjectData, ObjectHeaders,
+    ObjectPath, ObjectPlane, ObjectTransition, ObjectVersionId, ObjectVersionOrder,
+    ObjectVersionV1, ObjectWriteConditionV1, OperationId, OperationKind, OperationRecordV1,
+    PhysicalVersion, ProllyObjectStore, RandomIdSource, RefGeneration, ReflogEntryV1,
+    RepositoryFormatV1, RepositoryId, Result, RetentionPinV1, RetryAdvice, StorageToken,
+    SystemClock, TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
@@ -42,6 +47,14 @@ pub struct RepositoryOptions {
     pub read_only: bool,
     pub reflog_retention_millis: u64,
     pub history_traversal_limit: usize,
+    /// Repository-wide maximum payload PUT, COPY, DELETE, or multipart-part
+    /// requests in flight across independent calls and atomic batches.
+    pub max_parallel_payload_writes: usize,
+    /// In-process metadata cache bounds. These affect performance only and do
+    /// not change persisted repository semantics.
+    pub max_cached_commits: usize,
+    pub max_cached_branches: usize,
+    pub max_cached_node_pack_bytes: usize,
     /// Maximum exact physical deletions per second during GC. Zero disables
     /// pacing. The native format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
@@ -61,6 +74,10 @@ impl Default for RepositoryOptions {
             read_only: false,
             reflog_retention_millis: 90 * 24 * 60 * 60 * 1_000,
             history_traversal_limit: 100_000,
+            max_parallel_payload_writes: 16,
+            max_cached_commits: 4_096,
+            max_cached_branches: 1_024,
+            max_cached_node_pack_bytes: 64 * 1024 * 1024,
             gc_delete_rate_limit_per_second: 0,
             clock: Arc::new(SystemClock),
             ids: Arc::new(RandomIdSource),
@@ -192,6 +209,22 @@ pub struct RepairReport {
     pub fsck: FsckReport,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RepositoryPerformanceSnapshot {
+    pub publication_acquisitions: u64,
+    pub publication_wait_nanos: u64,
+    pub publication_queue_depth: u64,
+    pub publication_max_queue_depth: u64,
+}
+
+#[derive(Default)]
+struct RepositoryPerformanceCounters {
+    publication_acquisitions: AtomicU64,
+    publication_wait_nanos: AtomicU64,
+    publication_queue_depth: AtomicU64,
+    publication_max_queue_depth: AtomicU64,
+}
+
 /// Returns the exclusive version-tree cursor immediately after every version
 /// of `key`. This lets AWS-shaped `key_marker` requests skip the complete key
 /// while keeping the physical Prolly encoding private everywhere else.
@@ -217,6 +250,55 @@ struct WarmBranchState {
     reference: crate::RefValueV1,
     token: StorageToken,
     commit: BucketCommitV1,
+}
+
+struct BoundedCache<K, V> {
+    entries: BTreeMap<K, V>,
+    order: VecDeque<K>,
+    capacity: usize,
+}
+
+struct StoredCommit {
+    id: CommitId,
+    pending_pack: Option<(PreparedNodePack, u64)>,
+}
+
+impl<K: Ord + Clone, V: Clone> BoundedCache<K, V> {
+    fn new(capacity: usize) -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn get(&mut self, key: &K) -> Option<V> {
+        let value = self.entries.get(key)?.clone();
+        self.order.retain(|candidate| candidate != key);
+        self.order.push_back(key.clone());
+        Some(value)
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        self.entries.insert(key.clone(), value);
+        self.order.retain(|candidate| candidate != &key);
+        self.order.push_back(key);
+        while self.entries.len() > self.capacity {
+            if let Some(evicted) = self.order.pop_front() {
+                self.entries.remove(&evicted);
+            }
+        }
+    }
+
+    fn remove(&mut self, key: &K) {
+        self.entries.remove(key);
+        self.order.retain(|candidate| candidate != key);
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+    }
 }
 
 #[derive(Default)]
@@ -266,9 +348,13 @@ pub struct Repository<P: ObjectPlane> {
     node_store: ProllyObjectStore<P>,
     engine: AsyncProlly<ProllyObjectStore<P>>,
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
-    warm_branches: Arc<RwLock<BTreeMap<String, WarmBranchState>>>,
-    commit_cache: Arc<RwLock<BTreeMap<CommitId, BucketCommitV1>>>,
+    warm_branches: Arc<RwLock<BoundedCache<String, WarmBranchState>>>,
+    commit_cache: Arc<RwLock<BoundedCache<CommitId, BucketCommitV1>>>,
     native_publication: Arc<tokio::sync::Mutex<()>>,
+    payload_writes: Arc<tokio::sync::Semaphore>,
+    operation_locks: Arc<std::sync::Mutex<BTreeMap<OperationId, Weak<tokio::sync::Mutex<()>>>>>,
+    lease_renewal: Arc<tokio::sync::Mutex<()>>,
+    performance: Arc<RepositoryPerformanceCounters>,
 }
 
 impl<P: ObjectPlane> Repository<P> {
@@ -346,7 +432,9 @@ impl<P: ObjectPlane> Repository<P> {
             created_at_millis: intent.format.created_at_millis,
             metadata: BTreeMap::new(),
         };
-        let commit_id = repository.store_commit(&commit).await?;
+        let stored = repository.store_commit(&commit, None).await?;
+        let commit_id = stored.id;
+        repository.finalize_stored_commit(stored)?;
 
         let reflog = ReflogEntryV1 {
             branch: options.default_branch.clone(),
@@ -466,9 +554,15 @@ impl<P: ObjectPlane> Repository<P> {
             format: format.state_tree_format.clone(),
             runtime: RuntimeConfig::default(),
         };
-        let node_store =
-            ProllyObjectStore::new_packed(plane.clone(), options.repository_prefix.clone());
+        let node_store = ProllyObjectStore::new_packed_with_cache_limit(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            options.max_cached_node_pack_bytes,
+        );
         let engine = AsyncProlly::new(node_store.clone(), config);
+        let max_cached_branches = options.max_cached_branches;
+        let max_cached_commits = options.max_cached_commits;
+        let max_parallel_payload_writes = options.max_parallel_payload_writes;
         Ok(Self {
             plane,
             options,
@@ -476,10 +570,84 @@ impl<P: ObjectPlane> Repository<P> {
             node_store,
             engine,
             writer_lease: Arc::new(RwLock::new(None)),
-            warm_branches: Arc::new(RwLock::new(BTreeMap::new())),
-            commit_cache: Arc::new(RwLock::new(BTreeMap::new())),
+            warm_branches: Arc::new(RwLock::new(BoundedCache::new(max_cached_branches))),
+            commit_cache: Arc::new(RwLock::new(BoundedCache::new(max_cached_commits))),
             native_publication: Arc::new(tokio::sync::Mutex::new(())),
+            payload_writes: Arc::new(tokio::sync::Semaphore::new(max_parallel_payload_writes)),
+            operation_locks: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+            lease_renewal: Arc::new(tokio::sync::Mutex::new(())),
+            performance: Arc::new(RepositoryPerformanceCounters::default()),
         })
+    }
+
+    pub fn performance_snapshot(&self) -> RepositoryPerformanceSnapshot {
+        RepositoryPerformanceSnapshot {
+            publication_acquisitions: self
+                .performance
+                .publication_acquisitions
+                .load(Ordering::Relaxed),
+            publication_wait_nanos: self
+                .performance
+                .publication_wait_nanos
+                .load(Ordering::Relaxed),
+            publication_queue_depth: self
+                .performance
+                .publication_queue_depth
+                .load(Ordering::Relaxed),
+            publication_max_queue_depth: self
+                .performance
+                .publication_max_queue_depth
+                .load(Ordering::Relaxed),
+        }
+    }
+
+    async fn lock_publication(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        let depth = self
+            .performance
+            .publication_queue_depth
+            .fetch_add(1, Ordering::Relaxed)
+            + 1;
+        self.performance
+            .publication_max_queue_depth
+            .fetch_max(depth, Ordering::Relaxed);
+        let started = std::time::Instant::now();
+        let guard = self.native_publication.lock().await;
+        self.performance
+            .publication_queue_depth
+            .fetch_sub(1, Ordering::Relaxed);
+        self.performance
+            .publication_acquisitions
+            .fetch_add(1, Ordering::Relaxed);
+        self.performance.publication_wait_nanos.fetch_add(
+            u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+        guard
+    }
+
+    /// Serialize requests that reuse an idempotency key before they touch the
+    /// data plane. This prevents concurrent retries in one writer process from
+    /// creating duplicate, unreachable native S3 versions.
+    fn operation_lock(&self, operation: OperationId) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self
+            .operation_locks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        locks.retain(|_, lock| lock.strong_count() > 0);
+        if let Some(lock) = locks.get(&operation).and_then(Weak::upgrade) {
+            return lock;
+        }
+        let lock = Arc::new(tokio::sync::Mutex::new(()));
+        locks.insert(operation, Arc::downgrade(&lock));
+        lock
+    }
+
+    async fn payload_write_permit(&self) -> tokio::sync::OwnedSemaphorePermit {
+        self.payload_writes
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("repository payload-write semaphore is never closed")
     }
 
     pub fn repository_id(&self) -> RepositoryId {
@@ -495,7 +663,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     /// Persist an advisory packed-node locator. It is safe to delete: cold
-    /// reads and repair can deterministically rebuild it from immutable packs.
+    /// reads and repair can rebuild it from immutable commit envelopes.
     pub async fn create_node_index_checkpoint(
         &self,
         branch: &str,
@@ -522,54 +690,72 @@ impl<P: ObjectPlane> Repository<P> {
             encode_canonical(&checkpoint)?,
         )
         .await?;
+        let pointer_path = node_index_head_path(&self.options.repository_prefix)?;
+        let current = self.plane.load_mutable(&pointer_path).await?;
+        let pointer = crate::NodeIndexHeadV1 {
+            checkpoint: checkpoint.id,
+            head: checkpoint.head,
+            generation: checkpoint.generation,
+            updated_at_millis: self.now_millis()?,
+        };
+        match self
+            .plane
+            .compare_exchange(CompareExchange {
+                path: pointer_path,
+                expected: current.map(|stored| stored.metadata.token),
+                bytes: encode_canonical(&pointer)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {}
+            CompareExchangeOutcome::Conflict(_) => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "node-index head changed while publishing a checkpoint",
+                ))
+            }
+        }
         Ok(checkpoint)
     }
 
     async fn load_latest_node_index_checkpoint(&self) -> Result<()> {
-        let prefix = format!("{}/node-index/checkpoints/", self.options.repository_prefix);
-        let mut continuation = None;
-        let mut paths = Vec::new();
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            paths.extend(page.entries.into_iter().map(|entry| entry.path));
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-        paths.sort_by(|left, right| right.cmp(left));
-        for path in paths {
-            let Some(object) = self
-                .plane
-                .get(GetRequest {
-                    path,
-                    range: None,
-                    physical_version: None,
-                })
-                .await?
-            else {
-                continue;
-            };
-            let Ok(checkpoint) = decode_canonical::<crate::NodeIndexCheckpointV1>(&object.bytes)
-            else {
-                continue;
-            };
-            if checkpoint.repository != self.format.repository_id || checkpoint.validate().is_err()
-            {
-                continue;
-            }
-            self.node_store.import_node_index(&checkpoint.entries)?;
+        let Some(head_object) = self
+            .plane
+            .load_mutable(&node_index_head_path(&self.options.repository_prefix)?)
+            .await?
+        else {
             return Ok(());
+        };
+        let head = match decode_canonical::<crate::NodeIndexHeadV1>(&head_object.bytes) {
+            Ok(head) => head,
+            Err(_) => return self.node_store.rebuild_node_index().await,
+        };
+        let checkpoint = self
+            .plane
+            .get(GetRequest {
+                path: node_checkpoint_path(
+                    &self.options.repository_prefix,
+                    head.generation,
+                    head.checkpoint,
+                )?,
+                range: None,
+                physical_version: None,
+            })
+            .await?;
+        let Some(checkpoint) = checkpoint else {
+            return self.node_store.rebuild_node_index().await;
+        };
+        let checkpoint = match decode_canonical::<crate::NodeIndexCheckpointV1>(&checkpoint.bytes) {
+            Ok(checkpoint) => checkpoint,
+            Err(_) => return self.node_store.rebuild_node_index().await,
+        };
+        if checkpoint.repository != self.format.repository_id
+            || checkpoint.validate().is_err()
+            || head.validate(&checkpoint).is_err()
+        {
+            return self.node_store.rebuild_node_index().await;
         }
-        Ok(())
+        self.node_store.import_node_index(&checkpoint.entries)
     }
 
     fn now_millis(&self) -> Result<u64> {
@@ -659,6 +845,11 @@ impl<P: ObjectPlane> Repository<P> {
     /// call this from an independent maintenance loop; mutations also renew
     /// opportunistically near the deadline.
     pub async fn renew_writer_lease(&self) -> Result<()> {
+        let _renewal = self.lease_renewal.lock().await;
+        self.renew_writer_lease_inner().await
+    }
+
+    async fn renew_writer_lease_inner(&self) -> Result<()> {
         let held = self
             .writer_lease
             .read()
@@ -921,7 +1112,28 @@ impl<P: ObjectPlane> Repository<P> {
             .expires_at_millis
             .saturating_sub(self.options.writer_lease_millis / 3);
         if now >= renew_at {
-            self.renew_writer_lease().await?;
+            let _renewal = self.lease_renewal.lock().await;
+            let current = self
+                .writer_lease
+                .read()
+                .map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned")
+                })?
+                .clone()
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::PreconditionFailed,
+                        "native repository has no exclusive writer authority",
+                    )
+                })?;
+            let now = self.now_millis()?;
+            let renew_at = current
+                .value
+                .expires_at_millis
+                .saturating_sub(self.options.writer_lease_millis / 3);
+            if now >= renew_at {
+                self.renew_writer_lease_inner().await?;
+            }
         }
         self.writer_fence_generation()
     }
@@ -964,10 +1176,9 @@ impl<P: ObjectPlane> Repository<P> {
     async fn warm_branch_state(&self, branch: &str) -> Result<WarmBranchState> {
         if let Some(cached) = self
             .warm_branches
-            .read()
+            .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned"))?
-            .get(branch)
-            .cloned()
+            .get(&branch.to_string())
         {
             return Ok(cached);
         }
@@ -1076,9 +1287,7 @@ impl<P: ObjectPlane> Repository<P> {
                         .as_str()
                         .strip_prefix(&prefix)
                         .is_some_and(|relative| {
-                            is_portable_clone_path(relative)
-                                || relative.starts_with("node-packs/")
-                                || relative.starts_with("writers/")
+                            is_portable_clone_path(relative) || relative.starts_with("writers/")
                         })
                 }) {
                     return Err(Error::new(
@@ -1338,6 +1547,7 @@ impl<P: ObjectPlane> Repository<P> {
                         "native clone source object failed logical checksum verification",
                     ));
                 }
+                let _payload_permit = target.payload_write_permit().await;
                 let write = target
                     .plane
                     .put_native_file(crate::NativeFilePut {
@@ -1368,6 +1578,7 @@ impl<P: ObjectPlane> Repository<P> {
                 LogicalObjectVersionKindV1::DeleteMarker,
                 crate::NativeObjectBindingV1::DeleteMarker { .. },
             ) => {
+                let _payload_permit = target.payload_write_permit().await;
                 match target
                     .plane
                     .delete_native(crate::NativeDelete {
@@ -1481,7 +1692,11 @@ impl<P: ObjectPlane> Repository<P> {
                     )
                 })?);
             }
-            let objects = encode_canonical(&commit.state.objects)?;
+            // Physical S3 version bindings are intentionally stored inline in
+            // the current-object tree. They differ after clone or push, so a
+            // transfer fingerprint must describe logical object identity
+            // rather than the provider-specific tree root.
+            let objects = encode_canonical(&self.current_object_map(commit).await?)?;
             let operations = encode_canonical(&commit.state.operations)?;
             let generation = commit.generation.0.to_be_bytes();
             let delta = encode_canonical(&commit.delta)?;
@@ -1658,7 +1873,7 @@ impl<P: ObjectPlane> Repository<P> {
                             &objects,
                             transition.key.clone(),
                             encode_canonical(&CurrentObjectV1 {
-                                version: transition.next,
+                                version: version.clone(),
                             })?,
                         )
                         .await?
@@ -1685,24 +1900,17 @@ impl<P: ObjectPlane> Repository<P> {
                 versions: TreeRootV1::from_tree(&versions)?,
                 operations: TreeRootV1::from_tree(&operations)?,
             };
-            if state.objects != source_commit.state.objects
-                || state.operations != source_commit.state.operations
-            {
+            if state.operations != source_commit.state.operations {
                 return Err(Error::new(
                     ErrorCode::CorruptCommit,
-                    "native transfer replay did not reproduce the logical commit state",
+                    "native transfer replay did not reproduce the logical operation state",
                 ));
             }
-            let node_pack = target
-                .node_store
-                .flush_node_pack(
-                    tree_format_digest(&target.format.state_tree_format)?,
-                    Vec::new(),
-                )
-                .await?;
-            if node_pack.is_some() {
-                report.copied_objects += 1;
-            }
+            let prepared = target.node_store.prepare_node_pack(
+                tree_format_digest(&target.format.state_tree_format)?,
+                Vec::new(),
+            )?;
+            let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
             let destination_commit = BucketCommitV1 {
                 state,
                 parents: mapped_parents,
@@ -1715,7 +1923,9 @@ impl<P: ObjectPlane> Repository<P> {
                 created_at_millis: source_commit.created_at_millis,
                 metadata: source_commit.metadata,
             };
-            let destination_id = target.store_commit(&destination_commit).await?;
+            let stored = target.store_commit(&destination_commit, prepared).await?;
+            let destination_id = stored.id;
+            target.finalize_stored_commit(stored)?;
             report.copied_objects += 1;
             commit_map.insert(source_id, destination_id);
         }
@@ -1730,7 +1940,7 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.lock_publication().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut report) = source
             .replay_native_history_to(self, &[source_head], false)
@@ -1754,7 +1964,7 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
         let source_head = self.head(source_branch).await?;
-        let _publication = destination.native_publication.lock().await;
+        let _publication = destination.lock_publication().await;
         let (mapped, mut report) = self
             .replay_native_history_to(destination, &[source_head], false)
             .await?;
@@ -1803,7 +2013,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(name)?;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let _native_publication = self.native_publication.lock().await;
+        let _native_publication = self.lock_publication().await;
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
@@ -1872,7 +2082,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_branch(&self, name: &str, expected: CommitId) -> Result<()> {
-        let _native_publication = self.native_publication.lock().await;
+        let _native_publication = self.lock_publication().await;
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let loaded = self.load_ref(name).await?;
         if loaded.value.target != expected {
@@ -1922,7 +2132,7 @@ impl<P: ObjectPlane> Repository<P> {
                     .map_err(|_| {
                         Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned")
                     })?
-                    .remove(name);
+                    .remove(&name.to_string());
                 Ok(())
             }
             Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
@@ -2095,7 +2305,7 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let _native_publication = self.native_publication.lock().await;
+        let _native_publication = self.lock_publication().await;
         self.move_ref_inner(branch, loaded, target, reason).await
     }
 
@@ -2233,7 +2443,7 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         validate_branch(name)?;
         self.load_commit(target).await?;
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.lock_publication().await;
         self.native_writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
@@ -2435,7 +2645,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.load_commit(target).await?;
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.lock_publication().await;
         self.native_writer_generation_for_mutation().await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
@@ -2884,7 +3094,6 @@ impl<P: ObjectPlane> Repository<P> {
         condition: ObjectWriteConditionV1,
         expected_checksums: ChecksumExpectation,
     ) -> Result<CommitReceipt> {
-        let _publication = self.native_publication.lock().await;
         let expected_size = bytes.len() as u64;
         let expected_sha256 = crate::codec::sha256(&bytes);
         let expected_md5: [u8; 16] = Md5::digest(&bytes).into();
@@ -2920,6 +3129,8 @@ impl<P: ObjectPlane> Repository<P> {
             &encode_canonical(&kind)?,
             &encode_canonical(&condition)?,
         ]);
+        let operation_lock = self.operation_lock(operation);
+        let _operation = operation_lock.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(branch, operation, input_digest)
             .await?
@@ -2931,6 +3142,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         let native = self
             .plane
             .put_native(crate::NativePut {
@@ -2953,6 +3165,7 @@ impl<P: ObjectPlane> Repository<P> {
                 None => return Err(error),
             },
         };
+        drop(_payload_permit);
         if native.size != expected_size
             || native.checksums.sha256 != Some(expected_sha256)
             || native.checksums.md5 != Some(expected_md5)
@@ -2962,6 +3175,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "native provider result disagrees with the uploaded object identity",
             ));
         }
+        let _publication = self.lock_publication().await;
         self.commit_one(
             branch,
             key,
@@ -2991,7 +3205,6 @@ impl<P: ObjectPlane> Repository<P> {
         condition: ObjectWriteConditionV1,
         expected_checksums: ChecksumExpectation,
     ) -> Result<CommitReceipt> {
-        let _publication = self.native_publication.lock().await;
         if expected_checksums
             .md5
             .is_some_and(|expected| expected != expected_md5)
@@ -3024,6 +3237,8 @@ impl<P: ObjectPlane> Repository<P> {
             &encode_canonical(&kind)?,
             &encode_canonical(&condition)?,
         ]);
+        let operation_lock = self.operation_lock(operation);
+        let _operation = operation_lock.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(branch, operation, input_digest)
             .await?
@@ -3035,6 +3250,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         let native = self
             .plane
             .put_native_file(crate::NativeFilePut {
@@ -3060,6 +3276,7 @@ impl<P: ObjectPlane> Repository<P> {
                 None => return Err(error),
             },
         };
+        drop(_payload_permit);
         if native.size != expected_size
             || native.checksums.sha256 != Some(expected_sha256)
             || native.checksums.md5 != Some(expected_md5)
@@ -3069,6 +3286,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "native provider result disagrees with the uploaded object identity",
             ));
         }
+        let _publication = self.lock_publication().await;
         self.commit_one(
             branch,
             key,
@@ -3184,6 +3402,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         self.plane
             .upload_native_multipart_part(crate::NativeMultipartUploadPart {
                 path,
@@ -3256,6 +3475,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         self.plane
             .upload_native_multipart_file_part(crate::NativeMultipartFilePart {
                 path,
@@ -3336,6 +3556,7 @@ impl<P: ObjectPlane> Repository<P> {
                 ))
             }
         };
+        let _payload_permit = self.payload_write_permit().await;
         let result = self
             .plane
             .upload_native_multipart_part_copy(crate::NativeMultipartUploadPartCopy {
@@ -3430,7 +3651,8 @@ impl<P: ObjectPlane> Repository<P> {
             &encode_canonical(&parts)?,
             &encode_canonical(&kind)?,
         ]);
-        let _publication = self.native_publication.lock().await;
+        let operation_lock = self.operation_lock(session.operation);
+        let _operation = operation_lock.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(&session.branch, session.operation, input_digest)
             .await?
@@ -3447,6 +3669,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         let completed = self
             .plane
             .complete_native_multipart(crate::NativeMultipartComplete {
@@ -3468,6 +3691,7 @@ impl<P: ObjectPlane> Repository<P> {
                 None => return Err(error),
             },
         };
+        drop(_payload_permit);
         if completed.size != size
             || completed.logical_etag != format!("\"{}\"", hex::encode(checksum_md5))
             || completed.checksums.sha256 != Some(checksum_sha256)
@@ -3478,6 +3702,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "native multipart result disagrees with its declared object identity",
             ));
         }
+        let _publication = self.lock_publication().await;
         self.commit_one(
             &session.branch,
             session.key,
@@ -3545,15 +3770,23 @@ impl<P: ObjectPlane> Repository<P> {
                 "native batch is empty, expired, or exceeds the mutation limit",
             ));
         }
+        let mut unique_keys = BTreeSet::new();
         for mutation in &mutations {
             self.validate_key(mutation.key())?;
+            if !unique_keys.insert(mutation.key().to_vec()) {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "native batch contains the same key more than once",
+                ));
+            }
         }
         let request_digest = derive_input_digest(&[
             b"native-batch",
             &encode_canonical(&mutations)?,
             batch.base_commit.as_bytes(),
         ]);
-        let _publication = self.native_publication.lock().await;
+        let operation_lock = self.operation_lock(batch.operation);
+        let _operation = operation_lock.lock().await;
         let warm = self.warm_branch_state(&batch.branch).await?;
         if warm.reference.target != batch.base_commit {
             if let Some(receipt) = self
@@ -3568,71 +3801,96 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let results =
+            futures_util::stream::iter(mutations.into_iter().map(|mutation| async move {
+                self.prepare_native_batch_mutation(
+                    mutation,
+                    batch.operation,
+                    writer_fence_generation,
+                )
+                .await
+            }))
+            .buffer_unordered(self.options.max_parallel_payload_writes)
+            .collect::<Vec<_>>()
+            .await;
         let mut prepared = BTreeMap::new();
-        for mutation in mutations {
-            match mutation {
-                crate::NativeBatchMutationV1::Put {
-                    key,
-                    bytes,
-                    headers,
-                    user_metadata,
-                } => {
-                    let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
-                        Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-                    })?)?;
-                    let native = self
-                        .plane
-                        .put_native(crate::NativePut {
-                            path,
-                            bytes,
-                            headers: headers.clone(),
-                            user_metadata: user_metadata.clone(),
-                            repository: self.format.repository_id,
-                            operation: batch.operation,
-                            writer_fence_generation,
-                        })
-                        .await?;
-                    prepared.insert(
-                        key.clone(),
-                        NativePreparedMutationV1::NativePut {
-                            key,
-                            size: native.size,
-                            logical_etag: native.logical_etag,
-                            checksums: native.checksums,
-                            headers,
-                            user_metadata,
-                            binding: native.binding,
-                        },
-                    );
-                }
-                crate::NativeBatchMutationV1::Delete { key } => {
-                    let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
-                        Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-                    })?)?;
-                    let binding = match self
-                        .plane
-                        .delete_native(crate::NativeDelete {
-                            path: path.clone(),
-                            repository: self.format.repository_id,
-                            operation: batch.operation,
-                            writer_fence_generation,
-                        })
-                        .await
-                    {
-                        Ok(binding) => binding,
-                        Err(error) => match self.reconcile_native_delete(&path).await? {
-                            Some(binding) => binding,
-                            None => return Err(error),
-                        },
-                    };
-                    prepared.insert(
-                        key.clone(),
-                        NativePreparedMutationV1::NativeDelete { key, binding },
-                    );
-                }
+        for result in results {
+            let (key, mutation) = result?;
+            prepared.insert(key, mutation);
+        }
+        let _publication = self.lock_publication().await;
+        self.commit_batch(&batch, &prepared, request_digest).await
+    }
+
+    async fn prepare_native_batch_mutation(
+        &self,
+        mutation: crate::NativeBatchMutationV1,
+        operation: OperationId,
+        writer_fence_generation: u64,
+    ) -> Result<(Vec<u8>, NativePreparedMutationV1)> {
+        match mutation {
+            crate::NativeBatchMutationV1::Put {
+                key,
+                bytes,
+                headers,
+                user_metadata,
+            } => {
+                let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                    Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+                })?)?;
+                let _payload_permit = self.payload_write_permit().await;
+                let native = self
+                    .plane
+                    .put_native(crate::NativePut {
+                        path,
+                        bytes,
+                        headers: headers.clone(),
+                        user_metadata: user_metadata.clone(),
+                        repository: self.format.repository_id,
+                        operation,
+                        writer_fence_generation,
+                    })
+                    .await?;
+                Ok((
+                    key.clone(),
+                    NativePreparedMutationV1::NativePut {
+                        key,
+                        size: native.size,
+                        logical_etag: native.logical_etag,
+                        checksums: native.checksums,
+                        headers,
+                        user_metadata,
+                        binding: native.binding,
+                    },
+                ))
+            }
+            crate::NativeBatchMutationV1::Delete { key } => {
+                let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                    Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+                })?)?;
+                let _payload_permit = self.payload_write_permit().await;
+                let binding = match self
+                    .plane
+                    .delete_native(crate::NativeDelete {
+                        path: path.clone(),
+                        repository: self.format.repository_id,
+                        operation,
+                        writer_fence_generation,
+                    })
+                    .await
+                {
+                    Ok(binding) => binding,
+                    Err(error) => match self.reconcile_native_delete(&path).await? {
+                        Some(binding) => binding,
+                        None => return Err(error),
+                    },
+                };
+                Ok((
+                    key.clone(),
+                    NativePreparedMutationV1::NativeDelete { key, binding },
+                ))
             }
         }
-        self.commit_batch(&batch, &prepared, request_digest).await
     }
 
     pub async fn delete_object(
@@ -3650,7 +3908,8 @@ impl<P: ObjectPlane> Repository<P> {
             b"delete",
             &key,
         ]);
-        let _native_publication = self.native_publication.lock().await;
+        let operation_lock = self.operation_lock(operation);
+        let _operation = operation_lock.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(branch, operation, input_digest)
             .await?
@@ -3662,6 +3921,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         let binding = match self
             .plane
             .delete_native(crate::NativeDelete {
@@ -3678,6 +3938,8 @@ impl<P: ObjectPlane> Repository<P> {
                 None => return Err(error),
             },
         };
+        drop(_payload_permit);
+        let _publication = self.lock_publication().await;
         self.commit_one(
             branch,
             key,
@@ -3715,6 +3977,13 @@ impl<P: ObjectPlane> Repository<P> {
         for key in &keys {
             self.validate_key(key)?;
         }
+        let mut unique_keys = BTreeSet::new();
+        if keys.iter().any(|key| !unique_keys.insert(key.clone())) {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "DeleteObjects contains the same key more than once",
+            ));
+        }
         let operation = operation.unwrap_or_else(|| self.new_operation());
         let encoded_keys = encode_canonical(&keys)?;
         let input_digest = derive_input_digest(&[
@@ -3734,8 +4003,48 @@ impl<P: ObjectPlane> Repository<P> {
         operation: OperationId,
         input_digest: [u8; 32],
     ) -> Result<CommitReceipt> {
-        let _publication = self.native_publication.lock().await;
+        let operation_lock = self.operation_lock(operation);
+        let _operation = operation_lock.lock().await;
+        if let Some(receipt) = self
+            .replay_warm_operation(branch, operation, input_digest)
+            .await?
+        {
+            return Ok(receipt);
+        }
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let results = futures_util::stream::iter(keys.iter().cloned().map(|key| async move {
+            let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+            let _payload_permit = self.payload_write_permit().await;
+            let binding = match self
+                .plane
+                .delete_native(crate::NativeDelete {
+                    path: path.clone(),
+                    repository: self.format.repository_id,
+                    operation,
+                    writer_fence_generation,
+                })
+                .await
+            {
+                Ok(binding) => binding,
+                Err(error) => match self.reconcile_native_delete(&path).await? {
+                    Some(binding) => binding,
+                    None => return Err(error),
+                },
+            };
+            Ok::<_, Error>((key, binding))
+        }))
+        .buffer_unordered(self.options.max_parallel_payload_writes)
+        .collect::<Vec<_>>()
+        .await;
+        let mut bindings = BTreeMap::new();
+        for result in results {
+            let (key, binding) = result?;
+            bindings.insert(key, binding);
+        }
+
+        let _publication = self.lock_publication().await;
         let warm = self.warm_branch_state(branch).await?;
         let loaded_ref = LoadedRef {
             value: warm.reference,
@@ -3786,26 +4095,13 @@ impl<P: ObjectPlane> Repository<P> {
                 .await?
                 .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
                 .transpose()?
-                .map(|current| current.version);
-            let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
-                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
-            })?)?;
-            let binding = match self
-                .plane
-                .delete_native(crate::NativeDelete {
-                    path: path.clone(),
-                    repository: self.format.repository_id,
-                    operation,
-                    writer_fence_generation,
-                })
-                .await
-            {
-                Ok(binding) => binding,
-                Err(error) => match self.reconcile_native_delete(&path).await? {
-                    Some(binding) => binding,
-                    None => return Err(error),
-                },
-            };
+                .map(|current| current.version.id);
+            let binding = bindings.remove(key).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "prepared multi-delete binding is missing",
+                )
+            })?;
             let body = LogicalObjectVersionBodyV1 {
                 order: ObjectVersionOrder {
                     commit_generation: generation,
@@ -3855,13 +4151,11 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let node_pack = self
-            .node_store
-            .flush_node_pack(
-                tree_format_digest(&self.format.state_tree_format)?,
-                Vec::new(),
-            )
-            .await?;
+        let prepared = self.node_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
                 objects: TreeRootV1::from_tree(&objects)?,
@@ -3878,7 +4172,8 @@ impl<P: ObjectPlane> Repository<P> {
             created_at_millis,
             metadata: BTreeMap::new(),
         };
-        let commit_id = self.store_commit(&commit).await?;
+        let stored = self.store_commit(&commit, prepared).await?;
+        let commit_id = stored.id;
         let reflog = ReflogEntryV1 {
             branch: branch.to_string(),
             old_target: Some(loaded_ref.value.target),
@@ -3918,6 +4213,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await?
         {
             CompareExchangeOutcome::Applied(metadata) => {
+                self.finalize_stored_commit(stored)?;
                 self.cache_branch(branch, next_ref, metadata.token, commit.clone())?;
                 Ok(CommitReceipt {
                     id: commit_id,
@@ -3968,7 +4264,8 @@ impl<P: ObjectPlane> Repository<P> {
             &destination_key,
             &kind_bytes,
         ]);
-        let _publication = self.native_publication.lock().await;
+        let operation_lock = self.operation_lock(operation);
+        let _operation = operation_lock.lock().await;
         if let Some(receipt) = self
             .replay_warm_operation(branch, operation, input_digest)
             .await?
@@ -4006,6 +4303,7 @@ impl<P: ObjectPlane> Repository<P> {
             ObjectPath::new(std::str::from_utf8(&destination_key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
+        let _payload_permit = self.payload_write_permit().await;
         let binding = match self
             .plane
             .copy_native(crate::NativeCopy {
@@ -4033,6 +4331,8 @@ impl<P: ObjectPlane> Repository<P> {
                 None => return Err(error),
             },
         };
+        drop(_payload_permit);
+        let _publication = self.lock_publication().await;
         self.commit_one(
             branch,
             destination_key,
@@ -4120,17 +4420,14 @@ impl<P: ObjectPlane> Repository<P> {
             .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
             .transpose()?;
         let current_etag = match previous_current.as_ref() {
-            Some(current) => {
-                let version = self.find_version(&base, &key, current.version).await?;
-                match version.body.kind {
-                    LogicalObjectVersionKindV1::Live { logical_etag, .. } => Some(logical_etag),
-                    LogicalObjectVersionKindV1::DeleteMarker => None,
-                }
-            }
+            Some(current) => match &current.version.body.kind {
+                LogicalObjectVersionKindV1::Live { logical_etag, .. } => Some(logical_etag),
+                LogicalObjectVersionKindV1::DeleteMarker => None,
+            },
             None => None,
         };
-        validate_write_condition(&condition, current_etag.as_deref())?;
-        let previous = previous_current.map(|current| current.version);
+        validate_write_condition(&condition, current_etag.map(String::as_str))?;
+        let previous = previous_current.map(|current| current.version.id);
         let body = LogicalObjectVersionBodyV1 {
             order: ObjectVersionOrder {
                 commit_generation: generation,
@@ -4155,7 +4452,7 @@ impl<P: ObjectPlane> Repository<P> {
                         &objects,
                         key.clone(),
                         encode_canonical(&CurrentObjectV1 {
-                            version: version.id,
+                            version: version.clone(),
                         })?,
                     )
                     .await?
@@ -4201,13 +4498,11 @@ impl<P: ObjectPlane> Repository<P> {
                 ),
             }],
         };
-        let node_pack = self
-            .node_store
-            .flush_node_pack(
-                tree_format_digest(&self.format.state_tree_format)?,
-                Vec::new(),
-            )
-            .await?;
+        let prepared = self.node_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
         let commit = BucketCommitV1 {
             state,
             parents: vec![loaded_ref.value.target],
@@ -4220,7 +4515,8 @@ impl<P: ObjectPlane> Repository<P> {
             created_at_millis,
             metadata: BTreeMap::new(),
         };
-        let commit_id = self.store_commit(&commit).await?;
+        let stored = self.store_commit(&commit, prepared).await?;
+        let commit_id = stored.id;
         let reflog = ReflogEntryV1 {
             branch: branch.to_string(),
             old_target: Some(loaded_ref.value.target),
@@ -4262,6 +4558,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         match publication {
             Ok(CompareExchangeOutcome::Applied(metadata)) => {
+                self.finalize_stored_commit(stored)?;
                 let receipt = CommitReceipt {
                     id: commit_id,
                     operation,
@@ -4280,7 +4577,7 @@ impl<P: ObjectPlane> Repository<P> {
                     .map_err(|_| {
                         Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned")
                     })?
-                    .remove(branch);
+                    .remove(&branch.to_string());
                 Err(Error::new(
                     ErrorCode::PreconditionFailed,
                     "native branch CAS conflicted; writer is fenced and must reopen",
@@ -4291,6 +4588,7 @@ impl<P: ObjectPlane> Repository<P> {
                     .reconcile_operation(branch, operation, input_digest)
                     .await?
                 {
+                    self.finalize_stored_commit(stored)?;
                     return Ok(receipt);
                 }
                 Err(Error::new(
@@ -4354,7 +4652,7 @@ impl<P: ObjectPlane> Repository<P> {
                 .await?
                 .map(|bytes| decode_canonical::<CurrentObjectV1>(&bytes))
                 .transpose()?
-                .map(|current| current.version);
+                .map(|current| current.version.id);
             let (kind, binding) = match mutation {
                 NativePreparedMutationV1::NativePut {
                     size,
@@ -4404,7 +4702,7 @@ impl<P: ObjectPlane> Repository<P> {
                         &objects,
                         key.to_vec(),
                         encode_canonical(&CurrentObjectV1 {
-                            version: version.id,
+                            version: version.clone(),
                         })?,
                     )
                     .await?
@@ -4448,13 +4746,11 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![batch.operation],
             changes: transitions,
         };
-        let node_pack = self
-            .node_store
-            .flush_node_pack(
-                tree_format_digest(&self.format.state_tree_format)?,
-                Vec::new(),
-            )
-            .await?;
+        let prepared = self.node_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
                 objects: TreeRootV1::from_tree(&objects)?,
@@ -4476,6 +4772,7 @@ impl<P: ObjectPlane> Repository<P> {
             loaded_ref,
             batch.operation,
             commit,
+            prepared,
             result,
             &batch.message,
         )
@@ -4583,10 +4880,10 @@ impl<P: ObjectPlane> Repository<P> {
             .await?
             .ok_or_else(|| Error::new(ErrorCode::NoSuchKey, "logical key is absent"))?;
         let current: CurrentObjectV1 = decode_canonical(&current)?;
-        let version = self.find_version(&commit, key, current.version).await?;
+        current.version.validate()?;
         Ok(ObjectSummary {
             key: key.to_vec(),
-            version,
+            version: current.version,
         })
     }
 
@@ -4648,7 +4945,8 @@ impl<P: ObjectPlane> Repository<P> {
                 .await?
                 .ok_or_else(|| Error::new(ErrorCode::NoSuchKey, "logical key is absent"))?;
             let current: CurrentObjectV1 = decode_canonical(&current)?;
-            self.find_version(&commit, key, current.version).await?
+            current.version.validate()?;
+            current.version
         };
         let bytes = match (&version.body.kind, &version.binding) {
             (
@@ -4743,8 +5041,11 @@ impl<P: ObjectPlane> Repository<P> {
                 continue;
             }
             let current: CurrentObjectV1 = decode_canonical(&current)?;
-            let version = self.find_version(&commit, &key, current.version).await?;
-            result.push(ObjectSummary { key, version });
+            current.version.validate()?;
+            result.push(ObjectSummary {
+                key,
+                version: current.version,
+            });
         }
         let truncated = result.len() > limit;
         result.truncate(limit);
@@ -5139,7 +5440,7 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        let _native_publication = self.native_publication.lock().await;
+        let _native_publication = self.lock_publication().await;
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let engine = AsyncProlly::new(
             self.node_store.clone(),
@@ -5202,7 +5503,19 @@ impl<P: ObjectPlane> Repository<P> {
                         .put(
                             &objects,
                             change.key.clone(),
-                            encode_canonical(&CurrentObjectV1 { version })?,
+                            encode_canonical(&CurrentObjectV1 {
+                                version: match self
+                                    .find_version(&theirs_commit, &change.key, version)
+                                    .await
+                                {
+                                    Ok(found) => found,
+                                    Err(error) if error.code == ErrorCode::NoSuchVersion => {
+                                        self.find_version(&ours_commit, &change.key, version)
+                                            .await?
+                                    }
+                                    Err(error) => return Err(error),
+                                },
+                            })?,
                         )
                         .await?;
                     version
@@ -5297,13 +5610,11 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let node_pack = self
-            .node_store
-            .flush_node_pack(
-                tree_format_digest(&self.format.state_tree_format)?,
-                Vec::new(),
-            )
-            .await?;
+        let prepared = self.node_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
                 objects: TreeRootV1::from_tree(&objects)?,
@@ -5325,6 +5636,7 @@ impl<P: ObjectPlane> Repository<P> {
             loaded_ref,
             operation,
             commit,
+            prepared,
             operation_result,
             "merge",
         )
@@ -5378,7 +5690,7 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let _native_publication = self.native_publication.lock().await;
+        let _native_publication = self.lock_publication().await;
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
         let engine = AsyncProlly::new(
             self.node_store.clone(),
@@ -5486,7 +5798,7 @@ impl<P: ObjectPlane> Repository<P> {
                         &objects,
                         key.clone(),
                         encode_canonical(&CurrentObjectV1 {
-                            version: version.id,
+                            version: version.clone(),
                         })?,
                     )
                     .await?
@@ -5530,13 +5842,11 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let node_pack = self
-            .node_store
-            .flush_node_pack(
-                tree_format_digest(&self.format.state_tree_format)?,
-                Vec::new(),
-            )
-            .await?;
+        let prepared = self.node_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
         let commit = BucketCommitV1 {
             state: BucketStateV1 {
                 objects: TreeRootV1::from_tree(&objects)?,
@@ -5558,6 +5868,7 @@ impl<P: ObjectPlane> Repository<P> {
             loaded_ref,
             operation,
             commit,
+            prepared,
             operation_result,
             "restore",
         )
@@ -5617,7 +5928,7 @@ impl<P: ObjectPlane> Repository<P> {
         while let Some(entry) = iter.next().await {
             let (key, value) = entry?;
             let current: CurrentObjectV1 = decode_canonical(&value)?;
-            result.insert(key, current.version);
+            result.insert(key, current.version.id);
         }
         Ok(result)
     }
@@ -5654,6 +5965,7 @@ impl<P: ObjectPlane> Repository<P> {
         loaded_ref: LoadedRef,
         operation: OperationId,
         commit: BucketCommitV1,
+        prepared: Option<PreparedNodePack>,
         operation_result: CanonicalOperationResult,
         reflog_message: &str,
     ) -> Result<CommitReceipt> {
@@ -5664,7 +5976,8 @@ impl<P: ObjectPlane> Repository<P> {
                 "prepared commit has a zero writer fence generation",
             ));
         }
-        let commit_id = self.store_commit(&commit).await?;
+        let stored = self.store_commit(&commit, prepared).await?;
+        let commit_id = stored.id;
         let reflog = ReflogEntryV1 {
             branch: branch.to_string(),
             old_target: Some(loaded_ref.value.target),
@@ -5705,6 +6018,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         match publication {
             Ok(CompareExchangeOutcome::Applied(metadata)) => {
+                self.finalize_stored_commit(stored)?;
                 let receipt = CommitReceipt {
                     id: commit_id,
                     operation,
@@ -5725,6 +6039,7 @@ impl<P: ObjectPlane> Repository<P> {
             .operation(operation.to_string())),
             Err(error) => {
                 if let Some(receipt) = self.lookup_operation(branch, operation).await? {
+                    self.finalize_stored_commit(stored)?;
                     return Ok(receipt);
                 }
                 Err(Error::new(
@@ -5775,7 +6090,7 @@ impl<P: ObjectPlane> Repository<P> {
                 fsck,
             });
         }
-        let _publication = self.native_publication.lock().await;
+        let _publication = self.lock_publication().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut sync) = source
             .replay_native_history_to(self, &[source_head], true)
@@ -6736,11 +7051,6 @@ impl<P: ObjectPlane> Repository<P> {
                     "commit has a zero writer fence generation",
                 ));
             }
-            if let Some(pack) = &commit.node_pack {
-                retained
-                    .paths
-                    .insert(node_pack_path(&self.options.repository_prefix, pack.id)?);
-            }
             let objects =
                 self.tree_from_root(&commit.state.objects, &self.format.state_tree_format)?;
             let versions =
@@ -6827,10 +7137,9 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         if let Some(warm) = self
             .warm_branches
-            .read()
+            .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned"))?
-            .get(branch)
-            .cloned()
+            .get(&branch.to_string())
         {
             return Ok(LoadedRef {
                 value: warm.reference,
@@ -6905,10 +7214,9 @@ impl<P: ObjectPlane> Repository<P> {
     async fn load_commit(&self, id: CommitId) -> Result<BucketCommitV1> {
         if let Some(commit) = self
             .commit_cache
-            .read()
+            .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
             .get(&id)
-            .cloned()
         {
             return Ok(commit);
         }
@@ -6921,10 +7229,13 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "commit object is missing"))?;
-        let commit: BucketCommitV1 = decode_canonical(&object.bytes)?;
+        let stored = CommitObjectV1::decode_object(&object.bytes)?;
+        let commit = stored.commit.clone();
         if commit.id()? != id {
             return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
         }
+        self.node_store
+            .register_commit_object(id, &stored, &object.bytes)?;
         self.commit_cache
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
@@ -6942,16 +7253,45 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(commit.delta.clone())
     }
 
-    async fn store_commit(&self, commit: &BucketCommitV1) -> Result<CommitId> {
-        let bytes = encode_canonical(commit)?;
+    async fn store_commit(
+        &self,
+        commit: &BucketCommitV1,
+        prepared: Option<PreparedNodePack>,
+    ) -> Result<StoredCommit> {
         let id = commit.id()?;
+        let stored = CommitObjectV1::new(
+            commit.clone(),
+            prepared.as_ref().map(|prepared| prepared.pack().clone()),
+        )?;
+        let bytes = stored.encode_object()?;
+        let payload_offset = CommitObjectV1::node_payload_offset(&bytes)?;
         self.store_immutable(commit_path(&self.options.repository_prefix, id)?, bytes)
             .await?;
+        let pending_pack = prepared
+            .map(|prepared| {
+                payload_offset
+                    .map(|payload_offset| (prepared, payload_offset))
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::InternalInvariant,
+                            "prepared commit node pack has no payload offset",
+                        )
+                    })
+            })
+            .transpose()?;
         self.commit_cache
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
             .insert(id, commit.clone());
-        Ok(id)
+        Ok(StoredCommit { id, pending_pack })
+    }
+
+    fn finalize_stored_commit(&self, stored: StoredCommit) -> Result<()> {
+        if let Some((prepared, payload_offset)) = stored.pending_pack {
+            self.node_store
+                .commit_node_pack(stored.id, prepared, payload_offset)?;
+        }
+        Ok(())
     }
 
     async fn store_tag_reflog(&self, entry: &ReflogEntryV1) -> Result<crate::ReflogEntryId> {
@@ -7068,6 +7408,21 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
             "history traversal limit must be greater than zero",
+        ));
+    }
+    if !(1..=1_024).contains(&options.max_parallel_payload_writes) {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "parallel payload write limit must be between 1 and 1,024",
+        ));
+    }
+    if options.max_cached_commits == 0
+        || options.max_cached_branches == 0
+        || options.max_cached_node_pack_bytes == 0
+    {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "metadata and node-pack cache bounds must be greater than zero",
         ));
     }
     if options.gc_delete_rate_limit_per_second > 1_000 {
@@ -7299,16 +7654,6 @@ fn tag_reflog_path(prefix: &str, tag: &str, id: crate::ReflogEntryId) -> Result<
     ))
 }
 
-fn node_pack_path(prefix: &str, id: crate::NodePackId) -> Result<ObjectPath> {
-    let encoded = hex::encode(id.as_bytes());
-    ObjectPath::new(format!(
-        "{prefix}/node-packs/sha256/{}/{}/{}.pack",
-        &encoded[..2],
-        &encoded[2..4],
-        encoded
-    ))
-}
-
 fn node_checkpoint_path(
     prefix: &str,
     generation: CommitGeneration,
@@ -7319,6 +7664,10 @@ fn node_checkpoint_path(
         generation.0,
         hex::encode(id.as_bytes())
     ))
+}
+
+fn node_index_head_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/node-index/latest.cbor"))
 }
 
 fn gc_plan_path(prefix: &str, id: GcPlanId) -> Result<ObjectPath> {
@@ -7372,12 +7721,11 @@ fn is_gc_data_path(prefix: &str, path: &ObjectPath) -> bool {
         .as_str()
         .strip_prefix(prefix)
         .and_then(|value| value.strip_prefix('/'));
-    relative.is_some_and(|value| value.starts_with("node-packs/") || value.starts_with("commits/"))
+    relative.is_some_and(|value| value.starts_with("commits/"))
 }
 
 fn is_portable_clone_path(relative: &str) -> bool {
     relative.starts_with("format/")
-        || relative.starts_with("node-packs/")
         || relative.starts_with("commits/")
         || relative.starts_with("reflogs/")
         || relative.starts_with("refs/")
@@ -7398,17 +7746,17 @@ fn object_diff_from_prolly(diff: prolly::Diff) -> Result<ObjectDiff> {
         prolly::Diff::Added { key, val } => Ok(ObjectDiff {
             key,
             from: None,
-            to: Some(decode_canonical::<CurrentObjectV1>(&val)?.version),
+            to: Some(decode_canonical::<CurrentObjectV1>(&val)?.version.id),
         }),
         prolly::Diff::Removed { key, val } => Ok(ObjectDiff {
             key,
-            from: Some(decode_canonical::<CurrentObjectV1>(&val)?.version),
+            from: Some(decode_canonical::<CurrentObjectV1>(&val)?.version.id),
             to: None,
         }),
         prolly::Diff::Changed { key, old, new } => Ok(ObjectDiff {
             key,
-            from: Some(decode_canonical::<CurrentObjectV1>(&old)?.version),
-            to: Some(decode_canonical::<CurrentObjectV1>(&new)?.version),
+            from: Some(decode_canonical::<CurrentObjectV1>(&old)?.version.id),
+            to: Some(decode_canonical::<CurrentObjectV1>(&new)?.version.id),
         }),
     }
 }

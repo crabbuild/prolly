@@ -504,6 +504,17 @@ pub struct MemoryObjectPlane {
     requests: Arc<MemoryRequestCounters>,
     lose_next_native_put_response: Arc<AtomicBool>,
     lose_next_native_delete_response: Arc<AtomicBool>,
+    native_put_delay_millis: Arc<AtomicU64>,
+    native_put_in_flight: Arc<AtomicU64>,
+    native_put_max_in_flight: Arc<AtomicU64>,
+}
+
+struct InFlightGuard(Arc<AtomicU64>);
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 #[derive(Default)]
@@ -595,7 +606,25 @@ impl MemoryObjectPlane {
             requests: Arc::new(MemoryRequestCounters::default()),
             lose_next_native_put_response: Arc::new(AtomicBool::new(false)),
             lose_next_native_delete_response: Arc::new(AtomicBool::new(false)),
+            native_put_delay_millis: Arc::new(AtomicU64::new(0)),
+            native_put_in_flight: Arc::new(AtomicU64::new(0)),
+            native_put_max_in_flight: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Test hook for proving bounded payload parallelism without relying on
+    /// wall-clock timing assertions.
+    pub fn set_native_put_delay_millis(&self, delay_millis: u64) {
+        self.native_put_delay_millis
+            .store(delay_millis, Ordering::Relaxed);
+    }
+
+    pub fn max_native_puts_in_flight(&self) -> u64 {
+        self.native_put_max_in_flight.load(Ordering::Relaxed)
+    }
+
+    pub fn reset_native_put_concurrency(&self) {
+        self.native_put_max_in_flight.store(0, Ordering::Relaxed);
     }
 
     pub fn lose_next_native_put_response(&self) {
@@ -927,6 +956,14 @@ impl ObjectPlane for MemoryObjectPlane {
                 ErrorCode::ProviderNotQualified,
                 "native writes require a versioned memory object plane",
             ));
+        }
+        let in_flight = self.native_put_in_flight.fetch_add(1, Ordering::Relaxed) + 1;
+        self.native_put_max_in_flight
+            .fetch_max(in_flight, Ordering::Relaxed);
+        let _in_flight = InFlightGuard(self.native_put_in_flight.clone());
+        let delay = self.native_put_delay_millis.load(Ordering::Relaxed);
+        if delay != 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
         }
         let size = request.bytes.len() as u64;
         let sha256 = sha256(&request.bytes);

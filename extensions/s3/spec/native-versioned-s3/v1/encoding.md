@@ -3,6 +3,20 @@
 The media type is `application/vnd.prolly.native-s3.v1+cbor`. All persisted
 records in [schema.cddl](schema.cddl) use the `prolly-packed-cbor/v1` profile.
 
+Commit paths contain a range-readable envelope instead of bare CBOR:
+
+```text
+"PLYCOM01" || u32be(commit_length) || u64be(node_pack_length) ||
+canonical BucketCommitV1 || optional NodePackV1 frame
+```
+
+`node_pack_length` is zero exactly when `BucketCommitV1.node_pack` is null.
+Otherwise the appended frame is
+`"PLYPACK1" || u32be(toc_length) || canonical NodePackTocV1 || payload` and its
+derived `NodePackRefV1` MUST equal the reference in the commit. The envelope
+path is still derived from the logical `BucketCommitV1`, not from the physical
+envelope bytes. Decoders reject length mismatches and trailing bytes.
+
 ## Encoder requirements
 
 An encoder MUST:

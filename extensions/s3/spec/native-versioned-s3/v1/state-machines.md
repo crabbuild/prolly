@@ -7,7 +7,7 @@ States: `Absent → Intent → Closure → Format → MainRef → Ready`.
 1. Qualify the provider and choose canonical limits/tree format.
 2. Derive RepositoryId from the initialization OperationId.
 3. Create `InitializationIntentV1` immutably.
-4. Create empty roots, optional node pack, initial commit, and reflog closure.
+4. Create empty roots, initial commit envelope, and reflog closure.
 5. Create `format/v1.cbor` immutably.
 6. Create the default branch ref conditionally.
 7. Re-read format/ref and validate the complete closure.
@@ -35,12 +35,15 @@ States: `Prepared → PhysicalWritten → Versioned → ClosureStored → Publis
 2. Canonicalize the input and reserve the OperationId.
 3. Write/copy/delete the native S3 object, obtaining an exact VersionId.
 4. Construct and validate `ObjectVersionV1`; its logical ID excludes binding.
-5. Update object/version/operation Prolly trees and store node closure.
-6. Store `BucketCommitV1` immutably.
+5. Update object/version/operation Prolly trees and prepare their node pack.
+6. Store one immutable commit envelope containing `BucketCommitV1` and its
+   node pack.
 7. Create reflog and compare-and-swap `RefValueV1` from the loaded token.
 8. Re-read the ref when the conditional outcome is uncertain.
 
-Failure before step 7 leaves unreachable physical data and is safe for GC.
+The warm foreground request budget is three S3 operations: one native payload
+mutation, one commit-envelope PUT, and one conditional branch PUT. Failure
+before step 7 leaves unreachable physical data and is safe for GC.
 Failure/conflict at step 7 does not make the commit visible. The operation may
 be retried: the implementation reconciles the OperationId and physical version
 before performing another provider mutation.
@@ -58,9 +61,10 @@ requires provider reconciliation using operation metadata before rewriting.
 States: `Open → PhysicalPrepared → Committed | Expired/Aborted`.
 
 The durable `NativeBatchV1` fixes branch, base commit, operation, message, and
-expiry. Mutations have unique logical keys. Provider writes happen first and
-produce `NativePreparedMutationV1` bindings. One commit applies all prepared
-mutations and one ref CAS publishes them atomically. A changed base yields
+expiry. Mutations have unique logical keys. Provider writes happen first with
+bounded parallelism and produce `NativePreparedMutationV1` bindings. One commit
+envelope applies all prepared mutations and one ref CAS publishes them
+atomically. A changed base yields
 `BatchConflict`; physical results remain unreachable and collectible.
 
 ## Multipart
@@ -93,13 +97,19 @@ preserved only after payload/checksum verification, while destination provider
 bindings contain new VersionIds. Ref publication occurs after all destination
 closure exists.
 
-## Node packs and index checkpoints
+## Commit envelopes, node packs, and index checkpoints
 
-A pack object is `PLYPACK1 || u32be(header_length) || canonical_toc || payload`.
+A commit object is `PLYCOM01 || u32be(commit_length) || u64be(pack_length) ||
+canonical_commit || optional_pack`. A contained pack is
+`PLYPACK1 || u32be(header_length) || canonical_toc || payload`.
 Entries are strictly CID-sorted, nonempty, nonoverlapping within payload, and
 have `CID == SHA256(node bytes) == entry.sha256`. Attachments are bounded and
-digest-verified. Checkpoint entries are strictly CID-sorted and absolute
-offsets point past the 12-byte fixed header and canonical TOC.
+digest-verified. Checkpoint entries identify both the commit container and pack,
+are strictly CID-sorted, and use absolute offsets into the commit envelope.
+Creation writes an immutable checkpoint, then CAS-updates
+`node-index/latest.cbor`. Open uses two GETs and does not list in the healthy
+path. A missing pointer defers scanning until the first uncached node miss; a
+corrupt pointer/checkpoint falls back to commit scanning during open.
 
 ## Garbage collection
 
@@ -120,7 +130,7 @@ pauses or aborts; it never broadens deletion.
 |---|---|---|
 | before physical write | none | retry same operation |
 | after physical write | unreachable version | reconcile, then continue or GC |
-| after nodes/commit | unreachable closure | retry ref CAS or GC |
+| after commit envelope | unreachable closure | retry ref CAS or GC |
 | during ref CAS | unknown | reload ref and operation record |
 | after ref CAS | committed | replay returns receipt |
 | during multipart | incomplete upload | resume from listed verified parts |

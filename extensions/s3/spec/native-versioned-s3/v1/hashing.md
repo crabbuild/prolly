@@ -30,7 +30,10 @@ The ordered parts for composite IDs are:
 - RepositoryId: operation UUID bytes.
 - ObjectVersionId: repository digest, logical key bytes, operation UUID bytes,
   canonical `LogicalObjectVersionBodyV1` bytes. Provider binding is excluded.
-- All one-body content IDs: canonical body or object bytes as their sole part.
+- CommitId: canonical `BucketCommitV1` bytes. The physical commit envelope and
+  provider-specific node location are excluded.
+- All other one-body content IDs: canonical body or object bytes as their sole
+  part.
 
 Printable 32-byte IDs use lowercase, unpadded RFC 4648 base32 after the prefix:
 

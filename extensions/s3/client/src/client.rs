@@ -186,10 +186,10 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
-        relative_pattern: "node-packs/sha256/<2>/<2>/<pack-id>.pack",
-        discipline: PhysicalPathDiscipline::Immutable,
-        portable_clone: true,
-        gc_managed: true,
+        relative_pattern: "node-index/latest.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
     },
     PhysicalPathFamily {
         relative_pattern: "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
@@ -492,6 +492,7 @@ pub struct Client {
     native_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), NativeMultipartPartResult>>>,
     native_multipart_sessions: Arc<RwLock<BTreeMap<String, NativeMultipartSessionV1>>>,
     writer_lease_maintenance: Option<Arc<WriterLeaseMaintenance>>,
+    max_staged_batch_bytes: usize,
 }
 
 #[derive(Default)]
@@ -503,6 +504,11 @@ pub struct ClientBuilder {
     writer: Option<String>,
     writer_lease_duration: Option<Duration>,
     read_only: bool,
+    max_parallel_payload_writes: Option<usize>,
+    max_cached_commits: Option<usize>,
+    max_cached_branches: Option<usize>,
+    max_cached_node_pack_bytes: Option<usize>,
+    max_staged_batch_bytes: Option<usize>,
     gc_delete_rate_limit_per_second: Option<u32>,
     token_signer: Option<Arc<dyn TokenSigner>>,
     cursor_ttl: Option<Duration>,
@@ -549,6 +555,35 @@ impl Client {
         self.repository.plane().reset_metrics()
     }
 
+    /// Returns hot-branch publication queue and wait counters.
+    pub fn performance_snapshot(&self) -> prolly_s3_core::RepositoryPerformanceSnapshot {
+        self.repository.performance_snapshot()
+    }
+
+    /// Perform an operator-authorized writer handoff after the previous
+    /// process and credentials have been independently stopped or revoked.
+    /// Open this client read-only and ensure no derived branch/snapshot clients
+    /// are alive before calling.
+    pub async fn takeover_writer(
+        &mut self,
+        expected_writer: &str,
+        expected_generation: u64,
+        handoff_evidence: &str,
+    ) -> Result<u64> {
+        self.ensure_provider_qualified()?;
+        let generation = {
+            let repository = Arc::get_mut(&mut self.repository).ok_or_else(|| {
+                invalid("writer takeover requires an unshared read-only client handle")
+            })?;
+            repository
+                .takeover_native_writer(expected_writer, expected_generation, handoff_evidence)
+                .await?
+        };
+        self.writer_lease_maintenance =
+            Some(Arc::new(self.repository.start_writer_lease_maintenance()?));
+        Ok(generation)
+    }
+
     pub fn on_branch(&self, branch: impl Into<String>) -> Result<Self> {
         let branch = branch.into();
         validate_branch_name(&branch)?;
@@ -566,6 +601,7 @@ impl Client {
             native_multipart_parts: self.native_multipart_parts.clone(),
             native_multipart_sessions: self.native_multipart_sessions.clone(),
             writer_lease_maintenance: self.writer_lease_maintenance.clone(),
+            max_staged_batch_bytes: self.max_staged_batch_bytes,
         })
     }
 
@@ -1410,6 +1446,27 @@ impl ClientBuilder {
         self.read_only = value;
         self
     }
+    pub fn max_parallel_payload_writes(mut self, writes: usize) -> Self {
+        self.max_parallel_payload_writes = Some(writes);
+        self
+    }
+    pub fn max_cached_commits(mut self, commits: usize) -> Self {
+        self.max_cached_commits = Some(commits);
+        self
+    }
+    pub fn max_cached_branches(mut self, branches: usize) -> Self {
+        self.max_cached_branches = Some(branches);
+        self
+    }
+    pub fn max_cached_node_pack_bytes(mut self, bytes: usize) -> Self {
+        self.max_cached_node_pack_bytes = Some(bytes);
+        self
+    }
+    /// Fail-closed memory bound for all bodies staged in one atomic commit.
+    pub fn max_staged_batch_bytes(mut self, bytes: usize) -> Self {
+        self.max_staged_batch_bytes = Some(bytes);
+        self
+    }
     pub fn gc_delete_rate_limit_per_second(mut self, deletes: u32) -> Self {
         self.gc_delete_rate_limit_per_second = Some(deletes);
         self
@@ -1490,6 +1547,10 @@ impl ClientBuilder {
         let cursor_clock_skew = self
             .cursor_clock_skew
             .unwrap_or(Duration::from_secs(5 * 60));
+        let max_staged_batch_bytes = self.max_staged_batch_bytes.unwrap_or(256 * 1024 * 1024);
+        if max_staged_batch_bytes == 0 {
+            return Err(invalid("staged batch byte limit must be greater than zero"));
+        }
         if cursor_ttl.is_zero() || cursor_ttl > Duration::from_secs(24 * 60 * 60) {
             return Err(invalid(
                 "cursor TTL must be greater than zero and at most 24 hours",
@@ -1523,6 +1584,18 @@ impl ClientBuilder {
                 .map_err(|_| invalid("writer lease duration exceeds u64 milliseconds"))?;
         }
         options.read_only = self.read_only;
+        if let Some(value) = self.max_parallel_payload_writes {
+            options.max_parallel_payload_writes = value;
+        }
+        if let Some(value) = self.max_cached_commits {
+            options.max_cached_commits = value;
+        }
+        if let Some(value) = self.max_cached_branches {
+            options.max_cached_branches = value;
+        }
+        if let Some(value) = self.max_cached_node_pack_bytes {
+            options.max_cached_node_pack_bytes = value;
+        }
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
@@ -1596,6 +1669,7 @@ impl ClientBuilder {
             native_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
             native_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
             writer_lease_maintenance,
+            max_staged_batch_bytes,
         })
     }
 }
@@ -1627,6 +1701,7 @@ impl CommitBuilder {
             client: self.client,
             manifest,
             native_mutations: BTreeMap::new(),
+            staged_body_bytes: 0,
         })
     }
 }
@@ -1635,6 +1710,7 @@ pub struct CommitSession {
     client: Client,
     manifest: NativeBatchV1,
     native_mutations: BTreeMap<Vec<u8>, prolly_s3_core::NativeBatchMutationV1>,
+    staged_body_bytes: usize,
 }
 impl CommitSession {
     pub fn id(&self) -> BatchId {
@@ -1712,15 +1788,49 @@ impl<'a> StagedPutObjectBuilder<'a> {
             .client
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
-        let body = self.body.ok_or_else(|| invalid("body is required"))?;
-        let bytes = body.collect().await.map_err(|error| {
-            Error::new(ErrorCode::Transport, format!("staged body failed: {error}"))
-        })?;
+        let key_bytes = key.as_bytes().to_vec();
+        let replaced_bytes = match self.session.native_mutations.get(&key_bytes) {
+            Some(prolly_s3_core::NativeBatchMutationV1::Put { bytes, .. }) => bytes.len(),
+            _ => 0,
+        };
+        let retained_bytes = self
+            .session
+            .staged_body_bytes
+            .checked_sub(replaced_bytes)
+            .ok_or_else(|| invalid("staged batch byte accounting underflow"))?;
+        let available = self
+            .session
+            .client
+            .max_staged_batch_bytes
+            .checked_sub(retained_bytes)
+            .ok_or_else(|| invalid("staged batch already exceeds its byte limit"))?;
+        let mut body = self.body.ok_or_else(|| invalid("body is required"))?;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk.map_err(|error| {
+                Error::new(ErrorCode::Transport, format!("staged body failed: {error}"))
+            })?;
+            let next_len = bytes
+                .len()
+                .checked_add(chunk.len())
+                .ok_or_else(|| invalid("staged body length overflow"))?;
+            if next_len > available {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    format!(
+                        "atomic commit bodies exceed the configured {} byte memory limit",
+                        self.session.client.max_staged_batch_bytes
+                    ),
+                ));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        self.session.staged_body_bytes = retained_bytes + bytes.len();
         self.session.native_mutations.insert(
-            key.as_bytes().to_vec(),
+            key_bytes.clone(),
             prolly_s3_core::NativeBatchMutationV1::Put {
-                key: key.as_bytes().to_vec(),
-                bytes: bytes.into_bytes().to_vec(),
+                key: key_bytes,
+                bytes,
                 headers: ObjectHeaders {
                     content_type: self.content_type,
                     ..ObjectHeaders::default()
@@ -1751,11 +1861,19 @@ impl<'a> StagedDeleteObjectBuilder<'a> {
             .client
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
+        let key_bytes = key.as_bytes().to_vec();
+        if let Some(prolly_s3_core::NativeBatchMutationV1::Put { bytes, .. }) =
+            self.session.native_mutations.get(&key_bytes)
+        {
+            self.session.staged_body_bytes = self
+                .session
+                .staged_body_bytes
+                .checked_sub(bytes.len())
+                .ok_or_else(|| invalid("staged batch byte accounting underflow"))?;
+        }
         self.session.native_mutations.insert(
-            key.as_bytes().to_vec(),
-            prolly_s3_core::NativeBatchMutationV1::Delete {
-                key: key.as_bytes().to_vec(),
-            },
+            key_bytes.clone(),
+            prolly_s3_core::NativeBatchMutationV1::Delete { key: key_bytes },
         );
         Ok(())
     }
@@ -4356,7 +4474,7 @@ mod tests {
         for required in [
             "format/v1.cbor",
             "providers/<provider-profile-id>.cbor",
-            "node-packs/sha256/<2>/<2>/<pack-id>.pack",
+            "node-index/latest.cbor",
             "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
             "commits/sha256/<2>/<2>/<commit-id>",
             "refs/{heads,tags}/<name-hex>",
@@ -4379,6 +4497,30 @@ mod tests {
             .iter()
             .filter(|family| family.gc_managed)
             .all(|family| family.discipline == PhysicalPathDiscipline::Immutable));
+    }
+
+    #[test]
+    fn multipart_upload_handle_is_self_contained_across_processes() {
+        let session = NativeMultipartSessionV1 {
+            repository: prolly_s3_core::RepositoryId::from_hash([7; 32]),
+            branch: "main".to_string(),
+            key: b"large/archive.bin".to_vec(),
+            headers: ObjectHeaders::default(),
+            user_metadata: BTreeMap::from([("purpose".to_string(), "backup".to_string())]),
+            provider_upload_id: "provider-upload-id".to_string(),
+            operation: OperationId::new(),
+            writer_fence_generation: 3,
+            created_at_millis: 123,
+            discovered: false,
+        };
+        let handle = encode_native_multipart_session(&session).unwrap();
+        let bytes = URL_SAFE_NO_PAD
+            .decode(handle.strip_prefix(NATIVE_MULTIPART_HANDLE_PREFIX).unwrap())
+            .unwrap();
+        assert_eq!(
+            decode_canonical::<NativeMultipartSessionV1>(&bytes).unwrap(),
+            session
+        );
     }
 
     #[test]
@@ -4500,6 +4642,16 @@ mod tests {
         assert_eq!(
             Client::builder()
                 .cursor_clock_skew(Duration::from_secs(15 * 60 + 1))
+                .open()
+                .await
+                .err()
+                .unwrap()
+                .code,
+            ErrorCode::InvalidRequest
+        );
+        assert_eq!(
+            Client::builder()
+                .max_staged_batch_bytes(0)
                 .open()
                 .await
                 .err()

@@ -3,12 +3,12 @@ use std::{collections::BTreeMap, sync::Arc};
 use md5::Md5;
 use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
-    tree_format_digest, Checksums, CommitGeneration, ErrorCode, LogicalObjectVersionBodyV1,
-    LogicalObjectVersionKindV1, MemoryObjectPlane, MergePolicy, NativeBatchMutationV1,
-    NativeMultipartCompletedPart, NativeObjectBindingV1, NativePut, NodePackEntryV1, NodePackV1,
-    ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionOrder, ObjectVersionV1, OperationId,
-    PhysicalVersion, PhysicalVersioning, ProviderCapabilities, Repository, RepositoryId,
-    RepositoryOptions,
+    tree_format_digest, Checksums, CommitGeneration, CommitObjectV1, ErrorCode,
+    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryObjectPlane, MergePolicy,
+    NativeBatchMutationV1, NativeMultipartCompletedPart, NativeObjectBindingV1, NativePut,
+    NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionOrder,
+    ObjectVersionV1, OperationId, PhysicalVersion, PhysicalVersioning, ProviderCapabilities,
+    Repository, RepositoryId, RepositoryOptions,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -60,7 +60,7 @@ async fn native_clone_replays_history_and_rebinds_physical_versions() {
         )
         .await
         .unwrap();
-    assert!(report.immutable_objects >= 7);
+    assert_eq!(report.immutable_objects, 6);
     assert_eq!(report.refs, 1);
     let resumed = source
         .clone_to(
@@ -169,7 +169,10 @@ async fn native_push_replays_only_new_history_and_moves_destination_ref() {
         )
         .await
         .unwrap();
-    assert_eq!(report.copied_objects, 3);
+    // One physical payload plus one commit envelope. The commit envelope
+    // carries the Prolly node pack, so transfer no longer copies a third
+    // standalone node-pack object.
+    assert_eq!(report.copied_objects, 2);
     assert_eq!(report.copied_bytes, b"incremental".len() as u64);
     assert_eq!(
         destination
@@ -330,7 +333,7 @@ async fn native_fetch_returns_a_destination_local_mapped_head() {
 }
 
 #[tokio::test]
-async fn native_multipart_uses_n_plus_five_calls_and_replays_without_io() {
+async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -401,9 +404,9 @@ async fn native_multipart_uses_n_plus_five_calls_and_replays_without_io() {
     assert_eq!(requests.native_multipart_create, 1);
     assert_eq!(requests.native_multipart_upload_part, 2);
     assert_eq!(requests.native_multipart_complete, 1);
-    assert_eq!(requests.immutable_put, 2);
+    assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 7, "unexpected calls: {requests:?}");
+    assert_eq!(requests.total(), 6, "unexpected calls: {requests:?}");
     assert_eq!(
         repository
             .get_current("main", b"multipart.bin")
@@ -431,7 +434,7 @@ async fn native_multipart_uses_n_plus_five_calls_and_replays_without_io() {
 }
 
 #[tokio::test]
-async fn two_object_native_batch_is_exactly_five_calls() {
+async fn two_object_native_batch_is_exactly_four_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -478,13 +481,84 @@ async fn two_object_native_batch_is_exactly_five_calls() {
     assert_eq!(receipt.changed_keys, 2);
     let requests = plane.request_snapshot();
     assert_eq!(requests.native_put, 2);
-    assert_eq!(requests.immutable_put, 2);
+    assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 5, "unexpected calls: {requests:?}");
+    assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test]
-async fn warm_native_merge_reuses_bindings_in_three_calls() {
+async fn two_object_native_multi_delete_is_exactly_four_calls() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        native_options(".prolly/native-versioned/multi-delete-budget"),
+    )
+    .await
+    .unwrap();
+    for key in [b"delete/a.bin".to_vec(), b"delete/b.bin".to_vec()] {
+        repository
+            .put_bytes(
+                "main",
+                key,
+                b"payload".to_vec(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    plane.reset_request_counts();
+    let receipt = repository
+        .delete_objects(
+            "main",
+            vec![b"delete/a.bin".to_vec(), b"delete/b.bin".to_vec()],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 2);
+    let requests = plane.request_snapshot();
+    assert_eq!(requests.native_delete, 2);
+    assert_eq!(requests.immutable_put, 1);
+    assert_eq!(requests.compare_exchange, 1);
+    assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn native_batch_payload_uploads_are_bounded_and_parallel() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    plane.set_native_put_delay_millis(20);
+    let mut options = native_options(".prolly/native-versioned/parallel-batch");
+    options.max_parallel_payload_writes = 3;
+    let repository = Repository::initialize(plane.clone(), options)
+        .await
+        .unwrap();
+    let batch = repository
+        .begin_native_batch("main", "parallel payloads", 60_000)
+        .await
+        .unwrap();
+    plane.reset_native_put_concurrency();
+    repository
+        .publish_native_batch(
+            batch,
+            (0..9)
+                .map(|index| NativeBatchMutationV1::Put {
+                    key: format!("parallel/{index}.bin").into_bytes(),
+                    bytes: vec![index; 1024],
+                    headers: ObjectHeaders::default(),
+                    user_metadata: BTreeMap::new(),
+                })
+                .collect(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(plane.max_native_puts_in_flight(), 3);
+}
+
+#[tokio::test]
+async fn warm_native_merge_reuses_bindings_in_two_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -540,9 +614,9 @@ async fn warm_native_merge_reuses_bindings_in_three_calls() {
         .await
         .unwrap();
     let requests = plane.request_snapshot();
-    assert_eq!(requests.immutable_put, 2);
+    assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
+    assert_eq!(requests.total(), 2, "unexpected calls: {requests:?}");
     assert_eq!(
         repository
             .get_current("main", b"feature.bin")
@@ -554,7 +628,7 @@ async fn warm_native_merge_reuses_bindings_in_three_calls() {
 }
 
 #[tokio::test]
-async fn warm_native_restore_reuses_live_binding_in_three_calls() {
+async fn warm_native_restore_reuses_live_binding_in_two_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -591,9 +665,9 @@ async fn warm_native_restore_reuses_live_binding_in_three_calls() {
         .await
         .unwrap();
     let requests = plane.request_snapshot();
-    assert_eq!(requests.immutable_put, 2);
+    assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
+    assert_eq!(requests.total(), 2, "unexpected calls: {requests:?}");
     assert_eq!(
         repository
             .get_current("main", b"restore.bin")
@@ -721,10 +795,13 @@ async fn lost_native_delete_response_is_reconciled_to_the_current_marker() {
         .unwrap();
     let operation = OperationId::new();
     plane.lose_next_native_delete_response();
-    let deleted = repository
-        .delete_object("main", b"deleted.txt".to_vec(), Some(operation))
-        .await
-        .unwrap();
+    let deleted = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        repository.delete_object("main", b"deleted.txt".to_vec(), Some(operation)),
+    )
+    .await
+    .expect("lost delete response reconciliation deadlocked")
+    .unwrap();
     assert_eq!(deleted.operation, operation);
     assert_eq!(
         repository
@@ -895,6 +972,59 @@ fn node_pack_verifies_cids_ranges_and_corruption() {
     assert_eq!(corrupt.validate().unwrap_err().code, ErrorCode::CorruptNode);
 }
 
+#[tokio::test]
+async fn commit_envelope_carries_a_range_readable_node_pack() {
+    let prefix = ".prolly/native-versioned/commit-envelope";
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(plane.clone(), native_options(prefix))
+        .await
+        .unwrap();
+    let receipt = repository
+        .put_bytes(
+            "main",
+            b"envelope.bin".to_vec(),
+            b"payload".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let encoded_id = hex::encode(receipt.id.as_bytes());
+    let object = plane
+        .get(prolly_s3_core::GetRequest {
+            path: ObjectPath::new(format!(
+                "{prefix}/commits/sha256/{}/{}/{}",
+                &encoded_id[..2],
+                &encoded_id[2..4],
+                encoded_id
+            ))
+            .unwrap(),
+            range: None,
+            physical_version: None,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+    let envelope = CommitObjectV1::decode_object(&object.bytes).unwrap();
+    assert_eq!(envelope.commit.id().unwrap(), receipt.id);
+    assert!(envelope
+        .node_pack
+        .as_ref()
+        .is_some_and(|pack| !pack.entries.is_empty()));
+    assert!(CommitObjectV1::node_payload_offset(&object.bytes)
+        .unwrap()
+        .is_some());
+
+    let mut corrupt = object.bytes;
+    corrupt[0] ^= 1;
+    assert_eq!(
+        CommitObjectV1::decode_object(&corrupt).unwrap_err().code,
+        ErrorCode::CorruptCommit
+    );
+}
+
 #[test]
 fn provider_native_profile_requires_enabled_versioning() {
     let mut capabilities = ProviderCapabilities {
@@ -1025,7 +1155,7 @@ async fn native_repository_round_trips_exact_physical_versions() {
 }
 
 #[tokio::test]
-async fn warm_native_put_is_exactly_four_foreground_calls() {
+async fn warm_native_put_is_exactly_three_foreground_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -1060,13 +1190,13 @@ async fn warm_native_put_is_exactly_four_foreground_calls() {
 
     let requests = plane.request_snapshot();
     assert_eq!(requests.native_put, 1);
-    assert_eq!(requests.immutable_put, 2);
+    assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
+    assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test]
-async fn native_writer_queue_preserves_four_calls_at_1_8_and_32_callers() {
+async fn native_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -1104,13 +1234,90 @@ async fn native_writer_queue_preserves_four_calls_at_1_8_and_32_callers() {
         let requests = plane.request_snapshot();
         assert_eq!(
             requests.total(),
-            (writers * 4) as u64,
+            (writers * 3) as u64,
             "{writers}-writer tier made unexpected calls: {requests:?}"
         );
         assert_eq!(requests.native_put, writers as u64);
-        assert_eq!(requests.immutable_put, (writers * 2) as u64);
+        assert_eq!(requests.immutable_put, writers as u64);
         assert_eq!(requests.compare_exchange, writers as u64);
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_writers_upload_payloads_before_serial_publication() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    plane.set_native_put_delay_millis(20);
+    let mut options = native_options(".prolly/native-versioned/parallel-writers");
+    options.max_parallel_payload_writes = 3;
+    let repository = Repository::initialize(plane.clone(), options)
+        .await
+        .unwrap();
+    plane.reset_native_put_concurrency();
+    let writes = (0..8).map(|index| {
+        repository.put_bytes(
+            "main",
+            format!("writers/{index}.bin").into_bytes(),
+            vec![index; 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+    });
+    for result in futures_util::future::join_all(writes).await {
+        result.unwrap();
+    }
+    assert!(plane.max_native_puts_in_flight() > 1);
+    assert_eq!(plane.max_native_puts_in_flight(), 3);
+    let performance = repository.performance_snapshot();
+    assert_eq!(performance.publication_acquisitions, 8);
+    assert!(performance.publication_max_queue_depth >= 1);
+    assert_eq!(performance.publication_queue_depth, 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_idempotent_retries_upload_only_one_native_version() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    plane.set_native_put_delay_millis(20);
+    let repository = Repository::initialize(
+        plane.clone(),
+        native_options(".prolly/native-versioned/idempotent-singleflight"),
+    )
+    .await
+    .unwrap();
+    let operation = OperationId::new();
+    plane.reset_request_counts();
+
+    let writes = (0..8).map(|_| {
+        repository.put_bytes(
+            "main",
+            b"same-operation.bin".to_vec(),
+            vec![7; 64 * 1024],
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            Some(operation),
+        )
+    });
+    let receipts = futures_util::future::join_all(writes)
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        receipts
+            .iter()
+            .filter(|receipt| !receipt.idempotent_replay)
+            .count(),
+        1
+    );
+    assert!(receipts
+        .iter()
+        .skip(1)
+        .all(|receipt| receipt.id == receipts[0].id));
+    let requests = plane.request_snapshot();
+    assert_eq!(requests.native_put, 1);
+    assert_eq!(requests.immutable_put, 1);
+    assert_eq!(requests.compare_exchange, 1);
 }
 
 #[tokio::test]
@@ -1196,6 +1403,7 @@ async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
         .unwrap();
     assert!(!checkpoint.entries.is_empty());
 
+    plane.reset_request_counts();
     let reopened = Repository::open(
         plane.clone(),
         RepositoryOptions {
@@ -1205,6 +1413,7 @@ async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
     )
     .await
     .unwrap();
+    assert_eq!(plane.request_snapshot().list, 0);
     plane.reset_request_counts();
     assert_eq!(
         reopened
@@ -1219,7 +1428,7 @@ async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
         requests.list, 0,
         "point read rebuilt by listing: {requests:?}"
     );
-    assert!(requests.get >= 4, "cold read accounting was incomplete");
+    assert!(requests.get >= 2, "cold read accounting was incomplete");
 }
 
 #[tokio::test]
@@ -1272,6 +1481,7 @@ async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
         .await
         .unwrap();
 
+    plane.reset_request_counts();
     let reopened = Repository::open(
         plane.clone(),
         RepositoryOptions {
@@ -1281,6 +1491,7 @@ async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
     )
     .await
     .unwrap();
+    assert!(plane.request_snapshot().list > 0);
     plane.reset_request_counts();
     assert_eq!(
         reopened
@@ -1290,7 +1501,7 @@ async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
             .bytes,
         b"canonical"
     );
-    assert!(plane.request_snapshot().list > 0);
+    assert_eq!(plane.request_snapshot().list, 0);
 }
 
 #[tokio::test]

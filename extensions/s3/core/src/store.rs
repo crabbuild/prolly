@@ -1,30 +1,85 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{Arc, RwLock},
 };
 
 use prolly::{AsyncStore, BatchOp, Cid};
 
 use crate::{
-    codec::sha256, DeleteOutcome, Error, ErrorCode, GetRequest, ImmutablePut, ListRequest,
-    NodeIndexEntryV1, NodePackAttachmentKindV1, NodePackAttachmentV1, NodePackEntryV1, NodePackId,
-    NodePackRefV1, NodePackV1, ObjectPath, ObjectPlane, PhysicalVersion, Result, TreeFormatDigest,
+    codec::sha256, CommitId, CommitObjectV1, DeleteOutcome, Error, ErrorCode, GetRequest,
+    ImmutablePut, ListRequest, NodeIndexEntryV1, NodePackAttachmentKindV1, NodePackAttachmentV1,
+    NodePackEntryV1, NodePackId, NodePackRefV1, NodePackV1, ObjectPath, ObjectPlane,
+    PhysicalVersion, Result, TreeFormatDigest,
 };
 
 #[derive(Clone)]
 struct PackedNodeLocation {
+    container: CommitId,
     pack: NodePackId,
     absolute_offset: u64,
     len: u32,
     sha256: [u8; 32],
 }
 
-#[derive(Default)]
 struct PackedNodeState {
     pending: RwLock<BTreeMap<Cid, Vec<u8>>>,
     locations: RwLock<BTreeMap<Cid, PackedNodeLocation>>,
-    packs: RwLock<BTreeMap<NodePackId, Arc<NodePackV1>>>,
-    indexed_packs: RwLock<BTreeSet<NodePackId>>,
+    packs: RwLock<PackedNodeCache>,
+    indexed_containers: RwLock<BTreeSet<CommitId>>,
+}
+
+struct PackedNodeCache {
+    entries: BTreeMap<NodePackId, (Arc<NodePackV1>, usize)>,
+    order: VecDeque<NodePackId>,
+    bytes: usize,
+    max_bytes: usize,
+}
+
+impl PackedNodeCache {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            order: VecDeque::new(),
+            bytes: 0,
+            max_bytes,
+        }
+    }
+
+    fn insert(&mut self, id: NodePackId, pack: Arc<NodePackV1>, bytes: usize) {
+        if let Some((_, previous)) = self.entries.remove(&id) {
+            self.bytes = self.bytes.saturating_sub(previous);
+        }
+        self.order.retain(|candidate| *candidate != id);
+        if bytes > self.max_bytes {
+            return;
+        }
+        self.entries.insert(id, (pack, bytes));
+        self.order.push_back(id);
+        self.bytes = self.bytes.saturating_add(bytes);
+        while self.bytes > self.max_bytes && self.entries.len() > 1 {
+            if let Some(evicted) = self.order.pop_front() {
+                if let Some((_, removed)) = self.entries.remove(&evicted) {
+                    self.bytes = self.bytes.saturating_sub(removed);
+                }
+            }
+        }
+    }
+}
+
+pub(crate) struct PreparedNodePack {
+    reference: NodePackRefV1,
+    pack: NodePackV1,
+    pending: BTreeMap<Cid, Vec<u8>>,
+}
+
+impl PreparedNodePack {
+    pub(crate) fn reference(&self) -> NodePackRefV1 {
+        self.reference.clone()
+    }
+
+    pub(crate) fn pack(&self) -> &NodePackV1 {
+        &self.pack
+    }
 }
 
 /// Prolly node store backed by immutable objects in an [`ObjectPlane`].
@@ -54,10 +109,23 @@ impl<P> ProllyObjectStore<P> {
     }
 
     pub fn new_packed(plane: Arc<P>, repository_prefix: impl Into<String>) -> Self {
+        Self::new_packed_with_cache_limit(plane, repository_prefix, 64 * 1024 * 1024)
+    }
+
+    pub fn new_packed_with_cache_limit(
+        plane: Arc<P>,
+        repository_prefix: impl Into<String>,
+        max_cached_pack_bytes: usize,
+    ) -> Self {
         Self {
             plane,
             repository_prefix: repository_prefix.into(),
-            packed: Some(Arc::new(PackedNodeState::default())),
+            packed: Some(Arc::new(PackedNodeState {
+                pending: RwLock::new(BTreeMap::new()),
+                locations: RwLock::new(BTreeMap::new()),
+                packs: RwLock::new(PackedNodeCache::new(max_cached_pack_bytes)),
+                indexed_containers: RwLock::new(BTreeSet::new()),
+            })),
         }
     }
 
@@ -78,10 +146,10 @@ impl<P> ProllyObjectStore<P> {
         ))
     }
 
-    fn node_pack_path(&self, id: NodePackId) -> Result<ObjectPath> {
+    fn commit_path(&self, id: CommitId) -> Result<ObjectPath> {
         let encoded = hex::encode(id.as_bytes());
         ObjectPath::new(format!(
-            "{}/node-packs/sha256/{}/{}/{}.pack",
+            "{}/commits/sha256/{}/{}/{}",
             self.repository_prefix,
             &encoded[..2],
             &encoded[2..4],
@@ -107,6 +175,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             .iter()
             .map(|(cid, location)| NodeIndexEntryV1 {
                 cid: cid.clone(),
+                container: location.container,
                 pack: location.pack,
                 absolute_offset: location.absolute_offset,
                 len: location.len,
@@ -139,6 +208,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             locations.insert(
                 entry.cid.clone(),
                 PackedNodeLocation {
+                    container: entry.container,
                     pack: entry.pack,
                     absolute_offset: entry.absolute_offset,
                     len: entry.len,
@@ -151,16 +221,16 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
 
     pub async fn rebuild_node_index(&self) -> Result<()> {
         if self.packed.is_some() {
-            self.scan_node_packs().await?;
+            self.scan_commit_objects().await?;
         }
         Ok(())
     }
 
-    pub async fn flush_node_pack(
+    pub(crate) fn prepare_node_pack(
         &self,
         format_digest: TreeFormatDigest,
         attachments: Vec<(NodePackAttachmentKindV1, Vec<u8>)>,
-    ) -> Result<Option<NodePackRefV1>> {
+    ) -> Result<Option<PreparedNodePack>> {
         let Some(state) = &self.packed else {
             return Ok(None);
         };
@@ -210,15 +280,30 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         };
         pack.validate()?;
         let reference = pack.reference()?;
-        let encoded = pack.encode_object()?;
-        let payload_offset = NodePackV1::object_payload_offset(&encoded[..12])?;
-        self.plane
-            .put_immutable(ImmutablePut {
-                path: self.node_pack_path(reference.id)?,
-                expected_sha256: sha256(&encoded),
-                bytes: encoded,
-            })
-            .await?;
+        Ok(Some(PreparedNodePack {
+            reference,
+            pack,
+            pending,
+        }))
+    }
+
+    pub(crate) fn commit_node_pack(
+        &self,
+        container: CommitId,
+        prepared: PreparedNodePack,
+        payload_offset: u64,
+    ) -> Result<()> {
+        let Some(state) = &self.packed else {
+            return Err(Error::new(
+                ErrorCode::InternalInvariant,
+                "cannot commit a node pack into an unpacked store",
+            ));
+        };
+        let PreparedNodePack {
+            reference,
+            pack,
+            pending,
+        } = prepared;
         {
             let mut locations = state.locations.write().map_err(|_| {
                 Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
@@ -227,6 +312,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 locations.insert(
                     entry.cid.clone(),
                     PackedNodeLocation {
+                        container,
                         pack: reference.id,
                         absolute_offset: payload_offset + entry.offset,
                         len: entry.len,
@@ -239,12 +325,16 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             .packs
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-            .insert(reference.id, Arc::new(pack));
+            .insert(
+                reference.id,
+                Arc::new(pack),
+                usize::try_from(reference.object_len).unwrap_or(usize::MAX),
+            );
         state
-            .indexed_packs
+            .indexed_containers
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-            .insert(reference.id);
+            .insert(container);
         let mut live_pending = state
             .pending
             .write()
@@ -254,7 +344,59 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 live_pending.remove(&cid);
             }
         }
-        Ok(Some(reference))
+        Ok(())
+    }
+
+    pub(crate) fn register_commit_object(
+        &self,
+        container: CommitId,
+        object: &CommitObjectV1,
+        encoded: &[u8],
+    ) -> Result<()> {
+        let Some(pack) = object.node_pack.as_ref() else {
+            return Ok(());
+        };
+        let Some(state) = &self.packed else {
+            return Ok(());
+        };
+        let payload_offset = CommitObjectV1::node_payload_offset(encoded)?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "commit node-pack payload is absent",
+            )
+        })?;
+        let reference = pack.reference()?;
+        {
+            let mut locations = state.locations.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
+            })?;
+            for entry in &pack.entries {
+                locations
+                    .entry(entry.cid.clone())
+                    .or_insert(PackedNodeLocation {
+                        container,
+                        pack: reference.id,
+                        absolute_offset: payload_offset + entry.offset,
+                        len: entry.len,
+                        sha256: entry.sha256,
+                    });
+            }
+        }
+        state
+            .packs
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+            .insert(
+                reference.id,
+                Arc::new(pack.clone()),
+                usize::try_from(reference.object_len).unwrap_or(usize::MAX),
+            );
+        state
+            .indexed_containers
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
+            .insert(container);
+        Ok(())
     }
 
     async fn get_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
@@ -283,7 +425,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         if let Some(bytes) = self.ranged_packed_node(&cid).await? {
             return Ok(Some(bytes));
         }
-        self.scan_node_packs().await?;
+        self.scan_commit_objects().await?;
         if let Some(bytes) = self.cached_packed_node(&cid)? {
             return Ok(Some(bytes));
         }
@@ -307,7 +449,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             .packs
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?;
-        let Some(pack) = packs.get(&location.pack) else {
+        let Some((pack, _)) = packs.entries.get(&location.pack) else {
             return Ok(None);
         };
         Ok(pack.node(cid)?.map(ToOwned::to_owned))
@@ -339,7 +481,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let object = self
             .plane
             .get(GetRequest {
-                path: self.node_pack_path(location.pack)?,
+                path: self.commit_path(location.container)?,
                 range: Some(location.absolute_offset..=end),
                 physical_version: None,
             })
@@ -357,11 +499,11 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         Ok(Some(object.bytes))
     }
 
-    async fn scan_node_packs(&self) -> Result<()> {
+    async fn scan_commit_objects(&self) -> Result<()> {
         let state = self.packed.as_ref().ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "packed node state is absent")
         })?;
-        let prefix = format!("{}/node-packs/sha256/", self.repository_prefix);
+        let prefix = format!("{}/commits/sha256/", self.repository_prefix);
         let mut continuation = None;
         loop {
             let page = self
@@ -374,21 +516,15 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 })
                 .await?;
             for listed in page.entries {
-                let name = listed.path.as_str().rsplit('/').next().unwrap_or_default();
-                let encoded = name.strip_suffix(".pack").ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::CorruptNode,
-                        "node-pack path has an invalid suffix",
-                    )
-                })?;
+                let encoded = listed.path.as_str().rsplit('/').next().unwrap_or_default();
                 let raw = hex::decode(encoded).map_err(|_| {
-                    Error::new(ErrorCode::CorruptNode, "node-pack path has an invalid ID")
+                    Error::new(ErrorCode::CorruptCommit, "commit path has an invalid ID")
                 })?;
-                let id = NodePackId::from_hash(raw.try_into().map_err(|_| {
-                    Error::new(ErrorCode::CorruptNode, "node-pack ID has the wrong length")
+                let id = CommitId::from_hash(raw.try_into().map_err(|_| {
+                    Error::new(ErrorCode::CorruptCommit, "commit ID has the wrong length")
                 })?);
                 if state
-                    .indexed_packs
+                    .indexed_containers
                     .read()
                     .map_err(|_| {
                         Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
@@ -397,64 +533,28 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 {
                     continue;
                 }
-                let prefix = self
+                let stored = self
                     .plane
                     .get(GetRequest {
                         path: listed.path.clone(),
-                        range: Some(0..=11),
+                        range: None,
                         physical_version: None,
                     })
                     .await?
                     .ok_or_else(|| {
-                        Error::new(ErrorCode::MissingClosure, "listed node pack disappeared")
+                        Error::new(ErrorCode::MissingClosure, "listed commit disappeared")
                     })?;
-                let payload_offset = NodePackV1::object_payload_offset(&prefix.bytes)?;
-                if payload_offset < 13 || payload_offset > listed.metadata.len {
+                if stored.bytes.len() as u64 != listed.metadata.len {
                     return Err(Error::new(
-                        ErrorCode::CorruptNode,
-                        "node-pack table-of-contents offset is invalid",
+                        ErrorCode::CorruptCommit,
+                        "commit object length disagrees with its listing metadata",
                     ));
                 }
-                let header = self
-                    .plane
-                    .get(GetRequest {
-                        path: listed.path,
-                        range: Some(12..=payload_offset - 1),
-                        physical_version: None,
-                    })
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::MissingClosure, "listed node pack disappeared")
-                    })?;
-                let toc = NodePackV1::decode_toc(&header.bytes)?;
-                if payload_offset + toc.payload_len != listed.metadata.len {
-                    return Err(Error::new(
-                        ErrorCode::CorruptNode,
-                        "node-pack object length disagrees with its table of contents",
-                    ));
+                let object = CommitObjectV1::decode_object(&stored.bytes)?;
+                if object.commit.id()? != id {
+                    return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
                 }
-                {
-                    let mut locations = state.locations.write().map_err(|_| {
-                        Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
-                    })?;
-                    for entry in &toc.entries {
-                        locations
-                            .entry(entry.cid.clone())
-                            .or_insert_with(|| PackedNodeLocation {
-                                pack: id,
-                                absolute_offset: payload_offset + entry.offset,
-                                len: entry.len,
-                                sha256: entry.sha256,
-                            });
-                    }
-                }
-                state
-                    .indexed_packs
-                    .write()
-                    .map_err(|_| {
-                        Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
-                    })?
-                    .insert(id);
+                self.register_commit_object(id, &object, &stored.bytes)?;
             }
             continuation = page.continuation;
             if continuation.is_none() {
