@@ -183,6 +183,14 @@ impl OperationId {
     pub fn as_bytes(&self) -> &[u8; 16] {
         self.0.as_bytes()
     }
+
+    pub const fn nil() -> Self {
+        Self(Uuid::nil())
+    }
+
+    pub const fn is_nil(self) -> bool {
+        self.0.is_nil()
+    }
 }
 
 impl Default for OperationId {
@@ -1549,6 +1557,51 @@ pub struct MultipartUploadV1 {
     /// means "no automatic expiry".
     #[serde(default)]
     pub expires_at_millis: u64,
+}
+
+/// Durable caller-held handle for native provider multipart state. The handle
+/// contains no secret credentials; callers must persist the exact value
+/// returned by create if they intend to complete after a process restart.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeMultipartSessionV1 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub key: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+    pub provider_upload_id: String,
+    pub operation: OperationId,
+    pub writer_fence_generation: u64,
+    pub created_at_millis: u64,
+    #[serde(default)]
+    pub discovered: bool,
+}
+
+impl NativeMultipartSessionV1 {
+    pub fn validate_address(&self, repository: RepositoryId) -> Result<()> {
+        crate::repository::validate_branch(&self.branch)?;
+        if self.repository != repository
+            || self.key.is_empty()
+            || self.provider_upload_id.is_empty()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "native multipart session is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        self.validate_address(repository)?;
+        if self.discovered || self.operation.is_nil() || self.writer_fence_generation == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "native multipart completion requires the original create handle",
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Immutable entry captured for stable pagination of active multipart uploads.

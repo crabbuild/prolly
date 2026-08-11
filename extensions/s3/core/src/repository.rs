@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
+    io::Write as _,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -25,6 +26,7 @@ use crate::{
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
 use prolly::{AsyncProlly, Cid, Config, RuntimeConfig, Tree, TreeFormat};
+use sha2::Sha256;
 
 const MIN_NONFINAL_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024 * 1024;
@@ -2850,7 +2852,15 @@ impl<P: ObjectPlane> Repository<P> {
         let operation = operation.unwrap_or_else(|| self.new_operation());
         if self.storage_profile() == RepositoryStorageProfile::NativeVersionedV1 {
             futures_util::pin_mut!(stream);
-            let mut bytes = Vec::new();
+            let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("could not create native upload spool: {error}"),
+                )
+            })?;
+            let mut size = 0_u64;
+            let mut sha256 = Sha256::new();
+            let mut md5 = Md5::new();
             while let Some(next) = stream.next().await {
                 let next = next.map_err(|error| {
                     Error::new(
@@ -2859,22 +2869,40 @@ impl<P: ObjectPlane> Repository<P> {
                     )
                 })?;
                 let next = next.as_ref();
-                let new_len = bytes.len().checked_add(next.len()).ok_or_else(|| {
+                size = size.checked_add(next.len() as u64).ok_or_else(|| {
                     Error::new(ErrorCode::EntityTooLarge, "native object length overflow")
                 })?;
-                if new_len > self.format.canonical_limits.max_object_bytes as usize {
+                if size > self.format.canonical_limits.max_object_bytes {
                     return Err(Error::new(
                         ErrorCode::EntityTooLarge,
                         "native object exceeds the repository size limit",
                     ));
                 }
-                bytes.extend_from_slice(next);
+                spool.write_all(next).map_err(|error| {
+                    Error::new(
+                        ErrorCode::Transport,
+                        format!("native upload spool write failed: {error}"),
+                    )
+                })?;
+                sha256.update(next);
+                md5.update(next);
             }
+            spool.flush().map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native upload spool flush failed: {error}"),
+                )
+            })?;
+            let checksum_sha256: [u8; 32] = sha256.finalize().into();
+            let checksum_md5: [u8; 16] = md5.finalize().into();
             return self
-                .put_native_bytes_checked(
+                .put_native_file_checked(
                     branch,
                     key,
-                    bytes,
+                    spool.path().to_path_buf(),
+                    size,
+                    checksum_sha256,
+                    checksum_md5,
                     headers,
                     user_metadata,
                     operation,
@@ -2982,6 +3010,117 @@ impl<P: ObjectPlane> Repository<P> {
             .put_native(crate::NativePut {
                 path: path.clone(),
                 bytes,
+                headers: headers.clone(),
+                user_metadata: user_metadata.clone(),
+                repository: self.format.repository_id,
+                operation,
+                writer_fence_generation,
+            })
+            .await;
+        let native = match native {
+            Ok(value) => value,
+            Err(error) => match self
+                .reconcile_native_payload(&path, operation, expected_sha256)
+                .await?
+            {
+                Some(value) => value,
+                None => return Err(error),
+            },
+        };
+        if native.size != expected_size
+            || native.checksums.sha256 != Some(expected_sha256)
+            || native.checksums.md5 != Some(expected_md5)
+        {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native provider result disagrees with the uploaded object identity",
+            ));
+        }
+        self.commit_one(
+            branch,
+            key,
+            kind,
+            Some(native.binding),
+            OperationKind::Put,
+            operation,
+            input_digest,
+            "PutObject",
+            None,
+            condition,
+            logical_retry_limit,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn put_native_file_checked(
+        &self,
+        branch: &str,
+        key: Vec<u8>,
+        body_path: std::path::PathBuf,
+        expected_size: u64,
+        expected_sha256: [u8; 32],
+        expected_md5: [u8; 16],
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+        operation: OperationId,
+        condition: ObjectWriteConditionV1,
+        expected_checksums: ChecksumExpectation,
+        logical_retry_limit: Option<u8>,
+    ) -> Result<CommitReceipt> {
+        let _publication = self.native_publication.lock().await;
+        if expected_checksums
+            .md5
+            .is_some_and(|expected| expected != expected_md5)
+            || expected_checksums
+                .sha256
+                .is_some_and(|expected| expected != expected_sha256)
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "request checksum does not match the native object body",
+            ));
+        }
+        let kind = ObjectVersionKindV1::Live {
+            content: crate::ContentRef::Empty,
+            size: expected_size,
+            logical_etag: format!("\"{}\"", hex::encode(expected_md5)),
+            headers: headers.clone(),
+            checksums: crate::Checksums {
+                md5: Some(expected_md5),
+                sha256: Some(expected_sha256),
+                algorithm_values: BTreeMap::new(),
+            },
+            user_metadata: user_metadata.clone(),
+            tags: BTreeMap::new(),
+        };
+        let input_digest = derive_input_digest(&[
+            self.format.repository_id.as_bytes(),
+            branch.as_bytes(),
+            b"put",
+            &key,
+            &encode_canonical(&kind)?,
+            &encode_canonical(&condition)?,
+        ]);
+        if let Some(receipt) = self
+            .replay_warm_operation(branch, operation, input_digest)
+            .await?
+        {
+            return Ok(receipt);
+        }
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let path =
+            ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        let native = self
+            .plane
+            .put_native_file(crate::NativeFilePut {
+                path: path.clone(),
+                body_path,
+                size: expected_size,
+                checksum_sha256: expected_sha256,
+                checksum_md5: expected_md5,
                 headers: headers.clone(),
                 user_metadata: user_metadata.clone(),
                 repository: self.format.repository_id,
@@ -3175,6 +3314,437 @@ impl<P: ObjectPlane> Repository<P> {
                 Err(Error::new(ErrorCode::UploadConflict, "upload ID collision"))
             }
         }
+    }
+
+    pub async fn create_native_multipart_upload(
+        &self,
+        branch: &str,
+        key: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+        operation: Option<OperationId>,
+    ) -> Result<crate::NativeMultipartSessionV1> {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "direct native multipart requires the native-versioned profile",
+            ));
+        }
+        validate_branch(branch)?;
+        self.validate_key(&key)?;
+        let operation = operation.unwrap_or_else(|| self.new_operation());
+        let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
+        let path =
+            ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        let provider_upload_id = self
+            .plane
+            .create_native_multipart(crate::NativeMultipartCreate {
+                path,
+                headers: headers.clone(),
+                user_metadata: user_metadata.clone(),
+                repository: self.format.repository_id,
+                operation,
+                writer_fence_generation,
+            })
+            .await?;
+        let session = crate::NativeMultipartSessionV1 {
+            repository: self.format.repository_id,
+            branch: branch.to_string(),
+            key,
+            headers,
+            user_metadata,
+            provider_upload_id,
+            operation,
+            writer_fence_generation,
+            created_at_millis: self.now_millis()?,
+            discovered: false,
+        };
+        session.validate_address(self.format.repository_id)?;
+        Ok(session)
+    }
+
+    pub async fn upload_native_multipart_part(
+        &self,
+        session: &crate::NativeMultipartSessionV1,
+        part_number: u32,
+        bytes: Vec<u8>,
+    ) -> Result<crate::NativeMultipartPartResult> {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "direct native multipart requires the native-versioned profile",
+            ));
+        }
+        session.validate_address(self.format.repository_id)?;
+        if !(1..=10_000).contains(&part_number) || bytes.len() as u64 > MAX_MULTIPART_PART_BYTES {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "native multipart part number or size is invalid",
+            ));
+        }
+        let path =
+            ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        self.plane
+            .upload_native_multipart_part(crate::NativeMultipartUploadPart {
+                path,
+                upload_id: session.provider_upload_id.clone(),
+                part_number,
+                bytes,
+            })
+            .await
+    }
+
+    pub async fn upload_native_multipart_part_stream<S, B, E>(
+        &self,
+        session: &crate::NativeMultipartSessionV1,
+        part_number: u32,
+        stream: S,
+    ) -> Result<crate::NativeMultipartPartResult>
+    where
+        S: Stream<Item = std::result::Result<B, E>>,
+        B: AsRef<[u8]>,
+        E: std::fmt::Display,
+    {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "direct native multipart requires the native-versioned profile",
+            ));
+        }
+        session.validate_address(self.format.repository_id)?;
+        if !(1..=10_000).contains(&part_number) {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "part number must be between 1 and 10000",
+            ));
+        }
+        futures_util::pin_mut!(stream);
+        let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("could not create native multipart spool: {error}"),
+            )
+        })?;
+        let mut size = 0_u64;
+        let mut checksum = Sha256::new();
+        while let Some(next) = stream.next().await {
+            let next = next.map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native multipart part body failed: {error}"),
+                )
+            })?;
+            let next = next.as_ref();
+            size = size.checked_add(next.len() as u64).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "multipart part length overflow")
+            })?;
+            if size > MAX_MULTIPART_PART_BYTES {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "multipart part exceeds the 5 GiB S3 limit",
+                ));
+            }
+            spool.write_all(next).map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("native multipart spool write failed: {error}"),
+                )
+            })?;
+            checksum.update(next);
+        }
+        spool.flush().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("native multipart spool flush failed: {error}"),
+            )
+        })?;
+        let path =
+            ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        self.plane
+            .upload_native_multipart_file_part(crate::NativeMultipartFilePart {
+                path,
+                upload_id: session.provider_upload_id.clone(),
+                part_number,
+                body_path: spool.path().to_path_buf(),
+                size,
+                checksum_sha256: checksum.finalize().into(),
+            })
+            .await
+    }
+
+    pub async fn upload_native_multipart_part_copy(
+        &self,
+        session: &crate::NativeMultipartSessionV1,
+        part_number: u32,
+        source_branch: &str,
+        source_key: &[u8],
+        source_version: Option<ObjectVersionId>,
+        range: Option<(u64, u64)>,
+    ) -> Result<crate::NativeMultipartPartResult> {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "direct native multipart requires the native-versioned profile",
+            ));
+        }
+        session.validate_address(self.format.repository_id)?;
+        if !(1..=10_000).contains(&part_number) {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "part number must be between 1 and 10000",
+            ));
+        }
+        let (_, source) = match source_version {
+            Some(version) => {
+                self.head_version(source_branch, source_key, version)
+                    .await?
+            }
+            None => self.head_current_at(source_branch, source_key).await?,
+        };
+        let ObjectVersionKindV1::Live {
+            size, checksums, ..
+        } = &source.version.body.kind
+        else {
+            return Err(Error::new(
+                ErrorCode::NoSuchKey,
+                "multipart copy source is a delete marker",
+            ));
+        };
+        let crate::NativeObjectBindingV1::Live { version_id, .. } =
+            source.version.native_binding.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "native multipart copy source has no provider binding",
+                )
+            })?
+        else {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "native multipart live source has a delete-marker binding",
+            ));
+        };
+        let (physical_range, part_size) = match range {
+            None if *size <= MAX_MULTIPART_PART_BYTES => (None, *size),
+            None => {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "multipart copy part exceeds 5 GiB",
+                ))
+            }
+            Some((start, end)) if start <= end && end < *size => {
+                let part_size = end
+                    .checked_sub(start)
+                    .and_then(|value| value.checked_add(1))
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "multipart copy range overflow")
+                    })?;
+                if part_size > MAX_MULTIPART_PART_BYTES {
+                    return Err(Error::new(
+                        ErrorCode::EntityTooLarge,
+                        "multipart copy part exceeds 5 GiB",
+                    ));
+                }
+                (Some(start..=end), part_size)
+            }
+            Some(_) => {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "multipart copy range is not satisfiable",
+                ))
+            }
+        };
+        let result = self
+            .plane
+            .upload_native_multipart_part_copy(crate::NativeMultipartUploadPartCopy {
+                source: ObjectPath::new(std::str::from_utf8(source_key).map_err(|_| {
+                    Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+                })?)?,
+                source_version_id: version_id.clone(),
+                destination: ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
+                    Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+                })?)?,
+                upload_id: session.provider_upload_id.clone(),
+                part_number,
+                range: physical_range,
+                size: part_size,
+            })
+            .await?;
+        if range.is_none()
+            && checksums.sha256.is_some()
+            && checksums.sha256 != result.checksum_sha256
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "native multipart copied part checksum differs from its source",
+            ));
+        }
+        Ok(result)
+    }
+
+    pub async fn complete_native_multipart_upload(
+        &self,
+        session: crate::NativeMultipartSessionV1,
+        parts: Vec<crate::NativeMultipartCompletedPart>,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+        size: u64,
+        operation: Option<OperationId>,
+    ) -> Result<CommitReceipt> {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "direct native multipart requires the native-versioned profile",
+            ));
+        }
+        session.validate(self.format.repository_id)?;
+        if operation.is_some_and(|operation| operation != session.operation) {
+            return Err(Error::new(
+                ErrorCode::IdempotencyConflict,
+                "native multipart completion must reuse its create operation ID",
+            ));
+        }
+        if parts.is_empty()
+            || parts.len() > 10_000
+            || parts
+                .windows(2)
+                .any(|pair| pair[0].part_number >= pair[1].part_number)
+            || parts
+                .iter()
+                .take(parts.len().saturating_sub(1))
+                .any(|part| part.size < MIN_NONFINAL_MULTIPART_PART_BYTES)
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "native multipart completion has invalid ordering, count, or nonfinal part size",
+            ));
+        }
+        let summed_size = parts.iter().try_fold(0_u64, |total, part| {
+            total.checked_add(part.size).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "multipart object length overflow",
+                )
+            })
+        })?;
+        if summed_size != size || size > self.format.canonical_limits.max_object_bytes {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "native multipart declared size does not match its part receipts",
+            ));
+        }
+        let kind = ObjectVersionKindV1::Live {
+            content: crate::ContentRef::Empty,
+            size,
+            logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+            headers: session.headers.clone(),
+            checksums: crate::Checksums {
+                md5: Some(checksum_md5),
+                sha256: Some(checksum_sha256),
+                algorithm_values: BTreeMap::new(),
+            },
+            user_metadata: session.user_metadata.clone(),
+            tags: BTreeMap::new(),
+        };
+        let input_digest = derive_input_digest(&[
+            self.format.repository_id.as_bytes(),
+            session.branch.as_bytes(),
+            b"native-multipart-complete",
+            &session.key,
+            session.provider_upload_id.as_bytes(),
+            &encode_canonical(&parts)?,
+            &encode_canonical(&kind)?,
+        ]);
+        let _publication = self.native_publication.lock().await;
+        if let Some(receipt) = self
+            .replay_warm_operation(&session.branch, session.operation, input_digest)
+            .await?
+        {
+            return Ok(receipt);
+        }
+        if self.native_writer_generation_for_mutation().await? != session.writer_fence_generation {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "native multipart upload belongs to an older writer fence",
+            ));
+        }
+        let path =
+            ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        let completed = self
+            .plane
+            .complete_native_multipart(crate::NativeMultipartComplete {
+                path: path.clone(),
+                upload_id: session.provider_upload_id,
+                parts,
+                checksum_sha256,
+                checksum_md5,
+                size,
+            })
+            .await;
+        let completed = match completed {
+            Ok(value) => value,
+            Err(error) => match self
+                .reconcile_native_payload(&path, session.operation, checksum_sha256)
+                .await?
+            {
+                Some(value) => value,
+                None => return Err(error),
+            },
+        };
+        if completed.size != size
+            || completed.logical_etag != format!("\"{}\"", hex::encode(checksum_md5))
+            || completed.checksums.sha256 != Some(checksum_sha256)
+            || completed.checksums.md5 != Some(checksum_md5)
+        {
+            return Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "native multipart result disagrees with its declared object identity",
+            ));
+        }
+        self.commit_one(
+            &session.branch,
+            session.key,
+            kind,
+            Some(completed.binding),
+            OperationKind::Put,
+            session.operation,
+            input_digest,
+            "CompleteMultipartUpload",
+            None,
+            ObjectWriteConditionV1::default(),
+            None,
+        )
+        .await
+    }
+
+    pub async fn abort_native_multipart_upload(
+        &self,
+        session: &crate::NativeMultipartSessionV1,
+    ) -> Result<()> {
+        if self.storage_profile() != RepositoryStorageProfile::NativeVersionedV1 {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "direct native multipart requires the native-versioned profile",
+            ));
+        }
+        session.validate_address(self.format.repository_id)?;
+        let path =
+            ObjectPath::new(std::str::from_utf8(&session.key).map_err(|_| {
+                Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
+            })?)?;
+        self.plane
+            .abort_native_multipart(crate::NativeMultipartAbort {
+                path,
+                upload_id: session.provider_upload_id.clone(),
+            })
+            .await
     }
 
     pub async fn upload_part_stream<S, B, E>(
@@ -7525,7 +8095,9 @@ impl<P: ObjectPlane> Repository<P> {
                 if metadata.get("prolly-repository-id")
                     != Some(&self.format.repository_id.to_string())
                     || metadata.get("prolly-operation-id") != Some(&operation.to_string())
-                    || metadata.get("prolly-sha256") != Some(&hex::encode(expected_sha256))
+                    || metadata
+                        .get("prolly-sha256")
+                        .is_some_and(|value| value != &hex::encode(expected_sha256))
                     || crate::codec::sha256(&object.bytes) != expected_sha256
                 {
                     continue;

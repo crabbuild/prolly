@@ -1,14 +1,16 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use md5::Md5;
 use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
     tree_format_digest, Checksums, CommitGeneration, ContentRef, ErrorCode,
     LogicalObjectVersionKindV2, MemoryObjectPlane, MergePolicy, NativeBatchMutationV1,
-    NativeObjectBindingV1, NativePut, NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectPath,
-    ObjectPlane, ObjectVersionBodyV1, ObjectVersionKindV1, ObjectVersionOrder, ObjectVersionV1,
-    OperationId, PhysicalVersion, PhysicalVersioning, ProviderCapabilities, Repository,
-    RepositoryId, RepositoryOptions, RepositoryStorageProfile,
+    NativeMultipartCompletedPart, NativeObjectBindingV1, NativePut, NodePackEntryV1, NodePackV1,
+    ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionBodyV1, ObjectVersionKindV1,
+    ObjectVersionOrder, ObjectVersionV1, OperationId, PhysicalVersion, PhysicalVersioning,
+    ProviderCapabilities, Repository, RepositoryId, RepositoryOptions, RepositoryStorageProfile,
 };
+use sha2::{Digest as _, Sha256};
 
 fn native_options(prefix: &str) -> RepositoryOptions {
     RepositoryOptions {
@@ -45,6 +47,107 @@ async fn unfinished_native_protocols_fail_closed() {
         .await
         .unwrap_err();
     assert_eq!(clone.code, ErrorCode::MissingCapability);
+}
+
+#[tokio::test]
+async fn native_multipart_uses_n_plus_five_calls_and_replays_without_io() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        native_options(".prolly/native-versioned/multipart-budget"),
+    )
+    .await
+    .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"warmup.bin".to_vec(),
+            b"warm".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let first_bytes = vec![7; 5 * 1024 * 1024];
+    let second_bytes = vec![9; 1024];
+    let mut whole = first_bytes.clone();
+    whole.extend_from_slice(&second_bytes);
+    let checksum_sha256: [u8; 32] = Sha256::digest(&whole).into();
+    let checksum_md5: [u8; 16] = Md5::digest(&whole).into();
+
+    plane.reset_request_counts();
+    let session = repository
+        .create_native_multipart_upload(
+            "main",
+            b"multipart.bin".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let first = repository
+        .upload_native_multipart_part(&session, 1, first_bytes)
+        .await
+        .unwrap();
+    let second = repository
+        .upload_native_multipart_part(&session, 2, second_bytes)
+        .await
+        .unwrap();
+    let parts = [&first, &second]
+        .into_iter()
+        .map(|part| NativeMultipartCompletedPart {
+            part_number: part.part_number,
+            etag: part.etag.clone(),
+            checksum_sha256: part.checksum_sha256.unwrap(),
+            size: part.size,
+        })
+        .collect::<Vec<_>>();
+    let receipt = repository
+        .complete_native_multipart_upload(
+            session.clone(),
+            parts.clone(),
+            checksum_sha256,
+            checksum_md5,
+            whole.len() as u64,
+            Some(session.operation),
+        )
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 1);
+    let requests = plane.request_snapshot();
+    assert_eq!(requests.native_multipart_create, 1);
+    assert_eq!(requests.native_multipart_upload_part, 2);
+    assert_eq!(requests.native_multipart_complete, 1);
+    assert_eq!(requests.immutable_put, 2);
+    assert_eq!(requests.compare_exchange, 1);
+    assert_eq!(requests.total(), 7, "unexpected calls: {requests:?}");
+    assert_eq!(
+        repository
+            .get_current("main", b"multipart.bin")
+            .await
+            .unwrap()
+            .bytes,
+        whole
+    );
+
+    plane.reset_request_counts();
+    let replay = repository
+        .complete_native_multipart_upload(
+            session.clone(),
+            parts,
+            checksum_sha256,
+            checksum_md5,
+            first.size + second.size,
+            Some(session.operation),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replay.id, receipt.id);
+    assert!(replay.idempotent_replay);
+    assert_eq!(plane.request_snapshot().total(), 0);
 }
 
 #[tokio::test]

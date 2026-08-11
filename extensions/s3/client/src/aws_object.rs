@@ -16,6 +16,10 @@ use md5::Md5;
 use prolly_s3_core::{
     Checksums, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
     GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, NativeCopy, NativeDelete,
+    NativeFilePut, NativeMultipartAbort, NativeMultipartComplete, NativeMultipartCreate,
+    NativeMultipartFilePart, NativeMultipartListParts, NativeMultipartListPartsPage,
+    NativeMultipartListUploads, NativeMultipartListUploadsPage, NativeMultipartPartResult,
+    NativeMultipartUploadEntry, NativeMultipartUploadPart, NativeMultipartUploadPartCopy,
     NativeObjectBindingV1, NativeObjectWriteResult, NativePut, ObjectPath, ObjectPlane,
     PhysicalListEntry, PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken,
     StoredMetadata, StoredObject,
@@ -34,6 +38,13 @@ pub struct S3OperationMetrics {
     pub list_objects_v2: u64,
     pub list_object_versions: u64,
     pub delete_object: u64,
+    pub create_multipart_upload: u64,
+    pub upload_part: u64,
+    pub upload_part_copy: u64,
+    pub complete_multipart_upload: u64,
+    pub abort_multipart_upload: u64,
+    pub list_parts: u64,
+    pub list_multipart_uploads: u64,
     pub uploaded_body_bytes: u64,
     pub downloaded_body_bytes: u64,
 }
@@ -47,6 +58,13 @@ impl S3OperationMetrics {
             + self.list_objects_v2
             + self.list_object_versions
             + self.delete_object
+            + self.create_multipart_upload
+            + self.upload_part
+            + self.upload_part_copy
+            + self.complete_multipart_upload
+            + self.abort_multipart_upload
+            + self.list_parts
+            + self.list_multipart_uploads
     }
 }
 
@@ -59,6 +77,13 @@ struct AtomicS3OperationMetrics {
     list_objects_v2: AtomicU64,
     list_object_versions: AtomicU64,
     delete_object: AtomicU64,
+    create_multipart_upload: AtomicU64,
+    upload_part: AtomicU64,
+    upload_part_copy: AtomicU64,
+    complete_multipart_upload: AtomicU64,
+    abort_multipart_upload: AtomicU64,
+    list_parts: AtomicU64,
+    list_multipart_uploads: AtomicU64,
     uploaded_body_bytes: AtomicU64,
     downloaded_body_bytes: AtomicU64,
 }
@@ -73,6 +98,13 @@ impl AtomicS3OperationMetrics {
             list_objects_v2: self.list_objects_v2.load(Ordering::Relaxed),
             list_object_versions: self.list_object_versions.load(Ordering::Relaxed),
             delete_object: self.delete_object.load(Ordering::Relaxed),
+            create_multipart_upload: self.create_multipart_upload.load(Ordering::Relaxed),
+            upload_part: self.upload_part.load(Ordering::Relaxed),
+            upload_part_copy: self.upload_part_copy.load(Ordering::Relaxed),
+            complete_multipart_upload: self.complete_multipart_upload.load(Ordering::Relaxed),
+            abort_multipart_upload: self.abort_multipart_upload.load(Ordering::Relaxed),
+            list_parts: self.list_parts.load(Ordering::Relaxed),
+            list_multipart_uploads: self.list_multipart_uploads.load(Ordering::Relaxed),
             uploaded_body_bytes: self.uploaded_body_bytes.load(Ordering::Relaxed),
             downloaded_body_bytes: self.downloaded_body_bytes.load(Ordering::Relaxed),
         }
@@ -87,6 +119,13 @@ impl AtomicS3OperationMetrics {
             list_objects_v2: self.list_objects_v2.swap(0, Ordering::Relaxed),
             list_object_versions: self.list_object_versions.swap(0, Ordering::Relaxed),
             delete_object: self.delete_object.swap(0, Ordering::Relaxed),
+            create_multipart_upload: self.create_multipart_upload.swap(0, Ordering::Relaxed),
+            upload_part: self.upload_part.swap(0, Ordering::Relaxed),
+            upload_part_copy: self.upload_part_copy.swap(0, Ordering::Relaxed),
+            complete_multipart_upload: self.complete_multipart_upload.swap(0, Ordering::Relaxed),
+            abort_multipart_upload: self.abort_multipart_upload.swap(0, Ordering::Relaxed),
+            list_parts: self.list_parts.swap(0, Ordering::Relaxed),
+            list_multipart_uploads: self.list_multipart_uploads.swap(0, Ordering::Relaxed),
             uploaded_body_bytes: self.uploaded_body_bytes.swap(0, Ordering::Relaxed),
             downloaded_body_bytes: self.downloaded_body_bytes.swap(0, Ordering::Relaxed),
         }
@@ -428,7 +467,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             request.repository.to_string(),
             request.operation.to_string(),
             request.writer_fence_generation,
-            checksum_sha256,
+            Some(checksum_sha256),
         )?;
         let mut operation = self
             .client
@@ -473,6 +512,63 @@ impl ObjectPlane for AwsS3ObjectPlane {
         })
     }
 
+    async fn put_native_file(&self, request: NativeFilePut) -> Result<NativeObjectWriteResult> {
+        self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .uploaded_body_bytes
+            .fetch_add(request.size, Ordering::Relaxed);
+        let metadata = native_metadata(
+            request.user_metadata,
+            request.repository.to_string(),
+            request.operation.to_string(),
+            request.writer_fence_generation,
+            Some(request.checksum_sha256),
+        )?;
+        let logical_etag = format!("\"{}\"", hex::encode(request.checksum_md5));
+        let body = ByteStream::from_path(&request.body_path)
+            .await
+            .map_err(|error| transport_error("native spool open", error))?;
+        let mut operation = self
+            .client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .set_cache_control(request.headers.cache_control)
+            .set_content_disposition(request.headers.content_disposition)
+            .set_content_encoding(request.headers.content_encoding)
+            .set_content_language(request.headers.content_language)
+            .set_content_type(request.headers.content_type)
+            .set_expires(
+                request
+                    .headers
+                    .expires_at_millis
+                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
+                    .map(DateTime::from_secs),
+            )
+            .set_metadata(Some(metadata))
+            .checksum_sha256(STANDARD.encode(request.checksum_sha256))
+            .body(body);
+        operation = operation.metadata("prolly-logical-etag", &logical_etag);
+        let output = operation
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("PutObject native spool", error))?;
+        Ok(NativeObjectWriteResult {
+            binding: NativeObjectBindingV1::Live {
+                version_id: required_version_id("PutObject", output.version_id())?,
+                provider_etag: output.e_tag().unwrap_or_default().to_string(),
+                checksum_sha256: request.checksum_sha256,
+            },
+            size: request.size,
+            logical_etag,
+            checksums: Checksums {
+                md5: Some(request.checksum_md5),
+                sha256: Some(request.checksum_sha256),
+                algorithm_values: Default::default(),
+            },
+        })
+    }
+
     async fn copy_native(&self, request: NativeCopy) -> Result<NativeObjectWriteResult> {
         self.metrics.copy_object.fetch_add(1, Ordering::Relaxed);
         let metadata = native_metadata(
@@ -480,7 +576,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             request.repository.to_string(),
             request.operation.to_string(),
             request.writer_fence_generation,
-            request.checksum_sha256,
+            Some(request.checksum_sha256),
         )?;
         let copy_source = format!(
             "{}/{}?versionId={}",
@@ -548,6 +644,400 @@ impl ObjectPlane for AwsS3ObjectPlane {
         }
         Ok(NativeObjectBindingV1::DeleteMarker {
             version_id: required_version_id("DeleteObject", output.version_id())?,
+        })
+    }
+
+    async fn create_native_multipart(&self, request: NativeMultipartCreate) -> Result<String> {
+        self.metrics
+            .create_multipart_upload
+            .fetch_add(1, Ordering::Relaxed);
+        let metadata = native_metadata(
+            request.user_metadata,
+            request.repository.to_string(),
+            request.operation.to_string(),
+            request.writer_fence_generation,
+            None,
+        )?;
+        let output = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .set_cache_control(request.headers.cache_control)
+            .set_content_disposition(request.headers.content_disposition)
+            .set_content_encoding(request.headers.content_encoding)
+            .set_content_language(request.headers.content_language)
+            .set_content_type(request.headers.content_type)
+            .set_expires(
+                request
+                    .headers
+                    .expires_at_millis
+                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
+                    .map(DateTime::from_secs),
+            )
+            .set_metadata(Some(metadata))
+            .checksum_algorithm(aws_sdk_s3::types::ChecksumAlgorithm::Sha256)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("CreateMultipartUpload native", error))?;
+        output
+            .upload_id()
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::ProviderNotQualified,
+                    "CreateMultipartUpload succeeded without an upload ID",
+                )
+            })
+    }
+
+    async fn upload_native_multipart_part(
+        &self,
+        request: NativeMultipartUploadPart,
+    ) -> Result<NativeMultipartPartResult> {
+        self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
+        let size = request.bytes.len() as u64;
+        self.metrics
+            .uploaded_body_bytes
+            .fetch_add(size, Ordering::Relaxed);
+        let checksum_sha256: [u8; 32] = Sha256::digest(&request.bytes).into();
+        let output = self
+            .client
+            .upload_part()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .upload_id(request.upload_id)
+            .part_number(i32::try_from(request.part_number).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidRequest,
+                    "multipart part number is invalid",
+                )
+            })?)
+            .checksum_sha256(STANDARD.encode(checksum_sha256))
+            .body(ByteStream::from(request.bytes))
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("UploadPart native", error))?;
+        let etag = output
+            .e_tag()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::ProviderNotQualified,
+                    "UploadPart succeeded without an ETag",
+                )
+            })?;
+        if output.checksum_sha256().is_some_and(|value| {
+            STANDARD.decode(value).ok().as_deref() != Some(checksum_sha256.as_slice())
+        }) {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "UploadPart returned a different SHA-256 checksum",
+            ));
+        }
+        Ok(NativeMultipartPartResult {
+            part_number: request.part_number,
+            etag: etag.to_string(),
+            checksum_sha256: Some(checksum_sha256),
+            size,
+        })
+    }
+
+    async fn upload_native_multipart_file_part(
+        &self,
+        request: NativeMultipartFilePart,
+    ) -> Result<NativeMultipartPartResult> {
+        self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .uploaded_body_bytes
+            .fetch_add(request.size, Ordering::Relaxed);
+        let body = ByteStream::from_path(&request.body_path)
+            .await
+            .map_err(|error| transport_error("native multipart spool open", error))?;
+        let output = self
+            .client
+            .upload_part()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .upload_id(request.upload_id)
+            .part_number(i32::try_from(request.part_number).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidRequest,
+                    "multipart part number is invalid",
+                )
+            })?)
+            .checksum_sha256(STANDARD.encode(request.checksum_sha256))
+            .body(body)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("UploadPart native spool", error))?;
+        let etag = output
+            .e_tag()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::ProviderNotQualified,
+                    "UploadPart succeeded without an ETag",
+                )
+            })?;
+        if output.checksum_sha256().is_some_and(|value| {
+            STANDARD.decode(value).ok().as_deref() != Some(request.checksum_sha256.as_slice())
+        }) {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "UploadPart returned a different SHA-256 checksum",
+            ));
+        }
+        Ok(NativeMultipartPartResult {
+            part_number: request.part_number,
+            etag: etag.to_string(),
+            checksum_sha256: Some(request.checksum_sha256),
+            size: request.size,
+        })
+    }
+
+    async fn upload_native_multipart_part_copy(
+        &self,
+        request: NativeMultipartUploadPartCopy,
+    ) -> Result<NativeMultipartPartResult> {
+        self.metrics
+            .upload_part_copy
+            .fetch_add(1, Ordering::Relaxed);
+        let copy_source = format!(
+            "{}/{}?versionId={}",
+            self.bucket,
+            request.source.as_str(),
+            request.source_version_id
+        );
+        let mut operation = self
+            .client
+            .upload_part_copy()
+            .bucket(&self.bucket)
+            .key(request.destination.as_str())
+            .upload_id(request.upload_id)
+            .part_number(i32::try_from(request.part_number).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidRequest,
+                    "multipart part number is invalid",
+                )
+            })?)
+            .copy_source(copy_source);
+        if let Some(range) = request.range.as_ref() {
+            operation = operation.copy_source_range(format_range(range));
+        }
+        let output = operation
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("UploadPartCopy native", error))?;
+        let result = output.copy_part_result().ok_or_else(|| {
+            Error::new(
+                ErrorCode::ProviderNotQualified,
+                "UploadPartCopy succeeded without a result",
+            )
+        })?;
+        let checksum = result.checksum_sha256().ok_or_else(|| {
+            Error::new(
+                ErrorCode::ProviderNotQualified,
+                "UploadPartCopy omitted the requested SHA-256 checksum",
+            )
+        })?;
+        let checksum_sha256 = STANDARD
+            .decode(checksum)
+            .ok()
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::ProviderNotQualified,
+                    "UploadPartCopy returned an invalid SHA-256 checksum",
+                )
+            })?;
+        Ok(NativeMultipartPartResult {
+            part_number: request.part_number,
+            etag: result.e_tag().unwrap_or_default().to_string(),
+            checksum_sha256: Some(checksum_sha256),
+            size: request.size,
+        })
+    }
+
+    async fn complete_native_multipart(
+        &self,
+        request: NativeMultipartComplete,
+    ) -> Result<NativeObjectWriteResult> {
+        self.metrics
+            .complete_multipart_upload
+            .fetch_add(1, Ordering::Relaxed);
+        let parts = request
+            .parts
+            .iter()
+            .map(|part| {
+                Ok(aws_sdk_s3::types::CompletedPart::builder()
+                    .part_number(i32::try_from(part.part_number).map_err(|_| {
+                        Error::new(
+                            ErrorCode::InvalidRequest,
+                            "multipart part number is invalid",
+                        )
+                    })?)
+                    .e_tag(&part.etag)
+                    .checksum_sha256(STANDARD.encode(part.checksum_sha256))
+                    .build())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let output = self
+            .client
+            .complete_multipart_upload()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .upload_id(request.upload_id)
+            .multipart_upload(
+                aws_sdk_s3::types::CompletedMultipartUpload::builder()
+                    .set_parts(Some(parts))
+                    .build(),
+            )
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("CompleteMultipartUpload native", error))?;
+        let version_id = required_version_id("CompleteMultipartUpload", output.version_id())?;
+        let provider_etag = output.e_tag().unwrap_or_default().to_string();
+        Ok(NativeObjectWriteResult {
+            binding: NativeObjectBindingV1::Live {
+                version_id,
+                provider_etag: provider_etag.clone(),
+                checksum_sha256: request.checksum_sha256,
+            },
+            size: request.size,
+            logical_etag: format!("\"{}\"", hex::encode(request.checksum_md5)),
+            checksums: Checksums {
+                md5: Some(request.checksum_md5),
+                sha256: Some(request.checksum_sha256),
+                algorithm_values: Default::default(),
+            },
+        })
+    }
+
+    async fn abort_native_multipart(&self, request: NativeMultipartAbort) -> Result<()> {
+        self.metrics
+            .abort_multipart_upload
+            .fetch_add(1, Ordering::Relaxed);
+        self.client
+            .abort_multipart_upload()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .upload_id(request.upload_id)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("AbortMultipartUpload native", error))?;
+        Ok(())
+    }
+
+    async fn list_native_multipart_parts(
+        &self,
+        request: NativeMultipartListParts,
+    ) -> Result<NativeMultipartListPartsPage> {
+        self.metrics.list_parts.fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .client
+            .list_parts()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .upload_id(request.upload_id)
+            .part_number_marker(request.after_part_number.to_string())
+            .max_parts(i32::try_from(request.limit.min(1_000)).unwrap_or(1_000))
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("ListParts native", error))?;
+        let parts = output
+            .parts()
+            .iter()
+            .map(|part| {
+                let part_number = part
+                    .part_number()
+                    .and_then(|value| u32::try_from(value).ok())
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::ProviderNotQualified,
+                            "ListParts returned an invalid part number",
+                        )
+                    })?;
+                let checksum_sha256 = part
+                    .checksum_sha256()
+                    .map(|checksum| {
+                        STANDARD
+                            .decode(checksum)
+                            .ok()
+                            .and_then(|bytes| bytes.try_into().ok())
+                            .ok_or_else(|| {
+                                Error::new(
+                                    ErrorCode::ProviderNotQualified,
+                                    "ListParts returned an invalid part SHA-256 checksum",
+                                )
+                            })
+                    })
+                    .transpose()?;
+                Ok(NativeMultipartPartResult {
+                    part_number,
+                    etag: part.e_tag().unwrap_or_default().to_string(),
+                    checksum_sha256,
+                    size: part
+                        .size()
+                        .and_then(|value| u64::try_from(value).ok())
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::ProviderNotQualified,
+                                "ListParts omitted a valid part size",
+                            )
+                        })?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(NativeMultipartListPartsPage {
+            parts,
+            next_part_number: output
+                .next_part_number_marker()
+                .and_then(|value| value.parse().ok()),
+        })
+    }
+
+    async fn list_native_multipart_uploads(
+        &self,
+        request: NativeMultipartListUploads,
+    ) -> Result<NativeMultipartListUploadsPage> {
+        self.metrics
+            .list_multipart_uploads
+            .fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .client
+            .list_multipart_uploads()
+            .bucket(&self.bucket)
+            .prefix(request.prefix)
+            .set_key_marker(request.key_marker)
+            .set_upload_id_marker(request.upload_id_marker)
+            .max_uploads(i32::try_from(request.limit.min(1_000)).unwrap_or(1_000))
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("ListMultipartUploads native", error))?;
+        let uploads = output
+            .uploads()
+            .iter()
+            .filter_map(|upload| {
+                let path = ObjectPath::new(upload.key()?).ok()?;
+                let upload_id = upload.upload_id()?.to_string();
+                let initiated_at_millis = upload
+                    .initiated()
+                    .and_then(|value| u64::try_from(value.secs()).ok())
+                    .and_then(|seconds| seconds.checked_mul(1_000))
+                    .unwrap_or_default();
+                Some(NativeMultipartUploadEntry {
+                    path,
+                    upload_id,
+                    initiated_at_millis,
+                })
+            })
+            .collect();
+        Ok(NativeMultipartListUploadsPage {
+            uploads,
+            next_key_marker: output.next_key_marker().map(ToString::to_string),
+            next_upload_id_marker: output.next_upload_id_marker().map(ToString::to_string),
         })
     }
 }
@@ -651,7 +1141,7 @@ fn native_metadata(
     repository: String,
     operation: String,
     writer_fence_generation: u64,
-    checksum_sha256: [u8; 32],
+    checksum_sha256: Option<[u8; 32]>,
 ) -> Result<std::collections::HashMap<String, String>> {
     if user_metadata
         .keys()
@@ -671,7 +1161,9 @@ fn native_metadata(
         "prolly-writer-fence".to_string(),
         writer_fence_generation.to_string(),
     );
-    metadata.insert("prolly-sha256".to_string(), hex::encode(checksum_sha256));
+    if let Some(checksum_sha256) = checksum_sha256 {
+        metadata.insert("prolly-sha256".to_string(), hex::encode(checksum_sha256));
+    }
     Ok(metadata)
 }
 
