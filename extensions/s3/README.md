@@ -46,6 +46,8 @@ branch-ref CAS.
 
 See [client/README.md](client/README.md) for setup and concrete API examples,
 [PROLLY-S3-DESIGN.md](PROLLY-S3-DESIGN.md) for the protocol,
+[CACHE-AND-SCALE-DESIGN.md](CACHE-AND-SCALE-DESIGN.md) for the proposed
+cache and unbounded-cardinality architecture,
 and [OPERATIONS.md](OPERATIONS.md) for deployment constraints.
 
 The frozen, language-neutral contract is

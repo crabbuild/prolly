@@ -231,3 +231,7 @@ Required release evidence includes:
 
 Local RustFS proves protocol behavior and request shape, not AWS production
 latency, durability, cost, or scale.
+
+The proposed architecture for bounded hybrid caching, lazy sharded indexes,
+resumable traversal, scalable ref listing, and partitioned garbage collection
+is documented in [CACHE-AND-SCALE-DESIGN.md](CACHE-AND-SCALE-DESIGN.md).
