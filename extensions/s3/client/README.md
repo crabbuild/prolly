@@ -78,6 +78,22 @@ against your key count and memory budget. Export `performance_snapshot()` for
 publication queue/wait telemetry and `s3_operation_metrics()` for SDK request
 counts.
 
+## Run the branching walkthrough
+
+To explore the repository model without AWS credentials or a running S3
+service, run the in-memory example from the workspace root:
+
+```bash
+cargo run --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-core --example branching_walkthrough
+```
+
+The example creates diverging `main` and `feature` branches, pages through a
+structural diff, previews a conflict, proves that a rejected merge does not
+move `main`, resolves the conflict explicitly, and prints the resulting
+first-parent history. It uses the same provider-neutral repository operations
+as the S3 client; use the RustFS example for a complete transport integration.
+
 ## Put and read a file
 
 The builders intentionally resemble the AWS Rust SDK:

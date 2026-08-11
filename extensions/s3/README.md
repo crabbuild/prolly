@@ -56,6 +56,20 @@ includes CDDL, deterministic CBOR and hashing rules, the physical S3 layout,
 state machines, a Smithy semantic API, and executable conformance vectors for
 implementing compatible Java, Go, TypeScript, and other clients.
 
+## Try commits and branches locally
+
+The runnable walkthrough needs no credentials or external service. It creates
+history, forks a branch, pages through a diff, detects a merge conflict,
+resolves it, and reads the merged files:
+
+```bash
+cargo run --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-core --example branching_walkthrough
+```
+
+It uses an in-memory versioned object plane to focus on repository semantics.
+Use the RustFS verification below to exercise the S3 transport as well.
+
 ## Local RustFS verification
 
 The checked-in Compose file runs a versioning-capable RustFS endpoint:
