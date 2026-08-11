@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 790" role="img" aria-labelledby="title description">
+  <title id="title">Prolly DynamoDB extension architecture and request flow</title>
+  <desc id="description">The Rust application calls an AWS SDK-shaped client, which delegates to a transport-independent DynamoDB model over Prolly. Immutable nodes and blobs are stored in a DynamoDB primary table while logical roots and metadata are conditionally advanced in a companion roots table. Separate write and read lanes show the request lifecycle.</desc>
+  <defs>
+    <style>
+      text { font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace; }
+      .title { fill: #f8fafc; font-size: 18px; font-weight: 700; }
+      .subtitle { fill: #94a3b8; font-size: 9px; }
+      .section { fill: #cbd5e1; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; }
+      .name { fill: #f8fafc; font-size: 11px; font-weight: 600; }
+      .detail { fill: #94a3b8; font-size: 8.5px; }
+      .tiny { fill: #94a3b8; font-size: 7.5px; }
+      .arrow-label { fill: #cbd5e1; font-size: 7.5px; font-weight: 500; }
+    </style>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+    </marker>
+  </defs>
+
+  <rect width="1320" height="790" fill="#0f172a"/>
+  <rect width="1320" height="790" fill="url(#grid)"/>
+
+  <text x="30" y="32" class="title">Prolly DynamoDB extension</text>
+  <text x="30" y="50" class="subtitle">AWS-shaped logical tables · immutable Prolly history · conditional DynamoDB publication</text>
+
+  <text x="30" y="84" class="section">HIGH-LEVEL ARCHITECTURE</text>
+  <rect x="1030" y="76" width="260" height="326" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,4"/>
+  <text x="1044" y="94" fill="#fbbf24" font-size="9" font-weight="600">AWS DYNAMODB / LOCAL</text>
+
+  <!-- Architecture connections -->
+  <path d="M 224 190 L 278 190" fill="none" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+  <path d="M 504 190 L 548 190" fill="none" stroke="#34d399" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+  <path d="M 774 190 L 818 190" fill="none" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#arrow-violet)"/>
+  <path d="M 1014 170 L 1060 150" fill="none" stroke="#fbbf24" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M 1014 210 L 1060 295" fill="none" stroke="#fbbf24" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M 660 248 L 660 316" fill="none" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Architecture component masks and boxes -->
+  <rect x="30" y="142" width="194" height="96" rx="8" fill="#0f172a"/>
+  <rect x="30" y="142" width="194" height="96" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="127" y="175" class="name" text-anchor="middle">Rust application</text>
+  <text x="127" y="194" class="detail" text-anchor="middle">owns AWS config + runtime</text>
+  <text x="127" y="210" class="detail" text-anchor="middle">calls familiar DynamoDB APIs</text>
+
+  <rect x="278" y="132" width="226" height="116" rx="8" fill="#0f172a"/>
+  <rect x="278" y="132" width="226" height="116" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="391" y="164" class="name" text-anchor="middle">prolly-dynamodb-client</text>
+  <text x="391" y="183" class="detail" text-anchor="middle">AWS SDK-shaped builders</text>
+  <text x="391" y="199" class="detail" text-anchor="middle">history · transactions · workers</text>
+  <text x="391" y="215" class="detail" text-anchor="middle">bounded cache + retry admission</text>
+  <text x="391" y="231" class="tiny" text-anchor="middle">in-process; no compatibility server</text>
+
+  <rect x="548" y="132" width="226" height="116" rx="8" fill="#0f172a"/>
+  <rect x="548" y="132" width="226" height="116" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="661" y="164" class="name" text-anchor="middle">prolly-dynamodb-core</text>
+  <text x="661" y="183" class="detail" text-anchor="middle">validation + expressions</text>
+  <text x="661" y="199" class="detail" text-anchor="middle">logical tables + commit history</text>
+  <text x="661" y="215" class="detail" text-anchor="middle">transport-independent format v12</text>
+
+  <rect x="818" y="132" width="196" height="116" rx="8" fill="#0f172a"/>
+  <rect x="818" y="132" width="196" height="116" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="916" y="164" class="name" text-anchor="middle">Prolly + adapter</text>
+  <text x="916" y="183" class="detail" text-anchor="middle">immutable indexed maps</text>
+  <text x="916" y="199" class="detail" text-anchor="middle">content-addressed nodes/blobs</text>
+  <text x="916" y="215" class="detail" text-anchor="middle">conditional root transactions</text>
+
+  <rect x="1060" y="112" width="200" height="94" rx="8" fill="#0f172a"/>
+  <rect x="1060" y="112" width="200" height="94" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1160" y="145" class="name" text-anchor="middle">Primary table</text>
+  <text x="1160" y="164" class="detail" text-anchor="middle">immutable nodes · blob chunks</text>
+  <text x="1160" y="180" class="detail" text-anchor="middle">partition key: binary pk</text>
+
+  <rect x="1060" y="250" width="200" height="94" rx="8" fill="#0f172a"/>
+  <rect x="1060" y="250" width="200" height="94" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1160" y="283" class="name" text-anchor="middle">Roots table</text>
+  <text x="1160" y="302" class="detail" text-anchor="middle">heads · catalogs · control roots</text>
+  <text x="1160" y="318" class="detail" text-anchor="middle">binary pk + binary sk</text>
+
+  <rect x="548" y="316" width="226" height="68" rx="8" fill="#0f172a"/>
+  <rect x="548" y="316" width="226" height="68" rx="8" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="661" y="343" class="name" text-anchor="middle">prolly-dynamodb-admin</text>
+  <text x="661" y="362" class="detail" text-anchor="middle">backup · import · retention · GC</text>
+
+  <text x="30" y="438" class="section">WRITE PATH</text>
+  <!-- Write connections -->
+  <path d="M 224 500 L 264 500" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <path d="M 454 500 L 494 500" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <path d="M 684 500 L 724 500" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <path d="M 914 500 L 954 500" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <path d="M 1144 500 L 1184 500" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+  <!-- Write boxes -->
+  <g>
+    <rect x="34" y="466" width="190" height="68" rx="7" fill="#0f172a"/>
+    <rect x="34" y="466" width="190" height="68" rx="7" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="129" y="493" class="name" text-anchor="middle">1 · Build request</text>
+    <text x="129" y="512" class="detail" text-anchor="middle">Put / Update / Transaction</text>
+  </g>
+  <g>
+    <rect x="264" y="466" width="190" height="68" rx="7" fill="#0f172a"/>
+    <rect x="264" y="466" width="190" height="68" rx="7" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="359" y="493" class="name" text-anchor="middle">2 · Validate</text>
+    <text x="359" y="512" class="detail" text-anchor="middle">canonical item + expressions</text>
+  </g>
+  <g>
+    <rect x="494" y="466" width="190" height="68" rx="7" fill="#0f172a"/>
+    <rect x="494" y="466" width="190" height="68" rx="7" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.3"/>
+    <text x="589" y="493" class="name" text-anchor="middle">3 · Resolve heads</text>
+    <text x="589" y="512" class="detail" text-anchor="middle">read immutable base versions</text>
+  </g>
+  <g>
+    <rect x="724" y="466" width="190" height="68" rx="7" fill="#0f172a"/>
+    <rect x="724" y="466" width="190" height="68" rx="7" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.3"/>
+    <text x="819" y="493" class="name" text-anchor="middle">4 · Build new roots</text>
+    <text x="819" y="512" class="detail" text-anchor="middle">reuse unchanged Prolly nodes</text>
+  </g>
+  <g>
+    <rect x="954" y="466" width="190" height="68" rx="7" fill="#0f172a"/>
+    <rect x="954" y="466" width="190" height="68" rx="7" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.3"/>
+    <text x="1049" y="493" class="name" text-anchor="middle">5 · Prepublish</text>
+    <text x="1049" y="512" class="detail" text-anchor="middle">verified immutable nodes/blobs</text>
+  </g>
+  <g>
+    <rect x="1184" y="466" width="106" height="68" rx="7" fill="#0f172a"/>
+    <rect x="1184" y="466" width="106" height="68" rx="7" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="1237" y="491" class="name" text-anchor="middle">6 · CAS</text>
+    <text x="1237" y="508" class="detail" text-anchor="middle">advance roots</text>
+    <text x="1237" y="521" class="tiny" text-anchor="middle">commit + version</text>
+  </g>
+
+  <text x="30" y="590" class="section">READ PATH</text>
+  <!-- Read connections -->
+  <path d="M 246 652 L 294 652" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+  <path d="M 516 652 L 564 652" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+  <path d="M 786 652 L 834 652" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+  <path d="M 1056 652 L 1104 652" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Read boxes -->
+  <g>
+    <rect x="34" y="618" width="212" height="68" rx="7" fill="#0f172a"/>
+    <rect x="34" y="618" width="212" height="68" rx="7" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="140" y="645" class="name" text-anchor="middle">1 · Select view</text>
+    <text x="140" y="664" class="detail" text-anchor="middle">current head or pinned version</text>
+  </g>
+  <g>
+    <rect x="294" y="618" width="222" height="68" rx="7" fill="#0f172a"/>
+    <rect x="294" y="618" width="222" height="68" rx="7" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.3"/>
+    <text x="405" y="645" class="name" text-anchor="middle">2 · Resolve root</text>
+    <text x="405" y="664" class="detail" text-anchor="middle">strongly consistent registry read</text>
+  </g>
+  <g>
+    <rect x="564" y="618" width="222" height="68" rx="7" fill="#0f172a"/>
+    <rect x="564" y="618" width="222" height="68" rx="7" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.3"/>
+    <text x="675" y="645" class="name" text-anchor="middle">3 · Traverse tree</text>
+    <text x="675" y="664" class="detail" text-anchor="middle">fetch only reachable nodes/blobs</text>
+  </g>
+  <g>
+    <rect x="834" y="618" width="222" height="68" rx="7" fill="#0f172a"/>
+    <rect x="834" y="618" width="222" height="68" rx="7" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="945" y="645" class="name" text-anchor="middle">4 · Evaluate</text>
+    <text x="945" y="664" class="detail" text-anchor="middle">key, projection, query, filter</text>
+  </g>
+  <g>
+    <rect x="1104" y="618" width="186" height="68" rx="7" fill="#0f172a"/>
+    <rect x="1104" y="618" width="186" height="68" rx="7" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="1197" y="645" class="name" text-anchor="middle">5 · Return</text>
+    <text x="1197" y="664" class="detail" text-anchor="middle">AWS output + version metadata</text>
+  </g>
+
+  <rect x="30" y="724" width="1260" height="38" rx="7" fill="rgba(30,41,59,0.72)" stroke="#475569" stroke-width="1"/>
+  <text x="50" y="748" fill="#cbd5e1" font-size="8.5">Safety boundary:</text>
+  <text x="164" y="748" class="detail">immutable content may be written early; visibility changes only when conditioned roots commit atomically</text>
+</svg>
