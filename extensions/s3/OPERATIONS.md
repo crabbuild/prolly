@@ -18,7 +18,7 @@ path-level overwrite or path-only delete.
 5. Separate provider qualification, runtime, maintenance, and recovery roles.
 6. Run provider qualification before initialization. Ordinary `open` must load
    a signed, matching, unexpired attestation and performs no write.
-7. Run `cargo deny --manifest-path s3/Cargo.toml --config s3/deny.toml check
+7. Run `cargo deny --manifest-path extensions/s3/Cargo.toml --config extensions/s3/deny.toml check
    advisories` against the candidate lockfile. Reject every unapproved advisory
    and verify the lockfile contains no legacy Rustls 0.21 transport. The sole
    policy exception is the reason-bearing, unmaintained-only `serde_cbor`
@@ -28,7 +28,7 @@ path-level overwrite or path-only delete.
 For local RustFS:
 
 ```bash
-docker compose --env-file s3/.env.example -f s3/docker-compose.rustfs.yml up -d
+docker compose --env-file extensions/s3/.env.example -f extensions/s3/docker-compose.rustfs.yml up -d
 docker inspect prolly-rustfs --format '{{.State.Health.Status}}'
 ```
 
@@ -150,7 +150,7 @@ The local destructive-cache rehearsal uses an isolated owner-derived cache
 path and proves the canonical physical-version snapshot is unchanged:
 
 ```bash
-PROLLY_S3_RUSTFS=1 cargo +1.94.1 test --manifest-path s3/Cargo.toml \
+PROLLY_S3_RUSTFS=1 cargo +1.94.1 test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --all-features --test rustfs_repository \
   rustfs_complete_slatedb_cache_loss_rebuilds_from_canonical_s3 -- \
   --nocapture --test-threads=1
@@ -188,8 +188,8 @@ see [DeleteObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObj
 For local RustFS, execute:
 
 ```bash
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_restart_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_active_outage_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_restart_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_active_outage_drill.sh
 ```
 
 Docker health alone is insufficient: RustFS may temporarily return a 503 while
@@ -221,7 +221,7 @@ versions, and full fsck. Never point writers at a partially restored prefix.
 The local physical-version rehearsal is:
 
 ```bash
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_backup_restore_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_backup_restore_drill.sh
 ```
 
 It quiesces a generated source repository, lists the physical inventory before
@@ -257,7 +257,7 @@ proves the new user, disables the old user, verifies terminal
 fsck, and removes both identities and the policy:
 
 ```bash
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_iam_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_iam_drill.sh
 ```
 
 The drill uses the digest-pinned disposable `minio/mc` image and never prints
@@ -270,23 +270,23 @@ provider response to non-retryable `PermissionDenied`.
 Attach dated outputs from:
 
 ```bash
-bash s3/scripts/check_clean_downstream.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_restart_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_active_outage_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_iam_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_backup_restore_drill.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_contention_matrix.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_cost_matrix.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_slatedb_http_correlation.sh
-PROLLY_S3_RUSTFS=1 bash s3/scripts/run_rustfs_rolling_upgrade.sh
+bash extensions/s3/scripts/check_clean_downstream.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_restart_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_active_outage_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_iam_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_backup_restore_drill.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_contention_matrix.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_cost_matrix.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_slatedb_http_correlation.sh
+PROLLY_S3_RUSTFS=1 bash extensions/s3/scripts/run_rustfs_rolling_upgrade.sh
 PROLLY_S3_RUSTFS=1 \
 PROLLY_S3_RELEASE_SIGNING_KEY=/secure/path/release-ed25519-private.pem \
-  bash s3/scripts/run_signed_release_rehearsal.sh
+  bash extensions/s3/scripts/run_signed_release_rehearsal.sh
 PROLLY_S3_RUSTFS=1 \
 PROLLY_S3_SOAK_SECONDS=86400 \
 PROLLY_S3_SOAK_RUN_ID=release-YYYYMMDD \
 PROLLY_S3_SOAK_EVIDENCE_DIR=/Volumes/Workspace/prolly-build/versioned-s3/soak-evidence/release-YYYYMMDD \
-  bash s3/scripts/run_rustfs_soak.sh
+  bash extensions/s3/scripts/run_rustfs_soak.sh
 ```
 
 Also attach real-AWS qualification, wire-level retry/request telemetry,

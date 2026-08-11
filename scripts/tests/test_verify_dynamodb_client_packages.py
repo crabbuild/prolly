@@ -10,9 +10,9 @@ class PackageVerificationContractTest(unittest.TestCase):
         lockfiles = [
             ROOT / "Cargo.lock",
             ROOT / "stores/prolly-store-dynamodb/Cargo.lock",
-            ROOT / "dynamodb/core/Cargo.lock",
-            ROOT / "dynamodb/client/Cargo.lock",
-            ROOT / "dynamodb/admin/Cargo.lock",
+            ROOT / "extensions/dynamodb/core/Cargo.lock",
+            ROOT / "extensions/dynamodb/client/Cargo.lock",
+            ROOT / "extensions/dynamodb/admin/Cargo.lock",
             ROOT / "benchmarks/dynamodb-client/Cargo.lock",
         ]
         for lockfile in lockfiles:

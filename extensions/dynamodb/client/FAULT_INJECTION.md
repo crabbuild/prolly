@@ -63,8 +63,8 @@ cargo test --manifest-path stores/prolly-store-dynamodb/Cargo.toml \
 Run deterministic logical fault tests and strict lint:
 
 ```bash
-cargo test --manifest-path dynamodb/core/Cargo.toml --all-targets
-cargo clippy --manifest-path dynamodb/core/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path extensions/dynamodb/core/Cargo.toml --all-targets
+cargo clippy --manifest-path extensions/dynamodb/core/Cargo.toml --all-targets -- -D warnings
 cargo clippy --manifest-path stores/prolly-store-dynamodb/Cargo.toml \
   --all-targets -- -D warnings
 ```

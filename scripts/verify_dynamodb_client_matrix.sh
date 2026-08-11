@@ -69,22 +69,22 @@ run_check --manifest-path "${repo_root}/Cargo.toml" --lib --features tokio
 # validation, history, transaction, or worker behavior.
 for manifest in \
   "${repo_root}/stores/prolly-store-dynamodb/Cargo.toml" \
-  "${repo_root}/dynamodb/core/Cargo.toml" \
-  "${repo_root}/dynamodb/client/Cargo.toml"
+  "${repo_root}/extensions/dynamodb/core/Cargo.toml" \
+  "${repo_root}/extensions/dynamodb/client/Cargo.toml"
 do
   run_check --manifest-path "${manifest}" --all-targets
   run_check --manifest-path "${manifest}" --all-targets --no-default-features
 done
 
-run_check --manifest-path "${repo_root}/dynamodb/admin/Cargo.toml" --all-targets
+run_check --manifest-path "${repo_root}/extensions/dynamodb/admin/Cargo.toml" --all-targets
 
 # Public AWS model types and the qualified TLS implementation are exact release
 # inputs. These commands fail if the expected package is absent or ambiguous.
-"${cargo_cmd[@]}" tree --locked --manifest-path "${repo_root}/dynamodb/client/Cargo.toml" \
+"${cargo_cmd[@]}" tree --locked --manifest-path "${repo_root}/extensions/dynamodb/client/Cargo.toml" \
   -i aws-sdk-dynamodb@1.73.0 >/dev/null
-"${cargo_cmd[@]}" tree --locked --manifest-path "${repo_root}/dynamodb/client/Cargo.toml" \
+"${cargo_cmd[@]}" tree --locked --manifest-path "${repo_root}/extensions/dynamodb/client/Cargo.toml" \
   -i aws-lc-rs@1.17.3 >/dev/null
-"${cargo_cmd[@]}" tree --locked --manifest-path "${repo_root}/dynamodb/client/Cargo.toml" \
+"${cargo_cmd[@]}" tree --locked --manifest-path "${repo_root}/extensions/dynamodb/client/Cargo.toml" \
   -i aws-lc-sys@0.43.0 >/dev/null
 
 printf 'matrix_ok toolchain=%s target=%s\n' "${toolchain}" "${target:-host}"

@@ -38,7 +38,7 @@ Run it against DynamoDB Local with:
 PROLLY_STORE_DYNAMODB_ENDPOINT=http://127.0.0.1:8000 \
 PROLLY_DYNAMODB_CLIENT_TEST_TABLE=prolly-versioned-client-test \
 PROLLY_DYNAMODB_RUN_SOAK=1 \
-cargo test --manifest-path dynamodb/client/Cargo.toml \
+cargo test --manifest-path extensions/dynamodb/client/Cargo.toml \
   --test dynamodb_local \
   multi_process_soak_preserves_items_versions_and_commits \
   -- --exact --nocapture

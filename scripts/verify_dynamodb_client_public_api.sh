@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MANIFEST="$REPO_ROOT/dynamodb/client/Cargo.toml"
-BASELINE="$REPO_ROOT/dynamodb/client/public-api.txt"
+MANIFEST="$REPO_ROOT/extensions/dynamodb/client/Cargo.toml"
+BASELINE="$REPO_ROOT/extensions/dynamodb/client/public-api.txt"
 PUBLIC_API_VERSION="0.52.0"
 RUSTDOC_TOOLCHAIN="nightly-2026-06-19"
 MODE="check"

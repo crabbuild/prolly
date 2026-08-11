@@ -3,5 +3,5 @@ members = ["core", "client"]
 resolver = "2"
 
 [patch.crates-io]
-prolly-map = { path = ".." }
+prolly-map = { path = "../.." }
 prolly-s3-core = { path = "core" }

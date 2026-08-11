@@ -711,7 +711,7 @@ reimplement expression semantics merely to avoid crossing a binding boundary.
 ### 5.3 Proposed repository layout
 
 ```text
-dynamodb/
+extensions/dynamodb/
   core/
     Cargo.toml                         # crate: prolly-dynamodb-core
     src/
@@ -1604,8 +1604,8 @@ orders and decimal spellings produce the same state ID.
 #### Verification
 
 ```text
-cargo test --manifest-path dynamodb/core/Cargo.toml
-cargo run --manifest-path dynamodb/core/Cargo.toml --example embedded_table
+cargo test --manifest-path extensions/dynamodb/core/Cargo.toml
+cargo run --manifest-path extensions/dynamodb/core/Cargo.toml --example embedded_table
 ```
 
 Property tests cover encode/decode, ordering, table recreation, format mismatch,
@@ -1642,7 +1642,7 @@ so the package cannot silently emulate them incorrectly.
 
 #### Scope and implementation
 
-- [x] Create `dynamodb/client` as the `prolly-dynamodb-client` crate with no
+- [x] Create `extensions/dynamodb/client` as the `prolly-dynamodb-client` crate with no
   language-binding or service dependency.
 - [x] Align Rust 1.91.1, `aws-sdk-dynamodb = 1.73.0`,
   `prolly-store-dynamodb = 0.6.0`, and the store's `prolly-map` version.
@@ -1682,10 +1682,10 @@ version without an HTTP service.
 #### Verification
 
 ```bash
-cargo test --manifest-path dynamodb/client/Cargo.toml
-cargo test --manifest-path dynamodb/client/Cargo.toml --test fluent_compile
-cargo run --manifest-path dynamodb/client/Cargo.toml --example direct_crud
-cargo package --manifest-path dynamodb/client/Cargo.toml
+cargo test --manifest-path extensions/dynamodb/client/Cargo.toml
+cargo test --manifest-path extensions/dynamodb/client/Cargo.toml --test fluent_compile
+cargo run --manifest-path extensions/dynamodb/client/Cargo.toml --example direct_crud
+cargo package --manifest-path extensions/dynamodb/client/Cargo.toml
 ```
 
 Run one contract example twice in separate processes against the same physical
@@ -1748,9 +1748,9 @@ and receive an official AWS output plus explicit version metadata.
 #### Verification
 
 ```text
-cargo test --manifest-path dynamodb/core/Cargo.toml expressions
-cargo test --manifest-path dynamodb/client/Cargo.toml expressions
-cargo test --manifest-path dynamodb/client/Cargo.toml --test fluent_compile
+cargo test --manifest-path extensions/dynamodb/core/Cargo.toml expressions
+cargo test --manifest-path extensions/dynamodb/client/Cargo.toml expressions
+cargo test --manifest-path extensions/dynamodb/client/Cargo.toml --test fluent_compile
 ```
 
 The differential suite compares final items and error categories, including
@@ -2188,7 +2188,7 @@ measured before a sharded alternative is selected.
   evidence that exceeds the published single-head envelope.
 - [x] Stabilize the Rust API, MSRV policy, AWS/store dependency policy, and
   compatibility matrix.
-  `dynamodb/client/public-api.txt` freezes every reviewed public signature and
+  `extensions/dynamodb/client/public-api.txt` freezes every reviewed public signature and
   trait implementation except generic blanket impls. A pinned
   `cargo-public-api 0.52.0`/`nightly-2026-06-19` verifier fails CI on drift,
   and package verification requires the exact baseline in the archive. The
@@ -2205,7 +2205,7 @@ A production-ready Rust client crate, compatibility/capability reference,
 benchmark and cost guide, security/deployment profiles, disaster-recovery
 runbook, and an evidence-based scale decision.
 
-The security profile is delivered in `dynamodb/client/SECURITY.md` with
+The security profile is delivered in `extensions/dynamodb/client/SECURITY.md` with
 exact-table runtime/provisioner policy templates under `deploy/aws`. Policy
 tests derive the physical SDK action set from the provider source. The profile
 correctly treats prefixes as collision isolation rather than hostile IAM
