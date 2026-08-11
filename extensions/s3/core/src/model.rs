@@ -794,7 +794,7 @@ impl NodePackV1 {
                 .ok_or_else(|| {
                     Error::new(ErrorCode::CorruptNode, "node-pack entry range overflow")
                 })?;
-            if end > toc.payload_len || entry.cid.as_bytes() != entry.sha256 {
+            if entry.len == 0 || end > toc.payload_len || entry.cid.as_bytes() != entry.sha256 {
                 return Err(Error::new(
                     ErrorCode::CorruptNode,
                     "node-pack table of contents contains an invalid node range",
@@ -813,6 +813,7 @@ impl NodePackV1 {
                 ));
             }
         }
+        validate_node_pack_ranges(&toc.entries, &toc.attachments, toc.payload_len)?;
         Ok(toc)
     }
 
@@ -844,6 +845,12 @@ impl NodePackV1 {
                 ));
             }
         }
+        validate_node_pack_ranges(
+            &self.entries,
+            &self.attachments,
+            u64::try_from(self.payload.len())
+                .map_err(|_| Error::new(ErrorCode::CorruptNode, "node-pack payload exceeds u64"))?,
+        )?;
         for entry in &self.entries {
             let bytes = self.payload_slice(entry.offset, entry.len)?;
             if sha256(bytes) != entry.sha256 || entry.cid.as_bytes() != entry.sha256 {
@@ -884,6 +891,51 @@ impl NodePackV1 {
             })?;
         Ok(&self.payload[start..end])
     }
+}
+
+fn validate_node_pack_ranges(
+    entries: &[NodePackEntryV1],
+    attachments: &[NodePackAttachmentV1],
+    payload_len: u64,
+) -> Result<()> {
+    let mut ranges = Vec::with_capacity(entries.len() + attachments.len());
+    for entry in entries {
+        if entry.len == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-pack entries must be nonempty",
+            ));
+        }
+        let end = entry
+            .offset
+            .checked_add(u64::from(entry.len))
+            .filter(|end| *end <= payload_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptNode, "node-pack node range is invalid"))?;
+        ranges.push((entry.offset, end));
+    }
+    for attachment in attachments {
+        let end = attachment
+            .offset
+            .checked_add(u64::from(attachment.len))
+            .filter(|end| *end <= payload_len)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptNode,
+                    "node-pack attachment range is invalid",
+                )
+            })?;
+        if attachment.len != 0 {
+            ranges.push((attachment.offset, end));
+        }
+    }
+    ranges.sort_unstable();
+    if ranges.windows(2).any(|pair| pair[0].1 > pair[1].0) {
+        return Err(Error::new(
+            ErrorCode::CorruptNode,
+            "node-pack payload ranges overlap",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

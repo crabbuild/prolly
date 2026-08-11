@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
-use prolly::TreeFormat;
+use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
     decode_canonical, encode_canonical, BucketCommitV1, BucketDeltaV1, BucketStateV1,
-    CanonicalLimits, CommitGeneration, CommitId, ExclusiveWriterLeaseV1,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, NativeObjectBindingV1, ObjectHeaders,
-    ObjectTransition, ObjectVersionOrder, ObjectVersionV1, OperationId, RefGeneration, RefValueV1,
-    ReflogEntryV1, RepositoryFormatV1, RepositoryId, TreeFormatDigest, TreeRootV1,
+    CanonicalLimits, CommitGeneration, CommitId, ErrorCode, ExclusiveWriterLeaseV1,
+    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, NativeObjectBindingV1, NodePackEntryV1,
+    NodePackV1, ObjectHeaders, ObjectTransition, ObjectVersionOrder, ObjectVersionV1, OperationId,
+    RefGeneration, RefValueV1, ReflogEntryV1, RepositoryFormatV1, RepositoryId, TreeFormatDigest,
+    TreeRootV1,
 };
 use serde::Serialize;
 use serde_json::{json, Value as JsonValue};
@@ -205,4 +206,28 @@ fn every_protocol_default_is_v1() {
     assert_eq!(RepositoryFormatV1::CURRENT_WRITER_VERSION, 1);
     assert_eq!(CommitId::PREFIX, "pbc1_");
     assert_eq!(prolly_s3_core::ObjectVersionId::PREFIX, "pov1_");
+}
+
+#[test]
+fn v1_node_pack_rejects_overlapping_payload_ranges() {
+    let mut entries = [(0_u64, b"ab".as_slice()), (1_u64, b"b".as_slice())]
+        .into_iter()
+        .map(|(offset, bytes)| {
+            let cid = Cid::from_bytes(bytes);
+            NodePackEntryV1 {
+                sha256: cid.as_bytes().try_into().unwrap(),
+                cid,
+                offset,
+                len: u32::try_from(bytes.len()).unwrap(),
+            }
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.cid.cmp(&right.cid));
+    let pack = NodePackV1 {
+        format_digest: TreeFormatDigest::from_hash(fixed_digest(0x22)),
+        entries,
+        attachments: Vec::new(),
+        payload: b"ab".to_vec(),
+    };
+    assert_eq!(pack.validate().unwrap_err().code, ErrorCode::CorruptNode);
 }
