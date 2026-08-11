@@ -50,7 +50,7 @@ jobs:
           --manifest-path extensions/s3/Cargo.toml --workspace --all-features
           -- --skip seeded_histories_are_identical_across_stores_and_restart
       - name: Independent canonical-format verifier
-        run: python3 extensions/s3/fixtures/verify_canonical_v1.py
+        run: python3 extensions/s3/spec/native-versioned-s3/v1/conformance/verify.py
       - name: Qualification evidence verifier contracts
         run: |
           python3 -m unittest discover -s extensions/s3/scripts/tests -p 'test_*.py'
