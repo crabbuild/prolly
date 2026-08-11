@@ -110,7 +110,7 @@ It is not a production attestation.
   classes, and attempts without a response. A deterministic local server
   returned 503 then 200; the fixture observed exactly one execution, two wire
   transmissions, one retry, one server-error response, and one success. The
-  refreshed ordinary RustFS probe observed 1,134 executions/transmissions for
+  refreshed ordinary RustFS probe observed 554 executions/transmissions for
   writes and 100 for reads, with zero SDK retry transmissions.
 - S3-shaped cost matrix: 17 measured object rows covered put/head/current and
   historical get/object and version listing/copy/single and atomic
@@ -119,7 +119,7 @@ It is not a production attestation.
   call mix, actual transmissions/retries, transferred body bytes, and exact
   physical-version storage growth through a separate uninstrumented accounting
   client; all rows completed with zero SDK retries and final fsck passed.
-- Repository maintenance cost matrix: 24 additional rows ran in an isolated
+- Repository maintenance cost matrix: 23 additional rows ran in an isolated
   physically versioned bucket and covered head/log, branch/tag/retention-pin
   administration, reflog/native-ref history, diff/merge planning/merge,
   restore/reset, commit and repository fsck, plus a GC reclaim plan and actual
@@ -127,9 +127,9 @@ It is not a production attestation.
   reported issued calls, actual transmissions, transferred bytes, latency, and
   physical-version storage growth; all rows completed with zero SDK retries.
 - Cross-repository cost matrix: four rows covered qualified clone, ordinary
-  fetch, resumable fetch, and push. Clone exposed 71 object-plane calls plus
+  fetch, resumable fetch, and push. Clone exposed 70 object-plane calls plus
   three explicitly classified provider control-plane qualification requests;
-  fetch/resumable-fetch/push issued 84/111/130 object-plane calls in the
+  fetch/resumable-fetch/push issued 84/109/122 object-plane calls in the
   measured fixture. Both source and destination metrics were aggregated and
   every row completed with zero SDK retries and final fsck on both sides.
 - Advisory rebuild cost matrix: one row rebuilt nine branch heads while
@@ -211,18 +211,18 @@ These are host-specific observations, not service-level objectives.
 | Workload | Observation |
 | --- | --- |
 | Deterministic engine corpus | Final audited source on Rust 1.89.0: 10,000 paired logical mutations in 1,102.53 s; 9.07 paired mutations/s; retained dual-store history used roughly 2.5 GiB RSS near completion |
-| RustFS ordinary sequential | Refreshed instrumented run, 20 × 64 KiB: 10.061 s writes (1.988 puts/s), 0.188 s reads (106.469 gets/s). Writes issued 1,134 object-plane SDK calls (56.70/op), uploaded 1.182× logical bytes, and downloaded 1.175×; reads issued 100 calls (5/op) and downloaded 1.016×. The Smithy interceptor observed the same 1,134/100 wire transmissions and zero SDK retries. |
-| RustFS S3-shaped cost matrix | Serialized runner observations: 64 KiB put: 51 calls and roughly +69.6 KiB of physical-version bytes; head/list/list-versions: 2 calls each, no storage growth; current/historical 64 KiB get: 5 calls and about 1.016× download each; zero-copy copy: 44 calls; delete: 39 calls; two-key delete: 47 calls; multipart create/upload/list-parts/list-uploads 2/10/2/4 calls; complete varied from 61–71 calls as generated catalog/tree identifiers crossed chunk boundaries; abort: 4 calls; part-copy: 13 calls; two-object 128 KiB atomic commit varied from 74–84 calls and approximately 1.125–1.128× upload. Zero SDK retries throughout. |
-| RustFS repository maintenance matrix | Serialized 24-row physically versioned run: head/log/list-branches 1/4/3 calls; branch create/delete 11/4; tag create/list/delete 11/2/4; retention-pin create/list/delete 11/2/3; diff/merge-bases/plan-merge 2/8/13; merge/restore/reset 63/58/18; reflog/native-ref versions 7/7; commit/repository fsck 21/28. A known 1 KiB unreachable content closure produced a 16-call GC plan and a 29-call exact-version sweep (three deletes, −969 physical bytes), followed by successful fsck. Zero SDK retries throughout. |
-| RustFS cross-repository matrix | Qualified clone: 71 object-plane calls plus three provider control-plane calls, 1.053× upload and 1.042× download relative to 13,433 immutable bytes; ordinary fetch/resumable fetch/push: 84/111/130 calls and +6,982/+7,888/+898 physical bytes. Zero SDK retries; source and destination fsck passed. |
+| RustFS ordinary sequential | Refreshed instrumented run after publication batching and CAS readback removal, 20 × 64 KiB: 2.125 s writes (9.413 puts/s), 0.241 s reads (82.847 gets/s). Writes issued 554 object-plane SDK calls (27.70/op), uploaded 1.151× logical bytes, and downloaded 1.141×; reads issued 100 calls (5/op) and downloaded 1.016×. The Smithy interceptor observed the same 554/100 wire transmissions and zero SDK retries. |
+| RustFS S3-shaped cost matrix | Serialized runner observations after publication batching and CAS readback removal: 64 KiB put: 22 calls and +67.9 KiB of physical-version bytes; head/list/list-versions: 2 calls each, no storage growth; current/historical 64 KiB get: 5 calls and about 1.016× download each; zero-copy copy: 24 calls; delete: 19 calls; two-key delete: 21 calls; multipart create/upload/list-parts/list-uploads 1/9/2/4 calls; complete: 33 calls; abort: 3 calls; part-copy: 9 calls; two-object 128 KiB atomic commit: 43 calls and approximately 1.112× upload. Zero SDK retries throughout. |
+| RustFS repository maintenance matrix | Serialized physically versioned run after the same optimization: head/log/list-branches 1/4/3 calls; branch create/delete 7/3; tag create/list/delete 7/2/3; retention-pin create/list/delete 7/2/2; diff/merge-bases/plan-merge 2/8/13; merge/restore/reset 40/29/10; reflog/native-ref versions 7/7; commit/repository fsck 21/28. A known 1 KiB unreachable content closure produced a 16-call GC plan and a 27-call exact-version sweep (three deletes, −969 physical bytes), followed by successful fsck. Zero SDK retries throughout. |
+| RustFS cross-repository matrix | Qualified clone: 70 object-plane calls plus three provider control-plane calls, 1.054× upload and 1.023× download relative to 13,462 immutable bytes; ordinary fetch/resumable fetch/push: 84/109/122 calls and +6,974/+8,053/+1,505 physical bytes. Zero SDK retries; source and destination fsck passed. |
 | RustFS SlateDB advisory rebuild | Nine canonical branch heads plus one corrupt cache entry: 10 canonical SDK calls/transmissions, zero retries, and 1.277–1.299 s elapsed. Across the serialized and race-hardened reruns, the separately counted SlateDB stack issued 19 `object_store` API calls (13 puts, four gets, two lists), uploaded 5,545–5,625 bytes, returned 164 bytes, and added the same 5,545–5,625 physical-version bytes across authority and cache prefixes. A body-blind dedicated proxy correlated the full lifecycle one-to-one: 125 API calls and 125 HTTP attempts (91 GET, nine HEAD, 25 PUT), 125 unique RustFS request IDs, 84 successes, and 41 expected discovery misses with no unexpected response class. |
 | RustFS accepted-CAS active-outage matrix | Eight serial workflows covered ordinary put, two-parent merge, multipart completion, atomic workspace publication, atomic multi-delete, restore, administrative reset, and branch tombstone. Every accepted ref-CAS response was discarded before a RustFS restart, followed by four consecutive authenticated readiness probes. The 41 s run issued 375 first-attempt SDK calls with zero wire retries; eight restarts used 30.232 s and provider data grew 1,296 KiB. Operation-bearing workflows reconciled one bucket commit with coordination-only replay growth; ref-only reset/delete replay created zero physical versions or commits. Exact operation/ref/tombstone state, payloads, delete markers, merge parents, reflogs, and fsck passed. |
 | RustFS IAM/credential rotation | Generated prefix-only runtime policy; five denied cross-prefix/delete/versioning probes; old/new overlap publication; old-key disable mapped to non-retryable `PermissionDenied`; three payload rereads, four-commit history, enabled bucket versioning, fsck, and removal of two users plus one policy. Completed in 23 s with +328 KiB provider data. RustFS beta.10 aliases native-version list/read to ordinary list/get grants, so the local runtime role is recovery-read capable. |
 | RustFS physical backup/restore | Stable 112-version source inventory archived as 111 hashed bodies plus one delete-marker record and a canonical hashed manifest (21,769 body bytes). Replay reconstructed 112 versions in a fresh versioned bucket; independent qualification preserved repository identity, main/feature/tag and logical historical reads, three native ref revisions, post-restore publication, and fsck. Three generated buckets were exact-version cleaned. Completed in 16 s with +2,940 KiB provider-directory growth. |
 | RustFS signed packaged rolling rehearsal | Cargo produced the exact `prolly-s3-core` and `prolly-s3-client` archives; an offline extracted-pair check prevented registry sibling substitution before current and field-absent legacy binaries were built from those archives. The mandatory dependency gate excluded legacy TLS and unused Foyer/Bincode/Paste paths and allowed only the documented unmaintained canonical-codec advisory. New→legacy→new publication, dual fsck, six exact `UnsupportedRepositoryFormat` rejections, and unchanged physical snapshots passed. The final-source signed twelve-artifact set includes the dependency policy/result and reverified with manifest SHA-256 `259fb064b4615e79ec433ab9d4feb47f55e384f1fa6c611753f74f18ac18a39b`. Local signer/source state was explicitly ephemeral/dirty. |
-| RustFS hot branch, 1 writer | p50/p95/p99/max 265.583 ms; 51 issued object-plane calls/write |
-| RustFS hot branch, 8 writers | p50 2,447.503 ms; p95/p99/max 3,901.975 ms; 170 issued calls/write |
-| RustFS hot branch, 32 writers | p50 30,452.888 ms; p95 37,216.516 ms; p99/max 37,351.528 ms; 579.5 issued calls/write |
+| RustFS hot branch, 1 writer | p50/p95/p99/max 103.711 ms; 22 issued object-plane calls/write |
+| RustFS hot branch, 8 writers | p50 814.523 ms; p95/p99/max 1,278.292 ms; 81.5 issued calls/write |
+| RustFS hot branch, 32 writers | p50 9,158.176 ms; p95 13,664.870 ms; p99/max 13,916.339 ms; 301.312 issued calls/write |
 | RustFS streamed multipart | Final-source 160 MiB upload + streamed read in 29.57 s; 107,921,408-byte maximum RSS; prior 8,830,976-byte no-op baseline retained as measurement context |
 
 The single-node RustFS development profile is supported through 32 concurrent
@@ -230,6 +230,61 @@ hot-branch writers. A 128-writer pressure attempt encountered provider 503s and
 did not converge within 3.5 minutes even with idempotent reconciliation, so 128
 is not a qualified tier for this profile. The checked-in probe now has a hard
 per-tier deadline and higher tiers are opt-in.
+
+## Enforced qualification limits
+
+`qualification/production-limits-v1.json` is the machine-readable release
+contract. The RustFS cost and contention runners feed their structured output
+to `scripts/verify_production_limits.py`; a successful Cargo exit without the
+required evidence rows is a failure. Every cost-matrix operation has an
+explicit SDK-call ceiling, and an unexpected or missing operation also fails.
+
+The highest-risk request ceilings are:
+
+| Logical operation | Maximum SDK calls | Maximum modeled request cost per 1,000 logical operations |
+| --- | ---: | ---: |
+| 64 KiB put | 55 | $0.25 |
+| Current or historical get | 6 | $0.005 |
+| Two-object atomic commit | 90 | $0.30 |
+| Multipart completion | 80 | $0.25 |
+| Merge | 70 | $0.25 |
+| Restore | 65 | $0.25 |
+| Push | 150 | $0.40 |
+
+Request cost is calculated from the observed GET, HEAD, PUT, LIST,
+ListVersions, and DELETE counts and a release-supplied JSON file containing the
+current per-1,000 request prices for the qualification region. Prices are not
+hard-coded because provider and regional prices change. The AWS verifier
+rejects missing prices.
+
+The RustFS regression tiers cap p95/calls per write at 750 ms/70 for one
+writer, 6 seconds/220 for eight writers, and 50 seconds/650 for 32 writers,
+with zero transport retries. The AWS release tiers are 2 seconds/70,
+20 seconds/220, and 60 seconds/650, with at most a 1% wire-retry rate. The
+contention probe uses the public logical retry maximum of 16 plus its existing
+bounded, operation-ID-preserving reconciliation loop; the configured retry
+limit is included in the evidence and must match the contract.
+
+AWS promotion additionally requires aggregate `LOAD_QUALIFICATION` evidence
+for put, current and historical get, atomic commit, multipart completion,
+merge, restore, and push. Each record includes sample count, p95 latency,
+terminal error rate, throttle rate, and modeled request cost. The scale record
+must prove at least 1 million live keys, 10 million retained versions,
+10,000 metadata files/second bulk loading, cold-read p95 at or below 200 ms,
+writable reopen within 30 seconds, and memory below 4 GiB. These are release
+gates, not claims established by the local RustFS profile.
+
+After producing dated AWS evidence and a regional price file, verify the whole
+profile with:
+
+```bash
+PROLLY_S3_AWS_COST_LOG=/evidence/cost.log \
+PROLLY_S3_AWS_CONTENTION_LOG=/evidence/contention.log \
+PROLLY_S3_AWS_LOAD_LOG=/evidence/load.log \
+PROLLY_S3_AWS_SCALE_LOG=/evidence/scale.log \
+PROLLY_S3_AWS_REQUEST_PRICES=/evidence/request-prices.json \
+  bash extensions/s3/scripts/verify_aws_release_limits.sh
+```
 
 ## Gates intentionally still open
 

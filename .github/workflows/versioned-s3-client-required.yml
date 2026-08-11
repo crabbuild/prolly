@@ -51,8 +51,11 @@ jobs:
           -- --skip seeded_histories_are_identical_across_stores_and_restart
       - name: Independent canonical-format verifier
         run: python3 extensions/s3/fixtures/verify_canonical_v1.py
-      - name: Soak evidence verifier contracts
-        run: python3 -m unittest s3.scripts.tests.test_verify_soak_evidence
+      - name: Qualification evidence verifier contracts
+        run: |
+          python3 -m unittest discover -s extensions/s3/scripts/tests -p 'test_*.py'
+          python3 extensions/s3/scripts/verify_production_limits.py \
+            --profile aws-release --validate-limits
 
   msrv-and-downstream:
     runs-on: ubuntu-24.04

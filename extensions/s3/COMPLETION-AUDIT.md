@@ -69,7 +69,7 @@ final run.
 | SlateDB loss affects performance only | **Proven** | Complete live cache deletion/rebuild with unchanged canonical snapshot |
 | Clone, fsck, retention, GC, sweep, and recovery are bounded and rehearsed | **Proven** | Cross-repository, maintenance, fault, IAM, and backup/restore matrices |
 | GC protects active leases and exact-deletes native physical versions | **Proven** | Lease-fencing tests and live exact-version deletion/sweep evidence |
-| Resource use and provider amplification are measured | **Proven** | Published cost matrices, contention tiers, RSS probe, and qualification baselines |
+| Resource use and provider amplification are measured and regression-bounded | **Proven locally** | Published cost matrices, checked-in request budgets, fail-closed 1/8/32 contention tiers, RSS probe, and qualification baselines; AWS release evidence remains external |
 | Open starts no hidden worker | **Proven** | API/lifecycle implementation audit and read-only namespace snapshot |
 | Clean downstream packages compile at declared toolchains/dependencies | **Proven** | Rust 1.89 core, Rust 1.94.1 client, newest-line check, offline exact-pair package rehearsal |
 | Upgrade and rollback are negotiated and tested | **Proven** | New→legacy→new packaged rolling rehearsal and fail-closed future-format fixtures |

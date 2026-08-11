@@ -30,7 +30,7 @@ use prolly_s3_client::{
         GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, MergePolicy, MultipartStateV1,
         MultipartUploadV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionKindV1,
         OperationId, PhysicalListPage, PhysicalVersion, PhysicalVersioning, Repository,
-        RepositoryOptions, RetryAdvice, StoredMetadata, StoredObject,
+        RepositoryOptions, RetryAdvice, StoredMetadata, StoredObject, MAX_LOGICAL_RETRY_LIMIT,
     },
     AwsS3ObjectPlane, Client, HmacAttestationSigner, HmacTokenSigner, ProviderIdentity,
     S3OperationMetrics, S3WireAttemptInterceptor, S3WireAttemptMetrics, WriteOptions,
@@ -2485,19 +2485,20 @@ async fn rustfs_contention_latency_probe() {
         .parse()
         .expect("PROLLY_S3_CONTENTION_DEADLINE_SECONDS must be an integer");
     assert!(deadline_seconds > 0);
-    let (aws, bucket) = rustfs_client().await;
+    let (aws, bucket, wire_metrics) = rustfs_client_with_wire_metrics().await;
     let client = Client::builder()
         .aws_client(aws)
         .bucket(&bucket)
         .repository_prefix(unique_prefix("contention-latency"))
         .writer(format!("contention-{writers}"))
-        .logical_retry_limit(u8::MAX)
+        .logical_retry_limit(MAX_LOGICAL_RETRY_LIMIT)
         .provider_identity(rustfs_provider_identity())
         .attestation_signer(test_attestation_signer())
         .initialize()
         .await
         .unwrap();
     client.reset_s3_operation_metrics();
+    wire_metrics.reset();
     let barrier = Arc::new(Barrier::new(writers));
     let tasks = (0..writers)
         .map(|writer| {
@@ -2571,15 +2572,19 @@ async fn rustfs_contention_latency_probe() {
         latencies[index.min(latencies.len() - 1)]
     };
     let metrics = client.reset_s3_operation_metrics();
+    let wire = wire_metrics.reset();
+    assert_eq!(wire.executions, metrics.total_calls());
     client.fsck().await.unwrap();
     eprintln!(
-        "CONTENTION_PROBE writers={writers} p50_ms={:.3} p95_ms={:.3} p99_ms={:.3} max_ms={:.3} sdk_calls={} calls_per_write={:.3} get={} head={} put={} list={} list_versions={} delete={} uploaded_bytes={} downloaded_bytes={}",
+        "CONTENTION_PROBE writers={writers} logical_retry_limit={MAX_LOGICAL_RETRY_LIMIT} p50_ms={:.3} p95_ms={:.3} p99_ms={:.3} max_ms={:.3} sdk_calls={} calls_per_write={:.3} wire_transmissions={} wire_retries={} get={} head={} put={} list={} list_versions={} delete={} uploaded_bytes={} downloaded_bytes={}",
         percentile(50, 100),
         percentile(95, 100),
         percentile(99, 100),
         latencies[latencies.len() - 1],
         metrics.total_calls(),
         metrics.total_calls() as f64 / writers as f64,
+        wire.transmissions,
+        wire.retry_transmissions(),
         metrics.get_object,
         metrics.head_object,
         metrics.put_object,
@@ -6117,6 +6122,7 @@ async fn rustfs_conditional_object_plane_conformance() {
     ));
 
     let ref_path = ObjectPath::new(format!("{prefix}/ref")).unwrap();
+    plane.reset_metrics();
     let created = match plane
         .compare_exchange(CompareExchange {
             path: ref_path.clone(),
@@ -6129,6 +6135,9 @@ async fn rustfs_conditional_object_plane_conformance() {
         CompareExchangeOutcome::Applied(metadata) => metadata,
         other => panic!("unexpected create result: {other:?}"),
     };
+    let create_metrics = plane.reset_metrics();
+    assert_eq!(create_metrics.put_object, 1);
+    assert_eq!(create_metrics.get_object, 0);
 
     let tasks = (0..32)
         .map(|writer| {
@@ -6156,6 +6165,9 @@ async fn rustfs_conditional_object_plane_conformance() {
     }
     assert_eq!(applied, 1);
     assert_eq!(conflicts, 31);
+    let update_metrics = plane.reset_metrics();
+    assert_eq!(update_metrics.put_object, 32);
+    assert_eq!(update_metrics.get_object, 31);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -259,13 +259,13 @@ The v1 contract favors correctness and recoverability over raw single-object thr
 | Logical deletion | Selected logical-version deletion is not supported |
 | Write cost | One logical write creates immutable metadata and publishes a ref; it is not one physical `PutObject` |
 | Hot-branch concurrency | Writers contend on one branch ref; use branches or batch related work when possible |
-| Keyspace scale | Trees and APIs are paged, but a million-object production workload has not been qualified |
+| Keyspace scale | AWS release evidence must prove at least 1 million live keys and 10 million retained logical versions; ordinary tests do not satisfy this gate |
 | Background work | `open()` starts no workers; multipart expiry, integrity checks, index rebuild, and garbage collection are explicit |
 | Garbage collection | Requires a persisted dry run and a separately approved, fenced sweep |
 | Native bucket versioning | Optional for correctness; recommended for native ref-recovery history |
 | Production status | Local RustFS evidence exists; AWS, release-topology soak, IAM, cost, and recovery gates remain open |
 
-The measured local cost explains why small sequential writes are slower than raw S3. A 64 KiB put used 51 object-plane calls in the RustFS cost matrix. A separate 20-write sequential run averaged 1.988 writes per second with zero SDK retries. These numbers describe one local single-node setup, not a service-level objective. See [measured development baselines](QUALIFICATION.md#measured-development-baselines) for the complete call, byte, contention, and memory data.
+The measured local cost explains why small sequential writes are still slower than raw S3. Publication-protection batching and removal of successful-CAS readbacks reduced a 64 KiB put from 51 to 22 object-plane calls in the RustFS cost matrix. A separate 20-write sequential run averaged 9.413 writes per second and 27.70 calls per write as the state trees grew, with zero SDK retries. These numbers describe one local single-node setup, not a service-level objective. The checked-in [production limits](qualification/production-limits-v1.json) turn request amplification, hot-branch latency, AWS request cost, and the one-million-key tier into fail-closed release gates. See [measured development baselines](QUALIFICATION.md#measured-development-baselines) for the observations and [enforced qualification limits](QUALIFICATION.md#enforced-qualification-limits) for the ceilings.
 
 ## Operate it safely
 

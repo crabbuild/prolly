@@ -469,6 +469,7 @@ async fn fenced_gc_retains_active_publications_and_deletes_exact_orphans() {
     .await
     .unwrap();
     lease.protect(protected.clone()).await.unwrap();
+    lease.flush_protection().await.unwrap();
 
     let dry_run = repository.plan_gc(2 * 60 * 60 * 1_000, 100).await.unwrap();
     assert!(dry_run
@@ -531,6 +532,53 @@ async fn fenced_gc_retains_active_publications_and_deletes_exact_orphans() {
         repository.sweep_gc(stale.plan.id).await.unwrap_err().code,
         ErrorCode::PreconditionFailed
     );
+}
+
+#[tokio::test]
+async fn publication_protection_batches_and_seals_bounded_segments() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let operation = OperationId::new();
+    let lease = PublicationLease::create_or_resume(
+        plane.clone(),
+        "repo-protection-batch",
+        operation,
+        "batch-test",
+        60 * 60 * 1_000,
+    )
+    .await
+    .unwrap();
+
+    for ordinal in 0..1_024 {
+        lease
+            .protect(ObjectPath::new(format!("repo-protection-batch/data/{ordinal:04}")).unwrap())
+            .await
+            .unwrap();
+    }
+    let first_head = lease
+        .snapshot()
+        .await
+        .protection_head
+        .expect("a full segment is sealed automatically");
+    let first = load_protection_segment(plane.as_ref(), "repo-protection-batch", first_head)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.paths.len(), 1_024);
+    assert_eq!(first.previous, None);
+
+    let final_path = ObjectPath::new("repo-protection-batch/data/final").unwrap();
+    lease.protect(final_path.clone()).await.unwrap();
+    assert_eq!(lease.snapshot().await.protection_head, Some(first_head));
+    lease.flush_protection().await.unwrap();
+
+    let second_head = lease.snapshot().await.protection_head.unwrap();
+    assert_ne!(second_head, first_head);
+    let second = load_protection_segment(plane.as_ref(), "repo-protection-batch", second_head)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(second.paths, vec![final_path]);
+    assert_eq!(second.previous, Some(first_head));
 }
 
 #[tokio::test]
@@ -1480,6 +1528,7 @@ async fn put_get_delete_and_version_history_are_bucket_atomic() {
     ));
     let mut segment_id = lease.protection_head;
     let mut protected = 0;
+    let mut protection_segments = 0;
     while let Some(id) = segment_id {
         let segment = load_protection_segment(plane.as_ref(), "repo-history", id)
             .await
@@ -1489,8 +1538,10 @@ async fn put_get_delete_and_version_history_are_bucket_atomic() {
         assert!(!segment.paths.is_empty());
         assert!(segment.paths.len() <= 1_024);
         protected += segment.paths.len();
+        protection_segments += 1;
         segment_id = segment.previous;
     }
+    assert_eq!(protection_segments, 1, "ordinary put protection is batched");
     assert!(
         protected >= 4,
         "content, nodes, delta, commit, and reflog are protected"

@@ -271,9 +271,11 @@ impl ObjectPlane for AwsS3ObjectPlane {
 
     async fn compare_exchange(&self, request: CompareExchange) -> Result<CompareExchangeOutcome> {
         self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
+        let len = request.bytes.len() as u64;
+        let sha256: [u8; 32] = Sha256::digest(&request.bytes).into();
         self.metrics
             .uploaded_body_bytes
-            .fetch_add(request.bytes.len() as u64, Ordering::Relaxed);
+            .fetch_add(len, Ordering::Relaxed);
         let mut operation = self
             .client
             .put_object()
@@ -287,20 +289,22 @@ impl ObjectPlane for AwsS3ObjectPlane {
         };
         match operation.send().await {
             Ok(output) => {
-                let current = self.get_current(&request.path).await?.ok_or_else(|| {
+                let etag = output.e_tag().ok_or_else(|| {
                     Error::new(
                         ErrorCode::OutcomeUnknown,
-                        "CAS was accepted but the new value is not readable",
+                        "CAS was accepted but the provider omitted its ETag",
                     )
                 })?;
-                let mut metadata = current.metadata;
-                if let Some(etag) = output.e_tag() {
-                    metadata.token.etag = etag.to_string();
-                }
-                if output.version_id().is_some() {
-                    metadata.token.version_id = output.version_id().map(ToString::to_string);
-                }
-                Ok(CompareExchangeOutcome::Applied(metadata))
+                Ok(CompareExchangeOutcome::Applied(StoredMetadata {
+                    token: StorageToken {
+                        etag: etag.to_string(),
+                        version_id: output.version_id().map(ToString::to_string),
+                    },
+                    len,
+                    sha256,
+                    last_modified_millis: 0,
+                    delete_marker: false,
+                }))
             }
             Err(error) if is_precondition_failed(&error) => Ok(CompareExchangeOutcome::Conflict(
                 self.get_current(&request.path).await?,
