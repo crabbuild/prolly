@@ -4012,8 +4012,8 @@ impl<P: ObjectPlane> Repository<P> {
             return Ok(receipt);
         }
         let writer_fence_generation = self.native_writer_generation_for_mutation().await?;
-        let results = futures_util::stream::iter(keys.iter().cloned().map(|key| async move {
-            let path = ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
+        let results = futures_util::stream::iter(keys.iter().map(|key| async move {
+            let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
             })?)?;
             let _payload_permit = self.payload_write_permit().await;
@@ -4033,7 +4033,7 @@ impl<P: ObjectPlane> Repository<P> {
                     None => return Err(error),
                 },
             };
-            Ok::<_, Error>((key, binding))
+            Ok::<_, Error>((key.clone(), binding))
         }))
         .buffer_unordered(self.options.max_parallel_payload_writes)
         .collect::<Vec<_>>()
