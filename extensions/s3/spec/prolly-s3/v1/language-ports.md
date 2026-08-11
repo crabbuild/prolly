@@ -3,7 +3,7 @@
 Use five layers with no host-language types crossing persistence boundaries:
 
 ```text
-public SDK → v1 state machines → Prolly/record codec → object-plane adapter → native S3 SDK
+public SDK → v1 state machines → Prolly/record codec → object-plane adapter → S3 SDK
 ```
 
 Start with a Reader implementation. Implement canonical CBOR and the hash/path

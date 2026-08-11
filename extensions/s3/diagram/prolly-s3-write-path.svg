@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 430" role="img" aria-labelledby="title desc">
-  <title id="title">Three-call native-versioned S3 write path</title>
+  <title id="title">Three-call Prolly S3 write path</title>
   <desc id="desc">A whole-object payload write is followed by one combined Prolly commit-envelope write and one conditional branch reference update. Only the final update makes the version visible.</desc>
   <defs>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -41,7 +41,7 @@
   <circle cx="86" cy="161" r="14" fill="#34d399"/>
   <text x="86" y="165" class="number" text-anchor="middle">1</text>
   <text x="180" y="181" class="name" text-anchor="middle">PUT whole object</text>
-  <text x="180" y="204" class="detail" text-anchor="middle">original user key · one native version</text>
+  <text x="180" y="204" class="detail" text-anchor="middle">original user key · one physical version</text>
   <text x="180" y="224" class="detail" text-anchor="middle">capture VersionId + checksums</text>
   <text x="180" y="248" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">BYTES DURABLE</text>
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free structural verifier for Native-Versioned S3 Protocol v1."""
+"""Dependency-free structural verifier for Prolly S3 Protocol v1."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def derive_path(case: dict[str, object]) -> str:
 
 def check_registry() -> None:
     protocol = json.loads((V1 / "protocol.json").read_text())
-    assert protocol["id"] == "prolly-native-versioned-s3/v1"
+    assert protocol["id"] == "prolly-s3/v1"
     assert protocol["status"] == "frozen"
     for section in ("versions",):
         for name, value in protocol[section].items():
@@ -57,7 +57,7 @@ def check_registry() -> None:
 
 def check_cases() -> None:
     corpus = json.loads((HERE / "cases.json").read_text())
-    assert corpus["schema"] == "prolly-native-versioned-s3-conformance/v1"
+    assert corpus["schema"] == "prolly-s3-conformance/v1"
     assert corpus["version"] == 1
     for case in corpus["hashes"]:
         if case["algorithm"] == "sha256":
@@ -113,7 +113,7 @@ def main() -> int:
     check_registry()
     check_cases()
     check_source_defaults()
-    print("native-versioned-s3 v1 conformance structure: ok")
+    print("prolly-s3 v1 conformance structure: ok")
     return 0
 
 
@@ -121,5 +121,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (AssertionError, KeyError, ValueError) as error:
-        print(f"native-versioned-s3 v1 conformance structure: FAILED: {error}", file=sys.stderr)
+        print(f"prolly-s3 v1 conformance structure: FAILED: {error}", file=sys.stderr)
         raise SystemExit(1)

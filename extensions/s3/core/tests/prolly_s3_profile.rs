@@ -5,27 +5,27 @@ use prolly::{Cid, TreeFormat};
 use prolly_s3_core::{
     tree_format_digest, Checksums, CommitGeneration, CommitObjectV1, ErrorCode,
     LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryObjectPlane, MergePolicy,
-    NativeBatchMutationV1, NativeMultipartCompletedPart, NativeObjectBindingV1, NativePut,
     NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectVersionOrder,
-    ObjectVersionV1, OperationId, PhysicalVersion, PhysicalVersioning, ProviderCapabilities,
-    Repository, RepositoryId, RepositoryOptions,
+    ObjectVersionV1, OperationId, PhysicalBatchMutationV1, PhysicalMultipartCompletedPart,
+    PhysicalObjectBindingV1, PhysicalPut, PhysicalVersion, PhysicalVersioning,
+    ProviderCapabilities, Repository, RepositoryId, RepositoryOptions,
 };
 use sha2::{Digest as _, Sha256};
 
-fn native_options(prefix: &str) -> RepositoryOptions {
+fn physical_options(prefix: &str) -> RepositoryOptions {
     RepositoryOptions {
         repository_prefix: prefix.to_string(),
-        writer: "native-writer".to_string(),
+        writer: "physical-writer".to_string(),
         ..RepositoryOptions::default()
     }
 }
 
 #[tokio::test]
-async fn native_clone_replays_history_and_rebinds_physical_versions() {
+async fn physical_clone_replays_history_and_rebinds_physical_versions() {
     let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(
         source_plane,
-        native_options(".prolly/native-versioned/clone-source"),
+        physical_options(".prolly/prolly-s3/clone-source"),
     )
     .await
     .unwrap();
@@ -56,7 +56,7 @@ async fn native_clone_replays_history_and_rebinds_physical_versions() {
     let report = source
         .clone_to(
             destination_plane.clone(),
-            ".prolly/native-versioned/clone-destination",
+            ".prolly/prolly-s3/clone-destination",
         )
         .await
         .unwrap();
@@ -65,7 +65,7 @@ async fn native_clone_replays_history_and_rebinds_physical_versions() {
     let resumed = source
         .clone_to(
             destination_plane.clone(),
-            ".prolly/native-versioned/clone-destination",
+            ".prolly/prolly-s3/clone-destination",
         )
         .await
         .unwrap();
@@ -75,7 +75,7 @@ async fn native_clone_replays_history_and_rebinds_physical_versions() {
 
     let destination = Repository::open(
         destination_plane,
-        native_options(".prolly/native-versioned/clone-destination"),
+        physical_options(".prolly/prolly-s3/clone-destination"),
     )
     .await
     .unwrap();
@@ -113,11 +113,11 @@ async fn native_clone_replays_history_and_rebinds_physical_versions() {
 }
 
 #[tokio::test]
-async fn native_push_replays_only_new_history_and_moves_destination_ref() {
+async fn physical_push_replays_only_new_history_and_moves_destination_ref() {
     let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(
         source_plane,
-        native_options(".prolly/native-versioned/push-source"),
+        physical_options(".prolly/prolly-s3/push-source"),
     )
     .await
     .unwrap();
@@ -136,13 +136,13 @@ async fn native_push_replays_only_new_history_and_moves_destination_ref() {
     source
         .clone_to(
             destination_plane.clone(),
-            ".prolly/native-versioned/push-destination",
+            ".prolly/prolly-s3/push-destination",
         )
         .await
         .unwrap();
     let destination = Repository::open(
         destination_plane,
-        native_options(".prolly/native-versioned/push-destination"),
+        physical_options(".prolly/prolly-s3/push-destination"),
     )
     .await
     .unwrap();
@@ -165,7 +165,7 @@ async fn native_push_replays_only_new_history_and_moves_destination_ref() {
             "main",
             "main",
             expected_destination,
-            "incremental native push",
+            "incremental physical push",
         )
         .await
         .unwrap();
@@ -194,11 +194,11 @@ async fn native_push_replays_only_new_history_and_moves_destination_ref() {
 }
 
 #[tokio::test]
-async fn native_repair_rebinds_a_missing_destination_payload() {
+async fn physical_repair_rebinds_a_missing_destination_payload() {
     let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(
         source_plane,
-        native_options(".prolly/native-versioned/repair-source"),
+        physical_options(".prolly/prolly-s3/repair-source"),
     )
     .await
     .unwrap();
@@ -217,13 +217,13 @@ async fn native_repair_rebinds_a_missing_destination_payload() {
     source
         .clone_to(
             destination_plane.clone(),
-            ".prolly/native-versioned/repair-destination",
+            ".prolly/prolly-s3/repair-destination",
         )
         .await
         .unwrap();
     let destination = Repository::open(
         destination_plane.clone(),
-        native_options(".prolly/native-versioned/repair-destination"),
+        physical_options(".prolly/prolly-s3/repair-destination"),
     )
     .await
     .unwrap();
@@ -232,8 +232,8 @@ async fn native_repair_rebinds_a_missing_destination_payload() {
         .await
         .unwrap()
         .version;
-    let NativeObjectBindingV1::Live { version_id, .. } = damaged.binding.clone() else {
-        panic!("expected live native binding")
+    let PhysicalObjectBindingV1::Live { version_id, .. } = damaged.binding.clone() else {
+        panic!("expected live physical binding")
     };
     destination_plane
         .delete_exact(
@@ -267,11 +267,11 @@ async fn native_repair_rebinds_a_missing_destination_payload() {
 }
 
 #[tokio::test]
-async fn native_fetch_returns_a_destination_local_mapped_head() {
+async fn physical_fetch_returns_a_destination_local_mapped_head() {
     let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(
         source_plane,
-        native_options(".prolly/native-versioned/fetch-source"),
+        physical_options(".prolly/prolly-s3/fetch-source"),
     )
     .await
     .unwrap();
@@ -290,13 +290,13 @@ async fn native_fetch_returns_a_destination_local_mapped_head() {
     source
         .clone_to(
             destination_plane.clone(),
-            ".prolly/native-versioned/fetch-destination",
+            ".prolly/prolly-s3/fetch-destination",
         )
         .await
         .unwrap();
     let destination = Repository::open(
         destination_plane,
-        native_options(".prolly/native-versioned/fetch-destination"),
+        physical_options(".prolly/prolly-s3/fetch-destination"),
     )
     .await
     .unwrap();
@@ -333,11 +333,11 @@ async fn native_fetch_returns_a_destination_local_mapped_head() {
 }
 
 #[tokio::test]
-async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
+async fn physical_multipart_uses_n_plus_four_calls_and_replays_without_io() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/multipart-budget"),
+        physical_options(".prolly/prolly-s3/multipart-budget"),
     )
     .await
     .unwrap();
@@ -362,7 +362,7 @@ async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
 
     plane.reset_request_counts();
     let session = repository
-        .create_native_multipart_upload(
+        .create_physical_multipart_upload(
             "main",
             b"multipart.bin".to_vec(),
             ObjectHeaders::default(),
@@ -372,16 +372,16 @@ async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
         .await
         .unwrap();
     let first = repository
-        .upload_native_multipart_part(&session, 1, first_bytes)
+        .upload_physical_multipart_part(&session, 1, first_bytes)
         .await
         .unwrap();
     let second = repository
-        .upload_native_multipart_part(&session, 2, second_bytes)
+        .upload_physical_multipart_part(&session, 2, second_bytes)
         .await
         .unwrap();
     let parts = [&first, &second]
         .into_iter()
-        .map(|part| NativeMultipartCompletedPart {
+        .map(|part| PhysicalMultipartCompletedPart {
             part_number: part.part_number,
             etag: part.etag.clone(),
             checksum_sha256: part.checksum_sha256.unwrap(),
@@ -389,7 +389,7 @@ async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
         })
         .collect::<Vec<_>>();
     let receipt = repository
-        .complete_native_multipart_upload(
+        .complete_physical_multipart_upload(
             session.clone(),
             parts.clone(),
             checksum_sha256,
@@ -401,9 +401,9 @@ async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
         .unwrap();
     assert_eq!(receipt.changed_keys, 1);
     let requests = plane.request_snapshot();
-    assert_eq!(requests.native_multipart_create, 1);
-    assert_eq!(requests.native_multipart_upload_part, 2);
-    assert_eq!(requests.native_multipart_complete, 1);
+    assert_eq!(requests.physical_multipart_create, 1);
+    assert_eq!(requests.physical_multipart_upload_part, 2);
+    assert_eq!(requests.physical_multipart_complete, 1);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
     assert_eq!(requests.total(), 6, "unexpected calls: {requests:?}");
@@ -418,7 +418,7 @@ async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
 
     plane.reset_request_counts();
     let replay = repository
-        .complete_native_multipart_upload(
+        .complete_physical_multipart_upload(
             session.clone(),
             parts,
             checksum_sha256,
@@ -434,11 +434,11 @@ async fn native_multipart_uses_n_plus_four_calls_and_replays_without_io() {
 }
 
 #[tokio::test]
-async fn two_object_native_batch_is_exactly_four_calls() {
+async fn two_object_physical_batch_is_exactly_four_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/batch-budget"),
+        physical_options(".prolly/prolly-s3/batch-budget"),
     )
     .await
     .unwrap();
@@ -454,21 +454,21 @@ async fn two_object_native_batch_is_exactly_four_calls() {
         .await
         .unwrap();
     let batch = repository
-        .begin_native_batch("main", "two objects", 60_000)
+        .begin_physical_batch("main", "two objects", 60_000)
         .await
         .unwrap();
     plane.reset_request_counts();
     let receipt = repository
-        .publish_native_batch(
+        .publish_physical_batch(
             batch,
             vec![
-                NativeBatchMutationV1::Put {
+                PhysicalBatchMutationV1::Put {
                     key: b"batch/a.bin".to_vec(),
                     bytes: b"a".to_vec(),
                     headers: ObjectHeaders::default(),
                     user_metadata: BTreeMap::new(),
                 },
-                NativeBatchMutationV1::Put {
+                PhysicalBatchMutationV1::Put {
                     key: b"batch/b.bin".to_vec(),
                     bytes: b"b".to_vec(),
                     headers: ObjectHeaders::default(),
@@ -480,18 +480,18 @@ async fn two_object_native_batch_is_exactly_four_calls() {
         .unwrap();
     assert_eq!(receipt.changed_keys, 2);
     let requests = plane.request_snapshot();
-    assert_eq!(requests.native_put, 2);
+    assert_eq!(requests.physical_put, 2);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
     assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test]
-async fn two_object_native_multi_delete_is_exactly_four_calls() {
+async fn two_object_physical_multi_delete_is_exactly_four_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/multi-delete-budget"),
+        physical_options(".prolly/prolly-s3/multi-delete-budget"),
     )
     .await
     .unwrap();
@@ -520,31 +520,31 @@ async fn two_object_native_multi_delete_is_exactly_four_calls() {
         .unwrap();
     assert_eq!(receipt.changed_keys, 2);
     let requests = plane.request_snapshot();
-    assert_eq!(requests.native_delete, 2);
+    assert_eq!(requests.physical_delete, 2);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
     assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn native_batch_payload_uploads_are_bounded_and_parallel() {
+async fn physical_batch_payload_uploads_are_bounded_and_parallel() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    plane.set_native_put_delay_millis(20);
-    let mut options = native_options(".prolly/native-versioned/parallel-batch");
+    plane.set_physical_put_delay_millis(20);
+    let mut options = physical_options(".prolly/prolly-s3/parallel-batch");
     options.max_parallel_payload_writes = 3;
     let repository = Repository::initialize(plane.clone(), options)
         .await
         .unwrap();
     let batch = repository
-        .begin_native_batch("main", "parallel payloads", 60_000)
+        .begin_physical_batch("main", "parallel payloads", 60_000)
         .await
         .unwrap();
-    plane.reset_native_put_concurrency();
+    plane.reset_physical_put_concurrency();
     repository
-        .publish_native_batch(
+        .publish_physical_batch(
             batch,
             (0..9)
-                .map(|index| NativeBatchMutationV1::Put {
+                .map(|index| PhysicalBatchMutationV1::Put {
                     key: format!("parallel/{index}.bin").into_bytes(),
                     bytes: vec![index; 1024],
                     headers: ObjectHeaders::default(),
@@ -554,15 +554,15 @@ async fn native_batch_payload_uploads_are_bounded_and_parallel() {
         )
         .await
         .unwrap();
-    assert_eq!(plane.max_native_puts_in_flight(), 3);
+    assert_eq!(plane.max_physical_puts_in_flight(), 3);
 }
 
 #[tokio::test]
-async fn warm_native_merge_reuses_bindings_in_two_calls() {
+async fn warm_physical_merge_reuses_bindings_in_two_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/merge-budget"),
+        physical_options(".prolly/prolly-s3/merge-budget"),
     )
     .await
     .unwrap();
@@ -628,11 +628,11 @@ async fn warm_native_merge_reuses_bindings_in_two_calls() {
 }
 
 #[tokio::test]
-async fn warm_native_restore_reuses_live_binding_in_two_calls() {
+async fn warm_physical_restore_reuses_live_binding_in_two_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/restore-budget"),
+        physical_options(".prolly/prolly-s3/restore-budget"),
     )
     .await
     .unwrap();
@@ -679,15 +679,15 @@ async fn warm_native_restore_reuses_live_binding_in_two_calls() {
 }
 
 #[tokio::test]
-async fn lost_native_payload_response_is_reconciled_without_duplicate_upload() {
+async fn lost_physical_payload_response_is_reconciled_without_duplicate_upload() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/lost-payload"),
+        physical_options(".prolly/prolly-s3/lost-payload"),
     )
     .await
     .unwrap();
-    plane.lose_next_native_put_response();
+    plane.lose_next_physical_put_response();
     repository
         .put_bytes(
             "main",
@@ -720,11 +720,11 @@ async fn lost_native_payload_response_is_reconciled_without_duplicate_upload() {
 }
 
 #[tokio::test]
-async fn lost_native_copy_response_is_reconciled_without_duplicate_upload() {
+async fn lost_physical_copy_response_is_reconciled_without_duplicate_upload() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/lost-copy"),
+        physical_options(".prolly/prolly-s3/lost-copy"),
     )
     .await
     .unwrap();
@@ -740,7 +740,7 @@ async fn lost_native_copy_response_is_reconciled_without_duplicate_upload() {
         .await
         .unwrap();
     let operation = OperationId::new();
-    plane.lose_next_native_put_response();
+    plane.lose_next_physical_put_response();
     let copied = repository
         .copy_object(
             "main",
@@ -774,11 +774,11 @@ async fn lost_native_copy_response_is_reconciled_without_duplicate_upload() {
 }
 
 #[tokio::test]
-async fn lost_native_delete_response_is_reconciled_to_the_current_marker() {
+async fn lost_physical_delete_response_is_reconciled_to_the_current_marker() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/lost-delete"),
+        physical_options(".prolly/prolly-s3/lost-delete"),
     )
     .await
     .unwrap();
@@ -794,7 +794,7 @@ async fn lost_native_delete_response_is_reconciled_to_the_current_marker() {
         .await
         .unwrap();
     let operation = OperationId::new();
-    plane.lose_next_native_delete_response();
+    plane.lose_next_physical_delete_response();
     let deleted = tokio::time::timeout(
         std::time::Duration::from_secs(1),
         repository.delete_object("main", b"deleted.txt".to_vec(), Some(operation)),
@@ -819,11 +819,11 @@ async fn lost_native_delete_response_is_reconciled_to_the_current_marker() {
 }
 
 #[tokio::test]
-async fn native_idempotent_replay_does_not_upload_again() {
+async fn physical_idempotent_replay_does_not_upload_again() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/idempotency"),
+        physical_options(".prolly/prolly-s3/idempotency"),
     )
     .await
     .unwrap();
@@ -856,7 +856,7 @@ async fn native_idempotent_replay_does_not_upload_again() {
     assert_eq!(plane.request_snapshot().total(), 0);
 }
 
-fn native_live_body(bytes: &[u8]) -> LogicalObjectVersionBodyV1 {
+fn physical_live_body(bytes: &[u8]) -> LogicalObjectVersionBodyV1 {
     let sha256 = Cid::from_bytes(bytes).0;
     LogicalObjectVersionBodyV1 {
         order: ObjectVersionOrder {
@@ -880,18 +880,18 @@ fn native_live_body(bytes: &[u8]) -> LogicalObjectVersionBodyV1 {
 }
 
 #[test]
-fn native_object_identity_excludes_provider_binding() {
+fn physical_object_identity_excludes_provider_binding() {
     let bytes = b"whole object";
     let repository = RepositoryId::from_hash([3; 32]);
     let operation = OperationId::new();
-    let body = native_live_body(bytes);
+    let body = physical_live_body(bytes);
     let checksum_sha256 = Cid::from_bytes(bytes).0;
     let first = ObjectVersionV1::derive(
         repository,
         b"asset.bin",
         operation,
         body.clone(),
-        NativeObjectBindingV1::Live {
+        PhysicalObjectBindingV1::Live {
             version_id: "version-a".to_string(),
             provider_etag: "etag-a".to_string(),
             checksum_sha256,
@@ -903,7 +903,7 @@ fn native_object_identity_excludes_provider_binding() {
         b"asset.bin",
         operation,
         body,
-        NativeObjectBindingV1::Live {
+        PhysicalObjectBindingV1::Live {
             version_id: "version-b".to_string(),
             provider_etag: "etag-b".to_string(),
             checksum_sha256,
@@ -918,13 +918,13 @@ fn native_object_identity_excludes_provider_binding() {
 }
 
 #[test]
-fn native_binding_rejects_kind_and_checksum_mismatch() {
+fn physical_binding_rejects_kind_and_checksum_mismatch() {
     let error = ObjectVersionV1::derive(
         RepositoryId::from_hash([4; 32]),
         b"asset.bin",
         OperationId::new(),
-        native_live_body(b"expected"),
-        NativeObjectBindingV1::DeleteMarker {
+        physical_live_body(b"expected"),
+        PhysicalObjectBindingV1::DeleteMarker {
             version_id: "delete-version".to_string(),
         },
     )
@@ -974,9 +974,9 @@ fn node_pack_verifies_cids_ranges_and_corruption() {
 
 #[tokio::test]
 async fn commit_envelope_carries_a_range_readable_node_pack() {
-    let prefix = ".prolly/native-versioned/commit-envelope";
+    let prefix = ".prolly/prolly-s3/commit-envelope";
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    let repository = Repository::initialize(plane.clone(), native_options(prefix))
+    let repository = Repository::initialize(plane.clone(), physical_options(prefix))
         .await
         .unwrap();
     let receipt = repository
@@ -1026,7 +1026,7 @@ async fn commit_envelope_carries_a_range_readable_node_pack() {
 }
 
 #[test]
-fn provider_native_profile_requires_enabled_versioning() {
+fn provider_physical_profile_requires_enabled_versioning() {
     let mut capabilities = ProviderCapabilities {
         conditional_create: true,
         conditional_update: true,
@@ -1044,17 +1044,17 @@ fn provider_native_profile_requires_enabled_versioning() {
         max_single_put_bytes: 5 * 1024 * 1024,
     };
     assert_eq!(
-        capabilities.validate_native_versioned().unwrap_err().code,
+        capabilities.validate_prolly_s3().unwrap_err().code,
         ErrorCode::ProviderNotQualified
     );
     capabilities.physical_versioning = PhysicalVersioning::Enabled;
-    capabilities.validate_native_versioned().unwrap();
+    capabilities.validate_prolly_s3().unwrap();
 }
 
 #[tokio::test]
-async fn native_repository_round_trips_exact_physical_versions() {
+async fn physical_repository_round_trips_exact_physical_versions() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    let options = native_options(".prolly/native-versioned/test");
+    let options = physical_options(".prolly/prolly-s3/test");
     let repository = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
@@ -1137,13 +1137,13 @@ async fn native_repository_round_trips_exact_physical_versions() {
         .1;
     assert!(matches!(
         marker.version.binding,
-        NativeObjectBindingV1::DeleteMarker { .. }
+        PhysicalObjectBindingV1::DeleteMarker { .. }
     ));
 
     let reserved = repository
         .put_bytes(
             "main",
-            b".prolly/native-versioned/test/internal".to_vec(),
+            b".prolly/prolly-s3/test/internal".to_vec(),
             vec![1],
             ObjectHeaders::default(),
             BTreeMap::new(),
@@ -1155,11 +1155,11 @@ async fn native_repository_round_trips_exact_physical_versions() {
 }
 
 #[tokio::test]
-async fn warm_native_put_is_exactly_three_foreground_calls() {
+async fn warm_physical_put_is_exactly_three_foreground_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/call-budget"),
+        physical_options(".prolly/prolly-s3/call-budget"),
     )
     .await
     .unwrap();
@@ -1189,18 +1189,18 @@ async fn warm_native_put_is_exactly_three_foreground_calls() {
         .unwrap();
 
     let requests = plane.request_snapshot();
-    assert_eq!(requests.native_put, 1);
+    assert_eq!(requests.physical_put, 1);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
     assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test]
-async fn native_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
+async fn physical_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/concurrent-budget"),
+        physical_options(".prolly/prolly-s3/concurrent-budget"),
     )
     .await
     .unwrap();
@@ -1237,7 +1237,7 @@ async fn native_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
             (writers * 3) as u64,
             "{writers}-writer tier made unexpected calls: {requests:?}"
         );
-        assert_eq!(requests.native_put, writers as u64);
+        assert_eq!(requests.physical_put, writers as u64);
         assert_eq!(requests.immutable_put, writers as u64);
         assert_eq!(requests.compare_exchange, writers as u64);
     }
@@ -1246,13 +1246,13 @@ async fn native_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_writers_upload_payloads_before_serial_publication() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    plane.set_native_put_delay_millis(20);
-    let mut options = native_options(".prolly/native-versioned/parallel-writers");
+    plane.set_physical_put_delay_millis(20);
+    let mut options = physical_options(".prolly/prolly-s3/parallel-writers");
     options.max_parallel_payload_writes = 3;
     let repository = Repository::initialize(plane.clone(), options)
         .await
         .unwrap();
-    plane.reset_native_put_concurrency();
+    plane.reset_physical_put_concurrency();
     let writes = (0..8).map(|index| {
         repository.put_bytes(
             "main",
@@ -1266,8 +1266,8 @@ async fn concurrent_writers_upload_payloads_before_serial_publication() {
     for result in futures_util::future::join_all(writes).await {
         result.unwrap();
     }
-    assert!(plane.max_native_puts_in_flight() > 1);
-    assert_eq!(plane.max_native_puts_in_flight(), 3);
+    assert!(plane.max_physical_puts_in_flight() > 1);
+    assert_eq!(plane.max_physical_puts_in_flight(), 3);
     let performance = repository.performance_snapshot();
     assert_eq!(performance.publication_acquisitions, 8);
     assert!(performance.publication_max_queue_depth >= 1);
@@ -1275,12 +1275,12 @@ async fn concurrent_writers_upload_payloads_before_serial_publication() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn concurrent_idempotent_retries_upload_only_one_native_version() {
+async fn concurrent_idempotent_retries_upload_only_one_physical_version() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    plane.set_native_put_delay_millis(20);
+    plane.set_physical_put_delay_millis(20);
     let repository = Repository::initialize(
         plane.clone(),
-        native_options(".prolly/native-versioned/idempotent-singleflight"),
+        physical_options(".prolly/prolly-s3/idempotent-singleflight"),
     )
     .await
     .unwrap();
@@ -1315,16 +1315,16 @@ async fn concurrent_idempotent_retries_upload_only_one_native_version() {
         .skip(1)
         .all(|receipt| receipt.id == receipts[0].id));
     let requests = plane.request_snapshot();
-    assert_eq!(requests.native_put, 1);
+    assert_eq!(requests.physical_put, 1);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
 }
 
 #[tokio::test]
-async fn native_gc_deletes_only_unreachable_exact_versions() {
+async fn physical_gc_deletes_only_unreachable_exact_versions() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository =
-        Repository::initialize(plane.clone(), native_options(".prolly/native-versioned/gc"))
+        Repository::initialize(plane.clone(), physical_options(".prolly/prolly-s3/gc"))
             .await
             .unwrap();
     repository
@@ -1339,7 +1339,7 @@ async fn native_gc_deletes_only_unreachable_exact_versions() {
         .await
         .unwrap();
     let orphan = plane
-        .put_native(NativePut {
+        .put_physical(PhysicalPut {
             path: ObjectPath::new("orphan.bin").unwrap(),
             bytes: b"orphan".to_vec(),
             headers: ObjectHeaders::default(),
@@ -1350,7 +1350,7 @@ async fn native_gc_deletes_only_unreachable_exact_versions() {
         })
         .await
         .unwrap();
-    let NativeObjectBindingV1::Live { version_id, .. } = orphan.binding else {
+    let PhysicalObjectBindingV1::Live { version_id, .. } = orphan.binding else {
         unreachable!()
     };
 
@@ -1380,7 +1380,7 @@ async fn native_gc_deletes_only_unreachable_exact_versions() {
 #[tokio::test]
 async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    let options = native_options(".prolly/native-versioned/checkpoint");
+    let options = physical_options(".prolly/prolly-s3/checkpoint");
     let repository = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
@@ -1434,7 +1434,7 @@ async fn checkpointed_reopen_uses_ranged_nodes_without_pack_listing() {
 #[tokio::test]
 async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    let options = native_options(".prolly/native-versioned/checkpoint-corrupt");
+    let options = physical_options(".prolly/prolly-s3/checkpoint-corrupt");
     let repository = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
@@ -1507,7 +1507,7 @@ async fn corrupt_checkpoint_falls_back_to_canonical_pack_rebuild() {
 #[tokio::test]
 async fn explicit_takeover_barrier_fences_the_old_writer() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    let options = native_options(".prolly/native-versioned/takeover");
+    let options = physical_options(".prolly/prolly-s3/takeover");
     let old_writer = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
@@ -1535,8 +1535,8 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
     .unwrap();
     assert_eq!(
         new_writer
-            .takeover_native_writer(
-                "native-writer",
+            .takeover_physical_writer(
+                "physical-writer",
                 1,
                 "old credentials revoked and process stopped",
             )
@@ -1574,5 +1574,5 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
         .await
         .unwrap_err();
     assert_eq!(stale.code, ErrorCode::PreconditionFailed);
-    assert_eq!(plane.request_snapshot().native_put, 0);
+    assert_eq!(plane.request_snapshot().physical_put, 0);
 }

@@ -1,9 +1,9 @@
-# Native-Versioned S3 Protocol v1
+# Prolly S3 Protocol v1
 
 Status: **normative and frozen**
 
 This directory is the language-neutral contract for repositories created by
-the native-versioned S3 client. A conforming implementation can read and write
+the Prolly S3 client. A conforming implementation can read and write
 the same repository from Rust, Java, Go, TypeScript, or another language
 without sharing implementation code.
 
@@ -32,7 +32,7 @@ Every protocol owned by this profile starts at and defaults to `1`:
 protocol. The embedded Prolly node format has its own independently versioned
 magic; a new S3 protocol version must not relabel existing Prolly bytes.
 Likewise, `$version: "2"` in `api.smithy` selects the Smithy IDL 2 grammar; the
-modeled service and every Native-Versioned S3 default remain version 1.
+modeled service and every Prolly S3 default remain version 1.
 
 ## Normative documents
 

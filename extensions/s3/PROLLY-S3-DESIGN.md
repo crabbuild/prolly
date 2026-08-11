@@ -1,4 +1,4 @@
-# Native-versioned S3 architecture
+# Prolly S3 architecture
 
 Status: implemented architecture; production qualification incomplete.
 
@@ -6,7 +6,7 @@ Status: implemented architecture; production qualification incomplete.
 
 The S3 extension has one storage architecture:
 
-- whole files are native S3 object versions at their original keys;
+- whole files are physical S3 object versions at their original keys;
 - Prolly commits are authoritative for current state and history;
 - each logical version records the exact provider-issued `VersionId`;
 - the Prolly wrapper is the exclusive writer for managed keys;
@@ -17,13 +17,13 @@ The repository-chunked profile, profile selector, mixed-mode codec, durable
 workspace protocol, publication lease, and compatibility harness are removed.
 There is no in-place upgrade from the former format.
 
-![Architecture](diagram/native-versioned-s3-architecture.svg)
+![Architecture](diagram/prolly-s3-architecture.svg)
 
 ## Why whole objects
 
 S3 already supplies immutable physical versions. Splitting an ordinary file
 into repository chunks duplicated that job and required chunks, a content
-index, and a manifest before Prolly could publish metadata. The native design
+index, and a manifest before Prolly could publish metadata. The physical design
 keeps each concern in the layer that owns it:
 
 | Concern | Authority |
@@ -58,7 +58,7 @@ Logical and physical identities are deliberately separate:
 - `CommitId` identifies one immutable bucket snapshot.
 - the mutable ref's storage token is the compare-and-exchange authority.
 
-An `ObjectVersionV1` contains a canonical logical body plus a native binding.
+An `ObjectVersionV1` contains a canonical logical body plus a physical binding.
 The logical ID excludes the provider binding, allowing a clone to retain
 logical history while rebinding to destination-issued S3 versions.
 
@@ -89,12 +89,12 @@ workspaces, publication leases, or repository multipart-part objects.
 
 ## Single-object publication
 
-![Write protocol](diagram/native-versioned-s3-write-path.svg)
+![Write protocol](diagram/prolly-s3-write-path.svg)
 
 For a warm writer:
 
 1. The writer validates the current branch head and write conditions.
-2. `PutObject(key, body)` creates one native object version.
+2. `PutObject(key, body)` creates one physical object version.
 3. The returned `VersionId`, checksums, headers, and logical metadata are added
    to the in-memory Prolly state transition.
 4. New tree nodes and `BucketCommitV1` are encoded in one immutable commit
@@ -131,7 +131,7 @@ another branch or an older Prolly snapshot.
 
 ## Delete, copy, merge, and restore
 
-- Delete creates a native S3 delete marker and commits its exact `VersionId`.
+- Delete creates a physical S3 delete marker and commits its exact `VersionId`.
 - Same-bucket copy asks S3 to create a new destination version and records it.
 - Merge and restore reuse already-retained physical bindings when possible;
   they publish one commit envelope and one ref CAS.
@@ -147,7 +147,7 @@ Large files use provider-native multipart upload. Prolly does not store parts
 or a chunk index. For `N` parts the foreground protocol is:
 
 1. create multipart upload;
-2. upload `N` native parts;
+2. upload `N` physical parts;
 3. complete multipart upload and capture its `VersionId`;
 4. upload one commit envelope;
 5. CAS the branch ref.
@@ -178,14 +178,14 @@ In-process requests sharing an OperationId are singleflighted before the data
 plane, preventing concurrent retries from creating duplicate orphan versions.
 
 If a payload request's response is lost, reconciliation identifies the exact
-native version before publication. If final ref publication is ambiguous,
+physical version before publication. If final ref publication is ambiguous,
 `lookup_operation` searches committed operation records. A mismatched input
 under the same operation ID fails with an idempotency conflict.
 
 ## Garbage collection
 
 Reachability starts from branches, tags, retained reflogs, and explicit pins.
-GC walks commit envelopes, logical versions, and exact native bindings. It
+GC walks commit envelopes, logical versions, and exact physical bindings. It
 persists a bounded deletion plan and revalidates roots before each batch.
 
 Deletion always specifies both key and physical `VersionId`. Automatic bucket

@@ -60,14 +60,14 @@ corresponding exit gate is complete.
 | Phase | Current evidence | Remaining gate before phase completion | Status |
 | --- | --- | --- | --- |
 | 0 | Separate core/client crates, canonical packed-CBOR rejection, domain-separated IDs, explicit AWS 1.140.0 pin, machine-readable [`compatibility-v1.json`](../extensions/s3/compatibility-v1.json), checked-in language-neutral format/empty-repository/object-version/delta/ID/tree-format golden fixture, dependency-free Python CBOR/ID verifier, and injected clock/ID sources for deterministic cross-store restart fixtures | None | complete |
-| 1 | Memory and AWS/RustFS object planes; immutable create-only writes; mutable ref CAS; physical current/version listing and exact-version deletion; zero-I/O `physical_layout` inspection API; 32-writer CAS test; signed expiring endpoint/bucket-bound attestations; native-version snapshot proof that ordinary open performs no physical write; mismatch/signature/expiry rejection; RustFS unversioned and versioned qualification; fail-closed AWS directory/access-point/Object Lambda/Outposts/MRAP identifier classification; structured provider code/message/request-ID preservation with a generated-SDK-shaped fixture | None for implementation; each production provider/account is promoted separately in Phase 8 | complete |
+| 1 | Memory and AWS/RustFS object planes; immutable create-only writes; mutable ref CAS; physical current/version listing and exact-version deletion; zero-I/O `physical_layout` inspection API; 32-writer CAS test; signed expiring endpoint/bucket-bound attestations; physical-version snapshot proof that ordinary open performs no physical write; mismatch/signature/expiry rejection; RustFS unversioned and versioned qualification; fail-closed AWS directory/access-point/Object Lambda/Outposts/MRAP identifier classification; structured provider code/message/request-ID preservation with a generated-SDK-shaped fixture | None for implementation; each production provider/account is promoted separately in Phase 8 | complete |
 | 2 | Chunked one-pass bodies, hash-verified reads/ranges, three Prolly roots, immutable-first commits/reflogs/ref CAS, initialization recovery, operation idempotency/reconciliation, concurrent disjoint-writer test; renewable CAS publication leases with immutable per-operation protection chains across ordinary, multi-delete, multipart-complete, and workspace publication; body-failure/expiry/no-cross-attribution tests; exhaustive ordinary, merge, and reset prewrite fault matrices; accepted-ref/lost-response and future-cancellation reconciliation across ordinary commits, multi-delete, merge, restore, multipart completion, and workspaces; opt-in million-chunk resource fixture; GC consumption of unexpired lease chains; final-source 10,000-operation deterministic dual-store/multi-restart corpus (1,102.53 s, 9.07 paired logical mutations/s in the debug fixture); refreshed instrumented live sequential 64 KiB RustFS baseline (1.988 puts/s, 106.469 gets/s); final-source live 160 MiB streamed multipart round trip with an 8 MiB canonical chunk budget and a separately measured 102.92 MiB total peak RSS | None | complete |
-| 3 | AWS-shaped fluent put/get/head/list; official-input execution for those four operations; streaming `ByteStream`; signed snapshot-pinned cursors; managed HMAC rotation ledger with TTL-plus-skew retirement enforcement and restart verification; explicit rejection of every field in the pinned inputs; 21-page raw-key corpus with NUL, Unicode, exclusive cursors, and concurrent snapshot advancement; live 1,023/1,024/1,025-byte ASCII/multibyte key boundaries; grouped-prefix resume; multibyte delimiters; `max_keys` 0/1/1,000/1,001 policy; atomic expected-head and ETag write conditions; MD5/SHA-256 request validation; ETag/date condition precedence; precondition-before-range precedence; distinct malformed/unsatisfiable range categories; checksum responses; executable manifest-validator parity test; live native-RustFS payload/checksum/closed/open/suffix range/date/precondition/error/delimiter differential matrix with the raw RustFS range-precedence deviation explicitly pinned; opt-in real-AWS qualification harness | None for implementation; native AWS differential promotion is a Phase 8 release gate | complete |
+| 3 | AWS-shaped fluent put/get/head/list; official-input execution for those four operations; streaming `ByteStream`; signed snapshot-pinned cursors; managed HMAC rotation ledger with TTL-plus-skew retirement enforcement and restart verification; explicit rejection of every field in the pinned inputs; 21-page raw-key corpus with NUL, Unicode, exclusive cursors, and concurrent snapshot advancement; live 1,023/1,024/1,025-byte ASCII/multibyte key boundaries; grouped-prefix resume; multibyte delimiters; `max_keys` 0/1/1,000/1,001 policy; atomic expected-head and ETag write conditions; MD5/SHA-256 request validation; ETag/date condition precedence; precondition-before-range precedence; distinct malformed/unsatisfiable range categories; checksum responses; executable manifest-validator parity test; live RustFS payload/checksum/closed/open/suffix range/date/precondition/error/delimiter differential matrix with the raw RustFS range-precedence deviation explicitly pinned; opt-in real-AWS qualification harness | None for implementation; AWS differential promotion is a Phase 8 release gate | complete |
 | 4 | Stable per-object version IDs, delete markers, historical reads, atomic multi-delete, version listing with key marker plus signed version cursor; explicit durable retention pins; injected-clock ordering and merge fixtures; live pagination advances the branch between pages and proves the signed cursor remains bound to the original snapshot | None | complete |
 | 5 | Zero-copy same-repository copy; durable create/upload/list/complete/abort multipart; AWS-shaped key/upload-ID catalog; expiry cleanup; full and ranged upload-part-copy; completion idempotency and one-commit visibility; deterministic part-wins/completion-wins races; lost-response reconciliation after accepted part and terminal completion CAS; cancellation after accepted bucket publication reconciles and terminalizes the same upload without a duplicate commit; deterministic request validation before the `Active -> Completing` freeze; same-operation/different-input conflict detection; exact 10,000-part, synthetic 5 GiB part, and configured 5 TiB object limits; content-addressed immutable catalog snapshots; HMAC-authenticated repository/bucket/branch/prefix/position/expiry-bound markers; concurrent create/abort page stability; tamper/query rejection; expiry-aware exact-version GC eligibility; exact 1,000/1,001 catalog boundary; three-part cross-boundary range stream; independent-process `Completing` recovery against RustFS; measured 160 MiB streaming resource envelope | None | complete |
 | 6 | Durable resumable workspaces, atomic mixed mutation publish, branches, tags, paged bounded first-parent log and object diff; bounded best-common-ancestor discovery; explicit merge plans/conflicts/ours/theirs policies; validated version/operation tree unions; two-parent merge publication; history-preserving restore; expected-head reset; branch/tag reflogs and tombstone recovery; deterministic criss-cross and truly unrelated-history fixtures; exhaustive merge/reset prewrite fault matrices; lost-response reconciliation for branch/tag create/delete/recover, merge, and reset; cancellation reconciliation for merge, restore, and workspace publication; live RustFS contention corpus with independent OS-process branch/tag create-only races, concurrent disjoint merges, explicit loser conflicts, final reconciliation, and fsck | None | complete |
-| 7 | Memory/SlateDB advisory-index seam; owner-derived per-repository/per-writer SlateDB paths with durable owner records; automatic corrupt-head quarantine; canonical full rebuild with stale-entry removal; durable running/completed rebuild checkpoints and restart recovery; close/reopen persistence on same-bucket RustFS; complete owner-cache deletion/recreation with native delete-marker evidence and byte-identical canonical physical-version snapshots; reachable-closure fsck with injected missing/corrupt coverage for every immutable family plus missing ref targets; portable clone into an empty target with independent target-provider qualification and destination-local ref CAS; identity-checked reachable-missing-closure fetch/push; destination-local CAS sync runs pinned to a source head with bounded sorted-path batches and restart recovery; immutable-first expected-head push; incremental commit fsck and missing-object repair; explicit proof that corrupt-present immutables are never overwritten; retained-root discovery across refs, tags, bounded reflogs, explicit pins, workspaces, uploads, and unexpired publication chains; immutable deterministic GC plans; durable fixed-time GC mark-run restart records; grace/candidate bounds; repository-wide failed-closed active sweep/publication fence; generation-checked explicit abort; CAS-checkpointed bounded sweep; run-bound configurable delete pacing; exact physical-version deletion; per-kind metrics; declared conservative indefinite native-ref-version recovery policy; live-path, concurrent-head, orphan-exclusion, repair, interrupted-mark/sweep, rate, and physically versioned RustFS fixtures | None | complete |
-| 8 | S3-scoped required CI for dependency policy, strict quality, 98-case behavior, exact MSRVs/clean downstreams, live RustFS, executable example, and signed exact-package rehearsal; pinned dependency baseline; strict workspace clippy; default/minimal feature checks; core build proven on Rust 1.89; exact all-feature workspace check proven on Rust 1.94.1; locked clean-downstream crates proven on Rust 1.89.0 for core and Rust 1.94.1 for minimal/AWS-only and SlateDB client surfaces; enforced reader/writer/capability requirements with future fixtures proving incompatible open fails before physical writes and a byte-identical legacy-profile fixture; independently compiled current/legacy codecs with successful new→legacy→new RustFS publication, exact `UnsupportedRepositoryFormat` results, and unchanged native-version snapshots around rejected future reader/writer/profile opens; exact core/client `.crate` archive pairs compiled together without registry substitution, exercised through the same live rolling sequence, and sealed with the dependency policy/result into a closed twelve-artifact Ed25519 rehearsal manifest whose local ephemeral/dirty trust state is explicit; public interval metrics for object-plane SDK calls/transferred body bytes plus a public Smithy interceptor for executions, wire transmissions, retries, response classes, and response-less attempts; deterministic 503→200 retry proof; an instrumented ordinary RustFS baseline reporting 56.70 issued calls/write, 5 calls/read, and zero SDK retries; 17 S3-shaped object rows, 24 physically versioned repository-administration/maintenance rows including exact-version GC, four cross-repository clone/fetch/push rows, and one same-bucket SlateDB advisory-rebuild row reporting canonical call mix, wire attempts, separate advisory object-store calls, transfer amplification, latency, and exact physical-version storage growth through an isolated accounting client; a body-blind SlateDB-only HTTP correlation proving 125 `object_store` calls mapped one-to-one to 125 provider attempts with unique request IDs and no unexpected response classes; qualified clone returns target-side metrics so callers can aggregate source, target and wire-level control-plane costs; qualified hot-branch p50/p95/p99 latency and call amplification at 1/8/32 writers with idempotent ambiguity reconciliation and a declared 32-writer maximum for this single-node development profile; a pinned-toolchain clean provider-restart drill that requires authenticated S3 readiness rather than Docker health alone; a verified eight-workflow active-outage matrix covering ordinary, merge, multipart, workspace, atomic multi-delete, restore, administrative reset, and branch tombstone accepted-CAS loss; four-probe authenticated readiness stabilization; exact operation/ref/tombstone reconciliation; zero duplicate ref-only versions/commits; coordination-only operation replay; wire/storage accounting; payload/delete-marker/reflog checks; and fsck; a digest-pinned local IAM/credential-rotation drill proving prefix-scoped adapter operation, five denied destructive/cross-prefix probes, overlap-then-revoke rotation, terminal disabled-key mapping, final fsck, and IAM cleanup while explicitly recording RustFS beta.10 native-version list/read action aliases; a pinned-test-binary soak harness with exact workflow/fsck records, restart/mount/source/toolchain checks, explicit memory/storage/build bounds, independent verification, and non-overwriting evidence; live RustFS coverage for CAS, exact native-version deletion, reopen/history, AWS-shaped operations, multipart/workspaces, SlateDB advisory behavior, merge/restore, independently qualified clone, resumable fetch/push, and GC fencing | 24-hour soak, release-topology repetition or extension of the eight-workflow chaos matrix, AWS IAM exact-action separation, AWS general-purpose qualification, release-topology cost/contention plus repeat SlateDB transport correlation, and clean operator-key-signed release evidence | in progress |
+| 7 | Memory/SlateDB advisory-index seam; owner-derived per-repository/per-writer SlateDB paths with durable owner records; automatic corrupt-head quarantine; canonical full rebuild with stale-entry removal; durable running/completed rebuild checkpoints and restart recovery; close/reopen persistence on same-bucket RustFS; complete owner-cache deletion/recreation with physical delete-marker evidence and byte-identical canonical physical-version snapshots; reachable-closure fsck with injected missing/corrupt coverage for every immutable family plus missing ref targets; portable clone into an empty target with independent target-provider qualification and destination-local ref CAS; identity-checked reachable-missing-closure fetch/push; destination-local CAS sync runs pinned to a source head with bounded sorted-path batches and restart recovery; immutable-first expected-head push; incremental commit fsck and missing-object repair; explicit proof that corrupt-present immutables are never overwritten; retained-root discovery across refs, tags, bounded reflogs, explicit pins, workspaces, uploads, and unexpired publication chains; immutable deterministic GC plans; durable fixed-time GC mark-run restart records; grace/candidate bounds; repository-wide failed-closed active sweep/publication fence; generation-checked explicit abort; CAS-checkpointed bounded sweep; run-bound configurable delete pacing; exact physical-version deletion; per-kind metrics; declared conservative indefinite physical-ref-version recovery policy; live-path, concurrent-head, orphan-exclusion, repair, interrupted-mark/sweep, rate, and physically versioned RustFS fixtures | None | complete |
+| 8 | S3-scoped required CI for dependency policy, strict quality, 98-case behavior, exact MSRVs/clean downstreams, live RustFS, executable example, and signed exact-package rehearsal; pinned dependency baseline; strict workspace clippy; default/minimal feature checks; core build proven on Rust 1.89; exact all-feature workspace check proven on Rust 1.94.1; locked clean-downstream crates proven on Rust 1.89.0 for core and Rust 1.94.1 for minimal/AWS-only and SlateDB client surfaces; enforced reader/writer/capability requirements with future fixtures proving incompatible open fails before physical writes and a byte-identical legacy-profile fixture; independently compiled current/legacy codecs with successful new→legacy→new RustFS publication, exact `UnsupportedRepositoryFormat` results, and unchanged physical-version snapshots around rejected future reader/writer/profile opens; exact core/client `.crate` archive pairs compiled together without registry substitution, exercised through the same live rolling sequence, and sealed with the dependency policy/result into a closed twelve-artifact Ed25519 rehearsal manifest whose local ephemeral/dirty trust state is explicit; public interval metrics for object-plane SDK calls/transferred body bytes plus a public Smithy interceptor for executions, wire transmissions, retries, response classes, and response-less attempts; deterministic 503→200 retry proof; an instrumented ordinary RustFS baseline reporting 56.70 issued calls/write, 5 calls/read, and zero SDK retries; 17 S3-shaped object rows, 24 physically versioned repository-administration/maintenance rows including exact-version GC, four cross-repository clone/fetch/push rows, and one same-bucket SlateDB advisory-rebuild row reporting canonical call mix, wire attempts, separate advisory object-store calls, transfer amplification, latency, and exact physical-version storage growth through an isolated accounting client; a body-blind SlateDB-only HTTP correlation proving 125 `object_store` calls mapped one-to-one to 125 provider attempts with unique request IDs and no unexpected response classes; qualified clone returns target-side metrics so callers can aggregate source, target and wire-level control-plane costs; qualified hot-branch p50/p95/p99 latency and call amplification at 1/8/32 writers with idempotent ambiguity reconciliation and a declared 32-writer maximum for this single-node development profile; a pinned-toolchain clean provider-restart drill that requires authenticated S3 readiness rather than Docker health alone; a verified eight-workflow active-outage matrix covering ordinary, merge, multipart, workspace, atomic multi-delete, restore, administrative reset, and branch tombstone accepted-CAS loss; four-probe authenticated readiness stabilization; exact operation/ref/tombstone reconciliation; zero duplicate ref-only versions/commits; coordination-only operation replay; wire/storage accounting; payload/delete-marker/reflog checks; and fsck; a digest-pinned local IAM/credential-rotation drill proving prefix-scoped adapter operation, five denied destructive/cross-prefix probes, overlap-then-revoke rotation, terminal disabled-key mapping, final fsck, and IAM cleanup while explicitly recording RustFS beta.10 physical-version list/read action aliases; a pinned-test-binary soak harness with exact workflow/fsck records, restart/mount/source/toolchain checks, explicit memory/storage/build bounds, independent verification, and non-overwriting evidence; live RustFS coverage for CAS, exact physical-version deletion, reopen/history, AWS-shaped operations, multipart/workspaces, SlateDB advisory behavior, merge/restore, independently qualified clone, resumable fetch/push, and GC fencing | 24-hour soak, release-topology repetition or extension of the eight-workflow chaos matrix, AWS IAM exact-action separation, AWS general-purpose qualification, release-topology cost/contention plus repeat SlateDB transport correlation, and clean operator-key-signed release evidence | in progress |
 
 The current implementation is therefore a working development preview for the
 operations marked `true` in the compatibility manifest. It is deliberately not
@@ -79,7 +79,7 @@ Phase 8 also includes a live physical-version backup/restore gate. A stable
 112-version RustFS source inventory was archived as 111 hashed bodies plus one
 delete-marker record under a canonical hashed manifest, replayed into a fresh
 versioned bucket, and independently qualified. Repository identity,
-main/feature/tag history, a retained logical historical read, three native ref
+main/feature/tag history, a retained logical historical read, three physical ref
 recovery revisions, post-restore publication, and fsck all passed; the three
 generated buckets were then removed by exact-version cleanup. Release evidence
 must additionally archive and sign the external bucket encryption/policy/Object
@@ -100,7 +100,7 @@ Latest local qualification evidence on 2026-08-09:
 - dependency-free Python canonical-CBOR/ID verifier: passed;
 - live RustFS `1.0.0-beta.10`: all 11 normally enabled provider scenarios
   passed, including
-  32-way ref CAS, exact native-version deletion,
+  32-way ref CAS, exact physical-version deletion,
   independent-process multipart/ref contention recovery, reopened resumable
   sync, SlateDB quarantine/rebuild and complete cache-loss recovery, a dedicated
   physically versioned reflog reset/recovery drill, history administration, and
@@ -154,7 +154,7 @@ flowchart LR
 
 The ref CAS is the only logical visibility point. Every object named by the
 three state roots, commit, delta, and reflog is durable and lease-protected
-before that CAS. Provider-issued ETags and native version IDs never become
+before that CAS. Provider-issued ETags and physical version IDs never become
 logical IDs.
 
 ## 1. Executive summary
@@ -223,10 +223,10 @@ The design keeps three identities separate:
 | --- | --- | --- |
 | `ObjectVersionId` | One mutation of one logical S3 key | Canonical logical record plus operation ID |
 | `CommitId` | One immutable snapshot of the entire logical bucket | Canonical commit bytes |
-| `StorageToken` | Concurrency token for one mutable physical ref object | Physical S3 ETag/version metadata |
+| `StorageToken` | Concurrency token for one mutable physical ref object | S3 ETag/version metadata |
 
 An unrelated key update therefore changes the bucket `CommitId` but does not
-change another object's `ObjectVersionId`. Physical S3 ETags and physical
+change another object's `ObjectVersionId`. S3 ETags and physical
 version IDs never become logical identities.
 
 SlateDB may materialize object metadata, commit summaries, and hot Prolly nodes
@@ -317,7 +317,7 @@ phase exit or release gate:
 | A reflog write could fail after the branch commit point | Write the immutable reflog entry before ref CAS and store its ID in the ref value. Failed CAS leaves an unreachable reflog entry for GC. |
 | Wall-clock timestamps could order versions incorrectly | Order versions by commit generation, mutation ordinal, and version ID. Use wall-clock time only for display and retention hints. |
 | Retrying an upload could consume a non-replayable `ByteStream` twice | Stage content once, then reuse its immutable `ContentRef` for logical retries. Provider retries remain inside the AWS SDK body contract. |
-| Native bucket versioning could prevent physical GC from reclaiming bytes | The object plane lists and deletes exact physical versions. GC reports delete markers and noncurrent versions separately. |
+| Physical bucket versioning could prevent physical GC from reclaiming bytes | The object plane lists and deletes exact physical versions. GC reports delete markers and noncurrent versions separately. |
 | S3-compatible capability probing was underspecified | Initialization runs an isolated conformance probe and stores a signed, expiring attestation. Open reads and verifies it without probe writes. |
 | Reconciliation after cancellation had no public result | Add `OutcomeUnknown`, operation lookup, and explicit `reconcile_operation`. Cancellation after a possible ref CAS never reports a definitive cancellation without reconciliation. |
 | Commit sessions were process-local | Persist a CAS-protected workspace manifest and support resume by `WorkspaceId`. Staged payloads remain immutable. |
@@ -338,7 +338,7 @@ phase exit or release gate:
 | Long GC sweeps had no durable progress or useful accounting | `gc/runs` stores CAS-protected batch checkpoints and cumulative counts/bytes by immutable object family. Interrupted active sweeps fail closed and have a tested explicit abort transition. A validated 0-or-1..=1,000 deletes/second setting is bound into each run and paced while the publication fence remains active. |
 | A merge retry after an accepted-but-canceled ref CAS recomputed its digest from the new head | When an explicit operation ID is already reachable, merge reconstructs the original two-parent inputs, selected base, and policy before reconciliation. A changed source/base/policy returns `IdempotencyConflict`; an exact retry returns the original commit. |
 | Qualification counted flag-disabled probe tests as live work | Default RustFS scenarios and dedicated throughput/resource/contention/restart probes are reported separately. The soak deadline begins after baseline collection and the runner guarantees at least one iteration. |
-| Native provider versions were visible but lacked a safe recovery API | Administrative native-ref listing validates canonical ref records; recovery fscks the selected target and uses the normal expected-head reset/reflog path instead of raw provider overwrite. |
+| Provider object versions were visible but lacked a safe recovery API | Administrative physical-ref listing validates canonical ref records; recovery fscks the selected target and uses the normal expected-head reset/reflog path instead of raw provider overwrite. |
 | Declared per-call deadlines and retry limits were admission-only options | Put/get/head/list now enforce deadlines. Pre-I/O expiry is retry-safe; an in-flight publishing timeout is `OutcomeUnknown` with a durable operation ID. Put retry limits override only logical ref-conflict retries. |
 | Diff pagination materialized the complete change set before truncation | `diff_page` consumes the structural diff stream and retains at most `limit + 1` entries; its raw-key cursor is exclusive and tied to exact immutable endpoints. |
 | History and upload-expiry capabilities existed only in the core | The client exposes exact-commit `log_page`, bounded `diff_page`, and explicit `expire_multipart_uploads` methods, with live RustFS contract coverage. |
@@ -384,9 +384,9 @@ requires a design revision before implementation continues.
 
 - Being type-identical to `aws_sdk_s3::Client` or generated fluent builders.
 - Providing S3 wire compatibility to unmodified clients.
-- Making logical keys visible to raw physical S3 listing or inventory.
+- Making logical keys visible to raw S3 listing or inventory.
 - Forwarding unknown operations to the physical bucket.
-- Treating physical S3 bucket versioning as logical repository history.
+- Treating S3 bucket versioning as logical repository history.
 - Using SlateDB as multi-writer ref authority.
 - Supporting bucket provisioning, ACL administration, Object Lock, lifecycle,
   website hosting, S3 Select, replication, notifications, or Inventory in v1.
@@ -623,7 +623,7 @@ cross this method; `content.rs` converts them into bounded replayable chunks.
 `StoredMetadata`, `MutableObject`, and `PhysicalListPage` retain physical ETag,
 version ID, length, checksum metadata, and last-modified time. Only ref CAS and
 maintenance use the physical token/version. `delete_exact` is mandatory when
-native physical bucket versioning is enabled, because an unversioned delete
+physical bucket versioning is enabled, because an unversioned delete
 would create another delete marker instead of reclaiming data.
 
 `load_mutable` obtains bytes and their storage token from one provider response;
@@ -789,7 +789,7 @@ impl Client {
 ```
 
 Every accepted input field is validated. Unknown or unsupported fields never
-fall through to physical S3.
+fall through to S3.
 
 ```rust
 pub struct ReadOptions {
@@ -843,7 +843,7 @@ handles, commit log results, and explicit response metadata.
 Text IDs are lowercase, version-prefixed, unpadded base32 encodings of their
 fixed canonical bytes: `pov1_...` for object versions and `pbc1_...` for bucket
 commits. Parsers require the prefix, exact decoded length, canonical alphabet,
-and no padding. The physical provider's native version string is never accepted
+and no padding. The provider's physical version string is never accepted
 as a logical `version_id`.
 
 ### 5.4 Branch and snapshot views
@@ -949,9 +949,9 @@ impl Client {
     pub async fn recover_branch(&self, reflog: ReflogEntryId,
         expected_head: CommitId, reason: &str) -> Result<RefMoveReceipt, Error>;
     pub async fn list_reflog(&self) -> Result<Vec<(ReflogEntryId, ReflogEntryV1)>, Error>;
-    pub async fn list_native_branch_ref_versions(&self)
-        -> Result<Vec<NativeBranchRefVersion>, Error>;
-    pub async fn recover_branch_from_native_version(&self, version_id: &str,
+    pub async fn list_physical_branch_ref_versions(&self)
+        -> Result<Vec<PhysicalBranchRefVersion>, Error>;
+    pub async fn recover_branch_from_physical_version(&self, version_id: &str,
         expected_head: CommitId, reason: &str) -> Result<RefMoveReceipt, Error>;
     pub async fn recover_tag(&self, tag: impl AsRef<str>, reflog: ReflogEntryId,
         expected_target: CommitId, reason: &str) -> Result<Tag, Error>;
@@ -1243,7 +1243,7 @@ source `ContentRef` preserves its source logical ETag; a copy that streams new
 content computes the ordinary put ETag. This zero-copy rule is a declared S3
 subset divergence. ETags do not provide integrity or identity. SHA-256 chunk
 CIDs and manifest CIDs provide storage integrity; supported whole/composite
-checksums provide the declared client checksum semantics. Physical S3 ETags are
+checksums provide the declared client checksum semantics. S3 ETags are
 never exposed as logical object ETags.
 
 The tagged kind makes content, size, ETag, headers, checksums, metadata, and tags
@@ -1353,7 +1353,7 @@ pub struct LoadedRef {
 }
 ```
 
-`StorageToken` contains physical S3 ETag/version metadata and is never serialized
+`StorageToken` contains S3 ETag/version metadata and is never serialized
 inside canonical commits. Ref deletion is a conditional tombstone update;
 physical removal happens after a retention window.
 
@@ -1565,7 +1565,7 @@ Initialization uses this order:
 6. Create the default branch ref with `If-None-Match: *`.
 7. Reload the intent, marker, attestation, and ref, then validate their exact
    relationship.
-8. Remove probe objects by exact physical version when native versioning is
+8. Remove probe objects by exact physical version when physical versioning is
    enabled, or by path on an unversioned physical bucket.
 
 The initialization intent is retained as a create-only recovery record. It
@@ -1710,7 +1710,7 @@ in `next_upload_id_marker` while preserving the actual last logical key in
 summaries returned across all pages. The cursor and snapshot are jointly bound
 to repository, bucket, branch, prefix, position, last key, and one expiry; both
 are checked on every continuation. This is an adapter-compatible marker subset,
-not a claim that native S3 accepts or emits the same opaque value.
+not a claim that S3 accepts or emits the same opaque value.
 
 `ListObjectVersions` orders logical keys by UTF-8 bytes and each key's versions
 by descending `(CommitGeneration, mutation_ordinal, ObjectVersionId)`. Display
@@ -1720,7 +1720,7 @@ captured commit. A truncated response returns the actual last logical key as
 `next_key_marker` and an adapter-issued opaque cursor as
 `next_version_id_marker`. Later requests must return both. The cursor binds the
 snapshot, query, exact version-tree position, expiry, and signer key. This is a
-declared SDK-compatible subset, not wire-level token equivalence with native
+declared SDK-compatible subset, not wire-level token equivalence with physical
 S3.
 
 Versions and delete markers together count toward the 1,000 maximum. `is_latest`
@@ -1763,7 +1763,7 @@ rewrite reachable history under explicit policy, audit, and retention controls.
 - GET and range GET stream across manifest parts without assembling the full
   object in memory.
 - The logical multipart ETag follows the policy in Section 6.4. A part ETag
-  identifies the selected immutable part record, not a physical provider ETag.
+  identifies the selected immutable part record, not a provider ETag.
 
 ### 8.6 Copy behavior
 
@@ -1923,13 +1923,13 @@ adapter-specific result and is never collapsed into a generic timeout.
 
 Recommended roles are separate:
 
-- provisioner: physical bucket, encryption, native versioning, and policies;
+- provisioner: physical bucket, encryption, physical versioning, and policies;
 - provider qualifier: isolated probes and signed capability attestations;
 - runtime client: immutable object writes and approved conditional ref updates;
 - maintenance worker: list, pin, retention, reflog, upload cleanup, and GC;
-- recovery operator: fsck, ref repair, and native-version restoration.
+- recovery operator: fsck, ref repair, and physical-version restoration.
 
-Native S3 bucket versioning is recommended as defense in depth for mutable ref
+S3 bucket versioning is recommended as defense in depth for mutable ref
 recovery, but it is not the logical version model. Server-side encryption is
 configured on the physical bucket/adapter. Per-request SSE-C and mixed KMS-key
 semantics are unsupported until content deduplication and copy behavior are
@@ -1939,7 +1939,7 @@ Bucket lifecycle expiration must not target the authoritative repository
 prefix. Retention and reclamation are repository operations because only the
 commit graph proves reachability. On a physically versioned bucket, sweep and
 probe cleanup delete the exact listed physical version ID; a path-only delete
-is forbidden because it creates a native delete marker without reclaiming the
+is forbidden because it creates a physical delete marker without reclaiming the
 selected bytes. Ref recovery permissions remain separate from routine runtime
 permissions.
 
@@ -2141,7 +2141,7 @@ risk.
   and does not create a new delete marker.
 - Physical listing follows opaque provider continuation tokens to exhaustion
   without omissions or duplicates.
-- Physical S3 ETags/version IDs appear only inside `StorageToken` and
+- S3 ETags/version IDs appear only inside `StorageToken` and
   diagnostics.
 - The memory and reference S3-compatible provider pass the same conformance
   suite. Every advertised production provider/account, including AWS, must pass
@@ -2157,7 +2157,7 @@ PROLLY_S3_RUSTFS=1 \
   --test rustfs_repository rustfs_conditional_object_plane_conformance
 PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-client --all-features \
-  --test rustfs_repository rustfs_exact_delete_preserves_other_native_versions
+  --test rustfs_repository rustfs_exact_delete_preserves_other_physical_versions
 PROLLY_S3_AWS=1 PROLLY_AWS_REGION=us-west-2 \
   PROLLY_AWS_BUCKET_UNVERSIONED=<isolated-bucket> \
   PROLLY_AWS_BUCKET_VERSIONED=<isolated-versioned-bucket> \
@@ -2318,7 +2318,7 @@ implying concrete AWS client compatibility that the adapter cannot provide.
 - publishable internal MVP client crate;
 - compile fixtures demonstrating migration-shaped call chains;
 - API-path parity suite for fluent, input-first, and core calls;
-- differential logical tests against an isolated native S3 bucket where
+- differential logical tests against an isolated S3 bucket where
   semantics are comparable.
 
 #### Acceptance criteria
@@ -2357,7 +2357,7 @@ cargo test --manifest-path extensions/s3/Cargo.toml -p prolly-s3-core \
 PROLLY_S3_RUSTFS=1 cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository \
   rustfs_aws_shaped_client_round_trip
-# The complete native-S3 differential matrix is an AWS-account release gate;
+# The complete S3 differential matrix is an AWS-account release gate;
 # run the Phase 1 aws_qualification command plus the signed differential job.
 ```
 
@@ -2431,7 +2431,7 @@ queries explicitly.
 - A selected-version `DeleteObject` is rejected before staging or publication.
 - `DeleteObjects` rejects duplicate identifiers and exposes either all valid
   selected logical deletes in one commit or none.
-- Object version IDs never contain or depend on physical S3 version IDs.
+- Object version IDs never contain or depend on S3 version IDs.
 
 #### Verification
 
@@ -2649,7 +2649,7 @@ tag, pin, and reflog target. A time/size policy never prunes history still
 reachable from one of those roots. Destructive reachable-history rewriting is a
 future audited migration, not GC. Sweep therefore targets failed proposals,
 expired deleted-branch histories, terminal uploads/workspaces/leases, obsolete
-native physical ref versions, and other proven-unreachable objects.
+physical ref versions, and other proven-unreachable objects.
 
 #### Dependencies
 
@@ -2670,10 +2670,10 @@ native physical ref versions, and other proven-unreachable objects.
   content.
 - Implement full and incremental fsck. Repair only missing immutable closure
   members from a qualified matching repository. Treat a corrupt present
-  immutable as an incident requiring quarantine/native-version recovery rather
+  immutable as an incident requiring quarantine/physical-version recovery rather
   than overwriting it in place.
 - Implement retained-root discovery from refs, tags, reflogs, pins, uploads,
-  workspaces, publication leases, token/reflog retention policy, native
+  workspaces, publication leases, token/reflog retention policy, physical
   ref-version recovery policy, and active maintenance runs.
 - Implement a fenced GC run: persist cutoff and physical-version candidates;
   mark canonical roots and closures; reread mutable roots/leases; abort or mark
@@ -2725,7 +2725,7 @@ native physical ref versions, and other proven-unreachable objects.
   move a ref.
 - On a physically versioned bucket, sweep enumerates versions and deletes only
   the recorded exact version IDs. It never issues a path-only delete and never
-  removes native ref history inside the configured recovery window.
+  removes physical ref history inside the configured recovery window.
 - Format markers, capability attestations, current refs, current coordination
   manifests, and active run state are outside the immutable sweep allowlist.
 - An interrupted mark resumes from a durable fixed-time operation record and
@@ -2767,7 +2767,7 @@ same logical repository.
 
 The advisory index and maintenance workers are optional. Disabling them leaves
 canonical repository reads/writes intact; a failed sweep cannot be rolled back
-without native bucket versioning or backups, so sweep remains opt-in until the
+without physical bucket versioning or backups, so sweep remains opt-in until the
 exit gate passes.
 
 ### Phase 8: Production qualification and release
@@ -2792,7 +2792,7 @@ Release requires measured envelopes and clean downstream packaging.
   cache rebuild, sync, and GC.
 - Measure provider requests, transferred bytes, storage amplification, CPU,
   memory, temporary disk, and orphan accumulation.
-- Verify IAM profiles, encryption, native bucket versioning recovery, and
+- Verify IAM profiles, encryption, physical bucket versioning recovery, and
   credential ownership.
 - Test mixed reader/writer versions and fail-closed upgrade negotiation.
 - Test the pinned baseline and newest compatible dependency set separately;
@@ -2842,10 +2842,10 @@ Release requires measured envelopes and clean downstream packaging.
 - A legacy profile-1 format marker remains byte-identical/readable, while
   future reader, writer, and capability requirements all return
   `UnsupportedRepositoryFormat` with an unchanged physical-version snapshot.
-- Recovery from a mistakenly moved/deleted ref succeeds using reflog and native
+- Recovery from a mistakenly moved/deleted ref succeeds using reflog and physical
   S3 versions in the documented profile.
 - GC qualification on a physically versioned bucket proves reclaimed versions
-  disappear without creating path delete markers or damaging retained native
+  disappear without creating path delete markers or damaging retained physical
   ref history.
 - The public compatibility manifest, documentation, compile tests, and runtime
   validator agree exactly.
@@ -2902,7 +2902,7 @@ Every benchmark reports:
 
 ```text
 logical latency and bytes
-physical S3 GET/HEAD/PUT/LIST/DELETE counts and bytes
+S3 GET/HEAD/PUT/LIST/DELETE counts and bytes
 Prolly nodes read/written and structural reuse
 payload/chunk/manifest bytes written and deduplicated
 ref conflicts, retries, proposed orphan bytes, and reconciliation time
@@ -2934,7 +2934,7 @@ Required matrices include:
 4. Object-plane conformance tests shared by memory, emulator, and AWS adapters,
    including physically versioned and unversioned buckets.
 5. Client/core/API-path parity tests.
-6. Differential tests against native S3 for the declared comparable subset.
+6. Differential tests against S3 for the declared comparable subset.
 7. Multi-process ref, retry, version, branch, and workspace races.
 8. Fault injection at every initialization, body read, write, lease update,
    read, CAS, response, cancellation, cache, sync, and GC boundary.
@@ -2961,7 +2961,7 @@ Required matrices include:
 | Pagination follows moving branch | Duplicated/missing list results | Commit-bound authenticated continuation tokens |
 | Token keys differ by process | Valid pages fail after restart | Required shared signer/key ring and rotation window |
 | GC races publication or tokens | Historical reads fail | leases, pins, uploads, workspaces, root recheck, grace period |
-| Path-only GC on a versioned bucket | Bytes remain or wrong native version is hidden | enumerate and delete exact physical version IDs |
+| Path-only GC on a versioned bucket | Bytes remain or wrong physical version is hidden | enumerate and delete exact physical version IDs |
 | Stale/self-asserted provider profile | CAS/consistency assumptions are false | signed expiring qualification attestation and IAM separation |
 | Crash before format marker changes repository ID | Initialization cannot converge | create-only initialization intent |
 | Raw S3 users expect logical keys | Data appears missing or internals leak | bucket-bound adapter docs and IAM isolation |
@@ -2970,13 +2970,13 @@ Required matrices include:
 | Canonical codec becomes unmaintained | A casual replacement breaks durable IDs or old repositories | one exact reason-bearing advisory exception, golden bytes, independent decoding, and a separately versioned migration |
 | Hidden workers run per process | Duplicate unsafe maintenance | explicit leased workers only |
 
-## 17. Alternatives considered
+## 17. Alterphysicals considered
 
-### 17.1 Use native S3 bucket versioning only
+### 17.1 Use S3 bucket versioning only
 
-Rejected. Native versions are per physical key and cannot atomically select one
+Rejected. Physical versions are per physical key and cannot atomically select one
 whole-bucket snapshot, branch, merge, or restore without rewriting logical
-objects. Native versioning remains valuable for ref disaster recovery.
+objects. Physical versioning remains valuable for ref disaster recovery.
 
 ### 17.2 Store logical objects at their original physical keys
 
@@ -3036,7 +3036,7 @@ The versioned S3 client is complete for its declared v1 scope when:
 - clone, fsck, retention, dry-run GC, sweep, and recovery are bounded,
   checkpointed, and rehearsed;
 - GC protects active publication leases and uses exact physical version deletes
-  whenever native bucket versioning is enabled;
+  whenever physical bucket versioning is enabled;
 - streaming resource use, physical amplification, contention, and provider cost
   are measured and published;
 - no hidden worker starts on open;

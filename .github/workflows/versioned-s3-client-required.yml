@@ -50,7 +50,7 @@ jobs:
           --manifest-path extensions/s3/Cargo.toml --workspace --all-features
           -- --skip seeded_histories_are_identical_across_stores_and_restart
       - name: Independent canonical-format verifier
-        run: python3 extensions/s3/spec/native-versioned-s3/v1/conformance/verify.py
+        run: python3 extensions/s3/spec/prolly-s3/v1/conformance/verify.py
       - name: AWS qualification gate fails closed without operator inputs
         run: |
           if PROLLY_S3_AWS_PERF=0 cargo +"$CLIENT_TOOLCHAIN" test --locked \

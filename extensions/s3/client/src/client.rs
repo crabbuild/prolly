@@ -36,11 +36,11 @@ use http_body::{Body, Frame, SizeHint};
 use prolly_s3_core::{
     decode_canonical, encode_canonical, version_cursor_after_key, BatchId, ChecksumExpectation,
     CommitId, CommitReceipt, Error, ErrorCode, EtagPredicateV1, GetRequest, ListRequest,
-    LogicalObjectVersionKindV1, NativeBatchV1, NativeMultipartCompletedPart,
-    NativeMultipartPartResult, NativeMultipartSessionV1, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectSummary, ObjectVersionId, ObjectWriteConditionV1, OperationId, PhysicalVersion,
-    PhysicalVersioning, ProviderAttestationV1, ProviderProfileId, RefValueV1, Repository,
-    RepositoryOptions, Result, RetryAdvice, VersionSummary, WriterLeaseMaintenance,
+    LogicalObjectVersionKindV1, ObjectHeaders, ObjectPath, ObjectPlane, ObjectSummary,
+    ObjectVersionId, ObjectWriteConditionV1, OperationId, PhysicalBatchV1,
+    PhysicalMultipartCompletedPart, PhysicalMultipartPartResult, PhysicalMultipartSessionV1,
+    PhysicalVersion, PhysicalVersioning, ProviderAttestationV1, ProviderProfileId, RefValueV1,
+    Repository, RepositoryOptions, Result, RetryAdvice, VersionSummary, WriterLeaseMaintenance,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -122,7 +122,7 @@ pub struct QualifiedClone {
 /// A provider-native physical version of this client's selected branch ref.
 /// This is an administrative recovery record, never a logical object VersionId.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeBranchRefVersion {
+pub struct PhysicalBranchRefVersion {
     pub version_id: String,
     pub target: CommitId,
     pub generation: u64,
@@ -489,8 +489,8 @@ pub struct Client {
     provider_identity: ProviderIdentity,
     attestation_signer: Arc<dyn AttestationSigner>,
     provider_attestation: Arc<RwLock<ProviderAttestationV1>>,
-    native_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), NativeMultipartPartResult>>>,
-    native_multipart_sessions: Arc<RwLock<BTreeMap<String, NativeMultipartSessionV1>>>,
+    physical_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), PhysicalMultipartPartResult>>>,
+    physical_multipart_sessions: Arc<RwLock<BTreeMap<String, PhysicalMultipartSessionV1>>>,
     writer_lease_maintenance: Option<Arc<WriterLeaseMaintenance>>,
     max_staged_batch_bytes: usize,
 }
@@ -576,7 +576,7 @@ impl Client {
                 invalid("writer takeover requires an unshared read-only client handle")
             })?;
             repository
-                .takeover_native_writer(expected_writer, expected_generation, handoff_evidence)
+                .takeover_physical_writer(expected_writer, expected_generation, handoff_evidence)
                 .await?
         };
         self.writer_lease_maintenance =
@@ -598,8 +598,8 @@ impl Client {
             provider_identity: self.provider_identity.clone(),
             attestation_signer: self.attestation_signer.clone(),
             provider_attestation: self.provider_attestation.clone(),
-            native_multipart_parts: self.native_multipart_parts.clone(),
-            native_multipart_sessions: self.native_multipart_sessions.clone(),
+            physical_multipart_parts: self.physical_multipart_parts.clone(),
+            physical_multipart_sessions: self.physical_multipart_sessions.clone(),
             writer_lease_maintenance: self.writer_lease_maintenance.clone(),
             max_staged_batch_bytes: self.max_staged_batch_bytes,
         })
@@ -800,10 +800,10 @@ impl Client {
             .await
     }
 
-    /// Lists hash/codec-validated native S3 versions of the selected branch ref.
-    pub async fn list_native_branch_ref_versions(&self) -> Result<Vec<NativeBranchRefVersion>> {
+    /// Lists hash/codec-validated physical S3 versions of the selected branch ref.
+    pub async fn list_physical_branch_ref_versions(&self) -> Result<Vec<PhysicalBranchRefVersion>> {
         self.ensure_provider_qualified()?;
-        self.ensure_native_version_recovery_supported()?;
+        self.ensure_physical_version_recovery_supported()?;
         let path = self.branch_ref_path()?;
         let mut continuation = None;
         let mut versions = Vec::new();
@@ -825,7 +825,7 @@ impl Client {
                 let version_id = entry.metadata.token.version_id.ok_or_else(|| {
                     Error::new(
                         ErrorCode::MissingCapability,
-                        "provider omitted a native version ID while listing a versioned ref",
+                        "provider omitted a physical version ID while listing a versioned ref",
                     )
                 })?;
                 let stored = self
@@ -842,11 +842,11 @@ impl Client {
                     .ok_or_else(|| {
                         Error::new(
                             ErrorCode::NoSuchVersion,
-                            "listed native branch-ref version is no longer readable",
+                            "listed physical branch-ref version is no longer readable",
                         )
                     })?;
                 let value: RefValueV1 = decode_canonical(&stored.bytes)?;
-                versions.push(NativeBranchRefVersion {
+                versions.push(PhysicalBranchRefVersion {
                     version_id,
                     target: value.target,
                     generation: value.generation.0,
@@ -872,18 +872,18 @@ impl Client {
         Ok(versions)
     }
 
-    /// Restores a native ref version through the ordinary audited reset path.
+    /// Restores a physical ref version through the ordinary audited reset path.
     /// The selected target closure is fully fscked before any new ref write.
-    pub async fn recover_branch_from_native_version(
+    pub async fn recover_branch_from_physical_version(
         &self,
         version_id: &str,
         expected_head: CommitId,
         reason: &str,
     ) -> Result<prolly_s3_core::RefMoveReceipt> {
         self.ensure_provider_qualified()?;
-        self.ensure_native_version_recovery_supported()?;
+        self.ensure_physical_version_recovery_supported()?;
         if version_id.is_empty() {
-            return Err(invalid("native branch-ref version ID must not be empty"));
+            return Err(invalid("physical branch-ref version ID must not be empty"));
         }
         let path = self.branch_ref_path()?;
         let stored = self
@@ -897,12 +897,14 @@ impl Client {
                 }),
             })
             .await?
-            .ok_or_else(|| Error::new(ErrorCode::NoSuchVersion, "native ref version not found"))?;
+            .ok_or_else(|| {
+                Error::new(ErrorCode::NoSuchVersion, "physical ref version not found")
+            })?;
         let candidate: RefValueV1 = decode_canonical(&stored.bytes)?;
         if candidate.tombstone {
             return Err(Error::new(
                 ErrorCode::InvalidRevision,
-                "native ref version is a logical tombstone",
+                "physical ref version is a logical tombstone",
             ));
         }
         self.repository.fsck_commit(candidate.target).await?;
@@ -1102,7 +1104,7 @@ impl Client {
             None,
         )
         .await?;
-        validate_native_capabilities(&attestation)?;
+        validate_physical_capabilities(&attestation)?;
         let id = attestation.id;
         *self
             .provider_attestation
@@ -1289,10 +1291,10 @@ impl Client {
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "attestation lock poisoned"))?;
         ensure_attestation_current(&attestation)?;
-        validate_native_capabilities(&attestation)
+        validate_physical_capabilities(&attestation)
     }
 
-    fn ensure_native_version_recovery_supported(&self) -> Result<()> {
+    fn ensure_physical_version_recovery_supported(&self) -> Result<()> {
         let attestation = self
             .provider_attestation
             .read()
@@ -1301,7 +1303,7 @@ impl Client {
         if attestation.body.capabilities.physical_versioning != PhysicalVersioning::Enabled {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
-                "native branch-ref recovery requires provider bucket versioning",
+                "physical branch-ref recovery requires provider bucket versioning",
             ));
         }
         Ok(())
@@ -1599,7 +1601,7 @@ impl ClientBuilder {
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
-        let maintain_native_writer = !options.read_only;
+        let maintain_physical_writer = !options.read_only;
         let branch = options.default_branch.clone();
         let plane = Arc::new(AwsS3ObjectPlane::new(aws, bucket.clone()));
         let provider_identity = self
@@ -1635,7 +1637,7 @@ impl ClientBuilder {
                 }
                 Err(error) => return Err(error),
             };
-            validate_native_capabilities(&attestation)?;
+            validate_physical_capabilities(&attestation)?;
             (Repository::initialize(plane, options).await?, attestation)
         } else {
             let repository = Repository::open(plane.clone(), options).await?;
@@ -1647,11 +1649,11 @@ impl ClientBuilder {
                 selected_attestation,
             )
             .await?;
-            validate_native_capabilities(&attestation)?;
+            validate_physical_capabilities(&attestation)?;
             (repository, attestation)
         };
         let repository = Arc::new(repository);
-        let writer_lease_maintenance = maintain_native_writer
+        let writer_lease_maintenance = maintain_physical_writer
             .then(|| repository.start_writer_lease_maintenance())
             .transpose()?
             .map(Arc::new);
@@ -1666,8 +1668,8 @@ impl ClientBuilder {
             provider_identity,
             attestation_signer,
             provider_attestation: Arc::new(RwLock::new(attestation)),
-            native_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
-            native_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
+            physical_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
+            physical_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
             writer_lease_maintenance,
             max_staged_batch_bytes,
         })
@@ -1695,12 +1697,12 @@ impl CommitBuilder {
         let manifest = self
             .client
             .repository
-            .begin_native_batch(&self.client.branch, self.message, millis)
+            .begin_physical_batch(&self.client.branch, self.message, millis)
             .await?;
         Ok(CommitSession {
             client: self.client,
             manifest,
-            native_mutations: BTreeMap::new(),
+            physical_mutations: BTreeMap::new(),
             staged_body_bytes: 0,
         })
     }
@@ -1708,8 +1710,8 @@ impl CommitBuilder {
 
 pub struct CommitSession {
     client: Client,
-    manifest: NativeBatchV1,
-    native_mutations: BTreeMap<Vec<u8>, prolly_s3_core::NativeBatchMutationV1>,
+    manifest: PhysicalBatchV1,
+    physical_mutations: BTreeMap<Vec<u8>, prolly_s3_core::PhysicalBatchMutationV1>,
     staged_body_bytes: usize,
 }
 impl CommitSession {
@@ -1741,7 +1743,10 @@ impl CommitSession {
         let receipt = self
             .client
             .repository
-            .publish_native_batch(self.manifest, self.native_mutations.into_values().collect())
+            .publish_physical_batch(
+                self.manifest,
+                self.physical_mutations.into_values().collect(),
+            )
             .await?;
         self.client.record_advisory(&receipt).await;
         Ok(receipt)
@@ -1789,8 +1794,8 @@ impl<'a> StagedPutObjectBuilder<'a> {
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let key_bytes = key.as_bytes().to_vec();
-        let replaced_bytes = match self.session.native_mutations.get(&key_bytes) {
-            Some(prolly_s3_core::NativeBatchMutationV1::Put { bytes, .. }) => bytes.len(),
+        let replaced_bytes = match self.session.physical_mutations.get(&key_bytes) {
+            Some(prolly_s3_core::PhysicalBatchMutationV1::Put { bytes, .. }) => bytes.len(),
             _ => 0,
         };
         let retained_bytes = self
@@ -1826,9 +1831,9 @@ impl<'a> StagedPutObjectBuilder<'a> {
             bytes.extend_from_slice(&chunk);
         }
         self.session.staged_body_bytes = retained_bytes + bytes.len();
-        self.session.native_mutations.insert(
+        self.session.physical_mutations.insert(
             key_bytes.clone(),
-            prolly_s3_core::NativeBatchMutationV1::Put {
+            prolly_s3_core::PhysicalBatchMutationV1::Put {
                 key: key_bytes,
                 bytes,
                 headers: ObjectHeaders {
@@ -1862,8 +1867,8 @@ impl<'a> StagedDeleteObjectBuilder<'a> {
             .validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let key_bytes = key.as_bytes().to_vec();
-        if let Some(prolly_s3_core::NativeBatchMutationV1::Put { bytes, .. }) =
-            self.session.native_mutations.get(&key_bytes)
+        if let Some(prolly_s3_core::PhysicalBatchMutationV1::Put { bytes, .. }) =
+            self.session.physical_mutations.get(&key_bytes)
         {
             self.session.staged_body_bytes = self
                 .session
@@ -1871,9 +1876,9 @@ impl<'a> StagedDeleteObjectBuilder<'a> {
                 .checked_sub(bytes.len())
                 .ok_or_else(|| invalid("staged batch byte accounting underflow"))?;
         }
-        self.session.native_mutations.insert(
+        self.session.physical_mutations.insert(
             key_bytes.clone(),
-            prolly_s3_core::NativeBatchMutationV1::Delete { key: key_bytes },
+            prolly_s3_core::PhysicalBatchMutationV1::Delete { key: key_bytes },
         );
         Ok(())
     }
@@ -2760,7 +2765,7 @@ impl ListMultipartUploadsBuilder {
             .client
             .repository
             .plane()
-            .list_native_multipart_uploads(prolly_s3_core::NativeMultipartListUploads {
+            .list_physical_multipart_uploads(prolly_s3_core::PhysicalMultipartListUploads {
                 prefix: prefix.clone(),
                 key_marker: self.key_marker.clone(),
                 upload_id_marker: self.upload_id_marker.clone(),
@@ -2772,7 +2777,7 @@ impl ListMultipartUploadsBuilder {
             .iter()
             .map(|upload| {
                 let key = upload.path.as_str().to_string();
-                let handle = encode_native_multipart_session(&NativeMultipartSessionV1 {
+                let handle = encode_physical_multipart_session(&PhysicalMultipartSessionV1 {
                     repository: self.client.repository_id(),
                     branch: self.client.branch.clone(),
                     key: key.as_bytes().to_vec(),
@@ -2792,12 +2797,16 @@ impl ListMultipartUploadsBuilder {
             })
             .collect::<Result<Vec<_>>>()?;
         if page.next_key_marker.is_none() {
-            let sessions = self.client.native_multipart_sessions.read().map_err(|_| {
-                Error::new(
-                    ErrorCode::InternalInvariant,
-                    "native multipart session cache lock poisoned",
-                )
-            })?;
+            let sessions = self
+                .client
+                .physical_multipart_sessions
+                .read()
+                .map_err(|_| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "physical multipart session cache lock poisoned",
+                    )
+                })?;
             for (handle, session) in sessions.iter() {
                 let key = std::str::from_utf8(&session.key).map_err(|_| {
                     Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -2887,7 +2896,7 @@ impl CreateMultipartUploadBuilder {
         let session = self
             .client
             .repository
-            .create_native_multipart_upload(
+            .create_physical_multipart_upload(
                 &self.client.branch,
                 key.as_bytes().to_vec(),
                 headers,
@@ -2895,14 +2904,14 @@ impl CreateMultipartUploadBuilder {
                 self.operation_id,
             )
             .await?;
-        let upload_id = encode_native_multipart_session(&session)?;
+        let upload_id = encode_physical_multipart_session(&session)?;
         self.client
-            .native_multipart_sessions
+            .physical_multipart_sessions
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart session cache lock poisoned",
+                    "physical multipart session cache lock poisoned",
                 )
             })?
             .insert(upload_id.clone(), session);
@@ -2996,11 +3005,11 @@ impl UploadPartCopyBuilder {
         } else {
             None
         };
-        let session = decode_native_multipart_session(&self.client, upload_text, destination)?;
+        let session = decode_physical_multipart_session(&self.client, upload_text, destination)?;
         let part = self
             .client
             .repository
-            .upload_native_multipart_part_copy(
+            .upload_physical_multipart_part_copy(
                 &session,
                 part_number,
                 &self.client.branch,
@@ -3010,12 +3019,12 @@ impl UploadPartCopyBuilder {
             )
             .await?;
         self.client
-            .native_multipart_parts
+            .physical_multipart_parts
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart part cache lock poisoned",
+                    "physical multipart part cache lock poisoned",
                 )
             })?
             .insert((upload_text.to_string(), part_number), part.clone());
@@ -3079,22 +3088,22 @@ impl UploadPartBuilder {
         )
         .map_err(|_| invalid("part_number must be positive"))?;
         let body = self.body.ok_or_else(|| invalid("body is required"))?;
-        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+        let session = decode_physical_multipart_session(&self.client, upload_text, key)?;
         let stream = futures_util::stream::unfold(body, |mut body| async move {
             body.next().await.map(|item| (item, body))
         });
         let part = self
             .client
             .repository
-            .upload_native_multipart_part_stream(&session, part_number, stream)
+            .upload_physical_multipart_part_stream(&session, part_number, stream)
             .await?;
         self.client
-            .native_multipart_parts
+            .physical_multipart_parts
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart part cache lock poisoned",
+                    "physical multipart part cache lock poisoned",
                 )
             })?
             .insert((upload_text.to_string(), part_number), part.clone());
@@ -3148,7 +3157,7 @@ impl ListPartsBuilder {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
-        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+        let session = decode_physical_multipart_session(&self.client, upload_text, key)?;
         let marker = self
             .part_number_marker
             .as_deref()
@@ -3161,17 +3170,17 @@ impl ListPartsBuilder {
             .client
             .repository
             .plane()
-            .list_native_multipart_parts(prolly_s3_core::NativeMultipartListParts {
+            .list_physical_multipart_parts(prolly_s3_core::PhysicalMultipartListParts {
                 path: ObjectPath::new(key)?,
                 upload_id: session.provider_upload_id,
                 after_part_number: marker,
                 limit,
             })
             .await?;
-        let mut cache = self.client.native_multipart_parts.write().map_err(|_| {
+        let mut cache = self.client.physical_multipart_parts.write().map_err(|_| {
             Error::new(
                 ErrorCode::InternalInvariant,
-                "native multipart part cache lock poisoned",
+                "physical multipart part cache lock poisoned",
             )
         })?;
         for part in &page.parts {
@@ -3278,7 +3287,7 @@ impl CompleteMultipartUploadBuilder {
         let completed = self
             .multipart_upload
             .ok_or_else(|| invalid("multipart_upload is required"))?;
-        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+        let session = decode_physical_multipart_session(&self.client, upload_text, key)?;
         let checksum_sha256 = decode_checksum::<32>(
             required(self.checksum_sha256.as_deref(), "checksum_sha256")?,
             "checksum_sha256",
@@ -3289,15 +3298,15 @@ impl CompleteMultipartUploadBuilder {
         )?;
         let expected_size = self
             .expected_size
-            .ok_or_else(|| invalid("expected_size is required for native multipart"))?;
-        let native_parts = {
-            let cached = self.client.native_multipart_parts.read().map_err(|_| {
+            .ok_or_else(|| invalid("expected_size is required for physical multipart"))?;
+        let physical_parts = {
+            let cached = self.client.physical_multipart_parts.read().map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart part cache lock poisoned",
+                    "physical multipart part cache lock poisoned",
                 )
             })?;
-            let mut native_parts = Vec::with_capacity(completed.parts().len());
+            let mut physical_parts = Vec::with_capacity(completed.parts().len());
             for part in completed.parts() {
                 let part_number = u32::try_from(
                     part.part_number()
@@ -3320,31 +3329,31 @@ impl CompleteMultipartUploadBuilder {
                     .copied()
                     .or_else(|| cached_part.map(|part| part.size))
                     .ok_or_else(|| {
-                        invalid("part_size is required after a native multipart process restart")
+                        invalid("part_size is required after a physical multipart process restart")
                     })?;
                 if cached_part.is_some_and(|part| {
                     part.etag != etag || part.checksum_sha256 != Some(checksum) || part.size != size
                 }) {
                     return Err(Error::new(
                         ErrorCode::ChecksumMismatch,
-                        "completed native multipart part differs from its upload receipt",
+                        "completed physical multipart part differs from its upload receipt",
                     ));
                 }
-                native_parts.push(NativeMultipartCompletedPart {
+                physical_parts.push(PhysicalMultipartCompletedPart {
                     part_number,
                     etag,
                     checksum_sha256: checksum,
                     size,
                 });
             }
-            native_parts
+            physical_parts
         };
         let receipt = self
             .client
             .repository
-            .complete_native_multipart_upload(
+            .complete_physical_multipart_upload(
                 session,
-                native_parts,
+                physical_parts,
                 checksum_sha256,
                 checksum_md5,
                 expected_size,
@@ -3352,22 +3361,22 @@ impl CompleteMultipartUploadBuilder {
             )
             .await?;
         self.client
-            .native_multipart_parts
+            .physical_multipart_parts
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart part cache lock poisoned",
+                    "physical multipart part cache lock poisoned",
                 )
             })?
             .retain(|(upload, _), _| upload != upload_text);
         self.client
-            .native_multipart_sessions
+            .physical_multipart_sessions
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart session cache lock poisoned",
+                    "physical multipart session cache lock poisoned",
                 )
             })?
             .remove(upload_text);
@@ -3429,28 +3438,28 @@ impl AbortMultipartUploadBuilder {
         self.client.validate_bucket(self.bucket.as_deref())?;
         let key = required(self.key.as_deref(), "key")?;
         let upload_text = required(self.upload_id.as_deref(), "upload_id")?;
-        let session = decode_native_multipart_session(&self.client, upload_text, key)?;
+        let session = decode_physical_multipart_session(&self.client, upload_text, key)?;
         self.client
             .repository
-            .abort_native_multipart_upload(&session)
+            .abort_physical_multipart_upload(&session)
             .await?;
         self.client
-            .native_multipart_parts
+            .physical_multipart_parts
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart part cache lock poisoned",
+                    "physical multipart part cache lock poisoned",
                 )
             })?
             .retain(|(upload, _), _| upload != upload_text);
         self.client
-            .native_multipart_sessions
+            .physical_multipart_sessions
             .write()
             .map_err(|_| {
                 Error::new(
                     ErrorCode::InternalInvariant,
-                    "native multipart session cache lock poisoned",
+                    "physical multipart session cache lock poisoned",
                 )
             })?
             .remove(upload_text);
@@ -4082,8 +4091,8 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::InvalidRequest, message)
 }
 
-fn validate_native_capabilities(attestation: &ProviderAttestationV1) -> Result<()> {
-    attestation.body.capabilities.validate_native_versioned()
+fn validate_physical_capabilities(attestation: &ProviderAttestationV1) -> Result<()> {
+    attestation.body.capabilities.validate_prolly_s3()
 }
 fn validate_branch_name(branch: &str) -> Result<()> {
     if branch.is_empty()
@@ -4181,45 +4190,45 @@ fn parse_copy_source(value: &str) -> Result<(String, String, Option<ObjectVersio
     }
     Ok((bucket.to_string(), key, version))
 }
-const NATIVE_MULTIPART_HANDLE_PREFIX: &str = "nmu1_";
+const PHYSICAL_MULTIPART_HANDLE_PREFIX: &str = "nmu1_";
 
-fn encode_native_multipart_session(session: &NativeMultipartSessionV1) -> Result<String> {
+fn encode_physical_multipart_session(session: &PhysicalMultipartSessionV1) -> Result<String> {
     Ok(format!(
-        "{NATIVE_MULTIPART_HANDLE_PREFIX}{}",
+        "{PHYSICAL_MULTIPART_HANDLE_PREFIX}{}",
         URL_SAFE_NO_PAD.encode(encode_canonical(session)?)
     ))
 }
 
-fn decode_native_multipart_session(
+fn decode_physical_multipart_session(
     client: &Client,
     value: &str,
     key: &str,
-) -> Result<NativeMultipartSessionV1> {
+) -> Result<PhysicalMultipartSessionV1> {
     let encoded = value
-        .strip_prefix(NATIVE_MULTIPART_HANDLE_PREFIX)
+        .strip_prefix(PHYSICAL_MULTIPART_HANDLE_PREFIX)
         .ok_or_else(|| {
             Error::new(
                 ErrorCode::NoSuchUpload,
-                "native multipart handle is invalid",
+                "physical multipart handle is invalid",
             )
         })?;
     let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|_| {
         Error::new(
             ErrorCode::NoSuchUpload,
-            "native multipart handle is not canonical base64url",
+            "physical multipart handle is not canonical base64url",
         )
     })?;
-    let session: NativeMultipartSessionV1 = decode_canonical(&bytes).map_err(|_| {
+    let session: PhysicalMultipartSessionV1 = decode_canonical(&bytes).map_err(|_| {
         Error::new(
             ErrorCode::NoSuchUpload,
-            "native multipart handle is malformed",
+            "physical multipart handle is malformed",
         )
     })?;
     session.validate_address(client.repository_id())?;
     if session.branch != client.branch || session.key != key.as_bytes() {
         return Err(Error::new(
             ErrorCode::NoSuchUpload,
-            "native multipart upload does not belong to this branch and key",
+            "physical multipart upload does not belong to this branch and key",
         ));
     }
     Ok(session)
@@ -4501,7 +4510,7 @@ mod tests {
 
     #[test]
     fn multipart_upload_handle_is_self_contained_across_processes() {
-        let session = NativeMultipartSessionV1 {
+        let session = PhysicalMultipartSessionV1 {
             repository: prolly_s3_core::RepositoryId::from_hash([7; 32]),
             branch: "main".to_string(),
             key: b"large/archive.bin".to_vec(),
@@ -4513,12 +4522,16 @@ mod tests {
             created_at_millis: 123,
             discovered: false,
         };
-        let handle = encode_native_multipart_session(&session).unwrap();
+        let handle = encode_physical_multipart_session(&session).unwrap();
         let bytes = URL_SAFE_NO_PAD
-            .decode(handle.strip_prefix(NATIVE_MULTIPART_HANDLE_PREFIX).unwrap())
+            .decode(
+                handle
+                    .strip_prefix(PHYSICAL_MULTIPART_HANDLE_PREFIX)
+                    .unwrap(),
+            )
             .unwrap();
         assert_eq!(
-            decode_canonical::<NativeMultipartSessionV1>(&bytes).unwrap(),
+            decode_canonical::<PhysicalMultipartSessionV1>(&bytes).unwrap(),
             session
         );
     }

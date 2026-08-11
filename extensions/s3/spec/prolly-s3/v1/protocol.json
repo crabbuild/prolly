@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "id": "prolly-native-versioned-s3/v1",
+  "id": "prolly-s3/v1",
   "status": "frozen",
   "versions": {
     "repository_format": 1,
@@ -30,7 +30,7 @@
     "repository_prefix": ".prolly/v1",
     "default_branch": "main"
   },
-  "media_type": "application/vnd.prolly.native-s3.v1+cbor",
+  "media_type": "application/vnd.prolly.s3.v1+cbor",
   "schema": "schema.cddl",
   "api_model": "api.smithy",
   "format_path": "{prefix}/format/v1.cbor",
@@ -69,10 +69,10 @@
     "RefValueV1",
     "ExclusiveWriterLeaseV1",
     "TagValueV1",
-    "NativeMultipartSessionV1",
-    "NativePreparedMutationV1",
-    "NativeBatchMutationV1",
-    "NativeBatchV1"
+    "PhysicalMultipartSessionV1",
+    "PhysicalPreparedMutationV1",
+    "PhysicalBatchMutationV1",
+    "PhysicalBatchV1"
   ],
   "path_record_dispatch": {
     "format/v1.cbor": "RepositoryFormatV1",

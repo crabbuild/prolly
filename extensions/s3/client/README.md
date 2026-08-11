@@ -1,4 +1,4 @@
-# Prolly native-versioned S3 client
+# Prolly S3 client
 
 `prolly-s3-client` keeps files as normal, whole objects in a versioned S3
 bucket and adds Git-like history through Prolly commits. It deliberately does
@@ -258,7 +258,7 @@ stale expected head fails explicitly.
 - No unmanaged or multi-process concurrent writers.
 - No repository-level deduplication, chunking, or partial-file updates.
 - Commit sessions buffer bodies in memory and fail closed at the configured
-  aggregate byte limit; use native multipart for large individual files.
+  aggregate byte limit; use physical multipart for large individual files.
 - Multipart restart requires the caller to persist the upload handle, each
   part's ETag/SHA-256/size, and whole-object checksums.
 - Provider-native version IDs cannot be preserved across buckets.

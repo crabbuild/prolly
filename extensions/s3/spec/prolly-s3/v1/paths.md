@@ -1,4 +1,4 @@
-# Physical S3 namespace
+# S3 namespace
 
 `P` is the configured repository prefix. Its v1 default is `.prolly/v1`.
 It MUST satisfy the physical object-path rules: UTF-8, 1–1024 bytes, no leading
@@ -34,8 +34,8 @@ trailing slash, `//`, `..`, `@{`, trailing `.`, component `.`/`..`, or component
 ending `.lock`.
 
 User payload objects live at their logical S3 key, outside `P`. A logical key
-equal to `P` or beginning `P/` is reserved and MUST be rejected. The native S3
-VersionId returned by the provider is stored in `NativeObjectBindingV1` and is
+equal to `P` or beginning `P/` is reserved and MUST be rejected. The S3
+VersionId returned by the provider is stored in `PhysicalObjectBindingV1` and is
 never synthesized from a logical ID.
 
 ## Creation and mutability

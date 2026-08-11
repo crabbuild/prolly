@@ -1,5 +1,5 @@
 {
-  "schema": "prolly-native-versioned-s3-conformance/v1",
+  "schema": "prolly-s3-conformance/v1",
   "version": 1,
   "hashes": [
     {

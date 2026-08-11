@@ -5,18 +5,17 @@ use prolly_s3_core::{
     decode_canonical, encode_canonical, BucketCommitV1, BucketDeltaV1, BucketStateV1,
     CanonicalLimits, CommitGeneration, CommitId, CommitObjectV1, CurrentObjectV1, ErrorCode,
     ExclusiveWriterLeaseV1, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
-    NativeObjectBindingV1, NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectTransition,
-    ObjectVersionOrder, ObjectVersionV1, OperationId, RefGeneration, RefValueV1, ReflogEntryV1,
-    RepositoryFormatV1, RepositoryId, TreeFormatDigest, TreeRootV1,
+    NodePackEntryV1, NodePackV1, ObjectHeaders, ObjectTransition, ObjectVersionOrder,
+    ObjectVersionV1, OperationId, PhysicalObjectBindingV1, RefGeneration, RefValueV1,
+    ReflogEntryV1, RepositoryFormatV1, RepositoryId, TreeFormatDigest, TreeRootV1,
 };
 use serde::Serialize;
 use serde_json::{json, Value as JsonValue};
 use uuid::Uuid;
 
-const FIXTURE: &str =
-    include_str!("../../spec/native-versioned-s3/v1/conformance/canonical-records.json");
+const FIXTURE: &str = include_str!("../../spec/prolly-s3/v1/conformance/canonical-records.json");
 // Keep the fixture embedded so any wire change is reviewed as source.
-const CASES: &str = include_str!("../../spec/native-versioned-s3/v1/conformance/cases.json");
+const CASES: &str = include_str!("../../spec/prolly-s3/v1/conformance/cases.json");
 
 fn encoded<T: Serialize>(value: &T) -> String {
     hex::encode(encode_canonical(value).unwrap())
@@ -73,7 +72,7 @@ fn actual_fixture() -> JsonValue {
                 tags: BTreeMap::from([("env".into(), "test".into())]),
             },
         },
-        NativeObjectBindingV1::Live {
+        PhysicalObjectBindingV1::Live {
             version_id: "provider-version-1".into(),
             provider_etag: "provider-etag-1".into(),
             checksum_sha256: checksum,
@@ -148,7 +147,7 @@ fn actual_fixture() -> JsonValue {
     };
 
     json!({
-        "schema": "prolly-native-versioned-s3-canonical-records/v1",
+        "schema": "prolly-s3-canonical-records/v1",
         "version": 1,
         "records": {
             "repository_format_v1": {"cbor_hex": encoded(&format)},
@@ -206,11 +205,8 @@ fn v1_decoder_rejects_all_negative_cbor_vectors() {
 #[test]
 fn every_protocol_default_is_v1() {
     assert_eq!(RepositoryFormatV1::VERSION, 1);
-    assert_eq!(
-        RepositoryFormatV1::NATIVE_VERSIONED_S3_CAPABILITY_PROFILE,
-        1
-    );
-    assert_eq!(RepositoryFormatV1::NATIVE_VERSIONED_PROTOCOL_VERSION, 1);
+    assert_eq!(RepositoryFormatV1::PROLLY_S3_CAPABILITY_PROFILE, 1);
+    assert_eq!(RepositoryFormatV1::PROLLY_S3_PROTOCOL_VERSION, 1);
     assert_eq!(RepositoryFormatV1::CURRENT_READER_VERSION, 1);
     assert_eq!(RepositoryFormatV1::CURRENT_WRITER_VERSION, 1);
     assert_eq!(CommitId::PREFIX, "pbc1_");

@@ -1,4 +1,4 @@
-# Native-versioned S3 qualification
+# Prolly S3 qualification
 
 Status: local protocol qualification passes; production AWS qualification is
 incomplete.
@@ -34,7 +34,7 @@ Run them with:
 
 ```bash
 cargo test --manifest-path extensions/s3/Cargo.toml \
-  -p prolly-s3-core --test native_versioned_profile
+  -p prolly-s3-core --test prolly_s3_profile
 
 PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml \

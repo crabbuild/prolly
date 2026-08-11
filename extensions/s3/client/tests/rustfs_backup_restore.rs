@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct NativeEntry {
+struct PhysicalEntry {
     key: String,
     version_id: String,
     delete_marker: bool,
@@ -149,11 +149,11 @@ fn timestamp_millis(value: Option<&aws_smithy_types::DateTime>) -> i64 {
         .unwrap_or_default()
 }
 
-async fn list_native_entries(
+async fn list_physical_entries(
     client: &aws_sdk_s3::Client,
     bucket: &str,
     prefix: &str,
-) -> Vec<NativeEntry> {
+) -> Vec<PhysicalEntry> {
     let mut key_marker = None;
     let mut version_marker = None;
     let mut entries = Vec::new();
@@ -169,7 +169,7 @@ async fn list_native_entries(
             .await
             .unwrap();
         entries.extend(output.versions().iter().filter_map(|version| {
-            Some(NativeEntry {
+            Some(PhysicalEntry {
                 key: version.key()?.to_string(),
                 version_id: version.version_id()?.to_string(),
                 delete_marker: false,
@@ -182,7 +182,7 @@ async fn list_native_entries(
             })
         }));
         entries.extend(output.delete_markers().iter().filter_map(|marker| {
-            Some(NativeEntry {
+            Some(PhysicalEntry {
                 key: marker.key()?.to_string(),
                 version_id: marker.version_id()?.to_string(),
                 delete_marker: true,
@@ -200,7 +200,7 @@ async fn list_native_entries(
     entries
 }
 
-fn inventory(mut entries: Vec<NativeEntry>) -> Vec<NativeEntry> {
+fn inventory(mut entries: Vec<PhysicalEntry>) -> Vec<PhysicalEntry> {
     entries.sort_by(|left, right| {
         left.key
             .cmp(&right.key)
@@ -211,7 +211,7 @@ fn inventory(mut entries: Vec<NativeEntry>) -> Vec<NativeEntry> {
     entries
 }
 
-fn inventory_shape(entries: &[NativeEntry], prefix: &str) -> Vec<(String, bool, bool, u64)> {
+fn inventory_shape(entries: &[PhysicalEntry], prefix: &str) -> Vec<(String, bool, bool, u64)> {
     let prefix = format!("{prefix}/");
     let mut shape = entries
         .iter()
@@ -241,7 +241,7 @@ async fn archive_physical_versions(
     repository_id: RepositoryId,
 ) -> (PhysicalBackupManifestV1, String, usize) {
     let source_before =
-        inventory(list_native_entries(client, source_bucket, repository_prefix).await);
+        inventory(list_physical_entries(client, source_bucket, repository_prefix).await);
     assert!(!source_before.is_empty());
     let mut entries = Vec::with_capacity(source_before.len());
     let mut archived_bytes = 0_usize;
@@ -307,7 +307,7 @@ async fn archive_physical_versions(
         });
     }
     let source_after =
-        inventory(list_native_entries(client, source_bucket, repository_prefix).await);
+        inventory(list_physical_entries(client, source_bucket, repository_prefix).await);
     assert_eq!(
         source_after, source_before,
         "the source changed while the physical backup was being captured"
@@ -527,7 +527,7 @@ async fn rustfs_physical_backup_restore_process_helper() {
     source.create_tag("backup-point", main_head).await.unwrap();
     source.fsck().await.unwrap();
     let repository_id = source.repository_id();
-    let source_ref_versions = source.list_native_branch_ref_versions().await.unwrap();
+    let source_ref_versions = source.list_physical_branch_ref_versions().await.unwrap();
     assert!(source_ref_versions.len() >= 3);
 
     let raw_marker_key = format!("{repository_prefix}/backup-fixture/deleted");
@@ -561,12 +561,12 @@ async fn rustfs_physical_backup_restore_process_helper() {
     assert_eq!(loaded, manifest);
 
     restore_physical_versions(&aws, &archive_bucket, &restore_bucket, &loaded).await;
-    let source_inventory = list_native_entries(&aws, &source_bucket, &repository_prefix).await;
-    let restored_inventory = list_native_entries(&aws, &restore_bucket, &repository_prefix).await;
+    let source_inventory = list_physical_entries(&aws, &source_bucket, &repository_prefix).await;
+    let restored_inventory = list_physical_entries(&aws, &restore_bucket, &repository_prefix).await;
     assert_eq!(
         inventory_shape(&restored_inventory, &repository_prefix),
         inventory_shape(&source_inventory, &repository_prefix),
-        "restored native-version stack differs in key, kind, latest state, or size"
+        "restored physical-version stack differs in key, kind, latest state, or size"
     );
     let raw_marker = restored_inventory
         .iter()
@@ -607,7 +607,7 @@ async fn rustfs_physical_backup_restore_process_helper() {
         .await
         .unwrap_err();
     assert!(
-        format!("{raw_error:?}").contains("native object version is missing"),
+        format!("{raw_error:?}").contains("physical object version is missing"),
         "raw cross-bucket restore unexpectedly preserved provider VersionIds: {raw_error:?}"
     );
     drop(raw_restored);
@@ -704,7 +704,7 @@ async fn rustfs_physical_backup_restore_process_helper() {
         .unwrap()
         .into_bytes();
     assert_eq!(current.as_ref(), b"current retained revision");
-    let restored_ref_versions = restored.list_native_branch_ref_versions().await.unwrap();
+    let restored_ref_versions = restored.list_physical_branch_ref_versions().await.unwrap();
     assert!(!restored_ref_versions.is_empty());
     assert_eq!(
         restored
@@ -727,7 +727,7 @@ async fn rustfs_physical_backup_restore_process_helper() {
         .unwrap();
     restored.fsck().await.unwrap();
     eprintln!(
-        "RUSTFS_BACKUP_RESTORE source_bucket={source_bucket} archive_bucket={archive_bucket} restore_bucket={restore_bucket} prefix={repository_prefix} source_versions={} archived_bodies={} archived_bytes={archived_bytes} delete_markers={} manifest_sha256={manifest_digest} raw_cross_bucket_restore=rejected portable_archive=verified provider_ids=rebound repository_identity=preserved logical_history=preserved native_ref_versions={} post_restore_write=ok final_fsck=ok",
+        "RUSTFS_BACKUP_RESTORE source_bucket={source_bucket} archive_bucket={archive_bucket} restore_bucket={restore_bucket} prefix={repository_prefix} source_versions={} archived_bodies={} archived_bytes={archived_bytes} delete_markers={} manifest_sha256={manifest_digest} raw_cross_bucket_restore=rejected portable_archive=verified provider_ids=rebound repository_identity=preserved logical_history=preserved physical_ref_versions={} post_restore_write=ok final_fsck=ok",
         manifest.entries.len(),
         manifest
             .entries

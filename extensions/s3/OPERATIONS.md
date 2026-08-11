@@ -1,4 +1,4 @@
-# Native-versioned S3 operations
+# Prolly S3 operations
 
 ## Deployment contract
 
@@ -12,7 +12,7 @@
 
 ## IAM capabilities
 
-The writer needs object-version reads, whole-object writes, native multipart,
+The writer needs object-version reads, whole-object writes, physical multipart,
 version listing for recovery/GC, exact-version deletion for explicit GC, and
 conditional metadata writes under `.prolly/v1/`. Readers need exact-version
 gets plus repository metadata reads.
@@ -38,7 +38,7 @@ Track separately:
 - Smithy wire attempts and provider throttling;
 - publication queue depth and wait time from `performance_snapshot()`;
 - lease renewal latency, ambiguity, and fencing events;
-- unreachable native versions and commit envelopes;
+- unreachable physical versions and commit envelopes;
 - GC candidate bytes, exact-version deletes, and failures;
 - node-index checkpoint age and rebuild fallbacks.
 

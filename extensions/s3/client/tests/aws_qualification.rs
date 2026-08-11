@@ -59,7 +59,7 @@ async fn aws_general_purpose_bucket_qualification_matrix() {
         assert_eq!(
             status == Some(BucketVersioningStatus::Enabled),
             expect_versioned,
-            "AWS qualification bucket has the wrong native versioning profile"
+            "AWS qualification bucket has the wrong physical versioning profile"
         );
         let prefix = unique_prefix(profile);
         let client = Client::builder()

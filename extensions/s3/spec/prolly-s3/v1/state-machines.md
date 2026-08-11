@@ -33,7 +33,7 @@ States: `Prepared → PhysicalWritten → Versioned → ClosureStored → Publis
 
 1. Load branch ref/commit and evaluate logical preconditions.
 2. Canonicalize the input and reserve the OperationId.
-3. Write/copy/delete the native S3 object, obtaining an exact VersionId.
+3. Write/copy/delete the physical S3 object, obtaining an exact VersionId.
 4. Construct and validate `ObjectVersionV1`; its logical ID excludes binding.
 5. Update object/version/operation Prolly trees and prepare their node pack.
 6. Store one immutable commit envelope containing `BucketCommitV1` and its
@@ -41,7 +41,7 @@ States: `Prepared → PhysicalWritten → Versioned → ClosureStored → Publis
 7. Create reflog and compare-and-swap `RefValueV1` from the loaded token.
 8. Re-read the ref when the conditional outcome is uncertain.
 
-The warm foreground request budget is three S3 operations: one native payload
+The warm foreground request budget is three S3 operations: one physical payload
 mutation, one commit-envelope PUT, and one conditional branch PUT. Failure
 before step 7 leaves unreachable physical data and is safe for GC.
 Failure/conflict at step 7 does not make the commit visible. The operation may
@@ -60,9 +60,9 @@ requires provider reconciliation using operation metadata before rewriting.
 
 States: `Open → PhysicalPrepared → Committed | Expired/Aborted`.
 
-The durable `NativeBatchV1` fixes branch, base commit, operation, message, and
+The durable `PhysicalBatchV1` fixes branch, base commit, operation, message, and
 expiry. Mutations have unique logical keys. Provider writes happen first with
-bounded parallelism and produce `NativePreparedMutationV1` bindings. One commit
+bounded parallelism and produce `PhysicalPreparedMutationV1` bindings. One commit
 envelope applies all prepared mutations and one ref CAS publishes them
 atomically. A changed base yields
 `BatchConflict`; physical results remain unreachable and collectible.
@@ -71,7 +71,7 @@ atomically. A changed base yields
 
 States: `Created → Parts → CompletedPhysical → Published | Aborted`.
 
-The original `NativeMultipartSessionV1` is required for completion; a session
+The original `PhysicalMultipartSessionV1` is required for completion; a session
 discovered by listing is read-only and cannot publish because it lacks the
 original operation/fence authority. Complete validates ordered parts and whole
 checksums, obtains the exact VersionId, then follows Put from `Versioned`.
@@ -116,7 +116,7 @@ corrupt pointer/checkpoint falls back to commit scanning during open.
 States: `MarkRunning → Planned → SweepRunning ↔ Paused → Completed | Aborted`.
 
 Mark snapshots every live branch, tag, nonexpired retention pin, and the cutoff
-time into `GcFenceV1`; it traces the complete commit/node/native-version graph.
+time into `GcFenceV1`; it traces the complete commit/node/physical-version graph.
 Candidates must be older than the grace cutoff and absent from reachability.
 Sweep reloads roots/fence before each destructive window, rechecks candidate
 reachability, and deletes only the exact VersionId recorded in the plan. It
