@@ -15,8 +15,11 @@ use md5::{Digest as _, Md5};
 #[cfg(feature = "foyer-cache")]
 use prolly_s3_client::{core::PhysicalBatchMutationV1, FoyerNodeCache, FoyerNodeCacheConfig};
 use prolly_s3_client::{
-    core::{ObjectHeaders, PhysicalMultipartCompletedPart, Repository, RepositoryOptions},
-    AwsS3ObjectPlane, Client, HmacAttestationSigner, ProviderIdentity,
+    core::{
+        ObjectHeaders, PhysicalMultipartCompletedPart, ProviderPerKeyVersionLimitV2, Repository,
+        RepositoryOptions,
+    },
+    AwsS3ObjectPlane, Client, ClientV2, HmacAttestationSigner, ProviderIdentity,
 };
 use sha2::Sha256;
 
@@ -273,6 +276,87 @@ async fn rustfs_branch_takeover_fences_old_client_before_payload_upload() {
         .key(format!("{key_prefix}/after-takeover.bin"))
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"after"))
         .send()
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_client_uses_immutable_payloads_and_fences_takeover() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-client-repository");
+    let old_writer = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-old-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    old_writer
+        .put_object("docs/native-v2.txt", b"before takeover".to_vec())
+        .await
+        .unwrap();
+    let stored = old_writer
+        .get_object("docs/native-v2.txt")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.bytes, b"before takeover");
+    assert!(stored
+        .version
+        .binding
+        .unwrap()
+        .path
+        .as_str()
+        .contains("/payloads/v2/"));
+
+    let replacement = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-new-writer")
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    assert_eq!(
+        replacement
+            .takeover_branch_writer(
+                "main",
+                "rustfs-native-v2-old-writer",
+                1,
+                "old native-v2 test credentials revoked and process isolated",
+            )
+            .await
+            .unwrap(),
+        2
+    );
+
+    old_writer.reset_s3_operation_metrics();
+    let error = old_writer
+        .put_object("docs/stale-v2.txt", b"must not upload".to_vec())
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, prolly_s3_client::ErrorCode::PreconditionFailed);
+    let stale_calls = old_writer.reset_s3_operation_metrics();
+    assert_eq!(
+        stale_calls.put_object, 0,
+        "unexpected calls: {stale_calls:?}"
+    );
+
+    replacement
+        .put_object("docs/current-v2.txt", b"writer-b".to_vec())
         .await
         .unwrap();
 }

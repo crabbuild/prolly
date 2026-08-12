@@ -44,8 +44,8 @@ pub use publication_v2::{
     PublicationJournalEntryV2, PublicationJournalPageV2, ShardedBranchPublisherV2,
 };
 pub use repository::{
-    version_cursor_after_key, BranchHead, BranchPage, BranchReflogCursor, BranchReflogPage,
-    CatalogBranchPage, CatalogTagPage, CloneReport, CommitClosureCleanupReport,
+    validate_branch, version_cursor_after_key, BranchHead, BranchPage, BranchReflogCursor,
+    BranchReflogPage, CatalogBranchPage, CatalogTagPage, CloneReport, CommitClosureCleanupReport,
     CommitClosureCursor, CommitClosurePage, CommitGraphAdvanceReport, CommitPage,
     FirstParentCursor, FirstParentPage, FsckReport, GcDryRun, GcEpochStepReport, GcSweepReport,
     HistoryCursor, IndexFreshness, InternalNodePrewarmReport, MergeConflict, MergePlan,

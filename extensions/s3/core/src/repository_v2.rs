@@ -1,6 +1,9 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, RwLock, Weak},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock, Weak,
+    },
     time::Duration,
 };
 
@@ -18,9 +21,9 @@ use crate::{
     JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, LogicalObjectVersionBodyV1,
     LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
     ObjectTransitionV2, ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV2, OperationId,
-    OperationIndexAdvanceReportV2, ProllyObjectStore, RandomIdSource, RepositoryFormatV2, Result,
-    SegmentedOperationIndexV2, ShardWriterAuthorityV2, ShardedBranchPublisherV2, SystemClock,
-    TakeoverRequestV2, TreeRootV1,
+    OperationIndexAdvanceReportV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2, RandomIdSource,
+    RepositoryFormatV2, Result, SegmentedOperationIndexV2, ShardWriterAuthorityV2,
+    ShardedBranchPublisherV2, SystemClock, TakeoverRequestV2, TreeRootV1,
 };
 
 #[derive(Clone)]
@@ -38,6 +41,7 @@ pub struct RepositoryV2Options {
     pub node_cache: Option<Arc<dyn NodeCache>>,
     pub mutable_control_versions_to_retain: usize,
     pub idempotency_retention: IdempotencyRetentionV2,
+    pub provider_per_key_version_limit: ProviderPerKeyVersionLimitV2,
     pub clock: Arc<dyn Clock>,
     pub ids: Arc<dyn IdSource>,
 }
@@ -58,6 +62,7 @@ impl Default for RepositoryV2Options {
             node_cache: None,
             mutable_control_versions_to_retain: crate::DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
             idempotency_retention: IdempotencyRetentionV2::default(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Unknown,
             clock: Arc::new(SystemClock),
             ids: Arc::new(RandomIdSource),
         }
@@ -127,6 +132,7 @@ impl<P: ObjectPlane> NodeLocator for JournalNodeLocator<P> {
 /// bindings, or operation trees. Migration is implemented as an explicit
 /// logical clone into a separately initialized v2 repository.
 pub struct RepositoryV2<P: ObjectPlane> {
+    plane: Arc<P>,
     options: RepositoryV2Options,
     format: RepositoryFormatV2,
     node_store: ProllyObjectStore<P>,
@@ -138,6 +144,7 @@ pub struct RepositoryV2<P: ObjectPlane> {
     locator: Arc<JournalNodeLocator<P>>,
     permits: RwLock<BTreeMap<String, AuthorityPermitV2>>,
     publication_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
+    writable: AtomicBool,
 }
 
 impl<P: ObjectPlane> RepositoryV2<P> {
@@ -159,6 +166,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             state_tree_format: options.state_tree_format.clone(),
             canonical_limits: options.limits.clone(),
             idempotency_retention: options.idempotency_retention,
+            provider_per_key_version_limit: options.provider_per_key_version_limit,
             min_reader_version: RepositoryFormatV2::PROLLY_S3_PROTOCOL_VERSION,
             min_writer_version: RepositoryFormatV2::PROLLY_S3_PROTOCOL_VERSION,
             created_at_millis,
@@ -358,7 +366,9 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             branches: RwLock::new(BTreeSet::new()),
         });
         node_store.set_node_locator(locator.clone())?;
+        let writable = !options.read_only;
         Ok(Self {
+            plane,
             options,
             format,
             node_store,
@@ -370,11 +380,20 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             locator,
             permits: RwLock::new(BTreeMap::new()),
             publication_lanes: std::sync::Mutex::new(BTreeMap::new()),
+            writable: AtomicBool::new(writable),
         })
     }
 
     pub fn format(&self) -> &RepositoryFormatV2 {
         &self.format
+    }
+
+    pub fn repository_id(&self) -> crate::RepositoryId {
+        self.format.repository_id
+    }
+
+    pub fn plane(&self) -> Arc<P> {
+        self.plane.clone()
     }
 
     pub async fn head(&self, branch: &str) -> Result<CommitIdV2> {
@@ -387,13 +406,13 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     /// Open read-only before takeover so no existing local permit or derived
     /// client can race the branch-ref barrier.
     pub async fn takeover_branch_writer(
-        &mut self,
+        &self,
         branch: &str,
         expected_writer: &str,
         expected_generation: u64,
         handoff_evidence: &str,
     ) -> Result<u64> {
-        if !self.options.read_only {
+        if self.writable.load(Ordering::Acquire) {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "protocol-v2 takeover requires a read-only repository handle",
@@ -433,7 +452,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .activate_after_barrier(pending, applied.into_barrier(), now)
             .await?;
         self.install_permit(branch, permit)?;
-        self.options.read_only = false;
+        self.writable.store(true, Ordering::Release);
         Ok(generation)
     }
 
@@ -459,7 +478,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         user_metadata: BTreeMap<String, String>,
         operation: OperationId,
     ) -> Result<CommitReceiptV2> {
-        if self.options.read_only {
+        if !self.writable.load(Ordering::Acquire) {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "protocol-v2 repository is read-only",
@@ -872,6 +891,9 @@ impl<P: ObjectPlane> RepositoryV2<P> {
 fn validate_options(options: &RepositoryV2Options) -> Result<()> {
     crate::repository::validate_branch(&options.default_branch)?;
     options.idempotency_retention.validate()?;
+    options
+        .provider_per_key_version_limit
+        .validate_immutable_payload_profile(options.mutable_control_versions_to_retain)?;
     if options.repository_prefix.is_empty()
         || options.repository_prefix.ends_with('/')
         || options.writer.trim().is_empty()
@@ -909,6 +931,7 @@ fn validate_format_compatibility(
     if format.state_tree_format != options.state_tree_format
         || format.canonical_limits != options.limits
         || format.idempotency_retention != options.idempotency_retention
+        || format.provider_per_key_version_limit != options.provider_per_key_version_limit
     {
         return Err(Error::new(
             ErrorCode::RepositoryFormatConflict,

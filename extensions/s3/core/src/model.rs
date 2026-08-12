@@ -247,6 +247,7 @@ pub struct RepositoryFormatV2 {
     pub state_tree_format: TreeFormat,
     pub canonical_limits: CanonicalLimits,
     pub idempotency_retention: IdempotencyRetentionV2,
+    pub provider_per_key_version_limit: ProviderPerKeyVersionLimitV2,
     pub min_reader_version: u32,
     pub min_writer_version: u32,
     pub created_at_millis: u64,
