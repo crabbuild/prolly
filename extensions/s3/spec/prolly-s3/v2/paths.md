@@ -12,6 +12,8 @@ any protocol v1 record. `P` is the configured repository prefix.
 | authority-stamped commit object | `P/commits/v2/sha256/H0/H1/H` |
 | publication event | `P/publications/v2/sha256/H0/H1/H` |
 | immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
+| operation-index head | `P/operation-index/v2/heads/N.cbor` |
+| operation-index segment | `P/operation-index/v2/segments/N/sha256/H0/H1/H` |
 
 `N` is lowercase hex of the UTF-8 branch or system-namespace name. The
 canonical lease embeds its repository ID and full authority scope, so moving a
@@ -41,6 +43,15 @@ create different immutable payload keys instead of accumulating provider
 versions at that user key. Identical content reuses the same immutable object.
 An original-key object, when materialized for external compatibility, is a
 rebuildable projection and is never part of repository closure.
+
+The operation-ID index is advisory and branch-local. Its bounded mutable head
+checkpoints one publication event and references immutable, sorted LSM-style
+segments. A configured generation and age window defines the idempotency
+contract; an entry outside either boundary is not replayable. Lookup checks the
+bounded journal tail after the checkpoint and then the compact segment levels.
+Index heads must be initialized with branch creation. If lag exceeds the
+configured tail bound, normal advancement fails closed and requires the
+resumable rebuild path instead of scanning unbounded history in one call.
 
 Provider qualification for v2 must attest either an unlimited per-key version
 count or a finite count at least two greater than the configured mutable-control

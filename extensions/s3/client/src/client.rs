@@ -257,6 +257,18 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
+        relative_pattern: "operation-index/v2/heads/<branch-hex>.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "operation-index/v2/segments/<branch-hex>/sha256/<2>/<2>/<segment-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
         relative_pattern: "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: false,
@@ -4927,6 +4939,8 @@ mod tests {
             "node-index/v2/head.cbor",
             "ref-catalog/v2/head.cbor",
             "commit-graph/v2/head.cbor",
+            "operation-index/v2/heads/<branch-hex>.cbor",
+            "operation-index/v2/segments/<branch-hex>/sha256/<2>/<2>/<segment-id>",
             "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
             "commits/sha256/<2>/<2>/<commit-id>",
             "publications/v2/sha256/<2>/<2>/<publication-id>",

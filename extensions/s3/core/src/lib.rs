@@ -7,6 +7,7 @@ mod control_versions;
 mod error;
 mod model;
 mod object_plane;
+mod operation_index_v2;
 mod payload_v2;
 mod publication_v2;
 mod repository;
@@ -26,6 +27,10 @@ pub use control_versions::{
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
 pub use model::*;
 pub use object_plane::*;
+pub use operation_index_v2::{
+    OperationIndexAdvanceReportV2, SegmentedOperationIndexV2, DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
+    DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS, DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
+};
 pub use payload_v2::ImmutablePayloadStoreV2;
 pub use prolly::Cid;
 pub use publication_v2::{

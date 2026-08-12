@@ -89,6 +89,7 @@ hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(PublicationEventIdV2, "ppe2_");
+hash_id!(OperationIndexSegmentIdV2, "poi2_");
 hash_id!(TreeFormatDigest, "ptf1_");
 hash_id!(ProviderProfileId, "ppf1_");
 hash_id!(GcPlanId, "pgc1_");
@@ -1648,6 +1649,123 @@ impl PublicationEventV2 {
             && self.authority == reference.authority
             && self.created_at_millis == reference.updated_at_millis)
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdempotencyRetentionV2 {
+    /// An operation remains replayable only while it is within this many ref
+    /// generations of the current branch head.
+    pub max_generations: u64,
+    /// The generation window is additionally capped by wall-clock age.
+    pub max_age_millis: u64,
+}
+
+impl Default for IdempotencyRetentionV2 {
+    fn default() -> Self {
+        Self {
+            max_generations: 1_000_000,
+            max_age_millis: 7 * 24 * 60 * 60 * 1_000,
+        }
+    }
+}
+
+impl IdempotencyRetentionV2 {
+    pub fn validate(self) -> Result<()> {
+        if self.max_generations == 0
+            || self.max_generations > 1_000_000
+            || self.max_age_millis < 60_000
+            || self.max_age_millis > 365 * 24 * 60 * 60 * 1_000
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 idempotency retention is outside the supported production bounds",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn contains(
+        self,
+        current_generation: RefGeneration,
+        now_millis: u64,
+        operation_generation: RefGeneration,
+        created_at_millis: u64,
+    ) -> bool {
+        operation_generation.0 <= current_generation.0
+            && created_at_millis <= now_millis
+            && current_generation.0.saturating_sub(operation_generation.0) <= self.max_generations
+            && now_millis.saturating_sub(created_at_millis) <= self.max_age_millis
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexedOperationV2 {
+    pub operation: OperationId,
+    pub publication: PublicationEventIdV2,
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+    pub created_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexSegmentV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub level: u8,
+    /// Strictly sorted by operation ID.
+    pub entries: Vec<IndexedOperationV2>,
+}
+
+impl OperationIndexSegmentV2 {
+    pub fn validate(&self) -> Result<()> {
+        crate::repository::validate_branch(&self.branch)?;
+        if self.entries.is_empty()
+            || self.entries.iter().any(|entry| entry.operation.is_nil())
+            || self
+                .entries
+                .windows(2)
+                .any(|pair| pair[0].operation >= pair[1].operation)
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 operation-index segment is empty or not strictly sorted",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn id(&self) -> Result<OperationIndexSegmentIdV2> {
+        self.validate()?;
+        let bytes = encode_canonical(self)?;
+        Ok(OperationIndexSegmentIdV2(domain_hash(
+            b"prolly-s3/operation-index-segment/v2",
+            &[&bytes],
+        )))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexSegmentRefV2 {
+    pub id: OperationIndexSegmentIdV2,
+    pub level: u8,
+    pub min_generation: RefGeneration,
+    pub max_generation: RefGeneration,
+    pub min_created_at_millis: u64,
+    pub max_created_at_millis: u64,
+    pub entries: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexHeadV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub checkpoint: PublicationEventIdV2,
+    pub checkpoint_generation: RefGeneration,
+    pub retention: IdempotencyRetentionV2,
+    /// Each level contains fewer than the configured merge fanout segments.
+    pub levels: Vec<Vec<OperationIndexSegmentRefV2>>,
+    pub generation: u64,
+    pub updated_at_millis: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -93,6 +93,15 @@ not change that traversal. Publishing the event adds one immutable write to the
 v2 foreground path. A failed competing ref CAS can leave an unreachable event;
 retain it until the v2 concurrent-GC gate is enabled.
 
+Initialize `SegmentedOperationIndexV2` when a v2 branch is created, and advance
+it continuously from the publication journal. The default idempotency window
+is the smaller of one million ref generations and seven days. Applications
+must retain and reuse operation IDs only within the configured window. The
+mutable per-branch head stays under the repository control-version bound;
+immutable sorted segments merge geometrically, so lookup reads a bounded
+number of levels plus the explicitly bounded unindexed journal tail. Excessive
+lag fails closed with `HistoryLimitExceeded` and must use resumable rebuild.
+
 ## Conflict and outage handling
 
 - A stale `expected_head` or branch-ref CAS returns a conflict. Re-read and let

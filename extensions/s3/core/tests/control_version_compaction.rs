@@ -71,6 +71,10 @@ fn every_mutable_control_family_has_one_canonical_classification() {
             "commit-graph/v2/head.cbor",
             MutableControlKind::CommitGraphHeadV2,
         ),
+        (
+            "operation-index/v2/heads/6d61696e.cbor",
+            MutableControlKind::OperationIndexHeadV2,
+        ),
         ("gc/mark-runs/01.cbor", MutableControlKind::GcMarkRunV1),
         ("gc/runs/pgc1_x.cbor", MutableControlKind::GcRunV1),
         ("gc/v2/epochs/01/head.cbor", MutableControlKind::GcEpochV2),
