@@ -20,11 +20,11 @@ use crate::{
     CommitSessionCleanupReportV2, CommitSessionStateV2, CommitSessionStoreV2, CompareExchange,
     CompareExchangeOutcome, CurrentObjectV2, Error, ErrorCode, GetRequest, IdSource,
     IdempotencyRetentionV2, ImmutablePayloadStoreV2, InitializationIntentV2,
-    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, LogicalObjectVersionBodyV1,
+    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, LoadedRefV2, LogicalObjectVersionBodyV1,
     LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
     ObjectTransitionV2, ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV2, OperationId,
     OperationIndexAdvanceReportV2, PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore,
-    ProviderPerKeyVersionLimitV2, RandomIdSource, RepositoryFormatV2, Result,
+    ProviderPerKeyVersionLimitV2, RandomIdSource, RefGeneration, RepositoryFormatV2, Result,
     SegmentedOperationIndexV2, ShardWriterAuthorityV2, ShardedBranchPublisherV2,
     StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock, TakeoverRequestV2,
     TreeRootV1,
@@ -111,6 +111,29 @@ pub struct BranchIndexAdvanceReportV2 {
     pub journal: JournalIndexAdvanceReportV2,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchIndexHealthV2 {
+    pub branch: String,
+    pub target: CommitIdV2,
+    pub ref_generation: RefGeneration,
+    pub indexed_target: Option<CommitIdV2>,
+    pub indexed_generation: Option<RefGeneration>,
+    pub lag_generations: u64,
+    pub ready: bool,
+    pub locally_registered: bool,
+    pub last_error: Option<String>,
+}
+
+pub struct BranchIndexMaintenance {
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for BranchIndexMaintenance {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 struct JournalNodeLocator<P: ObjectPlane> {
     indexes: Arc<JournalDerivedIndexesV2<P>>,
     branches: RwLock<BTreeSet<String>>,
@@ -123,6 +146,16 @@ impl<P: ObjectPlane> JournalNodeLocator<P> {
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 locator lock poisoned"))?
             .insert(branch.to_string());
         Ok(())
+    }
+
+    fn registered_branches(&self) -> Result<Vec<String>> {
+        Ok(self
+            .branches
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 locator lock poisoned"))?
+            .iter()
+            .cloned()
+            .collect())
     }
 }
 
@@ -164,6 +197,9 @@ pub struct RepositoryV2<P: ObjectPlane> {
     fenced_branches: RwLock<BTreeSet<String>>,
     authority_renewal: tokio::sync::Mutex<()>,
     publication_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
+    index_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
+    local_index_heads: RwLock<BTreeMap<String, CommitIdV2>>,
+    index_errors: RwLock<BTreeMap<String, String>>,
     writable: AtomicBool,
 }
 
@@ -242,7 +278,6 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         match repository.publisher.load(&default_branch).await {
             Ok(_) => {
                 repository.locator.register(&default_branch)?;
-                repository.register_unindexed_tail(&default_branch).await?;
                 return Ok(repository);
             }
             Err(error) if error.code == ErrorCode::InvalidRevision => {}
@@ -319,7 +354,6 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let repository = Self::from_format(plane, options, format)?;
         let branch = repository.options.default_branch.clone();
         repository.locator.register(&branch)?;
-        repository.register_unindexed_tail(&branch).await?;
         if !repository.options.read_only {
             let permit = repository
                 .authority
@@ -423,6 +457,9 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             fenced_branches: RwLock::new(BTreeSet::new()),
             authority_renewal: tokio::sync::Mutex::new(()),
             publication_lanes: std::sync::Mutex::new(BTreeMap::new()),
+            index_lanes: std::sync::Mutex::new(BTreeMap::new()),
+            local_index_heads: RwLock::new(BTreeMap::new()),
+            index_errors: RwLock::new(BTreeMap::new()),
             writable: AtomicBool::new(writable),
         })
     }
@@ -772,6 +809,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                 "protocol-v2 commit session belongs to another authority epoch",
             ));
         }
+        self.require_branch_indexes_ready(&session.branch).await?;
         let current = self.publisher.load(&session.branch).await?;
         if current.value.target != session.base_commit {
             return Err(Error::new(
@@ -914,6 +952,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             Ok(published) => {
                 self.finalize_pack(published.value.target, &commit, prepared)
                     .await?;
+                self.mark_local_index_head(&session.branch, published.value.target)?;
                 Ok(CommitReceiptV2 {
                     id: published.value.target,
                     operation: session.identity.operation,
@@ -1070,6 +1109,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         // The authority check happens before payload bytes enter the object
         // plane. A stale process therefore fails before its payload PUT.
         self.authority.validate_active(&permit, now).await?;
+        self.require_branch_indexes_ready(branch).await?;
         let binding = self.payloads.put(bytes).await?;
 
         let current = self.publisher.load(branch).await?;
@@ -1177,6 +1217,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .await?;
         self.finalize_pack(published.value.target, &commit, prepared)
             .await?;
+        self.mark_local_index_head(branch, published.value.target)?;
         Ok(CommitReceiptV2 {
             id: published.value.target,
             operation,
@@ -1191,8 +1232,9 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     pub async fn get_object(&self, branch: &str, key: &[u8]) -> Result<Option<ObjectDataV2>> {
         self.validate_key(key)?;
         self.locator.register(branch)?;
-        self.register_unindexed_tail(branch).await?;
         let reference = self.publisher.load(branch).await?;
+        self.require_branch_indexes_ready_for(branch, &reference)
+            .await?;
         let commit = self
             .load_commit_object(reference.value.target)
             .await?
@@ -1230,7 +1272,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     ) -> Result<Option<ObjectDataV2>> {
         self.validate_key(key)?;
         self.locator.register(branch)?;
-        self.register_unindexed_tail(branch).await?;
+        self.require_branch_indexes_ready(branch).await?;
         let commit = self.load_commit_object(snapshot).await?.commit;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let Some(encoded) = self
@@ -1288,6 +1330,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         }
         let permit = self.active_permit(branch, now).await?;
         self.authority.validate_active(&permit, now).await?;
+        self.require_branch_indexes_ready(branch).await?;
         let current = self.publisher.load(branch).await?;
         let base = self.load_commit_object(current.value.target).await?.commit;
         let write_store = self.node_store.isolated_write_session();
@@ -1372,6 +1415,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .await?;
         self.finalize_pack(published.value.target, &commit, prepared)
             .await?;
+        self.mark_local_index_head(branch, published.value.target)?;
         Ok(CommitReceiptV2 {
             id: published.value.target,
             operation,
@@ -1414,7 +1458,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             return Ok((Vec::new(), false));
         }
         self.locator.register(branch)?;
-        self.register_unindexed_tail(branch).await?;
+        self.require_branch_indexes_ready(branch).await?;
         let commit = self.load_commit_object(snapshot).await?.commit;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let engine = self.engine(self.node_store.clone());
@@ -1450,7 +1494,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
         let snapshot = self.head(branch).await?;
         self.locator.register(branch)?;
-        self.register_unindexed_tail(branch).await?;
+        self.require_branch_indexes_ready(branch).await?;
         let commit = self.load_commit_object(snapshot).await?.commit;
         let versions = self.tree_from_root(&commit.state.versions)?;
         let prefix = version_tree_prefix(key);
@@ -1499,7 +1543,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             return Ok((Vec::new(), false));
         }
         self.locator.register(branch)?;
-        self.register_unindexed_tail(branch).await?;
+        self.require_branch_indexes_ready(branch).await?;
         let commit = self.load_commit_object(snapshot).await?.commit;
         let versions = self.tree_from_root(&commit.state.versions)?;
         let encoded_prefix = version_tree_partial_prefix(prefix);
@@ -1530,6 +1574,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
 
     pub async fn advance_branch_indexes(&self, branch: &str) -> Result<BranchIndexAdvanceReportV2> {
         self.locator.register(branch)?;
+        let _lane = self.lock_index_branch(branch).await;
         let now = self.options.clock.now_millis()?;
         let operations = self
             .operation_index
@@ -1539,10 +1584,109 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .journal_indexes
             .advance(&self.publisher, branch, now)
             .await?;
-        Ok(BranchIndexAdvanceReportV2 {
+        let report = BranchIndexAdvanceReportV2 {
             operations,
             journal,
+        };
+        self.index_errors
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 index-error lock poisoned"))?
+            .remove(branch);
+        Ok(report)
+    }
+
+    pub async fn branch_index_health(&self, branch: &str) -> Result<BranchIndexHealthV2> {
+        self.locator.register(branch)?;
+        let reference = self.publisher.load(branch).await?;
+        self.branch_index_health_for(branch, &reference).await
+    }
+
+    async fn branch_index_health_for(
+        &self,
+        branch: &str,
+        reference: &LoadedRefV2,
+    ) -> Result<BranchIndexHealthV2> {
+        let indexed = self.journal_indexes.head(branch).await?;
+        if indexed
+            .as_ref()
+            .is_some_and(|head| head.checkpoint_generation.0 > reference.value.generation.0)
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "v2 journal index is ahead of the branch ref",
+            ));
+        }
+        let locally_registered = self
+            .local_index_heads
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 local-index lock poisoned"))?
+            .get(branch)
+            .is_some_and(|target| *target == reference.value.target);
+        // Node closure is ready when the durable index has already covered
+        // this exact target. A takeover barrier may advance the publication
+        // journal without changing the target; background maintenance still
+        // consumes that event, but reads need not wait for it.
+        let durable_ready = indexed
+            .as_ref()
+            .is_some_and(|head| head.target == reference.value.target);
+        let indexed_generation = indexed.as_ref().map(|head| head.checkpoint_generation);
+        let lag_generations = reference
+            .value
+            .generation
+            .0
+            .saturating_sub(indexed_generation.map_or(0, |generation| generation.0));
+        let last_error = self
+            .index_errors
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 index-error lock poisoned"))?
+            .get(branch)
+            .cloned();
+        Ok(BranchIndexHealthV2 {
+            branch: branch.to_string(),
+            target: reference.value.target,
+            ref_generation: reference.value.generation,
+            indexed_target: indexed.as_ref().map(|head| head.target),
+            indexed_generation,
+            lag_generations,
+            ready: durable_ready || locally_registered,
+            locally_registered,
+            last_error,
         })
+    }
+
+    pub fn start_branch_index_maintenance(
+        self: &Arc<Self>,
+        interval: Duration,
+    ) -> Result<BranchIndexMaintenance> {
+        if interval < Duration::from_millis(10) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 branch-index maintenance interval must be at least 10 milliseconds",
+            ));
+        }
+        let repository = Arc::downgrade(self);
+        let task = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                let Some(repository) = repository.upgrade() else {
+                    return;
+                };
+                let branches = match repository.locator.registered_branches() {
+                    Ok(branches) => branches,
+                    Err(_) => return,
+                };
+                for branch in branches {
+                    if let Err(error) = repository.advance_branch_indexes(&branch).await {
+                        if let Ok(mut errors) = repository.index_errors.write() {
+                            errors.insert(branch, error.to_string());
+                        }
+                    }
+                }
+            }
+        });
+        Ok(BranchIndexMaintenance { task })
     }
 
     /// Renew every locally held branch-authority permit. A failed or ambiguous
@@ -1781,53 +1925,39 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .contains(branch))
     }
 
-    async fn register_unindexed_tail(&self, branch: &str) -> Result<()> {
-        let reference = self.publisher.load(branch).await?;
-        let checkpoint = self
-            .journal_indexes
-            .head(branch)
-            .await?
-            .map(|head| head.checkpoint);
-        let mut cursor = Some(self.publisher.open_journal(branch).await?);
-        let mut reached_checkpoint = checkpoint.is_none();
-        let mut visited = 0usize;
-        while let Some(current) = cursor {
-            let page = self.publisher.read_journal_page(&current, 256).await?;
-            for entry in page.entries {
-                if checkpoint == Some(entry.id) {
-                    reached_checkpoint = true;
-                    break;
-                }
-                self.load_commit_object(entry.event.new_target).await?;
-                visited += 1;
-                if visited > crate::DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS {
-                    return Err(Error::new(
-                        ErrorCode::HistoryLimitExceeded,
-                        "v2 node-index journal tail exceeds its bounded foreground recovery limit",
-                    ));
-                }
-            }
-            if reached_checkpoint {
-                break;
-            }
-            cursor = page.continuation;
+    async fn require_branch_indexes_ready(&self, branch: &str) -> Result<()> {
+        let health = self.branch_index_health(branch).await?;
+        Self::check_branch_index_health(health)
+    }
+
+    async fn require_branch_indexes_ready_for(
+        &self,
+        branch: &str,
+        reference: &LoadedRefV2,
+    ) -> Result<()> {
+        let health = self.branch_index_health_for(branch, reference).await?;
+        Self::check_branch_index_health(health)
+    }
+
+    fn check_branch_index_health(health: BranchIndexHealthV2) -> Result<()> {
+        if health.ready {
+            return Ok(());
         }
-        if checkpoint.is_some() && !reached_checkpoint {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "v2 journal index checkpoint is not reachable from the branch ref",
-            ));
-        }
-        // A generation-zero repository intentionally has no earlier indexed
-        // history. Register its commit pack directly.
-        if checkpoint.is_none() && reference.value.generation.0 == 0 {
-            self.load_commit_object(reference.value.target).await?;
-        } else if checkpoint.is_none() {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "v2 journal indexes were not initialized with branch creation",
-            ));
-        }
+        Err(Error::new(
+            ErrorCode::MissingClosure,
+            format!(
+                "protocol-v2 branch indexes lag {} generation(s); background catch-up is required",
+                health.lag_generations
+            ),
+        )
+        .retry(crate::RetryAdvice::After(Duration::from_millis(250))))
+    }
+
+    fn mark_local_index_head(&self, branch: &str, target: CommitIdV2) -> Result<()> {
+        self.local_index_heads
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 local-index lock poisoned"))?
+            .insert(branch.to_string(), target);
         Ok(())
     }
 
@@ -1906,6 +2036,24 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let lane = {
             let mut lanes = self
                 .publication_lanes
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            lanes.retain(|_, lane| lane.strong_count() > 0);
+            if let Some(lane) = lanes.get(branch).and_then(Weak::upgrade) {
+                lane
+            } else {
+                let lane = Arc::new(tokio::sync::Mutex::new(()));
+                lanes.insert(branch.to_string(), Arc::downgrade(&lane));
+                lane
+            }
+        };
+        lane.lock_owned().await
+    }
+
+    async fn lock_index_branch(&self, branch: &str) -> tokio::sync::OwnedMutexGuard<()> {
+        let lane = {
+            let mut lanes = self
+                .index_lanes
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             lanes.retain(|_, lane| lane.strong_count() > 0);

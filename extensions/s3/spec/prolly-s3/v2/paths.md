@@ -80,6 +80,13 @@ proportional only to the unindexed journal tail. The head also records the
 derived current target, providing exact per-branch ref freshness; global branch
 enumeration remains a separate resumable administrative concern.
 
+Foreground object reads compare the selected ref target with the durable index
+target and never replay publication events. A locally published target is
+immediately readable from its registered commit pack. A cold process reports
+`MissingClosure` with retry advice until branch-local background maintenance
+advances the durable node and graph roots. Index lag and the last maintenance
+error are exposed as branch health rather than hidden inside read latency.
+
 Whole-history administration first pages refs, tags, and pins, incrementally
 attaches their targets to a `CommitClosureCursor`, and advances under explicit
 step and output budgets. The constant-size cursor names immutable Prolly state

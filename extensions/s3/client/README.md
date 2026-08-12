@@ -180,6 +180,31 @@ loop {
 }
 ```
 
+### Observe cold-start index readiness
+
+`ClientV2` starts branch-local index maintenance and waits for the default
+branch to become readable during open. Foreground reads never replay a journal
+tail. A newly selected branch instead fails quickly with `MissingClosure` and
+retry advice until background catch-up completes.
+
+```rust
+let health = client.branch_index_health().await?;
+println!(
+    "ready={} lag={} last_error={:?}",
+    health.ready,
+    health.lag_generations,
+    health.last_error,
+);
+
+client
+    .wait_for_branch_indexes(std::time::Duration::from_secs(30))
+    .await?;
+```
+
+Maintenance is branch-local and checks only branches registered in that
+process. `background_index_maintenance(false)` is available for isolated
+request-shape probes; production clients should keep the default enabled.
+
 ## Ingest files in batches (recommended)
 
 Use `ingest_objects` when loading more than one file. It publishes up to 100

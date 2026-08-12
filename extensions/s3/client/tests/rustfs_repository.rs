@@ -474,6 +474,7 @@ async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
         .bucket(&bucket)
         .repository_prefix(unique_name("native-v2-commit-session"))
         .writer("rustfs-native-v2-batch-writer")
+        .background_index_maintenance(false)
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
         .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
@@ -600,6 +601,66 @@ async fn rustfs_native_v2_durable_session_resumes_without_payload_reupload() {
             .unwrap()
             .bytes,
         payload
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_cold_open_catches_indexes_before_serving_reads() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-cold-index-catchup");
+    let writer = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-index-writer")
+        .background_index_maintenance(false)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    for index in 0..3 {
+        writer
+            .put_object(
+                format!("cold/{index}.txt"),
+                format!("value-{index}").into_bytes(),
+            )
+            .await
+            .unwrap();
+    }
+    drop(writer);
+
+    let reader = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    let health = reader.branch_index_health().await.unwrap();
+    assert!(
+        health.ready,
+        "cold open must await background catch-up: {health:?}"
+    );
+    assert_eq!(health.lag_generations, 0);
+    assert_eq!(
+        reader
+            .get_object("cold/2.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"value-2"
     );
 }
 

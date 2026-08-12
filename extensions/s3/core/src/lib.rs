@@ -59,8 +59,8 @@ pub use repository::{
     TagReflogPage, TraversalBudget, VersionSummary,
 };
 pub use repository_v2::{
-    BranchIndexAdvanceReportV2, CommitReceiptV2, ObjectDataV2, ObjectSummaryV2, RepositoryV2,
-    RepositoryV2Options, VersionSummaryV2,
+    BranchIndexAdvanceReportV2, BranchIndexHealthV2, BranchIndexMaintenance, CommitReceiptV2,
+    ObjectDataV2, ObjectSummaryV2, RepositoryV2, RepositoryV2Options, VersionSummaryV2,
 };
 #[deprecated(
     since = "0.1.0",

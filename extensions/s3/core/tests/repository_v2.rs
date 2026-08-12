@@ -619,3 +619,75 @@ async fn native_v2_expired_session_cleanup_is_bounded_and_exact() {
         .unwrap_err();
     assert_eq!(error.code, prolly_s3_core::ErrorCode::InvalidRequest);
 }
+
+#[tokio::test]
+async fn native_v2_cold_reads_fail_fast_until_background_indexes_catch_up() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(90_000));
+    let options = RepositoryV2Options {
+        repository_prefix: ".tests/native-v2-background-index".to_string(),
+        writer: "index-writer".to_string(),
+        clock: clock.clone(),
+        ids: Arc::new(SequenceIdSource::new(0xee, 1)),
+        provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+        ..RepositoryV2Options::default()
+    };
+    let writer = RepositoryV2::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..3 {
+        clock.advance(1).unwrap();
+        writer
+            .put_object(
+                "main",
+                format!("cold/{index}.txt").into_bytes(),
+                format!("value-{index}").into_bytes(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let reader = Arc::new(
+        RepositoryV2::open(
+            plane.clone(),
+            RepositoryV2Options {
+                read_only: true,
+                ..options
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    plane.reset_request_counts();
+    let error = reader.get_object("main", b"cold/2.txt").await.unwrap_err();
+    assert_eq!(error.code, prolly_s3_core::ErrorCode::MissingClosure);
+    assert!(
+        plane.request_snapshot().get <= 3,
+        "a foreground read may inspect ref/index heads but must not replay the journal tail"
+    );
+
+    let _maintenance = reader
+        .start_branch_index_maintenance(std::time::Duration::from_millis(10))
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if reader.branch_index_health("main").await.unwrap().ready {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        reader
+            .get_object("main", b"cold/2.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"value-2"
+    );
+}

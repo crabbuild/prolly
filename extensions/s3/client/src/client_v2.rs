@@ -8,8 +8,8 @@ use std::{
 use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
-    BatchId, BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode,
-    ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2,
+    BatchId, BranchIndexAdvanceReportV2, BranchIndexHealthV2, CommitIdV2, CommitReceiptV2, Error,
+    ErrorCode, ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2,
     ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2,
     RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
 };
@@ -32,6 +32,7 @@ pub struct ClientV2 {
     branch: String,
     provider_attestation: ProviderAttestationV1,
     shard_authority_maintenance: Arc<Mutex<Option<prolly_s3_core::ShardAuthorityMaintenance>>>,
+    _branch_index_maintenance: Arc<Mutex<Option<prolly_s3_core::BranchIndexMaintenance>>>,
 }
 
 #[derive(Default)]
@@ -53,6 +54,7 @@ pub struct ClientV2Builder {
     provider_attestation: Option<ProviderProfileId>,
     qualification_options: Option<ProviderQualificationOptions>,
     provider_per_key_version_limit: Option<ProviderPerKeyVersionLimitV2>,
+    background_index_maintenance: Option<bool>,
 }
 
 impl ClientV2 {
@@ -267,6 +269,34 @@ impl ClientV2 {
     pub async fn advance_branch_indexes(&self) -> Result<BranchIndexAdvanceReportV2> {
         self.ensure_provider_qualified()?;
         self.repository.advance_branch_indexes(&self.branch).await
+    }
+
+    pub async fn branch_index_health(&self) -> Result<BranchIndexHealthV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.branch_index_health(&self.branch).await
+    }
+
+    pub async fn wait_for_branch_indexes(&self, timeout: Duration) -> Result<BranchIndexHealthV2> {
+        self.ensure_provider_qualified()?;
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let health = self.repository.branch_index_health(&self.branch).await?;
+            if health.ready {
+                return Ok(health);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(Error::new(
+                    ErrorCode::MissingClosure,
+                    health.last_error.unwrap_or_else(|| {
+                        format!(
+                            "protocol-v2 branch indexes remain {} generation(s) behind",
+                            health.lag_generations
+                        )
+                    }),
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
     }
 
     pub async fn cleanup_expired_commit_sessions(
@@ -597,6 +627,13 @@ impl ClientV2Builder {
         self
     }
 
+    /// Enable or disable automatic branch-index catch-up. It is enabled by
+    /// default; disabling it is intended for isolated request-shape probes.
+    pub fn background_index_maintenance(mut self, enabled: bool) -> Self {
+        self.background_index_maintenance = Some(enabled);
+        self
+    }
+
     pub fn bucket(mut self, bucket: impl Into<String>) -> Self {
         self.bucket = Some(bucket.into());
         self
@@ -693,6 +730,7 @@ impl ClientV2Builder {
                 "native v2 initialization requires a writable client",
             ));
         }
+        let background_index_maintenance = self.background_index_maintenance.unwrap_or(true);
         let aws = self
             .aws_client
             .ok_or_else(|| invalid("aws_client is required"))?;
@@ -791,13 +829,25 @@ impl ClientV2Builder {
         } else {
             Some(repository.start_shard_authority_maintenance()?)
         };
-        Ok(ClientV2 {
+        let branch_index_maintenance = if background_index_maintenance {
+            Some(repository.start_branch_index_maintenance(Duration::from_secs(5))?)
+        } else {
+            None
+        };
+        let client = ClientV2 {
             repository,
             bucket,
             branch,
             provider_attestation: attestation,
             shard_authority_maintenance: Arc::new(Mutex::new(shard_authority_maintenance)),
-        })
+            _branch_index_maintenance: Arc::new(Mutex::new(branch_index_maintenance)),
+        };
+        if background_index_maintenance {
+            client
+                .wait_for_branch_indexes(Duration::from_secs(30))
+                .await?;
+        }
+        Ok(client)
     }
 }
 

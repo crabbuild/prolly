@@ -146,7 +146,7 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             .is_some_and(|head| head.value.checkpoint == current.value.publication)
         {
             let head = &loaded.as_ref().expect("checked as present").value;
-            if head.checkpoint_generation != current.value.generation
+            if head.checkpoint_generation.0 > current.value.generation.0
                 || head.target != current.value.target
             {
                 return Err(Error::new(
