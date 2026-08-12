@@ -10,7 +10,8 @@ The S3 extension has one storage architecture:
 - Prolly commits are authoritative for current state and history;
 - each logical version records the exact provider-issued `VersionId`;
 - the Prolly wrapper is the exclusive writer for managed keys;
-- one fenced writer service serializes mutation publication;
+- one fenced writer service serializes publication per branch while allowing
+  independent branches to publish concurrently;
 - repository metadata uses format v1 under `.prolly/v1/`.
 
 The repository-chunked profile, profile selector, mixed-mode codec, durable
@@ -160,8 +161,11 @@ SHA-256 values, sizes, and whole-object checksums.
 
 The architecture intentionally does not use optimistic multi-writer retry
 loops. A repository-scoped lease grants one process mutation authority.
-Concurrent callers inside that process upload payloads before a short
-publication mutex; batch payload mutations use configurable bounded
+Concurrent callers inside that process upload payloads before entering a
+branch-keyed publication lane. Callers on one branch remain ordered, while
+independent branches can construct commits and CAS their refs concurrently.
+Repository-wide maintenance, including GC and repair, takes an exclusive
+barrier across all lanes. Batch payload mutations use configurable bounded
 parallelism. This keeps each completed warm write at three calls under 1, 8,
 or 32 callers without serializing network upload time.
 
