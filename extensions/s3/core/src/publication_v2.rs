@@ -421,6 +421,27 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             .await
     }
 
+    /// Store a migration/repair commit without moving a ref. The caller must
+    /// later publish an authoritative ref and a complete node/graph index
+    /// closure before exposing the imported history to readers.
+    pub(crate) async fn store_unpublished_commit(
+        &self,
+        permit: &AuthorityPermitV2,
+        commit: &BucketCommitV2,
+        node_pack: Option<NodePackV1>,
+        now_millis: u64,
+    ) -> Result<CommitIdV2> {
+        let stamp = self.authority.validate_active(permit, now_millis).await?;
+        stamp.validate(self.repository, &stamp.scope)?;
+        if commit.authority != stamp {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "unpublished v2 commit does not match migration authority",
+            ));
+        }
+        self.store_commit(commit, node_pack).await
+    }
+
     /// Publish the no-target-change ref barrier required by a pending
     /// authority takeover. The returned receipt is the only constructible
     /// input to `activate_after_barrier`.

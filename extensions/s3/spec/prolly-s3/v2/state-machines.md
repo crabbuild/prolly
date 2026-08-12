@@ -124,3 +124,34 @@ CAS against only the selected catalog shard.
   immutable snapshot; ordinary incremental catch-up consumes later events.
 - Successful and abandoned jobs exact-delete chunk objects in bounded pages.
   Cleanup starts only after every consumer of the shared chunks is complete.
+
+## Explicit v1-to-v2 branch migration
+
+`Pinned -> Copying -> Publishing -> Complete -> Cleaned`
+
+- Start snapshots one authoritative v1 branch head, creates a non-expiring v1
+  retention pin, and opens a constant-size parent-before-child closure cursor.
+- Copying transforms at most the caller's commit budget. V1 live versions are
+  streamed through a verified disk spool into native immutable payload keys;
+  delete markers remain logical-only. A stable derivation maps each v1 object
+  version to one v2 identity. Versions already present through another merge
+  parent reuse their immutable binding without another payload transfer.
+- Imported commits preserve parent topology, generation, author, message,
+  timestamp, and metadata. They carry the target `v1-migration` system
+  authority stamp and remain unreachable until publication.
+- Every completed commit adds a source-to-destination mapping to the source
+  closure tree and adds its node pack plus binary-lifting ancestry entry to
+  target-side imported index roots. Both roots are in the returned cursor.
+- On restart, those imported roots serve ancestor-packed node lookups before
+  any user ref exists. A page is therefore resumable without rebuilding whole
+  historical snapshots or depending on process-local node locations.
+- Publishing creates the destination branch at the mapped source head and
+  atomically replaces its bootstrap index with the complete imported closure.
+  Only then is the source retention pin tombstoned and completion returned.
+- Replaying a completed cursor verifies the destination ref and exact durable
+  index roots. Cleanup exact-deletes source traversal nodes in bounded pages.
+- Abort unregisters the transient target index root, tombstones the source pin,
+  and exact-deletes traversal nodes in bounded pages. It never publishes a
+  partial branch; unreachable immutable imports are left for native-v2 GC.
+- V1 and v2 prefixes are physically separate. The protocol never dual-writes
+  mutations or changes an existing repository's format marker.

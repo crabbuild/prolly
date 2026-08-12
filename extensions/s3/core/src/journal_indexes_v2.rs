@@ -73,6 +73,19 @@ pub struct JournalIndexRebuildCleanupV2 {
     pub complete: bool,
 }
 
+/// Durable roots built while importing a parent-before-child commit closure.
+/// The roots live in the regular native-v2 index node namespaces, so this
+/// cursor remains constant-size and can be resumed by another process.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportedJournalIndexStateV2 {
+    pub repository: RepositoryId,
+    pub job: OperationId,
+    pub node_root: TreeRootV1,
+    pub commit_graph_root: TreeRootV1,
+    pub indexed_commits: u64,
+    pub indexed_nodes: u64,
+}
+
 struct LoadedHead {
     value: JournalDerivedIndexHeadV2,
     token: StorageToken,
@@ -686,6 +699,219 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             ));
         }
         Ok(entry)
+    }
+
+    pub fn start_imported_closure(&self, job: OperationId) -> Result<ImportedJournalIndexStateV2> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "imported journal-index closure requires a non-nil job ID",
+            ));
+        }
+        Ok(ImportedJournalIndexStateV2 {
+            repository: self.repository,
+            job,
+            node_root: TreeRootV1::from_tree(&self.node_engine.create())?,
+            commit_graph_root: TreeRootV1::from_tree(&self.graph_engine.create())?,
+            indexed_commits: 0,
+            indexed_nodes: 0,
+        })
+    }
+
+    /// Add one already durable native-v2 commit to an imported closure. The
+    /// caller supplies commits parent-before-child so first-parent skip links
+    /// can be constructed without an ancestor scan.
+    pub async fn index_imported_commit(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        state: &ImportedJournalIndexStateV2,
+        commit: CommitIdV2,
+    ) -> Result<ImportedJournalIndexStateV2> {
+        self.validate_imported_state(state)?;
+        let mut node_tree = self.tree_from_root(&state.node_root);
+        let mut graph_tree = self.tree_from_root(&state.commit_graph_root);
+        if self
+            .graph_engine
+            .get(&graph_tree, commit.as_bytes())
+            .await?
+            .is_some()
+        {
+            return Ok(state.clone());
+        }
+        let object = publisher.load_commit_object(commit).await?;
+        for parent in &object.commit.parents {
+            if self
+                .graph_engine
+                .get(&graph_tree, parent.as_bytes())
+                .await?
+                .is_none()
+            {
+                return Err(Error::new(
+                    ErrorCode::MissingClosure,
+                    "imported commit parent is not yet indexed",
+                ));
+            }
+        }
+        let mut indexed_nodes = 0usize;
+        self.index_node_pack(&mut node_tree, commit, &object, &mut indexed_nodes)
+            .await?;
+        self.index_commit_graph(&mut graph_tree, commit, object)
+            .await?;
+        Ok(ImportedJournalIndexStateV2 {
+            repository: state.repository,
+            job: state.job,
+            node_root: TreeRootV1::from_tree(&node_tree)?,
+            commit_graph_root: TreeRootV1::from_tree(&graph_tree)?,
+            indexed_commits: state.indexed_commits.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "imported commit count overflow",
+                )
+            })?,
+            indexed_nodes: state
+                .indexed_nodes
+                .checked_add(u64::try_from(indexed_nodes).map_err(|_| {
+                    Error::new(ErrorCode::InvalidLimit, "imported node count exceeds u64")
+                })?)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "imported node count overflow")
+                })?,
+        })
+    }
+
+    /// Resolve a packed node against roots held by an in-progress import.
+    /// This is what lets an interrupted migration continue without publishing
+    /// a partially imported user branch.
+    pub async fn imported_node_location(
+        &self,
+        state: &ImportedJournalIndexStateV2,
+        cid: &prolly::Cid,
+    ) -> Result<Option<JournalNodeIndexEntryV2>> {
+        self.validate_imported_state(state)?;
+        let tree = self.tree_from_root(&state.node_root);
+        let entry = self
+            .node_engine
+            .get(&tree, cid.as_bytes())
+            .await?
+            .map(|encoded| decode_canonical(&encoded))
+            .transpose()?;
+        if entry
+            .as_ref()
+            .is_some_and(|entry: &JournalNodeIndexEntryV2| entry.cid != *cid)
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "imported node-index value does not match its key",
+            ));
+        }
+        Ok(entry)
+    }
+
+    /// Atomically install a completed imported closure as the selected
+    /// branch's durable node/commit-graph checkpoint.
+    pub async fn publish_imported_closure(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        branch: &str,
+        state: &ImportedJournalIndexStateV2,
+        now_millis: u64,
+    ) -> Result<()> {
+        self.validate_imported_state(state)?;
+        let reference = publisher.load(branch).await?;
+        let graph_tree = self.tree_from_root(&state.commit_graph_root);
+        if self
+            .graph_engine
+            .get(&graph_tree, reference.value.target.as_bytes())
+            .await?
+            .is_none()
+        {
+            return Err(Error::new(
+                ErrorCode::MissingClosure,
+                "imported branch target is absent from its commit-graph closure",
+            ));
+        }
+        let path = self.head_path(branch)?;
+        let loaded = self.load_head(branch).await?;
+        if loaded.as_ref().is_some_and(|head| {
+            head.value.checkpoint == reference.value.publication
+                && head.value.checkpoint_generation == reference.value.generation
+                && head.value.target == reference.value.target
+                && head.value.node_root == state.node_root
+                && head.value.commit_graph_root == state.commit_graph_root
+        }) {
+            return Ok(());
+        }
+        let next = JournalDerivedIndexHeadV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            checkpoint: reference.value.publication,
+            checkpoint_generation: reference.value.generation,
+            target: reference.value.target,
+            node_root: state.node_root.clone(),
+            commit_graph_root: state.commit_graph_root.clone(),
+            generation: loaded.as_ref().map_or(Ok(0), |head| {
+                head.value.generation.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "imported journal-index generation overflow",
+                    )
+                })
+            })?,
+            indexed_publications: 1,
+            indexed_commits: state.indexed_commits,
+            updated_at_millis: now_millis,
+        };
+        next.validate(self.repository, branch, tree_format_digest(&self.format)?)?;
+        let bytes = encode_canonical(&next)?;
+        let expected = loaded.map(|head| head.token);
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path: path.clone(),
+                expected,
+                bytes: bytes.clone(),
+            })
+            .await
+        {
+            Ok(CompareExchangeOutcome::Applied(_)) => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(Some(current))) if current.bytes == bytes => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "imported journal-index publication conflicted",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+            Err(error) => {
+                if self
+                    .plane
+                    .load_mutable(&path)
+                    .await?
+                    .is_some_and(|current| current.bytes == bytes)
+                {
+                    Ok(())
+                } else {
+                    Err(Error::new(
+                        ErrorCode::OutcomeUnknown,
+                        format!("imported journal-index publication is unknown: {error}"),
+                    )
+                    .retry(RetryAdvice::ReconcileOperation))
+                }
+            }
+        }
+    }
+
+    fn validate_imported_state(&self, state: &ImportedJournalIndexStateV2) -> Result<()> {
+        let digest = tree_format_digest(&self.format)?;
+        if state.repository != self.repository
+            || state.job.is_nil()
+            || state.node_root.format_digest != digest
+            || state.commit_graph_root.format_digest != digest
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "imported journal-index state belongs to another repository or format",
+            ));
+        }
+        Ok(())
     }
 
     pub async fn commit_graph_entry(

@@ -32,9 +32,9 @@ pub use control_versions::{
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
 pub use journal_indexes_v2::{
-    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
-    JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2,
-    DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
+    ImportedJournalIndexStateV2, JournalDerivedIndexesV2, JournalIndexAdvanceReportV2,
+    JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2,
+    JournalIndexRebuildStepV2, DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
 };
 pub use model::*;
 pub use object_plane::*;
@@ -64,12 +64,14 @@ pub use repository::{
     RefCatalogAdvanceReport, RefMoveReceipt, RefVersionCompactionReport, RepairReport, Repository,
     RepositoryOptions, RepositoryPerformanceSnapshot, ResumableFsckCursor, ResumableFsckPage,
     ResumableFsckPhase, RetentionPinPage, ShardAuthorityMaintenance, SyncReport, Tag, TagPage,
-    TagReflogPage, TraversalBudget, VersionSummary,
+    TagReflogPage, TraversalBudget, V1ToV2MigrationCursor, V1ToV2MigrationPage,
+    V1ToV2MigrationPhase, VersionSummary,
 };
 pub use repository_v2::{
     BranchCatalogPageV2, BranchHeadV2, BranchIndexAdvanceReportV2, BranchIndexHealthV2,
-    BranchIndexMaintenance, CommitReceiptV2, ObjectDataV2, ObjectSummaryV2, RefCatalogRepairPageV2,
-    RepositoryV2, RepositoryV2Options, TagCatalogPageV2, TagV2, VersionSummaryV2,
+    BranchIndexMaintenance, CommitReceiptV2, ImportedCommitReceiptV2, ObjectDataV2,
+    ObjectSummaryV2, RefCatalogRepairPageV2, RepositoryV2, RepositoryV2Options, TagCatalogPageV2,
+    TagV2, VersionSummaryV2,
 };
 #[deprecated(
     since = "0.1.0",

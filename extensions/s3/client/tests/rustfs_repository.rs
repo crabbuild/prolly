@@ -534,6 +534,108 @@ async fn rustfs_native_v2_ref_lifecycle_uses_catalog_shards_without_ref_scans() 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_v1_history_migrates_to_native_v2_in_restartable_pages() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let key = format!("{}/history.txt", unique_name("v1-to-v2-object"));
+    let source = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(unique_name("v1-to-v2-source"))
+        .writer("rustfs-v1-migration-source")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .initialize()
+        .await
+        .unwrap();
+    for body in [b"first".as_slice(), b"second".as_slice()] {
+        source
+            .put_object()
+            .bucket(&bucket)
+            .key(&key)
+            .body(ByteStream::from(body.to_vec()))
+            .send()
+            .await
+            .unwrap();
+    }
+
+    let destination_prefix = unique_name("v1-to-v2-destination");
+    let destination = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&destination_prefix)
+        .writer("rustfs-v2-migration-destination")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .background_index_maintenance(false)
+        .initialize()
+        .await
+        .unwrap();
+    let mut cursor = source
+        .start_v2_migration(&destination, "imported-main")
+        .await
+        .unwrap();
+    loop {
+        cursor = prolly_s3_client::core::decode_canonical(
+            &prolly_s3_client::core::encode_canonical(&cursor).unwrap(),
+        )
+        .unwrap();
+        let page = source
+            .advance_v2_migration(&destination, &cursor, 100, 1)
+            .await
+            .unwrap();
+        cursor = page.cursor;
+        if page.complete {
+            break;
+        }
+    }
+    assert_eq!(cursor.migrated_commits, 3);
+    assert_eq!(cursor.migrated_payloads, 2);
+    let imported = destination.for_branch("imported-main").unwrap();
+    assert_eq!(
+        imported.get_object(&key).await.unwrap().unwrap().bytes,
+        b"second"
+    );
+    loop {
+        if source
+            .cleanup_v2_migration(&cursor, 1_000)
+            .await
+            .unwrap()
+            .complete
+        {
+            break;
+        }
+    }
+
+    drop(imported);
+    drop(destination);
+    let cold = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(destination_prefix)
+        .writer("rustfs-v2-migration-destination")
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .background_index_maintenance(false)
+        .open()
+        .await
+        .unwrap()
+        .for_branch("imported-main")
+        .unwrap();
+    assert_eq!(
+        cold.get_object(&key).await.unwrap().unwrap().bytes,
+        b"second"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");

@@ -127,6 +127,14 @@ administrative traffic. If a crash leaves a published ref absent from the
 catalog, page `repair_branch_catalog_page` or `repair_tag_catalog_page` with a
 bounded limit and persist the returned continuation between invocations.
 
+For v1-to-native-v2 migration, initialize a separate v2 prefix and migrate into
+a new branch. Persist the canonical migration cursor after every bounded page.
+The workflow holds a non-expiring v1 retention pin until the destination ref
+and its complete node/commit-graph closure are durable; alert on old
+`v1-to-v2-*` pins because they indicate abandoned jobs. After completion, run
+bounded migration cleanup until it reports complete. Never delete the source
+repository or run an unpinned source GC while a migration is active.
+
 ```rust
 use prolly::TreeFormat;
 use prolly_s3_core::JournalDerivedIndexesV2;

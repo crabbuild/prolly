@@ -481,7 +481,11 @@ impl ClientV2 {
         self.repository.fenced_branches()
     }
 
-    fn ensure_provider_qualified(&self) -> Result<()> {
+    pub(crate) fn repository_handle(&self) -> Arc<RepositoryV2<AwsS3ObjectPlane>> {
+        self.repository.clone()
+    }
+
+    pub(crate) fn ensure_provider_qualified(&self) -> Result<()> {
         ensure_attestation_current(&self.provider_attestation)?;
         self.provider_attestation
             .body

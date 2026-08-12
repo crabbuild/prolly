@@ -2372,6 +2372,24 @@ pub struct ObjectVersionV2 {
 }
 
 impl ObjectVersionV2 {
+    pub fn derive_id(
+        repository: RepositoryId,
+        key: &[u8],
+        operation: OperationId,
+        body: &LogicalObjectVersionBodyV1,
+    ) -> Result<ObjectVersionIdV2> {
+        let body_bytes = encode_canonical(body)?;
+        Ok(ObjectVersionIdV2(domain_hash(
+            b"prolly-s3/object-version/v2",
+            &[
+                repository.as_bytes(),
+                key,
+                operation.as_bytes(),
+                &body_bytes,
+            ],
+        )))
+    }
+
     pub fn derive(
         repository: RepositoryId,
         key: &[u8],
@@ -2380,17 +2398,8 @@ impl ObjectVersionV2 {
         binding: Option<PhysicalObjectBindingV2>,
     ) -> Result<Self> {
         validate_physical_object_version_v2(&body, binding.as_ref())?;
-        let body_bytes = encode_canonical(&body)?;
         Ok(Self {
-            id: ObjectVersionIdV2(domain_hash(
-                b"prolly-s3/object-version/v2",
-                &[
-                    repository.as_bytes(),
-                    key,
-                    operation.as_bytes(),
-                    &body_bytes,
-                ],
-            )),
+            id: Self::derive_id(repository, key, operation, &body)?,
             body,
             binding,
         })

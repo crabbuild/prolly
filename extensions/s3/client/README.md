@@ -231,6 +231,78 @@ loop {
 Repair is intentionally the only native-v2 path that lists the authoritative
 ref namespace. It should not run in foreground request handling.
 
+### Migrate a v1 branch without dual writes
+
+Migration copies one immutable v1 branch snapshot into a new native-v2 branch
+while preserving its complete commit DAG, merge parents, commit metadata,
+object history, and delete markers. The source and destination repositories
+must use different prefixes; the destination branch must not exist.
+
+```rust
+let mut cursor = v1_client
+    .start_v2_migration(&v2_client, "imported-main")
+    .await?;
+
+loop {
+    let page = v1_client
+        .advance_v2_migration(&v2_client, &cursor, 4_096, 256)
+        .await?;
+
+    cursor = page.cursor;
+    let checkpoint = prolly_s3_client::core::encode_canonical(&cursor)?;
+    std::fs::write("v1-to-v2-migration.cbor", checkpoint)?;
+
+    if page.complete {
+        break;
+    }
+}
+
+let imported = v2_client.for_branch("imported-main")?;
+println!("native-v2 head: {}", imported.head().await?);
+```
+
+The cursor is constant-size. Its traversal stack, source-to-destination commit
+mappings, and imported node/commit-graph roots live in immutable Prolly nodes.
+Restart either process, reopen both clients with the same writer identities,
+decode the last persisted cursor, and continue. Replaying an older cursor is
+safe: payload and commit writes are content-addressed and reconcile exactly.
+
+Migration creates a non-expiring source retention pin before traversal and
+removes it only after the destination ref and complete cold-read indexes are
+durable. Clean the now-unreferenced traversal nodes afterward:
+
+```rust
+loop {
+    let cleanup = v1_client.cleanup_v2_migration(&cursor, 1_000).await?;
+    if cleanup.complete {
+        break;
+    }
+}
+```
+
+To abandon an incomplete job, call `abort_v2_migration` in bounded cleanup
+pages. It releases the source pin, unregisters the target's transient imported
+index root, and deletes traversal state. Unreachable immutable payloads and
+commits remain safe for native-v2 GC.
+
+Run one migration per source branch that must remain independently named. The
+native importer uses one target system-authority scope, so shared commits have
+stable destination identities within the same authority epoch. Before cleanup,
+resolve any source tag target and create its native tag explicitly:
+
+```rust
+for source_tag in v1_client.list_tags().await? {
+    if let Some(native_target) = v1_client
+        .v2_migration_mapping(&cursor, source_tag.target)
+        .await?
+    {
+        v2_client.create_tag(&source_tag.name, native_target).await?;
+    }
+}
+```
+
+Do not mutate both formats as a migration strategy.
+
 ### Clean expired checkpoints
 
 Cleanup is bounded and resumable. Run it periodically from repository

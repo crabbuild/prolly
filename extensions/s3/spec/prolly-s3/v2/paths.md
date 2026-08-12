@@ -121,6 +121,14 @@ buffering the DAG. Finished or abandoned jobs exact-delete `E` in bounded
 cleanup calls; the state is not a GC candidate while its externally persisted
 cursor may still be live.
 
+An explicit v1-to-v2 migration reuses this closure namespace. Keys under the
+closure root retain source-to-native commit mappings alongside traversal work.
+Target imported node and commit-graph roots use the normal journal-index node
+namespaces, but are not installed as a branch head until the full pinned source
+closure is durable. Imported commits use the `v1-migration` system-authority
+scope, giving shared source commits stable target identities across separately
+named branch migrations performed in the same authority epoch.
+
 Physical clone, fetch, push, and repair consume that traversal in pages of at
 most 256 commits. Each completed source commit records an immutable
 source-to-destination mapping. A later transfer resolves the mapping with one

@@ -16,16 +16,17 @@ use sha2::Sha256;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, AuthorityPermitV2, AuthorityScopeV2,
-    BucketCommitV2, BucketDeltaV2, BucketStateV2, CanonicalLimits, Checksums, Clock,
-    CommitGeneration, CommitIdV2, CommitObjectV2, CommitPublicationV2, CommitSessionCheckpointV2,
-    CommitSessionCleanupReportV2, CommitSessionStateV2, CommitSessionStoreV2, CompareExchange,
-    CompareExchangeOutcome, CurrentObjectV2, Error, ErrorCode, GetRequest, IdSource,
-    IdempotencyRetentionV2, ImmutablePayloadStoreV2, InitializationIntentV2,
-    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
-    JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2,
-    ListRequest, LoadedRefV2, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
-    MemoryNodeCache, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2,
-    ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV2, OperationId,
+    BucketCommitV1, BucketCommitV2, BucketDeltaV2, BucketStateV2, CanonicalLimits, Checksums,
+    Clock, CommitGeneration, CommitId, CommitIdV2, CommitObjectV2, CommitPublicationV2,
+    CommitSessionCheckpointV2, CommitSessionCleanupReportV2, CommitSessionStateV2,
+    CommitSessionStoreV2, CompareExchange, CompareExchangeOutcome, CurrentObjectV2, Error,
+    ErrorCode, GetRequest, IdSource, IdempotencyRetentionV2, ImmutablePayloadStoreV2,
+    ImportedJournalIndexStateV2, InitializationIntentV2, JournalDerivedIndexesV2,
+    JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2,
+    JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2, ListRequest, LoadedRefV2,
+    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
+    ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2, ObjectVersionIdV2,
+    ObjectVersionOrder, ObjectVersionV1, ObjectVersionV2, OperationId,
     OperationIndexAdvanceReportV2, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2,
     PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2,
     RandomIdSource, RefCatalogCursorV2, RefGeneration, RefKindV2, RepositoryFormatV2, Result,
@@ -151,6 +152,21 @@ pub struct RefCatalogRepairPageV2 {
     pub continuation: Option<String>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct V1MigrationChangeV2 {
+    pub key: Vec<u8>,
+    pub version: ObjectVersionV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportedCommitReceiptV2 {
+    pub source: CommitId,
+    pub destination: CommitIdV2,
+    pub index: ImportedJournalIndexStateV2,
+    pub payloads: usize,
+    pub payload_bytes: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchIndexAdvanceReportV2 {
     pub operations: OperationIndexAdvanceReportV2,
@@ -183,6 +199,7 @@ impl Drop for BranchIndexMaintenance {
 struct JournalNodeLocator<P: ObjectPlane> {
     indexes: Arc<JournalDerivedIndexesV2<P>>,
     branches: RwLock<BTreeSet<String>>,
+    imports: RwLock<BTreeMap<OperationId, ImportedJournalIndexStateV2>>,
 }
 
 impl<P: ObjectPlane> JournalNodeLocator<P> {
@@ -203,6 +220,22 @@ impl<P: ObjectPlane> JournalNodeLocator<P> {
             .cloned()
             .collect())
     }
+
+    fn register_import(&self, state: ImportedJournalIndexStateV2) -> Result<()> {
+        self.imports
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 locator lock poisoned"))?
+            .insert(state.job, state);
+        Ok(())
+    }
+
+    fn remove_import(&self, job: OperationId) -> Result<()> {
+        self.imports
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 locator lock poisoned"))?
+            .remove(&job);
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -215,6 +248,18 @@ impl<P: ObjectPlane> NodeLocator for JournalNodeLocator<P> {
             .clone();
         for branch in branches {
             if let Some(entry) = self.indexes.node_location(&branch, cid).await? {
+                return Ok(Some(entry.into()));
+            }
+        }
+        let imports = self
+            .imports
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 locator lock poisoned"))?
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for state in imports {
+            if let Some(entry) = self.indexes.imported_node_location(&state, cid).await? {
                 return Ok(Some(entry.into()));
             }
         }
@@ -502,6 +547,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let locator = Arc::new(JournalNodeLocator {
             indexes: journal_indexes.clone(),
             branches: RwLock::new(BTreeSet::new()),
+            imports: RwLock::new(BTreeMap::new()),
         });
         node_store.set_node_locator(locator.clone())?;
         let writable = !options.read_only;
@@ -549,6 +595,402 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     pub async fn head(&self, branch: &str) -> Result<CommitIdV2> {
         self.locator.register(branch)?;
         Ok(self.publisher.load(branch).await?.value.target)
+    }
+
+    pub(crate) async fn start_v1_migration(
+        &self,
+        source_repository: crate::RepositoryId,
+        source_head: CommitId,
+        destination_branch: &str,
+        job: OperationId,
+    ) -> Result<(ImportedJournalIndexStateV2, [u8; 32])> {
+        crate::repository::validate_branch(destination_branch)?;
+        match self
+            .publisher
+            .load_including_tombstone(destination_branch)
+            .await
+        {
+            Ok(_) => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "v1 migration destination branch already exists",
+                ))
+            }
+            Err(error) if error.code == ErrorCode::InvalidRevision => {}
+            Err(error) => return Err(error),
+        }
+        let now = self.options.clock.now_millis()?;
+        self.active_permit(destination_branch, now).await?;
+        let state = self.journal_indexes.start_imported_closure(job)?;
+        self.locator.register_import(state.clone())?;
+        Ok((
+            state,
+            self.v1_migration_destination_scope(source_repository, source_head, destination_branch),
+        ))
+    }
+
+    pub(crate) fn validate_v1_migration_destination(
+        &self,
+        source_repository: crate::RepositoryId,
+        source_head: CommitId,
+        destination_branch: &str,
+        scope: [u8; 32],
+        index: &ImportedJournalIndexStateV2,
+    ) -> Result<()> {
+        if scope
+            != self.v1_migration_destination_scope(
+                source_repository,
+                source_head,
+                destination_branch,
+            )
+            || index.repository != self.format.repository_id
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v1 migration cursor belongs to another destination",
+            ));
+        }
+        self.locator.register_import(index.clone())
+    }
+
+    fn v1_migration_destination_scope(
+        &self,
+        source_repository: crate::RepositoryId,
+        source_head: CommitId,
+        destination_branch: &str,
+    ) -> [u8; 32] {
+        crate::model::derive_input_digest_v2(&[
+            b"v1-to-v2-migration-destination",
+            source_repository.as_bytes(),
+            source_head.as_bytes(),
+            self.format.repository_id.as_bytes(),
+            destination_branch.as_bytes(),
+        ])
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn import_v1_commit<S: ObjectPlane>(
+        &self,
+        source_plane: Arc<S>,
+        source_repository: crate::RepositoryId,
+        source_id: CommitId,
+        source_commit: BucketCommitV1,
+        mapped_parents: Vec<CommitIdV2>,
+        changes: Vec<V1MigrationChangeV2>,
+        destination_branch: &str,
+        index: &ImportedJournalIndexStateV2,
+    ) -> Result<ImportedCommitReceiptV2> {
+        crate::repository::validate_branch(destination_branch)?;
+        let changes_match_delta = source_commit.delta.changes.len() == changes.len()
+            && source_commit
+                .delta
+                .changes
+                .iter()
+                .zip(&changes)
+                .all(|(transition, change)| {
+                    transition.key == change.key
+                        && transition.next == change.version.id
+                        && transition.delete_marker
+                            == matches!(
+                                change.version.body.kind,
+                                LogicalObjectVersionKindV1::DeleteMarker
+                            )
+                });
+        if source_commit.parents.len() != mapped_parents.len() || !changes_match_delta {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v1 migration changes do not match the source commit delta",
+            ));
+        }
+        self.locator.register_import(index.clone())?;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_system_permit("v1-migration", now).await?;
+        self.authority.validate_active(&permit, now).await?;
+        let write_store = self.node_store.isolated_write_session();
+        let engine = self.engine(write_store.clone());
+        let empty = engine.create();
+        let mut parent_commits = Vec::with_capacity(mapped_parents.len());
+        for parent in &mapped_parents {
+            parent_commits.push(self.load_commit_object(*parent).await?.commit);
+        }
+        let base = parent_commits.first();
+        let mut objects = match &base {
+            Some(base) => self.tree_from_root(&base.state.objects)?,
+            None => empty.clone(),
+        };
+        let mut versions = match &base {
+            Some(base) => self.tree_from_root(&base.state.versions)?,
+            None => empty,
+        };
+        let mut object_mutations = Vec::with_capacity(changes.len());
+        let mut version_mutations = Vec::with_capacity(changes.len());
+        let mut transitions = Vec::with_capacity(changes.len());
+        let mut payloads = 0usize;
+        let mut payload_bytes = 0u64;
+        for change in changes {
+            self.validate_key(&change.key)?;
+            change.version.validate()?;
+            let previous = engine
+                .get(&objects, &change.key)
+                .await?
+                .map(|encoded| decode_canonical::<CurrentObjectV2>(&encoded))
+                .transpose()?
+                .map(|current| current.version.id);
+            let operation =
+                migration_version_operation(source_repository, &change.key, change.version.id);
+            let expected_version = ObjectVersionV2::derive_id(
+                self.format.repository_id,
+                &change.key,
+                operation,
+                &change.version.body,
+            )?;
+            let mut reusable = self
+                .find_v2_version_in_tree(&versions, &change.key, expected_version)
+                .await?;
+            if reusable.is_none() {
+                for parent in parent_commits.iter().skip(1) {
+                    let parent_versions = self.tree_from_root(&parent.state.versions)?;
+                    reusable = self
+                        .find_v2_version_in_tree(&parent_versions, &change.key, expected_version)
+                        .await?;
+                    if reusable.is_some() {
+                        break;
+                    }
+                }
+            }
+            if reusable
+                .as_ref()
+                .is_some_and(|version| version.body != change.version.body)
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v1 migration version identity collided with different content",
+                ));
+            }
+            let binding = match (
+                &change.version.body.kind,
+                &change.version.binding,
+                reusable
+                    .as_ref()
+                    .and_then(|version| version.binding.clone()),
+            ) {
+                (LogicalObjectVersionKindV1::Live { .. }, _, Some(binding)) => Some(binding),
+                (
+                    LogicalObjectVersionKindV1::Live {
+                        size, checksums, ..
+                    },
+                    crate::PhysicalObjectBindingV1::Live {
+                        version_id,
+                        checksum_sha256,
+                        ..
+                    },
+                    None,
+                ) => {
+                    if checksums.sha256 != Some(*checksum_sha256) {
+                        return Err(Error::new(
+                            ErrorCode::ChecksumMismatch,
+                            "v1 migration source checksum is inconsistent",
+                        ));
+                    }
+                    let spool = tempfile::NamedTempFile::new().map_err(|error| {
+                        Error::new(
+                            ErrorCode::Transport,
+                            format!("could not create v1 migration spool: {error}"),
+                        )
+                    })?;
+                    let path =
+                        ObjectPath::new(std::str::from_utf8(&change.key).map_err(|_| {
+                            Error::new(ErrorCode::InvalidKey, "v1 migration key is not UTF-8")
+                        })?)?;
+                    let fetched = source_plane
+                        .get_physical_file(crate::PhysicalFileGet {
+                            path,
+                            version_id: version_id.clone(),
+                            body_path: spool.path().to_path_buf(),
+                        })
+                        .await?;
+                    if fetched.size != *size || fetched.checksum_sha256 != *checksum_sha256 {
+                        return Err(Error::new(
+                            ErrorCode::ChecksumMismatch,
+                            "v1 migration source payload failed verification",
+                        ));
+                    }
+                    let binding = self
+                        .payloads
+                        .put_file(spool.path().to_path_buf(), *size, *checksum_sha256)
+                        .await?;
+                    payloads = payloads.checked_add(1).ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::InternalInvariant,
+                            "migration payload count overflow",
+                        )
+                    })?;
+                    payload_bytes = payload_bytes.checked_add(*size).ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::EntityTooLarge,
+                            "migration payload bytes overflow",
+                        )
+                    })?;
+                    Some(binding)
+                }
+                (
+                    LogicalObjectVersionKindV1::DeleteMarker,
+                    crate::PhysicalObjectBindingV1::DeleteMarker { .. },
+                    _,
+                ) => None,
+                _ => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "v1 migration source version has an invalid binding",
+                    ))
+                }
+            };
+            let version = ObjectVersionV2::derive(
+                self.format.repository_id,
+                &change.key,
+                operation,
+                change.version.body,
+                binding,
+            )?;
+            let delete_marker =
+                matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker);
+            object_mutations.push(if delete_marker {
+                Mutation::Delete {
+                    key: change.key.clone(),
+                }
+            } else {
+                Mutation::Upsert {
+                    key: change.key.clone(),
+                    val: encode_canonical(&CurrentObjectV2 {
+                        version: version.clone(),
+                    })?,
+                }
+            });
+            version_mutations.push(Mutation::Upsert {
+                key: version_tree_key(&change.key, version.body.order, version.id),
+                val: encode_canonical(&version)?,
+            });
+            transitions.push(ObjectTransitionV2 {
+                key: change.key,
+                previous,
+                next: version.id,
+                delete_marker,
+            });
+        }
+        objects = engine.batch(&objects, object_mutations).await?;
+        versions = engine.batch(&versions, version_mutations).await?;
+        let prepared = write_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let commit = BucketCommitV2 {
+            state: BucketStateV2 {
+                objects: TreeRootV1::from_tree(&objects)?,
+                versions: TreeRootV1::from_tree(&versions)?,
+            },
+            parents: mapped_parents,
+            generation: source_commit.generation,
+            delta: BucketDeltaV2 {
+                input_digest: crate::model::derive_input_digest_v2(&[
+                    b"v1-to-v2-migration",
+                    source_repository.as_bytes(),
+                    source_id.as_bytes(),
+                ]),
+                changes: transitions,
+            },
+            node_pack: prepared.as_ref().map(PreparedNodePack::reference),
+            authority: permit.stamp(),
+            author: source_commit.author,
+            message: source_commit.message,
+            created_at_millis: source_commit.created_at_millis,
+            metadata: source_commit.metadata,
+        };
+        let destination = self
+            .publisher
+            .store_unpublished_commit(
+                &permit,
+                &commit,
+                prepared.as_ref().map(PreparedNodePack::pack).cloned(),
+                now,
+            )
+            .await?;
+        self.finalize_pack(destination, &commit, prepared).await?;
+        let next_index = self
+            .journal_indexes
+            .index_imported_commit(&self.publisher, index, destination)
+            .await?;
+        self.locator.register_import(next_index.clone())?;
+        Ok(ImportedCommitReceiptV2 {
+            source: source_id,
+            destination,
+            index: next_index,
+            payloads,
+            payload_bytes,
+        })
+    }
+
+    pub(crate) async fn finish_v1_migration(
+        &self,
+        source_repository: crate::RepositoryId,
+        source_head: CommitId,
+        destination_branch: &str,
+        destination_head: CommitIdV2,
+        destination_scope: [u8; 32],
+        index: &ImportedJournalIndexStateV2,
+    ) -> Result<BranchHeadV2> {
+        self.validate_v1_migration_destination(
+            source_repository,
+            source_head,
+            destination_branch,
+            destination_scope,
+            index,
+        )?;
+        let branch = match self.publisher.load(destination_branch).await {
+            Ok(reference) if reference.value.target == destination_head => BranchHeadV2 {
+                name: destination_branch.to_string(),
+                target: reference.value.target,
+                generation: reference.value.generation,
+            },
+            Ok(_) => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "v1 migration destination branch points to another commit",
+                ))
+            }
+            Err(error) if error.code == ErrorCode::InvalidRevision => {
+                self.create_branch(destination_branch, destination_head)
+                    .await?
+            }
+            Err(error) => return Err(error),
+        };
+        let now = self.options.clock.now_millis()?;
+        self.journal_indexes
+            .publish_imported_closure(&self.publisher, destination_branch, index, now)
+            .await?;
+        let reference = self.publisher.load(destination_branch).await?;
+        self.record_branch_catalog(&reference).await?;
+        self.mark_local_index_head(destination_branch, destination_head)?;
+        self.locator.register(destination_branch)?;
+        self.locator.remove_import(index.job)?;
+        Ok(branch)
+    }
+
+    pub(crate) fn abandon_v1_migration(
+        &self,
+        source_repository: crate::RepositoryId,
+        source_head: CommitId,
+        destination_branch: &str,
+        destination_scope: [u8; 32],
+        index: &ImportedJournalIndexStateV2,
+    ) -> Result<()> {
+        self.validate_v1_migration_destination(
+            source_repository,
+            source_head,
+            destination_branch,
+            destination_scope,
+            index,
+        )?;
+        self.locator.remove_import(index.job)
     }
 
     pub async fn create_branch(&self, name: &str, from: CommitIdV2) -> Result<BranchHeadV2> {
@@ -2468,6 +2910,25 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         Ok(object)
     }
 
+    async fn find_v2_version_in_tree(
+        &self,
+        versions: &Tree,
+        key: &[u8],
+        selected: ObjectVersionIdV2,
+    ) -> Result<Option<ObjectVersionV2>> {
+        let engine = self.engine(self.node_store.clone());
+        let mut entries = engine.prefix(versions, &version_tree_prefix(key)).await?;
+        while let Some(entry) = entries.next().await {
+            let (_, encoded) = entry?;
+            let version: ObjectVersionV2 = decode_canonical(&encoded)?;
+            if version.id == selected {
+                version.validate()?;
+                return Ok(Some(version));
+            }
+        }
+        Ok(None)
+    }
+
     async fn finalize_pack(
         &self,
         id: CommitIdV2,
@@ -2641,6 +3102,25 @@ fn version_tree_key(key: &[u8], order: ObjectVersionOrder, version: ObjectVersio
     output.extend(order.mutation_ordinal.to_be_bytes().map(|byte| !byte));
     output.extend(version.as_bytes().iter().map(|byte| !byte));
     output
+}
+
+fn migration_version_operation(
+    source_repository: crate::RepositoryId,
+    key: &[u8],
+    version: crate::ObjectVersionId,
+) -> OperationId {
+    let digest = crate::codec::sha256(
+        &[
+            b"prolly-s3/v1-to-v2-version".as_slice(),
+            source_repository.as_bytes().as_slice(),
+            key,
+            version.as_bytes().as_slice(),
+        ]
+        .concat(),
+    );
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    OperationId(uuid::Uuid::from_bytes(bytes))
 }
 
 fn version_tree_prefix(key: &[u8]) -> Vec<u8> {

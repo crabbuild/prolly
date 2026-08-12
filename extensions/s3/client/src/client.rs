@@ -45,6 +45,7 @@ use prolly_s3_core::{
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
+use crate::client_v2::ClientV2;
 use crate::{
     ensure_attestation_current, load_valid_attestation, qualify_and_store,
     validate_provider_bucket, AdvisoryIndex, AttestationSigner, AwsS3ObjectPlane, ProviderIdentity,
@@ -855,6 +856,80 @@ impl Client {
     pub async fn head_commit(&self) -> Result<CommitId> {
         self.ensure_provider_qualified()?;
         self.repository.head(&self.branch).await
+    }
+
+    /// Start a history-preserving migration of this v1 branch into a new
+    /// branch in a physically separate native-v2 repository.
+    pub async fn start_v2_migration(
+        &self,
+        target: &ClientV2,
+        destination_branch: impl AsRef<str>,
+    ) -> Result<prolly_s3_core::V1ToV2MigrationCursor> {
+        self.ensure_provider_qualified()?;
+        target.ensure_provider_qualified()?;
+        self.repository
+            .start_v1_to_v2_migration(
+                target.repository_handle().as_ref(),
+                &self.branch,
+                destination_branch.as_ref(),
+            )
+            .await
+    }
+
+    /// Advance one bounded migration page. Persist the returned cursor before
+    /// scheduling the next call so another process can resume it.
+    pub async fn advance_v2_migration(
+        &self,
+        target: &ClientV2,
+        cursor: &prolly_s3_core::V1ToV2MigrationCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<prolly_s3_core::V1ToV2MigrationPage> {
+        self.ensure_provider_qualified()?;
+        target.ensure_provider_qualified()?;
+        self.repository
+            .v1_to_v2_migration_page(
+                target.repository_handle().as_ref(),
+                cursor,
+                max_steps,
+                max_commits,
+            )
+            .await
+    }
+
+    pub async fn cleanup_v2_migration(
+        &self,
+        cursor: &prolly_s3_core::V1ToV2MigrationCursor,
+        limit: usize,
+    ) -> Result<prolly_s3_core::CommitClosureCleanupReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .cleanup_v1_to_v2_migration(cursor, limit)
+            .await
+    }
+
+    pub async fn abort_v2_migration(
+        &self,
+        target: &ClientV2,
+        cursor: &prolly_s3_core::V1ToV2MigrationCursor,
+        limit: usize,
+    ) -> Result<prolly_s3_core::CommitClosureCleanupReport> {
+        self.ensure_provider_qualified()?;
+        target.ensure_provider_qualified()?;
+        self.repository
+            .abort_v1_to_v2_migration(target.repository_handle().as_ref(), cursor, limit)
+            .await
+    }
+
+    pub async fn v2_migration_mapping(
+        &self,
+        cursor: &prolly_s3_core::V1ToV2MigrationCursor,
+        source: CommitId,
+    ) -> Result<Option<prolly_s3_core::CommitIdV2>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .v1_to_v2_migration_mapping(cursor, source)
+            .await
     }
     pub async fn log(
         &self,
