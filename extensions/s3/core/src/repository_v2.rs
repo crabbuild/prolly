@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock, Weak,
@@ -425,6 +426,10 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         self.format.repository_id
     }
 
+    pub fn max_object_bytes(&self) -> u64 {
+        self.format.canonical_limits.max_object_bytes
+    }
+
     pub fn plane(&self) -> Arc<P> {
         self.plane.clone()
     }
@@ -542,6 +547,47 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let checksum_md5: [u8; 16] = Md5::digest(&bytes).into();
         let checksum_sha256: [u8; 32] = Sha256::digest(&bytes).into();
         let binding = self.payloads.put(bytes).await?;
+        Ok(StagedMutationV2 {
+            body: StagedMutationBodyV2::Put(Box::new(StagedPutV2 {
+                key,
+                size,
+                logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+                checksums: Checksums {
+                    md5: Some(checksum_md5),
+                    sha256: Some(checksum_sha256),
+                    algorithm_values: BTreeMap::new(),
+                },
+                headers,
+                user_metadata,
+                binding,
+            })),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn stage_commit_session_file(
+        &self,
+        session: &PhysicalBatchV2,
+        key: Vec<u8>,
+        body_path: PathBuf,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutationV2> {
+        self.validate_commit_session(session).await?;
+        self.validate_key(&key)?;
+        if size > self.format.canonical_limits.max_object_bytes {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "v2 object exceeds the repository object-size limit",
+            ));
+        }
+        let binding = self
+            .payloads
+            .put_file(body_path, size, checksum_sha256)
+            .await?;
         Ok(StagedMutationV2 {
             body: StagedMutationBodyV2::Put(Box::new(StagedPutV2 {
                 key,

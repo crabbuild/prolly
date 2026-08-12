@@ -8,6 +8,7 @@ use aws_config::BehaviorVersion;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::{
     config::Region,
+    primitives::ByteStream,
     types::{BucketVersioningStatus, VersioningConfiguration},
 };
 use futures_util::StreamExt;
@@ -491,7 +492,7 @@ async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
         .await
         .unwrap();
     session
-        .put_object("batch/b.txt", b"second".to_vec())
+        .put_stream("batch/b.txt", ByteStream::from_static(b"second"))
         .await
         .unwrap();
     session.delete_object("batch/removed.txt").unwrap();
@@ -501,6 +502,10 @@ async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
     assert_eq!(
         calls.put_object, 5,
         "two immutable payload PUTs plus commit/event/ref publication must preserve N + 3: {calls:?}"
+    );
+    assert_eq!(
+        calls.head_object, 0,
+        "the successful streaming path must not require reconciliation HEADs: {calls:?}"
     );
     assert_eq!(
         client

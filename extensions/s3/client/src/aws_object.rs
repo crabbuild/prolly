@@ -20,14 +20,15 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use md5::Md5;
 use prolly_s3_core::{
     Checksums, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
-    GetRequest, ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath, ObjectPlane,
-    PhysicalCopy, PhysicalDelete, PhysicalFileGet, PhysicalFileGetResult, PhysicalFilePut,
-    PhysicalListEntry, PhysicalListPage, PhysicalMultipartAbort, PhysicalMultipartComplete,
-    PhysicalMultipartCreate, PhysicalMultipartFilePart, PhysicalMultipartListParts,
-    PhysicalMultipartListPartsPage, PhysicalMultipartListUploads, PhysicalMultipartListUploadsPage,
-    PhysicalMultipartPartResult, PhysicalMultipartUploadEntry, PhysicalMultipartUploadPart,
-    PhysicalMultipartUploadPartCopy, PhysicalObjectBindingV1, PhysicalObjectWriteResult,
-    PhysicalPut, PhysicalVersion, Result, RetryAdvice, StorageToken, StoredMetadata, StoredObject,
+    GetRequest, ImmutableFilePut, ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath,
+    ObjectPlane, PhysicalCopy, PhysicalDelete, PhysicalFileGet, PhysicalFileGetResult,
+    PhysicalFilePut, PhysicalListEntry, PhysicalListPage, PhysicalMultipartAbort,
+    PhysicalMultipartComplete, PhysicalMultipartCreate, PhysicalMultipartFilePart,
+    PhysicalMultipartListParts, PhysicalMultipartListPartsPage, PhysicalMultipartListUploads,
+    PhysicalMultipartListUploadsPage, PhysicalMultipartPartResult, PhysicalMultipartUploadEntry,
+    PhysicalMultipartUploadPart, PhysicalMultipartUploadPartCopy, PhysicalObjectBindingV1,
+    PhysicalObjectWriteResult, PhysicalPut, PhysicalVersion, Result, RetryAdvice, StorageToken,
+    StoredMetadata, StoredObject,
 };
 use sha2::{Digest, Sha256};
 
@@ -338,6 +339,72 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 Ok(ImmutablePutOutcome::AlreadyPresent(existing.metadata))
             }
             Err(error) => Err(map_sdk_error("PutObject immutable", error)),
+        }
+    }
+
+    async fn put_immutable_file(&self, request: ImmutableFilePut) -> Result<ImmutablePutOutcome> {
+        let file_size = std::fs::metadata(&request.body_path)
+            .map_err(|error| transport_error("immutable spool metadata", error))?
+            .len();
+        if file_size != request.size {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "immutable spool size changed before upload",
+            ));
+        }
+        self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .uploaded_body_bytes
+            .fetch_add(request.size, Ordering::Relaxed);
+        let body = ByteStream::from_path(&request.body_path)
+            .await
+            .map_err(|error| transport_error("immutable spool open", error))?;
+        let result = self
+            .client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(request.path.as_str())
+            .if_none_match("*")
+            .metadata("prolly-sha256", hex::encode(request.expected_sha256))
+            .body(body)
+            .send()
+            .await;
+        match result {
+            Ok(output) => Ok(ImmutablePutOutcome::Created(StoredMetadata {
+                token: StorageToken {
+                    etag: output.e_tag().unwrap_or_default().to_string(),
+                    version_id: output.version_id().map(ToString::to_string),
+                },
+                len: request.size,
+                sha256: request.expected_sha256,
+                last_modified_millis: 0,
+                delete_marker: false,
+                user_metadata: BTreeMap::from([(
+                    "prolly-sha256".to_string(),
+                    hex::encode(request.expected_sha256),
+                )]),
+            })),
+            Err(error) => {
+                let precondition_failed = is_precondition_failed(&error);
+                let original = map_sdk_error("PutObject immutable spool", error);
+                match self.head(&request.path).await {
+                    Ok(Some(existing))
+                        if existing.len == request.size
+                            && existing.sha256 == request.expected_sha256 =>
+                    {
+                        Ok(ImmutablePutOutcome::AlreadyPresent(existing))
+                    }
+                    Ok(Some(_)) => Err(Error::new(
+                        ErrorCode::CorruptContent,
+                        format!("different bytes exist at {}", request.path),
+                    )),
+                    Ok(None) if precondition_failed => Err(Error::new(
+                        ErrorCode::OutcomeUnknown,
+                        "immutable create conflicted but the winner is not readable",
+                    )),
+                    Ok(None) | Err(_) => Err(original),
+                }
+            }
         }
     }
 
