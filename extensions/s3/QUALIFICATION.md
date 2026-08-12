@@ -29,6 +29,8 @@ Core tests verify:
   bounded sweep fencing, and journal cleanup;
 - branch-local node and commit-graph indexing from bounded publication-journal
   tails with zero commit/ref namespace scans and fail-closed late startup;
+- root/internal-only cache prewarm with no object enumeration, plus verified
+  cache reuse across a fresh repository process;
 - raw cross-bucket restore rejection plus portable archive clone/rebind,
   read-only `fsck`, explicit writer takeover, post-restore write, and cleanup.
 

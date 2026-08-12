@@ -680,9 +680,10 @@ async fn hot_branch_ref_versions_are_compacted_without_losing_history() {
 #[tokio::test]
 async fn hundred_object_batch_packs_only_final_reachable_nodes() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
+    let prefix = ".prolly/prolly-s3/final-batch-nodes";
     let repository = Repository::initialize(
-        plane,
-        physical_options(".prolly/prolly-s3/final-batch-nodes"),
+        plane.clone(),
+        physical_options(prefix),
     )
     .await
     .unwrap();
@@ -711,6 +712,35 @@ async fn hundred_object_batch_packs_only_final_reachable_nodes() {
         packed_bytes < 2 * 1024 * 1024,
         "100-object commit packed {packed_bytes} bytes of transient nodes"
     );
+    let warmed = repository.prewarm_internal_nodes(receipt.id).await.unwrap();
+    assert_eq!(warmed.roots, 3);
+    assert!(warmed.internal_nodes > 0);
+    assert!(warmed.leaves_skipped > 0);
+
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    let shared_cache = Arc::new(MemoryNodeCache::new(64 * 1024 * 1024));
+    let mut reader_options = physical_options(prefix);
+    reader_options.read_only = true;
+    reader_options.node_cache = Some(shared_cache.clone());
+    let reader = Repository::open(plane.clone(), reader_options.clone())
+        .await
+        .unwrap();
+    plane.reset_request_counts();
+    let cold = reader.prewarm_internal_nodes(receipt.id).await.unwrap();
+    assert_eq!(plane.request_snapshot().list, 0);
+    assert_eq!(
+        reader.performance_snapshot().node_ranged_fetches,
+        (cold.internal_nodes + cold.root_leaves) as u64
+    );
+
+    // A fresh repository process can reuse the same persistent/shared cache
+    // without refetching any warmed routing node from S3.
+    let reopened = Repository::open(plane.clone(), reader_options).await.unwrap();
+    plane.reset_request_counts();
+    let warm = reopened.prewarm_internal_nodes(receipt.id).await.unwrap();
+    assert_eq!(warm, cold);
+    assert_eq!(reopened.performance_snapshot().node_ranged_fetches, 0);
+    assert_eq!(plane.request_snapshot().list, 0);
 }
 
 #[tokio::test]

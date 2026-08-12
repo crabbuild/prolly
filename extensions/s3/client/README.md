@@ -326,16 +326,21 @@ let client = Client::builder()
 
 // On a cold host, populate the cache before serving traversal-heavy reads.
 let snapshot = client.head_commit().await?;
-let warmed = client
-    .prewarm_node_cache(snapshot, b"", 1_000)
-    .await?;
-println!("warmed {} objects in {} pages", warmed.object_count, warmed.pages);
+let warmed = client.prewarm_internal_node_cache(snapshot).await?;
+println!(
+    "warmed {} roots and {} internal nodes; skipped {} leaves",
+    warmed.roots,
+    warmed.internal_nodes,
+    warmed.leaves_skipped,
+);
 ```
 
 Use one filesystem owner per cache directory. Drop clients before calling
 `node_cache.close().await?` during graceful shutdown. Reopen the same directory
 after restart to reuse persisted immutable nodes. A new host should run
-`prewarm_node_cache` before taking traversal-heavy traffic.
+`prewarm_internal_node_cache` before taking traversal-heavy traffic. It does
+not enumerate every object or warm leaf nodes, so cost grows with tree height
+and internal fanout rather than file count.
 
 ## Page through large histories and ref sets
 

@@ -276,6 +276,14 @@ pub struct NodeIndexAdvanceReport {
     pub completed_scan: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InternalNodePrewarmReport {
+    pub roots: usize,
+    pub internal_nodes: usize,
+    pub root_leaves: usize,
+    pub leaves_skipped: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IndexFreshness {
     pub generation: u64,
@@ -1142,6 +1150,94 @@ impl<P: ObjectPlane> Repository<P> {
                 .node_index_entries_indexed
                 .load(Ordering::Relaxed),
         }
+    }
+
+    /// Fetch only the three state-tree roots and their internal descendants.
+    /// Leaf nodes and object payloads are intentionally not read.
+    pub async fn prewarm_internal_nodes(
+        &self,
+        snapshot: CommitId,
+    ) -> Result<InternalNodePrewarmReport> {
+        let commit = self.load_commit_metadata(snapshot).await?;
+        let mut pending = Vec::new();
+        for root in [
+            &commit.state.objects,
+            &commit.state.versions,
+            &commit.state.operations,
+        ] {
+            if root.format_digest != tree_format_digest(&self.format.state_tree_format)? {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "prewarm root uses an incompatible tree format",
+                ));
+            }
+            if let Some(cid) = root.root.clone() {
+                pending.push(cid);
+            }
+        }
+        let roots = pending.len();
+        let mut seen = HashSet::new();
+        let mut internal_nodes = 0usize;
+        let mut root_leaves = 0usize;
+        let mut leaves_skipped = 0usize;
+        while let Some(cid) = pending.pop() {
+            if !seen.insert(cid.clone()) {
+                continue;
+            }
+            let bytes = self
+                .node_store
+                .get_indexed_packed(cid.as_bytes())
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "prewarm node is absent from the bounded node index",
+                    )
+                })?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("prewarm could not decode a Prolly node: {error}"),
+                    )
+                })?;
+            if node.leaf {
+                root_leaves = root_leaves.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "prewarm root-leaf counter overflow",
+                    )
+                })?;
+                continue;
+            }
+            internal_nodes = internal_nodes.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "prewarm internal-node counter overflow",
+                )
+            })?;
+            if node.level == 1 {
+                leaves_skipped = leaves_skipped.checked_add(node.vals.len()).ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "prewarm leaf counter overflow")
+                })?;
+                continue;
+            }
+            for encoded in node.vals {
+                let child = prolly::Cid(encoded.try_into().map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        "prewarm internal node contains a malformed child CID",
+                    )
+                })?);
+                pending.push(child);
+            }
+        }
+        Ok(InternalNodePrewarmReport {
+            roots,
+            internal_nodes,
+            root_leaves,
+            leaves_skipped,
+        })
     }
 
     fn begin_publication_wait(&self) -> std::time::Instant {
@@ -10278,6 +10374,62 @@ impl<P: ObjectPlane> Repository<P> {
         }
         self.node_store
             .register_commit_object(id, &stored, &object.bytes)?;
+        self.commit_cache
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
+            .insert(id, commit.clone());
+        Ok(commit)
+    }
+
+    async fn load_commit_metadata(&self, id: CommitId) -> Result<BucketCommitV1> {
+        if let Some(commit) = self
+            .commit_cache
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
+            .get(&id)
+        {
+            return Ok(commit);
+        }
+        let path = commit_path(&self.options.repository_prefix, id)?;
+        let header = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: Some(0..=19),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "commit object is missing"))?;
+        let (commit_len, _) = CommitObjectV1::header_lengths(&header.bytes)?;
+        if commit_len == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object has an empty canonical commit",
+            ));
+        }
+        let end = 20_u64
+            .checked_add(u64::from(commit_len))
+            .and_then(|exclusive| exclusive.checked_sub(1))
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "commit range overflow"))?;
+        let encoded = self
+            .plane
+            .get(GetRequest {
+                path,
+                range: Some(20..=end),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "commit object is missing"))?;
+        if encoded.bytes.len() != commit_len as usize {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "ranged commit metadata has the wrong length",
+            ));
+        }
+        let commit: BucketCommitV1 = decode_canonical(&encoded.bytes)?;
+        if commit.id()? != id {
+            return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
+        }
         self.commit_cache
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?

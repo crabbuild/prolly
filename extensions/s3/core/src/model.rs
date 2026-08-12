@@ -1178,6 +1178,19 @@ pub struct CommitObjectV1 {
 }
 
 impl CommitObjectV1 {
+    pub fn header_lengths(encoded: &[u8]) -> Result<(u32, u64)> {
+        if encoded.len() != COMMIT_OBJECT_HEADER_LEN || &encoded[..8] != COMMIT_OBJECT_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object has an invalid wire header",
+            ));
+        }
+        Ok((
+            u32::from_be_bytes(encoded[8..12].try_into().expect("fixed range")),
+            u64::from_be_bytes(encoded[12..20].try_into().expect("fixed range")),
+        ))
+    }
+
     pub fn new(commit: BucketCommitV1, node_pack: Option<NodePackV1>) -> Result<Self> {
         let object = Self { commit, node_pack };
         object.validate()?;

@@ -101,7 +101,13 @@ pub struct IngestReport {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NodeCachePrewarmReport {
     pub snapshot: CommitId,
+    pub roots: usize,
+    pub internal_nodes: usize,
+    pub root_leaves: usize,
+    pub leaves_skipped: usize,
+    /// Compatibility field: internal-only prewarm does not enumerate objects.
     pub object_count: usize,
+    /// Compatibility field: internal-only prewarm does not page objects.
     pub pages: usize,
 }
 
@@ -1048,42 +1054,37 @@ impl Client {
         Ok(receipt)
     }
 
-    /// Traverse one immutable object snapshot and populate the configured
-    /// verified node cache without downloading object payloads.
+    /// Populate the verified node cache with state roots and internal nodes.
+    /// The legacy prefix and page size are accepted for source compatibility;
+    /// no object enumeration is performed.
     pub async fn prewarm_node_cache(
         &self,
         snapshot: CommitId,
-        prefix: &[u8],
+        _prefix: &[u8],
         page_size: usize,
     ) -> Result<NodeCachePrewarmReport> {
         self.ensure_provider_qualified()?;
         if page_size == 0 {
             return Err(invalid("prewarm page_size must be greater than zero"));
         }
-        let mut after = None;
-        let mut object_count = 0usize;
-        let mut pages = 0usize;
-        loop {
-            let (objects, truncated) = self
-                .repository
-                .list_objects_at(snapshot, prefix, after.as_deref(), page_size)
-                .await?;
-            pages = pages
-                .checked_add(1)
-                .ok_or_else(|| invalid("prewarm page count overflow"))?;
-            object_count = object_count
-                .checked_add(objects.len())
-                .ok_or_else(|| invalid("prewarm object count overflow"))?;
-            after = objects.last().map(|object| object.key.clone());
-            if !truncated {
-                break;
-            }
-        }
+        let warmed = self.repository.prewarm_internal_nodes(snapshot).await?;
         Ok(NodeCachePrewarmReport {
             snapshot,
-            object_count,
-            pages,
+            roots: warmed.roots,
+            internal_nodes: warmed.internal_nodes,
+            root_leaves: warmed.root_leaves,
+            leaves_skipped: warmed.leaves_skipped,
+            object_count: 0,
+            pages: 0,
         })
+    }
+
+    /// Preferred internal-only cache warming API.
+    pub async fn prewarm_internal_node_cache(
+        &self,
+        snapshot: CommitId,
+    ) -> Result<NodeCachePrewarmReport> {
+        self.prewarm_node_cache(snapshot, b"", 1).await
     }
     pub async fn at(&self, commit: CommitId) -> Result<Snapshot> {
         self.ensure_provider_qualified()?;

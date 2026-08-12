@@ -89,8 +89,10 @@ ID—the writer admits every node in the committed pack to the configured cache.
 Foyer flushes those verified immutable nodes to disk on graceful close. A
 reader reopening the same cache directory can therefore traverse the writer's
 snapshot without re-fetching nodes. A new host can call
-`Client::prewarm_node_cache` for selected snapshots and prefixes before serving
-traffic.
+`Client::prewarm_internal_node_cache` for selected snapshots before serving
+traffic. Prewarm follows only roots and internal descendants; level-one child
+links are counted but their leaf nodes are not fetched. This bounds warm-up by
+the routing structure rather than the number of files.
 
 ### Cache keys
 

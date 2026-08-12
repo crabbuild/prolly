@@ -62,8 +62,11 @@ latency require it; use multipart for one file larger than the staged bound.
 Configure a Foyer node cache on writers and traversal-heavy readers. Successful
 publications write committed immutable nodes through to the cache. Reopen the
 same cache directory after a restart, with only one process owning that
-directory. On a new or empty host, call `prewarm_node_cache` for the production
-snapshot and required prefixes before accepting list, diff, or history traffic.
+directory. On a new or empty host, call `prewarm_internal_node_cache` for the
+production snapshot before accepting list, diff, or history traffic. It fetches
+only the three state roots and internal descendants; it does not enumerate user
+objects or fetch leaf nodes. The injected `NodeCache` may be a local persistent
+Foyer cache or a tenant-isolated shared remote cache.
 
 Every recurring mutable control object is bounded by
 `mutable_control_versions_to_retain` (100 by default). The same Module covers
