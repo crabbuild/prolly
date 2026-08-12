@@ -72,3 +72,24 @@ must fail closed for a sharded repository.
   record: replaying its final checkpoint resolves through the operation index.
 - Bounded cleanup pages physical checkpoint versions and exact-deletes only
   records whose embedded expiry is in the past.
+
+## Journal-index rebuild
+
+`Discovering → Applying → Complete → Cleaned`
+
+- The job opens one immutable branch-journal snapshot and records its ref
+  generation and target.
+- Each discovery step reads at most the requested event limit and stores one
+  immutable content-addressed chunk. A chunk points to the previously written,
+  newer chunk, so the final oldest chunk is also the start of chronological
+  replay.
+- The constant-size cursor is canonical and process-independent. It contains
+  only the job/snapshot identity, one journal cursor or chunk ID, fresh Prolly
+  roots, counters, and the index-head baseline.
+- Each apply step consumes one chunk oldest-to-newest and updates fresh node
+  and commit-graph roots. It never materializes the complete journal or commit
+  set in memory.
+- Final head CAS is allowed only if the durable index still matches the
+  baseline captured at job start. A moving branch does not invalidate the
+  immutable snapshot; ordinary incremental catch-up consumes later events.
+- Successful and abandoned jobs exact-delete chunk objects in bounded pages.

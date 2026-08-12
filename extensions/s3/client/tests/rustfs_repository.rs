@@ -665,6 +665,78 @@ async fn rustfs_native_v2_cold_open_catches_indexes_before_serving_reads() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_over_limit_index_rebuild_resumes_from_canonical_cursor() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-index-rebuild");
+    let writer = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-rebuild-writer")
+        .journal_index_max_unindexed_events(2)
+        .background_index_maintenance(false)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    for index in 0..5 {
+        writer
+            .put_object(
+                format!("rebuild/{index}.txt"),
+                format!("value-{index}").into_bytes(),
+            )
+            .await
+            .unwrap();
+    }
+    drop(writer);
+
+    let reader = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .read_only(true)
+        .journal_index_max_unindexed_events(2)
+        .background_index_maintenance(false)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    assert!(!reader.branch_index_health().await.unwrap().ready);
+    let mut cursor = reader.start_branch_index_rebuild().await.unwrap();
+    loop {
+        let bytes = prolly_s3_client::core::encode_canonical(&cursor).unwrap();
+        cursor = prolly_s3_client::core::decode_canonical(&bytes).unwrap();
+        let step = reader
+            .advance_branch_index_rebuild(&cursor, 2)
+            .await
+            .unwrap();
+        cursor = step.cursor;
+        if step.complete {
+            break;
+        }
+    }
+    assert!(reader.branch_index_health().await.unwrap().ready);
+    assert_eq!(
+        reader
+            .get_object("rebuild/4.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"value-4"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_two_part_multipart_write_uses_eight_s3_calls() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");

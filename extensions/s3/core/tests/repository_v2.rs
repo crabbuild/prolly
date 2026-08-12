@@ -691,3 +691,96 @@ async fn native_v2_cold_reads_fail_fast_until_background_indexes_catch_up() {
         b"value-2"
     );
 }
+
+#[tokio::test]
+async fn native_v2_over_limit_index_lag_rebuilds_in_restartable_pages() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(100_000));
+    let options = RepositoryV2Options {
+        repository_prefix: ".tests/native-v2-index-rebuild".to_string(),
+        writer: "rebuild-writer".to_string(),
+        clock: clock.clone(),
+        ids: Arc::new(SequenceIdSource::new(0xfa, 1)),
+        journal_index_max_unindexed_events: 2,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+        ..RepositoryV2Options::default()
+    };
+    let writer = RepositoryV2::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..5 {
+        clock.advance(1).unwrap();
+        writer
+            .put_object(
+                "main",
+                format!("rebuild/{index}.txt").into_bytes(),
+                format!("value-{index}").into_bytes(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+            )
+            .await
+            .unwrap();
+    }
+    let reader = RepositoryV2::open(
+        plane,
+        RepositoryV2Options {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    let error = reader.advance_branch_indexes("main").await.unwrap_err();
+    assert_eq!(error.code, prolly_s3_core::ErrorCode::HistoryLimitExceeded);
+    assert!(!reader.branch_index_health("main").await.unwrap().ready);
+
+    let mut cursor = reader.start_branch_index_rebuild("main").await.unwrap();
+    let mut steps = 0;
+    loop {
+        // A workflow may persist this canonical cursor and resume in another
+        // process between every bounded step.
+        let encoded = prolly_s3_core::encode_canonical(&cursor).unwrap();
+        cursor = prolly_s3_core::decode_canonical(&encoded).unwrap();
+        let step = reader
+            .advance_branch_index_rebuild(&cursor, 2)
+            .await
+            .unwrap();
+        cursor = step.cursor;
+        steps += 1;
+        if step.complete {
+            break;
+        }
+        assert!(steps < 16);
+    }
+    assert!(
+        steps >= 6,
+        "discovery and application are independently paged"
+    );
+    let health = reader.branch_index_health("main").await.unwrap();
+    assert!(
+        health.ready,
+        "rebuild must publish the selected snapshot roots"
+    );
+    assert_eq!(
+        reader
+            .get_object("main", b"rebuild/4.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"value-4"
+    );
+
+    let mut deleted = 0;
+    loop {
+        let cleanup = reader
+            .cleanup_branch_index_rebuild(&cursor, 1)
+            .await
+            .unwrap();
+        deleted += cleanup.deleted_objects;
+        if cleanup.complete {
+            break;
+        }
+    }
+    assert_eq!(deleted, 3);
+}

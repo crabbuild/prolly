@@ -9,9 +9,10 @@ use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
     BatchId, BranchIndexAdvanceReportV2, BranchIndexHealthV2, CommitIdV2, CommitReceiptV2, Error,
-    ErrorCode, ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2,
-    ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2,
-    RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
+    ErrorCode, JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2,
+    JournalIndexRebuildStepV2, ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2,
+    PhysicalBatchV2, ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId,
+    RepositoryV2, RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -49,6 +50,7 @@ pub struct ClientV2Builder {
     max_cached_node_bytes: Option<usize>,
     node_cache: Option<Arc<dyn prolly_s3_core::NodeCache>>,
     mutable_control_versions_to_retain: Option<usize>,
+    journal_index_max_unindexed_events: Option<usize>,
     provider_identity: Option<ProviderIdentity>,
     attestation_signer: Option<Arc<dyn AttestationSigner>>,
     provider_attestation: Option<ProviderProfileId>,
@@ -274,6 +276,35 @@ impl ClientV2 {
     pub async fn branch_index_health(&self) -> Result<BranchIndexHealthV2> {
         self.ensure_provider_qualified()?;
         self.repository.branch_index_health(&self.branch).await
+    }
+
+    pub async fn start_branch_index_rebuild(&self) -> Result<JournalIndexRebuildCursorV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .start_branch_index_rebuild(&self.branch)
+            .await
+    }
+
+    pub async fn advance_branch_index_rebuild(
+        &self,
+        cursor: &JournalIndexRebuildCursorV2,
+        max_events: usize,
+    ) -> Result<JournalIndexRebuildStepV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .advance_branch_index_rebuild(cursor, max_events)
+            .await
+    }
+
+    pub async fn cleanup_branch_index_rebuild(
+        &self,
+        cursor: &JournalIndexRebuildCursorV2,
+        limit: usize,
+    ) -> Result<JournalIndexRebuildCleanupV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .cleanup_branch_index_rebuild(cursor, limit)
+            .await
     }
 
     pub async fn wait_for_branch_indexes(&self, timeout: Duration) -> Result<BranchIndexHealthV2> {
@@ -634,6 +665,11 @@ impl ClientV2Builder {
         self
     }
 
+    pub fn journal_index_max_unindexed_events(mut self, events: usize) -> Self {
+        self.journal_index_max_unindexed_events = Some(events);
+        self
+    }
+
     pub fn bucket(mut self, bucket: impl Into<String>) -> Self {
         self.bucket = Some(bucket.into());
         self
@@ -815,6 +851,9 @@ impl ClientV2Builder {
         }
         if let Some(versions) = self.mutable_control_versions_to_retain {
             options.mutable_control_versions_to_retain = versions;
+        }
+        if let Some(events) = self.journal_index_max_unindexed_events {
+            options.journal_index_max_unindexed_events = events;
         }
         options.node_cache = self.node_cache;
         let branch = options.default_branch.clone();

@@ -89,6 +89,7 @@ hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(PublicationEventIdV2, "ppe2_");
+hash_id!(JournalIndexRebuildChunkIdV2, "jrc2_");
 hash_id!(OperationIndexSegmentIdV2, "poi2_");
 hash_id!(GcDirtyRootIdV2, "pdr2_");
 hash_id!(TreeFormatDigest, "ptf1_");
@@ -1861,6 +1862,56 @@ impl PublicationEventV2 {
             && self.reflog == reference.reflog
             && self.authority == reference.authority
             && self.created_at_millis == reference.updated_at_millis)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalIndexRebuildChunkV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub job: OperationId,
+    pub sequence: u64,
+    pub newer: Option<JournalIndexRebuildChunkIdV2>,
+    pub events: Vec<PublicationEventV2>,
+}
+
+impl JournalIndexRebuildChunkV2 {
+    pub fn id(&self) -> Result<JournalIndexRebuildChunkIdV2> {
+        let bytes = encode_canonical(self)?;
+        Ok(JournalIndexRebuildChunkIdV2(domain_hash(
+            b"prolly-s3/journal-index-rebuild-chunk/v2",
+            &[&bytes],
+        )))
+    }
+
+    pub fn validate(&self, repository: RepositoryId, branch: &str) -> Result<()> {
+        crate::repository::validate_branch(branch)?;
+        if self.repository != repository
+            || self.branch != branch
+            || self.job.is_nil()
+            || self.events.is_empty()
+            || self.events.len() > 1_000
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "journal-index rebuild chunk is malformed or belongs to another job",
+            ));
+        }
+        let mut previous_generation = None;
+        for event in &self.events {
+            event.validate()?;
+            if event.repository != repository
+                || event.branch != branch
+                || previous_generation.is_some_and(|previous: u64| event.generation.0 >= previous)
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "journal-index rebuild chunk events are not newest-to-oldest",
+                ));
+            }
+            previous_generation = Some(event.generation.0);
+        }
+        Ok(())
     }
 }
 

@@ -20,14 +20,15 @@ use crate::{
     CommitSessionCleanupReportV2, CommitSessionStateV2, CommitSessionStoreV2, CompareExchange,
     CompareExchangeOutcome, CurrentObjectV2, Error, ErrorCode, GetRequest, IdSource,
     IdempotencyRetentionV2, ImmutablePayloadStoreV2, InitializationIntentV2,
-    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, LoadedRefV2, LogicalObjectVersionBodyV1,
-    LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransitionV2, ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV2, OperationId,
-    OperationIndexAdvanceReportV2, PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore,
-    ProviderPerKeyVersionLimitV2, RandomIdSource, RefGeneration, RepositoryFormatV2, Result,
-    SegmentedOperationIndexV2, ShardWriterAuthorityV2, ShardedBranchPublisherV2,
-    StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock, TakeoverRequestV2,
-    TreeRootV1,
+    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
+    JournalIndexRebuildCursorV2, JournalIndexRebuildStepV2, LoadedRefV2,
+    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
+    ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2, ObjectVersionIdV2,
+    ObjectVersionOrder, ObjectVersionV2, OperationId, OperationIndexAdvanceReportV2,
+    PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2,
+    RandomIdSource, RefGeneration, RepositoryFormatV2, Result, SegmentedOperationIndexV2,
+    ShardWriterAuthorityV2, ShardedBranchPublisherV2, StagedMutationBodyV2, StagedMutationV2,
+    StagedPutV2, SystemClock, TakeoverRequestV2, TreeRootV1,
 };
 
 #[derive(Clone)]
@@ -44,6 +45,7 @@ pub struct RepositoryV2Options {
     pub max_cached_node_bytes: usize,
     pub node_cache: Option<Arc<dyn NodeCache>>,
     pub mutable_control_versions_to_retain: usize,
+    pub journal_index_max_unindexed_events: usize,
     pub idempotency_retention: IdempotencyRetentionV2,
     pub provider_per_key_version_limit: ProviderPerKeyVersionLimitV2,
     pub clock: Arc<dyn Clock>,
@@ -65,6 +67,7 @@ impl Default for RepositoryV2Options {
             max_cached_node_bytes: 64 * 1024 * 1024,
             node_cache: None,
             mutable_control_versions_to_retain: crate::DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+            journal_index_max_unindexed_events: crate::DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
             idempotency_retention: IdempotencyRetentionV2::default(),
             provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Unknown,
             clock: Arc::new(SystemClock),
@@ -432,7 +435,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             format.repository_id,
             format.state_tree_format.clone(),
             node_cache,
-            crate::DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
+            options.journal_index_max_unindexed_events,
             options.mutable_control_versions_to_retain,
         )?);
         let locator = Arc::new(JournalNodeLocator {
@@ -1595,6 +1598,52 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         Ok(report)
     }
 
+    pub async fn start_branch_index_rebuild(
+        &self,
+        branch: &str,
+    ) -> Result<JournalIndexRebuildCursorV2> {
+        self.locator.register(branch)?;
+        let _lane = self.lock_index_branch(branch).await;
+        self.journal_indexes
+            .start_rebuild(&self.publisher, branch, self.options.ids.operation())
+            .await
+    }
+
+    pub async fn advance_branch_index_rebuild(
+        &self,
+        cursor: &JournalIndexRebuildCursorV2,
+        max_events: usize,
+    ) -> Result<JournalIndexRebuildStepV2> {
+        self.locator.register(&cursor.branch)?;
+        let _lane = self.lock_index_branch(&cursor.branch).await;
+        let step = self
+            .journal_indexes
+            .advance_rebuild(
+                &self.publisher,
+                cursor,
+                max_events,
+                self.options.clock.now_millis()?,
+            )
+            .await?;
+        if step.complete {
+            self.index_errors
+                .write()
+                .map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "v2 index-error lock poisoned")
+                })?
+                .remove(&cursor.branch);
+        }
+        Ok(step)
+    }
+
+    pub async fn cleanup_branch_index_rebuild(
+        &self,
+        cursor: &JournalIndexRebuildCursorV2,
+        limit: usize,
+    ) -> Result<JournalIndexRebuildCleanupV2> {
+        self.journal_indexes.cleanup_rebuild(cursor, limit).await
+    }
+
     pub async fn branch_index_health(&self, branch: &str) -> Result<BranchIndexHealthV2> {
         self.locator.register(branch)?;
         let reference = self.publisher.load(branch).await?;
@@ -2083,6 +2132,7 @@ fn validate_options(options: &RepositoryV2Options) -> Result<()> {
         || options.max_cached_node_locations == 0
         || options.max_cached_node_bytes == 0
         || options.mutable_control_versions_to_retain < 2
+        || !(1..=1_000_000).contains(&options.journal_index_max_unindexed_events)
     {
         return Err(Error::new(
             ErrorCode::InvalidRequest,

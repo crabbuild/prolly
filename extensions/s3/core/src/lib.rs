@@ -30,7 +30,8 @@ pub use control_versions::{
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
 pub use journal_indexes_v2::{
-    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2,
+    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
+    JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2,
     DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
 };
 pub use model::*;

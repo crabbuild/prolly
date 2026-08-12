@@ -205,6 +205,38 @@ Maintenance is branch-local and checks only branches registered in that
 process. `background_index_maintenance(false)` is available for isolated
 request-shape probes; production clients should keep the default enabled.
 
+If health reports that lag exceeded the incremental window, run the resumable
+rebuild workflow. Persist the canonical cursor after every step in your job
+store before scheduling the next step:
+
+```rust
+let mut cursor = client.start_branch_index_rebuild().await?;
+
+loop {
+    let step = client
+        .advance_branch_index_rebuild(&cursor, 256)
+        .await?;
+
+    cursor = step.cursor;
+    let encoded_cursor = prolly_s3_client::core::encode_canonical(&cursor)?;
+    std::fs::write("journal-index-rebuild.cbor", encoded_cursor)?;
+
+    if step.complete {
+        break;
+    }
+}
+
+while !client
+    .cleanup_branch_index_rebuild(&cursor, 1_000)
+    .await?
+    .complete
+{}
+```
+
+Discovery and application are independently paged. Rebuild state consists of
+immutable linked chunks and fresh Prolly roots, so restart does not rediscover
+already scanned history.
+
 ## Ingest files in batches (recommended)
 
 Use `ingest_objects` when loading more than one file. It publishes up to 100

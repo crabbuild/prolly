@@ -18,6 +18,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 | journal-derived index head | `P/journal-index/v2/heads/N.cbor` |
 | journal-derived node tree | `P/journal-index/v2/node-tree/nodes/sha256/H0/H1/H` |
 | journal-derived graph tree | `P/journal-index/v2/graph-tree/nodes/sha256/H0/H1/H` |
+| journal-index rebuild chunk | `P/administration/v2/index-rebuild/N/E/chunks/sha256/H0/H1/H` |
 | resumable commit-closure state | `P/administration/v2/closure/E/tree/nodes/sha256/H0/H1/H` |
 | physical transfer mapping | `P/administration/v2/transfer-mappings/sha256/H0/H1/H` |
 | GC coordinator | `P/gc/v2/coordinator.cbor` |
