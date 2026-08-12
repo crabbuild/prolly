@@ -79,6 +79,107 @@ against your key count and memory budget. Export `performance_snapshot()` for
 publication queue/wait telemetry and `s3_operation_metrics()` for SDK request
 counts.
 
+## Use the native v2 client for new repositories
+
+`ClientV2` stores payloads under immutable SHA-256-derived keys. Repeated
+writes to one logical filename therefore do not consume provider versions at
+that filename. V2 is a separate repository format and does not dual-write v1.
+
+```rust
+use std::sync::Arc;
+
+use prolly_s3_client::{
+    ClientV2, HmacAttestationSigner, ProviderIdentity,
+    core::ProviderPerKeyVersionLimitV2,
+};
+
+async fn create_v2(
+    aws: aws_sdk_s3::Client,
+    bucket: &str,
+) -> Result<ClientV2, prolly_s3_client::Error> {
+    ClientV2::builder()
+        .aws_client(aws)
+        .bucket(bucket)
+        .repository_prefix(".prolly/native-v2")
+        .writer("ingestion-service")
+        .provider_identity(ProviderIdentity::aws_region("us-west-2"))
+        .attestation_signer(Arc::new(HmacAttestationSigner::single(
+            "provider-key-2026-01",
+            vec![0x41; 32],
+        )?))
+        .provider_per_key_version_limit(
+            ProviderPerKeyVersionLimitV2::Finite(10_000),
+        )
+        .initialize()
+        .await
+}
+```
+
+### Stream and resume a durable batch
+
+Durable commit sessions are the default. Each body is spooled with bounded
+memory, hashed once, and uploaded to its immutable payload key. Checkpoints
+store bindings and operation IDs, never body bytes.
+
+```rust
+use aws_sdk_s3::primitives::ByteStream;
+
+let mut commit = client
+    .begin_commit()
+    .message("daily document import")
+    .checkpoint_every(256)
+    .start()
+    .await?;
+
+let session_id = commit.id();
+
+commit
+    .put_stream(
+        "documents/report.pdf",
+        ByteStream::from_path("report.pdf").await?,
+    )
+    .await?;
+
+commit.delete_object("documents/obsolete.pdf")?;
+commit.checkpoint().await?;
+
+// After a process restart, construct/open ClientV2 again and resume by ID.
+let resumed = client.resume_commit(session_id).await?;
+let receipt = resumed.publish().await?;
+println!("published {}", receipt.id);
+```
+
+Resume reuses verified payloads. It fails if the branch moved, the session
+expired, or another writer took ownership. Publication reconciles an ambiguous
+ref CAS by operation ID before fencing the branch.
+
+Durability adds one checkpoint PUT at session creation, one per configured
+checkpoint interval, and a final checkpoint when needed. The payload and
+atomic publication path remains `N + 3` PUTs. For a latency-sensitive batch
+that does not require restart recovery, opt out explicitly:
+
+```rust
+let commit = client.begin_commit().ephemeral().start().await?;
+```
+
+### Clean expired checkpoints
+
+Cleanup is bounded and resumable. Run it periodically from repository
+maintenance:
+
+```rust
+let mut cursor = None;
+loop {
+    let page = client
+        .cleanup_expired_commit_sessions(cursor, 1_000)
+        .await?;
+    cursor = page.continuation;
+    if cursor.is_none() {
+        break;
+    }
+}
+```
+
 ## Ingest files in batches (recommended)
 
 Use `ingest_objects` when loading more than one file. It publishes up to 100

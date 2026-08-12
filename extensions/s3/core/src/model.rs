@@ -2394,6 +2394,56 @@ impl StagedMutationV2 {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommitSessionStateV2 {
+    Open,
+    Aborted,
+}
+
+/// Canonical, immutable recovery checkpoint for a protocol-v2 commit
+/// session. Checkpoints retain only logical mutation metadata and immutable
+/// payload bindings; object bodies are never copied into the manifest.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitSessionCheckpointV2 {
+    pub session: PhysicalBatchV2,
+    pub sequence: u64,
+    pub mutations: Vec<StagedMutationV2>,
+    pub state: CommitSessionStateV2,
+}
+
+impl CommitSessionCheckpointV2 {
+    pub fn validate(&self, repository: RepositoryId, max_mutations: usize) -> Result<()> {
+        self.session.validate(repository)?;
+        if self.mutations.len() > max_mutations {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 commit-session checkpoint exceeds the mutation limit",
+            ));
+        }
+        let mut previous = None;
+        for mutation in &self.mutations {
+            let key = mutation.key();
+            if key.is_empty() || previous.is_some_and(|prior: &[u8]| prior >= key) {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "v2 checkpoint mutations must have unique canonical key order",
+                ));
+            }
+            previous = Some(key);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CommitSessionCleanupReportV2 {
+    pub scanned: usize,
+    pub deleted: usize,
+    pub already_missing: usize,
+    pub retained: usize,
+    pub continuation: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectData {
     pub key: Vec<u8>,

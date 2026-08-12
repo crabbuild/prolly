@@ -514,3 +514,108 @@ async fn native_v2_commit_session_batches_payloads_into_one_replayable_publicati
     assert_eq!(replay.id, receipt.id);
     assert!(replay.idempotent_replay);
 }
+
+#[tokio::test]
+async fn native_v2_durable_session_resumes_after_process_authority_reacquisition() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(70_000));
+    let options = RepositoryV2Options {
+        repository_prefix: ".tests/native-v2-durable-session".to_string(),
+        writer: "restartable-writer".to_string(),
+        clock: clock.clone(),
+        ids: Arc::new(SequenceIdSource::new(0xcc, 1)),
+        authority_lease_millis: 10_000,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+        ..RepositoryV2Options::default()
+    };
+    let original = RepositoryV2::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    let checkpoint = original
+        .begin_durable_commit_session("main", "restartable import", 60_000)
+        .await
+        .unwrap();
+    let staged = original
+        .stage_commit_session_put(
+            &checkpoint.session,
+            b"resume/object.txt".to_vec(),
+            b"uploaded exactly once".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    original
+        .checkpoint_commit_session(&checkpoint.session, vec![staged], 1)
+        .await
+        .unwrap();
+    let payload_puts = plane.request_snapshot().immutable_put;
+    drop(original);
+
+    clock.advance(1).unwrap();
+    let reopened = RepositoryV2::open(plane.clone(), options).await.unwrap();
+    let resumed = reopened
+        .resume_commit_session(checkpoint.session.id)
+        .await
+        .unwrap();
+    assert_eq!(resumed.mutations.len(), 1);
+    let receipt = reopened
+        .publish_commit_session(resumed.session, resumed.mutations)
+        .await
+        .unwrap();
+    assert_eq!(receipt.operation, checkpoint.session.identity.operation);
+    assert_eq!(
+        reopened
+            .get_object("main", b"resume/object.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"uploaded exactly once"
+    );
+    assert!(
+        plane.request_snapshot().immutable_put <= payload_puts + 3,
+        "resume may checkpoint authority adoption and publish commit/event, but must not upload a payload"
+    );
+}
+
+#[tokio::test]
+async fn native_v2_expired_session_cleanup_is_bounded_and_exact() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(80_000));
+    let repository = RepositoryV2::initialize(
+        plane,
+        RepositoryV2Options {
+            repository_prefix: ".tests/native-v2-session-cleanup".to_string(),
+            writer: "cleanup-writer".to_string(),
+            clock: clock.clone(),
+            ids: Arc::new(SequenceIdSource::new(0xdd, 1)),
+            authority_lease_millis: 10_000,
+            provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+            ..RepositoryV2Options::default()
+        },
+    )
+    .await
+    .unwrap();
+    let checkpoint = repository
+        .begin_durable_commit_session("main", "expire me", 100)
+        .await
+        .unwrap();
+    clock.advance(101).unwrap();
+    let report = repository
+        .cleanup_expired_commit_sessions(None, 1)
+        .await
+        .unwrap();
+    assert_eq!(report.scanned, 1);
+    assert_eq!(report.deleted, 1);
+    let final_page = repository
+        .cleanup_expired_commit_sessions(report.continuation, 1)
+        .await
+        .unwrap();
+    assert!(final_page.continuation.is_none());
+    let error = repository
+        .resume_commit_session(checkpoint.session.id)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, prolly_s3_core::ErrorCode::InvalidRequest);
+}

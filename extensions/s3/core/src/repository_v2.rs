@@ -16,7 +16,8 @@ use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedN
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, AuthorityPermitV2, AuthorityScopeV2,
     BucketCommitV2, BucketDeltaV2, BucketStateV2, CanonicalLimits, Checksums, Clock,
-    CommitGeneration, CommitIdV2, CommitObjectV2, CommitPublicationV2, CompareExchange,
+    CommitGeneration, CommitIdV2, CommitObjectV2, CommitPublicationV2, CommitSessionCheckpointV2,
+    CommitSessionCleanupReportV2, CommitSessionStateV2, CommitSessionStoreV2, CompareExchange,
     CompareExchangeOutcome, CurrentObjectV2, Error, ErrorCode, GetRequest, IdSource,
     IdempotencyRetentionV2, ImmutablePayloadStoreV2, InitializationIntentV2,
     JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, LogicalObjectVersionBodyV1,
@@ -155,6 +156,7 @@ pub struct RepositoryV2<P: ObjectPlane> {
     authority: Arc<ShardWriterAuthorityV2<P>>,
     publisher: ShardedBranchPublisherV2<P>,
     payloads: ImmutablePayloadStoreV2<P>,
+    commit_sessions: CommitSessionStoreV2<P>,
     operation_index: SegmentedOperationIndexV2<P>,
     journal_indexes: Arc<JournalDerivedIndexesV2<P>>,
     locator: Arc<JournalNodeLocator<P>>,
@@ -374,6 +376,12 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             options.repository_prefix.clone(),
             format.repository_id,
         );
+        let commit_sessions = CommitSessionStoreV2::new(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            format.repository_id,
+            format.canonical_limits.max_mutations_per_commit as usize,
+        )?;
         let operation_index = SegmentedOperationIndexV2::new_with_limits(
             plane.clone(),
             options.repository_prefix.clone(),
@@ -407,6 +415,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             authority,
             publisher,
             payloads,
+            commit_sessions,
             operation_index,
             journal_indexes,
             locator,
@@ -527,6 +536,120 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         Ok(session)
     }
 
+    pub async fn begin_durable_commit_session(
+        &self,
+        branch: &str,
+        message: impl Into<String>,
+        expires_after_millis: u64,
+    ) -> Result<CommitSessionCheckpointV2> {
+        let session = self
+            .begin_commit_session(branch, message, expires_after_millis)
+            .await?;
+        let checkpoint = CommitSessionCheckpointV2 {
+            session,
+            sequence: 0,
+            mutations: Vec::new(),
+            state: CommitSessionStateV2::Open,
+        };
+        self.commit_sessions.save(&checkpoint).await?;
+        Ok(checkpoint)
+    }
+
+    pub async fn checkpoint_commit_session(
+        &self,
+        session: &PhysicalBatchV2,
+        mutations: Vec<StagedMutationV2>,
+        sequence: u64,
+    ) -> Result<CommitSessionCheckpointV2> {
+        self.validate_commit_session(session).await?;
+        let checkpoint = CommitSessionCheckpointV2 {
+            session: session.clone(),
+            sequence,
+            mutations: self.canonical_session_mutations(mutations, true)?,
+            state: CommitSessionStateV2::Open,
+        };
+        self.commit_sessions.save(&checkpoint).await?;
+        Ok(checkpoint)
+    }
+
+    /// Resume the newest durable checkpoint and adopt it into this process's
+    /// current branch-authority epoch. Adoption is allowed only while the
+    /// original base commit is still the branch head.
+    pub async fn resume_commit_session(
+        &self,
+        batch: crate::BatchId,
+    ) -> Result<CommitSessionCheckpointV2> {
+        let mut checkpoint = self.commit_sessions.latest(batch).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidRequest,
+                "protocol-v2 commit session does not exist",
+            )
+        })?;
+        if checkpoint.state != CommitSessionStateV2::Open {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "protocol-v2 commit session was aborted",
+            ));
+        }
+        let now = self.options.clock.now_millis()?;
+        if checkpoint.session.expires_at_millis < now {
+            return Err(Error::new(
+                ErrorCode::BatchExpired,
+                "protocol-v2 commit session expired",
+            ));
+        }
+        let permit = self.active_permit(&checkpoint.session.branch, now).await?;
+        if checkpoint.session.identity.authority.writer_id != permit.stamp().writer_id {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "another writer cannot adopt a durable protocol-v2 commit session",
+            )
+            .operation(checkpoint.session.identity.operation.to_string()));
+        }
+        let current = self.publisher.load(&checkpoint.session.branch).await?;
+        if current.value.target != checkpoint.session.base_commit {
+            return Err(Error::new(
+                ErrorCode::BatchConflict,
+                "protocol-v2 branch moved since the durable session checkpoint",
+            )
+            .operation(checkpoint.session.identity.operation.to_string()));
+        }
+        if checkpoint.session.identity.authority != permit.stamp() {
+            checkpoint.sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InvalidLimit, "v2 checkpoint sequence overflow")
+            })?;
+            checkpoint.session.identity.authority = permit.stamp();
+            self.commit_sessions.save(&checkpoint).await?;
+        }
+        Ok(checkpoint)
+    }
+
+    pub async fn abort_commit_session(
+        &self,
+        session: PhysicalBatchV2,
+        mutations: Vec<StagedMutationV2>,
+        sequence: u64,
+    ) -> Result<()> {
+        self.validate_commit_session(&session).await?;
+        let checkpoint = CommitSessionCheckpointV2 {
+            session,
+            sequence,
+            mutations: self.canonical_session_mutations(mutations, true)?,
+            state: CommitSessionStateV2::Aborted,
+        };
+        self.commit_sessions.save(&checkpoint).await
+    }
+
+    pub async fn cleanup_expired_commit_sessions(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<CommitSessionCleanupReportV2> {
+        self.commit_sessions
+            .cleanup_expired_page(self.options.clock.now_millis()?, continuation, limit)
+            .await
+    }
+
     pub async fn stage_commit_session_put(
         &self,
         session: &PhysicalBatchV2,
@@ -611,26 +734,18 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         mutations: Vec<StagedMutationV2>,
     ) -> Result<CommitReceiptV2> {
         session.validate(self.format.repository_id)?;
-        if mutations.is_empty()
-            || mutations.len() > self.format.canonical_limits.max_mutations_per_commit as usize
-            || session.expires_at_millis < self.options.clock.now_millis()?
-        {
+        if session.expires_at_millis < self.options.clock.now_millis()? {
             return Err(Error::new(
-                ErrorCode::InvalidRequest,
-                "protocol-v2 commit session is empty, expired, or exceeds the mutation limit",
+                ErrorCode::BatchExpired,
+                "protocol-v2 commit session is expired",
             ));
         }
-        let mut ordered = BTreeMap::new();
-        for mutation in mutations {
-            self.validate_key(mutation.key())?;
-            if ordered.insert(mutation.key().to_vec(), mutation).is_some() {
-                return Err(Error::new(
-                    ErrorCode::InvalidRequest,
-                    "protocol-v2 commit session contains the same key more than once",
-                ));
-            }
-        }
-        let canonical_mutations = ordered.values().cloned().collect::<Vec<_>>();
+        let canonical_mutations = self.canonical_session_mutations(mutations, false)?;
+        let ordered = canonical_mutations
+            .iter()
+            .cloned()
+            .map(|mutation| (mutation.key().to_vec(), mutation))
+            .collect::<BTreeMap<_, _>>();
         let input_digest = crate::model::derive_input_digest_v2(&[
             b"commit-session",
             session.branch.as_bytes(),
@@ -700,19 +815,6 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                         binding,
                         ..
                     } = staged.as_ref();
-                    binding.validate()?;
-                    let expected_etag =
-                        checksums.md5.map(|md5| format!("\"{}\"", hex::encode(md5)));
-                    if *size > self.format.canonical_limits.max_object_bytes
-                        || binding.path != self.payloads.path(binding.checksum_sha256)?
-                        || checksums.sha256 != Some(binding.checksum_sha256)
-                        || expected_etag.as_deref() != Some(logical_etag)
-                    {
-                        return Err(Error::new(
-                            ErrorCode::ChecksumMismatch,
-                            "staged v2 payload identity does not match its immutable binding",
-                        ));
-                    }
                     (
                         LogicalObjectVersionKindV1::Live {
                             size: *size,
@@ -868,6 +970,54 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "protocol-v2 commit session belongs to another authority epoch",
+            ));
+        }
+        Ok(())
+    }
+
+    fn canonical_session_mutations(
+        &self,
+        mutations: Vec<StagedMutationV2>,
+        allow_empty: bool,
+    ) -> Result<Vec<StagedMutationV2>> {
+        if (!allow_empty && mutations.is_empty())
+            || mutations.len() > self.format.canonical_limits.max_mutations_per_commit as usize
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "protocol-v2 commit session has an invalid mutation count",
+            ));
+        }
+        let mut ordered = BTreeMap::new();
+        for mutation in mutations {
+            self.validate_key(mutation.key())?;
+            if let StagedMutationBodyV2::Put(staged) = &mutation.body {
+                self.validate_staged_put(staged)?;
+            }
+            if ordered.insert(mutation.key().to_vec(), mutation).is_some() {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "protocol-v2 commit session contains the same key more than once",
+                ));
+            }
+        }
+        Ok(ordered.into_values().collect())
+    }
+
+    fn validate_staged_put(&self, staged: &StagedPutV2) -> Result<()> {
+        staged.binding.validate()?;
+        let expected_etag = staged
+            .checksums
+            .md5
+            .map(|md5| format!("\"{}\"", hex::encode(md5)));
+        if staged.size > self.format.canonical_limits.max_object_bytes
+            || staged.binding.path != self.payloads.path(staged.binding.checksum_sha256)?
+            || staged.checksums.sha256 != Some(staged.binding.checksum_sha256)
+            || expected_etag.as_deref() != Some(staged.logical_etag.as_str())
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "staged v2 payload identity does not match its immutable binding",
             ));
         }
         Ok(())

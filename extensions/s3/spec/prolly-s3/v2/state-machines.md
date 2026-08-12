@@ -48,3 +48,27 @@ Repository-wide maintenance may not infer exclusivity from one branch permit.
 Until the v2 maintenance gate, stable snapshot generations, and dirty-root
 journal are implemented, GC and other destructive whole-repository operations
 must fail closed for a sharded repository.
+
+## Durable commit session
+
+`Absent → Open(0) → Open(n) → Published`
+
+`Open(n) → Aborted(n+1) → Expired/Cleaned`
+
+- Session creation persists checkpoint zero with the stable batch ID,
+  operation ID, base commit, authority stamp, and expiry.
+- Staging uploads whole payloads to immutable content-addressed keys. A
+  checkpoint contains only sorted logical mutations and verified bindings.
+- Every checkpoint is a create-once object at a monotonically increasing
+  sequence; an ambiguous create is reconciled by exact canonical bytes.
+- Resume lists only the batch checkpoint prefix and selects the greatest
+  canonical sequence. A process may adopt the session into a newer authority
+  epoch only when its writer ID is unchanged and the branch still points to
+  the original base commit.
+- Publication revalidates authority and base, applies both Prolly trees in
+  batch, and reconciles the operation ID before treating an ambiguous ref CAS
+  as fencing evidence.
+- A successfully published session needs no additional mutable completion
+  record: replaying its final checkpoint resolves through the operation index.
+- Bounded cleanup pages physical checkpoint versions and exact-deletes only
+  records whose embedded expiry is in the past.

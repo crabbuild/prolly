@@ -8,10 +8,10 @@ use std::{
 use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
-    BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode, ObjectDataV2,
-    ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2, ProviderAttestationV1,
-    ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2, RepositoryV2Options, Result,
-    StagedMutationV2, VersionSummaryV2,
+    BatchId, BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode,
+    ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2,
+    ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2,
+    RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -141,7 +141,29 @@ impl ClientV2 {
             client: self.clone(),
             message: "atomic protocol-v2 commit".to_string(),
             expires_after: Duration::from_secs(60 * 60),
+            durable: true,
+            checkpoint_every: 256,
         }
+    }
+
+    /// Resume the latest canonical remote checkpoint for a session. Verified
+    /// immutable payload bindings are reused; bodies are not uploaded again.
+    pub async fn resume_commit(&self, batch: BatchId) -> Result<CommitSessionV2> {
+        self.ensure_provider_qualified()?;
+        let checkpoint = self.repository.resume_commit_session(batch).await?;
+        Ok(CommitSessionV2 {
+            client: self.clone(),
+            manifest: checkpoint.session,
+            staged: checkpoint
+                .mutations
+                .into_iter()
+                .map(|mutation| (mutation.key().to_vec(), mutation))
+                .collect(),
+            durable: true,
+            checkpoint_every: 256,
+            checkpoint_sequence: checkpoint.sequence,
+            dirty_mutations: 0,
+        })
     }
 
     pub async fn list_objects(
@@ -247,6 +269,17 @@ impl ClientV2 {
         self.repository.advance_branch_indexes(&self.branch).await
     }
 
+    pub async fn cleanup_expired_commit_sessions(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<prolly_s3_core::CommitSessionCleanupReportV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .cleanup_expired_commit_sessions(continuation, limit)
+            .await
+    }
+
     pub fn s3_operation_metrics(&self) -> S3OperationMetrics {
         self.repository.plane().metrics()
     }
@@ -283,6 +316,8 @@ pub struct CommitSessionV2Builder {
     client: ClientV2,
     message: String,
     expires_after: Duration,
+    durable: bool,
+    checkpoint_every: usize,
 }
 
 impl CommitSessionV2Builder {
@@ -296,19 +331,55 @@ impl CommitSessionV2Builder {
         self
     }
 
+    /// Disable remote checkpoints for the minimum N + 3 S3 PUT shape. The
+    /// session cannot then be resumed after process loss.
+    pub fn ephemeral(mut self) -> Self {
+        self.durable = false;
+        self
+    }
+
+    /// Checkpoint after this many staged mutations. The final state is always
+    /// checkpointed before publication for durable sessions.
+    pub fn checkpoint_every(mut self, mutations: usize) -> Self {
+        self.checkpoint_every = mutations;
+        self
+    }
+
     pub async fn start(self) -> Result<CommitSessionV2> {
         self.client.ensure_provider_qualified()?;
         let expires_after_millis = u64::try_from(self.expires_after.as_millis())
             .map_err(|_| invalid("v2 commit-session expiry exceeds u64 milliseconds"))?;
-        let manifest = self
-            .client
-            .repository
-            .begin_commit_session(&self.client.branch, self.message, expires_after_millis)
-            .await?;
+        if self.durable && self.checkpoint_every == 0 {
+            return Err(invalid("v2 checkpoint interval must be positive"));
+        }
+        let (manifest, checkpoint_sequence) = if self.durable {
+            let checkpoint = self
+                .client
+                .repository
+                .begin_durable_commit_session(
+                    &self.client.branch,
+                    self.message,
+                    expires_after_millis,
+                )
+                .await?;
+            (checkpoint.session, checkpoint.sequence)
+        } else {
+            (
+                self.client
+                    .repository
+                    .begin_commit_session(&self.client.branch, self.message, expires_after_millis)
+                    .await?,
+                0,
+            )
+        };
         Ok(CommitSessionV2 {
             client: self.client,
             manifest,
             staged: BTreeMap::new(),
+            durable: self.durable,
+            checkpoint_every: self.checkpoint_every,
+            checkpoint_sequence,
+            dirty_mutations: 0,
         })
     }
 }
@@ -317,6 +388,10 @@ pub struct CommitSessionV2 {
     client: ClientV2,
     manifest: PhysicalBatchV2,
     staged: BTreeMap<Vec<u8>, StagedMutationV2>,
+    durable: bool,
+    checkpoint_every: usize,
+    checkpoint_sequence: u64,
+    dirty_mutations: usize,
 }
 
 impl CommitSessionV2 {
@@ -334,6 +409,10 @@ impl CommitSessionV2 {
 
     pub fn staged_objects(&self) -> usize {
         self.staged.len()
+    }
+
+    pub fn is_durable(&self) -> bool {
+        self.durable
     }
 
     pub async fn put_object(&mut self, key: impl Into<String>, bytes: Vec<u8>) -> Result<()> {
@@ -361,6 +440,7 @@ impl CommitSessionV2 {
             )
             .await?;
         self.staged.insert(staged.key().to_vec(), staged);
+        self.mark_staged_and_checkpoint_if_due().await?;
         Ok(())
     }
 
@@ -439,6 +519,7 @@ impl CommitSessionV2 {
             )
             .await?;
         self.staged.insert(staged.key().to_vec(), staged);
+        self.mark_staged_and_checkpoint_if_due().await?;
         Ok(())
     }
 
@@ -449,20 +530,65 @@ impl CommitSessionV2 {
         }
         self.staged
             .insert(key.clone(), StagedMutationV2::delete(key));
+        self.dirty_mutations = self.dirty_mutations.saturating_add(1);
         Ok(())
     }
 
-    pub async fn publish(self) -> Result<CommitReceiptV2> {
+    pub async fn checkpoint(&mut self) -> Result<()> {
+        if !self.durable || self.dirty_mutations == 0 {
+            return Ok(());
+        }
+        let sequence = self
+            .checkpoint_sequence
+            .checked_add(1)
+            .ok_or_else(|| invalid("v2 commit-session checkpoint sequence overflow"))?;
+        let checkpoint = self
+            .client
+            .repository
+            .checkpoint_commit_session(
+                &self.manifest,
+                self.staged.values().cloned().collect(),
+                sequence,
+            )
+            .await?;
+        self.manifest = checkpoint.session;
+        self.checkpoint_sequence = checkpoint.sequence;
+        self.dirty_mutations = 0;
+        Ok(())
+    }
+
+    pub async fn publish(mut self) -> Result<CommitReceiptV2> {
         self.client.ensure_provider_qualified()?;
+        self.checkpoint().await?;
         self.client
             .repository
             .publish_commit_session(self.manifest, self.staged.into_values().collect())
             .await
     }
 
-    /// Aborting leaves only content-addressed payload candidates. A bounded v2
-    /// staging/GC workflow will reclaim payloads that no commit references.
-    pub fn abort(self) {}
+    /// Mark a durable session aborted. Immutable payload candidates remain
+    /// deduplicated and bounded staging cleanup removes expired checkpoints.
+    pub async fn abort(self) -> Result<()> {
+        if !self.durable {
+            return Ok(());
+        }
+        let sequence = self
+            .checkpoint_sequence
+            .checked_add(1)
+            .ok_or_else(|| invalid("v2 commit-session checkpoint sequence overflow"))?;
+        self.client
+            .repository
+            .abort_commit_session(self.manifest, self.staged.into_values().collect(), sequence)
+            .await
+    }
+
+    async fn mark_staged_and_checkpoint_if_due(&mut self) -> Result<()> {
+        self.dirty_mutations = self.dirty_mutations.saturating_add(1);
+        if self.durable && self.dirty_mutations >= self.checkpoint_every {
+            self.checkpoint().await?;
+        }
+        Ok(())
+    }
 }
 
 impl ClientV2Builder {

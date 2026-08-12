@@ -482,6 +482,7 @@ async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
         .unwrap();
     let mut session = client
         .begin_commit()
+        .ephemeral()
         .message("two puts and one delete")
         .start()
         .await
@@ -530,6 +531,76 @@ async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
         .await
         .unwrap()
         .is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_durable_session_resumes_without_payload_reupload() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-durable-resume");
+    let client = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-resumable-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    let payload = vec![0x5a; 1024 * 1024];
+    let mut session = client
+        .begin_commit()
+        .message("resume after process loss")
+        .start()
+        .await
+        .unwrap();
+    let batch = session.id();
+    let operation = session.operation();
+    session
+        .put_stream("resume/large.bin", ByteStream::from(payload.clone()))
+        .await
+        .unwrap();
+    session.checkpoint().await.unwrap();
+    drop(session);
+    drop(client);
+
+    let reopened = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-resumable-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    reopened.reset_s3_operation_metrics();
+    let resumed = reopened.resume_commit(batch).await.unwrap();
+    assert_eq!(resumed.operation(), operation);
+    assert_eq!(resumed.staged_objects(), 1);
+    let receipt = resumed.publish().await.unwrap();
+    assert_eq!(receipt.operation, operation);
+    let calls = reopened.reset_s3_operation_metrics();
+    assert!(
+        calls.uploaded_body_bytes < payload.len() as u64,
+        "resume must publish metadata without uploading the 1 MiB payload again: {calls:?}"
+    );
+    assert_eq!(
+        reopened
+            .get_object("resume/large.bin")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        payload
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -12,6 +12,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 | authority-stamped commit object | `P/commits/v2/sha256/H0/H1/H` |
 | publication event | `P/publications/v2/sha256/H0/H1/H` |
 | immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
+| commit-session checkpoint | `P/staging/v2/R/B/checkpoints/Q.cbor` |
 | operation-index head | `P/operation-index/v2/heads/N.cbor` |
 | operation-index segment | `P/operation-index/v2/segments/N/sha256/H0/H1/H` |
 | journal-derived index head | `P/journal-index/v2/heads/N.cbor` |
@@ -50,6 +51,15 @@ create different immutable payload keys instead of accumulating provider
 versions at that user key. Identical content reuses the same immutable object.
 An original-key object, when materialized for external compatibility, is a
 rebuildable projection and is never part of repository closure.
+
+`B` is a protocol-v2 batch ID and `Q` is a fixed-width checkpoint sequence.
+Commit-session checkpoints are immutable, canonical snapshots containing the
+batch operation ID, base commit, authority stamp, expiry, and sorted staged
+mutations. Put mutations retain only verified immutable payload bindings, not
+object bodies. Resume lists only the selected batch prefix and adopts the
+checkpoint only when the writer ID and base branch head still match. Expired
+checkpoint versions are removed through bounded, cursor-based exact deletion;
+there is no hot mutable staging head.
 
 The operation-ID index is advisory and branch-local. Its bounded mutable head
 checkpoints one publication event and references immutable, sorted LSM-style

@@ -3,6 +3,7 @@
 mod authority;
 mod cache;
 mod codec;
+mod commit_session_v2;
 mod control_versions;
 mod error;
 mod journal_indexes_v2;
@@ -22,6 +23,7 @@ pub use authority::{
 };
 pub use cache::{MemoryNodeCache, NodeCache, NodeCacheError, NodeCacheKey};
 pub use codec::{decode_canonical, encode_canonical};
+pub use commit_session_v2::CommitSessionStoreV2;
 pub use control_versions::{
     classify_mutable_control_path, ControlVersionCompactionReport, MutableControlKind,
     MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
