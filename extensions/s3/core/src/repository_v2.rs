@@ -10,29 +10,35 @@ use std::{
 
 use futures_util::{stream, StreamExt};
 use md5::{Digest as _, Md5};
-use prolly::{AsyncProlly, Config, Mutation, RuntimeConfig, Tree, TreeFormat};
+use prolly::{AsyncProlly, Config, Diff, Mutation, RuntimeConfig, Tree, TreeFormat};
 use sha2::Sha256;
 
+use crate::merge_v2::{
+    MergeBaseCandidateV2, MergePlanEntryV2, MergeQueueEntryV2, MergeSeenEntryV2,
+};
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, AuthorityPermitV2, AuthorityScopeV2,
     BucketCommitV1, BucketCommitV2, BucketDeltaV2, BucketStateV2, CanonicalLimits, Checksums,
     Clock, CommitGeneration, CommitId, CommitIdV2, CommitObjectV2, CommitPublicationV2,
     CommitSessionCheckpointV2, CommitSessionCleanupReportV2, CommitSessionStateV2,
-    CommitSessionStoreV2, CompareExchange, CompareExchangeOutcome, CurrentObjectV2, Error,
-    ErrorCode, GetRequest, IdSource, IdempotencyRetentionV2, ImmutablePayloadStoreV2,
-    ImportedJournalIndexStateV2, InitializationIntentV2, JournalDerivedIndexesV2,
-    JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2,
-    JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2, ListRequest, LoadedRefV2,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
-    ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2, ObjectVersionIdV2,
-    ObjectVersionOrder, ObjectVersionV1, ObjectVersionV2, OperationId,
-    OperationIndexAdvanceReportV2, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2,
-    PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2,
-    RandomIdSource, RefCatalogCursorV2, RefGeneration, RefKindV2, RepositoryFormatV2, Result,
-    SegmentedOperationIndexV2, ShardWriterAuthorityV2, ShardedBranchPublisherV2,
-    ShardedRefCatalogV2, StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock,
-    TagStoreV2, TakeoverRequestV2, TreeRootV1,
+    CommitSessionStoreV2, CompareExchange, CompareExchangeOutcome, CurrentObjectV2, DeleteOutcome,
+    Error, ErrorCode, GetRequest, IdSource, IdempotencyRetentionV2, ImmutablePayloadStoreV2,
+    ImportedJournalIndexStateV2, InitializationIntentV2, JournalCommitGraphEntryV2,
+    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
+    JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2,
+    ListRequest, LoadedRefV2, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    MemoryNodeCache, MergeAdvancePageV2, MergeBaseCursorV2, MergeBasePageV2, MergeChangeCursorV2,
+    MergeChangePageV2, MergeChangeV2, MergeCleanupCursorV2, MergeCleanupPageV2,
+    MergeConflictCursorV2, MergeConflictPageV2, MergeConflictV2, MergeCursorV2, MergePhaseV2,
+    MergePolicyV2, MergeReceiptV2, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
+    ObjectTransitionV2, ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV1, ObjectVersionV2,
+    OperationId, OperationIndexAdvanceReportV2, OperationIndexRebuildCursorV2,
+    OperationIndexRebuildStepV2, PhysicalBatchV2, PhysicalMutationIdentityV2, PhysicalVersion,
+    ProllyObjectStore, ProviderPerKeyVersionLimitV2, RandomIdSource, RefCatalogCursorV2,
+    RefGeneration, RefKindV2, RepositoryFormatV2, Result, SegmentedOperationIndexV2,
+    ShardWriterAuthorityV2, ShardedBranchPublisherV2, ShardedRefCatalogV2, StagedMutationBodyV2,
+    StagedMutationV2, StagedPutV2, SystemClock, TagStoreV2, TakeoverRequestV2, TreeRootV1,
 };
 
 #[derive(Clone)]
@@ -403,6 +409,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             delta: BucketDeltaV2 {
                 input_digest: crate::model::derive_input_digest_v2(&[b"initialize"]),
                 changes: Vec::new(),
+                changes_root: None,
+                change_count: 0,
             },
             node_pack: None,
             authority: permit.stamp(),
@@ -897,6 +905,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     source_id.as_bytes(),
                 ]),
                 changes: transitions,
+                changes_root: None,
+                change_count: 0,
             },
             node_pack: prepared.as_ref().map(PreparedNodePack::reference),
             authority: permit.stamp(),
@@ -1669,6 +1679,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             delta: BucketDeltaV2 {
                 input_digest,
                 changes: transitions,
+                changes_root: None,
+                change_count: 0,
             },
             node_pack: prepared.as_ref().map(PreparedNodePack::reference),
             authority: permit.stamp(),
@@ -1936,6 +1948,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     next: version.id,
                     delete_marker: false,
                 }],
+                changes_root: None,
+                change_count: 0,
             },
             node_pack,
             authority: permit.stamp(),
@@ -2134,6 +2148,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     next: version.id,
                     delete_marker: true,
                 }],
+                changes_root: None,
+                change_count: 0,
             },
             node_pack: prepared.as_ref().map(PreparedNodePack::reference),
             authority: permit.stamp(),
@@ -2314,6 +2330,456 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let truncated = result.len() > limit;
         result.truncate(limit);
         Ok((result, truncated))
+    }
+
+    /// Start a durable native-v2 merge between two branch snapshots.
+    ///
+    /// The returned cursor is process-independent. Callers must persist the
+    /// cursor returned by every successful `advance_merge` call before
+    /// discarding the previous one.
+    pub async fn start_merge(
+        &self,
+        target_branch: &str,
+        source_branch: &str,
+        requested_base: Option<CommitIdV2>,
+        policy: MergePolicyV2,
+        message: impl Into<String>,
+    ) -> Result<MergeCursorV2> {
+        crate::repository::validate_branch(target_branch)?;
+        crate::repository::validate_branch(source_branch)?;
+        if target_branch == source_branch {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 merge source and target branches must differ",
+            ));
+        }
+        let message = message.into();
+        if message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 merge message is empty",
+            ));
+        }
+        self.locator.register(target_branch)?;
+        self.locator.register(source_branch)?;
+        self.advance_branch_indexes(target_branch).await?;
+        self.advance_branch_indexes(source_branch).await?;
+        self.require_branch_indexes_ready(target_branch).await?;
+        self.require_branch_indexes_ready(source_branch).await?;
+        let ours = self.head(target_branch).await?;
+        let theirs = self.head(source_branch).await?;
+        let ours_entry = self
+            .merge_graph_entry(target_branch, source_branch, ours)
+            .await?;
+        let theirs_entry = self
+            .merge_graph_entry(target_branch, source_branch, theirs)
+            .await?;
+        let job = self.options.ids.operation();
+        let operation = self.options.ids.operation();
+        let engine = self.merge_plan_engine(job)?;
+        let mut tree = engine.create();
+        let now = self.options.clock.now_millis()?;
+        let mut cursor = MergeCursorV2 {
+            repository: self.format.repository_id,
+            job,
+            target_branch: target_branch.to_string(),
+            source_branch: source_branch.to_string(),
+            ours,
+            theirs,
+            requested_base,
+            selected_base: None,
+            policy,
+            operation,
+            message,
+            created_at_millis: now,
+            phase: MergePhaseV2::DiscoveringBases,
+            plan_root: TreeRootV1::from_tree(&tree)?,
+            ours_diff: None,
+            theirs_diff: None,
+            ours_pending: None,
+            theirs_pending: None,
+            ours_finished: false,
+            theirs_finished: false,
+            version_diff: None,
+            version_diff_finished: false,
+            build_after: None,
+            final_objects: None,
+            final_versions: None,
+            delta_root: None,
+            visited_commits: 0,
+            best_base_count: 0,
+            planned_changes: 0,
+            conflicts: 0,
+            built_changes: 0,
+        };
+
+        // First-parent ancestry is the common fast-forward case. The helper
+        // consumes binary-lifting pointers from the journal-derived graph and
+        // avoids creating a general frontier when one head is already the
+        // selected base.
+        let fast_base = if self
+            .is_first_parent_ancestor_v2(target_branch, source_branch, ours, theirs)
+            .await?
+        {
+            Some(ours)
+        } else if self
+            .is_first_parent_ancestor_v2(target_branch, source_branch, theirs, ours)
+            .await?
+        {
+            Some(theirs)
+        } else {
+            None
+        };
+        if let Some(base) = fast_base {
+            tree = engine
+                .batch(
+                    &tree,
+                    vec![Mutation::Upsert {
+                        key: merge_base_result_key(base),
+                        val: Vec::new(),
+                    }],
+                )
+                .await?;
+            cursor.plan_root = TreeRootV1::from_tree(&tree)?;
+            cursor.best_base_count = 1;
+            cursor.selected_base = Some(base);
+            self.validate_requested_merge_base(&cursor, base)?;
+            cursor.phase = MergePhaseV2::Planning;
+            self.seal_merge_cursor(&mut cursor).await?;
+            return Ok(cursor);
+        }
+
+        let mut mutations = Vec::new();
+        self.seed_merge_frontier(&mut mutations, ours_entry, MERGE_LEFT)?;
+        self.seed_merge_frontier(&mut mutations, theirs_entry, MERGE_RIGHT)?;
+        tree = engine.batch(&tree, mutations).await?;
+        cursor.plan_root = TreeRootV1::from_tree(&tree)?;
+        self.seal_merge_cursor(&mut cursor).await?;
+        Ok(cursor)
+    }
+
+    /// Advance a durable merge by at most `max_steps` graph or tree records.
+    pub async fn advance_merge(
+        &self,
+        cursor: &MergeCursorV2,
+        max_steps: usize,
+    ) -> Result<MergeAdvancePageV2> {
+        if !(1..=10_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 merge advance must process 1 to 10,000 records",
+            ));
+        }
+        self.validate_merge_cursor(cursor).await?;
+        let mut next = cursor.clone();
+        let mut processed = 0usize;
+        let mut changes = Vec::new();
+        let mut conflicts = Vec::new();
+        while processed < max_steps {
+            let before = next.phase;
+            let advanced = match next.phase {
+                MergePhaseV2::DiscoveringBases => self.advance_merge_base_one(&mut next).await?,
+                MergePhaseV2::CollectingBases => self.collect_merge_base_one(&mut next).await?,
+                MergePhaseV2::Planning => {
+                    self.advance_merge_plan(
+                        &mut next,
+                        max_steps - processed,
+                        &mut changes,
+                        &mut conflicts,
+                    )
+                    .await?
+                }
+                MergePhaseV2::BuildingVersions => {
+                    self.advance_merge_version_union(&mut next, max_steps - processed)
+                        .await?
+                }
+                MergePhaseV2::BuildingObjects => {
+                    self.advance_merge_object_build(&mut next, max_steps - processed)
+                        .await?
+                }
+                MergePhaseV2::AwaitingBase
+                | MergePhaseV2::Conflicted
+                | MergePhaseV2::ReadyToPublish => 0,
+            };
+            processed = processed.checked_add(advanced).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "v2 merge work counter overflow",
+                )
+            })?;
+            if advanced == 0 && next.phase == before {
+                break;
+            }
+        }
+        self.seal_merge_cursor(&mut next).await?;
+        Ok(MergeAdvancePageV2 {
+            cursor: next,
+            processed,
+            changes,
+            conflicts,
+        })
+    }
+
+    /// Select one of several best merge bases discovered by the frontier.
+    pub async fn select_merge_base(
+        &self,
+        cursor: &MergeCursorV2,
+        base: CommitIdV2,
+    ) -> Result<MergeCursorV2> {
+        self.validate_merge_cursor(cursor).await?;
+        if cursor.phase != MergePhaseV2::AwaitingBase {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "v2 merge is not awaiting an explicit merge base",
+            ));
+        }
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        if engine
+            .get(&tree, &merge_base_result_key(base))
+            .await?
+            .is_none()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRevision,
+                "selected v2 merge base is not a best common ancestor",
+            ));
+        }
+        let mut next = cursor.clone();
+        next.selected_base = Some(base);
+        next.phase = MergePhaseV2::Planning;
+        self.seal_merge_cursor(&mut next).await?;
+        Ok(next)
+    }
+
+    pub async fn merge_changes_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeChangeCursorV2>,
+        limit: usize,
+    ) -> Result<MergeChangePageV2> {
+        self.merge_change_page(cursor, continuation, limit).await
+    }
+
+    pub async fn merge_bases_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeBaseCursorV2>,
+        limit: usize,
+    ) -> Result<MergeBasePageV2> {
+        self.merge_base_page(cursor, continuation, limit).await
+    }
+
+    pub async fn merge_conflicts_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeConflictCursorV2>,
+        limit: usize,
+    ) -> Result<MergeConflictPageV2> {
+        self.merge_conflict_page(cursor, continuation, limit).await
+    }
+
+    /// CAS-publish a completely built merge plan. Replaying this call with the
+    /// same cursor and operation ID reconciles an ambiguous prior publication.
+    pub async fn publish_merge(&self, cursor: &MergeCursorV2) -> Result<MergeReceiptV2> {
+        self.validate_merge_cursor(cursor).await?;
+        if cursor.phase != MergePhaseV2::ReadyToPublish {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "v2 merge plan is not ready to publish",
+            ));
+        }
+        if cursor.policy == MergePolicyV2::Fail && cursor.conflicts != 0 {
+            return Err(Error::new(
+                ErrorCode::MergeConflict,
+                "v2 merge plan contains unresolved conflicts",
+            ));
+        }
+        let base = cursor.selected_base.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 merge plan has no selected base",
+            )
+        })?;
+        let input_digest = self.merge_input_digest(cursor, base);
+        let _lane = self.lock_branch(&cursor.target_branch).await;
+        let now = self.options.clock.now_millis()?;
+        if let Some(receipt) = self
+            .reconcile_merge_operation(cursor, input_digest, now)
+            .await?
+        {
+            return Ok(receipt);
+        }
+        let current = self.publisher.load(&cursor.target_branch).await?;
+        if current.value.target != cursor.ours {
+            return Err(Error::new(
+                ErrorCode::RefConflict,
+                "v2 merge target moved after planning",
+            ));
+        }
+        let permit = self.active_permit(&cursor.target_branch, now).await?;
+        let ours = self.load_commit_object(cursor.ours).await?.commit;
+        let theirs = self.load_commit_object(cursor.theirs).await?.commit;
+        let generation = CommitGeneration(
+            ours.generation
+                .0
+                .max(theirs.generation.0)
+                .checked_add(1)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "v2 merge generation overflow")
+                })?,
+        );
+        let commit = BucketCommitV2 {
+            state: BucketStateV2 {
+                objects: cursor.final_objects.clone().ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "v2 merge object root is absent",
+                    )
+                })?,
+                versions: cursor.final_versions.clone().ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "v2 merge version root is absent",
+                    )
+                })?,
+            },
+            parents: vec![cursor.ours, cursor.theirs],
+            generation,
+            delta: BucketDeltaV2 {
+                input_digest,
+                changes: Vec::new(),
+                changes_root: cursor.delta_root.clone(),
+                change_count: cursor.built_changes,
+            },
+            node_pack: None,
+            authority: permit.stamp(),
+            author: self.options.writer.clone(),
+            message: Some(cursor.message.clone()),
+            created_at_millis: cursor.created_at_millis,
+            metadata: BTreeMap::new(),
+        };
+        let publication = self
+            .publisher
+            .store_and_publish(
+                current,
+                CommitPublicationV2 {
+                    permit: &permit,
+                    branch: &cursor.target_branch,
+                    commit: &commit,
+                    node_pack: None,
+                    operation: cursor.operation,
+                    message: &cursor.message,
+                    now_millis: now,
+                },
+            )
+            .await;
+        match publication {
+            Ok(published) => {
+                self.mark_local_index_head(&cursor.target_branch, published.value.target)?;
+                Ok(MergeReceiptV2 {
+                    id: published.value.target,
+                    operation: cursor.operation,
+                    branch: cursor.target_branch.clone(),
+                    parents: [cursor.ours, cursor.theirs],
+                    changed_keys: cursor.built_changes,
+                    conflicts: cursor.conflicts,
+                    idempotent_replay: false,
+                })
+            }
+            Err(error) => match self
+                .reconcile_merge_operation(cursor, input_digest, now)
+                .await?
+            {
+                Some(receipt) => Ok(receipt),
+                None => {
+                    self.fence_branch(&cursor.target_branch)?;
+                    Err(error)
+                }
+            },
+        }
+    }
+
+    /// Exact-delete one bounded page of job-scoped merge-plan nodes after a
+    /// successful publication or an explicitly abandoned plan. State and
+    /// delta nodes referenced by a published commit use the repository node
+    /// namespace and are not touched here.
+    pub async fn cleanup_merge(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeCleanupCursorV2>,
+        limit: usize,
+    ) -> Result<MergeCleanupPageV2> {
+        if continuation.is_none() {
+            self.validate_merge_cursor(cursor).await?;
+        } else if cursor.repository != self.format.repository_id || cursor.job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge cleanup cursor belongs to another repository",
+            ));
+        }
+        if !(1..=1_000).contains(&limit) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 merge cleanup page must contain 1 to 1,000 objects",
+            ));
+        }
+        if continuation.is_some_and(|continuation| {
+            continuation.repository != cursor.repository || continuation.job != cursor.job
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge cleanup cursor belongs to another job",
+            ));
+        }
+        let prefix = format!(
+            "{}/administration/v2/merge/{}/plan/",
+            self.options.repository_prefix, cursor.job
+        );
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix,
+                continuation: continuation.map(|cursor| cursor.provider_continuation.clone()),
+                limit,
+                include_versions: true,
+            })
+            .await?;
+        let mut deleted = 0usize;
+        for entry in page.entries {
+            let physical_version = entry
+                .metadata
+                .token
+                .version_id
+                .clone()
+                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                .unwrap_or_else(|| PhysicalVersion::Unversioned {
+                    token: Some(entry.metadata.token),
+                });
+            match self
+                .plane
+                .delete_exact(&entry.path, physical_version)
+                .await?
+            {
+                DeleteOutcome::Deleted | DeleteOutcome::NotFound => deleted += 1,
+                DeleteOutcome::TokenMismatch => {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "v2 merge cleanup object changed concurrently",
+                    ))
+                }
+            }
+        }
+        Ok(MergeCleanupPageV2 {
+            deleted,
+            continuation: page
+                .continuation
+                .map(|provider_continuation| MergeCleanupCursorV2 {
+                    repository: cursor.repository,
+                    job: cursor.job,
+                    provider_continuation,
+                }),
+        })
     }
 
     pub async fn advance_branch_indexes(&self, branch: &str) -> Result<BranchIndexAdvanceReportV2> {
@@ -2977,6 +3443,995 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         })
     }
 
+    fn merge_plan_engine(&self, job: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/v2/merge/{job}/plan",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn merge_state_engine(&self) -> AsyncProlly<ProllyObjectStore<P>> {
+        self.engine(self.node_store.durable_direct_write_session())
+    }
+
+    fn tree_from_merge_root(&self, root: &TreeRootV1) -> Result<Tree> {
+        self.tree_from_root(root).map_err(|_| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge cursor uses another tree format",
+            )
+        })
+    }
+
+    async fn validate_merge_cursor(&self, cursor: &MergeCursorV2) -> Result<()> {
+        crate::repository::validate_branch(&cursor.target_branch)?;
+        crate::repository::validate_branch(&cursor.source_branch)?;
+        self.tree_from_merge_root(&cursor.plan_root)?;
+        if cursor.repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.operation.is_nil()
+            || cursor.target_branch == cursor.source_branch
+            || cursor.message.trim().is_empty()
+            || cursor.best_base_count == 0
+                && !matches!(
+                    cursor.phase,
+                    MergePhaseV2::DiscoveringBases | MergePhaseV2::CollectingBases
+                )
+            || cursor.selected_base.is_none()
+                && matches!(
+                    cursor.phase,
+                    MergePhaseV2::Planning
+                        | MergePhaseV2::BuildingVersions
+                        | MergePhaseV2::BuildingObjects
+                        | MergePhaseV2::Conflicted
+                        | MergePhaseV2::ReadyToPublish
+                )
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge cursor is malformed or belongs to another repository",
+            ));
+        }
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let stored = engine
+            .get(&tree, MERGE_CURSOR_KEY)
+            .await?
+            .map(|bytes| decode_canonical::<MergeCursorV2>(&bytes))
+            .transpose()?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidContinuationToken,
+                    "v2 merge cursor is not anchored by its durable plan",
+                )
+            })?;
+        if normalized_merge_cursor(&stored)? != normalized_merge_cursor(cursor)? {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge cursor state disagrees with its durable plan",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn seal_merge_cursor(&self, cursor: &mut MergeCursorV2) -> Result<()> {
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let mut tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        tree = engine
+            .batch(
+                &tree,
+                vec![Mutation::Upsert {
+                    key: MERGE_CURSOR_KEY.to_vec(),
+                    val: normalized_merge_cursor(cursor)?,
+                }],
+            )
+            .await?;
+        cursor.plan_root = TreeRootV1::from_tree(&tree)?;
+        Ok(())
+    }
+
+    fn validate_requested_merge_base(
+        &self,
+        cursor: &MergeCursorV2,
+        discovered: CommitIdV2,
+    ) -> Result<()> {
+        if cursor
+            .requested_base
+            .is_some_and(|requested| requested != discovered)
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRevision,
+                "requested v2 merge base is not a best common ancestor",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn merge_graph_entry(
+        &self,
+        target_branch: &str,
+        source_branch: &str,
+        commit: CommitIdV2,
+    ) -> Result<JournalCommitGraphEntryV2> {
+        if let Some(entry) = self
+            .journal_indexes
+            .commit_graph_entry(target_branch, commit)
+            .await?
+        {
+            return Ok(entry);
+        }
+        if let Some(entry) = self
+            .journal_indexes
+            .commit_graph_entry(source_branch, commit)
+            .await?
+        {
+            return Ok(entry);
+        }
+        let commit_object = self.load_commit_object(commit).await?.commit;
+        Ok(JournalCommitGraphEntryV2 {
+            commit,
+            generation: commit_object.generation,
+            parents: commit_object.parents,
+            first_parent_jumps: Vec::new(),
+        })
+    }
+
+    async fn is_first_parent_ancestor_v2(
+        &self,
+        target_branch: &str,
+        source_branch: &str,
+        ancestor: CommitIdV2,
+        mut descendant: CommitIdV2,
+    ) -> Result<bool> {
+        let ancestor_entry = self
+            .merge_graph_entry(target_branch, source_branch, ancestor)
+            .await?;
+        let target_generation = ancestor_entry.generation.0;
+        loop {
+            if descendant == ancestor {
+                return Ok(true);
+            }
+            let entry = self
+                .merge_graph_entry(target_branch, source_branch, descendant)
+                .await?;
+            if entry.generation.0 <= target_generation {
+                return Ok(false);
+            }
+            let mut selected = entry.parents.first().copied();
+            for jump in entry.first_parent_jumps.iter().rev().copied() {
+                let jump_entry = self
+                    .merge_graph_entry(target_branch, source_branch, jump)
+                    .await?;
+                if jump_entry.generation.0 >= target_generation {
+                    selected = Some(jump);
+                    break;
+                }
+            }
+            let Some(next) = selected else {
+                return Ok(false);
+            };
+            descendant = next;
+        }
+    }
+
+    fn seed_merge_frontier(
+        &self,
+        mutations: &mut Vec<Mutation>,
+        entry: JournalCommitGraphEntryV2,
+        flags: u8,
+    ) -> Result<()> {
+        let seen_key = merge_seen_key(entry.commit);
+        let queue_key = merge_queue_key(entry.generation.0, entry.commit);
+        mutations.push(Mutation::Upsert {
+            key: seen_key,
+            val: encode_canonical(&MergeSeenEntryV2 {
+                generation: entry.generation.0,
+                flags,
+            })?,
+        });
+        mutations.push(Mutation::Upsert {
+            key: queue_key,
+            val: encode_canonical(&MergeQueueEntryV2 {
+                commit: entry.commit,
+                generation: entry.generation.0,
+            })?,
+        });
+        Ok(())
+    }
+
+    async fn advance_merge_base_one(&self, cursor: &mut MergeCursorV2) -> Result<usize> {
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let mut tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let mut queue = engine.prefix(&tree, MERGE_QUEUE_PREFIX).await?;
+        let Some(entry) = queue.next().await else {
+            cursor.phase = MergePhaseV2::CollectingBases;
+            return Ok(0);
+        };
+        let (queue_key, encoded) = entry?;
+        let queued: MergeQueueEntryV2 = decode_canonical(&encoded)?;
+        let seen_key = merge_seen_key(queued.commit);
+        let seen: MergeSeenEntryV2 = engine
+            .get(&tree, &seen_key)
+            .await?
+            .map(|bytes| decode_canonical(&bytes))
+            .transpose()?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 merge queue has no seen record",
+                )
+            })?;
+        if seen.generation != queued.generation {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 merge queue generation disagrees with seen state",
+            ));
+        }
+        let candidate_key = merge_base_candidate_key(queued.commit);
+        let candidate = engine
+            .get(&tree, &candidate_key)
+            .await?
+            .map(|bytes| decode_canonical::<MergeBaseCandidateV2>(&bytes))
+            .transpose()?;
+        let is_common = seen.flags & MERGE_BOTH == MERGE_BOTH;
+        let is_stale = seen.flags & MERGE_STALE != 0;
+        let mut mutations = vec![Mutation::Delete { key: queue_key }];
+        if is_common && !is_stale && candidate.is_none() {
+            mutations.push(Mutation::Upsert {
+                key: candidate_key.clone(),
+                val: encode_canonical(&MergeBaseCandidateV2 {
+                    generation: seen.generation,
+                    stale: false,
+                })?,
+            });
+        } else if is_stale && candidate.as_ref().is_some_and(|candidate| !candidate.stale) {
+            mutations.push(Mutation::Upsert {
+                key: candidate_key,
+                val: encode_canonical(&MergeBaseCandidateV2 {
+                    generation: seen.generation,
+                    stale: true,
+                })?,
+            });
+        }
+        let propagated = if is_common {
+            seen.flags | MERGE_STALE
+        } else {
+            seen.flags
+        };
+        let graph = self
+            .merge_graph_entry(&cursor.target_branch, &cursor.source_branch, queued.commit)
+            .await?;
+        for parent in graph.parents {
+            let parent_graph = self
+                .merge_graph_entry(&cursor.target_branch, &cursor.source_branch, parent)
+                .await?;
+            let parent_seen_key = merge_seen_key(parent);
+            let previous = engine
+                .get(&tree, &parent_seen_key)
+                .await?
+                .map(|bytes| decode_canonical::<MergeSeenEntryV2>(&bytes))
+                .transpose()?;
+            let next_flags = previous
+                .as_ref()
+                .map_or(propagated, |entry| entry.flags | propagated);
+            if previous
+                .as_ref()
+                .is_some_and(|entry| entry.flags == next_flags)
+            {
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key: parent_seen_key,
+                val: encode_canonical(&MergeSeenEntryV2 {
+                    generation: parent_graph.generation.0,
+                    flags: next_flags,
+                })?,
+            });
+            mutations.push(Mutation::Upsert {
+                key: merge_queue_key(parent_graph.generation.0, parent),
+                val: encode_canonical(&MergeQueueEntryV2 {
+                    commit: parent,
+                    generation: parent_graph.generation.0,
+                })?,
+            });
+            if next_flags & MERGE_STALE != 0 {
+                let key = merge_base_candidate_key(parent);
+                if let Some(candidate) = engine
+                    .get(&tree, &key)
+                    .await?
+                    .map(|bytes| decode_canonical::<MergeBaseCandidateV2>(&bytes))
+                    .transpose()?
+                {
+                    if !candidate.stale {
+                        mutations.push(Mutation::Upsert {
+                            key,
+                            val: encode_canonical(&MergeBaseCandidateV2 {
+                                generation: candidate.generation,
+                                stale: true,
+                            })?,
+                        });
+                    }
+                }
+            }
+        }
+        tree = engine.batch(&tree, mutations).await?;
+        cursor.plan_root = TreeRootV1::from_tree(&tree)?;
+        cursor.visited_commits = cursor.visited_commits.checked_add(1).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 merge visited count overflow",
+            )
+        })?;
+        Ok(1)
+    }
+
+    async fn collect_merge_base_one(&self, cursor: &mut MergeCursorV2) -> Result<usize> {
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let mut tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let mut candidates = engine.prefix(&tree, MERGE_BASE_CANDIDATE_PREFIX).await?;
+        let Some(entry) = candidates.next().await else {
+            if cursor.best_base_count == 0 {
+                return Err(Error::new(
+                    ErrorCode::NoMergeBase,
+                    "v2 commits have no common ancestor",
+                ));
+            }
+            if let Some(requested) = cursor.requested_base {
+                if engine
+                    .get(&tree, &merge_base_result_key(requested))
+                    .await?
+                    .is_none()
+                {
+                    return Err(Error::new(
+                        ErrorCode::InvalidRevision,
+                        "requested v2 merge base is not a best common ancestor",
+                    ));
+                }
+                cursor.selected_base = Some(requested);
+                cursor.phase = MergePhaseV2::Planning;
+            } else if cursor.best_base_count == 1 {
+                let mut bases = engine.prefix(&tree, MERGE_BASE_RESULT_PREFIX).await?;
+                let (key, _) = bases.next().await.ok_or_else(|| {
+                    Error::new(ErrorCode::CorruptCommit, "v2 best-base result is absent")
+                })??;
+                cursor.selected_base = Some(commit_from_suffix(&key, MERGE_BASE_RESULT_PREFIX)?);
+                cursor.phase = MergePhaseV2::Planning;
+            } else {
+                cursor.phase = MergePhaseV2::AwaitingBase;
+            }
+            return Ok(0);
+        };
+        let (key, encoded) = entry?;
+        let candidate: MergeBaseCandidateV2 = decode_canonical(&encoded)?;
+        let commit = commit_from_suffix(&key, MERGE_BASE_CANDIDATE_PREFIX)?;
+        let mut mutations = vec![Mutation::Delete { key }];
+        if !candidate.stale {
+            mutations.push(Mutation::Upsert {
+                key: merge_base_result_key(commit),
+                val: Vec::new(),
+            });
+            cursor.best_base_count = cursor.best_base_count.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "v2 best-base count overflow")
+            })?;
+        }
+        tree = engine.batch(&tree, mutations).await?;
+        cursor.plan_root = TreeRootV1::from_tree(&tree)?;
+        Ok(1)
+    }
+
+    async fn advance_merge_plan(
+        &self,
+        cursor: &mut MergeCursorV2,
+        max_steps: usize,
+        emitted_changes: &mut Vec<MergeChangeV2>,
+        emitted_conflicts: &mut Vec<MergeConflictV2>,
+    ) -> Result<usize> {
+        let base = cursor.selected_base.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 merge plan has no selected base",
+            )
+        })?;
+        let base_commit = self.load_commit_object(base).await?.commit;
+        let ours_commit = self.load_commit_object(cursor.ours).await?.commit;
+        let theirs_commit = self.load_commit_object(cursor.theirs).await?.commit;
+        let base_tree = self.tree_from_root(&base_commit.state.objects)?;
+        let ours_tree = self.tree_from_root(&ours_commit.state.objects)?;
+        let theirs_tree = self.tree_from_root(&theirs_commit.state.objects)?;
+        let state_engine = self.engine(self.node_store.clone());
+        let plan_engine = self.merge_plan_engine(cursor.job)?;
+        let mut plan_tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let mut processed = 0usize;
+        let mut page_mutations = Vec::new();
+        while processed < max_steps {
+            if cursor.ours_pending.is_none() && !cursor.ours_finished {
+                let page = state_engine
+                    .structural_diff_page(&base_tree, &ours_tree, cursor.ours_diff.as_ref(), 1)
+                    .await?;
+                cursor.ours_pending = page.diffs.into_iter().next();
+                cursor.ours_diff = page.next_cursor;
+                if cursor.ours_diff.is_none() {
+                    cursor.ours_finished = true;
+                }
+            }
+            if cursor.theirs_pending.is_none() && !cursor.theirs_finished {
+                let page = state_engine
+                    .structural_diff_page(&base_tree, &theirs_tree, cursor.theirs_diff.as_ref(), 1)
+                    .await?;
+                cursor.theirs_pending = page.diffs.into_iter().next();
+                cursor.theirs_diff = page.next_cursor;
+                if cursor.theirs_diff.is_none() {
+                    cursor.theirs_finished = true;
+                }
+            }
+            let key_order = match (&cursor.ours_pending, &cursor.theirs_pending) {
+                (None, None) => break,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some(ours), Some(theirs)) => ours.key().cmp(theirs.key()),
+            };
+            let (key, base_value, ours_value, theirs_value) = match key_order {
+                std::cmp::Ordering::Less => {
+                    let ours = cursor.ours_pending.take().expect("matched pending ours");
+                    let (key, base, ours) = merge_diff_values(ours);
+                    (key, base.clone(), ours, base)
+                }
+                std::cmp::Ordering::Greater => {
+                    let theirs = cursor
+                        .theirs_pending
+                        .take()
+                        .expect("matched pending theirs");
+                    let (key, base, theirs) = merge_diff_values(theirs);
+                    (key, base.clone(), base, theirs)
+                }
+                std::cmp::Ordering::Equal => {
+                    let ours = cursor.ours_pending.take().expect("matched pending ours");
+                    let theirs = cursor
+                        .theirs_pending
+                        .take()
+                        .expect("matched pending theirs");
+                    let (key, ours_base, ours_value) = merge_diff_values(ours);
+                    let (theirs_key, theirs_base, theirs_value) = merge_diff_values(theirs);
+                    if key != theirs_key || ours_base != theirs_base {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "v2 structural merge streams disagree on their base value",
+                        ));
+                    }
+                    (key, ours_base, ours_value, theirs_value)
+                }
+            };
+            let conflict = ours_value != theirs_value
+                && ours_value != base_value
+                && theirs_value != base_value;
+            let selected = if ours_value == theirs_value {
+                ours_value.clone()
+            } else if ours_value == base_value {
+                theirs_value.clone()
+            } else if theirs_value == base_value {
+                ours_value.clone()
+            } else {
+                match cursor.policy {
+                    MergePolicyV2::Fail | MergePolicyV2::Ours => ours_value.clone(),
+                    MergePolicyV2::Theirs => theirs_value.clone(),
+                }
+            };
+            let record = MergePlanEntryV2 {
+                key: key.clone(),
+                base: base_value.clone(),
+                ours: ours_value.clone(),
+                theirs: theirs_value.clone(),
+                selected: selected.clone(),
+                conflict,
+            };
+            if selected != ours_value {
+                page_mutations.push(Mutation::Upsert {
+                    key: merge_change_key(&key),
+                    val: encode_canonical(&record)?,
+                });
+                let change = merge_change_from_record(&record)?;
+                emitted_changes.push(change);
+                cursor.planned_changes =
+                    cursor.planned_changes.checked_add(1).ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::InternalInvariant,
+                            "v2 merge change count overflow",
+                        )
+                    })?;
+            }
+            if conflict {
+                page_mutations.push(Mutation::Upsert {
+                    key: merge_conflict_key(&key),
+                    val: encode_canonical(&record)?,
+                });
+                let conflict = merge_conflict_from_record(&record)?;
+                emitted_conflicts.push(conflict);
+                cursor.conflicts = cursor.conflicts.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "v2 merge conflict count overflow",
+                    )
+                })?;
+            }
+            processed += 1;
+        }
+        if !page_mutations.is_empty() {
+            plan_tree = plan_engine.batch(&plan_tree, page_mutations).await?;
+            cursor.plan_root = TreeRootV1::from_tree(&plan_tree)?;
+        }
+        if cursor.ours_pending.is_none()
+            && cursor.theirs_pending.is_none()
+            && cursor.ours_finished
+            && cursor.theirs_finished
+        {
+            if cursor.policy == MergePolicyV2::Fail && cursor.conflicts != 0 {
+                cursor.phase = MergePhaseV2::Conflicted;
+            } else {
+                cursor.final_objects = Some(ours_commit.state.objects);
+                cursor.final_versions = Some(ours_commit.state.versions);
+                let empty_delta = self.merge_state_engine().create();
+                cursor.delta_root = Some(TreeRootV1::from_tree(&empty_delta)?);
+                cursor.phase = MergePhaseV2::BuildingVersions;
+            }
+        }
+        Ok(processed)
+    }
+
+    async fn advance_merge_version_union(
+        &self,
+        cursor: &mut MergeCursorV2,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let ours_commit = self.load_commit_object(cursor.ours).await?.commit;
+        let theirs_commit = self.load_commit_object(cursor.theirs).await?.commit;
+        let ours_versions = self.tree_from_root(&ours_commit.state.versions)?;
+        let theirs_versions = self.tree_from_root(&theirs_commit.state.versions)?;
+        let read_engine = self.engine(self.node_store.clone());
+        let page = read_engine
+            .structural_diff_page(
+                &ours_versions,
+                &theirs_versions,
+                cursor.version_diff.as_ref(),
+                max_steps,
+            )
+            .await?;
+        let processed = page.diffs.len();
+        let mut mutations = Vec::new();
+        for diff in page.diffs {
+            match diff {
+                Diff::Added { key, val } => mutations.push(Mutation::Upsert { key, val }),
+                Diff::Removed { .. } => {}
+                Diff::Changed { .. } => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "same v2 version-tree key has unequal immutable values",
+                    ))
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            let state_engine = self.merge_state_engine();
+            let versions =
+                self.tree_from_root(cursor.final_versions.as_ref().ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "v2 merge version root is absent",
+                    )
+                })?)?;
+            let versions = state_engine.batch(&versions, mutations).await?;
+            cursor.final_versions = Some(TreeRootV1::from_tree(&versions)?);
+        }
+        cursor.version_diff = page.next_cursor;
+        if cursor.version_diff.is_none() {
+            cursor.version_diff_finished = true;
+            cursor.phase = MergePhaseV2::BuildingObjects;
+            cursor.build_after = None;
+        }
+        Ok(processed)
+    }
+
+    async fn advance_merge_object_build(
+        &self,
+        cursor: &mut MergeCursorV2,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let plan_engine = self.merge_plan_engine(cursor.job)?;
+        let plan_tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let end = prolly::prefix_range(MERGE_CHANGE_PREFIX).1;
+        let mut entries = match &cursor.build_after {
+            Some(after) => {
+                plan_engine
+                    .range_after(&plan_tree, after, end.as_deref())
+                    .await?
+            }
+            None => plan_engine.prefix(&plan_tree, MERGE_CHANGE_PREFIX).await?,
+        };
+        let mut records = Vec::with_capacity(max_steps);
+        while records.len() < max_steps {
+            let Some(entry) = entries.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(MERGE_CHANGE_PREFIX) {
+                break;
+            }
+            let record: MergePlanEntryV2 = decode_canonical(&encoded)?;
+            if merge_change_key(&record.key) != key {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 merge-plan change key disagrees with its record",
+                ));
+            }
+            records.push((key, record));
+        }
+        if records.is_empty() {
+            if cursor.built_changes != cursor.planned_changes {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 merge build did not consume every planned change",
+                ));
+            }
+            if cursor.built_changes == 0 {
+                cursor.delta_root = None;
+            }
+            cursor.phase = MergePhaseV2::ReadyToPublish;
+            return Ok(0);
+        }
+        let ours = self.load_commit_object(cursor.ours).await?.commit;
+        let theirs = self.load_commit_object(cursor.theirs).await?.commit;
+        let generation = CommitGeneration(
+            ours.generation
+                .0
+                .max(theirs.generation.0)
+                .checked_add(1)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "v2 merge generation overflow")
+                })?,
+        );
+        let mut object_mutations = Vec::with_capacity(records.len());
+        let mut version_mutations = Vec::new();
+        let mut delta_mutations = Vec::with_capacity(records.len());
+        for (_, record) in &records {
+            let previous = current_v2_id(record.ours.as_deref())?;
+            let (next, delete_marker) = if let Some(selected) = &record.selected {
+                let current: CurrentObjectV2 = decode_canonical(selected)?;
+                current.version.validate()?;
+                object_mutations.push(Mutation::Upsert {
+                    key: record.key.clone(),
+                    val: selected.clone(),
+                });
+                (current.version.id, false)
+            } else {
+                object_mutations.push(Mutation::Delete {
+                    key: record.key.clone(),
+                });
+                let ordinal = u32::try_from(cursor.built_changes + delta_mutations.len() as u64)
+                    .map_err(|_| {
+                        Error::new(
+                            ErrorCode::InvalidLimit,
+                            "v2 merge delete ordinal exceeds u32",
+                        )
+                    })?;
+                let version = ObjectVersionV2::derive(
+                    self.format.repository_id,
+                    &record.key,
+                    cursor.operation,
+                    LogicalObjectVersionBodyV1 {
+                        order: ObjectVersionOrder {
+                            commit_generation: generation,
+                            mutation_ordinal: ordinal,
+                        },
+                        created_at_millis: cursor.created_at_millis,
+                        kind: LogicalObjectVersionKindV1::DeleteMarker,
+                    },
+                    None,
+                )?;
+                version_mutations.push(Mutation::Upsert {
+                    key: version_tree_key(&record.key, version.body.order, version.id),
+                    val: encode_canonical(&version)?,
+                });
+                (version.id, true)
+            };
+            let transition = ObjectTransitionV2 {
+                key: record.key.clone(),
+                previous,
+                next,
+                delete_marker,
+            };
+            delta_mutations.push(Mutation::Upsert {
+                key: record.key.clone(),
+                val: encode_canonical(&transition)?,
+            });
+        }
+        let state_engine = self.merge_state_engine();
+        let objects = self.tree_from_root(cursor.final_objects.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 merge object root is absent",
+            )
+        })?)?;
+        let versions = self.tree_from_root(cursor.final_versions.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 merge version root is absent",
+            )
+        })?)?;
+        let delta = self.tree_from_root(cursor.delta_root.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 merge delta root is absent",
+            )
+        })?)?;
+        let objects = state_engine.batch(&objects, object_mutations).await?;
+        let versions = if version_mutations.is_empty() {
+            versions
+        } else {
+            state_engine.batch(&versions, version_mutations).await?
+        };
+        let delta = state_engine.batch(&delta, delta_mutations).await?;
+        cursor.final_objects = Some(TreeRootV1::from_tree(&objects)?);
+        cursor.final_versions = Some(TreeRootV1::from_tree(&versions)?);
+        cursor.delta_root = Some(TreeRootV1::from_tree(&delta)?);
+        cursor.built_changes = cursor
+            .built_changes
+            .checked_add(records.len() as u64)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "v2 merge build count overflow",
+                )
+            })?;
+        cursor.build_after = records.last().map(|(key, _)| key.clone());
+        Ok(records.len())
+    }
+
+    async fn merge_base_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeBaseCursorV2>,
+        limit: usize,
+    ) -> Result<MergeBasePageV2> {
+        self.validate_merge_cursor(cursor).await?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 merge-base page limit must be greater than zero",
+            ));
+        }
+        if continuation.is_some_and(|continuation| {
+            continuation.repository != cursor.repository
+                || continuation.job != cursor.job
+                || continuation.plan_root != cursor.plan_root
+                || !continuation.after.starts_with(MERGE_BASE_RESULT_PREFIX)
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge-base cursor belongs to another plan",
+            ));
+        }
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let end = prolly::prefix_range(MERGE_BASE_RESULT_PREFIX).1;
+        let mut iter = match continuation {
+            Some(continuation) => {
+                engine
+                    .range_after(&tree, &continuation.after, end.as_deref())
+                    .await?
+            }
+            None => engine.prefix(&tree, MERGE_BASE_RESULT_PREFIX).await?,
+        };
+        let mut bases = Vec::with_capacity(limit);
+        let mut last = None;
+        while bases.len() < limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, _) = entry?;
+            if !key.starts_with(MERGE_BASE_RESULT_PREFIX) {
+                break;
+            }
+            bases.push(commit_from_suffix(&key, MERGE_BASE_RESULT_PREFIX)?);
+            last = Some(key);
+        }
+        Ok(MergeBasePageV2 {
+            continuation: (bases.len() == limit).then(|| MergeBaseCursorV2 {
+                repository: cursor.repository,
+                job: cursor.job,
+                plan_root: cursor.plan_root.clone(),
+                after: last.expect("full page has a last merge base"),
+            }),
+            bases,
+        })
+    }
+
+    async fn merge_change_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeChangeCursorV2>,
+        limit: usize,
+    ) -> Result<MergeChangePageV2> {
+        self.validate_merge_cursor(cursor).await?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 merge change page limit must be greater than zero",
+            ));
+        }
+        if continuation.is_some_and(|continuation| {
+            continuation.repository != cursor.repository
+                || continuation.job != cursor.job
+                || continuation.plan_root != cursor.plan_root
+                || !continuation.after.starts_with(MERGE_CHANGE_PREFIX)
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge change cursor belongs to another plan",
+            ));
+        }
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let end = prolly::prefix_range(MERGE_CHANGE_PREFIX).1;
+        let mut iter = match continuation {
+            Some(continuation) => {
+                engine
+                    .range_after(&tree, &continuation.after, end.as_deref())
+                    .await?
+            }
+            None => engine.prefix(&tree, MERGE_CHANGE_PREFIX).await?,
+        };
+        let mut changes = Vec::with_capacity(limit);
+        let mut last = None;
+        while changes.len() < limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(MERGE_CHANGE_PREFIX) {
+                break;
+            }
+            let record: MergePlanEntryV2 = decode_canonical(&encoded)?;
+            changes.push(merge_change_from_record(&record)?);
+            last = Some(key);
+        }
+        Ok(MergeChangePageV2 {
+            continuation: (changes.len() == limit).then(|| MergeChangeCursorV2 {
+                repository: cursor.repository,
+                job: cursor.job,
+                plan_root: cursor.plan_root.clone(),
+                after: last.expect("full page has a last merge change"),
+            }),
+            changes,
+        })
+    }
+
+    async fn merge_conflict_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeConflictCursorV2>,
+        limit: usize,
+    ) -> Result<MergeConflictPageV2> {
+        self.validate_merge_cursor(cursor).await?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 merge conflict page limit must be greater than zero",
+            ));
+        }
+        if continuation.is_some_and(|continuation| {
+            continuation.repository != cursor.repository
+                || continuation.job != cursor.job
+                || continuation.plan_root != cursor.plan_root
+                || !continuation.after.starts_with(MERGE_CONFLICT_PREFIX)
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v2 merge conflict cursor belongs to another plan",
+            ));
+        }
+        let engine = self.merge_plan_engine(cursor.job)?;
+        let tree = self.tree_from_merge_root(&cursor.plan_root)?;
+        let end = prolly::prefix_range(MERGE_CONFLICT_PREFIX).1;
+        let mut iter = match continuation {
+            Some(continuation) => {
+                engine
+                    .range_after(&tree, &continuation.after, end.as_deref())
+                    .await?
+            }
+            None => engine.prefix(&tree, MERGE_CONFLICT_PREFIX).await?,
+        };
+        let mut conflicts = Vec::with_capacity(limit);
+        let mut last = None;
+        while conflicts.len() < limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(MERGE_CONFLICT_PREFIX) {
+                break;
+            }
+            let record: MergePlanEntryV2 = decode_canonical(&encoded)?;
+            conflicts.push(merge_conflict_from_record(&record)?);
+            last = Some(key);
+        }
+        Ok(MergeConflictPageV2 {
+            continuation: (conflicts.len() == limit).then(|| MergeConflictCursorV2 {
+                repository: cursor.repository,
+                job: cursor.job,
+                plan_root: cursor.plan_root.clone(),
+                after: last.expect("full page has a last merge conflict"),
+            }),
+            conflicts,
+        })
+    }
+
+    fn merge_input_digest(&self, cursor: &MergeCursorV2, base: CommitIdV2) -> [u8; 32] {
+        let policy = match cursor.policy {
+            MergePolicyV2::Fail => [0],
+            MergePolicyV2::Ours => [1],
+            MergePolicyV2::Theirs => [2],
+        };
+        crate::model::derive_input_digest_v2(&[
+            b"merge-v2",
+            self.format.repository_id.as_bytes(),
+            cursor.target_branch.as_bytes(),
+            cursor.ours.as_bytes(),
+            cursor.theirs.as_bytes(),
+            base.as_bytes(),
+            &policy,
+        ])
+    }
+
+    async fn reconcile_merge_operation(
+        &self,
+        cursor: &MergeCursorV2,
+        input_digest: [u8; 32],
+        now: u64,
+    ) -> Result<Option<MergeReceiptV2>> {
+        let Some(indexed) = self
+            .operation_index
+            .lookup(
+                &self.publisher,
+                &cursor.target_branch,
+                cursor.operation,
+                now,
+            )
+            .await?
+        else {
+            return Ok(None);
+        };
+        let commit = self.load_commit_object(indexed.target).await?.commit;
+        if commit.delta.input_digest != input_digest
+            || commit.parents.as_slice() != [cursor.ours, cursor.theirs]
+        {
+            return Err(Error::new(
+                ErrorCode::IdempotencyConflict,
+                "v2 merge operation ID was reused with different input",
+            )
+            .operation(cursor.operation.to_string()));
+        }
+        Ok(Some(MergeReceiptV2 {
+            id: indexed.target,
+            operation: cursor.operation,
+            branch: cursor.target_branch.clone(),
+            parents: [cursor.ours, cursor.theirs],
+            changed_keys: commit.delta.logical_change_count(),
+            conflicts: cursor.conflicts,
+            idempotent_replay: true,
+        }))
+    }
+
     fn validate_key(&self, key: &[u8]) -> Result<()> {
         if key.is_empty()
             || key.len() > self.format.canonical_limits.max_key_bytes as usize
@@ -3027,6 +4482,122 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         };
         lane.lock_owned().await
     }
+}
+
+const MERGE_LEFT: u8 = 1;
+const MERGE_RIGHT: u8 = 2;
+const MERGE_BOTH: u8 = MERGE_LEFT | MERGE_RIGHT;
+const MERGE_STALE: u8 = 4;
+const MERGE_QUEUE_PREFIX: &[u8] = b"q/";
+const MERGE_SEEN_PREFIX: &[u8] = b"s/";
+const MERGE_BASE_CANDIDATE_PREFIX: &[u8] = b"b/";
+const MERGE_BASE_RESULT_PREFIX: &[u8] = b"r/";
+const MERGE_CHANGE_PREFIX: &[u8] = b"c/";
+const MERGE_CONFLICT_PREFIX: &[u8] = b"f/";
+const MERGE_CURSOR_KEY: &[u8] = b"x/cursor";
+
+fn normalized_merge_cursor(cursor: &MergeCursorV2) -> Result<Vec<u8>> {
+    let mut normalized = cursor.clone();
+    normalized.plan_root.root = None;
+    encode_canonical(&normalized)
+}
+
+fn merge_queue_key(generation: u64, commit: CommitIdV2) -> Vec<u8> {
+    let mut key = Vec::with_capacity(MERGE_QUEUE_PREFIX.len() + 8 + 32);
+    key.extend_from_slice(MERGE_QUEUE_PREFIX);
+    key.extend_from_slice(&(u64::MAX - generation).to_be_bytes());
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn merge_seen_key(commit: CommitIdV2) -> Vec<u8> {
+    merge_commit_key(MERGE_SEEN_PREFIX, commit)
+}
+
+fn merge_base_candidate_key(commit: CommitIdV2) -> Vec<u8> {
+    merge_commit_key(MERGE_BASE_CANDIDATE_PREFIX, commit)
+}
+
+fn merge_base_result_key(commit: CommitIdV2) -> Vec<u8> {
+    merge_commit_key(MERGE_BASE_RESULT_PREFIX, commit)
+}
+
+fn merge_commit_key(prefix: &[u8], commit: CommitIdV2) -> Vec<u8> {
+    let mut key = Vec::with_capacity(prefix.len() + 32);
+    key.extend_from_slice(prefix);
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn merge_change_key(logical_key: &[u8]) -> Vec<u8> {
+    let mut key = Vec::with_capacity(MERGE_CHANGE_PREFIX.len() + logical_key.len());
+    key.extend_from_slice(MERGE_CHANGE_PREFIX);
+    key.extend_from_slice(logical_key);
+    key
+}
+
+fn merge_conflict_key(logical_key: &[u8]) -> Vec<u8> {
+    let mut key = Vec::with_capacity(MERGE_CONFLICT_PREFIX.len() + logical_key.len());
+    key.extend_from_slice(MERGE_CONFLICT_PREFIX);
+    key.extend_from_slice(logical_key);
+    key
+}
+
+fn commit_from_suffix(key: &[u8], prefix: &[u8]) -> Result<CommitIdV2> {
+    let suffix = key.strip_prefix(prefix).ok_or_else(|| {
+        Error::new(
+            ErrorCode::CorruptCommit,
+            "v2 merge-state key uses the wrong namespace",
+        )
+    })?;
+    let hash: [u8; 32] = suffix.try_into().map_err(|_| {
+        Error::new(
+            ErrorCode::CorruptCommit,
+            "v2 merge-state commit key has the wrong length",
+        )
+    })?;
+    Ok(CommitIdV2::from_hash(hash))
+}
+
+fn merge_diff_values(diff: Diff) -> (Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>) {
+    match diff {
+        Diff::Added { key, val } => (key, None, Some(val)),
+        Diff::Removed { key, val } => (key, Some(val), None),
+        Diff::Changed { key, old, new } => (key, Some(old), Some(new)),
+    }
+}
+
+fn current_v2_id(value: Option<&[u8]>) -> Result<Option<ObjectVersionIdV2>> {
+    value
+        .map(|value| {
+            let current: CurrentObjectV2 = decode_canonical(value)?;
+            current.version.validate()?;
+            Ok(current.version.id)
+        })
+        .transpose()
+}
+
+fn merge_change_from_record(record: &MergePlanEntryV2) -> Result<MergeChangeV2> {
+    Ok(MergeChangeV2 {
+        key: record.key.clone(),
+        from: current_v2_id(record.ours.as_deref())?,
+        to: current_v2_id(record.selected.as_deref())?,
+    })
+}
+
+fn merge_conflict_from_record(record: &MergePlanEntryV2) -> Result<MergeConflictV2> {
+    if !record.conflict {
+        return Err(Error::new(
+            ErrorCode::CorruptCommit,
+            "v2 merge conflict index points to a non-conflict record",
+        ));
+    }
+    Ok(MergeConflictV2 {
+        key: record.key.clone(),
+        base: current_v2_id(record.base.as_deref())?,
+        ours: current_v2_id(record.ours.as_deref())?,
+        theirs: current_v2_id(record.theirs.as_deref())?,
+    })
 }
 
 fn validate_options(options: &RepositoryV2Options) -> Result<()> {

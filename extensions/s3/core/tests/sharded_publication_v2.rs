@@ -38,6 +38,8 @@ fn commit(
         delta: BucketDeltaV2 {
             input_digest: [0; 32],
             changes: Vec::new(),
+            changes_root: None,
+            change_count: 0,
         },
         node_pack: None,
         authority,

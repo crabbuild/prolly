@@ -219,6 +219,7 @@ pub struct ProllyObjectStore<P> {
     packed: Option<Arc<PackedNodeState>>,
     packed_pending: Option<PackedPendingNodes>,
     direct: Option<Arc<DirectNodeState>>,
+    write_direct: bool,
 }
 
 impl<P> Clone for ProllyObjectStore<P> {
@@ -229,6 +230,7 @@ impl<P> Clone for ProllyObjectStore<P> {
             packed: self.packed.clone(),
             packed_pending: self.packed_pending.clone(),
             direct: self.direct.clone(),
+            write_direct: self.write_direct,
         }
     }
 }
@@ -241,6 +243,7 @@ impl<P> ProllyObjectStore<P> {
             packed: None,
             packed_pending: None,
             direct: None,
+            write_direct: false,
         }
     }
 
@@ -283,6 +286,7 @@ impl<P> ProllyObjectStore<P> {
             })),
             packed_pending: Some(Arc::new(RwLock::new(BTreeMap::new()))),
             direct: None,
+            write_direct: false,
         }
     }
 
@@ -315,6 +319,7 @@ impl<P> ProllyObjectStore<P> {
                 coalesced_waits: AtomicU64::new(0),
                 object_fetches: AtomicU64::new(0),
             })),
+            write_direct: true,
         }
     }
 
@@ -406,6 +411,16 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         if self.packed.is_some() {
             session.packed_pending = Some(Arc::new(RwLock::new(BTreeMap::new())));
         }
+        session
+    }
+
+    /// Read through the packed-node locator and cache while writing newly
+    /// created immutable nodes to their deterministic direct CID paths. This
+    /// is used by restartable protocol-v2 builders whose intermediate roots
+    /// must survive process loss before a final commit envelope exists.
+    pub(crate) fn durable_direct_write_session(&self) -> Self {
+        let mut session = self.clone();
+        session.write_direct = true;
         session
     }
 
@@ -928,6 +943,14 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 return Ok(Some(bytes));
             }
         }
+        // Protocol-v2 administrative builders (notably resumable merges) may
+        // checkpoint immutable state nodes directly at their deterministic CID
+        // paths. This point lookup is the scale-safe fallback after the
+        // journal-derived packed-node index misses; it never scans a namespace.
+        if let Some(bytes) = self.get_uncached_direct(key).await? {
+            self.admit_node(cid, bytes.clone()).await;
+            return Ok(Some(bytes));
+        }
         Ok(None)
     }
 
@@ -1295,7 +1318,7 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
                 "attempted Prolly node write under the wrong CID",
             ));
         }
-        if self.packed.is_some() {
+        if self.packed.is_some() && !self.write_direct {
             self.packed_pending
                 .as_ref()
                 .ok_or_else(|| {
@@ -1320,12 +1343,15 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
         if self.direct.is_some() {
             self.admit_direct_node(Cid(key.try_into().expect("length checked")), value.to_vec())
                 .await;
+        } else if self.packed.is_some() {
+            self.admit_node(Cid(key.try_into().expect("length checked")), value.to_vec())
+                .await;
         }
         Ok(())
     }
 
     async fn delete(&self, key: &[u8]) -> Result<()> {
-        if self.packed.is_some() {
+        if self.packed.is_some() && !self.write_direct {
             if key.len() != 32 {
                 return Err(Error::new(
                     ErrorCode::CorruptNode,

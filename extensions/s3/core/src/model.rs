@@ -661,6 +661,29 @@ pub struct BucketDeltaV2 {
     /// authority-stamped publication event and bounded operation index.
     pub input_digest: [u8; 32],
     pub changes: Vec<ObjectTransitionV2>,
+    /// Optional immutable Prolly root for a merge delta that is too large to
+    /// embed in one commit envelope. Tree keys are logical object keys and
+    /// values are canonical `ObjectTransitionV2` records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes_root: Option<TreeRootV1>,
+    /// Exact number of records in `changes_root`. Legacy inline deltas leave
+    /// this at zero and derive their count from `changes`.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub change_count: u64,
+}
+
+impl BucketDeltaV2 {
+    pub fn logical_change_count(&self) -> u64 {
+        if self.changes_root.is_some() {
+            self.change_count
+        } else {
+            self.changes.len() as u64
+        }
+    }
+}
+
+fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2253,7 +2276,25 @@ impl CommitObjectV2 {
                 ErrorCode::CorruptCommit,
                 "v2 commit object node pack does not match its logical reference",
             )),
+        }?;
+        if let Some(root) = &self.commit.delta.changes_root {
+            if !self.commit.delta.changes.is_empty()
+                || self.commit.delta.change_count == 0
+                || root.root.is_none()
+                || root.format_digest != self.commit.state.objects.format_digest
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 external commit delta is malformed or uses another tree format",
+                ));
+            }
+        } else if self.commit.delta.change_count != 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 inline commit delta carries an external change count",
+            ));
         }
+        Ok(())
     }
 
     pub fn encode_object(&self) -> Result<Vec<u8>> {

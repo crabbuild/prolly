@@ -2098,6 +2098,7 @@ dependencies = [
  "serde_cbor",
  "sha2 0.10.9",
  "slatedb",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
 ]

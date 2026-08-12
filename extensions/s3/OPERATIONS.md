@@ -156,6 +156,36 @@ println!(
 );
 ```
 
+## Native-v2 merge jobs
+
+Treat `MergeCursorV2` as workflow state. Canonically persist the exact cursor
+returned by `start_merge`, `select_merge_base`, or every successful
+`advance_merge` call before scheduling the next page. The cursor is
+constant-size; its job-scoped Prolly root owns the potentially unbounded graph
+frontier, changes, and conflicts.
+
+Use a bounded `max_steps` appropriate for the worker deadline. A page may
+perform graph work without emitting changes, so completion is determined only
+by `MergePhaseV2`, not by an empty result vector. `AwaitingBase` requires the
+operator or application to page the best bases and select one. `Conflicted`
+under the `Fail` policy cannot be published; page conflicts for reporting and
+then clean up the plan or start a new merge with an explicit resolution policy.
+
+`publish_merge` is safe to retry with the same cursor. It reconciles the
+operation ID before fencing on an ambiguous ref CAS. A target branch that moved
+after planning returns `RefConflict`; do not edit the cursor or rebase the plan.
+Start a new merge against the new target head.
+
+After successful publication, or when abandoning any incomplete/conflicted
+job, call `cleanup_merge` until its continuation is absent. Cleanup deletes
+only `administration/v2/merge/<job>/plan`; it never deletes output nodes
+referenced by a published commit. Alert on old merge-job prefixes because the
+repository cannot infer whether an externally persisted cursor is still live.
+
+Output state and delta nodes are immutable and addressed by CID. Keep the
+verified node cache enabled on merge workers and readers; a cold reader can
+recover them through deterministic point GETs without a namespace scan.
+
 Partitioned GC no longer holds the repository publication barrier while it
 discovers roots, marks commits/nodes/versions, scans candidates, or consumes
 dirty roots. Starting an epoch activates one durable coordinator. Each live

@@ -367,13 +367,32 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
                 "v2 branch ref is tombstoned or carries another authority epoch",
             ));
         }
-        let parent = self.load_commit(current.value.target).await?;
-        if request.commit.parents.first() != Some(&current.value.target)
-            || request.commit.generation.0 != parent.generation.0.saturating_add(1)
-        {
+        if request.commit.parents.first() != Some(&current.value.target) {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
                 "v2 commit does not advance the selected branch ref",
+            ));
+        }
+        let mut parent_generation = None;
+        for parent in &request.commit.parents {
+            let generation = self.load_commit(*parent).await?.generation.0;
+            parent_generation =
+                Some(parent_generation.map_or(generation, |current: u64| current.max(generation)));
+        }
+        let expected_generation =
+            parent_generation
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidRequest,
+                        "v2 parent generation cannot be advanced",
+                    )
+                })?;
+        if request.commit.generation.0 != expected_generation {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 commit generation does not follow its newest parent",
             ));
         }
         let target = self

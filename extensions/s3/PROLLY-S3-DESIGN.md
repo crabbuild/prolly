@@ -104,6 +104,54 @@ photos/launch.jpg                          # S3 version v1, v2, ...
 There are no payload chunks, content manifests, delta side objects,
 workspaces, publication leases, or repository multipart-part objects.
 
+## Native protocol-v2 additions
+
+Native v2 uses a separate repository prefix and format marker. Payload bytes
+move to immutable repository-scoped SHA-256 keys, while branch refs,
+publication journals, operation indexes, and node/graph indexes are sharded by
+branch.
+
+```text
+P/
+├── format/v2.cbor
+├── payloads/v2/<repository>/sha256/<2>/<2>/<digest>
+├── commits/v2/sha256/<2>/<2>/<commit>
+├── refs/v2/heads/<encoded-branch>
+├── publications/v2/sha256/<2>/<2>/<event>
+├── journal-index/v2/heads/<encoded-branch>.cbor
+├── operation-index/v2/heads/<encoded-branch>.cbor
+├── administration/v2/merge/<job>/plan/nodes/sha256/...
+└── nodes/sha256/<2>/<2>/<cid>
+```
+
+The last path stores immutable nodes produced by restartable administrative
+builders before a final commit envelope exists. Reads first consult the
+branch-local node locator and verified cache, then use this deterministic CID
+point lookup. Native-v2 reads never recover a missing node by scanning a
+namespace.
+
+### Resumable native-v2 merge
+
+`start_merge` pins the observed target and source commit IDs. A generation
+priority frontier finds best common ancestors and persists its queue, seen
+flags, candidate bases, and results in the job plan. First-parent ancestry uses
+the commit graph's binary-lifting pointers. Criss-cross histories expose every
+best base and require an explicit selection.
+
+Planning structurally diffs `base → target` and `base → source`, pruning equal
+CID subtrees. Each advance processes a bounded record page and batches that
+page into one new plan root. Conflicts and selected changes use separate key
+prefixes so both can be paged without loading the complete plan.
+
+The builder unions immutable version trees and applies selected object changes
+in bounded pages. A large commit delta is a Prolly root plus exact record count
+rather than an inline vector. The final commit has parents `[target, source]`
+and generation `max(parent generations) + 1`. Publication revalidates the
+target ref, reconciles the operation ID after an ambiguous CAS, and never
+silently rebases. Job-plan nodes require explicit bounded cleanup after success
+or abandonment; state, version, and delta nodes referenced by the commit are
+not part of that cleanup.
+
 ## Single-object publication
 
 ![Write protocol](diagram/prolly-s3-write-path.svg)

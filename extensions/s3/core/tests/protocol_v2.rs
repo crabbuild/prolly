@@ -102,6 +102,8 @@ fn v2_publication_records_have_frozen_content_identities() {
         delta: BucketDeltaV2 {
             input_digest: [0; 32],
             changes: Vec::new(),
+            changes_root: None,
+            change_count: 0,
         },
         node_pack: None,
         authority: authority.clone(),
@@ -175,6 +177,8 @@ fn v2_commit_envelope_is_range_readable_and_wire_separated_from_v1() {
         delta: BucketDeltaV2 {
             input_digest: [0; 32],
             changes: Vec::new(),
+            changes_root: None,
+            change_count: 0,
         },
         node_pack: None,
         authority: lease().stamp(),
@@ -197,6 +201,18 @@ fn v2_commit_envelope_is_range_readable_and_wire_separated_from_v1() {
         .is_some());
     assert_eq!(
         CommitObjectV1::decode_object(&encoded).unwrap_err().code,
+        ErrorCode::CorruptCommit
+    );
+
+    let mut external_delta = commit;
+    external_delta.node_pack = None;
+    external_delta.delta.changes_root = Some(external_delta.state.objects.clone());
+    external_delta.delta.change_count = 1;
+    CommitObjectV2::new(external_delta.clone(), None).unwrap();
+
+    external_delta.delta.changes_root.as_mut().unwrap().root = None;
+    assert_eq!(
+        CommitObjectV2::new(external_delta, None).unwrap_err().code,
         ErrorCode::CorruptCommit
     );
 }

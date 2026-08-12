@@ -155,3 +155,37 @@ CAS against only the selected catalog shard.
   partial branch; unreachable immutable imports are left for native-v2 GC.
 - V1 and v2 prefixes are physically separate. The protocol never dual-writes
   mutations or changes an existing repository's format marker.
+
+## Resumable structural merge
+
+`DiscoveringBases -> CollectingBases -> Planning -> BuildingVersions -> BuildingObjects -> ReadyToPublish`
+
+Optional stops are `CollectingBases -> AwaitingBase -> Planning` for several
+best bases and `Planning -> Conflicted` for the fail-on-conflict policy.
+
+- Start snapshots the target and source commit IDs and first advances both
+  branch-local node/graph indexes. A first-parent ancestor is found through
+  binary-lifting pointers; other histories seed a generation-priority,
+  bidirectional paint-down frontier in the job plan.
+- A common commit becomes a candidate. Painting its ancestors stale removes
+  non-best common ancestors. Several surviving candidates are all exposed and
+  require an explicit caller selection.
+- Planning structurally diffs base-to-target and base-to-source. Equal CID
+  subtrees are pruned. The cursor retains at most one pending record from each
+  stream, and one advance batches its selected changes/conflicts into one new
+  durable plan root.
+- Version construction structurally unions the immutable parent version trees.
+  Unequal values at the same version-tree key are corruption. Object
+  construction applies only selected changes and creates deterministic logical
+  delete markers for source-selected deletions.
+- A large merge delta is an immutable Prolly root and exact count. The final
+  commit has parents `[observed-target, observed-source]` and generation one
+  greater than the newest parent.
+- Publication locks only the target branch, reconciles the operation ID first,
+  and then requires the target ref still to equal the observed target. A moved
+  target is a conflict; the implementation never rebases the plan.
+- Replaying publication with the same cursor returns the prior merge receipt.
+  An ambiguous, unreconciled publication fences only the target branch.
+- The caller exact-deletes merge-plan nodes in bounded pages after success or
+  abandonment. Output nodes referenced by a commit are never job-cleanup
+  candidates.

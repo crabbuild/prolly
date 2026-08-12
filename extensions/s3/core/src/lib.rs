@@ -7,6 +7,7 @@ mod commit_session_v2;
 mod control_versions;
 mod error;
 mod journal_indexes_v2;
+mod merge_v2;
 mod model;
 mod object_plane;
 mod operation_index_v2;
@@ -35,6 +36,12 @@ pub use journal_indexes_v2::{
     ImportedJournalIndexStateV2, JournalDerivedIndexesV2, JournalIndexAdvanceReportV2,
     JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2,
     JournalIndexRebuildStepV2, DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
+};
+pub use merge_v2::{
+    MergeAdvancePageV2, MergeBaseCursorV2, MergeBasePageV2, MergeChangeCursorV2, MergeChangePageV2,
+    MergeChangeV2, MergeCleanupCursorV2, MergeCleanupPageV2, MergeConflictCursorV2,
+    MergeConflictPageV2, MergeConflictV2, MergeCursorV2, MergePhaseV2, MergePolicyV2,
+    MergeReceiptV2,
 };
 pub use model::*;
 pub use object_plane::*;

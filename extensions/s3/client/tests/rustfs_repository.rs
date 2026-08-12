@@ -17,7 +17,8 @@ use md5::{Digest as _, Md5};
 use prolly_s3_client::{core::PhysicalBatchMutationV1, FoyerNodeCache, FoyerNodeCacheConfig};
 use prolly_s3_client::{
     core::{
-        LogicalObjectVersionKindV1, ObjectHeaders, PhysicalMultipartCompletedPart,
+        decode_canonical, encode_canonical, LogicalObjectVersionKindV1, MergeCursorV2,
+        MergePhaseV2, MergePolicyV2, ObjectHeaders, PhysicalMultipartCompletedPart,
         ProviderPerKeyVersionLimitV2, Repository, RepositoryOptions,
     },
     AwsS3ObjectPlane, Client, ClientV2, HmacAttestationSigner, ProviderIdentity,
@@ -706,6 +707,111 @@ async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
         .await
         .unwrap()
         .is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_merge_resumes_and_publishes_structural_plan() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-merge");
+    let client = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-merge-writer")
+        .background_index_maintenance(false)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    client
+        .put_object("merge/conflict.txt", b"base".to_vec())
+        .await
+        .unwrap();
+    let base = client.head().await.unwrap();
+    client.create_branch("feature", Some(base)).await.unwrap();
+    client
+        .put_object("merge/conflict.txt", b"ours".to_vec())
+        .await
+        .unwrap();
+    let feature = client.for_branch("feature").unwrap();
+    feature
+        .put_object("merge/conflict.txt", b"theirs".to_vec())
+        .await
+        .unwrap();
+    feature
+        .put_object("merge/source-only.txt", b"source".to_vec())
+        .await
+        .unwrap();
+
+    let mut cursor = client
+        .start_merge(
+            "feature",
+            None,
+            MergePolicyV2::Theirs,
+            "merge feature through RustFS",
+        )
+        .await
+        .unwrap();
+    drop(feature);
+    drop(client);
+    while cursor.phase != MergePhaseV2::ReadyToPublish {
+        let reopened = ClientV2::builder()
+            .aws_client(aws.clone())
+            .bucket(&bucket)
+            .repository_prefix(&repository_prefix)
+            .writer("rustfs-native-v2-merge-writer")
+            .background_index_maintenance(false)
+            .provider_identity(provider_identity())
+            .attestation_signer(attestation_signer())
+            .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+            .open()
+            .await
+            .unwrap();
+        let encoded = encode_canonical(&cursor).unwrap();
+        let restored: MergeCursorV2 = decode_canonical(&encoded).unwrap();
+        cursor = reopened.advance_merge(&restored, 2).await.unwrap().cursor;
+        drop(reopened);
+    }
+    let publisher = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-merge-writer")
+        .background_index_maintenance(false)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    let receipt = publisher.publish_merge(&cursor).await.unwrap();
+    assert_eq!(receipt.changed_keys, 2);
+    assert_eq!(receipt.conflicts, 1);
+    assert_eq!(
+        publisher
+            .get_object("merge/conflict.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"theirs"
+    );
+    assert_eq!(
+        publisher
+            .get_object("merge/source-only.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"source"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

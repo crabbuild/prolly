@@ -10,12 +10,14 @@ use md5::Md5;
 use prolly_s3_core::{
     BatchId, BranchCatalogPageV2, BranchHeadV2, BranchIndexAdvanceReportV2, BranchIndexHealthV2,
     CommitIdV2, CommitReceiptV2, Error, ErrorCode, JournalIndexRebuildCleanupV2,
-    JournalIndexRebuildCursorV2, JournalIndexRebuildStepV2, ObjectDataV2, ObjectHeaders,
-    ObjectSummaryV2, ObjectVersionV2, OperationId, OperationIndexRebuildCursorV2,
-    OperationIndexRebuildStepV2, PhysicalBatchV2, ProviderAttestationV1,
-    ProviderPerKeyVersionLimitV2, ProviderProfileId, RefCatalogCursorV2, RefCatalogRepairPageV2,
-    RefKindV2, RepositoryV2, RepositoryV2Options, Result, StagedMutationV2, TagCatalogPageV2,
-    TagV2, VersionSummaryV2,
+    JournalIndexRebuildCursorV2, JournalIndexRebuildStepV2, MergeAdvancePageV2, MergeBaseCursorV2,
+    MergeBasePageV2, MergeChangeCursorV2, MergeChangePageV2, MergeCleanupCursorV2,
+    MergeCleanupPageV2, MergeConflictCursorV2, MergeConflictPageV2, MergeCursorV2, MergePolicyV2,
+    MergeReceiptV2, ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, OperationId,
+    OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2, PhysicalBatchV2,
+    ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RefCatalogCursorV2,
+    RefCatalogRepairPageV2, RefKindV2, RepositoryV2, RepositoryV2Options, Result, StagedMutationV2,
+    TagCatalogPageV2, TagV2, VersionSummaryV2,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -126,6 +128,98 @@ impl ClientV2 {
     pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitIdV2) -> Result<()> {
         self.ensure_provider_qualified()?;
         self.repository.delete_tag(name.as_ref(), expected).await
+    }
+
+    /// Start a restartable structural merge from `source_branch` into this
+    /// client's selected branch.
+    pub async fn start_merge(
+        &self,
+        source_branch: impl AsRef<str>,
+        selected_base: Option<CommitIdV2>,
+        policy: MergePolicyV2,
+        message: impl Into<String>,
+    ) -> Result<MergeCursorV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .start_merge(
+                &self.branch,
+                source_branch.as_ref(),
+                selected_base,
+                policy,
+                message,
+            )
+            .await
+    }
+
+    pub async fn advance_merge(
+        &self,
+        cursor: &MergeCursorV2,
+        max_steps: usize,
+    ) -> Result<MergeAdvancePageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_merge(cursor, max_steps).await
+    }
+
+    pub async fn select_merge_base(
+        &self,
+        cursor: &MergeCursorV2,
+        base: CommitIdV2,
+    ) -> Result<MergeCursorV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.select_merge_base(cursor, base).await
+    }
+
+    pub async fn merge_bases_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeBaseCursorV2>,
+        limit: usize,
+    ) -> Result<MergeBasePageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .merge_bases_page(cursor, continuation, limit)
+            .await
+    }
+
+    pub async fn merge_changes_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeChangeCursorV2>,
+        limit: usize,
+    ) -> Result<MergeChangePageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .merge_changes_page(cursor, continuation, limit)
+            .await
+    }
+
+    pub async fn merge_conflicts_page(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeConflictCursorV2>,
+        limit: usize,
+    ) -> Result<MergeConflictPageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .merge_conflicts_page(cursor, continuation, limit)
+            .await
+    }
+
+    pub async fn publish_merge(&self, cursor: &MergeCursorV2) -> Result<MergeReceiptV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.publish_merge(cursor).await
+    }
+
+    pub async fn cleanup_merge(
+        &self,
+        cursor: &MergeCursorV2,
+        continuation: Option<&MergeCleanupCursorV2>,
+        limit: usize,
+    ) -> Result<MergeCleanupPageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .cleanup_merge(cursor, continuation, limit)
+            .await
     }
 
     pub async fn list_branch_catalog_page(

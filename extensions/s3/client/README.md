@@ -189,6 +189,92 @@ client.delete_tag("release-2026-08", release.target).await?;
 client.delete_branch("feature", committed.id).await?;
 ```
 
+### Merge branches with bounded, restartable work
+
+Native-v2 merge never materializes complete snapshots or ancestor sets. The
+cursor stays constant-size while the graph frontier, changes, conflicts, and
+partially built output roots live in a job-scoped Prolly tree.
+
+```rust
+use prolly_s3_client::core::{
+    decode_canonical, encode_canonical, MergeCursorV2, MergePhaseV2,
+    MergePolicyV2,
+};
+
+let mut cursor = client
+    .start_merge(
+        "feature",
+        None,
+        MergePolicyV2::Theirs,
+        "merge reviewed feature",
+    )
+    .await?;
+std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+
+loop {
+    if cursor.phase == MergePhaseV2::AwaitingBase {
+        let page = client.merge_bases_page(&cursor, None, 100).await?;
+        let base = page
+            .bases
+            .first()
+            .copied()
+            .ok_or_else(|| std::io::Error::other("merge reported no best base"))?;
+        cursor = client.select_merge_base(&cursor, base).await?;
+        std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+    }
+
+    if matches!(
+        cursor.phase,
+        MergePhaseV2::ReadyToPublish | MergePhaseV2::Conflicted
+    ) {
+        break;
+    }
+
+    let page = client.advance_merge(&cursor, 512).await?;
+    cursor = page.cursor;
+
+    // Save only the returned cursor. An older saved cursor is safe to replay,
+    // but may repeat already completed bounded work.
+    std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+}
+
+// Another process can reopen ClientV2 and resume from the canonical cursor.
+let saved: MergeCursorV2 = decode_canonical(&std::fs::read("merge.cbor")?)?;
+cursor = saved;
+
+let mut after = None;
+loop {
+    let page = client.merge_changes_page(&cursor, after.as_ref(), 500).await?;
+    for change in &page.changes {
+        println!("change: {}", String::from_utf8_lossy(&change.key));
+    }
+    after = page.continuation;
+    if after.is_none() {
+        break;
+    }
+}
+
+let receipt = client.publish_merge(&cursor).await?;
+println!("published merge {}", receipt.id);
+
+let mut cleanup = None;
+loop {
+    let page = client.cleanup_merge(&cursor, cleanup.as_ref(), 1_000).await?;
+    cleanup = page.continuation;
+    if cleanup.is_none() {
+        break;
+    }
+}
+```
+
+`MergePolicyV2::Fail` stops in `Conflicted`; page conflicts with
+`merge_conflicts_page`, then clean up the abandoned plan or start a new plan
+with an explicit `Ours` or `Theirs` policy. A criss-cross history can produce
+several best bases and stops in `AwaitingBase` until the caller selects one.
+Publication revalidates the target branch head and uses operation-ID
+reconciliation after an ambiguous CAS. A target move is returned as
+`RefConflict`; merge never silently rebases the completed plan.
+
 ### Page the native ref catalog
 
 The catalog is split into 16 independent shards. Listing uses point reads of
@@ -796,15 +882,17 @@ For a large repository, call `advance_node_index` until its report says
   distinct branch authority. A branch still has exactly one active writer, and
   direct S3 mutations outside this client remain unsupported.
 - No repository-level deduplication, chunking, or partial-file updates.
-- Commit sessions buffer bodies in memory and fail closed at the configured
-  aggregate byte limit; use physical multipart for large individual files.
+- Legacy `Client` commit sessions buffer bodies in memory and fail closed at
+  the configured aggregate byte limit. Native-v2 durable sessions spool
+  streams to disk and retain only verified immutable bindings.
 - Multipart restart requires the caller to persist the upload handle, each
   part's ETag/SHA-256/size, and whole-object checksums.
 - Provider-native version IDs cannot be preserved across buckets.
 - Raw S3 listing shows physical state, not a branch or historical snapshot.
-- Whole-result compatibility methods such as `list_branches`, `merge_bases`,
-  merge planning, and repository-wide `fsck` are not billion-scale APIs. Use
-  paged catalog/history/diff calls and partition operational work.
+- Legacy whole-result methods such as `list_branches`, `merge_bases`, and
+  repository-wide `fsck` are not billion-scale APIs. Native-v2 merge uses a
+  durable frontier and paged changes/conflicts; other repository-wide work
+  still requires bounded administrative APIs.
 - Production AWS scale and throttling qualification is still pending.
 
 The complete RustFS example is

@@ -5,6 +5,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 
 | Object | Key |
 |---|---|
+| repository format marker | `P/format/v2.cbor` |
 | branch authority lease | `P/authority/v2/branches/N/lease.cbor` |
 | system authority lease | `P/authority/v2/system/N/lease.cbor` |
 | maintenance gate | `P/authority/v2/maintenance/gate.cbor` |
@@ -25,6 +26,8 @@ any protocol v1 record. `P` is the configured repository prefix.
 | journal-index rebuild chunk | `P/administration/v2/index-rebuild/N/E/chunks/sha256/H0/H1/H` |
 | resumable commit-closure state | `P/administration/v2/closure/E/tree/nodes/sha256/H0/H1/H` |
 | physical transfer mapping | `P/administration/v2/transfer-mappings/sha256/H0/H1/H` |
+| resumable merge plan node | `P/administration/v2/merge/E/plan/nodes/sha256/H0/H1/H` |
+| durable administrative output node | `P/nodes/sha256/H0/H1/H` |
 | GC coordinator | `P/gc/v2/coordinator.cbor` |
 | GC dirty root | `P/gc/v2/dirty-roots/E/S/H` |
 
@@ -138,6 +141,21 @@ mapped commit, the stale mapping is exact-deleted and safely rebuilt. Mapping
 nodes inside the active traversal are committed only after all destination
 side effects for that page succeed, so retrying an interrupted page is
 idempotent.
+
+A native-v2 merge cursor names one `E`-scoped plan root. The plan tree stores
+the bidirectional graph frontier, seen flags, best-base candidates/results,
+selected object changes, conflicts, and a sealed copy of the cursor state.
+Cursor tokens never contain those unbounded collections. Each successful page
+creates a new immutable plan root; successful and abandoned jobs exact-delete
+only their merge-plan prefix through bounded cleanup.
+
+Partially built object, version, and external-delta trees use deterministic
+`P/nodes/sha256/...` point-addressed nodes. These nodes are outside the
+job-cleanup prefix because a published commit may reference them. Packed-node
+readers fall back to the exact CID path after the journal-derived locator
+misses; they must not list the node namespace. A merge commit with a non-empty
+external delta carries an empty inline change vector, the delta root manifest,
+and its exact logical change count.
 
 `E` is the hex GC epoch operation ID and `S` is a fixed-width, monotonically
 increasing dirty-root sequence. While an epoch is active, every branch, tag,
