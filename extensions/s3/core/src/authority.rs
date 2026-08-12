@@ -90,6 +90,7 @@ impl AuthorityLeaseV2 {
 
     pub fn stamp(&self) -> AuthorityStampV2 {
         AuthorityStampV2 {
+            repository: self.repository,
             scope: self.scope.clone(),
             generation: self.generation,
             writer_id: self.writer_id.clone(),
@@ -100,10 +101,29 @@ impl AuthorityLeaseV2 {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorityStampV2 {
+    pub repository: RepositoryId,
     pub scope: AuthorityScopeV2,
     pub generation: u64,
     pub writer_id: String,
     pub fencing_token_digest: [u8; 32],
+}
+
+impl AuthorityStampV2 {
+    pub fn validate(&self, repository: RepositoryId, scope: &AuthorityScopeV2) -> Result<()> {
+        scope.validate()?;
+        if self.repository != repository
+            || &self.scope != scope
+            || self.generation == 0
+            || self.writer_id.is_empty()
+            || self.fencing_token_digest == [0; 32]
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "authority stamp is malformed or belongs to another scope",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]

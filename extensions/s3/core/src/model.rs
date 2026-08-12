@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    authority::{AuthorityScopeV2, AuthorityStampV2},
     codec::{domain_hash, sha256},
     decode_canonical, encode_canonical, Error, ErrorCode, ObjectPath, Result,
 };
@@ -82,8 +83,10 @@ macro_rules! hash_id {
 
 hash_id!(RepositoryId, "pr1_");
 hash_id!(CommitId, "pbc1_");
+hash_id!(CommitIdV2, "pbc2_");
 hash_id!(ObjectVersionId, "pov1_");
 hash_id!(ReflogEntryId, "prl1_");
+hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(TreeFormatDigest, "ptf1_");
 hash_id!(ProviderProfileId, "ppf1_");
 hash_id!(GcPlanId, "pgc1_");
@@ -1558,6 +1561,284 @@ pub struct PhysicalBatchV1 {
     pub message: String,
     pub created_at_millis: u64,
     pub expires_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReflogEntryV2 {
+    pub branch: String,
+    pub old_target: Option<CommitIdV2>,
+    pub new_target: CommitIdV2,
+    pub operation: OperationId,
+    pub actor: String,
+    pub message: String,
+    pub created_at_millis: u64,
+}
+
+impl ReflogEntryV2 {
+    pub fn id(&self) -> Result<ReflogEntryIdV2> {
+        crate::repository::validate_branch(&self.branch)?;
+        let bytes = encode_canonical(self)?;
+        Ok(ReflogEntryIdV2(domain_hash(
+            b"prolly-s3/reflog/v2",
+            &[&bytes],
+        )))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefValueV2 {
+    pub target: CommitIdV2,
+    pub previous_target: Option<CommitIdV2>,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub reflog: ReflogEntryIdV2,
+    pub inline_reflog: ReflogEntryV2,
+    pub authority: AuthorityStampV2,
+    pub updated_at_millis: u64,
+    pub tombstone: bool,
+}
+
+impl RefValueV2 {
+    pub fn validate(&self, repository: RepositoryId, branch: &str) -> Result<()> {
+        crate::repository::validate_branch(branch)?;
+        self.authority.validate(
+            repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )?;
+        if self.operation.is_nil()
+            || self.inline_reflog.branch != branch
+            || self.inline_reflog.old_target != self.previous_target
+            || self.inline_reflog.new_target != self.target
+            || self.inline_reflog.operation != self.operation
+            || self.inline_reflog.id()? != self.reflog
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 branch ref does not match its authority or inline reflog",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketCommitV2 {
+    pub state: BucketStateV1,
+    pub parents: Vec<CommitIdV2>,
+    pub generation: CommitGeneration,
+    pub delta: BucketDeltaV1,
+    pub node_pack: Option<NodePackRefV1>,
+    pub authority: AuthorityStampV2,
+    pub author: String,
+    pub message: Option<String>,
+    pub created_at_millis: u64,
+    pub metadata: BTreeMap<String, Vec<u8>>,
+}
+
+impl BucketCommitV2 {
+    pub fn id(&self) -> Result<CommitIdV2> {
+        let bytes = encode_canonical(self)?;
+        Ok(CommitIdV2(domain_hash(b"prolly-s3/commit/v2", &[&bytes])))
+    }
+
+    pub fn validate_authority(&self, repository: RepositoryId, branch: &str) -> Result<()> {
+        self.authority.validate(
+            repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )
+    }
+}
+
+const COMMIT_OBJECT_V2_MAGIC: &[u8; 8] = b"PLYCOM02";
+
+/// Physical immutable representation of an authority-stamped v2 commit and
+/// the Prolly nodes created by it. The v2 magic keeps the wire object
+/// unambiguously separate from `CommitObjectV1` while reusing the frozen v1
+/// node-pack format.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitObjectV2 {
+    pub commit: BucketCommitV2,
+    pub node_pack: Option<NodePackV1>,
+}
+
+impl CommitObjectV2 {
+    pub fn new(commit: BucketCommitV2, node_pack: Option<NodePackV1>) -> Result<Self> {
+        let object = Self { commit, node_pack };
+        object.validate()?;
+        Ok(object)
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match (&self.commit.node_pack, &self.node_pack) {
+            (None, None) => Ok(()),
+            (Some(expected), Some(pack)) if pack.reference()? == *expected => pack.validate(),
+            _ => Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 commit object node pack does not match its logical reference",
+            )),
+        }
+    }
+
+    pub fn encode_object(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        let commit = encode_canonical(&self.commit)?;
+        let pack = self
+            .node_pack
+            .as_ref()
+            .map(NodePackV1::encode_object)
+            .transpose()?
+            .unwrap_or_default();
+        let commit_len = u32::try_from(commit.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "v2 commit exceeds u32"))?;
+        let pack_len = u64::try_from(pack.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "v2 node pack exceeds u64"))?;
+        let mut encoded = Vec::with_capacity(COMMIT_OBJECT_HEADER_LEN + commit.len() + pack.len());
+        encoded.extend_from_slice(COMMIT_OBJECT_V2_MAGIC);
+        encoded.extend_from_slice(&commit_len.to_be_bytes());
+        encoded.extend_from_slice(&pack_len.to_be_bytes());
+        encoded.extend_from_slice(&commit);
+        encoded.extend_from_slice(&pack);
+        Ok(encoded)
+    }
+
+    pub fn decode_object(encoded: &[u8]) -> Result<Self> {
+        let (commit_range, pack_range) = Self::ranges(encoded)?;
+        let commit = decode_canonical::<BucketCommitV2>(&encoded[commit_range])?;
+        let node_pack = if pack_range.is_empty() {
+            None
+        } else {
+            Some(NodePackV1::decode_object(&encoded[pack_range])?)
+        };
+        Self::new(commit, node_pack)
+    }
+
+    pub fn node_payload_offset(encoded: &[u8]) -> Result<Option<u64>> {
+        let (_, pack_range) = Self::ranges(encoded)?;
+        if pack_range.is_empty() {
+            return Ok(None);
+        }
+        let relative = NodePackV1::object_payload_offset(&encoded[pack_range.start..])?;
+        Ok(Some(pack_range.start as u64 + relative))
+    }
+
+    fn ranges(encoded: &[u8]) -> Result<(std::ops::Range<usize>, std::ops::Range<usize>)> {
+        if encoded.len() < COMMIT_OBJECT_HEADER_LEN || &encoded[..8] != COMMIT_OBJECT_V2_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 commit object has an invalid wire header",
+            ));
+        }
+        let commit_len =
+            u32::from_be_bytes(encoded[8..12].try_into().expect("fixed range")) as usize;
+        let pack_len = usize::try_from(u64::from_be_bytes(
+            encoded[12..20].try_into().expect("fixed range"),
+        ))
+        .map_err(|_| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 node-pack length exceeds usize",
+            )
+        })?;
+        let commit_start = COMMIT_OBJECT_HEADER_LEN;
+        let commit_end = commit_start
+            .checked_add(commit_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "v2 commit length overflow"))?;
+        let pack_end = commit_end
+            .checked_add(pack_len)
+            .filter(|end| *end == encoded.len())
+            .ok_or_else(|| {
+                Error::new(ErrorCode::CorruptCommit, "v2 commit object length mismatch")
+            })?;
+        Ok((commit_start..commit_end, commit_end..pack_end))
+    }
+}
+
+/// Identity stamped on every provider mutation in protocol v2. The scope is
+/// part of idempotency identity, so operation IDs may be safely segmented by
+/// writer shard.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalMutationIdentityV2 {
+    pub repository: RepositoryId,
+    pub operation: OperationId,
+    pub authority: AuthorityStampV2,
+}
+
+impl PhysicalMutationIdentityV2 {
+    pub fn validate(&self, branch: &str) -> Result<()> {
+        if self.operation.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "physical mutation operation ID is nil",
+            ));
+        }
+        self.authority.validate(
+            self.repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalMultipartSessionV2 {
+    pub identity: PhysicalMutationIdentityV2,
+    pub branch: String,
+    pub key: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+    pub provider_upload_id: String,
+    pub created_at_millis: u64,
+    #[serde(default)]
+    pub discovered: bool,
+}
+
+impl PhysicalMultipartSessionV2 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        self.identity.validate(&self.branch)?;
+        if self.identity.repository != repository
+            || self.key.is_empty()
+            || self.provider_upload_id.is_empty()
+            || self.discovered
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 multipart session is malformed or cannot publish",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalBatchV2 {
+    pub id: BatchId,
+    pub branch: String,
+    pub base_commit: CommitIdV2,
+    pub identity: PhysicalMutationIdentityV2,
+    pub message: String,
+    pub created_at_millis: u64,
+    pub expires_at_millis: u64,
+}
+
+impl PhysicalBatchV2 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        self.identity.validate(&self.branch)?;
+        if self.identity.repository != repository
+            || self.message.trim().is_empty()
+            || self.expires_at_millis <= self.created_at_millis
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 physical batch is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

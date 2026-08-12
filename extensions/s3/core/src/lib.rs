@@ -6,6 +6,7 @@ mod codec;
 mod error;
 mod model;
 mod object_plane;
+mod publication_v2;
 mod repository;
 mod runtime;
 mod store;
@@ -20,6 +21,9 @@ pub use error::{Error, ErrorCode, Result, RetryAdvice};
 pub use model::*;
 pub use object_plane::*;
 pub use prolly::Cid;
+pub use publication_v2::{
+    AppliedBranchBarrierV2, CommitPublicationV2, LoadedRefV2, ShardedBranchPublisherV2,
+};
 pub use repository::{
     version_cursor_after_key, BranchHead, BranchPage, CatalogBranchPage, CatalogTagPage,
     CloneReport, CommitGraphAdvanceReport, CommitPage, FirstParentCursor, FirstParentPage,

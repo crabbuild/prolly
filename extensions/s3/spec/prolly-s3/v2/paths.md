@@ -8,10 +8,22 @@ any protocol v1 record. `P` is the configured repository prefix.
 | branch authority lease | `P/authority/v2/branches/N/lease.cbor` |
 | system authority lease | `P/authority/v2/system/N/lease.cbor` |
 | maintenance gate | `P/authority/v2/maintenance/gate.cbor` |
+| branch ref | `P/refs/v2/heads/N` |
+| authority-stamped commit object | `P/commits/v2/sha256/H0/H1/H` |
 
 `N` is lowercase hex of the UTF-8 branch or system-namespace name. The
 canonical lease embeds its repository ID and full authority scope, so moving a
 lease object to another path or repository is corruption.
+
+`H` is lowercase hex of a protocol-v2 commit ID. `H0` and `H1` are its first
+and second byte pairs. V2 commits and refs use distinct content-ID domains and
+wire records (`CommitIdV2`, `BucketCommitV2`, `RefValueV2`, and
+`ReflogEntryV2`); no v1 reader can mistake them for v1 state.
+
+Every branch publication requires exact equality between the active permit's
+authority stamp, the commit authority stamp, and the resulting ref authority
+stamp. The ref CAS is reconciled by exact canonical bytes after a lost or
+ambiguous response. A different value at the path is a real ref conflict.
 
 Protocol v1's `P/writers/lease.cbor` remains repository-exclusive and retains
 its original scalar-generation meaning. A v1 writer must never read or write
