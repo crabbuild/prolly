@@ -1,15 +1,19 @@
 use std::{
     collections::BTreeMap,
+    io::Write as _,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
+use aws_sdk_s3::primitives::ByteStream;
+use md5::Md5;
 use prolly_s3_core::{
     BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode, ObjectDataV2,
     ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2, ProviderAttestationV1,
     ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2, RepositoryV2Options, Result,
     StagedMutationV2, VersionSummaryV2,
 };
+use sha2::{Digest as _, Sha256};
 
 use crate::{
     ensure_attestation_current, load_valid_attestation, qualify_and_store,
@@ -352,6 +356,84 @@ impl CommitSessionV2 {
                 &self.manifest,
                 key.into().into_bytes(),
                 bytes,
+                headers,
+                metadata,
+            )
+            .await?;
+        self.staged.insert(staged.key().to_vec(), staged);
+        Ok(())
+    }
+
+    /// Stage a streamed object through a bounded-memory disk spool. The spool
+    /// is removed after its immutable content-addressed upload completes.
+    pub async fn put_stream(&mut self, key: impl Into<String>, body: ByteStream) -> Result<()> {
+        self.put_stream_with_metadata(key, body, ObjectHeaders::default(), BTreeMap::new())
+            .await
+    }
+
+    pub async fn put_stream_with_metadata(
+        &mut self,
+        key: impl Into<String>,
+        mut body: ByteStream,
+        headers: ObjectHeaders,
+        metadata: BTreeMap<String, String>,
+    ) -> Result<()> {
+        self.client.ensure_provider_qualified()?;
+        let key = key.into().into_bytes();
+        if key.is_empty() {
+            return Err(invalid("v2 commit-session put key is empty"));
+        }
+        let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("could not create v2 upload spool: {error}"),
+            )
+        })?;
+        let max_object_bytes = self.client.repository.max_object_bytes();
+        let mut size = 0_u64;
+        let mut sha256 = Sha256::new();
+        let mut md5 = Md5::new();
+        while let Some(next) = body.next().await {
+            let next = next.map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("v2 object input stream failed: {error}"),
+                )
+            })?;
+            size = size.checked_add(next.len() as u64).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "v2 object length overflow")
+            })?;
+            if size > max_object_bytes {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "v2 object exceeds the repository object-size limit",
+                ));
+            }
+            spool.write_all(&next).map_err(|error| {
+                Error::new(
+                    ErrorCode::Transport,
+                    format!("v2 upload spool write failed: {error}"),
+                )
+            })?;
+            sha256.update(&next);
+            md5.update(&next);
+        }
+        spool.flush().map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("v2 upload spool flush failed: {error}"),
+            )
+        })?;
+        let staged = self
+            .client
+            .repository
+            .stage_commit_session_file(
+                &self.manifest,
+                key,
+                spool.path().to_path_buf(),
+                size,
+                sha256.finalize().into(),
+                md5.finalize().into(),
                 headers,
                 metadata,
             )

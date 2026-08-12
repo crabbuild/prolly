@@ -33,13 +33,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11"
 sha2 = "0.10"
 slatedb = { version = "0.14.0", default-features = false, features = ["aws"], optional = true }
+tempfile = "3.23"
 thiserror = "2.0"
 tokio = { version = "1.45", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
 serde_json = "1.0"
-tempfile = "3.23"
 
 [lints.rust]
 unsafe_code = "forbid"

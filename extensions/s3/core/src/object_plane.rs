@@ -90,6 +90,14 @@ pub struct ImmutablePut {
 }
 
 #[derive(Clone, Debug)]
+pub struct ImmutableFilePut {
+    pub path: ObjectPath,
+    pub body_path: PathBuf,
+    pub size: u64,
+    pub expected_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug)]
 pub struct PhysicalPut {
     pub path: ObjectPath,
     pub bytes: Vec<u8>,
@@ -320,6 +328,30 @@ pub trait ObjectPlane: Send + Sync + 'static {
     async fn get(&self, request: GetRequest) -> Result<Option<StoredObject>>;
     async fn head(&self, path: &ObjectPath) -> Result<Option<StoredMetadata>>;
     async fn put_immutable(&self, request: ImmutablePut) -> Result<ImmutablePutOutcome>;
+
+    /// Upload an immutable object from a file without requiring the caller to
+    /// retain its complete body in memory. Providers with streaming upload
+    /// support should override this default implementation.
+    async fn put_immutable_file(&self, request: ImmutableFilePut) -> Result<ImmutablePutOutcome> {
+        let bytes = std::fs::read(&request.body_path).map_err(|error| {
+            Error::new(
+                ErrorCode::Transport,
+                format!("immutable spool could not be read: {error}"),
+            )
+        })?;
+        if bytes.len() as u64 != request.size || sha256(&bytes) != request.expected_sha256 {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "immutable spool identity changed before upload",
+            ));
+        }
+        self.put_immutable(ImmutablePut {
+            path: request.path,
+            bytes,
+            expected_sha256: request.expected_sha256,
+        })
+        .await
+    }
     async fn load_mutable(&self, path: &ObjectPath) -> Result<Option<StoredObject>>;
     async fn compare_exchange(&self, request: CompareExchange) -> Result<CompareExchangeOutcome>;
     async fn list(&self, request: ListRequest) -> Result<PhysicalListPage>;

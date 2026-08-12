@@ -1,10 +1,12 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, io::Write as _, sync::Arc};
 
+use md5::{Digest as _, Md5};
 use prolly_s3_core::{
     FixedClock, GetRequest, ListRequest, LogicalObjectVersionKindV1, MemoryObjectPlane,
     ObjectHeaders, ObjectPath, ObjectPlane, ProviderPerKeyVersionLimitV2, RepositoryFormatV2,
     RepositoryV2, RepositoryV2Options, SequenceIdSource,
 };
+use sha2::Sha256;
 
 #[tokio::test]
 async fn native_v2_put_read_replay_and_reopen_use_only_v2_authority() {
@@ -450,11 +452,17 @@ async fn native_v2_commit_session_batches_payloads_into_one_replayable_publicati
         )
         .await
         .unwrap();
+    let mut spool = tempfile::NamedTempFile::new().unwrap();
+    spool.write_all(b"second").unwrap();
+    spool.flush().unwrap();
     let second = repository
-        .stage_commit_session_put(
+        .stage_commit_session_file(
             &session,
             b"batch/b.txt".to_vec(),
-            b"second".to_vec(),
+            spool.path().to_path_buf(),
+            6,
+            Sha256::digest(b"second").into(),
+            Md5::digest(b"second").into(),
             ObjectHeaders::default(),
             BTreeMap::new(),
         )

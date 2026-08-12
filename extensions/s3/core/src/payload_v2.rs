@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    codec::sha256, GetRequest, ImmutablePut, ObjectPath, ObjectPlane, PhysicalObjectBindingV2,
-    PhysicalVersion, RepositoryId, Result,
+    codec::sha256, GetRequest, ImmutableFilePut, ImmutablePut, ObjectPath, ObjectPlane,
+    PhysicalObjectBindingV2, PhysicalVersion, RepositoryId, Result,
 };
 
 #[derive(Clone)]
@@ -36,6 +36,42 @@ impl<P: ObjectPlane> ImmutablePayloadStoreV2<P> {
             crate::ImmutablePutOutcome::Created(metadata)
             | crate::ImmutablePutOutcome::AlreadyPresent(metadata) => metadata,
         };
+        let binding = PhysicalObjectBindingV2 {
+            path,
+            provider_version_id: metadata.token.version_id,
+            provider_etag: metadata.token.etag,
+            checksum_sha256,
+        };
+        binding.validate()?;
+        Ok(binding)
+    }
+
+    pub async fn put_file(
+        &self,
+        body_path: PathBuf,
+        size: u64,
+        checksum_sha256: [u8; 32],
+    ) -> Result<PhysicalObjectBindingV2> {
+        let path = self.path(checksum_sha256)?;
+        let outcome = self
+            .plane
+            .put_immutable_file(ImmutableFilePut {
+                path: path.clone(),
+                body_path,
+                size,
+                expected_sha256: checksum_sha256,
+            })
+            .await?;
+        let metadata = match outcome {
+            crate::ImmutablePutOutcome::Created(metadata)
+            | crate::ImmutablePutOutcome::AlreadyPresent(metadata) => metadata,
+        };
+        if metadata.len != size || metadata.sha256 != checksum_sha256 {
+            return Err(crate::Error::new(
+                crate::ErrorCode::ChecksumMismatch,
+                "immutable payload metadata does not match the staged file",
+            ));
+        }
         let binding = PhysicalObjectBindingV2 {
             path,
             provider_version_id: metadata.token.version_id,
