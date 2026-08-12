@@ -20,6 +20,8 @@ Core tests verify:
 - bounded legacy node-location fallback after in-memory eviction;
 - corrupt v2 node/ref/graph indexes failing open and rebuilding from authority;
 - idempotent replay and lost put/copy/delete response reconciliation;
+- applied-then-conflicted CAS reconciliation by operation ID for puts and
+  atomic batches;
 - exclusive writer takeover fencing;
 - clone, fetch, push, repair, and provider-ID rebinding;
 - exact-version GC and corrupt-checkpoint recovery.
@@ -43,6 +45,51 @@ PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository -- --nocapture
 ```
+
+Run the reproducible 10K concurrent-commit regression gate separately. It is
+ignored by default because it is intentionally sustained and writes a unique
+development repository prefix:
+
+```bash
+PROLLY_S3_RUSTFS=1 \
+PROLLY_S3_RUSTFS_10K=1 \
+PROLLY_RUSTFS_10K_CONCURRENCY=32 \
+PROLLY_RUSTFS_10K_OBJECT_BYTES=65536 \
+cargo test --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --test rustfs_repository \
+  rustfs_10k_concurrent_commits_are_reconciled_and_complete \
+  -- --ignored --exact --nocapture
+```
+
+The gate runs cumulative 1K, 5K, and 10K tiers against one hot branch. It
+reports throughput and p50/p95/p99 latency, bounds SDK calls per write, checks
+the final ref generation, pages through exactly 10K logical objects, and
+requires an empty publication queue.
+
+On 2026-08-11, the pinned local RustFS gate passed all 10K commits in 469.81 s.
+The final 5K tier sustained 19.63 writes/s with p50/p95/p99 of
+1,462/2,760/3,285 ms and 3.005 SDK calls/write. The additional 24 calls were
+amortized branch-ref version compaction. RustFS beta.10 hardcodes a 10,000
+physical-version limit per object; automatic compaction at generation 5,000
+retained 100 ref versions while preserving the complete logical commit DAG.
+
+Run the batched-ingest and persisted-cache gate with the Foyer feature:
+
+```bash
+PROLLY_S3_RUSTFS=1 \
+PROLLY_S3_RUSTFS_BATCH_10K=1 \
+cargo test --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --features foyer-cache --test rustfs_repository \
+  rustfs_10k_batched_ingest_has_bounded_bytes_and_persisted_cache \
+  -- --ignored --exact --nocapture
+```
+
+On 2026-08-11, 100 commits ingested 10K × 64 KiB files in 78.89 s
+(126.76 files/s) at 1.020 calls/file. Upload amplification was 1.083×, down
+from the pre-fix 2.70×; all node packs totaled 49.73 MiB and the largest was
+965.65 KiB. After a graceful Foyer close/reopen, listing all 10K files took
+285 ms, one commit GET, and zero node-range GETs, down from 421+ S3 calls in the
+uncached baseline.
 
 ## Not yet qualified
 

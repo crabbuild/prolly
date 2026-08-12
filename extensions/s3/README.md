@@ -25,7 +25,8 @@ A warm single-object write uses three foreground S3 operations:
 No content chunks, content manifests, publication leases, durable staging
 workspaces, or post-CAS readback are created. A two-object atomic commit uses
 four calls: two parallelizable payload writes, one commit envelope, and one
-branch-ref CAS.
+branch-ref CAS. For bulk ingestion, `Client::ingest_objects` is the recommended
+path and publishes up to 100 whole files per commit by default.
 
 ## Authority model
 
@@ -79,11 +80,17 @@ The integration tests enforce these warm-path budgets:
 | Merge or restore | 2 |
 | Multipart with `N` parts | `N + 4` |
 | Warm current or historical read | 1 |
+| Bulk ingest with 100 files/commit | 1.02 per file |
 
 The core contract also exercises 1, 8, and 32 concurrent callers and requires
-three calls per completed whole-object write. The RustFS load probe also runs
-32 concurrent 64 KiB writes, checks 96 total calls, and reports latency and
-throughput.
+three calls per completed whole-object write. The RustFS probes include 32
+concurrent 64 KiB writes and an ignored-by-default 10K hot-branch regression
+gate that validates the complete logical key set and operation-ID
+reconciliation.
+
+The local 10K batch gate also enforces less than 1.5× uploaded-byte
+amplification and verifies that a closed/reopened Foyer cache lists all 10K
+files with zero node-range reads.
 
 ## Current limits
 

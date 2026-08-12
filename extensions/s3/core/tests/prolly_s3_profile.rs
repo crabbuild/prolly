@@ -537,6 +537,183 @@ async fn two_object_physical_batch_is_exactly_four_calls() {
 }
 
 #[tokio::test]
+async fn applied_put_cas_conflict_is_reconciled_by_operation_id() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        physical_options(".prolly/prolly-s3/reconcile-applied-put"),
+    )
+    .await
+    .unwrap();
+
+    plane.conflict_after_next_compare_exchange();
+    let receipt = repository
+        .put_bytes(
+            "main",
+            b"reconciled.bin".to_vec(),
+            b"published".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert!(receipt.idempotent_replay);
+    assert_eq!(repository.head("main").await.unwrap(), receipt.id);
+    assert_eq!(
+        repository
+            .get_current("main", b"reconciled.bin")
+            .await
+            .unwrap()
+            .bytes,
+        b"published"
+    );
+}
+
+#[tokio::test]
+async fn applied_batch_cas_conflict_is_reconciled_by_operation_id() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        physical_options(".prolly/prolly-s3/reconcile-applied-batch"),
+    )
+    .await
+    .unwrap();
+    let batch = repository
+        .begin_physical_batch("main", "reconciled batch", 60_000)
+        .await
+        .unwrap();
+
+    plane.conflict_after_next_compare_exchange();
+    let receipt = repository
+        .publish_physical_batch(
+            batch,
+            vec![PhysicalBatchMutationV1::Put {
+                key: b"reconciled-batch.bin".to_vec(),
+                bytes: b"published".to_vec(),
+                headers: ObjectHeaders::default(),
+                user_metadata: BTreeMap::new(),
+            }],
+        )
+        .await
+        .unwrap();
+
+    assert!(receipt.idempotent_replay);
+    assert_eq!(repository.head("main").await.unwrap(), receipt.id);
+}
+
+#[tokio::test]
+async fn applied_multi_delete_cas_conflict_is_reconciled_by_operation_id() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        physical_options(".prolly/prolly-s3/reconcile-applied-multi-delete"),
+    )
+    .await
+    .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"delete-me.bin".to_vec(),
+            b"published".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+
+    plane.conflict_after_next_compare_exchange();
+    let receipt = repository
+        .delete_objects("main", vec![b"delete-me.bin".to_vec()], None)
+        .await
+        .unwrap();
+
+    assert!(receipt.idempotent_replay);
+    assert_eq!(repository.head("main").await.unwrap(), receipt.id);
+    assert!(repository
+        .get_current("main", b"delete-me.bin")
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn hot_branch_ref_versions_are_compacted_without_losing_history() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let mut options = physical_options(".prolly/prolly-s3/ref-version-compaction");
+    options.branch_ref_compaction_interval = 100;
+    options.branch_ref_versions_to_retain = 5;
+    let repository = Repository::initialize(plane, options).await.unwrap();
+    for index in 0..101 {
+        repository
+            .put_bytes(
+                "main",
+                format!("objects/{index:04}.bin").into_bytes(),
+                vec![index as u8; 32],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    let report = repository
+        .compact_branch_ref_versions("main")
+        .await
+        .unwrap();
+    assert_eq!(report.scanned, 6, "automatic compaction did not run");
+    assert_eq!(report.retained, 5);
+    assert_eq!(report.deleted, 1);
+    assert_eq!(repository.list_reflog("main").await.unwrap().len(), 101);
+    assert_eq!(
+        repository
+            .get_current("main", b"objects/0000.bin")
+            .await
+            .unwrap()
+            .bytes,
+        vec![0; 32]
+    );
+}
+
+#[tokio::test]
+async fn hundred_object_batch_packs_only_final_reachable_nodes() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane,
+        physical_options(".prolly/prolly-s3/final-batch-nodes"),
+    )
+    .await
+    .unwrap();
+    let batch = repository
+        .begin_physical_batch("main", "one hundred objects", 60_000)
+        .await
+        .unwrap();
+    let receipt = repository
+        .publish_physical_batch(
+            batch,
+            (0..100)
+                .map(|index| PhysicalBatchMutationV1::Put {
+                    key: format!("objects/{index:04}.bin").into_bytes(),
+                    bytes: vec![index as u8; 1024],
+                    headers: ObjectHeaders::default(),
+                    user_metadata: BTreeMap::new(),
+                })
+                .collect(),
+        )
+        .await
+        .unwrap();
+    let commit = repository.commit(receipt.id).await.unwrap();
+    let packed_bytes = commit.node_pack.expect("batch node pack").object_len;
+
+    assert!(
+        packed_bytes < 2 * 1024 * 1024,
+        "100-object commit packed {packed_bytes} bytes of transient nodes"
+    );
+}
+
+#[tokio::test]
 async fn two_object_physical_multi_delete_is_exactly_four_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
@@ -1621,6 +1798,56 @@ async fn sharded_node_index_opens_lazily_and_node_cache_eliminates_repeat_ranges
     assert!(shared_warm.node_cache_hits > 0);
     assert_eq!(shared_warm.node_ranged_fetches, 0);
     assert_eq!(plane.request_snapshot().list, 0);
+}
+
+#[tokio::test]
+async fn writer_populates_shared_node_cache_for_a_zero_range_reopen() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let shared_node_cache = Arc::new(MemoryNodeCache::new(64 * 1024 * 1024));
+    let options = RepositoryOptions {
+        max_cached_node_pack_bytes: 1,
+        node_cache: Some(shared_node_cache.clone()),
+        ..physical_options(".prolly/prolly-s3/write-through-node-cache")
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for index in 0..128 {
+        repository
+            .put_bytes(
+                "main",
+                format!("objects/{index:04}.bin").into_bytes(),
+                vec![index as u8; 1024],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let head = repository.head("main").await.unwrap();
+    drop(repository);
+
+    let reader = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            node_cache: Some(shared_node_cache),
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    plane.reset_request_counts();
+    let (objects, truncated) = reader
+        .list_objects_at(head, b"objects/", None, 1_000)
+        .await
+        .unwrap();
+
+    assert_eq!(objects.len(), 128);
+    assert!(!truncated);
+    assert_eq!(reader.performance_snapshot().node_ranged_fetches, 0);
+    assert!(plane.request_snapshot().get <= 1);
 }
 
 #[tokio::test]

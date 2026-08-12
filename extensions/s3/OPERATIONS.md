@@ -41,6 +41,7 @@ Track separately:
 - unreachable physical versions and commit envelopes;
 - GC candidate bytes, exact-version deletes, and failures;
 - node-index checkpoint age and rebuild fallbacks.
+- branch-ref physical version count and compaction failures.
 
 The three-call write budget counts SDK operations, not internal HTTP retry
 attempts. Alert on either dimension independently.
@@ -50,6 +51,27 @@ request-rate budget. Bound in-process metadata with `max_cached_commits`,
 `max_cached_branches`, and `max_cached_node_pack_bytes`; do not disable these
 bounds in a long-running writer. Alert when publication wait consumes a
 material part of end-to-end latency or max queue depth grows continuously.
+
+## Bulk ingestion and cache warm-up
+
+Use `Client::ingest_objects` as the default path for imports and backfills. It
+publishes at most 100 whole files per commit and also obeys
+`max_staged_batch_bytes`. Tune the count downward when file sizes or commit
+latency require it; use multipart for one file larger than the staged bound.
+
+Configure a Foyer node cache on writers and traversal-heavy readers. Successful
+publications write committed immutable nodes through to the cache. Reopen the
+same cache directory after a restart, with only one process owning that
+directory. On a new or empty host, call `prewarm_node_cache` for the production
+snapshot and required prefixes before accepting list, diff, or history traffic.
+
+The writer automatically compacts a branch ref every 5,000 generations and
+retains 100 physical ref versions by default. This deletes only obsolete
+physical CAS-object versions; immutable commits, object versions, and logical
+history are unchanged. Keep `s3:ListBucketVersions` and version-qualified
+`s3:DeleteObject`/`s3:DeleteObjects` permissions available. Tune
+`branch_ref_compaction_interval` below a provider's per-object version limit,
+or invoke `compact_branch_ref_versions` during controlled maintenance.
 
 ## Conflict and outage handling
 

@@ -78,7 +78,41 @@ against your key count and memory budget. Export `performance_snapshot()` for
 publication queue/wait telemetry and `s3_operation_metrics()` for SDK request
 counts.
 
-## Put and read a file
+## Ingest files in batches (recommended)
+
+Use `ingest_objects` when loading more than one file. It publishes up to 100
+whole files per commit by default, reducing commit-envelope and branch-CAS
+traffic from two calls per file to two calls per batch.
+
+```rust
+use prolly_s3_client::IngestObject;
+
+let files = (0..1_000).map(|index| {
+    IngestObject::new(
+        format!("imports/file-{index:04}.json"),
+        format!(r#"{{"index":{index}}}"#).into_bytes(),
+    )
+    .content_type("application/json")
+    .metadata("source", "initial-import")
+});
+
+let report = client.ingest_objects(files).await?;
+assert_eq!(report.object_count, 1_000);
+assert_eq!(report.commits.len(), 10);
+```
+
+The default is bounded by both 100 files and the configured
+`max_staged_batch_bytes`. Use `ingest_objects_with_limit` to choose a smaller
+commit size. Use multipart upload for any single file larger than the staged
+byte limit.
+
+The checked-in RustFS gate measured 10K × 64 KiB files at 1.020 SDK calls/file
+and 1.083× uploaded-byte amplification. Treat those as local regression
+budgets, not AWS latency or durability claims.
+
+For interactive or independent writes, use the single-file API below.
+
+## Put and read one file
 
 The builders intentionally resemble the AWS Rust SDK:
 
@@ -149,7 +183,7 @@ let old_bytes = old.output.body.collect().await?.into_bytes();
 assert_eq!(old_bytes.as_ref(), b"mode = 'safe'\n");
 ```
 
-## Publish several changes atomically
+## Publish a custom atomic change set
 
 Staged changes are invisible until `publish`. The session is intentionally
 in-memory; it is not resumable after process loss.
@@ -184,8 +218,9 @@ println!("published commit: {}", receipt.id);
 ```
 
 For `N` staged keys, publication uses `N + 2` foreground S3 calls. Payload
-mutations are bounded and parallel; one commit envelope and one branch CAS make
-the batch visible.
+mutations are bounded and parallel. One commit envelope and one branch CAS make
+the entire batch visible. Prefer `ingest_objects` for homogeneous bulk puts;
+use a commit session when you need mixed puts and deletes or a custom message.
 
 ## List, branch, and diff
 
@@ -248,8 +283,9 @@ stale expected head fails explicitly.
 ## Add a persistent node cache
 
 Foyer keeps verified immutable Prolly nodes in bounded memory and local disk.
-Cache hits are checked against the CID; corruption and cache I/O errors fail
-open to a verified S3 read.
+Successful commits write their new nodes through to this cache. Cache hits are
+checked against the CID; corruption and cache I/O errors fail open to a
+verified S3 read.
 
 ```rust
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -286,10 +322,19 @@ let client = Client::builder()
     .node_index_maintenance(Duration::from_secs(60), 1_000)
     .open()
     .await?;
+
+// On a cold host, populate the cache before serving traversal-heavy reads.
+let snapshot = client.head_commit().await?;
+let warmed = client
+    .prewarm_node_cache(snapshot, b"", 1_000)
+    .await?;
+println!("warmed {} objects in {} pages", warmed.object_count, warmed.pages);
 ```
 
 Use one filesystem owner per cache directory. Drop clients before calling
-`node_cache.close().await?` during graceful shutdown.
+`node_cache.close().await?` during graceful shutdown. Reopen the same directory
+after restart to reuse persisted immutable nodes. A new host should run
+`prewarm_node_cache` before taking traversal-heavy traffic.
 
 ## Page through large histories and ref sets
 

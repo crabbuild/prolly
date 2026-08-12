@@ -21,8 +21,9 @@ pub use repository::{
     FsckReport, GcDryRun, GcEpochStepReport, GcSweepReport, HistoryCursor, IndexFreshness,
     MergeConflict, MergePlan, MergePolicy, NodeIndexAdvanceReport, NodeIndexMaintenance,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectSummary, RefCatalogAdvanceReport,
-    RefMoveReceipt, RepairReport, Repository, RepositoryOptions, RepositoryPerformanceSnapshot,
-    SyncReport, Tag, TagPage, TraversalBudget, VersionSummary, WriterLeaseMaintenance,
+    RefMoveReceipt, RefVersionCompactionReport, RepairReport, Repository, RepositoryOptions,
+    RepositoryPerformanceSnapshot, SyncReport, Tag, TagPage, TraversalBudget, VersionSummary,
+    WriterLeaseMaintenance,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

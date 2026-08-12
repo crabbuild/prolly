@@ -59,6 +59,52 @@ pub struct Versioned<T> {
     pub commit: Option<CommitReceipt>,
 }
 
+/// Default number of whole-file puts published in one bulk-ingest commit.
+pub const DEFAULT_INGEST_FILES_PER_COMMIT: usize = 100;
+
+/// One in-memory whole file for [`Client::ingest_objects`].
+#[derive(Clone, Debug)]
+pub struct IngestObject {
+    pub key: String,
+    pub bytes: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub metadata: BTreeMap<String, String>,
+}
+
+impl IngestObject {
+    pub fn new(key: impl Into<String>, bytes: impl Into<Vec<u8>>) -> Self {
+        Self {
+            key: key.into(),
+            bytes: bytes.into(),
+            headers: ObjectHeaders::default(),
+            metadata: BTreeMap::new(),
+        }
+    }
+
+    pub fn content_type(mut self, value: impl Into<String>) -> Self {
+        self.headers.content_type = Some(value.into());
+        self
+    }
+
+    pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct IngestReport {
+    pub object_count: usize,
+    pub commits: Vec<CommitReceipt>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NodeCachePrewarmReport {
+    pub snapshot: CommitId,
+    pub object_count: usize,
+    pub pages: usize,
+}
+
 pub fn supported_input_fields(operation: &str) -> Option<&'static [&'static str]> {
     match operation {
         "put_object" => Some(&[
@@ -512,6 +558,8 @@ pub struct ClientBuilder {
     max_cached_node_locations: Option<usize>,
     max_cached_node_bytes: Option<usize>,
     node_cache: Option<Arc<dyn prolly_s3_core::NodeCache>>,
+    branch_ref_compaction_interval: Option<u64>,
+    branch_ref_versions_to_retain: Option<usize>,
     node_index_maintenance_interval: Option<Duration>,
     node_index_maintenance_batch: Option<usize>,
     max_staged_batch_bytes: Option<usize>,
@@ -564,6 +612,17 @@ impl Client {
     /// Returns hot-branch publication queue and wait counters.
     pub fn performance_snapshot(&self) -> prolly_s3_core::RepositoryPerformanceSnapshot {
         self.repository.performance_snapshot()
+    }
+
+    /// Compact obsolete physical versions of the selected branch-ref object.
+    /// Logical commits, history, and object versions are not removed.
+    pub async fn compact_branch_ref_versions(
+        &self,
+    ) -> Result<prolly_s3_core::RefVersionCompactionReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .compact_branch_ref_versions(&self.branch)
+            .await
     }
 
     /// Run one bounded node-index maintenance step immediately. Normal
@@ -800,6 +859,133 @@ impl Client {
             message: "atomic bucket commit".to_string(),
             expires_after: Duration::from_secs(60 * 60),
         }
+    }
+
+    /// Publish whole files in bounded atomic commits instead of creating one
+    /// hot-branch CAS and commit envelope per file.
+    pub async fn ingest_objects<I>(&self, objects: I) -> Result<IngestReport>
+    where
+        I: IntoIterator<Item = IngestObject>,
+    {
+        self.ingest_objects_with_limit(objects, DEFAULT_INGEST_FILES_PER_COMMIT)
+            .await
+    }
+
+    pub async fn ingest_objects_with_limit<I>(
+        &self,
+        objects: I,
+        max_files_per_commit: usize,
+    ) -> Result<IngestReport>
+    where
+        I: IntoIterator<Item = IngestObject>,
+    {
+        self.ensure_provider_qualified()?;
+        if max_files_per_commit == 0
+            || max_files_per_commit
+                > self
+                    .repository
+                    .format()
+                    .canonical_limits
+                    .max_mutations_per_commit as usize
+        {
+            return Err(invalid(
+                "max_files_per_commit must fit the repository mutation limit",
+            ));
+        }
+
+        let mut report = IngestReport::default();
+        let mut chunk = Vec::with_capacity(max_files_per_commit);
+        let mut chunk_bytes = 0usize;
+        for object in objects {
+            if object.bytes.len() > self.max_staged_batch_bytes {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "one ingest object exceeds the configured staged-byte limit; use multipart",
+                ));
+            }
+            let next_bytes = chunk_bytes
+                .checked_add(object.bytes.len())
+                .ok_or_else(|| invalid("ingest byte accounting overflow"))?;
+            if !chunk.is_empty()
+                && (chunk.len() == max_files_per_commit || next_bytes > self.max_staged_batch_bytes)
+            {
+                report.commits.push(self.publish_ingest_chunk(chunk).await?);
+                chunk = Vec::with_capacity(max_files_per_commit);
+                chunk_bytes = 0;
+            }
+            chunk_bytes = chunk_bytes
+                .checked_add(object.bytes.len())
+                .ok_or_else(|| invalid("ingest byte accounting overflow"))?;
+            report.object_count = report
+                .object_count
+                .checked_add(1)
+                .ok_or_else(|| invalid("ingest object count overflow"))?;
+            chunk.push(object);
+        }
+        if !chunk.is_empty() {
+            report.commits.push(self.publish_ingest_chunk(chunk).await?);
+        }
+        Ok(report)
+    }
+
+    async fn publish_ingest_chunk(&self, objects: Vec<IngestObject>) -> Result<CommitReceipt> {
+        let batch = self
+            .repository
+            .begin_physical_batch(&self.branch, "bulk ingest", 60 * 60 * 1_000)
+            .await?;
+        let mutations = objects
+            .into_iter()
+            .map(|object| prolly_s3_core::PhysicalBatchMutationV1::Put {
+                key: object.key.into_bytes(),
+                bytes: object.bytes,
+                headers: object.headers,
+                user_metadata: object.metadata,
+            })
+            .collect();
+        let receipt = self
+            .repository
+            .publish_physical_batch(batch, mutations)
+            .await?;
+        self.record_advisory(&receipt).await;
+        Ok(receipt)
+    }
+
+    /// Traverse one immutable object snapshot and populate the configured
+    /// verified node cache without downloading object payloads.
+    pub async fn prewarm_node_cache(
+        &self,
+        snapshot: CommitId,
+        prefix: &[u8],
+        page_size: usize,
+    ) -> Result<NodeCachePrewarmReport> {
+        self.ensure_provider_qualified()?;
+        if page_size == 0 {
+            return Err(invalid("prewarm page_size must be greater than zero"));
+        }
+        let mut after = None;
+        let mut object_count = 0usize;
+        let mut pages = 0usize;
+        loop {
+            let (objects, truncated) = self
+                .repository
+                .list_objects_at(snapshot, prefix, after.as_deref(), page_size)
+                .await?;
+            pages = pages
+                .checked_add(1)
+                .ok_or_else(|| invalid("prewarm page count overflow"))?;
+            object_count = object_count
+                .checked_add(objects.len())
+                .ok_or_else(|| invalid("prewarm object count overflow"))?;
+            after = objects.last().map(|object| object.key.clone());
+            if !truncated {
+                break;
+            }
+        }
+        Ok(NodeCachePrewarmReport {
+            snapshot,
+            object_count,
+            pages,
+        })
     }
     pub async fn at(&self, commit: CommitId) -> Result<Snapshot> {
         self.ensure_provider_qualified()?;
@@ -1615,6 +1801,11 @@ impl ClientBuilder {
         self.node_cache = Some(cache);
         self
     }
+    pub fn branch_ref_compaction(mut self, interval: u64, versions_to_retain: usize) -> Self {
+        self.branch_ref_compaction_interval = Some(interval);
+        self.branch_ref_versions_to_retain = Some(versions_to_retain);
+        self
+    }
     pub fn node_index_maintenance(mut self, interval: Duration, batch: usize) -> Self {
         self.node_index_maintenance_interval = Some(interval);
         self.node_index_maintenance_batch = Some(batch);
@@ -1761,6 +1952,12 @@ impl ClientBuilder {
             options.max_cached_node_bytes = value;
         }
         options.node_cache = self.node_cache;
+        if let Some(value) = self.branch_ref_compaction_interval {
+            options.branch_ref_compaction_interval = value;
+        }
+        if let Some(value) = self.branch_ref_versions_to_retain {
+            options.branch_ref_versions_to_retain = value;
+        }
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }

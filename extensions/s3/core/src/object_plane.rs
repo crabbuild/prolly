@@ -329,6 +329,26 @@ pub trait ObjectPlane: Send + Sync + 'static {
         version: PhysicalVersion,
     ) -> Result<DeleteOutcome>;
 
+    /// Delete at most 1,000 exact physical versions. Providers with a bulk
+    /// delete API should override this; the default preserves correctness for
+    /// simpler object planes.
+    async fn delete_exact_batch(
+        &self,
+        objects: Vec<(ObjectPath, PhysicalVersion)>,
+    ) -> Result<Vec<DeleteOutcome>> {
+        if objects.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "exact delete batch cannot exceed 1,000 versions",
+            ));
+        }
+        let mut outcomes = Vec::with_capacity(objects.len());
+        for (path, version) in objects {
+            outcomes.push(self.delete_exact(&path, version).await?);
+        }
+        Ok(outcomes)
+    }
+
     async fn put_physical(&self, _request: PhysicalPut) -> Result<PhysicalObjectWriteResult> {
         Err(Error::new(
             ErrorCode::MissingCapability,
@@ -505,6 +525,7 @@ pub struct MemoryObjectPlane {
     inner: Arc<RwLock<MemoryState>>,
     versioned: bool,
     requests: Arc<MemoryRequestCounters>,
+    conflict_after_next_compare_exchange: Arc<AtomicBool>,
     lose_next_physical_put_response: Arc<AtomicBool>,
     lose_next_physical_delete_response: Arc<AtomicBool>,
     physical_put_delay_millis: Arc<AtomicU64>,
@@ -607,6 +628,7 @@ impl MemoryObjectPlane {
             inner: Arc::new(RwLock::new(MemoryState::default())),
             versioned,
             requests: Arc::new(MemoryRequestCounters::default()),
+            conflict_after_next_compare_exchange: Arc::new(AtomicBool::new(false)),
             lose_next_physical_put_response: Arc::new(AtomicBool::new(false)),
             lose_next_physical_delete_response: Arc::new(AtomicBool::new(false)),
             physical_put_delay_millis: Arc::new(AtomicU64::new(0)),
@@ -632,6 +654,14 @@ impl MemoryObjectPlane {
 
     pub fn lose_next_physical_put_response(&self) {
         self.lose_next_physical_put_response
+            .store(true, Ordering::Relaxed);
+    }
+
+    /// Test hook that applies the next successful CAS, then reports a
+    /// conflict containing the applied value. This models a provider or SDK
+    /// retry whose first wire attempt committed but whose response was lost.
+    pub fn conflict_after_next_compare_exchange(&self) {
+        self.conflict_after_next_compare_exchange
             .store(true, Ordering::Relaxed);
     }
 
@@ -858,9 +888,18 @@ impl ObjectPlane for MemoryObjectPlane {
             versions.clear();
         }
         versions.push(MemoryVersion {
-            bytes: Some(request.bytes),
+            bytes: Some(request.bytes.clone()),
             metadata: metadata.clone(),
         });
+        if self
+            .conflict_after_next_compare_exchange
+            .swap(false, Ordering::Relaxed)
+        {
+            return Ok(CompareExchangeOutcome::Conflict(Some(StoredObject {
+                bytes: request.bytes,
+                metadata,
+            })));
+        }
         Ok(CompareExchangeOutcome::Applied(metadata))
     }
 
