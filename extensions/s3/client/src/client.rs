@@ -400,6 +400,12 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         portable_clone: false,
         gc_managed: false,
     },
+    PhysicalPathFamily {
+        relative_pattern: "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
 ];
 
 #[derive(Clone, Debug, Default)]
@@ -4982,6 +4988,7 @@ mod tests {
             "gc/v2/dirty-roots/<operation-id-hex>/<sequence>/<dirty-root-id>",
             "journal-index/v2/heads/<branch-hex>.cbor",
             "journal-index/v2/<node-or-graph>-tree/nodes/sha256/<2>/<2>/<cid>",
+            "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
         ] {
             assert!(
                 PHYSICAL_PATH_FAMILIES

@@ -31,6 +31,8 @@ Core tests verify:
   tails with zero commit/ref namespace scans and fail-closed late startup;
 - root/internal-only cache prewarm with no object enumeration, plus verified
   cache reuse across a fresh repository process;
+- constant-size, restartable, parent-first commit-closure traversal with
+  bounded work/output, paged pins/reflogs, and bounded exact cleanup;
 - raw cross-bucket restore rejection plus portable archive clone/rebind,
   read-only `fsck`, explicit writer takeover, post-restore write, and cleanup.
 

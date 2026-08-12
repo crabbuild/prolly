@@ -43,15 +43,17 @@ pub use publication_v2::{
     PublicationJournalEntryV2, PublicationJournalPageV2, ShardedBranchPublisherV2,
 };
 pub use repository::{
-    version_cursor_after_key, BranchHead, BranchPage, CatalogBranchPage, CatalogTagPage,
-    CloneReport, CommitGraphAdvanceReport, CommitPage, FirstParentCursor, FirstParentPage,
+    version_cursor_after_key, BranchHead, BranchPage, BranchReflogCursor, BranchReflogPage,
+    CatalogBranchPage, CatalogTagPage, CloneReport, CommitClosureCleanupReport,
+    CommitClosureCursor, CommitClosurePage, CommitGraphAdvanceReport, CommitPage,
+    FirstParentCursor, FirstParentPage,
     FsckReport, GcDryRun, GcEpochStepReport, GcSweepReport, HistoryCursor, IndexFreshness,
     InternalNodePrewarmReport, MergeConflict, MergePlan, MergePolicy, NodeIndexAdvanceReport,
     NodeIndexMaintenance,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectSummary, RefCatalogAdvanceReport,
     RefMoveReceipt, RefVersionCompactionReport, RepairReport, Repository, RepositoryOptions,
-    RepositoryPerformanceSnapshot, SyncReport, Tag, TagPage, TraversalBudget, VersionSummary,
-    WriterLeaseMaintenance,
+    RepositoryPerformanceSnapshot, RetentionPinPage, SyncReport, Tag, TagPage, TagReflogPage,
+    TraversalBudget, VersionSummary, WriterLeaseMaintenance,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

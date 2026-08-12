@@ -155,6 +155,23 @@ are exact-deleted in restartable batches. Only one GC epoch may be active.
 - Perform takeover only after establishing that the previous writer cannot
   continue publishing.
 
+## Whole-history administration
+
+Do not build repository-wide jobs with `list_branches`, `list_tags`,
+`list_retention_pins`, `list_reflog`, or an in-memory commit closure. Their
+legacy convenience forms remain bounded compatibility APIs. Production jobs
+page branches, tags, pins, and tag/branch reflogs with their `*_page` methods.
+
+For a clone, fsck, repair, or export, start a `CommitClosureCursor` with the
+first bounded root page, attach later root pages with
+`extend_commit_closure`, and persist the cursor returned by every
+`commit_closure_page`. The cursor stays constant-size because its stack and
+visited set are immutable Prolly state. Each page has separate step and emitted
+commit limits and emits parents before children. Persist copied-object and
+source-to-destination commit mappings before persisting the next cursor. After
+the final result/ref CAS, repeatedly call `cleanup_commit_closure`; abandoned
+jobs require the same explicit bounded cleanup.
+
 ## Backup and restore
 
 A raw cross-bucket copy is not a valid repository restore: S3 assigns new

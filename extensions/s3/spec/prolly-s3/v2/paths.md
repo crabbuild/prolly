@@ -17,6 +17,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 | journal-derived index head | `P/journal-index/v2/heads/N.cbor` |
 | journal-derived node tree | `P/journal-index/v2/node-tree/nodes/sha256/H0/H1/H` |
 | journal-derived graph tree | `P/journal-index/v2/graph-tree/nodes/sha256/H0/H1/H` |
+| resumable commit-closure state | `P/administration/v2/closure/E/tree/nodes/sha256/H0/H1/H` |
 | GC coordinator | `P/gc/v2/coordinator.cbor` |
 | GC dirty root | `P/gc/v2/dirty-roots/E/S/H` |
 
@@ -67,6 +68,15 @@ Steady-state advancement performs no commit- or ref-namespace listing and is
 proportional only to the unindexed journal tail. The head also records the
 derived current target, providing exact per-branch ref freshness; global branch
 enumeration remains a separate resumable administrative concern.
+
+Whole-history administration first pages refs, tags, and pins, incrementally
+attaches their targets to a `CommitClosureCursor`, and advances under explicit
+step and output budgets. The constant-size cursor names immutable Prolly state
+holding the traversal stack and visited set. Commits are emitted
+parent-before-child so clone and repair can checkpoint mappings without
+buffering the DAG. Finished or abandoned jobs exact-delete `E` in bounded
+cleanup calls; the state is not a GC candidate while its externally persisted
+cursor may still be live.
 
 `E` is the hex GC epoch operation ID and `S` is a fixed-width, monotonically
 increasing dirty-root sequence. While an epoch is active, every branch, tag,

@@ -351,6 +351,39 @@ pub struct CommitPage {
     pub budget_exhausted: bool,
 }
 
+/// Durable state for a parent-before-child traversal of an arbitrary commit
+/// DAG closure. The large stack and visited set live in immutable Prolly nodes;
+/// serializing this cursor remains constant-size.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommitClosureCursor {
+    pub repository: RepositoryId,
+    pub traversal: OperationId,
+    pub state: TreeRootV1,
+    pub next_stack_sequence: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitClosurePage {
+    /// Parent-before-child commits, each emitted exactly once per traversal.
+    pub commits: Vec<(CommitId, BucketCommitV1)>,
+    pub cursor: CommitClosureCursor,
+    pub steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CommitClosureCleanupReport {
+    pub deleted_objects: usize,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct CommitClosureWork {
+    commit: CommitId,
+    finish: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FirstParentCursor {
     root: CommitId,
@@ -379,6 +412,34 @@ pub struct BranchPage {
 pub struct TagPage {
     pub tags: Vec<Tag>,
     pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetentionPinPage {
+    pub pins: Vec<RetentionPinV1>,
+    pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagReflogPage {
+    pub entries: Vec<(crate::ReflogEntryId, ReflogEntryV1)>,
+    pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchReflogPage {
+    pub entries: Vec<(crate::ReflogEntryId, ReflogEntryV1)>,
+    pub continuation: Option<BranchReflogCursor>,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BranchReflogCursor {
+    branch: String,
+    root: CommitId,
+    history: Option<HistoryCursor>,
+    inline_id: crate::ReflogEntryId,
+    inline_emitted: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -3657,6 +3718,108 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(entries)
     }
 
+    /// Bounded newest-to-oldest branch reflog traversal. Administrative ref
+    /// movements are emitted from the inline ref record; commit publications
+    /// then resume through the first-parent history cursor.
+    pub async fn list_branch_reflog_page(
+        &self,
+        branch: &str,
+        cursor: Option<&BranchReflogCursor>,
+        limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<BranchReflogPage> {
+        validate_branch(branch)?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "branch reflog page limit must be greater than zero",
+            ));
+        }
+        let (mut state, inline) = if let Some(cursor) = cursor {
+            (cursor.clone(), None)
+        } else {
+            let loaded = self.load_ref_including_tombstone(branch).await?;
+            (
+                BranchReflogCursor {
+                    branch: branch.to_string(),
+                    root: loaded.value.target,
+                    history: Some(HistoryCursor {
+                        root: loaded.value.target,
+                        next: loaded.value.target,
+                    }),
+                    inline_id: loaded.value.reflog,
+                    inline_emitted: false,
+                },
+                Some((loaded.value.reflog, loaded.value.inline_reflog)),
+            )
+        };
+        if state.branch != branch {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "branch reflog cursor belongs to another branch",
+            ));
+        }
+        let mut entries = Vec::with_capacity(limit);
+        if !state.inline_emitted {
+            let (id, entry) = inline.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidContinuationToken,
+                    "branch reflog cursor omitted its inline-entry state",
+                )
+            })?;
+            if entry.id()? != id {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "ref inline reflog identity mismatch",
+                ));
+            }
+            entries.push((id, entry));
+            state.inline_emitted = true;
+        }
+        let mut budget_exhausted = false;
+        if entries.len() < limit {
+            if let Some(history) = state.history.as_ref() {
+                let page = self
+                    .log_page_bounded(
+                        state.root,
+                        Some(history),
+                        limit - entries.len(),
+                        budget,
+                    )
+                    .await?;
+                for (id, commit) in page.commits {
+                    let delta = self.load_commit_delta(&commit).await?;
+                    if let Some(operation) = delta.operation_ids.first().copied() {
+                        let entry = ReflogEntryV1 {
+                            branch: branch.to_string(),
+                            old_target: commit.parents.first().copied(),
+                            new_target: id,
+                            operation,
+                            actor: commit.author,
+                            message: commit.message.unwrap_or_default(),
+                            created_at_millis: commit.created_at_millis,
+                        };
+                        let id = entry.id()?;
+                        if id != state.inline_id
+                            && !entries.iter().any(|(existing, _)| *existing == id)
+                        {
+                            entries.push((id, entry));
+                        }
+                    }
+                }
+                state.history = page.continuation;
+                budget_exhausted = page.budget_exhausted;
+            }
+        }
+        let continuation = state.history.is_some().then_some(state);
+        Ok(BranchReflogPage {
+            entries,
+            continuation,
+            budget_exhausted,
+        })
+    }
+
     async fn physical_reflog_history(
         &self,
         branch: &str,
@@ -4359,29 +4522,13 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn list_retention_pins(&self) -> Result<Vec<RetentionPinV1>> {
-        let prefix = format!("{}/retention/pins/", self.options.repository_prefix);
-        let now = self.now_millis()?;
         let mut continuation = None;
         let mut pins = Vec::new();
         loop {
             let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
+                .list_retention_pins_page(continuation, 1_000)
                 .await?;
-            for entry in page.entries {
-                let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
-                    continue;
-                };
-                let pin: RetentionPinV1 = decode_canonical(&stored.bytes)?;
-                if !pin.tombstone && (pin.expires_at_millis == 0 || pin.expires_at_millis > now) {
-                    pins.push(pin);
-                }
-            }
+            pins.extend(page.pins);
             continuation = page.continuation;
             if continuation.is_none() {
                 break;
@@ -4389,6 +4536,45 @@ impl<P: ObjectPlane> Repository<P> {
         }
         pins.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(pins)
+    }
+
+    pub async fn list_retention_pins_page(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<RetentionPinPage> {
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "retention-pin page limit must be greater than zero",
+            ));
+        }
+        let now = self.now_millis()?;
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/retention/pins/", self.options.repository_prefix),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut pins = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            let pin: RetentionPinV1 = decode_canonical(&stored.bytes)?;
+            if !pin.tombstone && (pin.expires_at_millis == 0 || pin.expires_at_millis > now) {
+                pins.push(pin);
+            }
+        }
+        pins.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(RetentionPinPage {
+            pins,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn list_tag_reflog(
@@ -4402,6 +4588,67 @@ impl<P: ObjectPlane> Repository<P> {
             hex::encode(tag.as_bytes())
         );
         self.list_reflog_prefix(tag, prefix).await
+    }
+
+    pub async fn list_tag_reflog_page(
+        &self,
+        tag: &str,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<TagReflogPage> {
+        validate_branch(tag)?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "tag reflog page limit must be greater than zero",
+            ));
+        }
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!(
+                    "{}/reflogs/tags/{}/",
+                    self.options.repository_prefix,
+                    hex::encode(tag.as_bytes())
+                ),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut entries = Vec::with_capacity(page.entries.len());
+        for listed in page.entries {
+            let object = self
+                .plane
+                .get(GetRequest {
+                    path: listed.path,
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "listed reflog entry disappeared")
+                })?;
+            let entry: ReflogEntryV1 = decode_canonical(&object.bytes)?;
+            if entry.branch != tag {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "reflog entry escaped its ref namespace",
+                ));
+            }
+            entries.push((entry.id()?, entry));
+        }
+        entries.sort_by(|left, right| {
+            left.1
+                .created_at_millis
+                .cmp(&right.1.created_at_millis)
+                .then_with(|| left.0.cmp(&right.0))
+        });
+        Ok(TagReflogPage {
+            entries,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn recover_tag(
@@ -6793,6 +7040,304 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn log(&self, branch: &str, limit: usize) -> Result<Vec<(CommitId, BucketCommitV1)>> {
         self.log_at(self.head(branch).await?, None, limit).await
+    }
+
+    /// Start a constant-size-cursor traversal over one or more commit roots.
+    /// Additional paged branch/tag roots may be attached later with
+    /// [`Self::extend_commit_closure`].
+    pub async fn start_commit_closure(
+        &self,
+        roots: &[CommitId],
+    ) -> Result<CommitClosureCursor> {
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure start requires between 1 and 1,000 roots",
+            ));
+        }
+        let traversal = self.new_operation();
+        let index = self.commit_closure_index(traversal)?;
+        let mut cursor = CommitClosureCursor {
+            repository: self.format.repository_id,
+            traversal,
+            state: TreeRootV1::from_tree(&index.engine.create())?,
+            next_stack_sequence: u64::MAX,
+        };
+        self.extend_commit_closure(&mut cursor, roots).await?;
+        Ok(cursor)
+    }
+
+    /// Attach another bounded page of roots to an existing traversal. This is
+    /// how repository-wide fsck/clone/repair first page refs without retaining
+    /// all ref targets in memory.
+    pub async fn extend_commit_closure(
+        &self,
+        cursor: &mut CommitClosureCursor,
+        roots: &[CommitId],
+    ) -> Result<()> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure extension requires between 1 and 1,000 roots",
+            ));
+        }
+        let index = self.commit_closure_index(cursor.traversal)?;
+        index.install_root(cursor.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut unique = roots.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        let mut mutations = Vec::with_capacity(unique.len());
+        for commit in unique.into_iter().rev() {
+            if index
+                .engine
+                .get(&tree, &commit_closure_seen_key(commit))
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key: commit_closure_stack_key(cursor.next_stack_sequence),
+                val: encode_canonical(&CommitClosureWork {
+                    commit,
+                    finish: false,
+                })?,
+            });
+            cursor.next_stack_sequence = cursor
+                .next_stack_sequence
+                .checked_sub(1)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::HistoryLimitExceeded,
+                        "commit-closure stack sequence is exhausted",
+                    )
+                })?;
+        }
+        if !mutations.is_empty() {
+            tree = index.engine.batch(&tree, mutations).await?;
+            cursor.state = TreeRootV1::from_tree(&tree)?;
+        }
+        Ok(())
+    }
+
+    /// Advance a durable DAG traversal under explicit work and output bounds.
+    /// Commits are emitted parent-before-child so clone/repair pipelines can
+    /// materialize parent mappings without buffering the complete history.
+    pub async fn commit_closure_page(
+        &self,
+        cursor: &CommitClosureCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<CommitClosurePage> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if !(1..=100_000).contains(&max_steps) || !(1..=1_000).contains(&max_commits) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure page requires 1..=100,000 steps and 1..=1,000 commits",
+            ));
+        }
+        let index = self.commit_closure_index(cursor.traversal)?;
+        index.install_root(cursor.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut next_cursor = cursor.clone();
+        let mut commits = Vec::with_capacity(max_commits.min(64));
+        let mut steps = 0usize;
+        while steps < max_steps && commits.len() < max_commits {
+            let mut queue = index.engine.prefix(&tree, b"q/").await?;
+            let Some(entry) = queue.next().await else {
+                break;
+            };
+            let (stack_key, encoded) = entry?;
+            drop(queue);
+            let work: CommitClosureWork = decode_canonical(&encoded)?;
+            let seen_key = commit_closure_seen_key(work.commit);
+            let state = index.engine.get(&tree, &seen_key).await?;
+            let mut mutations = vec![Mutation::Delete { key: stack_key }];
+            if work.finish {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        let commit = self.load_commit(work.commit).await?;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![1],
+                        });
+                        commits.push((work.commit, commit));
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure finish record has invalid state",
+                        ));
+                    }
+                }
+            } else {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit graph contains a cycle",
+                        ));
+                    }
+                    None => {
+                        let commit = self.load_commit(work.commit).await?;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![0],
+                        });
+                        self.push_commit_closure_work(
+                            &mut next_cursor,
+                            &mut mutations,
+                            work.commit,
+                            true,
+                        )?;
+                        for parent in commit.parents.iter().rev() {
+                            self.push_commit_closure_work(
+                                &mut next_cursor,
+                                &mut mutations,
+                                *parent,
+                                false,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure visited state is malformed",
+                        ));
+                    }
+                }
+            }
+            tree = index.engine.batch(&tree, mutations).await?;
+            steps += 1;
+        }
+        next_cursor.state = TreeRootV1::from_tree(&tree)?;
+        let mut remaining = index.engine.prefix(&tree, b"q/").await?;
+        let complete = remaining.next().await.is_none();
+        Ok(CommitClosurePage {
+            commits,
+            cursor: next_cursor,
+            steps,
+            complete,
+            budget_exhausted: !complete && steps == max_steps,
+        })
+    }
+
+    /// Exact-delete one bounded page of immutable traversal-state nodes after
+    /// a clone/fsck/repair job has durably committed its final result.
+    pub async fn cleanup_commit_closure(
+        &self,
+        cursor: &CommitClosureCursor,
+        limit: usize,
+    ) -> Result<CommitClosureCleanupReport> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if !(1..=1_000).contains(&limit) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure cleanup limit must be between 1 and 1,000",
+            ));
+        }
+        let prefix = format!(
+            "{}/administration/v2/closure/{}/tree/nodes/sha256/",
+            self.options.repository_prefix,
+            hex::encode(cursor.traversal.as_bytes())
+        );
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix,
+                continuation: None,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        if page.entries.is_empty() {
+            return Ok(CommitClosureCleanupReport {
+                deleted_objects: 0,
+                complete: true,
+            });
+        }
+        let mut targets = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let token = entry.metadata.token;
+            let physical = token
+                .version_id
+                .clone()
+                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+            targets.push((entry.path, physical));
+        }
+        let deleted_objects = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if matches!(outcome, DeleteOutcome::TokenMismatch) {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "commit-closure state changed during exact cleanup",
+                ));
+            }
+        }
+        Ok(CommitClosureCleanupReport {
+            deleted_objects,
+            complete: page.continuation.is_none(),
+        })
+    }
+
+    fn push_commit_closure_work(
+        &self,
+        cursor: &mut CommitClosureCursor,
+        mutations: &mut Vec<Mutation>,
+        commit: CommitId,
+        finish: bool,
+    ) -> Result<()> {
+        mutations.push(Mutation::Upsert {
+            key: commit_closure_stack_key(cursor.next_stack_sequence),
+            val: encode_canonical(&CommitClosureWork { commit, finish })?,
+        });
+        cursor.next_stack_sequence = cursor
+            .next_stack_sequence
+            .checked_sub(1)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::HistoryLimitExceeded,
+                    "commit-closure stack sequence is exhausted",
+                )
+            })?;
+        Ok(())
+    }
+
+    fn validate_commit_closure_cursor(&self, cursor: &CommitClosureCursor) -> Result<()> {
+        if cursor.repository != self.format.repository_id
+            || cursor.traversal.is_nil()
+            || cursor.state.format_digest != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "commit-closure cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
+    fn commit_closure_index(&self, traversal: OperationId) -> Result<ProllyMetadataIndex<P>> {
+        let path = format!(
+            "administration/v2/closure/{}/tree",
+            hex::encode(traversal.as_bytes())
+        );
+        ProllyMetadataIndex::new(
+            self.plane.clone(),
+            &self.options.repository_prefix,
+            self.format.repository_id,
+            self.format.state_tree_format.clone(),
+            self.node_cache.clone(),
+            MetadataIndexSpec {
+                path: &path,
+                protocol_version: 6,
+                name: "commit-closure",
+            },
+        )
     }
 
     /// Bounded, resumable first-parent traversal. Unlike `log_at`, resuming
@@ -10985,6 +11530,16 @@ fn gc_epoch_v2_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
 
 fn gc_coordinator_v2_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/gc/v2/coordinator.cbor"))
+}
+
+fn commit_closure_stack_key(sequence: u64) -> Vec<u8> {
+    format!("q/{sequence:020}").into_bytes()
+}
+
+fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
+    let mut key = b"s/".to_vec();
+    key.extend_from_slice(commit.as_bytes());
+    key
 }
 
 fn gc_dirty_root_v2_prefix(prefix: &str, epoch: OperationId) -> String {
