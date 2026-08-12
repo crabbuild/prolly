@@ -531,6 +531,9 @@ pub struct MemoryObjectPlane {
     physical_put_delay_millis: Arc<AtomicU64>,
     physical_put_in_flight: Arc<AtomicU64>,
     physical_put_max_in_flight: Arc<AtomicU64>,
+    compare_exchange_delay_millis: Arc<AtomicU64>,
+    compare_exchange_in_flight: Arc<AtomicU64>,
+    compare_exchange_max_in_flight: Arc<AtomicU64>,
 }
 
 struct InFlightGuard(Arc<AtomicU64>);
@@ -634,6 +637,9 @@ impl MemoryObjectPlane {
             physical_put_delay_millis: Arc::new(AtomicU64::new(0)),
             physical_put_in_flight: Arc::new(AtomicU64::new(0)),
             physical_put_max_in_flight: Arc::new(AtomicU64::new(0)),
+            compare_exchange_delay_millis: Arc::new(AtomicU64::new(0)),
+            compare_exchange_in_flight: Arc::new(AtomicU64::new(0)),
+            compare_exchange_max_in_flight: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -650,6 +656,21 @@ impl MemoryObjectPlane {
 
     pub fn reset_physical_put_concurrency(&self) {
         self.physical_put_max_in_flight.store(0, Ordering::Relaxed);
+    }
+
+    /// Test hook for proving independent mutable-object publications overlap.
+    pub fn set_compare_exchange_delay_millis(&self, delay_millis: u64) {
+        self.compare_exchange_delay_millis
+            .store(delay_millis, Ordering::Relaxed);
+    }
+
+    pub fn max_compare_exchanges_in_flight(&self) -> u64 {
+        self.compare_exchange_max_in_flight.load(Ordering::Relaxed)
+    }
+
+    pub fn reset_compare_exchange_concurrency(&self) {
+        self.compare_exchange_max_in_flight
+            .store(0, Ordering::Relaxed);
     }
 
     pub fn lose_next_physical_put_response(&self) {
@@ -860,6 +881,17 @@ impl ObjectPlane for MemoryObjectPlane {
         self.requests
             .compare_exchange
             .fetch_add(1, Ordering::Relaxed);
+        let in_flight = self
+            .compare_exchange_in_flight
+            .fetch_add(1, Ordering::Relaxed)
+            + 1;
+        self.compare_exchange_max_in_flight
+            .fetch_max(in_flight, Ordering::Relaxed);
+        let _in_flight = InFlightGuard(self.compare_exchange_in_flight.clone());
+        let delay = self.compare_exchange_delay_millis.load(Ordering::Relaxed);
+        if delay > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        }
         let mut state = self
             .inner
             .write()

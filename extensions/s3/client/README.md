@@ -277,8 +277,9 @@ assert_eq!(result.commit.as_ref().unwrap().operation, operation);
 ```
 
 The client does not retry logical branch conflicts. Local payload uploads may
-run concurrently, while the short metadata-publication phase is serialized; a
-stale expected head fails explicitly.
+run concurrently. The short metadata-publication phase is serialized per
+branch, while independent branches can publish concurrently; a stale expected
+head fails explicitly.
 
 ## Add a persistent node cache
 

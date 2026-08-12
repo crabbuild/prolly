@@ -657,6 +657,11 @@ pub struct NodeIndexMaintenance {
     task: tokio::task::JoinHandle<()>,
 }
 
+struct PublicationLaneGuard<'a> {
+    _barrier: tokio::sync::RwLockReadGuard<'a, ()>,
+    _lane: tokio::sync::OwnedMutexGuard<()>,
+}
+
 impl Drop for NodeIndexMaintenance {
     fn drop(&mut self) {
         self.task.abort();
@@ -676,7 +681,8 @@ pub struct Repository<P: ObjectPlane> {
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
     warm_branches: Arc<RwLock<BoundedCache<String, WarmBranchState>>>,
     commit_cache: Arc<RwLock<BoundedCache<CommitId, BucketCommitV1>>>,
-    physical_publication: Arc<tokio::sync::Mutex<()>>,
+    publication_barrier: Arc<tokio::sync::RwLock<()>>,
+    publication_lanes: Arc<std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>>,
     payload_writes: Arc<tokio::sync::Semaphore>,
     operation_locks: Arc<std::sync::Mutex<BTreeMap<OperationId, Weak<tokio::sync::Mutex<()>>>>>,
     lease_renewal: Arc<tokio::sync::Mutex<()>>,
@@ -946,7 +952,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer_lease: Arc::new(RwLock::new(None)),
             warm_branches: Arc::new(RwLock::new(BoundedCache::new(max_cached_branches))),
             commit_cache: Arc::new(RwLock::new(BoundedCache::new(max_cached_commits))),
-            physical_publication: Arc::new(tokio::sync::Mutex::new(())),
+            publication_barrier: Arc::new(tokio::sync::RwLock::new(())),
+            publication_lanes: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             payload_writes: Arc::new(tokio::sync::Semaphore::new(max_parallel_payload_writes)),
             operation_locks: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             lease_renewal: Arc::new(tokio::sync::Mutex::new(())),
@@ -997,7 +1004,7 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    async fn lock_publication(&self) -> tokio::sync::MutexGuard<'_, ()> {
+    fn begin_publication_wait(&self) -> std::time::Instant {
         let depth = self
             .performance
             .publication_queue_depth
@@ -1006,8 +1013,10 @@ impl<P: ObjectPlane> Repository<P> {
         self.performance
             .publication_max_queue_depth
             .fetch_max(depth, Ordering::Relaxed);
-        let started = std::time::Instant::now();
-        let guard = self.physical_publication.lock().await;
+        std::time::Instant::now()
+    }
+
+    fn finish_publication_wait(&self, started: std::time::Instant) {
         self.performance
             .publication_queue_depth
             .fetch_sub(1, Ordering::Relaxed);
@@ -1018,7 +1027,54 @@ impl<P: ObjectPlane> Repository<P> {
             u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
-        guard
+    }
+
+    fn publication_lane(&self, scope: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut lanes = self
+            .publication_lanes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        lanes.retain(|_, lane| lane.strong_count() > 0);
+        if let Some(lane) = lanes.get(scope).and_then(Weak::upgrade) {
+            return lane;
+        }
+        let lane = Arc::new(tokio::sync::Mutex::new(()));
+        lanes.insert(scope.to_string(), Arc::downgrade(&lane));
+        lane
+    }
+
+    async fn lock_publication_lane(&self, scope: &str) -> PublicationLaneGuard<'_> {
+        let started = self.begin_publication_wait();
+        // Take the keyed lane first. Otherwise multiple waiters for one branch
+        // could hold read locks and unnecessarily starve global maintenance.
+        let lane = self.publication_lane(scope).lock_owned().await;
+        let barrier = self.publication_barrier.read().await;
+        self.finish_publication_wait(started);
+        PublicationLaneGuard {
+            _barrier: barrier,
+            _lane: lane,
+        }
+    }
+
+    async fn lock_branch_publication(&self, branch: &str) -> PublicationLaneGuard<'_> {
+        self.lock_publication_lane(&format!("branch:{branch}"))
+            .await
+    }
+
+    async fn lock_named_publication(
+        &self,
+        namespace: &str,
+        name: &str,
+    ) -> PublicationLaneGuard<'_> {
+        self.lock_publication_lane(&format!("{namespace}:{name}"))
+            .await
+    }
+
+    async fn lock_global_publication(&self) -> tokio::sync::RwLockWriteGuard<'_, ()> {
+        let started = self.begin_publication_wait();
+        let barrier = self.publication_barrier.write().await;
+        self.finish_publication_wait(started);
+        barrier
     }
 
     /// Serialize requests that reuse an idempotency key before they touch the
@@ -2232,7 +2288,7 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<RefVersionCompactionReport> {
         validate_branch(branch)?;
         self.physical_writer_generation_for_mutation().await?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(branch).await;
         let loaded = self.load_ref_including_tombstone(branch).await?;
         self.compact_branch_ref_versions_inner(branch, &loaded)
             .await
@@ -2937,6 +2993,14 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
         let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
+        let target_write_store = target.node_store.isolated_write_session();
+        let target_engine = AsyncProlly::new(
+            target_write_store.clone(),
+            Config {
+                format: target.format.state_tree_format.clone(),
+                runtime: RuntimeConfig::default(),
+            },
+        );
         let mut binding_map: BTreeMap<(Vec<u8>, ObjectVersionId), crate::PhysicalObjectBindingV1> =
             BTreeMap::new();
         for (source_id, source_commit) in source_ordered {
@@ -2956,7 +3020,7 @@ impl<P: ObjectPlane> Repository<P> {
                 Some(parent) => Some(target.load_commit(*parent).await?),
                 None => None,
             };
-            let empty = target.engine.create();
+            let empty = target_engine.create();
             let mut objects = match &base {
                 Some(commit) => target
                     .tree_from_root(&commit.state.objects, &target.format.state_tree_format)?,
@@ -3039,8 +3103,7 @@ impl<P: ObjectPlane> Repository<P> {
                 binding_map.insert(binding_key, binding.clone());
                 version.binding = binding;
                 version.validate()?;
-                versions = target
-                    .engine
+                versions = target_engine
                     .put(
                         &versions,
                         version_tree_key(&transition.key, version.body.order, version.id),
@@ -3048,10 +3111,9 @@ impl<P: ObjectPlane> Repository<P> {
                     )
                     .await?;
                 objects = if transition.delete_marker {
-                    target.engine.delete(&objects, &transition.key).await?
+                    target_engine.delete(&objects, &transition.key).await?
                 } else {
-                    target
-                        .engine
+                    target_engine
                         .put(
                             &objects,
                             transition.key.clone(),
@@ -3073,8 +3135,7 @@ impl<P: ObjectPlane> Repository<P> {
                             "physical transfer delta names a missing operation",
                         )
                     })?;
-                operations = target
-                    .engine
+                operations = target_engine
                     .put(&operations, operation.as_bytes().to_vec(), record)
                     .await?;
             }
@@ -3089,7 +3150,7 @@ impl<P: ObjectPlane> Repository<P> {
                     "physical transfer replay did not reproduce the logical operation state",
                 ));
             }
-            let prepared = target.node_store.prepare_node_pack(
+            let prepared = target_write_store.prepare_node_pack(
                 tree_format_digest(&target.format.state_tree_format)?,
                 Vec::new(),
             )?;
@@ -3123,7 +3184,7 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_global_publication().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut report) = source
             .replay_physical_history_to(self, &[source_head], false)
@@ -3147,7 +3208,9 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
         let source_head = self.head(source_branch).await?;
-        let _publication = destination.lock_publication().await;
+        let _publication = destination
+            .lock_branch_publication(destination_branch)
+            .await;
         let (mapped, mut report) = self
             .replay_physical_history_to(destination, &[source_head], false)
             .await?;
@@ -3196,7 +3259,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(name)?;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let _physical_publication = self.lock_publication().await;
+        let _physical_publication = self.lock_branch_publication(name).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
@@ -3265,7 +3328,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_branch(&self, name: &str, expected: CommitId) -> Result<()> {
-        let _physical_publication = self.lock_publication().await;
+        let _physical_publication = self.lock_branch_publication(name).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let loaded = self.load_ref(name).await?;
         if loaded.value.target != expected {
@@ -3488,7 +3551,7 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let _physical_publication = self.lock_publication().await;
+        let _physical_publication = self.lock_branch_publication(branch).await;
         self.move_ref_inner(branch, loaded, target, reason).await
     }
 
@@ -3733,7 +3796,7 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         validate_branch(name)?;
         self.load_commit(target).await?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_named_publication("tag", name).await;
         self.physical_writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
@@ -3947,6 +4010,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_tag(&self, name: &str, expected: CommitId) -> Result<()> {
+        let _publication = self.lock_named_publication("tag", name).await;
         let path = tag_path(&self.options.repository_prefix, name)?;
         let stored = self
             .plane
@@ -4037,7 +4101,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.load_commit(target).await?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_named_publication("pin", name).await;
         self.physical_writer_generation_for_mutation().await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
@@ -4095,6 +4159,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_retention_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        let _publication = self.lock_named_publication("pin", name).await;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let stored =
             self.plane.load_mutable(&path).await?.ok_or_else(|| {
@@ -4188,6 +4253,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "tag recovery requires a non-empty reason",
             ));
         }
+        let _publication = self.lock_named_publication("tag", tag).await;
         let entry = self.tag_reflog(tag, reflog).await?;
         let target = entry.old_target.ok_or_else(|| {
             Error::new(
@@ -4567,7 +4633,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "physical provider result disagrees with the uploaded object identity",
             ));
         }
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(branch).await;
         self.commit_one(
             branch,
             key,
@@ -4678,7 +4744,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "physical provider result disagrees with the uploaded object identity",
             ));
         }
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(branch).await;
         self.commit_one(
             branch,
             key,
@@ -5096,7 +5162,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "physical multipart result disagrees with its declared object identity",
             ));
         }
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(&session.branch).await;
         self.commit_one(
             &session.branch,
             session.key,
@@ -5212,7 +5278,7 @@ impl<P: ObjectPlane> Repository<P> {
             let (key, mutation) = result?;
             prepared.insert(key, mutation);
         }
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(&batch.branch).await;
         self.commit_batch(&batch, &prepared, request_digest).await
     }
 
@@ -5333,7 +5399,7 @@ impl<P: ObjectPlane> Repository<P> {
             },
         };
         drop(_payload_permit);
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(branch).await;
         self.commit_one(
             branch,
             key,
@@ -5438,15 +5504,16 @@ impl<P: ObjectPlane> Repository<P> {
             bindings.insert(key, binding);
         }
 
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(branch).await;
         let warm = self.warm_branch_state(branch).await?;
         let loaded_ref = LoadedRef {
             value: warm.reference,
             token: warm.token,
         };
         let base = warm.commit;
+        let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
-            self.node_store.clone(),
+            write_store.clone(),
             Config {
                 format: self.format.state_tree_format.clone(),
                 runtime: RuntimeConfig::default(),
@@ -5547,7 +5614,7 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let prepared = self.node_store.prepare_node_pack(
+        let prepared = write_store.prepare_node_pack(
             tree_format_digest(&self.format.state_tree_format)?,
             Vec::new(),
         )?;
@@ -5756,7 +5823,7 @@ impl<P: ObjectPlane> Repository<P> {
             },
         };
         drop(_payload_permit);
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_branch_publication(branch).await;
         self.commit_one(
             branch,
             destination_key,
@@ -5787,8 +5854,9 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         let created_at_millis = self.now_millis()?;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
-            self.node_store.clone(),
+            write_store.clone(),
             Config {
                 format: self.format.state_tree_format.clone(),
                 runtime: RuntimeConfig::default(),
@@ -5925,7 +5993,7 @@ impl<P: ObjectPlane> Repository<P> {
                 ),
             }],
         };
-        let prepared = self.node_store.prepare_node_pack(
+        let prepared = write_store.prepare_node_pack(
             tree_format_digest(&self.format.state_tree_format)?,
             Vec::new(),
         )?;
@@ -6058,8 +6126,9 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
-            self.node_store.clone(),
+            write_store.clone(),
             Config {
                 format: self.format.state_tree_format.clone(),
                 runtime: RuntimeConfig::default(),
@@ -6173,7 +6242,7 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![batch.operation],
             changes: transitions,
         };
-        let prepared = self.node_store.prepare_node_pack(
+        let prepared = write_store.prepare_node_pack(
             tree_format_digest(&self.format.state_tree_format)?,
             Vec::new(),
         )?;
@@ -7101,10 +7170,11 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        let _physical_publication = self.lock_publication().await;
+        let _physical_publication = self.lock_branch_publication(target).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
-            self.node_store.clone(),
+            write_store.clone(),
             Config {
                 format: self.format.state_tree_format.clone(),
                 runtime: RuntimeConfig::default(),
@@ -7271,7 +7341,7 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let prepared = self.node_store.prepare_node_pack(
+        let prepared = write_store.prepare_node_pack(
             tree_format_digest(&self.format.state_tree_format)?,
             Vec::new(),
         )?;
@@ -7352,10 +7422,11 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let _physical_publication = self.lock_publication().await;
+        let _physical_publication = self.lock_branch_publication(branch).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
-            self.node_store.clone(),
+            write_store.clone(),
             Config {
                 format: self.format.state_tree_format.clone(),
                 runtime: RuntimeConfig::default(),
@@ -7504,7 +7575,7 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: vec![operation],
             changes: transitions,
         };
-        let prepared = self.node_store.prepare_node_pack(
+        let prepared = write_store.prepare_node_pack(
             tree_format_digest(&self.format.state_tree_format)?,
             Vec::new(),
         )?;
@@ -7770,7 +7841,7 @@ impl<P: ObjectPlane> Repository<P> {
                 fsck,
             });
         }
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_global_publication().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut sync) = source
             .replay_physical_history_to(self, &[source_head], true)
@@ -8118,7 +8189,7 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn start_gc_epoch_v2(&self, grace_millis: u64) -> Result<GcEpochV2> {
         self.validate_gc_plan_limits(grace_millis, 1)?;
         self.physical_writer_generation_for_mutation().await?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_global_publication().await;
         let planned_at_millis = self.now_millis()?;
         let cutoff_millis = planned_at_millis
             .checked_sub(grace_millis)
@@ -8187,7 +8258,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.physical_writer_generation_for_mutation().await?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_global_publication().await;
         let acquisition = self
             .performance
             .publication_acquisitions
@@ -8751,7 +8822,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.physical_writer_generation_for_mutation().await?;
-        let _publication = self.lock_publication().await;
+        let _publication = self.lock_global_publication().await;
         let acquisition = self
             .performance
             .publication_acquisitions

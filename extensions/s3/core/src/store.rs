@@ -25,8 +25,9 @@ struct PackedNodeLocation {
     sha256: [u8; 32],
 }
 
+type PackedPendingNodes = Arc<RwLock<BTreeMap<Cid, Vec<u8>>>>;
+
 struct PackedNodeState {
-    pending: RwLock<BTreeMap<Cid, Vec<u8>>>,
     locations: RwLock<BoundedNodeLocations>,
     packs: RwLock<PackedNodeCache>,
     node_cache: Option<Arc<dyn NodeCache>>,
@@ -172,6 +173,7 @@ pub struct ProllyObjectStore<P> {
     plane: Arc<P>,
     repository_prefix: String,
     packed: Option<Arc<PackedNodeState>>,
+    packed_pending: Option<PackedPendingNodes>,
     direct: Option<Arc<DirectNodeState>>,
 }
 
@@ -181,6 +183,7 @@ impl<P> Clone for ProllyObjectStore<P> {
             plane: self.plane.clone(),
             repository_prefix: self.repository_prefix.clone(),
             packed: self.packed.clone(),
+            packed_pending: self.packed_pending.clone(),
             direct: self.direct.clone(),
         }
     }
@@ -192,6 +195,7 @@ impl<P> ProllyObjectStore<P> {
             plane,
             repository_prefix: repository_prefix.into(),
             packed: None,
+            packed_pending: None,
             direct: None,
         }
     }
@@ -218,7 +222,6 @@ impl<P> ProllyObjectStore<P> {
             plane,
             repository_prefix: repository_prefix.into(),
             packed: Some(Arc::new(PackedNodeState {
-                pending: RwLock::new(BTreeMap::new()),
                 locations: RwLock::new(BoundedNodeLocations::new(max_cached_locations)),
                 packs: RwLock::new(PackedNodeCache::new(max_cached_pack_bytes)),
                 node_cache: None,
@@ -233,6 +236,7 @@ impl<P> ProllyObjectStore<P> {
                 ranged_fetches: AtomicU64::new(0),
                 locator: RwLock::new(None),
             })),
+            packed_pending: Some(Arc::new(RwLock::new(BTreeMap::new()))),
             direct: None,
         }
     }
@@ -249,6 +253,7 @@ impl<P> ProllyObjectStore<P> {
             plane,
             repository_prefix: repository_prefix.into(),
             packed: None,
+            packed_pending: None,
             direct: Some(Arc::new(DirectNodeState {
                 node_cache,
                 cache_namespace: NodeCacheNamespace {
@@ -321,6 +326,16 @@ impl<P> ProllyObjectStore<P> {
 impl<P: ObjectPlane> ProllyObjectStore<P> {
     pub fn is_packed(&self) -> bool {
         self.packed.is_some()
+    }
+
+    /// Share immutable node locations and caches while isolating newly built
+    /// nodes to one commit construction session.
+    pub(crate) fn isolated_write_session(&self) -> Self {
+        let mut session = self.clone();
+        if self.packed.is_some() {
+            session.packed_pending = Some(Arc::new(RwLock::new(BTreeMap::new())));
+        }
+        session
     }
 
     pub fn node_cache_snapshot(&self) -> NodeCacheSnapshot {
@@ -511,17 +526,27 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         format_digest: TreeFormatDigest,
         attachments: Vec<(NodePackAttachmentKindV1, Vec<u8>)>,
     ) -> Result<Option<PreparedNodePack>> {
-        let Some(state) = &self.packed else {
-            return Ok(None);
-        };
-        let pending = state
-            .pending
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-            .clone();
-        if pending.is_empty() && attachments.is_empty() {
+        if self.packed.is_none() {
             return Ok(None);
         }
+        let mut pending_guard = self
+            .packed_pending
+            .as_ref()
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "packed pending-node session is absent",
+                )
+            })?
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?;
+        if pending_guard.is_empty() && attachments.is_empty() {
+            return Ok(None);
+        }
+        // A write session owns its pending set. Drain it into the prepared pack
+        // so a long-running replay can safely prepare more than one commit.
+        let pending = std::mem::take(&mut *pending_guard);
+        drop(pending_guard);
         let mut payload = Vec::new();
         let mut entries = Vec::with_capacity(pending.len());
         for (cid, bytes) in &pending {
@@ -610,16 +635,6 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 Arc::new(pack),
                 usize::try_from(reference.object_len).unwrap_or(usize::MAX),
             );
-        {
-            let mut live_pending = state.pending.write().map_err(|_| {
-                Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
-            })?;
-            for (cid, bytes) in &pending {
-                if live_pending.get(cid) == Some(bytes) {
-                    live_pending.remove(cid);
-                }
-            }
-        }
         futures_util::stream::iter(pending)
             .for_each_concurrent(Some(16), |(cid, bytes)| async move {
                 self.admit_node(cid, bytes).await;
@@ -687,8 +702,13 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let state = self.packed.as_ref().ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "packed node state is absent")
         })?;
-        if let Some(bytes) = state
-            .pending
+        let pending = self.packed_pending.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "packed pending-node session is absent",
+            )
+        })?;
+        if let Some(bytes) = pending
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
             .get(&cid)
@@ -722,8 +742,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
 
         // Another request may have populated any tier while this request was
         // waiting for the CID-scoped fetch lock.
-        if let Some(bytes) = state
-            .pending
+        if let Some(bytes) = pending
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
             .get(&cid)
@@ -1113,9 +1132,15 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
                 "attempted Prolly node write under the wrong CID",
             ));
         }
-        if let Some(state) = &self.packed {
-            state
-                .pending
+        if self.packed.is_some() {
+            self.packed_pending
+                .as_ref()
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "packed pending-node session is absent",
+                    )
+                })?
                 .write()
                 .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
                 .insert(Cid(key.try_into().expect("length checked")), value.to_vec());
@@ -1137,15 +1162,21 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
     }
 
     async fn delete(&self, key: &[u8]) -> Result<()> {
-        if let Some(state) = &self.packed {
+        if self.packed.is_some() {
             if key.len() != 32 {
                 return Err(Error::new(
                     ErrorCode::CorruptNode,
                     format!("Prolly node key has {} bytes, expected 32", key.len()),
                 ));
             }
-            state
-                .pending
+            self.packed_pending
+                .as_ref()
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "packed pending-node session is absent",
+                    )
+                })?
                 .write()
                 .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
                 .remove(&Cid(key.try_into().expect("length checked")));

@@ -250,9 +250,10 @@ and advances the node-index head. Cache write-through adds local I/O but no
 foreground S3 request; explicit prewarming performs the traversal reads needed
 to populate a new host.
 
-The fenced writer serializes only publication for a single branch. Scale-out
-uses independent branches or repository partitions; a branch with one mutable
-head has a finite maximum commit rate.
+The fenced writer uses one publication lane per branch. Different branch refs
+can publish concurrently; repository-wide maintenance takes an exclusive
+barrier across those lanes. Scale-out uses independent branches or repository
+partitions; a branch with one mutable head has a finite maximum commit rate.
 
 ## Garbage collection at billion scale
 

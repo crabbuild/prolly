@@ -35,7 +35,8 @@ path and publishes up to 100 whole files per commit by default.
 - The bucket must have physical versioning enabled.
 - The wrapper must be the exclusive writer for managed object keys.
 - One fenced writer service owns mutations. Concurrent payload requests run in
-  parallel; only commit construction and ref publication are serialized.
+  parallel; commit construction and ref publication are serialized per branch,
+  and independent branches publish concurrently.
 - Reads always use the exact S3 `VersionId` recorded by the selected Prolly
   commit. A raw `GetObject` without `version_id` is not a canonical read.
 - Bucket lifecycle rules must not expire versions managed by the repository.

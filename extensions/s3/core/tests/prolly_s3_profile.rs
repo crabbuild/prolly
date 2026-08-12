@@ -784,6 +784,51 @@ async fn physical_batch_payload_uploads_are_bounded_and_parallel() {
     assert_eq!(plane.max_physical_puts_in_flight(), 3);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn independent_branches_publish_their_refs_concurrently() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        physical_options(".prolly/prolly-s3/independent-branch-lanes"),
+    )
+    .await
+    .unwrap();
+    let root = repository.head("main").await.unwrap();
+    repository.create_branch("alpha", root).await.unwrap();
+    repository.create_branch("beta", root).await.unwrap();
+
+    plane.set_compare_exchange_delay_millis(50);
+    plane.reset_compare_exchange_concurrency();
+    let (alpha, beta) = tokio::join!(
+        repository.put_bytes(
+            "alpha",
+            b"alpha.bin".to_vec(),
+            b"alpha".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        ),
+        repository.put_bytes(
+            "beta",
+            b"beta.bin".to_vec(),
+            b"beta".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        ),
+    );
+    let alpha = alpha.unwrap();
+    let beta = beta.unwrap();
+
+    assert_eq!(
+        plane.max_compare_exchanges_in_flight(),
+        2,
+        "independent branch refs were serialized"
+    );
+    repository.fsck_commit(alpha.id).await.unwrap();
+    repository.fsck_commit(beta.id).await.unwrap();
+}
+
 #[tokio::test]
 async fn warm_physical_merge_reuses_bindings_in_two_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
@@ -1479,6 +1524,8 @@ async fn concurrent_writers_upload_payloads_before_serial_publication() {
     let repository = Repository::initialize(plane.clone(), options)
         .await
         .unwrap();
+    plane.set_compare_exchange_delay_millis(20);
+    plane.reset_compare_exchange_concurrency();
     plane.reset_physical_put_concurrency();
     let writes = (0..8).map(|index| {
         repository.put_bytes(
@@ -1495,6 +1542,7 @@ async fn concurrent_writers_upload_payloads_before_serial_publication() {
     }
     assert!(plane.max_physical_puts_in_flight() > 1);
     assert_eq!(plane.max_physical_puts_in_flight(), 3);
+    assert_eq!(plane.max_compare_exchanges_in_flight(), 1);
     let performance = repository.performance_snapshot();
     assert_eq!(performance.publication_acquisitions, 8);
     assert!(performance.publication_max_queue_depth >= 1);
