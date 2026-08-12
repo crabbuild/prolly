@@ -85,6 +85,7 @@ hash_id!(RepositoryId, "pr1_");
 hash_id!(CommitId, "pbc1_");
 hash_id!(CommitIdV2, "pbc2_");
 hash_id!(ObjectVersionId, "pov1_");
+hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(TreeFormatDigest, "ptf1_");
@@ -1765,6 +1766,122 @@ pub struct PhysicalMutationIdentityV2 {
     pub repository: RepositoryId,
     pub operation: OperationId,
     pub authority: AuthorityStampV2,
+}
+
+/// Protocol-v2 payload binding. The physical path is explicit because v2
+/// stores content under immutable derived keys instead of accumulating
+/// provider versions at the logical user key.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalObjectBindingV2 {
+    pub path: ObjectPath,
+    pub provider_version_id: Option<String>,
+    pub provider_etag: String,
+    pub checksum_sha256: [u8; 32],
+}
+
+impl PhysicalObjectBindingV2 {
+    pub fn validate(&self) -> Result<()> {
+        if self.provider_etag.is_empty() {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 physical payload binding is malformed",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObjectVersionV2 {
+    pub id: ObjectVersionIdV2,
+    pub body: LogicalObjectVersionBodyV1,
+    /// Delete markers are logical-only and carry no physical binding.
+    pub binding: Option<PhysicalObjectBindingV2>,
+}
+
+impl ObjectVersionV2 {
+    pub fn derive(
+        repository: RepositoryId,
+        key: &[u8],
+        operation: OperationId,
+        body: LogicalObjectVersionBodyV1,
+        binding: Option<PhysicalObjectBindingV2>,
+    ) -> Result<Self> {
+        validate_physical_object_version_v2(&body, binding.as_ref())?;
+        let body_bytes = encode_canonical(&body)?;
+        Ok(Self {
+            id: ObjectVersionIdV2(domain_hash(
+                b"prolly-s3/object-version/v2",
+                &[
+                    repository.as_bytes(),
+                    key,
+                    operation.as_bytes(),
+                    &body_bytes,
+                ],
+            )),
+            body,
+            binding,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        validate_physical_object_version_v2(&self.body, self.binding.as_ref())
+    }
+}
+
+fn validate_physical_object_version_v2(
+    body: &LogicalObjectVersionBodyV1,
+    binding: Option<&PhysicalObjectBindingV2>,
+) -> Result<()> {
+    let valid = match (&body.kind, binding) {
+        (LogicalObjectVersionKindV1::Live { checksums, .. }, Some(binding)) => {
+            binding.validate().is_ok()
+                && checksums
+                    .sha256
+                    .is_some_and(|logical| logical == binding.checksum_sha256)
+        }
+        (LogicalObjectVersionKindV1::DeleteMarker, None) => true,
+        _ => false,
+    };
+    if !valid {
+        return Err(Error::new(
+            ErrorCode::CorruptCommit,
+            "v2 object version has an invalid immutable payload binding",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProviderPerKeyVersionLimitV2 {
+    Unlimited,
+    Finite(u64),
+    Unknown,
+}
+
+impl ProviderPerKeyVersionLimitV2 {
+    /// Immutable payload keys consume one version. Only bounded mutable
+    /// controls need per-key headroom; unknown limits fail closed.
+    pub fn validate_immutable_payload_profile(self, mutable_control_bound: usize) -> Result<()> {
+        let required = u64::try_from(mutable_control_bound)
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "control bound exceeds u64"))?
+            .checked_add(2)
+            .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "control headroom overflow"))?;
+        match self {
+            Self::Unlimited => Ok(()),
+            Self::Finite(limit) if limit >= required => Ok(()),
+            Self::Finite(limit) => Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                format!(
+                    "provider per-key version limit {limit} is below required control headroom {required}"
+                ),
+            )),
+            Self::Unknown => Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "provider per-key version limit is unknown",
+            )),
+        }
+    }
 }
 
 impl PhysicalMutationIdentityV2 {

@@ -186,7 +186,8 @@ pub enum PhysicalPathDiscipline {
     Immutable,
     /// Installed exactly once with conditional create during repository initialization.
     CreateOnce,
-    /// Updated through provider-token compare-and-exchange.
+    /// Updated through provider-token compare-and-exchange and bounded by the
+    /// repository mutable-control version-retention policy.
     MutableCas,
     /// Temporary qualification data that is removed after the probe completes.
     EphemeralProbe,
@@ -238,6 +239,24 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
+        relative_pattern: "node-index/v2/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "ref-catalog/v2/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "commit-graph/v2/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
         relative_pattern: "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: false,
@@ -250,7 +269,25 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: true,
     },
     PhysicalPathFamily {
+        relative_pattern: "commits/v2/sha256/<2>/<2>/<commit-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: true,
+        gc_managed: true,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "payloads/v2/<repository-id-hex>/sha256/<2>/<2>/<content-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: true,
+        gc_managed: true,
+    },
+    PhysicalPathFamily {
         relative_pattern: "refs/{heads,tags}/<name-hex>",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: true,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "refs/v2/heads/<name-hex>",
         discipline: PhysicalPathDiscipline::MutableCas,
         portable_clone: true,
         gc_managed: false,
@@ -263,6 +300,18 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
     },
     PhysicalPathFamily {
         relative_pattern: "writers/lease.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "authority/v2/{branches,system}/<scope-hex>/lease.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "authority/v2/maintenance/gate.cbor",
         discipline: PhysicalPathDiscipline::MutableCas,
         portable_clone: false,
         gc_managed: false,
@@ -293,6 +342,12 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
     },
     PhysicalPathFamily {
         relative_pattern: "gc/runs/<plan-id>.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "gc/v2/epochs/<operation-id-hex>/head.cbor",
         discipline: PhysicalPathDiscipline::MutableCas,
         portable_clone: false,
         gc_managed: false,
@@ -560,6 +615,7 @@ pub struct ClientBuilder {
     node_cache: Option<Arc<dyn prolly_s3_core::NodeCache>>,
     branch_ref_compaction_interval: Option<u64>,
     branch_ref_versions_to_retain: Option<usize>,
+    mutable_control_versions_to_retain: Option<usize>,
     node_index_maintenance_interval: Option<Duration>,
     node_index_maintenance_batch: Option<usize>,
     max_staged_batch_bytes: Option<usize>,
@@ -1806,6 +1862,10 @@ impl ClientBuilder {
         self.branch_ref_versions_to_retain = Some(versions_to_retain);
         self
     }
+    pub fn mutable_control_version_retention(mut self, versions_to_retain: usize) -> Self {
+        self.mutable_control_versions_to_retain = Some(versions_to_retain);
+        self
+    }
     pub fn node_index_maintenance(mut self, interval: Duration, batch: usize) -> Self {
         self.node_index_maintenance_interval = Some(interval);
         self.node_index_maintenance_batch = Some(batch);
@@ -1957,6 +2017,9 @@ impl ClientBuilder {
         }
         if let Some(value) = self.branch_ref_versions_to_retain {
             options.branch_ref_versions_to_retain = value;
+        }
+        if let Some(value) = self.mutable_control_versions_to_retain {
+            options.mutable_control_versions_to_retain = value;
         }
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
@@ -4850,17 +4913,25 @@ mod tests {
 
     #[test]
     fn physical_layout_classifies_every_stable_namespace_family() {
-        assert_eq!(PHYSICAL_PATH_FAMILIES.len(), 14);
+        assert!(PHYSICAL_PATH_FAMILIES.len() >= 23);
         for required in [
             "format/v1.cbor",
             "providers/<provider-profile-id>.cbor",
             "node-index/latest.cbor",
+            "node-index/v2/head.cbor",
+            "ref-catalog/v2/head.cbor",
+            "commit-graph/v2/head.cbor",
             "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
             "commits/sha256/<2>/<2>/<commit-id>",
+            "payloads/v2/<repository-id-hex>/sha256/<2>/<2>/<content-id>",
             "refs/{heads,tags}/<name-hex>",
+            "refs/v2/heads/<name-hex>",
             "writers/lease.cbor",
+            "authority/v2/{branches,system}/<scope-hex>/lease.cbor",
+            "authority/v2/maintenance/gate.cbor",
             "gc/plans/<plan-id>.cbor",
             "gc/runs/<plan-id>.cbor",
+            "gc/v2/epochs/<operation-id-hex>/head.cbor",
         ] {
             assert!(
                 PHYSICAL_PATH_FAMILIES

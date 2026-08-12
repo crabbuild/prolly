@@ -3,9 +3,10 @@ use std::sync::Arc;
 use crate::{
     encode_canonical, AuthorityPermitV2, AuthorityScopeV2, BranchRefBarrierV2, BucketCommitV2,
     CommitIdV2, CommitObjectV2, CompareExchange, CompareExchangeOutcome, Error, ErrorCode,
-    GetRequest, ImmutablePut, NodePackV1, ObjectPath, ObjectPlane, OperationId, PendingAuthorityV2,
-    RefGeneration, RefValueV2, ReflogEntryV2, RepositoryId, Result, RetryAdvice,
-    ShardWriterAuthorityV2, StorageToken,
+    GetRequest, ImmutablePut, MutableControlStore, NodePackV1, ObjectPath, ObjectPlane,
+    OperationId, PendingAuthorityV2, RefGeneration, RefValueV2, ReflogEntryV2, RepositoryId,
+    Result, RetryAdvice, ShardWriterAuthorityV2, StorageToken,
+    DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 #[derive(Clone, Debug)]
@@ -41,6 +42,7 @@ impl AppliedBranchBarrierV2 {
 /// callers cannot accidentally publish a commit under the wrong shard stamp.
 pub struct ShardedBranchPublisherV2<P: ObjectPlane> {
     plane: Arc<P>,
+    controls: MutableControlStore<P>,
     prefix: String,
     repository: RepositoryId,
     authority: Arc<ShardWriterAuthorityV2<P>>,
@@ -52,13 +54,33 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
         prefix: impl Into<String>,
         repository: RepositoryId,
         authority: Arc<ShardWriterAuthorityV2<P>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Self::new_with_control_retention(
             plane,
-            prefix: prefix.into(),
+            prefix,
             repository,
             authority,
-        }
+            DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+        )
+    }
+
+    pub fn new_with_control_retention(
+        plane: Arc<P>,
+        prefix: impl Into<String>,
+        repository: RepositoryId,
+        authority: Arc<ShardWriterAuthorityV2<P>>,
+        control_versions_to_retain: usize,
+    ) -> Result<Self> {
+        let prefix = prefix.into();
+        let controls =
+            MutableControlStore::new(plane.clone(), prefix.clone(), control_versions_to_retain)?;
+        Ok(Self {
+            plane,
+            controls,
+            prefix,
+            repository,
+            authority,
+        })
     }
 
     pub async fn load(&self, branch: &str) -> Result<LoadedRefV2> {
@@ -311,7 +333,7 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
         let path = self.ref_path(branch)?;
         let bytes = encode_canonical(&value)?;
         let outcome = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: path.clone(),
                 expected,

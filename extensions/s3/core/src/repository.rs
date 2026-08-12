@@ -72,6 +72,10 @@ pub struct RepositoryOptions {
     /// Number of physical ref versions retained during compaction. Logical
     /// history remains in immutable commits and is unaffected.
     pub branch_ref_versions_to_retain: usize,
+    /// Maximum physical versions retained for every recurring mutable control
+    /// object. Compaction runs before each successful CAS update, reserving
+    /// one slot for the new version.
+    pub mutable_control_versions_to_retain: usize,
     /// Maximum exact physical deletions per second during GC. Zero disables
     /// pacing. The physical format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
@@ -100,6 +104,7 @@ impl Default for RepositoryOptions {
             node_cache: None,
             branch_ref_compaction_interval: 5_000,
             branch_ref_versions_to_retain: 100,
+            mutable_control_versions_to_retain: crate::DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
             gc_delete_rate_limit_per_second: 0,
             clock: Arc::new(SystemClock),
             ids: Arc::new(RandomIdSource),
@@ -670,6 +675,7 @@ impl Drop for NodeIndexMaintenance {
 
 pub struct Repository<P: ObjectPlane> {
     plane: Arc<P>,
+    controls: crate::MutableControlStore<P>,
     options: RepositoryOptions,
     format: RepositoryFormatV1,
     node_store: ProllyObjectStore<P>,
@@ -812,7 +818,8 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog,
         };
         let initial_ref_bytes = encode_canonical(&initial_ref)?;
-        match plane
+        match repository
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&options.repository_prefix, &options.default_branch)?,
                 expected: None,
@@ -939,8 +946,14 @@ impl<P: ObjectPlane> Repository<P> {
         let max_cached_branches = options.max_cached_branches;
         let max_cached_commits = options.max_cached_commits;
         let max_parallel_payload_writes = options.max_parallel_payload_writes;
+        let controls = crate::MutableControlStore::new(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            options.mutable_control_versions_to_retain,
+        )?;
         Ok(Self {
             plane,
+            controls,
             options,
             format,
             node_store,
@@ -1151,7 +1164,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: pointer_path,
                 expected: current.map(|stored| stored.metadata.token),
@@ -1334,7 +1347,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: head_path,
                 expected,
@@ -1524,7 +1537,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: head_path,
                 expected,
@@ -1689,7 +1702,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: head_path,
                 expected,
@@ -1867,7 +1880,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -1924,7 +1937,7 @@ impl<P: ObjectPlane> Repository<P> {
             .checked_add(self.options.writer_lease_millis)
             .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "writer lease expiry overflow"))?;
         let renewal = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: writer_lease_path(&self.options.repository_prefix)?,
                 expected: Some(held.token),
@@ -2097,7 +2110,7 @@ impl<P: ObjectPlane> Repository<P> {
                 updated_at_millis: now,
             };
             let token = match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: path.clone(),
                     expected: Some(stored.metadata.token),
@@ -2158,7 +2171,7 @@ impl<P: ObjectPlane> Repository<P> {
             barrier.updated_at_millis = now;
             barrier.writer_fence_generation = next_generation;
             match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: branch_path(&self.options.repository_prefix, &branch.name)?,
                     expected: Some(loaded.token),
@@ -2313,103 +2326,19 @@ impl<P: ObjectPlane> Repository<P> {
     async fn compact_branch_ref_versions_inner(
         &self,
         branch: &str,
-        loaded: &LoadedRef,
+        _loaded: &LoadedRef,
     ) -> Result<RefVersionCompactionReport> {
         let path = branch_path(&self.options.repository_prefix, branch)?;
-        let current_version = loaded.token.version_id.as_deref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::ProviderNotQualified,
-                "branch-ref compaction requires a versioned physical CAS object",
-            )
-        })?;
-        let mut continuation = None;
-        let mut versions = Vec::new();
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: path.as_str().to_string(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: true,
-                })
-                .await?;
-            versions.extend(
-                page.entries
-                    .into_iter()
-                    .filter(|entry| entry.path == path && !entry.metadata.delete_marker),
-            );
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-
-        if !versions.iter().any(|entry| {
-            entry.metadata.token.version_id.as_deref() == Some(current_version) && entry.is_latest
-        }) {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "current branch-ref version was absent from the version listing",
-            ));
-        }
-        versions.sort_by(|left, right| {
-            right
-                .is_latest
-                .cmp(&left.is_latest)
-                .then_with(|| {
-                    right
-                        .metadata
-                        .last_modified_millis
-                        .cmp(&left.metadata.last_modified_millis)
-                })
-                .then_with(|| {
-                    right
-                        .metadata
-                        .token
-                        .version_id
-                        .cmp(&left.metadata.token.version_id)
-                })
-        });
-        let scanned = versions.len();
-        let mut retained_versions = BTreeSet::new();
-        retained_versions.insert(current_version.to_string());
-        for entry in &versions {
-            if retained_versions.len() >= self.options.branch_ref_versions_to_retain {
-                break;
-            }
-            if let Some(version_id) = entry.metadata.token.version_id.as_ref() {
-                retained_versions.insert(version_id.clone());
-            }
-        }
-        let candidates = versions
-            .into_iter()
-            .filter_map(|entry| {
-                let version_id = entry.metadata.token.version_id?;
-                (!retained_versions.contains(&version_id))
-                    .then_some((entry.path, PhysicalVersion::Versioned { version_id }))
-            })
-            .collect::<Vec<_>>();
-        let mut report = RefVersionCompactionReport {
-            scanned,
-            retained: retained_versions.len(),
-            ..RefVersionCompactionReport::default()
-        };
-        for batch in candidates.chunks(1_000) {
-            for outcome in self.plane.delete_exact_batch(batch.to_vec()).await? {
-                match outcome {
-                    DeleteOutcome::Deleted => report.deleted += 1,
-                    DeleteOutcome::NotFound => report.already_missing += 1,
-                    DeleteOutcome::TokenMismatch => {
-                        return Err(Error::new(
-                            ErrorCode::PreconditionFailed,
-                            "branch-ref version changed during exact compaction",
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(report)
+        let report = self
+            .controls
+            .compact_path_with_retention(&path, self.options.branch_ref_versions_to_retain)
+            .await?;
+        Ok(RefVersionCompactionReport {
+            scanned: report.scanned,
+            retained: report.retained,
+            deleted: report.deleted,
+            already_missing: report.already_missing,
+        })
     }
 
     async fn warm_branch_state(&self, branch: &str) -> Result<WarmBranchState> {
@@ -2632,7 +2561,7 @@ impl<P: ObjectPlane> Repository<P> {
                 inline_reflog: reflog,
             };
             match target
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path,
                     expected: None,
@@ -2706,7 +2635,7 @@ impl<P: ObjectPlane> Repository<P> {
                 tombstone: false,
             };
             match target
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path,
                     expected: None,
@@ -3285,7 +3214,7 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, name)?,
                 expected: None,
@@ -3364,7 +3293,7 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog_entry,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, name)?,
                 expected: Some(loaded.token),
@@ -3592,7 +3521,7 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog_entry,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded.token),
@@ -3822,7 +3751,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: false,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: tag_path(&self.options.repository_prefix, name)?,
                 expected: None,
@@ -4050,7 +3979,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: true,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: path.clone(),
                 expected: Some(stored.metadata.token),
@@ -4142,7 +4071,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: false,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -4178,7 +4107,7 @@ impl<P: ObjectPlane> Repository<P> {
             .checked_add(1)
             .ok_or_else(|| Error::new(ErrorCode::InternalInvariant, "pin generation overflow"))?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected: Some(stored.metadata.token),
@@ -4301,7 +4230,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: false,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: path.clone(),
                 expected: Some(stored.metadata.token),
@@ -5667,7 +5596,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
@@ -6044,7 +5973,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
@@ -7746,7 +7675,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
@@ -8226,7 +8155,7 @@ impl<P: ObjectPlane> Repository<P> {
             abort_reason: None,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                 expected: None,
@@ -8326,7 +8255,7 @@ impl<P: ObjectPlane> Repository<P> {
         })?;
         next.updated_at_millis = self.now_millis()?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                 expected: Some(loaded.token),
@@ -8860,7 +8789,7 @@ impl<P: ObjectPlane> Repository<P> {
             next.generation = next.generation.saturating_add(1);
             next.updated_at_millis = self.now_millis()?;
             match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                     expected: Some(loaded.token),
@@ -8981,7 +8910,7 @@ impl<P: ObjectPlane> Repository<P> {
         })?;
         next.updated_at_millis = self.now_millis()?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                 expected: Some(loaded.token),
@@ -9168,7 +9097,7 @@ impl<P: ObjectPlane> Repository<P> {
                     updated_at_millis: now,
                 };
                 match self
-                    .plane
+                    .controls
                     .compare_exchange(CompareExchange {
                         path: path.clone(),
                         expected: None,
@@ -9225,7 +9154,7 @@ impl<P: ObjectPlane> Repository<P> {
         })?;
         next.updated_at_millis = self.now_millis()?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected: Some(loaded.token),
@@ -9301,7 +9230,7 @@ impl<P: ObjectPlane> Repository<P> {
                 last_delete_at_millis: 0,
             };
             let _ = self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: path.clone(),
                     expected: None,
@@ -9333,7 +9262,7 @@ impl<P: ObjectPlane> Repository<P> {
                 })?;
                 running.updated_at_millis = self.now_millis()?;
                 if matches!(
-                    self.plane
+                    self.controls
                         .compare_exchange(CompareExchange {
                             path: path.clone(),
                             expected: Some(loaded.token),
@@ -9354,7 +9283,7 @@ impl<P: ObjectPlane> Repository<P> {
                 aborted.generation = aborted.generation.saturating_add(1);
                 aborted.updated_at_millis = self.now_millis()?;
                 let _ = self
-                    .plane
+                    .controls
                     .compare_exchange(CompareExchange {
                         path: path.clone(),
                         expected: Some(loaded.token),
@@ -9441,7 +9370,7 @@ impl<P: ObjectPlane> Repository<P> {
                 next.state = GcRunStateV1::Paused;
             }
             match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: path.clone(),
                     expected: Some(loaded.token),
@@ -9541,7 +9470,7 @@ impl<P: ObjectPlane> Repository<P> {
         aborted.updated_at_millis = self.now_millis()?;
         aborted.abort_reason = Some(reason.to_string());
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_run_path(&self.options.repository_prefix, id)?,
                 expected: Some(loaded.token),
@@ -10053,6 +9982,18 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
             "branch-ref compaction requires an interval of at least 100 and a smaller nonzero retention count",
+        ));
+    }
+    if !(2..=10_000).contains(&options.mutable_control_versions_to_retain) {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "mutable-control retention must keep between 2 and 10,000 versions",
+        ));
+    }
+    if options.branch_ref_versions_to_retain > options.mutable_control_versions_to_retain {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "branch-ref retention cannot exceed the repository mutable-control bound",
         ));
     }
     if options.gc_delete_rate_limit_per_second > 1_000 {

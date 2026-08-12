@@ -3,9 +3,11 @@
 mod authority;
 mod cache;
 mod codec;
+mod control_versions;
 mod error;
 mod model;
 mod object_plane;
+mod payload_v2;
 mod publication_v2;
 mod repository;
 mod runtime;
@@ -17,9 +19,14 @@ pub use authority::{
 };
 pub use cache::{MemoryNodeCache, NodeCache, NodeCacheError, NodeCacheKey};
 pub use codec::{decode_canonical, encode_canonical};
+pub use control_versions::{
+    classify_mutable_control_path, ControlVersionCompactionReport, MutableControlKind,
+    MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+};
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
 pub use model::*;
 pub use object_plane::*;
+pub use payload_v2::ImmutablePayloadStoreV2;
 pub use prolly::Cid;
 pub use publication_v2::{
     AppliedBranchBarrierV2, CommitPublicationV2, LoadedRefV2, ShardedBranchPublisherV2,

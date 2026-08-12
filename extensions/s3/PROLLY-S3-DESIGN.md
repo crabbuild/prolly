@@ -19,6 +19,14 @@ The S3 extension has one storage architecture:
   independent branches to publish concurrently;
 - repository metadata uses format v1 under `.prolly/v1/`.
 
+Those bullets describe frozen protocol v1. Protocol v2 deliberately changes
+the physical binding for scale: a live logical version names an immutable
+content-addressed payload under `P/payloads/v2/...`; a delete marker is
+logical-only; an object at the original user key is an optional rebuildable
+projection. This prevents one hot logical key from accumulating provider
+versions while keeping each file whole. See
+[`docs/adr/0001-immutable-v2-payload-keys.md`](docs/adr/0001-immutable-v2-payload-keys.md).
+
 The repository-chunked profile, profile selector, mixed-mode codec, durable
 workspace protocol, publication lease, and compatibility harness are removed.
 There is no in-place upgrade from the former format.

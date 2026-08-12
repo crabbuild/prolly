@@ -10,6 +10,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 | maintenance gate | `P/authority/v2/maintenance/gate.cbor` |
 | branch ref | `P/refs/v2/heads/N` |
 | authority-stamped commit object | `P/commits/v2/sha256/H0/H1/H` |
+| immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
 
 `N` is lowercase hex of the UTF-8 branch or system-namespace name. The
 canonical lease embeds its repository ID and full authority scope, so moving a
@@ -24,6 +25,18 @@ Every branch publication requires exact equality between the active permit's
 authority stamp, the commit authority stamp, and the resulting ref authority
 stamp. The ref CAS is reconciled by exact canonical bytes after a lost or
 ambiguous response. A different value at the path is a real ref conflict.
+
+`R` is lowercase hex of the repository ID. A live `ObjectVersionV2` carries
+the full derived payload path and optional provider VersionId; a delete marker
+carries no physical binding. Repeated writes to one logical user key therefore
+create different immutable payload keys instead of accumulating provider
+versions at that user key. Identical content reuses the same immutable object.
+An original-key object, when materialized for external compatibility, is a
+rebuildable projection and is never part of repository closure.
+
+Provider qualification for v2 must attest either an unlimited per-key version
+count or a finite count at least two greater than the configured mutable-control
+retention bound. An unknown limit is not qualified for production writes.
 
 Protocol v1's `P/writers/lease.cbor` remains repository-exclusive and retains
 its original scalar-generation meaning. A v1 writer must never read or write

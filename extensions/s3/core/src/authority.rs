@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     decode_canonical, encode_canonical, CompareExchange, CompareExchangeOutcome, Error, ErrorCode,
-    ObjectPath, ObjectPlane, OperationId, RepositoryId, Result, StorageToken,
+    MutableControlStore, ObjectPath, ObjectPlane, OperationId, RepositoryId, Result, StorageToken,
+    DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -184,6 +185,7 @@ impl BranchRefBarrierV2 {
 /// `activate_after_barrier`.
 pub struct ShardWriterAuthorityV2<P: ObjectPlane> {
     plane: Arc<P>,
+    controls: MutableControlStore<P>,
     prefix: String,
     repository: RepositoryId,
     lease_duration: Duration,
@@ -196,6 +198,22 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
         repository: RepositoryId,
         lease_duration: Duration,
     ) -> Result<Self> {
+        Self::new_with_control_retention(
+            plane,
+            prefix,
+            repository,
+            lease_duration,
+            DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+        )
+    }
+
+    pub fn new_with_control_retention(
+        plane: Arc<P>,
+        prefix: impl Into<String>,
+        repository: RepositoryId,
+        lease_duration: Duration,
+        control_versions_to_retain: usize,
+    ) -> Result<Self> {
         if lease_duration < Duration::from_secs(10) || lease_duration > Duration::from_secs(86_400)
         {
             return Err(Error::new(
@@ -203,9 +221,13 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
                 "authority lease must be between 10 seconds and 24 hours",
             ));
         }
+        let prefix = prefix.into();
+        let controls =
+            MutableControlStore::new(plane.clone(), prefix.clone(), control_versions_to_retain)?;
         Ok(Self {
             plane,
-            prefix: prefix.into(),
+            controls,
+            prefix,
             repository,
             lease_duration,
         })
@@ -409,7 +431,7 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
         lease.validate(self.repository, &lease.scope)?;
         let bytes = encode_canonical(&lease)?;
         let outcome = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: path.clone(),
                 expected,

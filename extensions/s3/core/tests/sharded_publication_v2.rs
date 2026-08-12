@@ -3,8 +3,8 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use prolly_s3_core::{
     AuthorityScopeV2, AuthorityStampV2, BucketCommitV2, BucketDeltaV1, BucketStateV1,
     CommitGeneration, CommitIdV2, CommitObjectV2, CommitPublicationV2, ErrorCode, GetRequest,
-    MemoryObjectPlane, NodePackEntryV1, NodePackV1, ObjectPath, ObjectPlane, OperationId,
-    RepositoryId, ShardWriterAuthorityV2, ShardedBranchPublisherV2, TakeoverRequestV2,
+    ListRequest, MemoryObjectPlane, NodePackEntryV1, NodePackV1, ObjectPath, ObjectPlane,
+    OperationId, RepositoryId, ShardWriterAuthorityV2, ShardedBranchPublisherV2, TakeoverRequestV2,
     TreeFormatDigest, TreeRootV1,
 };
 
@@ -49,6 +49,31 @@ fn commit(
     }
 }
 
+async fn exact_version_count(plane: &MemoryObjectPlane, path: &ObjectPath) -> usize {
+    let mut continuation = None;
+    let mut count = 0;
+    loop {
+        let page = plane
+            .list(ListRequest {
+                prefix: path.as_str().to_string(),
+                continuation,
+                limit: 1_000,
+                include_versions: true,
+            })
+            .await
+            .unwrap();
+        count += page
+            .entries
+            .iter()
+            .filter(|entry| entry.path == *path)
+            .count();
+        continuation = page.continuation;
+        if continuation.is_none() {
+            return count;
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn separate_writers_publish_independent_branch_shards_concurrently() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
@@ -72,9 +97,11 @@ async fn separate_writers_publish_independent_branch_shards_concurrently() {
         .unwrap(),
     );
     let publisher_a =
-        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority_a.clone());
+        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority_a.clone())
+            .unwrap();
     let publisher_b =
-        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority_b.clone());
+        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority_b.clone())
+            .unwrap();
     let (main_permit, ingest_permit) = tokio::join!(
         authority_a.acquire(scope("main"), "writer-a", 1_000, operation(1)),
         authority_b.acquire(scope("ingest"), "writer-b", 1_000, operation(2)),
@@ -187,9 +214,11 @@ async fn branch_barrier_fences_the_old_writer_and_activates_the_new_writer() {
         ".prolly/v2",
         repository,
         old_authority.clone(),
-    );
+    )
+    .unwrap();
     let new_publisher =
-        ShardedBranchPublisherV2::new(plane, ".prolly/v2", repository, new_authority.clone());
+        ShardedBranchPublisherV2::new(plane, ".prolly/v2", repository, new_authority.clone())
+            .unwrap();
     let old_permit = old_authority
         .acquire(scope("main"), "writer-a", 1_000, operation(10))
         .await
@@ -301,7 +330,8 @@ async fn applied_ref_cas_with_lost_response_reconciles_by_exact_value() {
         .unwrap(),
     );
     let publisher =
-        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority.clone());
+        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority.clone())
+            .unwrap();
     let permit = authority
         .acquire(scope("main"), "writer-a", 1_000, operation(20))
         .await
@@ -341,7 +371,8 @@ async fn publication_stores_real_prolly_nodes_in_the_v2_commit_envelope() {
         .unwrap(),
     );
     let publisher =
-        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority.clone());
+        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority.clone())
+            .unwrap();
     let permit = authority
         .acquire(scope("main"), "writer-a", 1_000, operation(30))
         .await
@@ -396,4 +427,92 @@ async fn publication_stores_real_prolly_nodes_in_the_v2_commit_envelope() {
 
     assert_eq!(envelope.commit, root);
     assert_eq!(envelope.node_pack, Some(pack));
+}
+
+#[tokio::test]
+async fn v2_lease_and_ref_updates_remain_within_the_same_control_version_bound() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = RepositoryId::from_hash([0xbb; 32]);
+    let authority = Arc::new(
+        ShardWriterAuthorityV2::new_with_control_retention(
+            plane.clone(),
+            ".prolly/v2",
+            repository,
+            Duration::from_secs(60),
+            4,
+        )
+        .unwrap(),
+    );
+    let mut permit = authority
+        .acquire(scope("main"), "writer-a", 1_000, operation(40))
+        .await
+        .unwrap();
+    for now_millis in 1_001..1_013 {
+        permit = authority.renew(permit, now_millis).await.unwrap();
+    }
+    let authority_path =
+        ObjectPath::new(".prolly/v2/authority/v2/branches/6d61696e/lease.cbor").unwrap();
+    assert!(exact_version_count(&plane, &authority_path).await <= 4);
+
+    let publisher = ShardedBranchPublisherV2::new_with_control_retention(
+        plane.clone(),
+        ".prolly/v2",
+        repository,
+        authority.clone(),
+        4,
+    )
+    .unwrap();
+    let alternate_publisher = ShardedBranchPublisherV2::new_with_control_retention(
+        plane.clone(),
+        ".prolly/v2",
+        repository,
+        authority,
+        4,
+    )
+    .unwrap();
+    let mut root = commit(permit.stamp(), Vec::new(), 0, "root");
+    root.author = "writer-a".to_string();
+    let mut current = publisher
+        .create(CommitPublicationV2 {
+            permit: &permit,
+            branch: "main",
+            commit: &root,
+            node_pack: None,
+            operation: operation(41),
+            message: "create main",
+            now_millis: 1_020,
+        })
+        .await
+        .unwrap();
+    for generation in 1..13 {
+        let mut next = commit(
+            permit.stamp(),
+            vec![current.value.target],
+            generation,
+            "advance",
+        );
+        next.author = "writer-a".to_string();
+        let selected = if generation.is_multiple_of(2) {
+            &publisher
+        } else {
+            &alternate_publisher
+        };
+        current = selected
+            .store_and_publish(
+                current,
+                CommitPublicationV2 {
+                    permit: &permit,
+                    branch: "main",
+                    commit: &next,
+                    node_pack: None,
+                    operation: operation(41 + u128::from(generation)),
+                    message: "advance main",
+                    now_millis: 1_020 + generation,
+                },
+            )
+            .await
+            .unwrap();
+    }
+    let ref_path = ObjectPath::new(".prolly/v2/refs/v2/heads/6d61696e").unwrap();
+    assert!(exact_version_count(&plane, &ref_path).await <= 4);
 }

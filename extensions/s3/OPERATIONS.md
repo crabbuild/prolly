@@ -65,13 +65,25 @@ same cache directory after a restart, with only one process owning that
 directory. On a new or empty host, call `prewarm_node_cache` for the production
 snapshot and required prefixes before accepting list, diff, or history traffic.
 
-The writer automatically compacts a branch ref every 5,000 generations and
-retains 100 physical ref versions by default. This deletes only obsolete
-physical CAS-object versions; immutable commits, object versions, and logical
-history are unchanged. Keep `s3:ListBucketVersions` and version-qualified
-`s3:DeleteObject`/`s3:DeleteObjects` permissions available. Tune
-`branch_ref_compaction_interval` below a provider's per-object version limit,
-or invoke `compact_branch_ref_versions` during controlled maintenance.
+Every recurring mutable control object is bounded by
+`mutable_control_versions_to_retain` (100 by default). The same Module covers
+writer and shard-authority leases, branch and tag refs, pins, advisory-index
+heads, and GC checkpoints. Branch refs compact on persisted generation
+boundaries; lower-rate controls compact before every update. The compactor
+revalidates the current storage token after the complete version listing and
+exact-deletes only obsolete VersionIds. Restarting a writer forces compaction
+before its first update, so the bound does not depend on process-local state.
+
+The older branch-specific maintenance entry point remains available when an
+operator wants a smaller recovery depth. Keep `s3:ListBucketVersions` and
+version-qualified `s3:DeleteObject`/`s3:DeleteObjects` permissions available.
+Never set branch-ref retention above the repository-wide control bound.
+
+Protocol v1 still stores history as versions of the original user key. Do not
+claim unbounded hot-key support on a provider with a finite or unknown per-key
+limit. Protocol v2 uses immutable derived payload keys and qualifies finite
+providers only when their per-key limit exceeds the mutable-control bound plus
+two versions of safety headroom.
 
 ## Conflict and outage handling
 

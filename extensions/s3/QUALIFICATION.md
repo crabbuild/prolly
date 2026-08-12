@@ -73,6 +73,15 @@ amortized branch-ref version compaction. RustFS beta.10 hardcodes a 10,000
 physical-version limit per object; automatic compaction at generation 5,000
 retained 100 ref versions while preserving the complete logical commit DAG.
 
+This gate uses 10K distinct user keys and does not qualify protocol v1 for 10K
+revisions of one user key. Frozen v1 history binds the original key and exact
+provider VersionId, so a provider with a finite or unknown per-key limit is not
+qualified for unbounded hot-key history. Protocol v2 qualification instead
+requires the immutable-payload profile: repeated logical revisions must spread
+across one-version content-addressed keys, every mutable control family must
+stay within its configured bound, and the provider must attest sufficient
+per-key headroom.
+
 Run the batched-ingest and persisted-cache gate with the Foyer feature:
 
 ```bash

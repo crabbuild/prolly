@@ -941,21 +941,42 @@ impl ObjectPlane for MemoryObjectPlane {
             .inner
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "memory lock poisoned"))?;
-        let after = request.continuation.as_deref();
+        let version_cursor = request
+            .include_versions
+            .then(|| {
+                request
+                    .continuation
+                    .as_deref()
+                    .and_then(decode_memory_version_cursor)
+            })
+            .flatten();
+        let after = (!request.include_versions)
+            .then_some(request.continuation.as_deref())
+            .flatten();
         let mut entries = Vec::new();
         let limit = request.limit.max(1);
         for (path, versions) in &state.objects {
             if !path.as_str().starts_with(&request.prefix)
                 || after.is_some_and(|after| path.as_str() <= after)
+                || version_cursor
+                    .as_ref()
+                    .is_some_and(|(cursor_path, _)| path.as_str() < cursor_path.as_str())
             {
                 continue;
             }
-            let candidates: Vec<&MemoryVersion> = if request.include_versions {
-                versions.iter().collect()
+            let start = version_cursor
+                .as_ref()
+                .filter(|(cursor_path, _)| cursor_path == path.as_str())
+                .map_or(0, |(_, index)| *index);
+            let candidates: Vec<(usize, &MemoryVersion)> = if request.include_versions {
+                versions.iter().enumerate().skip(start).collect()
             } else {
-                Self::current_raw(versions).into_iter().collect()
+                Self::current_raw(versions)
+                    .into_iter()
+                    .map(|version| (versions.len().saturating_sub(1), version))
+                    .collect()
             };
-            for version in candidates {
+            for (index, version) in candidates {
                 if version.bytes.is_some()
                     || (request.include_versions && version.metadata.delete_marker)
                 {
@@ -968,7 +989,11 @@ impl ObjectPlane for MemoryObjectPlane {
                     });
                 }
                 if entries.len() == limit {
-                    let continuation = Some(path.as_str().to_string());
+                    let continuation = if request.include_versions {
+                        Some(encode_memory_version_cursor(path.as_str(), index + 1))
+                    } else {
+                        Some(path.as_str().to_string())
+                    };
                     return Ok(PhysicalListPage {
                         entries,
                         continuation,
@@ -1518,4 +1543,17 @@ impl ObjectPlane for MemoryObjectPlane {
             next_upload_id_marker,
         })
     }
+}
+
+fn encode_memory_version_cursor(path: &str, next_index: usize) -> String {
+    format!("memory-v1:{}:{next_index}", hex::encode(path.as_bytes()))
+}
+
+fn decode_memory_version_cursor(value: &str) -> Option<(String, usize)> {
+    let suffix = value.strip_prefix("memory-v1:")?;
+    let (path, index) = suffix.rsplit_once(':')?;
+    Some((
+        String::from_utf8(hex::decode(path).ok()?).ok()?,
+        index.parse().ok()?,
+    ))
 }
