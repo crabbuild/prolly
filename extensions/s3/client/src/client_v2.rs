@@ -8,12 +8,14 @@ use std::{
 use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
-    BatchId, BranchIndexAdvanceReportV2, BranchIndexHealthV2, CommitIdV2, CommitReceiptV2, Error,
-    ErrorCode, JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2,
-    JournalIndexRebuildStepV2, ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2,
-    OperationId, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2, PhysicalBatchV2,
-    ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2,
-    RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
+    BatchId, BranchCatalogPageV2, BranchHeadV2, BranchIndexAdvanceReportV2, BranchIndexHealthV2,
+    CommitIdV2, CommitReceiptV2, Error, ErrorCode, JournalIndexRebuildCleanupV2,
+    JournalIndexRebuildCursorV2, JournalIndexRebuildStepV2, ObjectDataV2, ObjectHeaders,
+    ObjectSummaryV2, ObjectVersionV2, OperationId, OperationIndexRebuildCursorV2,
+    OperationIndexRebuildStepV2, PhysicalBatchV2, ProviderAttestationV1,
+    ProviderPerKeyVersionLimitV2, ProviderProfileId, RefCatalogCursorV2, RefCatalogRepairPageV2,
+    RefKindV2, RepositoryV2, RepositoryV2Options, Result, StagedMutationV2, TagCatalogPageV2,
+    TagV2, VersionSummaryV2,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -86,6 +88,86 @@ impl ClientV2 {
         let mut client = self.clone();
         client.branch = branch;
         Ok(client)
+    }
+
+    pub async fn head(&self) -> Result<CommitIdV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.head(&self.branch).await
+    }
+
+    pub async fn create_branch(
+        &self,
+        name: impl AsRef<str>,
+        from: Option<CommitIdV2>,
+    ) -> Result<BranchHeadV2> {
+        self.ensure_provider_qualified()?;
+        let from = match from {
+            Some(from) => from,
+            None => self.repository.head(&self.branch).await?,
+        };
+        self.repository.create_branch(name.as_ref(), from).await
+    }
+
+    pub async fn delete_branch(&self, name: impl AsRef<str>, expected: CommitIdV2) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.repository.delete_branch(name.as_ref(), expected).await
+    }
+
+    pub async fn create_tag(&self, name: impl AsRef<str>, target: CommitIdV2) -> Result<TagV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.create_tag(name.as_ref(), target).await
+    }
+
+    pub async fn tag(&self, name: impl AsRef<str>) -> Result<TagV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.tag(name.as_ref()).await
+    }
+
+    pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitIdV2) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.repository.delete_tag(name.as_ref(), expected).await
+    }
+
+    pub async fn list_branch_catalog_page(
+        &self,
+        cursor: Option<RefCatalogCursorV2>,
+        limit: usize,
+    ) -> Result<BranchCatalogPageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_branch_catalog_page(cursor, limit)
+            .await
+    }
+
+    pub async fn list_tag_catalog_page(
+        &self,
+        cursor: Option<RefCatalogCursorV2>,
+        limit: usize,
+    ) -> Result<TagCatalogPageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.list_tag_catalog_page(cursor, limit).await
+    }
+
+    pub async fn repair_branch_catalog_page(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<RefCatalogRepairPageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .repair_ref_catalog_page(RefKindV2::Branch, continuation, limit)
+            .await
+    }
+
+    pub async fn repair_tag_catalog_page(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<RefCatalogRepairPageV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .repair_ref_catalog_page(RefKindV2::Tag, continuation, limit)
+            .await
     }
 
     pub async fn put_object(

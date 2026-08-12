@@ -12,10 +12,12 @@ mod object_plane;
 mod operation_index_v2;
 mod payload_v2;
 mod publication_v2;
+mod ref_catalog_v2;
 mod repository;
 mod repository_v2;
 mod runtime;
 mod store;
+mod tag_v2;
 
 pub use authority::{
     AuthorityLeaseStateV2, AuthorityLeaseV2, AuthorityPermitV2, AuthorityScopeV2, AuthorityStampV2,
@@ -47,6 +49,10 @@ pub use publication_v2::{
     AppliedBranchBarrierV2, CommitPublicationV2, LoadedRefV2, PublicationJournalCursorV2,
     PublicationJournalEntryV2, PublicationJournalPageV2, ShardedBranchPublisherV2,
 };
+pub use ref_catalog_v2::{
+    ref_catalog_shard_v2, CatalogRefV2, RefCatalogCursorV2, RefCatalogPageV2, RefCatalogUpdateV2,
+    ShardedRefCatalogV2, REF_CATALOG_SHARDS_V2,
+};
 pub use repository::{
     validate_branch, version_cursor_after_key, BranchHead, BranchPage, BranchReflogCursor,
     BranchReflogPage, CatalogBranchPage, CatalogTagPage, CloneReport, CommitClosureCleanupReport,
@@ -61,8 +67,9 @@ pub use repository::{
     TagReflogPage, TraversalBudget, VersionSummary,
 };
 pub use repository_v2::{
-    BranchIndexAdvanceReportV2, BranchIndexHealthV2, BranchIndexMaintenance, CommitReceiptV2,
-    ObjectDataV2, ObjectSummaryV2, RepositoryV2, RepositoryV2Options, VersionSummaryV2,
+    BranchCatalogPageV2, BranchHeadV2, BranchIndexAdvanceReportV2, BranchIndexHealthV2,
+    BranchIndexMaintenance, CommitReceiptV2, ObjectDataV2, ObjectSummaryV2, RefCatalogRepairPageV2,
+    RepositoryV2, RepositoryV2Options, TagCatalogPageV2, TagV2, VersionSummaryV2,
 };
 #[deprecated(
     since = "0.1.0",
@@ -71,3 +78,4 @@ pub use repository_v2::{
 pub type WriterLeaseMaintenance = ShardAuthorityMaintenance;
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};
+pub use tag_v2::{LoadedTagV2, TagStoreV2};

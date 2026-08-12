@@ -462,6 +462,78 @@ async fn rustfs_native_v2_writable_reopen_resumes_the_same_writer() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_ref_lifecycle_uses_catalog_shards_without_ref_scans() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-ref-catalog");
+    let client = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-ref-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .background_index_maintenance(false)
+        .initialize()
+        .await
+        .unwrap();
+    let main = client.head().await.unwrap();
+    client.create_branch("feature", Some(main)).await.unwrap();
+    let feature = client.for_branch("feature").unwrap();
+    let committed = feature
+        .put_object("docs/feature.txt", b"branch-local".to_vec())
+        .await
+        .unwrap();
+    feature.advance_branch_indexes().await.unwrap();
+    let tag = client.create_tag("release-1", committed.id).await.unwrap();
+
+    client.reset_s3_operation_metrics();
+    let branches = client.list_branch_catalog_page(None, 100).await.unwrap();
+    let mut names = branches
+        .branches
+        .into_iter()
+        .map(|branch| branch.name)
+        .collect::<Vec<_>>();
+    names.sort();
+    assert_eq!(names, vec!["feature", "main"]);
+    assert_eq!(
+        client.list_tag_catalog_page(None, 100).await.unwrap().tags,
+        vec![tag]
+    );
+    let metrics = client.reset_s3_operation_metrics();
+    assert_eq!(metrics.list_objects_v2, 0, "catalog listing scanned refs");
+    assert_eq!(
+        metrics.list_object_versions, 0,
+        "catalog listing scanned ref versions"
+    );
+
+    client.delete_tag("release-1", committed.id).await.unwrap();
+    client.delete_branch("feature", committed.id).await.unwrap();
+    assert!(client
+        .list_tag_catalog_page(None, 100)
+        .await
+        .unwrap()
+        .tags
+        .is_empty());
+    assert_eq!(
+        client
+            .list_branch_catalog_page(None, 100)
+            .await
+            .unwrap()
+            .branches
+            .into_iter()
+            .map(|branch| branch.name)
+            .collect::<Vec<_>>(),
+        vec!["main"]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");

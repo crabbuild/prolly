@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use futures_util::{stream, StreamExt};
 use md5::{Digest as _, Md5};
 use prolly::{AsyncProlly, Config, Mutation, RuntimeConfig, Tree, TreeFormat};
 use sha2::Sha256;
@@ -22,14 +23,15 @@ use crate::{
     IdempotencyRetentionV2, ImmutablePayloadStoreV2, InitializationIntentV2,
     JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
     JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2,
-    LoadedRefV2, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache,
-    NodeCache, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2, ObjectVersionIdV2,
-    ObjectVersionOrder, ObjectVersionV2, OperationId, OperationIndexAdvanceReportV2,
-    OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2, PhysicalBatchV2,
-    PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2, RandomIdSource,
-    RefGeneration, RepositoryFormatV2, Result, SegmentedOperationIndexV2, ShardWriterAuthorityV2,
-    ShardedBranchPublisherV2, StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock,
-    TakeoverRequestV2, TreeRootV1,
+    ListRequest, LoadedRefV2, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    MemoryNodeCache, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2,
+    ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV2, OperationId,
+    OperationIndexAdvanceReportV2, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2,
+    PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2,
+    RandomIdSource, RefCatalogCursorV2, RefGeneration, RefKindV2, RepositoryFormatV2, Result,
+    SegmentedOperationIndexV2, ShardWriterAuthorityV2, ShardedBranchPublisherV2,
+    ShardedRefCatalogV2, StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock,
+    TagStoreV2, TakeoverRequestV2, TreeRootV1,
 };
 
 #[derive(Clone)]
@@ -117,6 +119,39 @@ pub struct VersionSummaryV2 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchHeadV2 {
+    pub name: String,
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagV2 {
+    pub name: String,
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchCatalogPageV2 {
+    pub branches: Vec<BranchHeadV2>,
+    pub continuation: Option<RefCatalogCursorV2>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagCatalogPageV2 {
+    pub tags: Vec<TagV2>,
+    pub continuation: Option<RefCatalogCursorV2>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RefCatalogRepairPageV2 {
+    pub scanned: usize,
+    pub indexed: usize,
+    pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchIndexAdvanceReportV2 {
     pub operations: OperationIndexAdvanceReportV2,
     pub journal: JournalIndexAdvanceReportV2,
@@ -201,11 +236,13 @@ pub struct RepositoryV2<P: ObjectPlane> {
     publisher: ShardedBranchPublisherV2<P>,
     payloads: ImmutablePayloadStoreV2<P>,
     commit_sessions: CommitSessionStoreV2<P>,
+    tags: TagStoreV2<P>,
+    ref_catalog: Arc<ShardedRefCatalogV2<P>>,
     operation_index: SegmentedOperationIndexV2<P>,
     journal_indexes: Arc<JournalDerivedIndexesV2<P>>,
     locator: Arc<JournalNodeLocator<P>>,
-    permits: RwLock<BTreeMap<String, AuthorityPermitV2>>,
-    fenced_branches: RwLock<BTreeSet<String>>,
+    permits: RwLock<BTreeMap<AuthorityScopeV2, AuthorityPermitV2>>,
+    fenced_scopes: RwLock<BTreeSet<AuthorityScopeV2>>,
     authority_renewal: tokio::sync::Mutex<()>,
     publication_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
     index_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
@@ -289,6 +326,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         match repository.publisher.load(&default_branch).await {
             Ok(_) => {
                 repository.locator.register(&default_branch)?;
+                repository.advance_branch_indexes(&default_branch).await?;
                 return Ok(repository);
             }
             Err(error) if error.code == ErrorCode::InvalidRevision => {}
@@ -306,7 +344,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                 repository.options.ids.operation(),
             )
             .await?;
-        repository.install_permit(&default_branch, permit.clone())?;
+        repository.install_permit(permit.clone())?;
 
         let empty = repository.engine(repository.node_store.clone()).create();
         let repository_created_at = repository.format.created_at_millis;
@@ -377,7 +415,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     repository.options.ids.operation(),
                 )
                 .await?;
-            repository.install_permit(&branch, permit)?;
+            repository.install_permit(permit)?;
         }
         Ok(repository)
     }
@@ -421,6 +459,21 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             options.repository_prefix.clone(),
             format.repository_id,
         );
+        let tags = TagStoreV2::new_with_control_retention(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            format.repository_id,
+            authority.clone(),
+            options.mutable_control_versions_to_retain,
+        )?;
+        let ref_catalog = Arc::new(ShardedRefCatalogV2::new_with_limits(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            format.repository_id,
+            format.state_tree_format.clone(),
+            node_cache.clone(),
+            options.mutable_control_versions_to_retain,
+        )?);
         let commit_sessions = CommitSessionStoreV2::new(
             plane.clone(),
             options.repository_prefix.clone(),
@@ -461,11 +514,13 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             publisher,
             payloads,
             commit_sessions,
+            tags,
+            ref_catalog,
             operation_index,
             journal_indexes,
             locator,
             permits: RwLock::new(BTreeMap::new()),
-            fenced_branches: RwLock::new(BTreeSet::new()),
+            fenced_scopes: RwLock::new(BTreeSet::new()),
             authority_renewal: tokio::sync::Mutex::new(()),
             publication_lanes: std::sync::Mutex::new(BTreeMap::new()),
             index_lanes: std::sync::Mutex::new(BTreeMap::new()),
@@ -494,6 +549,242 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     pub async fn head(&self, branch: &str) -> Result<CommitIdV2> {
         self.locator.register(branch)?;
         Ok(self.publisher.load(branch).await?.value.target)
+    }
+
+    pub async fn create_branch(&self, name: &str, from: CommitIdV2) -> Result<BranchHeadV2> {
+        crate::repository::validate_branch(name)?;
+        let _lane = self.lock_branch(name).await;
+        self.load_commit_object(from).await?;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_permit(name, now).await?;
+        let reference = self
+            .publisher
+            .create_at_target(
+                &permit,
+                name,
+                from,
+                self.options.ids.operation(),
+                "create branch",
+                now,
+            )
+            .await?;
+        self.locator.register(name)?;
+        self.advance_branch_indexes(name).await?;
+        Ok(BranchHeadV2 {
+            name: name.to_string(),
+            target: reference.value.target,
+            generation: reference.value.generation,
+        })
+    }
+
+    pub async fn delete_branch(&self, name: &str, expected: CommitIdV2) -> Result<()> {
+        crate::repository::validate_branch(name)?;
+        let _lane = self.lock_branch(name).await;
+        let current = self.publisher.load(name).await?;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_permit(name, now).await?;
+        let deleted = self
+            .publisher
+            .delete(
+                &permit,
+                name,
+                current,
+                expected,
+                self.options.ids.operation(),
+                now,
+            )
+            .await?;
+        self.record_branch_catalog(&deleted).await?;
+        self.local_index_heads
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 local-index lock poisoned"))?
+            .remove(name);
+        Ok(())
+    }
+
+    pub async fn tag(&self, name: &str) -> Result<TagV2> {
+        let loaded = self.tags.load(name).await?;
+        Ok(TagV2 {
+            name: name.to_string(),
+            target: loaded.value.target,
+            generation: loaded.value.generation,
+        })
+    }
+
+    pub async fn create_tag(&self, name: &str, target: CommitIdV2) -> Result<TagV2> {
+        crate::repository::validate_branch(name)?;
+        let _lane = self.lock_branch(&format!("tag:{name}")).await;
+        self.load_commit_object(target).await?;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_system_permit("tags", now).await?;
+        let tag = self
+            .tags
+            .create(
+                &permit,
+                name,
+                target,
+                self.options.ids.operation(),
+                &self.options.writer,
+                now,
+            )
+            .await?;
+        self.record_tag_catalog(name, &tag.value).await?;
+        Ok(TagV2 {
+            name: name.to_string(),
+            target,
+            generation: tag.value.generation,
+        })
+    }
+
+    pub async fn delete_tag(&self, name: &str, expected: CommitIdV2) -> Result<()> {
+        crate::repository::validate_branch(name)?;
+        let _lane = self.lock_branch(&format!("tag:{name}")).await;
+        let current = self.tags.load(name).await?;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_system_permit("tags", now).await?;
+        let deleted = self
+            .tags
+            .delete(
+                &permit,
+                name,
+                current,
+                expected,
+                self.options.ids.operation(),
+                now,
+            )
+            .await?;
+        self.record_tag_catalog(name, &deleted.value).await?;
+        Ok(())
+    }
+
+    pub async fn list_branch_catalog_page(
+        &self,
+        cursor: Option<RefCatalogCursorV2>,
+        limit: usize,
+    ) -> Result<BranchCatalogPageV2> {
+        let page = self
+            .ref_catalog
+            .list(RefKindV2::Branch, cursor, limit)
+            .await?;
+        Ok(BranchCatalogPageV2 {
+            branches: page
+                .entries
+                .into_iter()
+                .map(|entry| BranchHeadV2 {
+                    name: entry.name,
+                    target: entry.target,
+                    generation: entry.generation,
+                })
+                .collect(),
+            continuation: page.continuation,
+        })
+    }
+
+    pub async fn list_tag_catalog_page(
+        &self,
+        cursor: Option<RefCatalogCursorV2>,
+        limit: usize,
+    ) -> Result<TagCatalogPageV2> {
+        let page = self.ref_catalog.list(RefKindV2::Tag, cursor, limit).await?;
+        Ok(TagCatalogPageV2 {
+            tags: page
+                .entries
+                .into_iter()
+                .map(|entry| TagV2 {
+                    name: entry.name,
+                    target: entry.target,
+                    generation: entry.generation,
+                })
+                .collect(),
+            continuation: page.continuation,
+        })
+    }
+
+    /// Explicit bounded repair for a catalog shard stream. Normal lifecycle
+    /// maintenance is event-driven and never calls this namespace scanner.
+    pub async fn repair_ref_catalog_page(
+        &self,
+        kind: RefKindV2,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<RefCatalogRepairPageV2> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 ref-catalog repair page must contain 1 to 1,000 refs",
+            ));
+        }
+        let namespace = match kind {
+            RefKindV2::Branch => "heads",
+            RefKindV2::Tag => "tags",
+        };
+        let prefix = format!("{}/refs/v2/{namespace}/", self.options.repository_prefix);
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: prefix.clone(),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut report = RefCatalogRepairPageV2 {
+            continuation: page.continuation,
+            ..RefCatalogRepairPageV2::default()
+        };
+        for entry in page.entries {
+            report.scanned += 1;
+            let encoded_name = entry.path.as_str().strip_prefix(&prefix).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 ref repair escaped its namespace",
+                )
+            })?;
+            let name = String::from_utf8(hex::decode(encoded_name).map_err(|_| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 ref path name is not canonical hex",
+                )
+            })?)
+            .map_err(|_| Error::new(ErrorCode::CorruptCommit, "v2 ref path name is not UTF-8"))?;
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            match kind {
+                RefKindV2::Branch => {
+                    let value: crate::RefValueV2 = decode_canonical(&stored.bytes)?;
+                    value.validate(self.format.repository_id, &name)?;
+                    self.ref_catalog
+                        .record(
+                            kind,
+                            &name,
+                            value.target,
+                            value.generation,
+                            value.operation,
+                            value.tombstone,
+                            value.updated_at_millis,
+                        )
+                        .await?;
+                }
+                RefKindV2::Tag => {
+                    let value: crate::TagValueV2 = decode_canonical(&stored.bytes)?;
+                    value.validate(self.format.repository_id, &name)?;
+                    self.ref_catalog
+                        .record(
+                            kind,
+                            &name,
+                            value.target,
+                            value.generation,
+                            value.operation,
+                            value.tombstone,
+                            value.updated_at_millis,
+                        )
+                        .await?;
+                }
+            }
+            report.indexed += 1;
+        }
+        Ok(report)
     }
 
     /// Explicitly transfer one branch shard to this repository process.
@@ -546,7 +837,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .authority
             .activate_after_barrier(pending, applied.into_barrier(), now)
             .await?;
-        self.install_permit(branch, permit)?;
+        self.install_permit(permit)?;
         self.writable.store(true, Ordering::Release);
         Ok(generation)
     }
@@ -1603,6 +1894,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 index-error lock poisoned"))?
             .remove(branch);
+        let reference = self.publisher.load(branch).await?;
+        self.record_branch_catalog(&reference).await?;
         Ok(report)
     }
 
@@ -1841,12 +2134,21 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
             .clone();
+        let authority = self.authority.clone();
+        let results = stream::iter(permits)
+            .map(|(scope, permit)| {
+                let authority = authority.clone();
+                async move { (scope, authority.renew(permit, now).await) }
+            })
+            .buffer_unordered(32)
+            .collect::<Vec<_>>()
+            .await;
         let mut first_error = None;
-        for (branch, permit) in permits {
-            match self.authority.renew(permit, now).await {
-                Ok(renewed) => self.install_permit(&branch, renewed)?,
+        for (scope, result) in results {
+            match result {
+                Ok(renewed) => self.install_permit(renewed)?,
                 Err(error) => {
-                    self.fence_branch(&branch)?;
+                    self.fence_scope(&scope)?;
                     if first_error.is_none() {
                         first_error = Some(error);
                     }
@@ -1886,7 +2188,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
 
     pub fn fenced_branches(&self) -> Result<Vec<String>> {
         Ok(self
-            .fenced_branches
+            .fenced_scopes
             .read()
             .map_err(|_| {
                 Error::new(
@@ -1895,7 +2197,10 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                 )
             })?
             .iter()
-            .cloned()
+            .filter_map(|scope| match scope {
+                AuthorityScopeV2::Branch { name } => Some(name.clone()),
+                AuthorityScopeV2::System { .. } => None,
+            })
             .collect())
     }
 
@@ -1938,13 +2243,37 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     }
 
     async fn active_permit(&self, branch: &str, now: u64) -> Result<AuthorityPermitV2> {
+        self.active_scope_permit(
+            AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+            now,
+        )
+        .await
+    }
+
+    async fn active_system_permit(&self, namespace: &str, now: u64) -> Result<AuthorityPermitV2> {
+        self.active_scope_permit(
+            AuthorityScopeV2::System {
+                namespace: namespace.to_string(),
+            },
+            now,
+        )
+        .await
+    }
+
+    async fn active_scope_permit(
+        &self,
+        scope: AuthorityScopeV2,
+        now: u64,
+    ) -> Result<AuthorityPermitV2> {
         if !self.writable.load(Ordering::Acquire) {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "protocol-v2 repository is read-only",
             ));
         }
-        if self.is_branch_fenced(branch)? {
+        if self.is_scope_fenced(&scope)? {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "protocol-v2 branch authority is fenced in this repository instance",
@@ -1954,14 +2283,14 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .permits
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
-            .get(branch)
+            .get(&scope)
             .cloned();
         let permit = if let Some(permit) = cached.filter(|permit| permit.expires_at_millis() > now)
         {
             permit
         } else {
             let _renewal = self.authority_renewal.lock().await;
-            if self.is_branch_fenced(branch)? {
+            if self.is_scope_fenced(&scope)? {
                 return Err(Error::new(
                     ErrorCode::PreconditionFailed,
                     "protocol-v2 branch authority is fenced in this repository instance",
@@ -1971,12 +2300,12 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                 .permits
                 .read()
                 .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
-                .get(branch)
+                .get(&scope)
                 .cloned();
             let acquired = match current {
                 Some(permit) if permit.expires_at_millis() > now => permit,
                 Some(_) => {
-                    self.fence_branch(branch)?;
+                    self.fence_scope(&scope)?;
                     return Err(Error::new(
                         ErrorCode::PreconditionFailed,
                         "protocol-v2 branch authority expired; explicit takeover is required",
@@ -1985,9 +2314,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                 None => match self
                     .authority
                     .acquire(
-                        AuthorityScopeV2::Branch {
-                            name: branch.to_string(),
-                        },
+                        scope.clone(),
                         &self.options.writer,
                         now,
                         self.options.ids.operation(),
@@ -1996,29 +2323,30 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                 {
                     Ok(permit) => permit,
                     Err(error) => {
-                        self.fence_branch(branch)?;
+                        self.fence_scope(&scope)?;
                         return Err(error);
                     }
                 },
             };
-            self.install_permit(branch, acquired.clone())?;
+            self.install_permit(acquired.clone())?;
             acquired
         };
         match self.authority.validate_active(&permit, now).await {
             Ok(_) => Ok(permit),
             Err(error) => {
-                self.fence_branch(branch)?;
+                self.fence_scope(&scope)?;
                 Err(error)
             }
         }
     }
 
-    fn install_permit(&self, branch: &str, permit: AuthorityPermitV2) -> Result<()> {
+    fn install_permit(&self, permit: AuthorityPermitV2) -> Result<()> {
+        let scope = permit.stamp().scope;
         self.permits
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
-            .insert(branch.to_string(), permit);
-        self.fenced_branches
+            .insert(scope.clone(), permit);
+        self.fenced_scopes
             .write()
             .map_err(|_| {
                 Error::new(
@@ -2026,16 +2354,22 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     "v2 fenced-branch lock poisoned",
                 )
             })?
-            .remove(branch);
+            .remove(&scope);
         Ok(())
     }
 
     fn fence_branch(&self, branch: &str) -> Result<()> {
+        self.fence_scope(&AuthorityScopeV2::Branch {
+            name: branch.to_string(),
+        })
+    }
+
+    fn fence_scope(&self, scope: &AuthorityScopeV2) -> Result<()> {
         self.permits
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
-            .remove(branch);
-        self.fenced_branches
+            .remove(scope);
+        self.fenced_scopes
             .write()
             .map_err(|_| {
                 Error::new(
@@ -2043,13 +2377,13 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     "v2 fenced-branch lock poisoned",
                 )
             })?
-            .insert(branch.to_string());
+            .insert(scope.clone());
         Ok(())
     }
 
-    fn is_branch_fenced(&self, branch: &str) -> Result<bool> {
+    fn is_scope_fenced(&self, scope: &AuthorityScopeV2) -> Result<bool> {
         Ok(self
-            .fenced_branches
+            .fenced_scopes
             .read()
             .map_err(|_| {
                 Error::new(
@@ -2057,7 +2391,7 @@ impl<P: ObjectPlane> RepositoryV2<P> {
                     "v2 fenced-branch lock poisoned",
                 )
             })?
-            .contains(branch))
+            .contains(scope))
     }
 
     async fn require_branch_indexes_ready(&self, branch: &str) -> Result<()> {
@@ -2093,6 +2427,36 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 local-index lock poisoned"))?
             .insert(branch.to_string(), target);
+        Ok(())
+    }
+
+    async fn record_branch_catalog(&self, reference: &LoadedRefV2) -> Result<()> {
+        self.ref_catalog
+            .record(
+                RefKindV2::Branch,
+                &reference.value.inline_reflog.branch,
+                reference.value.target,
+                reference.value.generation,
+                reference.value.operation,
+                reference.value.tombstone,
+                reference.value.updated_at_millis,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn record_tag_catalog(&self, name: &str, value: &crate::TagValueV2) -> Result<()> {
+        self.ref_catalog
+            .record(
+                RefKindV2::Tag,
+                name,
+                value.target,
+                value.generation,
+                value.operation,
+                value.tombstone,
+                value.updated_at_millis,
+            )
+            .await?;
         Ok(())
     }
 

@@ -162,6 +162,75 @@ that does not require restart recovery, opt out explicitly:
 let commit = client.begin_commit().ephemeral().start().await?;
 ```
 
+### Create branches and immutable tags
+
+Branches are independent publication lanes. Creating a branch points it at an
+existing durable commit; it does not copy payloads or Prolly nodes.
+
+```rust
+let main = client.head().await?;
+let feature_head = client.create_branch("feature", Some(main)).await?;
+
+let feature = client.for_branch("feature")?;
+let committed = feature
+    .put_object("docs/feature.txt", b"ready for review".to_vec())
+    .await?;
+
+let release = client.create_tag("release-2026-08", committed.id).await?;
+assert_eq!(client.tag("release-2026-08").await?, release);
+assert_eq!(feature_head.target, main);
+```
+
+Delete operations require the target you observed. A concurrent branch move
+or tag replacement therefore fails instead of deleting newer state.
+
+```rust
+client.delete_tag("release-2026-08", release.target).await?;
+client.delete_branch("feature", committed.id).await?;
+```
+
+### Page the native ref catalog
+
+The catalog is split into 16 independent shards. Listing uses point reads of
+the shard heads and nodes; it does not scan the S3 ref prefix. Ordering is
+stable by shard and then name, so persist the opaque cursor rather than
+constructing one.
+
+```rust
+let mut cursor = None;
+loop {
+    let page = client.list_branch_catalog_page(cursor, 500).await?;
+    for branch in page.branches {
+        println!("{} -> {}", branch.name, branch.target);
+    }
+    cursor = page.continuation;
+    if cursor.is_none() {
+        break;
+    }
+}
+```
+
+The catalog is derived discovery state. Resolve a chosen branch with
+`client.for_branch(name)?.head().await?` or a tag with `client.tag(name).await?`
+before acting on it. If a process crashes after publishing a ref but before
+updating its shard, run the bounded repair API from an administrative job:
+
+```rust
+let mut continuation = None;
+loop {
+    let page = client
+        .repair_branch_catalog_page(continuation, 500)
+        .await?;
+    continuation = page.continuation;
+    if continuation.is_none() {
+        break;
+    }
+}
+```
+
+Repair is intentionally the only native-v2 path that lists the authoritative
+ref namespace. It should not run in foreground request handling.
+
 ### Clean expired checkpoints
 
 Cleanup is bounded and resumable. Run it periodically from repository

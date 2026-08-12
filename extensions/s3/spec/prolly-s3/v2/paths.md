@@ -9,8 +9,12 @@ any protocol v1 record. `P` is the configured repository prefix.
 | system authority lease | `P/authority/v2/system/N/lease.cbor` |
 | maintenance gate | `P/authority/v2/maintenance/gate.cbor` |
 | branch ref | `P/refs/v2/heads/N` |
+| tag ref | `P/refs/v2/tags/N` |
 | authority-stamped commit object | `P/commits/v2/sha256/H0/H1/H` |
 | publication event | `P/publications/v2/sha256/H0/H1/H` |
+| ref-catalog lifecycle event | `P/ref-events/v2/sha256/H0/H1/H` |
+| ref-catalog shard head | `P/ref-catalog/v2/shards/SS/head.cbor` |
+| ref-catalog node tree | `P/ref-catalog/v2/tree/nodes/sha256/H0/H1/H` |
 | immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
 | commit-session checkpoint | `P/staging/v2/R/B/checkpoints/Q.cbor` |
 | operation-index head | `P/operation-index/v2/heads/N.cbor` |
@@ -44,6 +48,23 @@ previous event for the same branch. Consumers open the mutable ref once and
 then page newest-to-oldest through an immutable snapshot without listing a
 namespace. A losing CAS may leave an unreachable event, but it cannot enter the
 journal and is safe for GC to reclaim.
+
+Tag refs use the same canonical name encoding and mutable-control retention as
+branch refs. They are fenced by the `tags` system-authority scope. A tag
+create, recreation, or delete validates that authority before its exact CAS;
+deletion publishes a tombstone rather than removing the mutable key.
+
+Ref enumeration is derived from 16 independently published catalog shards.
+Each branch or tag transition stores one immutable lifecycle event and updates
+the shard selected by hashing its kind and name. The event links to the prior
+event for that shard, while the mutable shard head points to a Prolly root
+containing the latest generation for every ref. Tombstones remain in that tree
+so delayed events cannot resurrect deleted refs. Readers page shard-by-shard
+using a canonical cursor and issue point GETs only; they never list the ref
+namespace. The catalog is advisory: callers resolve an entry through its
+authoritative ref before mutation. A crash between ref publication and catalog
+publication is repaired by the explicit bounded ref scanner; namespace scans
+are not part of normal reads or writes.
 
 `R` is lowercase hex of the repository ID. A live `ObjectVersionV2` carries
 the full derived payload path and optional provider VersionId; a delete marker

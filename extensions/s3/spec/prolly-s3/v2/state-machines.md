@@ -73,6 +73,33 @@ must fail closed for a sharded repository.
 - Bounded cleanup pages physical checkpoint versions and exact-deletes only
   records whose embedded expiry is in the past.
 
+## Ref lifecycle and sharded catalog
+
+Authoritative branch states are:
+
+`Absent -> Live(g) -> Live(g+1) -> Tombstone(g+1) -> Live(g+2)`
+
+Tags follow the same generation progression. Branch moves first publish their
+immutable `PublicationEventV2`; tag transitions retain an inline reflog. Every
+transition then emits a common immutable `RefCatalogEventV2` and attempts one
+CAS against only the selected catalog shard.
+
+- A catalog event links to the previous event in its shard, not to an event in
+  another shard.
+- Concurrent writers to different shards never contend on a mutable catalog
+  object. Same-shard CAS losers reload the head, retain the winner's update,
+  apply their event to the new tree, and retry.
+- An update with a lower generation is ignored. Equal generation with
+  different state is corruption/conflict, while an exact repeat is idempotent.
+- A catalog failure cannot authorize or roll back a ref transition. Ordinary
+  branch index maintenance retries it from the authoritative branch head.
+- Branch and tag creation/deletion wait for their catalog update so lifecycle
+  APIs provide read-after-write enumeration. The bounded repair scanner closes
+  gaps after crashes and is the only path that lists the ref namespace.
+- Tombstoned entries remain in the derived tree but are omitted from listings.
+  Native GC may reclaim unreachable event/tree objects only after accounting
+  for every live shard head and in-progress repair/administration root.
+
 ## Journal-index rebuild
 
 `Discovering → Applying → Complete → Cleaned`

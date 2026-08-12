@@ -840,3 +840,109 @@ async fn native_v2_over_limit_index_lag_rebuilds_in_restartable_pages() {
     assert!(replay.idempotent_replay);
     assert_eq!(replay.id, original.id);
 }
+
+#[tokio::test]
+async fn native_v2_ref_lifecycle_uses_event_driven_sharded_catalogs() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(110_000));
+    let repository = RepositoryV2::initialize(
+        plane.clone(),
+        RepositoryV2Options {
+            repository_prefix: ".tests/native-v2-ref-catalog".to_string(),
+            writer: "writer-a".to_string(),
+            clock: clock.clone(),
+            ids: Arc::new(SequenceIdSource::new(0xdd, 1)),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+            ..RepositoryV2Options::default()
+        },
+    )
+    .await
+    .unwrap();
+    let main = repository.head("main").await.unwrap();
+
+    clock.advance(1).unwrap();
+    let feature = repository.create_branch("feature", main).await.unwrap();
+    assert_eq!(feature.target, main);
+    let feature_commit = repository
+        .put_object(
+            "feature",
+            b"feature.txt".to_vec(),
+            b"branch-local".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    repository.advance_branch_indexes("feature").await.unwrap();
+    assert_eq!(repository.head("main").await.unwrap(), main);
+
+    clock.advance(1).unwrap();
+    let tag = repository
+        .create_tag("release-1", feature_commit.id)
+        .await
+        .unwrap();
+    assert_eq!(repository.tag("release-1").await.unwrap(), tag);
+
+    plane.reset_request_counts();
+    let mut branch_cursor = None;
+    let mut branches = Vec::new();
+    loop {
+        let page = repository
+            .list_branch_catalog_page(branch_cursor, 1)
+            .await
+            .unwrap();
+        branches.extend(page.branches.into_iter().map(|branch| branch.name));
+        branch_cursor = page.continuation;
+        if branch_cursor.is_none() {
+            break;
+        }
+    }
+    branches.sort();
+    assert_eq!(branches, vec!["feature", "main"]);
+    let tags = repository.list_tag_catalog_page(None, 10).await.unwrap();
+    assert_eq!(tags.tags, vec![tag.clone()]);
+    assert_eq!(
+        plane.request_snapshot().list,
+        0,
+        "steady-state catalog listing must not scan the ref namespace"
+    );
+
+    clock.advance(1).unwrap();
+    repository
+        .delete_tag("release-1", feature_commit.id)
+        .await
+        .unwrap();
+    repository
+        .delete_branch("feature", feature_commit.id)
+        .await
+        .unwrap();
+    assert!(repository
+        .list_tag_catalog_page(None, 10)
+        .await
+        .unwrap()
+        .tags
+        .is_empty());
+    assert_eq!(
+        repository
+            .list_branch_catalog_page(None, 10)
+            .await
+            .unwrap()
+            .branches
+            .into_iter()
+            .map(|branch| branch.name)
+            .collect::<Vec<_>>(),
+        vec!["main"]
+    );
+
+    plane.reset_request_counts();
+    let repair = repository
+        .repair_ref_catalog_page(prolly_s3_core::RefKindV2::Branch, None, 100)
+        .await
+        .unwrap();
+    assert_eq!(repair.scanned, 2);
+    assert_eq!(repair.indexed, 2);
+    assert!(
+        plane.request_snapshot().list > 0,
+        "namespace listing is reserved for explicit repair"
+    );
+}

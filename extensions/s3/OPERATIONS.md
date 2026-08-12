@@ -118,6 +118,15 @@ v1's older `advance_node_index_v2`, `advance_commit_graph_v2`, and
 `advance_ref_catalog_v2` scan epochs remain compatibility/rebuild tools; do not
 use them as protocol-v2 steady-state maintenance.
 
+Native protocol v2 enumerates branches and tags through 16 event-driven
+catalog shards. Branch index maintenance records the latest authoritative ref
+generation after advancing its journal indexes. Branch/tag create and delete
+also update the catalog before returning. Catalog reads perform point GETs and
+must not call `ListObjectsV2`; monitor any ref-namespace LIST as repair or
+administrative traffic. If a crash leaves a published ref absent from the
+catalog, page `repair_branch_catalog_page` or `repair_tag_catalog_page` with a
+bounded limit and persist the returned continuation between invocations.
+
 ```rust
 use prolly::TreeFormat;
 use prolly_s3_core::JournalDerivedIndexesV2;

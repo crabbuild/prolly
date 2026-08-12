@@ -112,6 +112,17 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
     }
 
     pub async fn load(&self, branch: &str) -> Result<LoadedRefV2> {
+        let loaded = self.load_including_tombstone(branch).await?;
+        if loaded.value.tombstone {
+            return Err(Error::new(
+                ErrorCode::InvalidRevision,
+                "v2 branch ref is deleted",
+            ));
+        }
+        Ok(loaded)
+    }
+
+    pub async fn load_including_tombstone(&self, branch: &str) -> Result<LoadedRefV2> {
         let path = self.ref_path(branch)?;
         let stored =
             self.plane.load_mutable(&path).await?.ok_or_else(|| {
@@ -123,6 +134,156 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             value,
             token: stored.metadata.token,
         })
+    }
+
+    /// Create or recreate a branch ref at an already durable v2 commit. The
+    /// selected commit may have been authored under another branch authority;
+    /// future publications are fenced by the new branch's own permit.
+    pub async fn create_at_target(
+        &self,
+        permit: &AuthorityPermitV2,
+        branch: &str,
+        target: CommitIdV2,
+        operation: OperationId,
+        message: &str,
+        now_millis: u64,
+    ) -> Result<LoadedRefV2> {
+        crate::repository::validate_branch(branch)?;
+        if operation.is_nil() || message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 branch creation requires an operation and message",
+            ));
+        }
+        let stamp = self.authority.validate_active(permit, now_millis).await?;
+        stamp.validate(
+            self.repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )?;
+        self.load_commit_object(target).await?;
+        let existing = match self.load_including_tombstone(branch).await {
+            Ok(existing) if !existing.value.tombstone => {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "v2 branch already exists",
+                ));
+            }
+            Ok(existing) => Some(existing),
+            Err(error) if error.code == ErrorCode::InvalidRevision => None,
+            Err(error) => return Err(error),
+        };
+        let generation = existing.as_ref().map_or(Ok(RefGeneration(0)), |current| {
+            current
+                .value
+                .generation
+                .0
+                .checked_add(1)
+                .map(RefGeneration)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "v2 ref generation overflow")
+                })
+        })?;
+        let old_target = existing.as_ref().map(|current| current.value.target);
+        let reflog = ReflogEntryV2 {
+            branch: branch.to_string(),
+            old_target,
+            new_target: target,
+            operation,
+            actor: stamp.writer_id.clone(),
+            message: message.to_string(),
+            created_at_millis: now_millis,
+        };
+        let event = PublicationEventV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            generation,
+            previous: existing.as_ref().map(|current| current.value.publication),
+            old_target,
+            new_target: target,
+            operation,
+            reflog: reflog.id()?,
+            authority: stamp.clone(),
+            created_at_millis: now_millis,
+        };
+        let publication = self.store_publication(&event).await?;
+        let value = RefValueV2 {
+            target,
+            previous_target: old_target,
+            generation,
+            operation,
+            reflog: reflog.id()?,
+            publication,
+            inline_reflog: reflog,
+            authority: stamp,
+            updated_at_millis: now_millis,
+            tombstone: false,
+        };
+        self.cas_ref(branch, existing.map(|current| current.token), value)
+            .await
+    }
+
+    pub async fn delete(
+        &self,
+        permit: &AuthorityPermitV2,
+        branch: &str,
+        current: LoadedRefV2,
+        expected: CommitIdV2,
+        operation: OperationId,
+        now_millis: u64,
+    ) -> Result<LoadedRefV2> {
+        current.value.validate(self.repository, branch)?;
+        let stamp = self.authority.validate_active(permit, now_millis).await?;
+        if current.value.tombstone
+            || current.value.target != expected
+            || current.value.authority != stamp
+            || operation.is_nil()
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "v2 branch deletion does not match the live ref and authority",
+            ));
+        }
+        let generation =
+            RefGeneration(current.value.generation.0.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "v2 ref generation overflow")
+            })?);
+        let reflog = ReflogEntryV2 {
+            branch: branch.to_string(),
+            old_target: Some(expected),
+            new_target: expected,
+            operation,
+            actor: stamp.writer_id.clone(),
+            message: "delete branch".to_string(),
+            created_at_millis: now_millis,
+        };
+        let event = PublicationEventV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            generation,
+            previous: Some(current.value.publication),
+            old_target: Some(expected),
+            new_target: expected,
+            operation,
+            reflog: reflog.id()?,
+            authority: stamp.clone(),
+            created_at_millis: now_millis,
+        };
+        let publication = self.store_publication(&event).await?;
+        let value = RefValueV2 {
+            target: expected,
+            previous_target: Some(expected),
+            generation,
+            operation,
+            reflog: reflog.id()?,
+            publication,
+            inline_reflog: reflog,
+            authority: stamp,
+            updated_at_millis: now_millis,
+            tombstone: true,
+        };
+        self.cas_ref(branch, Some(current.token), value).await
     }
 
     pub async fn create(&self, request: CommitPublicationV2<'_>) -> Result<LoadedRefV2> {

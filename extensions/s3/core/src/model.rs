@@ -89,6 +89,7 @@ hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(PublicationEventIdV2, "ppe2_");
+hash_id!(RefCatalogEventIdV2, "pce2_");
 hash_id!(JournalIndexRebuildChunkIdV2, "jrc2_");
 hash_id!(OperationIndexSegmentIdV2, "poi2_");
 hash_id!(GcDirtyRootIdV2, "pdr2_");
@@ -1819,6 +1820,94 @@ pub struct PublicationEventV2 {
     pub created_at_millis: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum RefKindV2 {
+    Branch,
+    Tag,
+}
+
+/// Immutable lifecycle event consumed by one prefix-sharded ref catalog.
+/// Branch publication events remain the authoritative per-branch history;
+/// this record provides a common branch/tag discovery stream whose loss can be
+/// repaired from authoritative ref objects.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefCatalogEventV2 {
+    pub repository: RepositoryId,
+    pub shard: u8,
+    pub previous: Option<RefCatalogEventIdV2>,
+    pub kind: RefKindV2,
+    pub name: String,
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub tombstone: bool,
+    pub created_at_millis: u64,
+}
+
+impl RefCatalogEventV2 {
+    pub fn validate(&self, repository: RepositoryId, expected_shard: u8) -> Result<()> {
+        crate::repository::validate_branch(&self.name)?;
+        if self.repository != repository || self.shard != expected_shard || self.operation.is_nil()
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 ref-catalog event is malformed or belongs to another shard",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn id(&self) -> Result<RefCatalogEventIdV2> {
+        let bytes = encode_canonical(self)?;
+        Ok(RefCatalogEventIdV2(domain_hash(
+            b"prolly-s3/ref-catalog-event/v2",
+            &[&bytes],
+        )))
+    }
+}
+
+/// Derived ref state stored in a catalog shard. Tombstones are retained so an
+/// old or duplicated lifecycle event cannot resurrect a deleted ref.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeRefCatalogEntryV2 {
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub tombstone: bool,
+    pub updated_at_millis: u64,
+}
+
+/// Mutable root of one independently updated ref-catalog shard.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefCatalogShardHeadV2 {
+    pub repository: RepositoryId,
+    pub shard: u8,
+    pub latest_event: RefCatalogEventIdV2,
+    pub root: TreeRootV1,
+    pub generation: u64,
+    pub updated_at_millis: u64,
+}
+
+impl RefCatalogShardHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        expected_shard: u8,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        if self.repository != repository
+            || self.shard != expected_shard
+            || self.root.format_digest != expected_format
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "v2 ref-catalog shard head is malformed or belongs to another shard",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl PublicationEventV2 {
     pub fn id(&self) -> Result<PublicationEventIdV2> {
         self.validate()?;
@@ -2065,6 +2154,42 @@ impl RefValueV2 {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "v2 branch ref does not match its authority or inline reflog",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagValueV2 {
+    pub target: CommitIdV2,
+    pub previous_target: Option<CommitIdV2>,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub inline_reflog: ReflogEntryV2,
+    pub authority: AuthorityStampV2,
+    pub updated_at_millis: u64,
+    pub tombstone: bool,
+}
+
+impl TagValueV2 {
+    pub fn validate(&self, repository: RepositoryId, name: &str) -> Result<()> {
+        crate::repository::validate_branch(name)?;
+        self.authority.validate(
+            repository,
+            &AuthorityScopeV2::System {
+                namespace: "tags".to_string(),
+            },
+        )?;
+        if self.operation.is_nil()
+            || self.inline_reflog.branch != name
+            || self.inline_reflog.old_target != self.previous_target
+            || self.inline_reflog.new_target != self.target
+            || self.inline_reflog.operation != self.operation
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 tag ref does not match its authority or inline reflog",
             ));
         }
         Ok(())
