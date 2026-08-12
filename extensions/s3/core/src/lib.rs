@@ -12,6 +12,7 @@ mod operation_index_v2;
 mod payload_v2;
 mod publication_v2;
 mod repository;
+mod repository_v2;
 mod runtime;
 mod store;
 
@@ -54,6 +55,9 @@ pub use repository::{
     RepositoryOptions, RepositoryPerformanceSnapshot, ResumableFsckCursor, ResumableFsckPage,
     ResumableFsckPhase, RetentionPinPage, ShardAuthorityMaintenance, SyncReport, Tag, TagPage,
     TagReflogPage, TraversalBudget, VersionSummary,
+};
+pub use repository_v2::{
+    BranchIndexAdvanceReportV2, CommitReceiptV2, ObjectDataV2, RepositoryV2, RepositoryV2Options,
 };
 #[deprecated(
     since = "0.1.0",

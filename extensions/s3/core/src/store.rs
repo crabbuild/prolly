@@ -10,15 +10,22 @@ use futures_util::StreamExt;
 use prolly::{AsyncStore, BatchOp, Cid};
 
 use crate::{
-    codec::sha256, CommitId, CommitObjectV1, DeleteOutcome, Error, ErrorCode, GetRequest,
-    ImmutablePut, ListRequest, NodeCache, NodeCacheKey, NodeIndexEntryV1, NodePackAttachmentKindV1,
-    NodePackAttachmentV1, NodePackEntryV1, NodePackId, NodePackRefV1, NodePackV1, ObjectPath,
-    ObjectPlane, PhysicalVersion, RepositoryId, Result, TreeFormatDigest,
+    codec::sha256, CommitId, CommitIdV2, CommitObjectV1, CommitObjectV2, DeleteOutcome, Error,
+    ErrorCode, GetRequest, ImmutablePut, JournalNodeIndexEntryV2, ListRequest, NodeCache,
+    NodeCacheKey, NodeIndexEntryV1, NodePackAttachmentKindV1, NodePackAttachmentV1,
+    NodePackEntryV1, NodePackId, NodePackRefV1, NodePackV1, ObjectPath, ObjectPlane,
+    PhysicalVersion, RepositoryId, Result, TreeFormatDigest,
 };
+
+#[derive(Clone, Copy)]
+enum PackedCommitId {
+    V1(CommitId),
+    V2(CommitIdV2),
+}
 
 #[derive(Clone)]
 struct PackedNodeLocation {
-    container: CommitId,
+    container: PackedCommitId,
     pack: NodePackId,
     absolute_offset: u64,
     len: u32,
@@ -41,6 +48,7 @@ struct PackedNodeState {
     coalesced_waits: AtomicU64,
     ranged_fetches: AtomicU64,
     locator: RwLock<Option<Arc<dyn NodeLocator>>>,
+    allow_namespace_scan: bool,
 }
 
 struct DirectNodeState {
@@ -93,7 +101,43 @@ impl BoundedNodeLocations {
 
 #[async_trait::async_trait]
 pub(crate) trait NodeLocator: Send + Sync + 'static {
-    async fn locate(&self, cid: &Cid) -> Result<Option<NodeIndexEntryV1>>;
+    async fn locate(&self, cid: &Cid) -> Result<Option<LocatedPackedNode>>;
+}
+
+#[derive(Clone)]
+pub(crate) struct LocatedPackedNode {
+    cid: Cid,
+    container: PackedCommitId,
+    pack: NodePackId,
+    absolute_offset: u64,
+    len: u32,
+    sha256: [u8; 32],
+}
+
+impl From<NodeIndexEntryV1> for LocatedPackedNode {
+    fn from(entry: NodeIndexEntryV1) -> Self {
+        Self {
+            cid: entry.cid,
+            container: PackedCommitId::V1(entry.container),
+            pack: entry.pack,
+            absolute_offset: entry.absolute_offset,
+            len: entry.len,
+            sha256: entry.sha256,
+        }
+    }
+}
+
+impl From<JournalNodeIndexEntryV2> for LocatedPackedNode {
+    fn from(entry: JournalNodeIndexEntryV2) -> Self {
+        Self {
+            cid: entry.cid,
+            container: PackedCommitId::V2(entry.container),
+            pack: entry.pack,
+            absolute_offset: entry.absolute_offset,
+            len: entry.len,
+            sha256: entry.sha256,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -235,6 +279,7 @@ impl<P> ProllyObjectStore<P> {
                 coalesced_waits: AtomicU64::new(0),
                 ranged_fetches: AtomicU64::new(0),
                 locator: RwLock::new(None),
+                allow_namespace_scan: true,
             })),
             packed_pending: Some(Arc::new(RwLock::new(BTreeMap::new()))),
             direct: None,
@@ -294,6 +339,28 @@ impl<P> ProllyObjectStore<P> {
         store
     }
 
+    pub(crate) fn new_packed_v2_with_node_cache(
+        plane: Arc<P>,
+        repository_prefix: impl Into<String>,
+        max_cached_pack_bytes: usize,
+        max_cached_locations: usize,
+        cache_namespace: NodeCacheNamespace,
+        node_cache: Arc<dyn NodeCache>,
+    ) -> Self {
+        let mut store = Self::new_packed_with_node_cache(
+            plane,
+            repository_prefix,
+            max_cached_pack_bytes,
+            max_cached_locations,
+            cache_namespace,
+            node_cache,
+        );
+        let state = Arc::get_mut(store.packed.as_mut().expect("packed state was created"))
+            .expect("newly created packed state has one owner");
+        state.allow_namespace_scan = false;
+        store
+    }
+
     fn path_for_key(&self, key: &[u8]) -> Result<ObjectPath> {
         if key.len() != 32 {
             return Err(Error::new(
@@ -311,10 +378,14 @@ impl<P> ProllyObjectStore<P> {
         ))
     }
 
-    fn commit_path(&self, id: CommitId) -> Result<ObjectPath> {
-        let encoded = hex::encode(id.as_bytes());
+    fn commit_path(&self, id: PackedCommitId) -> Result<ObjectPath> {
+        let (version, encoded) = match id {
+            PackedCommitId::V1(id) => (None, hex::encode(id.as_bytes())),
+            PackedCommitId::V2(id) => (Some("v2"), hex::encode(id.as_bytes())),
+        };
+        let version = version.map_or_else(String::new, |version| format!("{version}/"));
         ObjectPath::new(format!(
-            "{}/commits/sha256/{}/{}/{}",
+            "{}/commits/{version}sha256/{}/{}/{}",
             self.repository_prefix,
             &encoded[..2],
             &encoded[2..4],
@@ -387,17 +458,28 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             .locations
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?;
-        Ok(locations
+        locations
             .iter()
-            .map(|(cid, location)| NodeIndexEntryV1 {
-                cid: cid.clone(),
-                container: location.container,
-                pack: location.pack,
-                absolute_offset: location.absolute_offset,
-                len: location.len,
-                sha256: location.sha256,
+            .map(|(cid, location)| {
+                let container = match location.container {
+                    PackedCommitId::V1(container) => container,
+                    PackedCommitId::V2(_) => {
+                        return Err(Error::new(
+                            ErrorCode::InternalInvariant,
+                            "cannot export v2 node locations through the v1 checkpoint API",
+                        ))
+                    }
+                };
+                Ok(NodeIndexEntryV1 {
+                    cid: cid.clone(),
+                    container,
+                    pack: location.pack,
+                    absolute_offset: location.absolute_offset,
+                    len: location.len,
+                    sha256: location.sha256,
+                })
             })
-            .collect())
+            .collect()
     }
 
     pub fn import_node_index(&self, entries: &[NodeIndexEntryV1]) -> Result<()> {
@@ -424,7 +506,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             locations.insert(
                 entry.cid.clone(),
                 PackedNodeLocation {
-                    container: entry.container,
+                    container: PackedCommitId::V1(entry.container),
                     pack: entry.pack,
                     absolute_offset: entry.absolute_offset,
                     len: entry.len,
@@ -436,7 +518,11 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
     }
 
     pub async fn rebuild_node_index(&self) -> Result<()> {
-        if self.packed.is_some() {
+        if self
+            .packed
+            .as_ref()
+            .is_some_and(|state| state.allow_namespace_scan)
+        {
             self.scan_commit_objects_for(None).await?;
         }
         Ok(())
@@ -494,14 +580,24 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 }
             }
         }
-        Ok(location.map(|location| NodeIndexEntryV1 {
-            cid: cid.clone(),
-            container: location.container,
-            pack: location.pack,
-            absolute_offset: location.absolute_offset,
-            len: location.len,
-            sha256: location.sha256,
-        }))
+        location
+            .map(|location| {
+                let PackedCommitId::V1(container) = location.container else {
+                    return Err(Error::new(
+                        ErrorCode::InternalInvariant,
+                        "cannot resolve a v2 node through the v1 checkpoint API",
+                    ));
+                };
+                Ok(NodeIndexEntryV1 {
+                    cid: cid.clone(),
+                    container,
+                    pack: location.pack,
+                    absolute_offset: location.absolute_offset,
+                    len: location.len,
+                    sha256: location.sha256,
+                })
+            })
+            .transpose()
     }
 
     pub(crate) fn clear_node_locations(&self) -> Result<()> {
@@ -598,6 +694,26 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         prepared: PreparedNodePack,
         payload_offset: u64,
     ) -> Result<()> {
+        self.commit_node_pack_for(PackedCommitId::V1(container), prepared, payload_offset)
+            .await
+    }
+
+    pub(crate) async fn commit_node_pack_v2(
+        &self,
+        container: CommitIdV2,
+        prepared: PreparedNodePack,
+        payload_offset: u64,
+    ) -> Result<()> {
+        self.commit_node_pack_for(PackedCommitId::V2(container), prepared, payload_offset)
+            .await
+    }
+
+    async fn commit_node_pack_for(
+        &self,
+        container: PackedCommitId,
+        prepared: PreparedNodePack,
+        payload_offset: u64,
+    ) -> Result<()> {
         let Some(state) = &self.packed else {
             return Err(Error::new(
                 ErrorCode::InternalInvariant,
@@ -649,13 +765,41 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         object: &CommitObjectV1,
         encoded: &[u8],
     ) -> Result<()> {
-        let Some(pack) = object.node_pack.as_ref() else {
+        let payload_offset = CommitObjectV1::node_payload_offset(encoded)?;
+        self.register_node_pack(
+            PackedCommitId::V1(container),
+            object.node_pack.as_ref(),
+            payload_offset,
+        )
+    }
+
+    pub(crate) fn register_commit_object_v2(
+        &self,
+        container: CommitIdV2,
+        object: &CommitObjectV2,
+        encoded: &[u8],
+    ) -> Result<()> {
+        let payload_offset = CommitObjectV2::node_payload_offset(encoded)?;
+        self.register_node_pack(
+            PackedCommitId::V2(container),
+            object.node_pack.as_ref(),
+            payload_offset,
+        )
+    }
+
+    fn register_node_pack(
+        &self,
+        container: PackedCommitId,
+        pack: Option<&NodePackV1>,
+        payload_offset: Option<u64>,
+    ) -> Result<()> {
+        let Some(pack) = pack else {
             return Ok(());
         };
         let Some(state) = &self.packed else {
             return Ok(());
         };
-        let payload_offset = CommitObjectV1::node_payload_offset(encoded)?.ok_or_else(|| {
+        let payload_offset = payload_offset.ok_or_else(|| {
             Error::new(
                 ErrorCode::CorruptCommit,
                 "commit node-pack payload is absent",
@@ -692,7 +836,12 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
     }
 
     async fn get_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.get_packed_with_fallback(key, true).await
+        let allow_namespace_scan = self
+            .packed
+            .as_ref()
+            .is_some_and(|state| state.allow_namespace_scan);
+        self.get_packed_with_fallback(key, allow_namespace_scan)
+            .await
     }
 
     pub(crate) async fn get_indexed_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
