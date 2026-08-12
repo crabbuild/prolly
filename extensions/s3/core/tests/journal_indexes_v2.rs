@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly::TreeFormat;
 use prolly_s3_core::{
-    AuthorityScopeV2, AuthorityStampV2, BucketCommitV2, BucketDeltaV1, BucketStateV1,
+    AuthorityScopeV2, AuthorityStampV2, BucketCommitV2, BucketDeltaV2, BucketStateV2,
     CommitGeneration, CommitIdV2, CommitPublicationV2, JournalDerivedIndexesV2, MemoryObjectPlane,
     NodePackEntryV1, NodePackV1, OperationId, RepositoryId, ShardWriterAuthorityV2,
     ShardedBranchPublisherV2, TreeFormatDigest, TreeRootV1,
@@ -23,16 +23,17 @@ fn commit(
         format_digest: TreeFormatDigest::from_hash([0x51; 32]),
     };
     BucketCommitV2 {
-        state: BucketStateV1 {
+        state: BucketStateV2 {
             objects: root.clone(),
-            versions: root.clone(),
-            operations: root,
+            versions: root,
         },
         parents,
         generation: CommitGeneration(generation),
-        delta: BucketDeltaV1 {
-            operation_ids: Vec::new(),
+        delta: BucketDeltaV2 {
+            input_digest: [0; 32],
             changes: Vec::new(),
+            changes_root: None,
+            change_count: 0,
         },
         node_pack: pack.map(|pack| pack.reference().unwrap()),
         authority,

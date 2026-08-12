@@ -6,8 +6,8 @@ use std::{
 use crate::{
     decode_canonical, CommitGraphHeadV2, CompareExchange, CompareExchangeOutcome, DeleteOutcome,
     Error, ErrorCode, JournalDerivedIndexHeadV2, ListRequest, NodeIndexHeadV2, ObjectPath,
-    ObjectPlane, OperationIndexHeadV2, PhysicalVersion, RefCatalogHeadV2, RefValueV1, RefValueV2,
-    Result, StorageToken,
+    ObjectPlane, OperationIndexHeadV2, PhysicalVersion, RefCatalogHeadV2, RefCatalogShardHeadV2,
+    RefValueV1, RefValueV2, Result, StorageToken,
 };
 
 pub const DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN: usize = 100;
@@ -22,10 +22,12 @@ pub enum MutableControlKind {
     BranchRefV1,
     BranchRefV2,
     TagRefV1,
+    TagRefV2,
     RetentionPinV1,
     NodeIndexHeadV1,
     NodeIndexHeadV2,
     RefCatalogHeadV2,
+    RefCatalogShardHeadV2,
     CommitGraphHeadV2,
     OperationIndexHeadV2,
     GcMarkRunV1,
@@ -133,6 +135,10 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                     let head: RefCatalogHeadV2 = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
+                MutableControlKind::RefCatalogShardHeadV2 => {
+                    let head: RefCatalogShardHeadV2 = decode_canonical(&request.bytes)?;
+                    first_update || head.generation.is_multiple_of(ref_interval)
+                }
                 MutableControlKind::CommitGraphHeadV2 => {
                     let head: CommitGraphHeadV2 = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
@@ -153,6 +159,7 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                     | MutableControlKind::BranchRefV2
                     | MutableControlKind::NodeIndexHeadV2
                     | MutableControlKind::RefCatalogHeadV2
+                    | MutableControlKind::RefCatalogShardHeadV2
                     | MutableControlKind::CommitGraphHeadV2
                     | MutableControlKind::OperationIndexHeadV2
                     | MutableControlKind::JournalDerivedIndexHeadV2 => {
@@ -366,10 +373,14 @@ pub fn classify_mutable_control_path(
         ["refs", "heads", _] => Some(MutableControlKind::BranchRefV1),
         ["refs", "v2", "heads", _] => Some(MutableControlKind::BranchRefV2),
         ["refs", "tags", _] => Some(MutableControlKind::TagRefV1),
+        ["refs", "v2", "tags", _] => Some(MutableControlKind::TagRefV2),
         ["retention", "pins", _] => Some(MutableControlKind::RetentionPinV1),
         ["node-index", "latest.cbor"] => Some(MutableControlKind::NodeIndexHeadV1),
         ["node-index", "v2", "head.cbor"] => Some(MutableControlKind::NodeIndexHeadV2),
         ["ref-catalog", "v2", "head.cbor"] => Some(MutableControlKind::RefCatalogHeadV2),
+        ["ref-catalog", "v2", "shards", _, "head.cbor"] => {
+            Some(MutableControlKind::RefCatalogShardHeadV2)
+        }
         ["commit-graph", "v2", "head.cbor"] => Some(MutableControlKind::CommitGraphHeadV2),
         ["operation-index", "v2", "heads", _] => Some(MutableControlKind::OperationIndexHeadV2),
         ["gc", "mark-runs", _] => Some(MutableControlKind::GcMarkRunV1),

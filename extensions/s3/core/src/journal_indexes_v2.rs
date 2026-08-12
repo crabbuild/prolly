@@ -1,14 +1,17 @@
 use std::sync::Arc;
 
 use prolly::{AsyncProlly, Config, Mutation, RuntimeConfig, Tree, TreeFormat};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, CommitIdV2, CommitObjectV2,
-    CompareExchange, CompareExchangeOutcome, Error, ErrorCode, JournalCommitGraphEntryV2,
-    JournalDerivedIndexHeadV2, JournalNodeIndexEntryV2, MemoryNodeCache, MutableControlStore,
-    NodeCache, ObjectPath, ObjectPlane, ProllyObjectStore, PublicationEventIdV2, RefGeneration,
-    RepositoryId, Result, RetryAdvice, ShardedBranchPublisherV2, StorageToken, TreeRootV1,
-    DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+    CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode, GetRequest,
+    ImmutablePut, ImmutablePutOutcome, JournalCommitGraphEntryV2, JournalDerivedIndexHeadV2,
+    JournalIndexRebuildChunkIdV2, JournalIndexRebuildChunkV2, JournalNodeIndexEntryV2, ListRequest,
+    MemoryNodeCache, MutableControlStore, NodeCache, ObjectPath, ObjectPlane, OperationId,
+    PhysicalVersion, ProllyObjectStore, PublicationEventIdV2, PublicationJournalCursorV2,
+    RefGeneration, RepositoryId, Result, RetryAdvice, ShardedBranchPublisherV2, StorageToken,
+    TreeRootV1, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 pub const DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS: usize = 4_096;
@@ -21,6 +24,66 @@ pub struct JournalIndexAdvanceReportV2 {
     pub indexed_commits: usize,
     pub indexed_nodes: usize,
     pub initialized: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum JournalIndexRebuildPhaseV2 {
+    Discovering,
+    Applying,
+    Complete,
+}
+
+/// Constant-size process-independent cursor for rebuilding branch-local node
+/// and commit-graph indexes from an immutable publication-journal snapshot.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalIndexRebuildCursorV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub job: OperationId,
+    pub snapshot: PublicationEventIdV2,
+    pub snapshot_generation: RefGeneration,
+    pub snapshot_target: CommitIdV2,
+    pub scan: Option<PublicationJournalCursorV2>,
+    pub oldest_chunk: Option<JournalIndexRebuildChunkIdV2>,
+    pub next_chunk: Option<JournalIndexRebuildChunkIdV2>,
+    pub next_chunk_sequence: u64,
+    pub node_root: TreeRootV1,
+    pub commit_graph_root: TreeRootV1,
+    pub discovered_publications: u64,
+    pub indexed_commits: u64,
+    pub indexed_nodes: u64,
+    pub baseline_checkpoint: Option<PublicationEventIdV2>,
+    pub baseline_generation: Option<u64>,
+    pub phase: JournalIndexRebuildPhaseV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JournalIndexRebuildStepV2 {
+    pub cursor: JournalIndexRebuildCursorV2,
+    pub discovered_publications: usize,
+    pub indexed_publications: usize,
+    pub indexed_commits: usize,
+    pub indexed_nodes: usize,
+    pub complete: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct JournalIndexRebuildCleanupV2 {
+    pub deleted_objects: usize,
+    pub complete: bool,
+}
+
+/// Durable roots built while importing a parent-before-child commit closure.
+/// The roots live in the regular native-v2 index node namespaces, so this
+/// cursor remains constant-size and can be resumed by another process.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportedJournalIndexStateV2 {
+    pub repository: RepositoryId,
+    pub job: OperationId,
+    pub node_root: TreeRootV1,
+    pub commit_graph_root: TreeRootV1,
+    pub indexed_commits: u64,
+    pub indexed_nodes: u64,
 }
 
 struct LoadedHead {
@@ -146,7 +209,7 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             .is_some_and(|head| head.value.checkpoint == current.value.publication)
         {
             let head = &loaded.as_ref().expect("checked as present").value;
-            if head.checkpoint_generation != current.value.generation
+            if head.checkpoint_generation.0 > current.value.generation.0
                 || head.target != current.value.target
             {
                 return Err(Error::new(
@@ -341,6 +404,276 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
         })
     }
 
+    pub async fn start_rebuild(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        branch: &str,
+        job: OperationId,
+    ) -> Result<JournalIndexRebuildCursorV2> {
+        crate::repository::validate_branch(branch)?;
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "journal-index rebuild requires a non-nil job ID",
+            ));
+        }
+        let scan = publisher.open_journal(branch).await?;
+        let snapshot_generation = scan.next_generation.ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "journal-index rebuild snapshot has no generation",
+            )
+        })?;
+        let snapshot_target = scan.next_target.ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "journal-index rebuild snapshot has no target",
+            )
+        })?;
+        let baseline = self.load_head(branch).await?;
+        let digest = tree_format_digest(&self.format)?;
+        Ok(JournalIndexRebuildCursorV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            job,
+            snapshot: scan.snapshot_head,
+            snapshot_generation,
+            snapshot_target,
+            scan: Some(scan),
+            oldest_chunk: None,
+            next_chunk: None,
+            next_chunk_sequence: 0,
+            node_root: TreeRootV1 {
+                root: None,
+                format_digest: digest,
+            },
+            commit_graph_root: TreeRootV1 {
+                root: None,
+                format_digest: digest,
+            },
+            discovered_publications: 0,
+            indexed_commits: 0,
+            indexed_nodes: 0,
+            baseline_checkpoint: baseline.as_ref().map(|head| head.value.checkpoint),
+            baseline_generation: baseline.as_ref().map(|head| head.value.generation),
+            phase: JournalIndexRebuildPhaseV2::Discovering,
+        })
+    }
+
+    pub async fn advance_rebuild(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        cursor: &JournalIndexRebuildCursorV2,
+        max_events: usize,
+        now_millis: u64,
+    ) -> Result<JournalIndexRebuildStepV2> {
+        self.validate_rebuild_cursor(cursor)?;
+        if !(1..=1_000).contains(&max_events) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "journal-index rebuild page must contain 1 to 1,000 events",
+            ));
+        }
+        if cursor.phase == JournalIndexRebuildPhaseV2::Complete {
+            return Ok(JournalIndexRebuildStepV2 {
+                cursor: cursor.clone(),
+                discovered_publications: 0,
+                indexed_publications: 0,
+                indexed_commits: 0,
+                indexed_nodes: 0,
+                complete: true,
+            });
+        }
+        if cursor.phase == JournalIndexRebuildPhaseV2::Discovering {
+            let scan = cursor.scan.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidContinuationToken,
+                    "discovering journal-index rebuild has no scan cursor",
+                )
+            })?;
+            let page = publisher.read_journal_page(scan, max_events).await?;
+            if page.entries.is_empty() {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "journal-index rebuild discovery returned an empty page",
+                ));
+            }
+            let chunk = JournalIndexRebuildChunkV2 {
+                repository: self.repository,
+                branch: cursor.branch.clone(),
+                job: cursor.job,
+                sequence: cursor.next_chunk_sequence,
+                newer: cursor.oldest_chunk,
+                events: page.entries.into_iter().map(|entry| entry.event).collect(),
+            };
+            chunk.validate(self.repository, &cursor.branch)?;
+            let chunk_id = self.store_rebuild_chunk(&chunk).await?;
+            let discovered = chunk.events.len();
+            let mut next = cursor.clone();
+            next.scan = page.continuation;
+            next.oldest_chunk = Some(chunk_id);
+            next.next_chunk_sequence =
+                next.next_chunk_sequence.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidLimit,
+                        "journal rebuild chunk sequence overflow",
+                    )
+                })?;
+            next.discovered_publications = next
+                .discovered_publications
+                .checked_add(u64::try_from(discovered).map_err(|_| {
+                    Error::new(ErrorCode::InvalidLimit, "journal rebuild count overflow")
+                })?)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InvalidLimit, "journal rebuild count overflow")
+                })?;
+            if next.scan.is_none() {
+                next.phase = JournalIndexRebuildPhaseV2::Applying;
+                next.next_chunk = next.oldest_chunk;
+            }
+            return Ok(JournalIndexRebuildStepV2 {
+                cursor: next,
+                discovered_publications: discovered,
+                indexed_publications: 0,
+                indexed_commits: 0,
+                indexed_nodes: 0,
+                complete: false,
+            });
+        }
+
+        let chunk_id = cursor.next_chunk.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "applying journal-index rebuild has no next chunk",
+            )
+        })?;
+        let chunk = self
+            .load_rebuild_chunk(&cursor.branch, cursor.job, chunk_id)
+            .await?;
+        if chunk.events.len() > max_events {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "journal-index rebuild apply limit is smaller than its persisted discovery chunk",
+            ));
+        }
+        let mut node_tree = self.tree_from_root(&cursor.node_root);
+        let mut graph_tree = self.tree_from_root(&cursor.commit_graph_root);
+        let mut indexed_commits = 0usize;
+        let mut indexed_nodes = 0usize;
+        for event in chunk.events.iter().rev() {
+            if self
+                .graph_engine
+                .get(&graph_tree, event.new_target.as_bytes())
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            let object = publisher.load_commit_object(event.new_target).await?;
+            self.index_node_pack(
+                &mut node_tree,
+                event.new_target,
+                &object,
+                &mut indexed_nodes,
+            )
+            .await?;
+            self.index_commit_graph(&mut graph_tree, event.new_target, object)
+                .await?;
+            indexed_commits += 1;
+        }
+        let mut next = cursor.clone();
+        next.node_root.root = node_tree.root;
+        next.commit_graph_root.root = graph_tree.root;
+        next.next_chunk = chunk.newer;
+        next.indexed_commits = next
+            .indexed_commits
+            .checked_add(u64::try_from(indexed_commits).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "journal rebuild commit count overflow",
+                )
+            })?)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "journal rebuild commit count overflow",
+                )
+            })?;
+        next.indexed_nodes = next
+            .indexed_nodes
+            .checked_add(u64::try_from(indexed_nodes).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "journal rebuild node count overflow",
+                )
+            })?)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "journal rebuild node count overflow",
+                )
+            })?;
+        if next.next_chunk.is_none() {
+            self.publish_rebuild(publisher, &next, now_millis).await?;
+            next.phase = JournalIndexRebuildPhaseV2::Complete;
+        }
+        Ok(JournalIndexRebuildStepV2 {
+            cursor: next.clone(),
+            discovered_publications: 0,
+            indexed_publications: chunk.events.len(),
+            indexed_commits,
+            indexed_nodes,
+            complete: next.phase == JournalIndexRebuildPhaseV2::Complete,
+        })
+    }
+
+    pub async fn cleanup_rebuild(
+        &self,
+        cursor: &JournalIndexRebuildCursorV2,
+        limit: usize,
+    ) -> Result<JournalIndexRebuildCleanupV2> {
+        self.validate_rebuild_cursor(cursor)?;
+        if !(1..=1_000).contains(&limit) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "journal-index rebuild cleanup limit must be 1 to 1,000",
+            ));
+        }
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: self.rebuild_chunk_prefix(&cursor.branch, cursor.job),
+                continuation: None,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut targets = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let token = entry.metadata.token;
+            let version = token.version_id.clone().map_or_else(
+                || PhysicalVersion::Unversioned {
+                    token: Some(token.clone()),
+                },
+                |version_id| PhysicalVersion::Versioned { version_id },
+            );
+            targets.push((entry.path, version));
+        }
+        let deleted_objects = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if matches!(outcome, DeleteOutcome::TokenMismatch) {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "journal-index rebuild state changed during cleanup",
+                ));
+            }
+        }
+        Ok(JournalIndexRebuildCleanupV2 {
+            deleted_objects,
+            complete: page.continuation.is_none(),
+        })
+    }
+
     pub async fn node_location(
         &self,
         branch: &str,
@@ -366,6 +699,219 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             ));
         }
         Ok(entry)
+    }
+
+    pub fn start_imported_closure(&self, job: OperationId) -> Result<ImportedJournalIndexStateV2> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "imported journal-index closure requires a non-nil job ID",
+            ));
+        }
+        Ok(ImportedJournalIndexStateV2 {
+            repository: self.repository,
+            job,
+            node_root: TreeRootV1::from_tree(&self.node_engine.create())?,
+            commit_graph_root: TreeRootV1::from_tree(&self.graph_engine.create())?,
+            indexed_commits: 0,
+            indexed_nodes: 0,
+        })
+    }
+
+    /// Add one already durable native-v2 commit to an imported closure. The
+    /// caller supplies commits parent-before-child so first-parent skip links
+    /// can be constructed without an ancestor scan.
+    pub async fn index_imported_commit(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        state: &ImportedJournalIndexStateV2,
+        commit: CommitIdV2,
+    ) -> Result<ImportedJournalIndexStateV2> {
+        self.validate_imported_state(state)?;
+        let mut node_tree = self.tree_from_root(&state.node_root);
+        let mut graph_tree = self.tree_from_root(&state.commit_graph_root);
+        if self
+            .graph_engine
+            .get(&graph_tree, commit.as_bytes())
+            .await?
+            .is_some()
+        {
+            return Ok(state.clone());
+        }
+        let object = publisher.load_commit_object(commit).await?;
+        for parent in &object.commit.parents {
+            if self
+                .graph_engine
+                .get(&graph_tree, parent.as_bytes())
+                .await?
+                .is_none()
+            {
+                return Err(Error::new(
+                    ErrorCode::MissingClosure,
+                    "imported commit parent is not yet indexed",
+                ));
+            }
+        }
+        let mut indexed_nodes = 0usize;
+        self.index_node_pack(&mut node_tree, commit, &object, &mut indexed_nodes)
+            .await?;
+        self.index_commit_graph(&mut graph_tree, commit, object)
+            .await?;
+        Ok(ImportedJournalIndexStateV2 {
+            repository: state.repository,
+            job: state.job,
+            node_root: TreeRootV1::from_tree(&node_tree)?,
+            commit_graph_root: TreeRootV1::from_tree(&graph_tree)?,
+            indexed_commits: state.indexed_commits.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "imported commit count overflow",
+                )
+            })?,
+            indexed_nodes: state
+                .indexed_nodes
+                .checked_add(u64::try_from(indexed_nodes).map_err(|_| {
+                    Error::new(ErrorCode::InvalidLimit, "imported node count exceeds u64")
+                })?)
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "imported node count overflow")
+                })?,
+        })
+    }
+
+    /// Resolve a packed node against roots held by an in-progress import.
+    /// This is what lets an interrupted migration continue without publishing
+    /// a partially imported user branch.
+    pub async fn imported_node_location(
+        &self,
+        state: &ImportedJournalIndexStateV2,
+        cid: &prolly::Cid,
+    ) -> Result<Option<JournalNodeIndexEntryV2>> {
+        self.validate_imported_state(state)?;
+        let tree = self.tree_from_root(&state.node_root);
+        let entry = self
+            .node_engine
+            .get(&tree, cid.as_bytes())
+            .await?
+            .map(|encoded| decode_canonical(&encoded))
+            .transpose()?;
+        if entry
+            .as_ref()
+            .is_some_and(|entry: &JournalNodeIndexEntryV2| entry.cid != *cid)
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "imported node-index value does not match its key",
+            ));
+        }
+        Ok(entry)
+    }
+
+    /// Atomically install a completed imported closure as the selected
+    /// branch's durable node/commit-graph checkpoint.
+    pub async fn publish_imported_closure(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        branch: &str,
+        state: &ImportedJournalIndexStateV2,
+        now_millis: u64,
+    ) -> Result<()> {
+        self.validate_imported_state(state)?;
+        let reference = publisher.load(branch).await?;
+        let graph_tree = self.tree_from_root(&state.commit_graph_root);
+        if self
+            .graph_engine
+            .get(&graph_tree, reference.value.target.as_bytes())
+            .await?
+            .is_none()
+        {
+            return Err(Error::new(
+                ErrorCode::MissingClosure,
+                "imported branch target is absent from its commit-graph closure",
+            ));
+        }
+        let path = self.head_path(branch)?;
+        let loaded = self.load_head(branch).await?;
+        if loaded.as_ref().is_some_and(|head| {
+            head.value.checkpoint == reference.value.publication
+                && head.value.checkpoint_generation == reference.value.generation
+                && head.value.target == reference.value.target
+                && head.value.node_root == state.node_root
+                && head.value.commit_graph_root == state.commit_graph_root
+        }) {
+            return Ok(());
+        }
+        let next = JournalDerivedIndexHeadV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            checkpoint: reference.value.publication,
+            checkpoint_generation: reference.value.generation,
+            target: reference.value.target,
+            node_root: state.node_root.clone(),
+            commit_graph_root: state.commit_graph_root.clone(),
+            generation: loaded.as_ref().map_or(Ok(0), |head| {
+                head.value.generation.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "imported journal-index generation overflow",
+                    )
+                })
+            })?,
+            indexed_publications: 1,
+            indexed_commits: state.indexed_commits,
+            updated_at_millis: now_millis,
+        };
+        next.validate(self.repository, branch, tree_format_digest(&self.format)?)?;
+        let bytes = encode_canonical(&next)?;
+        let expected = loaded.map(|head| head.token);
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path: path.clone(),
+                expected,
+                bytes: bytes.clone(),
+            })
+            .await
+        {
+            Ok(CompareExchangeOutcome::Applied(_)) => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(Some(current))) if current.bytes == bytes => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "imported journal-index publication conflicted",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+            Err(error) => {
+                if self
+                    .plane
+                    .load_mutable(&path)
+                    .await?
+                    .is_some_and(|current| current.bytes == bytes)
+                {
+                    Ok(())
+                } else {
+                    Err(Error::new(
+                        ErrorCode::OutcomeUnknown,
+                        format!("imported journal-index publication is unknown: {error}"),
+                    )
+                    .retry(RetryAdvice::ReconcileOperation))
+                }
+            }
+        }
+    }
+
+    fn validate_imported_state(&self, state: &ImportedJournalIndexStateV2) -> Result<()> {
+        let digest = tree_format_digest(&self.format)?;
+        if state.repository != self.repository
+            || state.job.is_nil()
+            || state.node_root.format_digest != digest
+            || state.commit_graph_root.format_digest != digest
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "imported journal-index state belongs to another repository or format",
+            ));
+        }
+        Ok(())
     }
 
     pub async fn commit_graph_entry(
@@ -397,6 +943,237 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
 
     pub async fn head(&self, branch: &str) -> Result<Option<JournalDerivedIndexHeadV2>> {
         Ok(self.load_head(branch).await?.map(|head| head.value))
+    }
+
+    fn validate_rebuild_cursor(&self, cursor: &JournalIndexRebuildCursorV2) -> Result<()> {
+        crate::repository::validate_branch(&cursor.branch)?;
+        let digest = tree_format_digest(&self.format)?;
+        let phase_shape = match cursor.phase {
+            JournalIndexRebuildPhaseV2::Discovering => {
+                cursor.scan.is_some() && cursor.next_chunk.is_none()
+            }
+            JournalIndexRebuildPhaseV2::Applying => {
+                cursor.scan.is_none() && cursor.next_chunk.is_some()
+            }
+            JournalIndexRebuildPhaseV2::Complete => {
+                cursor.scan.is_none() && cursor.next_chunk.is_none()
+            }
+        };
+        if cursor.repository != self.repository
+            || cursor.job.is_nil()
+            || cursor.node_root.format_digest != digest
+            || cursor.commit_graph_root.format_digest != digest
+            || cursor.baseline_checkpoint.is_some() != cursor.baseline_generation.is_some()
+            || !phase_shape
+            || cursor.scan.as_ref().is_some_and(|scan| {
+                scan.repository != self.repository
+                    || scan.branch != cursor.branch
+                    || scan.snapshot_head != cursor.snapshot
+            })
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "journal-index rebuild cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn store_rebuild_chunk(
+        &self,
+        chunk: &JournalIndexRebuildChunkV2,
+    ) -> Result<JournalIndexRebuildChunkIdV2> {
+        chunk.validate(self.repository, &chunk.branch)?;
+        let id = chunk.id()?;
+        let bytes = encode_canonical(chunk)?;
+        let path = self.rebuild_chunk_path(&chunk.branch, chunk.job, id)?;
+        let expected_sha256 = crate::codec::sha256(&bytes);
+        match self
+            .plane
+            .put_immutable(ImmutablePut {
+                path: path.clone(),
+                bytes: bytes.clone(),
+                expected_sha256,
+            })
+            .await
+        {
+            Ok(ImmutablePutOutcome::Created(_) | ImmutablePutOutcome::AlreadyPresent(_)) => Ok(id),
+            Err(original) => match self
+                .plane
+                .get(GetRequest {
+                    path,
+                    range: None,
+                    physical_version: None,
+                })
+                .await
+            {
+                Ok(Some(stored)) if stored.bytes == bytes => Ok(id),
+                _ => Err(original),
+            },
+        }
+    }
+
+    pub(crate) async fn load_rebuild_chunk(
+        &self,
+        branch: &str,
+        job: OperationId,
+        id: JournalIndexRebuildChunkIdV2,
+    ) -> Result<JournalIndexRebuildChunkV2> {
+        let stored = self
+            .plane
+            .get(GetRequest {
+                path: self.rebuild_chunk_path(branch, job, id)?,
+                range: None,
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "journal-index rebuild chunk is missing",
+                )
+            })?;
+        let chunk: JournalIndexRebuildChunkV2 = decode_canonical(&stored.bytes)?;
+        chunk.validate(self.repository, branch)?;
+        if chunk.job != job || chunk.id()? != id {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "journal-index rebuild chunk does not match its content address",
+            ));
+        }
+        Ok(chunk)
+    }
+
+    async fn publish_rebuild(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        cursor: &JournalIndexRebuildCursorV2,
+        now_millis: u64,
+    ) -> Result<()> {
+        let snapshot = publisher.load_publication(cursor.snapshot).await?;
+        let expected_publications =
+            cursor.snapshot_generation.0.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "journal-index rebuild publication count overflow",
+                )
+            })?;
+        if snapshot.repository != self.repository
+            || snapshot.branch != cursor.branch
+            || snapshot.generation != cursor.snapshot_generation
+            || snapshot.new_target != cursor.snapshot_target
+            || cursor.discovered_publications != expected_publications
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "journal-index rebuild cursor does not cover its complete snapshot",
+            ));
+        }
+        let loaded = self.load_head(&cursor.branch).await?;
+        let baseline_matches = match (
+            loaded.as_ref(),
+            cursor.baseline_checkpoint,
+            cursor.baseline_generation,
+        ) {
+            (None, None, None) => true,
+            (Some(head), Some(checkpoint), Some(generation)) => {
+                head.value.checkpoint == checkpoint && head.value.generation == generation
+            }
+            _ => false,
+        };
+        if !baseline_matches {
+            return Err(Error::new(
+                ErrorCode::RefConflict,
+                "journal index changed while its resumable rebuild was running",
+            )
+            .retry(RetryAdvice::ReloadHead));
+        }
+        let generation = loaded.as_ref().map_or(Ok(0), |head| {
+            head.value.generation.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "journal-index rebuild head generation overflow",
+                )
+            })
+        })?;
+        let next = JournalDerivedIndexHeadV2 {
+            repository: self.repository,
+            branch: cursor.branch.clone(),
+            checkpoint: cursor.snapshot,
+            checkpoint_generation: cursor.snapshot_generation,
+            target: cursor.snapshot_target,
+            node_root: cursor.node_root.clone(),
+            commit_graph_root: cursor.commit_graph_root.clone(),
+            generation,
+            indexed_publications: cursor.discovered_publications,
+            indexed_commits: cursor.indexed_commits,
+            updated_at_millis: now_millis,
+        };
+        next.validate(
+            self.repository,
+            &cursor.branch,
+            tree_format_digest(&self.format)?,
+        )?;
+        let bytes = encode_canonical(&next)?;
+        let path = self.head_path(&cursor.branch)?;
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path: path.clone(),
+                expected: loaded.map(|head| head.token),
+                bytes: bytes.clone(),
+            })
+            .await
+        {
+            Ok(CompareExchangeOutcome::Applied(_)) => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(Some(current))) if current.bytes == bytes => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "journal-index rebuild head publication conflicted",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+            Err(error) => {
+                if self
+                    .plane
+                    .load_mutable(&path)
+                    .await?
+                    .is_some_and(|current| current.bytes == bytes)
+                {
+                    Ok(())
+                } else {
+                    Err(Error::new(
+                        ErrorCode::OutcomeUnknown,
+                        format!("journal-index rebuild publication is unknown: {error}"),
+                    )
+                    .retry(RetryAdvice::ReconcileOperation))
+                }
+            }
+        }
+    }
+
+    fn rebuild_chunk_prefix(&self, branch: &str, job: OperationId) -> String {
+        format!(
+            "{}/administration/v2/index-rebuild/{}/{}/chunks/sha256/",
+            self.prefix,
+            hex::encode(branch.as_bytes()),
+            hex::encode(job.as_bytes())
+        )
+    }
+
+    fn rebuild_chunk_path(
+        &self,
+        branch: &str,
+        job: OperationId,
+        id: JournalIndexRebuildChunkIdV2,
+    ) -> Result<ObjectPath> {
+        let encoded = hex::encode(id.as_bytes());
+        ObjectPath::new(format!(
+            "{}{}/{}/{}",
+            self.rebuild_chunk_prefix(branch, job),
+            &encoded[..2],
+            &encoded[2..4],
+            encoded
+        ))
     }
 
     async fn index_node_pack(

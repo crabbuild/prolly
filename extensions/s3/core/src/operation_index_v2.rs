@@ -1,9 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     decode_canonical, encode_canonical, CompareExchange, CompareExchangeOutcome, Error, ErrorCode,
-    GetRequest, IdempotencyRetentionV2, ImmutablePut, IndexedOperationV2, MutableControlStore,
-    ObjectPath, ObjectPlane, OperationId, OperationIndexHeadV2, OperationIndexSegmentIdV2,
+    GetRequest, IdempotencyRetentionV2, ImmutablePut, IndexedOperationV2,
+    JournalIndexRebuildChunkIdV2, JournalIndexRebuildChunkV2, MutableControlStore, ObjectPath,
+    ObjectPlane, OperationId, OperationIndexHeadV2, OperationIndexSegmentIdV2,
     OperationIndexSegmentRefV2, OperationIndexSegmentV2, PublicationEventIdV2, RefGeneration,
     RepositoryId, Result, RetryAdvice, ShardedBranchPublisherV2, StorageToken,
     DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
@@ -20,6 +23,30 @@ pub struct OperationIndexAdvanceReportV2 {
     pub indexed_events: usize,
     pub segments_written: usize,
     pub initialized: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexRebuildCursorV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub job: OperationId,
+    pub snapshot: PublicationEventIdV2,
+    pub snapshot_generation: RefGeneration,
+    pub next_chunk: Option<JournalIndexRebuildChunkIdV2>,
+    pub levels: Vec<Vec<OperationIndexSegmentRefV2>>,
+    pub indexed_events: u64,
+    pub segments_written: u64,
+    pub baseline_checkpoint: Option<PublicationEventIdV2>,
+    pub baseline_generation: Option<u64>,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OperationIndexRebuildStepV2 {
+    pub cursor: OperationIndexRebuildCursorV2,
+    pub indexed_events: usize,
+    pub segments_written: usize,
+    pub complete: bool,
 }
 
 #[derive(Clone)]
@@ -276,6 +303,153 @@ impl<P: ObjectPlane> SegmentedOperationIndexV2<P> {
             indexed_events: events.len(),
             segments_written,
             initialized,
+        })
+    }
+
+    pub async fn start_rebuild(
+        &self,
+        branch: &str,
+        job: OperationId,
+        snapshot: PublicationEventIdV2,
+        snapshot_generation: RefGeneration,
+        oldest_chunk: JournalIndexRebuildChunkIdV2,
+    ) -> Result<OperationIndexRebuildCursorV2> {
+        crate::repository::validate_branch(branch)?;
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "operation-index rebuild requires a non-nil job ID",
+            ));
+        }
+        let baseline = self.load_head(branch).await?;
+        Ok(OperationIndexRebuildCursorV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            job,
+            snapshot,
+            snapshot_generation,
+            next_chunk: Some(oldest_chunk),
+            levels: Vec::new(),
+            indexed_events: 0,
+            segments_written: 0,
+            baseline_checkpoint: baseline.as_ref().map(|head| head.value.checkpoint),
+            baseline_generation: baseline.as_ref().map(|head| head.value.generation),
+            complete: false,
+        })
+    }
+
+    pub async fn advance_rebuild(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        cursor: &OperationIndexRebuildCursorV2,
+        chunk: &JournalIndexRebuildChunkV2,
+        expected_chunk: JournalIndexRebuildChunkIdV2,
+        max_events: usize,
+        now_millis: u64,
+    ) -> Result<OperationIndexRebuildStepV2> {
+        self.validate_rebuild_cursor(cursor)?;
+        chunk.validate(self.repository, &cursor.branch)?;
+        if chunk.job != cursor.job
+            || chunk.id()? != expected_chunk
+            || cursor.next_chunk != Some(expected_chunk)
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "operation-index rebuild received another job's journal chunk",
+            ));
+        }
+        if !(1..=1_000).contains(&max_events) || chunk.events.len() > max_events {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "operation-index rebuild page is outside the 1 to 1,000 event bound",
+            ));
+        }
+        let entries = chunk
+            .events
+            .iter()
+            .rev()
+            .filter(|event| {
+                self.retention.contains(
+                    cursor.snapshot_generation,
+                    now_millis,
+                    event.generation,
+                    event.created_at_millis,
+                )
+            })
+            .map(|event| {
+                Ok(IndexedOperationV2 {
+                    operation: event.operation,
+                    publication: event.id()?,
+                    target: event.new_target,
+                    generation: event.generation,
+                    created_at_millis: event.created_at_millis,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut next = cursor.clone();
+        let mut segments_written = 0usize;
+        for leaf in entries.chunks(self.leaf_entries) {
+            if let Some(reference) = self
+                .store_segment(
+                    &cursor.branch,
+                    0,
+                    leaf.to_vec(),
+                    cursor.snapshot_generation,
+                    now_millis,
+                )
+                .await?
+            {
+                segments_written += 1;
+                self.push_segment(
+                    &cursor.branch,
+                    &mut next.levels,
+                    reference,
+                    cursor.snapshot_generation,
+                    now_millis,
+                    &mut segments_written,
+                )
+                .await?;
+            }
+        }
+        self.prune_catalog(&mut next.levels, cursor.snapshot_generation, now_millis);
+        next.indexed_events = next
+            .indexed_events
+            .checked_add(u64::try_from(entries.len()).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "operation rebuild event count overflow",
+                )
+            })?)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "operation rebuild event count overflow",
+                )
+            })?;
+        next.segments_written = next
+            .segments_written
+            .checked_add(u64::try_from(segments_written).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "operation rebuild segment count overflow",
+                )
+            })?)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "operation rebuild segment count overflow",
+                )
+            })?;
+        next.next_chunk = chunk.newer;
+        if next.next_chunk.is_none() {
+            self.publish_rebuild(publisher, &next, now_millis).await?;
+            next.complete = true;
+        }
+        Ok(OperationIndexRebuildStepV2 {
+            cursor: next.clone(),
+            indexed_events: entries.len(),
+            segments_written,
+            complete: next.complete,
         })
     }
 
@@ -614,6 +788,119 @@ impl<P: ObjectPlane> SegmentedOperationIndexV2<P> {
             ));
         }
         Ok(segment)
+    }
+
+    fn validate_rebuild_cursor(&self, cursor: &OperationIndexRebuildCursorV2) -> Result<()> {
+        crate::repository::validate_branch(&cursor.branch)?;
+        if cursor.repository != self.repository
+            || cursor.job.is_nil()
+            || cursor.baseline_checkpoint.is_some() != cursor.baseline_generation.is_some()
+            || cursor.complete != cursor.next_chunk.is_none()
+            || cursor.levels.len() > self.max_levels()
+            || cursor.levels.iter().enumerate().any(|(level, segments)| {
+                segments.len() >= self.merge_fanout
+                    || segments
+                        .iter()
+                        .any(|segment| usize::from(segment.level) != level || segment.entries == 0)
+            })
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "operation-index rebuild cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn publish_rebuild(
+        &self,
+        publisher: &ShardedBranchPublisherV2<P>,
+        cursor: &OperationIndexRebuildCursorV2,
+        now_millis: u64,
+    ) -> Result<()> {
+        let snapshot = publisher.load_publication(cursor.snapshot).await?;
+        if snapshot.repository != self.repository
+            || snapshot.branch != cursor.branch
+            || snapshot.generation != cursor.snapshot_generation
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "operation-index rebuild cursor does not match its journal snapshot",
+            ));
+        }
+        let loaded = self.load_head(&cursor.branch).await?;
+        let baseline_matches = match (
+            loaded.as_ref(),
+            cursor.baseline_checkpoint,
+            cursor.baseline_generation,
+        ) {
+            (None, None, None) => true,
+            (Some(head), Some(checkpoint), Some(generation)) => {
+                head.value.checkpoint == checkpoint && head.value.generation == generation
+            }
+            _ => false,
+        };
+        if !baseline_matches {
+            return Err(Error::new(
+                ErrorCode::RefConflict,
+                "operation index changed while its resumable rebuild was running",
+            )
+            .retry(RetryAdvice::ReloadHead));
+        }
+        let generation = loaded.as_ref().map_or(Ok(0), |head| {
+            head.value.generation.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "operation-index rebuild head generation overflow",
+                )
+            })
+        })?;
+        let head = OperationIndexHeadV2 {
+            repository: self.repository,
+            branch: cursor.branch.clone(),
+            checkpoint: cursor.snapshot,
+            checkpoint_generation: cursor.snapshot_generation,
+            retention: self.retention,
+            levels: cursor.levels.clone(),
+            generation,
+            updated_at_millis: now_millis,
+        };
+        self.validate_head(&head)?;
+        let bytes = encode_canonical(&head)?;
+        let path = self.head_path(&cursor.branch)?;
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path: path.clone(),
+                expected: loaded.map(|head| head.token),
+                bytes: bytes.clone(),
+            })
+            .await
+        {
+            Ok(CompareExchangeOutcome::Applied(_)) => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(Some(current))) if current.bytes == bytes => Ok(()),
+            Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "operation-index rebuild head publication conflicted",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+            Err(error) => {
+                if self
+                    .plane
+                    .load_mutable(&path)
+                    .await?
+                    .is_some_and(|current| current.bytes == bytes)
+                {
+                    Ok(())
+                } else {
+                    Err(Error::new(
+                        ErrorCode::OutcomeUnknown,
+                        format!("operation-index rebuild publication is unknown: {error}"),
+                    )
+                    .retry(RetryAdvice::ReconcileOperation))
+                }
+            }
+        }
     }
 
     async fn load_head(&self, branch: &str) -> Result<Option<LoadedHeadV2>> {

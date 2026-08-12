@@ -35,6 +35,10 @@ Core tests verify:
   bounded work/output, paged pins/reflogs, and bounded exact cleanup;
 - raw cross-bucket restore rejection plus portable archive clone/rebind,
   read-only `fsck`, explicit writer takeover, post-restore write, and cleanup.
+- native-v2 merge with a durable generation-priority merge-base frontier,
+  structural three-way diff, paged changes/conflicts, restart after every
+  two-record page, cursor-tamper rejection, source deletion, target-ref
+  movement, CAS reconciliation, and bounded plan cleanup;
 
 RustFS integration tests verify a 64 KiB whole-object write at four S3 calls,
 one-call warm current and historical reads, historical content after overwrite,
@@ -53,6 +57,44 @@ PROLLY_S3_RUSTFS=1 \
   cargo test --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --test rustfs_repository -- --nocapture
 ```
+
+Run the native-v2 merge scale gates separately. The first builds a 10K-object
+snapshot, changes one key per branch, and requires structural pruning to keep
+logical merge work below 32 records. The second builds 4,096 first-parent
+commits and requires skip-pointer ancestry detection without entering the
+general frontier.
+
+```bash
+cargo test --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-core --test merge_v2 \
+  native_v2_sparse_merge_prunes_unchanged_10k_snapshot \
+  -- --ignored --exact --nocapture
+
+cargo test --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-core --test merge_v2 \
+  native_v2_merge_base_skips_deep_first_parent_history \
+  -- --ignored --exact --nocapture
+```
+
+On 2026-08-12, both release gates passed locally. The 10K sparse test body
+completed in 1.60 s after compilation. The 4,096-commit history gate completed
+in 200.88 s; almost all of that time constructs the sequential history, while
+the final assertion requires zero general-frontier visits.
+
+The RustFS merge regression drops and reopens `ClientV2` between every bounded
+page, round-trips the canonical cursor, publishes through the real conditional
+S3 adapter, and verifies both selected object bodies:
+
+```bash
+PROLLY_S3_RUSTFS=1 \
+  cargo test --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --test rustfs_repository \
+  rustfs_native_v2_merge_resumes_and_publishes_structural_plan \
+  -- --exact --nocapture
+```
+
+On 2026-08-12, the RustFS merge regression completed in 2.30 s. These timings
+are development-machine regression evidence, not AWS latency SLOs.
 
 Run the reproducible 10K concurrent-commit regression gate separately. It is
 ignored by default because it is intentionally sustained and writes a unique
@@ -120,7 +162,7 @@ The following are release blockers for a production claim:
 | Request cost | Measured traffic mix using current AWS request prices |
 | Latency | p50/p95/p99 for writes, reads, batches, multipart, merge, restore |
 | Throttling | Sustained and burst load including transport retry attempts |
-| Hot branch | Queue latency, timeout policy, and lease renewal under peak load |
+| Hot branch | Queue latency, timeout policy, and authority renewal under peak load |
 | Scale | 1M live keys and 10M retained versions with reopen, list, diff, fsck, GC |
 | Transfer scale | Interrupted clone/push/repair at 10M commits with bounded RSS, zero commit-namespace LISTs, and stale-mapping rebuild |
 | Administrative scale | Restart deep fsck in every phase at 1M keys/10M versions; assert bounded RSS, cursor size, and provider requests per page |

@@ -51,6 +51,7 @@ fn every_mutable_control_family_has_one_canonical_classification() {
         ("refs/heads/6d61696e", MutableControlKind::BranchRefV1),
         ("refs/v2/heads/6d61696e", MutableControlKind::BranchRefV2),
         ("refs/tags/7631", MutableControlKind::TagRefV1),
+        ("refs/v2/tags/7631", MutableControlKind::TagRefV2),
         (
             "retention/pins/6c6567616c",
             MutableControlKind::RetentionPinV1,
@@ -66,6 +67,10 @@ fn every_mutable_control_family_has_one_canonical_classification() {
         (
             "ref-catalog/v2/head.cbor",
             MutableControlKind::RefCatalogHeadV2,
+        ),
+        (
+            "ref-catalog/v2/shards/0a/head.cbor",
+            MutableControlKind::RefCatalogShardHeadV2,
         ),
         (
             "commit-graph/v2/head.cbor",

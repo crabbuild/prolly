@@ -212,14 +212,25 @@ instead of treating repository size as an error. `diff_page_bounded` uses the
 engine's structural checkpoint, preserving CID-subtree pruning across pages.
 Legacy `log_at`, `diff_at`, `merge_bases`, merge planning, and whole-repository
 `fsck` remain compatibility APIs with finite traversal/memory limits; they are
-not the interfaces to use for unbounded jobs.
+not the interfaces to use for unbounded jobs. Native-v2 merge instead persists
+its graph frontier, seen set, candidate bases, changes, and conflicts in a
+job-scoped Prolly tree. Its canonical cursor remains constant-size and every
+advance has an explicit record budget.
 
 Background workers build a separate immutable commit-graph Prolly tree with
 generation numbers and binary-lifting ancestor pointers. A commit can reference
 ancestors at distances 1, 2, 4, 8, and so on, allowing bounded first-parent
 walks to skip history. Missing segments fall back to bounded graph walking,
-preserving correctness. Merge-base discovery remains a finite compatibility
-API until it gains its own resumable graph frontier.
+preserving correctness. Native-v2 merge uses those generation and skip-pointer
+entries for a fast first-parent ancestry path and a generation-priority,
+bidirectional paint-down frontier for general and criss-cross histories.
+
+Planning structurally diffs `base → ours` and `base → theirs`. Equal CIDs prune
+unchanged subtrees, and each page retains at most one pending record per input
+stream. Selected changes and conflicts are independently pageable. Output
+object, version, and external-delta roots are built in bounded pages and stored
+at deterministic CID paths so a different process can resume before a final
+commit envelope exists.
 
 ## Refs
 
@@ -227,11 +238,11 @@ Each ref retains its deterministic S3 object and independent CAS token. Exact
 lookup and publication therefore remain O(1) in ref count, and unrelated refs
 do not contend on a global head.
 
-Listing millions or billions of refs uses a derived Prolly catalog keyed by
-normalized ref name. The catalog is partitioned by tenant and prefix and is
-updated asynchronously by bounded, repeated authoritative namespace scans.
-List responses are paged and disclose catalog generation, scan epoch, and
-update time. A later scan repairs missed or stale entries.
+Listing millions or billions of native-v2 refs uses a 16-shard derived Prolly
+catalog keyed by normalized ref name. Immutable lifecycle events update only
+the selected shard during steady-state create, move, and delete operations.
+Bounded authoritative namespace scans are repair-only. Catalog pages are
+stable by shard and name and expose canonical continuation cursors.
 
 The catalog must never authorize writes. A caller that selects a catalog result
 still loads the authoritative ref object before mutation. Ref creation and

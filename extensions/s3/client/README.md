@@ -79,6 +79,407 @@ against your key count and memory budget. Export `performance_snapshot()` for
 publication queue/wait telemetry and `s3_operation_metrics()` for SDK request
 counts.
 
+## Use the native v2 client for new repositories
+
+`ClientV2` stores payloads under immutable SHA-256-derived keys. Repeated
+writes to one logical filename therefore do not consume provider versions at
+that filename. V2 is a separate repository format and does not dual-write v1.
+
+```rust
+use std::sync::Arc;
+
+use prolly_s3_client::{
+    ClientV2, HmacAttestationSigner, ProviderIdentity,
+    core::ProviderPerKeyVersionLimitV2,
+};
+
+async fn create_v2(
+    aws: aws_sdk_s3::Client,
+    bucket: &str,
+) -> Result<ClientV2, prolly_s3_client::Error> {
+    ClientV2::builder()
+        .aws_client(aws)
+        .bucket(bucket)
+        .repository_prefix(".prolly/native-v2")
+        .writer("ingestion-service")
+        .provider_identity(ProviderIdentity::aws_region("us-west-2"))
+        .attestation_signer(Arc::new(HmacAttestationSigner::single(
+            "provider-key-2026-01",
+            vec![0x41; 32],
+        )?))
+        .provider_per_key_version_limit(
+            ProviderPerKeyVersionLimitV2::Finite(10_000),
+        )
+        .initialize()
+        .await
+}
+```
+
+### Stream and resume a durable batch
+
+Durable commit sessions are the default. Each body is spooled with bounded
+memory, hashed once, and uploaded to its immutable payload key. Checkpoints
+store bindings and operation IDs, never body bytes.
+
+```rust
+use aws_sdk_s3::primitives::ByteStream;
+
+let mut commit = client
+    .begin_commit()
+    .message("daily document import")
+    .checkpoint_every(256)
+    .start()
+    .await?;
+
+let session_id = commit.id();
+
+commit
+    .put_stream(
+        "documents/report.pdf",
+        ByteStream::from_path("report.pdf").await?,
+    )
+    .await?;
+
+commit.delete_object("documents/obsolete.pdf")?;
+commit.checkpoint().await?;
+
+// After a process restart, construct/open ClientV2 again and resume by ID.
+let resumed = client.resume_commit(session_id).await?;
+let receipt = resumed.publish().await?;
+println!("published {}", receipt.id);
+```
+
+Resume reuses verified payloads. It fails if the branch moved, the session
+expired, or another writer took ownership. Publication reconciles an ambiguous
+ref CAS by operation ID before fencing the branch.
+
+Durability adds one checkpoint PUT at session creation, one per configured
+checkpoint interval, and a final checkpoint when needed. The payload and
+atomic publication path remains `N + 3` PUTs. For a latency-sensitive batch
+that does not require restart recovery, opt out explicitly:
+
+```rust
+let commit = client.begin_commit().ephemeral().start().await?;
+```
+
+### Create branches and immutable tags
+
+Branches are independent publication lanes. Creating a branch points it at an
+existing durable commit; it does not copy payloads or Prolly nodes.
+
+```rust
+let main = client.head().await?;
+let feature_head = client.create_branch("feature", Some(main)).await?;
+
+let feature = client.for_branch("feature")?;
+let committed = feature
+    .put_object("docs/feature.txt", b"ready for review".to_vec())
+    .await?;
+
+let release = client.create_tag("release-2026-08", committed.id).await?;
+assert_eq!(client.tag("release-2026-08").await?, release);
+assert_eq!(feature_head.target, main);
+```
+
+Delete operations require the target you observed. A concurrent branch move
+or tag replacement therefore fails instead of deleting newer state.
+
+```rust
+client.delete_tag("release-2026-08", release.target).await?;
+client.delete_branch("feature", committed.id).await?;
+```
+
+### Merge branches with bounded, restartable work
+
+Native-v2 merge never materializes complete snapshots or ancestor sets. The
+cursor stays constant-size while the graph frontier, changes, conflicts, and
+partially built output roots live in a job-scoped Prolly tree.
+
+```rust
+use prolly_s3_client::core::{
+    decode_canonical, encode_canonical, MergeCursorV2, MergePhaseV2,
+    MergePolicyV2,
+};
+
+let mut cursor = client
+    .start_merge(
+        "feature",
+        None,
+        MergePolicyV2::Theirs,
+        "merge reviewed feature",
+    )
+    .await?;
+std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+
+loop {
+    if cursor.phase == MergePhaseV2::AwaitingBase {
+        let page = client.merge_bases_page(&cursor, None, 100).await?;
+        let base = page
+            .bases
+            .first()
+            .copied()
+            .ok_or_else(|| std::io::Error::other("merge reported no best base"))?;
+        cursor = client.select_merge_base(&cursor, base).await?;
+        std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+    }
+
+    if matches!(
+        cursor.phase,
+        MergePhaseV2::ReadyToPublish | MergePhaseV2::Conflicted
+    ) {
+        break;
+    }
+
+    let page = client.advance_merge(&cursor, 512).await?;
+    cursor = page.cursor;
+
+    // Save only the returned cursor. An older saved cursor is safe to replay,
+    // but may repeat already completed bounded work.
+    std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+}
+
+// Another process can reopen ClientV2 and resume from the canonical cursor.
+let saved: MergeCursorV2 = decode_canonical(&std::fs::read("merge.cbor")?)?;
+cursor = saved;
+
+let mut after = None;
+loop {
+    let page = client.merge_changes_page(&cursor, after.as_ref(), 500).await?;
+    for change in &page.changes {
+        println!("change: {}", String::from_utf8_lossy(&change.key));
+    }
+    after = page.continuation;
+    if after.is_none() {
+        break;
+    }
+}
+
+let receipt = client.publish_merge(&cursor).await?;
+println!("published merge {}", receipt.id);
+
+let mut cleanup = None;
+loop {
+    let page = client.cleanup_merge(&cursor, cleanup.as_ref(), 1_000).await?;
+    cleanup = page.continuation;
+    if cleanup.is_none() {
+        break;
+    }
+}
+```
+
+`MergePolicyV2::Fail` stops in `Conflicted`; page conflicts with
+`merge_conflicts_page`, then clean up the abandoned plan or start a new plan
+with an explicit `Ours` or `Theirs` policy. A criss-cross history can produce
+several best bases and stops in `AwaitingBase` until the caller selects one.
+Publication revalidates the target branch head and uses operation-ID
+reconciliation after an ambiguous CAS. A target move is returned as
+`RefConflict`; merge never silently rebases the completed plan.
+
+### Page the native ref catalog
+
+The catalog is split into 16 independent shards. Listing uses point reads of
+the shard heads and nodes; it does not scan the S3 ref prefix. Ordering is
+stable by shard and then name, so persist the opaque cursor rather than
+constructing one.
+
+```rust
+let mut cursor = None;
+loop {
+    let page = client.list_branch_catalog_page(cursor, 500).await?;
+    for branch in page.branches {
+        println!("{} -> {}", branch.name, branch.target);
+    }
+    cursor = page.continuation;
+    if cursor.is_none() {
+        break;
+    }
+}
+```
+
+The catalog is derived discovery state. Resolve a chosen branch with
+`client.for_branch(name)?.head().await?` or a tag with `client.tag(name).await?`
+before acting on it. If a process crashes after publishing a ref but before
+updating its shard, run the bounded repair API from an administrative job:
+
+```rust
+let mut continuation = None;
+loop {
+    let page = client
+        .repair_branch_catalog_page(continuation, 500)
+        .await?;
+    continuation = page.continuation;
+    if continuation.is_none() {
+        break;
+    }
+}
+```
+
+Repair is intentionally the only native-v2 path that lists the authoritative
+ref namespace. It should not run in foreground request handling.
+
+### Migrate a v1 branch without dual writes
+
+Migration copies one immutable v1 branch snapshot into a new native-v2 branch
+while preserving its complete commit DAG, merge parents, commit metadata,
+object history, and delete markers. The source and destination repositories
+must use different prefixes; the destination branch must not exist.
+
+```rust
+let mut cursor = v1_client
+    .start_v2_migration(&v2_client, "imported-main")
+    .await?;
+
+loop {
+    let page = v1_client
+        .advance_v2_migration(&v2_client, &cursor, 4_096, 256)
+        .await?;
+
+    cursor = page.cursor;
+    let checkpoint = prolly_s3_client::core::encode_canonical(&cursor)?;
+    std::fs::write("v1-to-v2-migration.cbor", checkpoint)?;
+
+    if page.complete {
+        break;
+    }
+}
+
+let imported = v2_client.for_branch("imported-main")?;
+println!("native-v2 head: {}", imported.head().await?);
+```
+
+The cursor is constant-size. Its traversal stack, source-to-destination commit
+mappings, and imported node/commit-graph roots live in immutable Prolly nodes.
+Restart either process, reopen both clients with the same writer identities,
+decode the last persisted cursor, and continue. Replaying an older cursor is
+safe: payload and commit writes are content-addressed and reconcile exactly.
+
+Migration creates a non-expiring source retention pin before traversal and
+removes it only after the destination ref and complete cold-read indexes are
+durable. Clean the now-unreferenced traversal nodes afterward:
+
+```rust
+loop {
+    let cleanup = v1_client.cleanup_v2_migration(&cursor, 1_000).await?;
+    if cleanup.complete {
+        break;
+    }
+}
+```
+
+To abandon an incomplete job, call `abort_v2_migration` in bounded cleanup
+pages. It releases the source pin, unregisters the target's transient imported
+index root, and deletes traversal state. Unreachable immutable payloads and
+commits remain safe for native-v2 GC.
+
+Run one migration per source branch that must remain independently named. The
+native importer uses one target system-authority scope, so shared commits have
+stable destination identities within the same authority epoch. Before cleanup,
+resolve any source tag target and create its native tag explicitly:
+
+```rust
+for source_tag in v1_client.list_tags().await? {
+    if let Some(native_target) = v1_client
+        .v2_migration_mapping(&cursor, source_tag.target)
+        .await?
+    {
+        v2_client.create_tag(&source_tag.name, native_target).await?;
+    }
+}
+```
+
+Do not mutate both formats as a migration strategy.
+
+### Clean expired checkpoints
+
+Cleanup is bounded and resumable. Run it periodically from repository
+maintenance:
+
+```rust
+let mut cursor = None;
+loop {
+    let page = client
+        .cleanup_expired_commit_sessions(cursor, 1_000)
+        .await?;
+    cursor = page.continuation;
+    if cursor.is_none() {
+        break;
+    }
+}
+```
+
+### Observe cold-start index readiness
+
+`ClientV2` starts branch-local index maintenance and waits for the default
+branch to become readable during open. Foreground reads never replay a journal
+tail. A newly selected branch instead fails quickly with `MissingClosure` and
+retry advice until background catch-up completes.
+
+```rust
+let health = client.branch_index_health().await?;
+println!(
+    "ready={} lag={} last_error={:?}",
+    health.ready,
+    health.lag_generations,
+    health.last_error,
+);
+
+client
+    .wait_for_branch_indexes(std::time::Duration::from_secs(30))
+    .await?;
+```
+
+Maintenance is branch-local and checks only branches registered in that
+process. `background_index_maintenance(false)` is available for isolated
+request-shape probes; production clients should keep the default enabled.
+
+If health reports that lag exceeded the incremental window, run the resumable
+rebuild workflow. Persist the canonical cursor after every step in your job
+store before scheduling the next step:
+
+```rust
+let mut cursor = client.start_branch_index_rebuild().await?;
+
+loop {
+    let step = client
+        .advance_branch_index_rebuild(&cursor, 256)
+        .await?;
+
+    cursor = step.cursor;
+    let encoded_cursor = prolly_s3_client::core::encode_canonical(&cursor)?;
+    std::fs::write("journal-index-rebuild.cbor", encoded_cursor)?;
+
+    if step.complete {
+        break;
+    }
+}
+
+// The operation-ID index replays the same linked chunks after the node and
+// graph roots are complete. Persist this cursor after every bounded step too.
+let mut operation = client.start_operation_index_rebuild(&cursor).await?;
+loop {
+    let step = client
+        .advance_operation_index_rebuild(&operation, 256)
+        .await?;
+    operation = step.cursor;
+    let encoded_cursor = prolly_s3_client::core::encode_canonical(&operation)?;
+    std::fs::write("operation-index-rebuild.cbor", encoded_cursor)?;
+    if step.complete {
+        break;
+    }
+}
+
+while !client
+    .cleanup_branch_index_rebuild(&cursor, &operation, 1_000)
+    .await?
+    .complete
+{}
+```
+
+Discovery and application are independently paged. Rebuild state consists of
+immutable linked chunks and fresh Prolly roots, so restart does not rediscover
+already scanned history. Do not clean up the shared chunks until both the
+node/graph and operation-index cursors are complete.
+
 ## Ingest files in batches (recommended)
 
 Use `ingest_objects` when loading more than one file. It publishes up to 100
@@ -284,6 +685,40 @@ run concurrently. The short metadata-publication phase is serialized per
 branch, while independent branches can publish concurrently; a stale expected
 head fails explicitly.
 
+## Hand off one branch writer
+
+Writer authority is branch-scoped. Open the replacement client read-only, make
+the previous process and credentials unable to publish, then perform an
+explicit generation-checked takeover:
+
+```rust
+let mut replacement = Client::builder()
+    .aws_client(aws)
+    .bucket(bucket)
+    .writer("repository-service-b")
+    .read_only(true)
+    .provider_identity(ProviderIdentity::aws_region("us-west-2"))
+    .attestation_signer(attestation_signer)
+    .open()
+    .await?;
+
+let generation = replacement
+    .takeover_branch_writer(
+        "main",
+        "repository-service-a",
+        7,
+        "old credentials revoked and process isolated",
+    )
+    .await?;
+
+assert_eq!(generation, 8);
+```
+
+The no-target-change branch-ref CAS is the fencing barrier. After it succeeds,
+the old writer fails its authority validation before uploading payload bytes.
+Take over additional branches independently; do not use one branch handoff as
+evidence that another branch changed owner.
+
 ## Add a persistent node cache
 
 Foyer keeps verified immutable Prolly nodes in bounded memory and local disk.
@@ -443,17 +878,21 @@ For a large repository, call `advance_node_index` until its report says
 
 ## Limitations
 
-- No unmanaged or multi-process concurrent writers.
+- Managed writers may run in multiple processes when each process owns a
+  distinct branch authority. A branch still has exactly one active writer, and
+  direct S3 mutations outside this client remain unsupported.
 - No repository-level deduplication, chunking, or partial-file updates.
-- Commit sessions buffer bodies in memory and fail closed at the configured
-  aggregate byte limit; use physical multipart for large individual files.
+- Legacy `Client` commit sessions buffer bodies in memory and fail closed at
+  the configured aggregate byte limit. Native-v2 durable sessions spool
+  streams to disk and retain only verified immutable bindings.
 - Multipart restart requires the caller to persist the upload handle, each
   part's ETag/SHA-256/size, and whole-object checksums.
 - Provider-native version IDs cannot be preserved across buckets.
 - Raw S3 listing shows physical state, not a branch or historical snapshot.
-- Whole-result compatibility methods such as `list_branches`, `merge_bases`,
-  merge planning, and repository-wide `fsck` are not billion-scale APIs. Use
-  paged catalog/history/diff calls and partition operational work.
+- Legacy whole-result methods such as `list_branches`, `merge_bases`, and
+  repository-wide `fsck` are not billion-scale APIs. Native-v2 merge uses a
+  durable frontier and paged changes/conflicts; other repository-wide work
+  still requires bounded administrative APIs.
 - Production AWS scale and throttling qualification is still pending.
 
 The complete RustFS example is

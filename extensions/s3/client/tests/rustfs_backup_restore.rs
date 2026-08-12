@@ -708,7 +708,8 @@ async fn rustfs_physical_backup_restore_process_helper() {
     assert!(!restored_ref_versions.is_empty());
     assert_eq!(
         restored
-            .takeover_writer(
+            .takeover_branch_writer(
+                "main",
                 "archive-reader",
                 1,
                 "archive reader is process-bound to a different bucket and cannot address restore",

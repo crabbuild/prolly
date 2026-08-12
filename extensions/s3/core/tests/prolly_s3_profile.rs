@@ -2491,7 +2491,7 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
         .unwrap();
 
     assert_eq!(
-        old_writer.renew_writer_lease().await.unwrap_err().code,
+        old_writer.renew_shard_authorities().await.unwrap_err().code,
         ErrorCode::PreconditionFailed
     );
     plane.reset_request_counts();

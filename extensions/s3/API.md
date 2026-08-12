@@ -27,9 +27,30 @@ branches, diffs, conditional publication, and idempotency.
 | Partitioned GC | `start_gc_epoch`, `advance_gc_epoch`, `sweep_gc_epoch` |
 | Merge/restore | `merge`, `restore` |
 | Verify repository | `fsck` |
-| Explicit writer handoff | `takeover_writer` |
+| Explicit branch-writer handoff | `takeover_branch_writer` |
 | SDK request counters | `s3_operation_metrics` |
 | Publication queue/wait counters | `performance_snapshot` |
+
+## Native protocol-v2 entry points
+
+New repositories that need immutable payload keys, resumable ingestion,
+event-driven ref catalogs, and scale-safe merge use `ClientV2`. V1 and v2 use
+separate format markers and are never dual-written.
+
+| Goal | API |
+|---|---|
+| Create or open native v2 | `ClientV2::builder().initialize()`, `open()` |
+| Select a branch | `for_branch` |
+| Stream a durable atomic commit | `begin_commit`, `put_stream`, `checkpoint`, `resume_commit`, `publish` |
+| Create/delete branches and tags | `create_branch`, `delete_branch`, `create_tag`, `delete_tag` |
+| Page ref catalogs | `list_branch_catalog_page`, `list_tag_catalog_page` |
+| Repair a catalog gap | `repair_branch_catalog_page`, `repair_tag_catalog_page` |
+| Start or advance merge | `start_merge`, `advance_merge` |
+| Select a criss-cross base | `merge_bases_page`, `select_merge_base` |
+| Inspect merge output | `merge_changes_page`, `merge_conflicts_page` |
+| Publish or discard merge | `publish_merge`, `cleanup_merge` |
+| Observe/rebuild branch indexes | `branch_index_health`, `start_branch_index_rebuild`, `advance_branch_index_rebuild` |
+| Explicit branch-writer handoff | `takeover_branch_writer` |
 
 ## Semantics to remember
 
@@ -49,3 +70,6 @@ branches, diffs, conditional publication, and idempotency.
   authoritative object before mutation.
 - Whole-result compatibility APIs retain finite limits. Use bounded history,
   structural diff, catalog, and GC APIs for growing repositories.
+- A native-v2 merge cursor is process-independent only when the caller saves
+  the exact cursor returned by each successful step. Publication rejects a
+  moved target branch and never rebases a completed plan.

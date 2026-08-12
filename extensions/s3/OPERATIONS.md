@@ -118,6 +118,23 @@ v1's older `advance_node_index_v2`, `advance_commit_graph_v2`, and
 `advance_ref_catalog_v2` scan epochs remain compatibility/rebuild tools; do not
 use them as protocol-v2 steady-state maintenance.
 
+Native protocol v2 enumerates branches and tags through 16 event-driven
+catalog shards. Branch index maintenance records the latest authoritative ref
+generation after advancing its journal indexes. Branch/tag create and delete
+also update the catalog before returning. Catalog reads perform point GETs and
+must not call `ListObjectsV2`; monitor any ref-namespace LIST as repair or
+administrative traffic. If a crash leaves a published ref absent from the
+catalog, page `repair_branch_catalog_page` or `repair_tag_catalog_page` with a
+bounded limit and persist the returned continuation between invocations.
+
+For v1-to-native-v2 migration, initialize a separate v2 prefix and migrate into
+a new branch. Persist the canonical migration cursor after every bounded page.
+The workflow holds a non-expiring v1 retention pin until the destination ref
+and its complete node/commit-graph closure are durable; alert on old
+`v1-to-v2-*` pins because they indicate abandoned jobs. After completion, run
+bounded migration cleanup until it reports complete. Never delete the source
+repository or run an unpinned source GC while a migration is active.
+
 ```rust
 use prolly::TreeFormat;
 use prolly_s3_core::JournalDerivedIndexesV2;
@@ -139,6 +156,36 @@ println!(
 );
 ```
 
+## Native-v2 merge jobs
+
+Treat `MergeCursorV2` as workflow state. Canonically persist the exact cursor
+returned by `start_merge`, `select_merge_base`, or every successful
+`advance_merge` call before scheduling the next page. The cursor is
+constant-size; its job-scoped Prolly root owns the potentially unbounded graph
+frontier, changes, and conflicts.
+
+Use a bounded `max_steps` appropriate for the worker deadline. A page may
+perform graph work without emitting changes, so completion is determined only
+by `MergePhaseV2`, not by an empty result vector. `AwaitingBase` requires the
+operator or application to page the best bases and select one. `Conflicted`
+under the `Fail` policy cannot be published; page conflicts for reporting and
+then clean up the plan or start a new merge with an explicit resolution policy.
+
+`publish_merge` is safe to retry with the same cursor. It reconciles the
+operation ID before fencing on an ambiguous ref CAS. A target branch that moved
+after planning returns `RefConflict`; do not edit the cursor or rebase the plan.
+Start a new merge against the new target head.
+
+After successful publication, or when abandoning any incomplete/conflicted
+job, call `cleanup_merge` until its continuation is absent. Cleanup deletes
+only `administration/v2/merge/<job>/plan`; it never deletes output nodes
+referenced by a published commit. Alert on old merge-job prefixes because the
+repository cannot infer whether an externally persisted cursor is still live.
+
+Output state and delta nodes are immutable and addressed by CID. Keep the
+verified node cache enabled on merge workers and readers; a cold reader can
+recover them through deterministic point GETs without a namespace scan.
+
 Partitioned GC no longer holds the repository publication barrier while it
 discovers roots, marks commits/nodes/versions, scans candidates, or consumes
 dirty roots. Starting an epoch activates one durable coordinator. Each live
@@ -154,7 +201,7 @@ are exact-deleted in restartable batches. Only one GC epoch may be active.
   the application decide whether to retry or merge.
 - Never automatically rebase an atomic commit.
 - Reuse a stable `OperationId` after an ambiguous response.
-- Stop writes when lease renewal is ambiguous or the fence is lost.
+- Stop writes when authority renewal is ambiguous or the fence is lost.
 - Perform takeover only after establishing that the previous writer cannot
   continue publishing.
 
@@ -209,8 +256,9 @@ For a portable backup, use `clone_to` to create a complete logical repository
 in a versioned archive bucket. Restore by opening that archive read-only and
 cloning it to the destination; both hops replay history and bind every logical
 version to the destination provider's exact ID. Open the result read-only, run
-`fsck`, and only then call `takeover_writer` with the previous writer ID, lease
-generation, and auditable credential/process-isolation evidence.
+`fsck`, and only then call `takeover_branch_writer` for each branch that the
+restored service will own, using the previous writer ID, authority generation,
+and auditable credential/process-isolation evidence.
 
 A provider-native physical snapshot is usable in place only when the restore
 mechanism explicitly guarantees preservation of every opaque `VersionId` and

@@ -106,9 +106,13 @@ def check_source_defaults() -> None:
     ]
     for marker in forbidden_defaults:
         assert marker not in default_surface, f"forbidden v2 default marker: {marker}"
+    format_impl = re.search(
+        r"impl RepositoryFormatV1 \{(?P<body>.*?)\n\}", model, re.DOTALL
+    )
+    assert format_impl is not None, "missing RepositoryFormatV1 implementation"
     constants = re.findall(
         r"(?:VERSION|CAPABILITY_PROFILE|PROTOCOL_VERSION|CURRENT_READER_VERSION|CURRENT_WRITER_VERSION):\s*u(?:16|32)\s*=\s*(\d+)",
-        model,
+        format_impl.group("body"),
     )
     assert constants and set(constants) == {"1"}, f"non-v1 protocol constants: {constants}"
 

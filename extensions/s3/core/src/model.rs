@@ -89,6 +89,8 @@ hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(PublicationEventIdV2, "ppe2_");
+hash_id!(RefCatalogEventIdV2, "pce2_");
+hash_id!(JournalIndexRebuildChunkIdV2, "jrc2_");
 hash_id!(OperationIndexSegmentIdV2, "poi2_");
 hash_id!(GcDirtyRootIdV2, "pdr2_");
 hash_id!(TreeFormatDigest, "ptf1_");
@@ -232,6 +234,40 @@ impl RepositoryFormatV1 {
 pub struct InitializationIntentV1 {
     pub repository_id: RepositoryId,
     pub format: RepositoryFormatV1,
+    pub operation: OperationId,
+}
+
+/// Create-once format marker for a native protocol-v2 repository.
+///
+/// V2 repositories use a separate marker and namespace from v1. Readers must
+/// never reinterpret a v1 marker as v2 or maintain both formats with dual
+/// writes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepositoryFormatV2 {
+    pub repository_id: RepositoryId,
+    pub format_version: u16,
+    pub state_tree_format: TreeFormat,
+    pub canonical_limits: CanonicalLimits,
+    pub idempotency_retention: IdempotencyRetentionV2,
+    pub provider_per_key_version_limit: ProviderPerKeyVersionLimitV2,
+    pub min_reader_version: u32,
+    pub min_writer_version: u32,
+    pub created_at_millis: u64,
+    pub required_capability_profile: u16,
+}
+
+impl RepositoryFormatV2 {
+    pub const VERSION: u16 = 2;
+    pub const PROLLY_S3_CAPABILITY_PROFILE: u16 = 2;
+    pub const PROLLY_S3_PROTOCOL_VERSION: u32 = 2;
+    pub const CURRENT_READER_VERSION: u32 = 2;
+    pub const CURRENT_WRITER_VERSION: u32 = 2;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InitializationIntentV2 {
+    pub repository_id: RepositoryId,
+    pub format: RepositoryFormatV2,
     pub operation: OperationId,
 }
 
@@ -388,6 +424,17 @@ pub struct BucketStateV1 {
     pub objects: TreeRootV1,
     pub versions: TreeRootV1,
     pub operations: TreeRootV1,
+}
+
+/// Native protocol-v2 logical state.
+///
+/// Operation idempotency is intentionally absent: v2 checkpoints the bounded
+/// branch publication journal into `SegmentedOperationIndexV2` instead of
+/// retaining an operation tree in every repository snapshot.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketStateV2 {
+    pub objects: TreeRootV1,
+    pub versions: TreeRootV1,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -553,6 +600,13 @@ pub struct CurrentObjectV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CurrentObjectV2 {
+    /// Complete current version so a lookup can fetch the immutable payload
+    /// without loading the version-history tree.
+    pub version: ObjectVersionV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OperationKind {
     Put,
     Delete,
@@ -590,6 +644,46 @@ pub struct ObjectTransition {
 pub struct BucketDeltaV1 {
     pub operation_ids: Vec<OperationId>,
     pub changes: Vec<ObjectTransition>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObjectTransitionV2 {
+    pub key: Vec<u8>,
+    pub previous: Option<ObjectVersionIdV2>,
+    pub next: ObjectVersionIdV2,
+    pub delete_marker: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketDeltaV2 {
+    /// Canonical digest used to reject reuse of a publication operation ID
+    /// with different logical input. The operation ID itself lives in the
+    /// authority-stamped publication event and bounded operation index.
+    pub input_digest: [u8; 32],
+    pub changes: Vec<ObjectTransitionV2>,
+    /// Optional immutable Prolly root for a merge delta that is too large to
+    /// embed in one commit envelope. Tree keys are logical object keys and
+    /// values are canonical `ObjectTransitionV2` records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes_root: Option<TreeRootV1>,
+    /// Exact number of records in `changes_root`. Legacy inline deltas leave
+    /// this at zero and derive their count from `changes`.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub change_count: u64,
+}
+
+impl BucketDeltaV2 {
+    pub fn logical_change_count(&self) -> u64 {
+        if self.changes_root.is_some() {
+            self.change_count
+        } else {
+            self.changes.len() as u64
+        }
+    }
+}
+
+fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1749,6 +1843,94 @@ pub struct PublicationEventV2 {
     pub created_at_millis: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum RefKindV2 {
+    Branch,
+    Tag,
+}
+
+/// Immutable lifecycle event consumed by one prefix-sharded ref catalog.
+/// Branch publication events remain the authoritative per-branch history;
+/// this record provides a common branch/tag discovery stream whose loss can be
+/// repaired from authoritative ref objects.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefCatalogEventV2 {
+    pub repository: RepositoryId,
+    pub shard: u8,
+    pub previous: Option<RefCatalogEventIdV2>,
+    pub kind: RefKindV2,
+    pub name: String,
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub tombstone: bool,
+    pub created_at_millis: u64,
+}
+
+impl RefCatalogEventV2 {
+    pub fn validate(&self, repository: RepositoryId, expected_shard: u8) -> Result<()> {
+        crate::repository::validate_branch(&self.name)?;
+        if self.repository != repository || self.shard != expected_shard || self.operation.is_nil()
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 ref-catalog event is malformed or belongs to another shard",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn id(&self) -> Result<RefCatalogEventIdV2> {
+        let bytes = encode_canonical(self)?;
+        Ok(RefCatalogEventIdV2(domain_hash(
+            b"prolly-s3/ref-catalog-event/v2",
+            &[&bytes],
+        )))
+    }
+}
+
+/// Derived ref state stored in a catalog shard. Tombstones are retained so an
+/// old or duplicated lifecycle event cannot resurrect a deleted ref.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeRefCatalogEntryV2 {
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub tombstone: bool,
+    pub updated_at_millis: u64,
+}
+
+/// Mutable root of one independently updated ref-catalog shard.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefCatalogShardHeadV2 {
+    pub repository: RepositoryId,
+    pub shard: u8,
+    pub latest_event: RefCatalogEventIdV2,
+    pub root: TreeRootV1,
+    pub generation: u64,
+    pub updated_at_millis: u64,
+}
+
+impl RefCatalogShardHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        expected_shard: u8,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        if self.repository != repository
+            || self.shard != expected_shard
+            || self.root.format_digest != expected_format
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "v2 ref-catalog shard head is malformed or belongs to another shard",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl PublicationEventV2 {
     pub fn id(&self) -> Result<PublicationEventIdV2> {
         self.validate()?;
@@ -1792,6 +1974,56 @@ impl PublicationEventV2 {
             && self.reflog == reference.reflog
             && self.authority == reference.authority
             && self.created_at_millis == reference.updated_at_millis)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalIndexRebuildChunkV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub job: OperationId,
+    pub sequence: u64,
+    pub newer: Option<JournalIndexRebuildChunkIdV2>,
+    pub events: Vec<PublicationEventV2>,
+}
+
+impl JournalIndexRebuildChunkV2 {
+    pub fn id(&self) -> Result<JournalIndexRebuildChunkIdV2> {
+        let bytes = encode_canonical(self)?;
+        Ok(JournalIndexRebuildChunkIdV2(domain_hash(
+            b"prolly-s3/journal-index-rebuild-chunk/v2",
+            &[&bytes],
+        )))
+    }
+
+    pub fn validate(&self, repository: RepositoryId, branch: &str) -> Result<()> {
+        crate::repository::validate_branch(branch)?;
+        if self.repository != repository
+            || self.branch != branch
+            || self.job.is_nil()
+            || self.events.is_empty()
+            || self.events.len() > 1_000
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "journal-index rebuild chunk is malformed or belongs to another job",
+            ));
+        }
+        let mut previous_generation = None;
+        for event in &self.events {
+            event.validate()?;
+            if event.repository != repository
+                || event.branch != branch
+                || previous_generation.is_some_and(|previous: u64| event.generation.0 >= previous)
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "journal-index rebuild chunk events are not newest-to-oldest",
+                ));
+            }
+            previous_generation = Some(event.generation.0);
+        }
+        Ok(())
     }
 }
 
@@ -1952,11 +2184,47 @@ impl RefValueV2 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagValueV2 {
+    pub target: CommitIdV2,
+    pub previous_target: Option<CommitIdV2>,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub inline_reflog: ReflogEntryV2,
+    pub authority: AuthorityStampV2,
+    pub updated_at_millis: u64,
+    pub tombstone: bool,
+}
+
+impl TagValueV2 {
+    pub fn validate(&self, repository: RepositoryId, name: &str) -> Result<()> {
+        crate::repository::validate_branch(name)?;
+        self.authority.validate(
+            repository,
+            &AuthorityScopeV2::System {
+                namespace: "tags".to_string(),
+            },
+        )?;
+        if self.operation.is_nil()
+            || self.inline_reflog.branch != name
+            || self.inline_reflog.old_target != self.previous_target
+            || self.inline_reflog.new_target != self.target
+            || self.inline_reflog.operation != self.operation
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 tag ref does not match its authority or inline reflog",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketCommitV2 {
-    pub state: BucketStateV1,
+    pub state: BucketStateV2,
     pub parents: Vec<CommitIdV2>,
     pub generation: CommitGeneration,
-    pub delta: BucketDeltaV1,
+    pub delta: BucketDeltaV2,
     pub node_pack: Option<NodePackRefV1>,
     pub authority: AuthorityStampV2,
     pub author: String,
@@ -2008,7 +2276,25 @@ impl CommitObjectV2 {
                 ErrorCode::CorruptCommit,
                 "v2 commit object node pack does not match its logical reference",
             )),
+        }?;
+        if let Some(root) = &self.commit.delta.changes_root {
+            if !self.commit.delta.changes.is_empty()
+                || self.commit.delta.change_count == 0
+                || root.root.is_none()
+                || root.format_digest != self.commit.state.objects.format_digest
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 external commit delta is malformed or uses another tree format",
+                ));
+            }
+        } else if self.commit.delta.change_count != 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 inline commit delta carries an external change count",
+            ));
         }
+        Ok(())
     }
 
     pub fn encode_object(&self) -> Result<Vec<u8>> {
@@ -2127,6 +2413,24 @@ pub struct ObjectVersionV2 {
 }
 
 impl ObjectVersionV2 {
+    pub fn derive_id(
+        repository: RepositoryId,
+        key: &[u8],
+        operation: OperationId,
+        body: &LogicalObjectVersionBodyV1,
+    ) -> Result<ObjectVersionIdV2> {
+        let body_bytes = encode_canonical(body)?;
+        Ok(ObjectVersionIdV2(domain_hash(
+            b"prolly-s3/object-version/v2",
+            &[
+                repository.as_bytes(),
+                key,
+                operation.as_bytes(),
+                &body_bytes,
+            ],
+        )))
+    }
+
     pub fn derive(
         repository: RepositoryId,
         key: &[u8],
@@ -2135,17 +2439,8 @@ impl ObjectVersionV2 {
         binding: Option<PhysicalObjectBindingV2>,
     ) -> Result<Self> {
         validate_physical_object_version_v2(&body, binding.as_ref())?;
-        let body_bytes = encode_canonical(&body)?;
         Ok(Self {
-            id: ObjectVersionIdV2(domain_hash(
-                b"prolly-s3/object-version/v2",
-                &[
-                    repository.as_bytes(),
-                    key,
-                    operation.as_bytes(),
-                    &body_bytes,
-                ],
-            )),
+            id: Self::derive_id(repository, key, operation, &body)?,
             body,
             binding,
         })
@@ -2285,6 +2580,96 @@ impl PhysicalBatchV2 {
     }
 }
 
+/// One payload-complete logical mutation ready for an atomic protocol-v2
+/// branch publication. Put payloads use immutable content-addressed bindings;
+/// delete markers do not create physical objects.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct StagedPutV2 {
+    pub(crate) key: Vec<u8>,
+    pub(crate) size: u64,
+    pub(crate) logical_etag: String,
+    pub(crate) checksums: Checksums,
+    pub(crate) headers: ObjectHeaders,
+    pub(crate) user_metadata: BTreeMap<String, String>,
+    pub(crate) binding: PhysicalObjectBindingV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum StagedMutationBodyV2 {
+    Put(Box<StagedPutV2>),
+    Delete { key: Vec<u8> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StagedMutationV2 {
+    pub(crate) body: StagedMutationBodyV2,
+}
+
+impl StagedMutationV2 {
+    pub fn delete(key: Vec<u8>) -> Self {
+        Self {
+            body: StagedMutationBodyV2::Delete { key },
+        }
+    }
+
+    pub fn key(&self) -> &[u8] {
+        match &self.body {
+            StagedMutationBodyV2::Put(staged) => &staged.key,
+            StagedMutationBodyV2::Delete { key } => key,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommitSessionStateV2 {
+    Open,
+    Aborted,
+}
+
+/// Canonical, immutable recovery checkpoint for a protocol-v2 commit
+/// session. Checkpoints retain only logical mutation metadata and immutable
+/// payload bindings; object bodies are never copied into the manifest.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommitSessionCheckpointV2 {
+    pub session: PhysicalBatchV2,
+    pub sequence: u64,
+    pub mutations: Vec<StagedMutationV2>,
+    pub state: CommitSessionStateV2,
+}
+
+impl CommitSessionCheckpointV2 {
+    pub fn validate(&self, repository: RepositoryId, max_mutations: usize) -> Result<()> {
+        self.session.validate(repository)?;
+        if self.mutations.len() > max_mutations {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 commit-session checkpoint exceeds the mutation limit",
+            ));
+        }
+        let mut previous = None;
+        for mutation in &self.mutations {
+            let key = mutation.key();
+            if key.is_empty() || previous.is_some_and(|prior: &[u8]| prior >= key) {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "v2 checkpoint mutations must have unique canonical key order",
+                ));
+            }
+            previous = Some(key);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CommitSessionCleanupReportV2 {
+    pub scanned: usize,
+    pub deleted: usize,
+    pub already_missing: usize,
+    pub retained: usize,
+    pub continuation: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectData {
     pub key: Vec<u8>,
@@ -2300,6 +2685,17 @@ pub(crate) fn derive_repository_id(operation: OperationId) -> RepositoryId {
     ))
 }
 
+pub(crate) fn derive_repository_id_v2(operation: OperationId) -> RepositoryId {
+    RepositoryId(domain_hash(
+        b"prolly-s3/repository/v2",
+        &[operation.as_bytes()],
+    ))
+}
+
 pub(crate) fn derive_input_digest(parts: &[&[u8]]) -> [u8; 32] {
     domain_hash(b"prolly-s3/operation-input/v1", parts)
+}
+
+pub(crate) fn derive_input_digest_v2(parts: &[&[u8]]) -> [u8; 32] {
+    domain_hash(b"prolly-s3/operation-input/v2", parts)
 }

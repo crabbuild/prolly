@@ -1,6 +1,6 @@
 use prolly_s3_core::{
     encode_canonical, AuthorityLeaseStateV2, AuthorityLeaseV2, AuthorityScopeV2, AuthorityStampV2,
-    BucketCommitV2, BucketDeltaV1, BucketStateV1, CommitGeneration, CommitIdV2, CommitObjectV1,
+    BucketCommitV2, BucketDeltaV2, BucketStateV2, CommitGeneration, CommitIdV2, CommitObjectV1,
     CommitObjectV2, ErrorCode, NodePackEntryV1, NodePackV1, ObjectHeaders, OperationId,
     PhysicalMultipartSessionV2, PhysicalMutationIdentityV2, PublicationEventV2, RefGeneration,
     RefValueV2, ReflogEntryV2, RepositoryId, TreeFormatDigest, TreeRootV1,
@@ -93,16 +93,17 @@ fn v2_publication_records_have_frozen_content_identities() {
         format_digest: TreeFormatDigest::from_hash([0x44; 32]),
     };
     let commit = BucketCommitV2 {
-        state: BucketStateV1 {
+        state: BucketStateV2 {
             objects: root.clone(),
-            versions: root.clone(),
-            operations: root,
+            versions: root,
         },
         parents: Vec::new(),
         generation: CommitGeneration(0),
-        delta: BucketDeltaV1 {
-            operation_ids: Vec::new(),
+        delta: BucketDeltaV2 {
+            input_digest: [0; 32],
             changes: Vec::new(),
+            changes_root: None,
+            change_count: 0,
         },
         node_pack: None,
         authority: authority.clone(),
@@ -135,7 +136,7 @@ fn v2_publication_records_have_frozen_content_identities() {
     );
     assert_eq!(
         commit.id().unwrap().to_string(),
-        "pbc2_k5quoflouuch4crelfudtng432li2tenqar65viagucs3iuzompa"
+        "pbc2_clgxccuoet2nnicx5n5uc7xtlhrp2ii3elwlbkk43ycuyh76zupq"
     );
     assert_eq!(
         publication.id().unwrap().to_string(),
@@ -167,16 +168,17 @@ fn v2_commit_envelope_is_range_readable_and_wire_separated_from_v1() {
         format_digest: pack.format_digest,
     };
     let mut commit = BucketCommitV2 {
-        state: BucketStateV1 {
+        state: BucketStateV2 {
             objects: root.clone(),
-            versions: root.clone(),
-            operations: root,
+            versions: root,
         },
         parents: Vec::new(),
         generation: CommitGeneration(0),
-        delta: BucketDeltaV1 {
-            operation_ids: Vec::new(),
+        delta: BucketDeltaV2 {
+            input_digest: [0; 32],
             changes: Vec::new(),
+            changes_root: None,
+            change_count: 0,
         },
         node_pack: None,
         authority: lease().stamp(),
@@ -199,6 +201,18 @@ fn v2_commit_envelope_is_range_readable_and_wire_separated_from_v1() {
         .is_some());
     assert_eq!(
         CommitObjectV1::decode_object(&encoded).unwrap_err().code,
+        ErrorCode::CorruptCommit
+    );
+
+    let mut external_delta = commit;
+    external_delta.node_pack = None;
+    external_delta.delta.changes_root = Some(external_delta.state.objects.clone());
+    external_delta.delta.change_count = 1;
+    CommitObjectV2::new(external_delta.clone(), None).unwrap();
+
+    external_delta.delta.changes_root.as_mut().unwrap().root = None;
+    assert_eq!(
+        CommitObjectV2::new(external_delta, None).unwrap_err().code,
         ErrorCode::CorruptCommit
     );
 }

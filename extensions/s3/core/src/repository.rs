@@ -8,24 +8,26 @@ use std::{
     time::Duration,
 };
 
-use crate::store::{NodeCacheNamespace, NodeLocator, PreparedNodePack};
+use crate::repository_v2::{ImportedCommitReceiptV2, V1MigrationChangeV2};
+use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::{
     decode_canonical, derive_input_digest, derive_repository_id, encode_canonical,
     tree_format_digest, BatchId, BucketCommitV1, BucketDeltaV1, BucketStateV1, CanonicalLimits,
     CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitGraphEntryV2,
-    CommitGraphHeadV2, CommitId, CommitObjectV1, CommitReceipt, CompareExchange,
+    CommitGraphHeadV2, CommitId, CommitIdV2, CommitObjectV1, CommitReceipt, CompareExchange,
     CompareExchangeOutcome, CurrentObjectV1, DeleteOutcome, Error, ErrorCode, EtagPredicateV1,
     GcCandidateV1, GcCommitWorkV2, GcCoordinatorV2, GcDirtyRootIdV2, GcDirtyRootV2, GcEpochPhaseV2,
     GcEpochV2, GcFenceV1, GcMarkRunStateV1, GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1,
     GcRunStateV1, GcRunV1, GcVersionWorkV2, GetRequest, IdSource, ImmutablePut,
-    InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
-    MemoryNodeCache, MutableControlKind, MutableControlObserver, NodeCache, NodeIndexEntryV1,
-    NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition,
-    ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1, OperationId,
-    OperationKind, OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1, PhysicalVersion,
-    ProllyObjectStore, RandomIdSource, RefCatalogEntryV2, RefCatalogHeadV2, RefGeneration,
-    ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result, RetentionPinV1, RetryAdvice,
-    StorageToken, SystemClock, TreeRootV1,
+    ImportedJournalIndexStateV2, InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1,
+    LogicalObjectVersionKindV1, MemoryNodeCache, MutableControlKind, MutableControlObserver,
+    NodeCache, NodeIndexEntryV1, NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath,
+    ObjectPlane, ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1,
+    ObjectWriteConditionV1, OperationId, OperationKind, OperationRecordV1, PhysicalBatchV1,
+    PhysicalPreparedMutationV1, PhysicalVersion, ProllyObjectStore, RandomIdSource,
+    RefCatalogEntryV2, RefCatalogHeadV2, RefGeneration, ReflogEntryV1, RepositoryFormatV1,
+    RepositoryId, RepositoryV2, Result, RetentionPinV1, RetryAdvice, StorageToken, SystemClock,
+    TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
@@ -434,6 +436,44 @@ pub struct PhysicalTransferPage {
     pub cursor: PhysicalTransferCursor,
     pub sync: SyncReport,
     pub processed_commits: usize,
+    pub traversal_steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum V1ToV2MigrationPhase {
+    Copying,
+    Publishing,
+    Complete,
+}
+
+/// Constant-size checkpoint for an explicit logical v1-to-native-v2 branch
+/// migration. Commit traversal/mappings and imported index roots are durable
+/// Prolly state; callers persist this canonical cursor after every page.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct V1ToV2MigrationCursor {
+    pub closure: CommitClosureCursor,
+    pub source_branch: String,
+    pub source_head: CommitId,
+    pub source_pin: String,
+    pub destination_branch: String,
+    pub destination_repository: RepositoryId,
+    pub destination_scope: [u8; 32],
+    pub index: ImportedJournalIndexStateV2,
+    pub mapped_head: Option<CommitIdV2>,
+    pub migrated_commits: u64,
+    pub migrated_payloads: u64,
+    pub migrated_payload_bytes: u64,
+    pub phase: V1ToV2MigrationPhase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct V1ToV2MigrationPage {
+    pub cursor: V1ToV2MigrationCursor,
+    pub processed_commits: usize,
+    pub copied_payloads: usize,
+    pub copied_payload_bytes: u64,
     pub traversal_steps: usize,
     pub complete: bool,
     pub budget_exhausted: bool,
@@ -877,21 +917,28 @@ impl<P: ObjectPlane> ProllyNodeIndex<P> {
 
 #[async_trait::async_trait]
 impl<P: ObjectPlane> NodeLocator for ProllyNodeIndex<P> {
-    async fn locate(&self, cid: &prolly::Cid) -> Result<Option<NodeIndexEntryV1>> {
+    async fn locate(&self, cid: &prolly::Cid) -> Result<Option<LocatedPackedNode>> {
         let tree = self.tree()?;
         self.engine
             .get(&tree, cid.as_bytes())
             .await?
             .map(|bytes| decode_canonical::<NodeIndexEntryV1>(&bytes))
             .transpose()
+            .map(|entry| entry.map(Into::into))
     }
 }
 
-pub struct WriterLeaseMaintenance {
+pub struct ShardAuthorityMaintenance {
     task: tokio::task::JoinHandle<()>,
 }
 
-impl Drop for WriterLeaseMaintenance {
+impl ShardAuthorityMaintenance {
+    pub(crate) fn from_task(task: tokio::task::JoinHandle<()>) -> Self {
+        Self { task }
+    }
+}
+
+impl Drop for ShardAuthorityMaintenance {
     fn drop(&mut self) {
         self.task.abort();
     }
@@ -2357,7 +2404,7 @@ impl<P: ObjectPlane> Repository<P> {
     /// Renew every cached branch/system authority permit. The repository-wide
     /// v1 lease is renewed only when this instance was opened through the
     /// legacy migration adapter.
-    pub async fn renew_writer_lease(&self) -> Result<()> {
+    pub async fn renew_shard_authorities(&self) -> Result<()> {
         let _authority_renewal = self.authority_renewal.lock().await;
         if self
             .writer_lease
@@ -2395,6 +2442,14 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let _renewal = self.lease_renewal.lock().await;
         self.renew_writer_lease_inner().await
+    }
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "use renew_shard_authorities; this name is retained for source compatibility"
+    )]
+    pub async fn renew_writer_lease(&self) -> Result<()> {
+        self.renew_shard_authorities().await
     }
 
     async fn renew_writer_lease_inner(&self) -> Result<()> {
@@ -2464,11 +2519,13 @@ impl<P: ObjectPlane> Repository<P> {
     /// Run independent shard-authority renewal until the returned handle is
     /// dropped. A failed or ambiguous renewal fences the affected writer
     /// instance before the task exits.
-    pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
+    pub fn start_shard_authority_maintenance(
+        self: &Arc<Self>,
+    ) -> Result<ShardAuthorityMaintenance> {
         if self.options.read_only {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
-                "writer lease maintenance requires a writable physical repository",
+                "shard-authority maintenance requires a writable repository",
             ));
         }
         let interval = Duration::from_millis((self.options.writer_lease_millis / 3).max(100));
@@ -2479,12 +2536,20 @@ impl<P: ObjectPlane> Repository<P> {
                 let Some(repository) = weak.upgrade() else {
                     break;
                 };
-                if repository.renew_writer_lease().await.is_err() {
+                if repository.renew_shard_authorities().await.is_err() {
                     break;
                 }
             }
         });
-        Ok(WriterLeaseMaintenance { task })
+        Ok(ShardAuthorityMaintenance { task })
+    }
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "use start_shard_authority_maintenance; this name is retained for source compatibility"
+    )]
+    pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<ShardAuthorityMaintenance> {
+        self.start_shard_authority_maintenance()
     }
 
     /// Continuously advance the rebuildable v2 node index outside foreground
@@ -2637,6 +2702,10 @@ impl<P: ObjectPlane> Repository<P> {
 
     /// Legacy repository-wide takeover adapter. New deployments should call
     /// `takeover_branch_writer` independently for each authority shard.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use takeover_branch_writer independently for each branch authority scope"
+    )]
     pub async fn takeover_physical_writer(
         &mut self,
         expected_writer: &str,
@@ -3301,6 +3370,404 @@ impl<P: ObjectPlane> Repository<P> {
                 "physical clone source version has an invalid binding",
             )),
         }
+    }
+
+    /// Start an explicit, history-preserving migration from one v1 branch to
+    /// a separately initialized native-v2 repository. The destination branch
+    /// must not already exist; v1 and v2 are never dual-written.
+    pub async fn start_v1_to_v2_migration<Q: ObjectPlane>(
+        &self,
+        target: &RepositoryV2<Q>,
+        source_branch: &str,
+        destination_branch: &str,
+    ) -> Result<V1ToV2MigrationCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        let source_head = self.head(source_branch).await?;
+        let closure = self.start_commit_closure(&[source_head]).await?;
+        let source_pin = format!("v1-to-v2-{}", hex::encode(closure.traversal.as_bytes()));
+        self.create_retention_pin(
+            &source_pin,
+            source_head,
+            &self.options.writer,
+            "native-v2 migration",
+            None,
+        )
+        .await?;
+        let destination = target
+            .start_v1_migration(
+                self.format.repository_id,
+                source_head,
+                destination_branch,
+                closure.traversal,
+            )
+            .await;
+        let (index, destination_scope) = match destination {
+            Ok(destination) => destination,
+            Err(error) => {
+                let _ = self.delete_retention_pin(&source_pin, source_head).await;
+                return Err(error);
+            }
+        };
+        Ok(V1ToV2MigrationCursor {
+            closure,
+            source_branch: source_branch.to_string(),
+            source_head,
+            source_pin,
+            destination_branch: destination_branch.to_string(),
+            destination_repository: target.repository_id(),
+            destination_scope,
+            index,
+            mapped_head: None,
+            migrated_commits: 0,
+            migrated_payloads: 0,
+            migrated_payload_bytes: 0,
+            phase: V1ToV2MigrationPhase::Copying,
+        })
+    }
+
+    /// Copy and index one bounded parent-before-child migration page. Every
+    /// returned cursor is process-independent. Persist it before scheduling
+    /// the next page; replaying the previous cursor is safe and may repeat
+    /// verified immutable payload PUTs without creating duplicate content.
+    pub async fn v1_to_v2_migration_page<Q: ObjectPlane>(
+        &self,
+        target: &RepositoryV2<Q>,
+        cursor: &V1ToV2MigrationCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<V1ToV2MigrationPage> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        validate_branch(&cursor.source_branch)?;
+        validate_branch(&cursor.source_pin)?;
+        validate_branch(&cursor.destination_branch)?;
+        let expected_pin = format!(
+            "v1-to-v2-{}",
+            hex::encode(cursor.closure.traversal.as_bytes())
+        );
+        if cursor.destination_repository != target.repository_id()
+            || cursor.index.job != cursor.closure.traversal
+            || cursor.source_pin != expected_pin
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v1-to-v2 migration cursor belongs to another source or destination",
+            ));
+        }
+        target.validate_v1_migration_destination(
+            self.format.repository_id,
+            cursor.source_head,
+            &cursor.destination_branch,
+            cursor.destination_scope,
+            &cursor.index,
+        )?;
+        if cursor.phase == V1ToV2MigrationPhase::Complete {
+            let destination_head = cursor.mapped_head.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidContinuationToken,
+                    "completed v1-to-v2 migration cursor has no mapped head",
+                )
+            })?;
+            target
+                .finish_v1_migration(
+                    self.format.repository_id,
+                    cursor.source_head,
+                    &cursor.destination_branch,
+                    destination_head,
+                    cursor.destination_scope,
+                    &cursor.index,
+                )
+                .await?;
+            return Ok(V1ToV2MigrationPage {
+                cursor: cursor.clone(),
+                processed_commits: 0,
+                copied_payloads: 0,
+                copied_payload_bytes: 0,
+                traversal_steps: 0,
+                complete: true,
+                budget_exhausted: false,
+            });
+        }
+        if cursor.phase != V1ToV2MigrationPhase::Copying {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "v1-to-v2 migration cursor has an invalid phase",
+            ));
+        }
+        self.validate_v1_to_v2_migration_pin(&cursor.source_pin, cursor.source_head)
+            .await?;
+        let page = self
+            .commit_closure_page(&cursor.closure, max_steps, max_commits)
+            .await?;
+        let processed_commits = page.commits.len();
+        let traversal_steps = page.steps;
+        let budget_exhausted = page.budget_exhausted;
+        let closure_complete = page.complete;
+        let index_store = self.commit_closure_index(cursor.closure.traversal)?;
+        index_store.install_root(cursor.closure.state.root.clone())?;
+        let prior_tree = index_store.tree()?;
+        let mut page_mappings = BTreeMap::new();
+        let mut mapping_mutations = Vec::with_capacity(processed_commits);
+        let mut imported_index = cursor.index.clone();
+        let mut copied_payloads = 0usize;
+        let mut copied_payload_bytes = 0u64;
+        for (source_id, source_commit) in page.commits {
+            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+            for parent in &source_commit.parents {
+                let mapped = match page_mappings.get(parent) {
+                    Some(mapped) => *mapped,
+                    None => index_store
+                        .engine
+                        .get(&prior_tree, &v1_to_v2_mapping_key(*parent))
+                        .await?
+                        .map(|bytes| decode_canonical(&bytes))
+                        .transpose()?
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::MissingClosure,
+                                "v1-to-v2 migration parent was not durably mapped",
+                            )
+                        })?,
+                };
+                mapped_parents.push(mapped);
+            }
+            let mut changes = Vec::with_capacity(source_commit.delta.changes.len());
+            for transition in &source_commit.delta.changes {
+                changes.push(V1MigrationChangeV2 {
+                    key: transition.key.clone(),
+                    version: self
+                        .find_version(&source_commit, &transition.key, transition.next)
+                        .await?,
+                });
+            }
+            let ImportedCommitReceiptV2 {
+                destination,
+                index,
+                payloads,
+                payload_bytes,
+                ..
+            } = target
+                .import_v1_commit(
+                    self.plane.clone(),
+                    self.format.repository_id,
+                    source_id,
+                    source_commit,
+                    mapped_parents,
+                    changes,
+                    &cursor.destination_branch,
+                    &imported_index,
+                )
+                .await?;
+            imported_index = index;
+            copied_payloads = copied_payloads.checked_add(payloads).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "migration payload count overflow",
+                )
+            })?;
+            copied_payload_bytes =
+                copied_payload_bytes
+                    .checked_add(payload_bytes)
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::EntityTooLarge,
+                            "migration payload bytes overflow",
+                        )
+                    })?;
+            page_mappings.insert(source_id, destination);
+            mapping_mutations.push(Mutation::Upsert {
+                key: v1_to_v2_mapping_key(source_id),
+                val: encode_canonical(&destination)?,
+            });
+        }
+        let mut next_closure = page.cursor;
+        if !mapping_mutations.is_empty() {
+            index_store.install_root(next_closure.state.root.clone())?;
+            let tree = index_store
+                .engine
+                .batch(&index_store.tree()?, mapping_mutations)
+                .await?;
+            next_closure.state = TreeRootV1::from_tree(&tree)?;
+        }
+        let mut next = cursor.clone();
+        next.closure = next_closure;
+        next.index = imported_index;
+        next.migrated_commits = next
+            .migrated_commits
+            .checked_add(u64::try_from(processed_commits).map_err(|_| {
+                Error::new(ErrorCode::InvalidLimit, "migration commit page exceeds u64")
+            })?)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "migration commit count overflow",
+                )
+            })?;
+        next.migrated_payloads = next
+            .migrated_payloads
+            .checked_add(u64::try_from(copied_payloads).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "migration payload page exceeds u64",
+                )
+            })?)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "migration payload count overflow",
+                )
+            })?;
+        next.migrated_payload_bytes = next
+            .migrated_payload_bytes
+            .checked_add(copied_payload_bytes)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "migration payload bytes overflow",
+                )
+            })?;
+        if closure_complete {
+            index_store.install_root(next.closure.state.root.clone())?;
+            let destination_head = index_store
+                .engine
+                .get(
+                    &index_store.tree()?,
+                    &v1_to_v2_mapping_key(cursor.source_head),
+                )
+                .await?
+                .map(|bytes| decode_canonical(&bytes))
+                .transpose()?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "v1-to-v2 migration did not map the source head",
+                    )
+                })?;
+            next.mapped_head = Some(destination_head);
+            next.phase = V1ToV2MigrationPhase::Publishing;
+            target
+                .finish_v1_migration(
+                    self.format.repository_id,
+                    cursor.source_head,
+                    &cursor.destination_branch,
+                    destination_head,
+                    cursor.destination_scope,
+                    &next.index,
+                )
+                .await?;
+            self.release_v1_to_v2_migration_pin(&cursor.source_pin, cursor.source_head)
+                .await?;
+            next.phase = V1ToV2MigrationPhase::Complete;
+        }
+        Ok(V1ToV2MigrationPage {
+            cursor: next,
+            processed_commits,
+            copied_payloads,
+            copied_payload_bytes,
+            traversal_steps,
+            complete: closure_complete,
+            budget_exhausted,
+        })
+    }
+
+    pub async fn cleanup_v1_to_v2_migration(
+        &self,
+        cursor: &V1ToV2MigrationCursor,
+        limit: usize,
+    ) -> Result<CommitClosureCleanupReport> {
+        if cursor.phase != V1ToV2MigrationPhase::Complete {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "v1-to-v2 migration traversal cannot be cleaned before publication",
+            ));
+        }
+        self.cleanup_commit_closure(&cursor.closure, limit).await
+    }
+
+    pub async fn abort_v1_to_v2_migration<Q: ObjectPlane>(
+        &self,
+        target: &RepositoryV2<Q>,
+        cursor: &V1ToV2MigrationCursor,
+        limit: usize,
+    ) -> Result<CommitClosureCleanupReport> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        if cursor.phase == V1ToV2MigrationPhase::Complete {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "completed v1-to-v2 migration must use normal cleanup",
+            ));
+        }
+        target.abandon_v1_migration(
+            self.format.repository_id,
+            cursor.source_head,
+            &cursor.destination_branch,
+            cursor.destination_scope,
+            &cursor.index,
+        )?;
+        self.release_v1_to_v2_migration_pin(&cursor.source_pin, cursor.source_head)
+            .await?;
+        self.cleanup_commit_closure(&cursor.closure, limit).await
+    }
+
+    pub async fn v1_to_v2_migration_mapping(
+        &self,
+        cursor: &V1ToV2MigrationCursor,
+        source: CommitId,
+    ) -> Result<Option<CommitIdV2>> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        index
+            .engine
+            .get(&index.tree()?, &v1_to_v2_mapping_key(source))
+            .await?
+            .map(|bytes| decode_canonical(&bytes))
+            .transpose()
+    }
+
+    async fn release_v1_to_v2_migration_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        match self.delete_retention_pin(name, expected).await {
+            Ok(()) => Ok(()),
+            Err(error)
+                if matches!(
+                    error.code,
+                    ErrorCode::InvalidRevision | ErrorCode::PreconditionFailed
+                ) =>
+            {
+                let path = retention_pin_path(&self.options.repository_prefix, name)?;
+                let Some(stored) = self.plane.load_mutable(&path).await? else {
+                    return Err(error);
+                };
+                let pin: RetentionPinV1 = decode_canonical(&stored.bytes)?;
+                if pin.target == expected && pin.tombstone {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn validate_v1_to_v2_migration_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        let path = retention_pin_path(&self.options.repository_prefix, name)?;
+        let stored = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "v1-to-v2 migration source retention pin is missing",
+            )
+        })?;
+        let pin: RetentionPinV1 = decode_canonical(&stored.bytes)?;
+        if pin.target != expected
+            || pin.tombstone
+            || (pin.expires_at_millis != 0 && pin.expires_at_millis <= self.now_millis()?)
+        {
+            return Err(Error::new(
+                ErrorCode::MissingClosure,
+                "v1-to-v2 migration source retention pin is not active",
+            ));
+        }
+        Ok(())
     }
 
     /// Start an interruptible physical clone/fetch/push/repair transfer.
@@ -12327,6 +12794,12 @@ fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
 
 fn commit_closure_mapping_key(commit: CommitId) -> Vec<u8> {
     let mut key = b"m/".to_vec();
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn v1_to_v2_mapping_key(commit: CommitId) -> Vec<u8> {
+    let mut key = b"v2m/".to_vec();
     key.extend_from_slice(commit.as_bytes());
     key
 }
