@@ -5,6 +5,7 @@ mod aws_object;
 #[cfg(feature = "foyer-cache")]
 mod cache;
 mod client;
+mod client_v2;
 mod provider;
 mod wire_metrics;
 
@@ -13,6 +14,7 @@ pub use aws_object::{AwsS3ObjectPlane, S3OperationMetrics};
 #[cfg(feature = "foyer-cache")]
 pub use cache::{FoyerNodeCache, FoyerNodeCacheConfig};
 pub use client::*;
+pub use client_v2::*;
 pub use prolly_s3_core as core;
 pub use prolly_s3_core::{Error, ErrorCode, Result};
 pub use provider::*;

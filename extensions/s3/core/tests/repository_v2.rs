@@ -2,7 +2,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use prolly_s3_core::{
     FixedClock, GetRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane,
-    RepositoryFormatV2, RepositoryV2, RepositoryV2Options, SequenceIdSource,
+    ProviderPerKeyVersionLimitV2, RepositoryFormatV2, RepositoryV2, RepositoryV2Options,
+    SequenceIdSource,
 };
 
 #[tokio::test]
@@ -15,6 +16,7 @@ async fn native_v2_put_read_replay_and_reopen_use_only_v2_authority() {
         writer: "writer-a".to_string(),
         clock: clock.clone(),
         ids: Arc::new(SequenceIdSource::new(0x55, 1)),
+        provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
         ..RepositoryV2Options::default()
     };
     let repository = RepositoryV2::initialize(plane.clone(), options.clone())
@@ -123,12 +125,13 @@ async fn native_v2_takeover_fences_old_writer_before_payload_put() {
         writer: "writer-a".to_string(),
         clock: clock.clone(),
         ids: Arc::new(SequenceIdSource::new(0x66, 1)),
+        provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
         ..RepositoryV2Options::default()
     };
     let old = RepositoryV2::initialize(plane.clone(), old_options.clone())
         .await
         .unwrap();
-    let mut replacement = RepositoryV2::open(
+    let replacement = RepositoryV2::open(
         plane.clone(),
         RepositoryV2Options {
             writer: "writer-b".to_string(),
