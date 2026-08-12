@@ -370,6 +370,18 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         portable_clone: false,
         gc_managed: false,
     },
+    PhysicalPathFamily {
+        relative_pattern: "gc/v2/coordinator.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "gc/v2/dirty-roots/<operation-id-hex>/<sequence>/<dirty-root-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
 ];
 
 #[derive(Clone, Debug, Default)]
@@ -4953,6 +4965,8 @@ mod tests {
             "gc/plans/<plan-id>.cbor",
             "gc/runs/<plan-id>.cbor",
             "gc/v2/epochs/<operation-id-hex>/head.cbor",
+            "gc/v2/coordinator.cbor",
+            "gc/v2/dirty-roots/<operation-id-hex>/<sequence>/<dirty-root-id>",
         ] {
             assert!(
                 PHYSICAL_PATH_FAMILIES

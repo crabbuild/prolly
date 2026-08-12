@@ -22,7 +22,7 @@ pub use cache::{MemoryNodeCache, NodeCache, NodeCacheError, NodeCacheKey};
 pub use codec::{decode_canonical, encode_canonical};
 pub use control_versions::{
     classify_mutable_control_path, ControlVersionCompactionReport, MutableControlKind,
-    MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+    MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
 pub use model::*;

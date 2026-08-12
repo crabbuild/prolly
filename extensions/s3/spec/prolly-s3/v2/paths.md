@@ -14,6 +14,8 @@ any protocol v1 record. `P` is the configured repository prefix.
 | immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
 | operation-index head | `P/operation-index/v2/heads/N.cbor` |
 | operation-index segment | `P/operation-index/v2/segments/N/sha256/H0/H1/H` |
+| GC coordinator | `P/gc/v2/coordinator.cbor` |
+| GC dirty root | `P/gc/v2/dirty-roots/E/S/H` |
 
 `N` is lowercase hex of the UTF-8 branch or system-namespace name. The
 canonical lease embeds its repository ID and full authority scope, so moving a
@@ -52,6 +54,15 @@ bounded journal tail after the checkpoint and then the compact segment levels.
 Index heads must be initialized with branch creation. If lag exceeds the
 configured tail bound, normal advancement fails closed and requires the
 resumable rebuild path instead of scanning unbounded history in one call.
+
+`E` is the hex GC epoch operation ID and `S` is a fixed-width, monotonically
+increasing dirty-root sequence. While an epoch is active, every branch, tag,
+or retention-pin CAS first persists a `GcDirtyRootV2` event containing both
+the pre-publication and post-publication roots (when present). GC records a
+stable sequence watermark under a brief publication barrier, releases the
+barrier, and marks those ordered events concurrently with writers. Sweep takes
+the barrier only for one bounded deletion batch. Completed epochs deactivate
+the coordinator before deleting their journal in restartable batches.
 
 Provider qualification for v2 must attest either an unlimited per-key version
 count or a finite count at least two greater than the configured mutable-control

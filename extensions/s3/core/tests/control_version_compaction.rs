@@ -78,6 +78,10 @@ fn every_mutable_control_family_has_one_canonical_classification() {
         ("gc/mark-runs/01.cbor", MutableControlKind::GcMarkRunV1),
         ("gc/runs/pgc1_x.cbor", MutableControlKind::GcRunV1),
         ("gc/v2/epochs/01/head.cbor", MutableControlKind::GcEpochV2),
+        (
+            "gc/v2/coordinator.cbor",
+            MutableControlKind::GcCoordinatorV2,
+        ),
     ];
     for (relative, expected) in cases {
         let path = ObjectPath::new(format!("{prefix}/{relative}")).unwrap();

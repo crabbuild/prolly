@@ -102,6 +102,15 @@ immutable sorted segments merge geometrically, so lookup reads a bounded
 number of levels plus the explicitly bounded unindexed journal tail. Excessive
 lag fails closed with `HistoryLimitExceeded` and must use resumable rebuild.
 
+Partitioned GC no longer holds the repository publication barrier while it
+discovers roots, marks commits/nodes/versions, scans candidates, or consumes
+dirty roots. Starting an epoch activates one durable coordinator. Each live
+branch/tag/pin CAS then writes an ordered dirty-root event before its control
+CAS. GC briefly takes the barrier to freeze a dirty sequence watermark and for
+each bounded exact-delete batch; it never restarts the full root scan because a
+writer advanced. After sweep, the coordinator is cleared and journal objects
+are exact-deleted in restartable batches. Only one GC epoch may be active.
+
 ## Conflict and outage handling
 
 - A stale `expected_head` or branch-ref CAS returns a conflict. Re-read and let
@@ -139,11 +148,11 @@ v2 epoch workflow rather than the in-memory v1 dry run:
 3. Call bounded `advance_gc_epoch` steps until `Ready`.
 4. Call bounded `sweep_gc_epoch` steps until `Completed`.
 5. Continue advancing instead of sweeping whenever a write or restart returns
-   the epoch to `DiscoverRoots`.
+   the epoch to `CatchUpDirtyRoots`; cleanup is also advanced in bounded steps.
 
 GC v2 requires the authoritative writer lease. It marks reachable CIDs and the
 actual envelopes supplying them before deletion, then names every exact
-physical `VersionId`. Never bypass a `MissingCapability`, root-restart, or
+physical `VersionId`. Never bypass a `MissingCapability`, dirty-root catch-up, or
 writer-fence error. Export marked-node, candidate, deleted, skipped-reachable,
 and restart counts.
 

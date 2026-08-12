@@ -30,6 +30,7 @@ pub enum MutableControlKind {
     GcMarkRunV1,
     GcRunV1,
     GcEpochV2,
+    GcCoordinatorV2,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -50,6 +51,16 @@ pub struct MutableControlStore<P: ObjectPlane> {
     repository_prefix: String,
     versions_to_retain: usize,
     seen_paths: Arc<Mutex<BTreeSet<ObjectPath>>>,
+    observer: Option<Arc<dyn MutableControlObserver>>,
+}
+
+#[async_trait::async_trait]
+pub trait MutableControlObserver: Send + Sync {
+    async fn before_compare_exchange(
+        &self,
+        kind: MutableControlKind,
+        request: &CompareExchange,
+    ) -> Result<()>;
 }
 
 impl<P: ObjectPlane> MutableControlStore<P> {
@@ -70,7 +81,13 @@ impl<P: ObjectPlane> MutableControlStore<P> {
             repository_prefix,
             versions_to_retain,
             seen_paths: Arc::new(Mutex::new(BTreeSet::new())),
+            observer: None,
         })
+    }
+
+    pub fn with_observer(mut self, observer: Arc<dyn MutableControlObserver>) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     pub fn classify(&self, path: &ObjectPath) -> Option<MutableControlKind> {
@@ -91,6 +108,9 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                 "compare_exchange through the mutable-control store requires a registered control path",
             )
         })?;
+        if let Some(observer) = self.observer.as_ref() {
+            observer.before_compare_exchange(kind, &request).await?;
+        }
         if let Some(expected) = request.expected.as_ref() {
             let first_update = self.is_unseen(&request.path)?;
             let ref_interval = (self.versions_to_retain / 2).max(1) as u64;
@@ -327,6 +347,7 @@ pub fn classify_mutable_control_path(
         ["gc", "mark-runs", _] => Some(MutableControlKind::GcMarkRunV1),
         ["gc", "runs", _] => Some(MutableControlKind::GcRunV1),
         ["gc", "v2", "epochs", _, "head.cbor"] => Some(MutableControlKind::GcEpochV2),
+        ["gc", "v2", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinatorV2),
         _ => None,
     }
 }

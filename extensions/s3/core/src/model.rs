@@ -90,6 +90,7 @@ hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
 hash_id!(PublicationEventIdV2, "ppe2_");
 hash_id!(OperationIndexSegmentIdV2, "poi2_");
+hash_id!(GcDirtyRootIdV2, "pdr2_");
 hash_id!(TreeFormatDigest, "ptf1_");
 hash_id!(ProviderProfileId, "ppf1_");
 hash_id!(GcPlanId, "pgc1_");
@@ -1306,8 +1307,10 @@ pub enum GcEpochPhaseV2 {
     MarkNodes,
     MarkVersions,
     ScanCandidates,
+    CatchUpDirtyRoots,
     Ready,
     Sweeping,
+    CleanupDirtyRoots,
     Completed,
     Aborted,
 }
@@ -1339,8 +1342,78 @@ pub struct GcEpochV2 {
     pub deleted_bytes: u64,
     pub skipped_reachable: u64,
     pub already_missing: u64,
+    #[serde(default)]
+    pub dirty_roots_marked: u64,
+    #[serde(default)]
+    pub dirty_catch_up_active: bool,
+    #[serde(default)]
+    pub dirty_root_sequence: u64,
+    #[serde(default)]
+    pub dirty_root_target_sequence: u64,
     pub updated_at_millis: u64,
     pub abort_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcCoordinatorV2 {
+    pub repository: RepositoryId,
+    pub generation: u64,
+    pub active_epoch: Option<OperationId>,
+    pub updated_at_millis: u64,
+}
+
+impl GcCoordinatorV2 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        if self.repository != repository || self.generation == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "GC coordinator is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcDirtyRootV2 {
+    pub repository: RepositoryId,
+    pub epoch: OperationId,
+    pub process_session: OperationId,
+    pub publication_sequence: u64,
+    pub namespace: String,
+    pub name: String,
+    pub target: CommitId,
+    pub previous_target: Option<CommitId>,
+    pub ref_generation: RefGeneration,
+    pub operation: OperationId,
+    pub created_at_millis: u64,
+}
+
+impl GcDirtyRootV2 {
+    pub fn validate(&self) -> Result<()> {
+        if self.epoch.is_nil()
+            || self.process_session.is_nil()
+            || self.operation.is_nil()
+            || self.publication_sequence == 0
+            || self.namespace.is_empty()
+            || self.name.is_empty()
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "GC dirty-root event is malformed",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn id(&self) -> Result<GcDirtyRootIdV2> {
+        self.validate()?;
+        let bytes = encode_canonical(self)?;
+        Ok(GcDirtyRootIdV2(domain_hash(
+            b"prolly-s3/gc-dirty-root/v2",
+            &[&bytes],
+        )))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

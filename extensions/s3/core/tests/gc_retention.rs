@@ -5,13 +5,13 @@ use std::{
 };
 
 use prolly_s3_core::{
-    CommitGeneration, CommitObjectV1, ErrorCode, FixedClock, GcEpochPhaseV2, GetRequest,
-    ImmutablePut, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane,
-    Repository, RepositoryOptions,
+    CommitGeneration, CommitObjectV1, ErrorCode, FixedClock, GcCoordinatorV2, GcEpochPhaseV2,
+    GetRequest, ImmutablePut, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath,
+    ObjectPlane, Repository, RepositoryOptions,
 };
 
 #[tokio::test]
-async fn partitioned_gc_v2_is_bounded_restartable_and_publication_fenced() {
+async fn partitioned_gc_v2_catches_up_dirty_roots_without_restarting_full_discovery() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -43,7 +43,24 @@ async fn partitioned_gc_v2_is_bounded_restartable_and_publication_fenced() {
         .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
         .await
         .unwrap();
-    let mut current = epoch;
+    assert_eq!(
+        repository
+            .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::PreconditionFailed
+    );
+    let main = repository.head("main").await.unwrap();
+    plane.set_compare_exchange_delay_millis(25);
+    plane.reset_compare_exchange_concurrency();
+    let (advanced, tagged) = tokio::join!(
+        repository.advance_gc_epoch_v2(epoch.id, 2),
+        repository.create_tag("during-mark", main),
+    );
+    tagged.unwrap();
+    let mut current = advanced.unwrap().epoch;
+    assert_eq!(plane.max_compare_exchanges_in_flight(), 2);
     for _ in 0..100 {
         if matches!(current.phase, GcEpochPhaseV2::Ready) {
             break;
@@ -57,17 +74,17 @@ async fn partitioned_gc_v2_is_bounded_restartable_and_publication_fenced() {
     assert!(matches!(current.phase, GcEpochPhaseV2::Ready));
     assert!(current.candidates >= 1);
 
-    // Any intervening ref publication makes the first sweep call restart root
-    // discovery without deleting a candidate.
-    let main = repository.head("main").await.unwrap();
+    // An intervening ref publication schedules only dirty-root catch-up; the
+    // completed stable root namespace scan is not restarted.
     repository.create_tag("gc-fence", main).await.unwrap();
     let restarted = repository.sweep_gc_epoch_v2(current.id, 1).await.unwrap();
     assert!(restarted.restarted_for_new_roots);
     assert_eq!(restarted.processed, 0);
     assert!(matches!(
         restarted.epoch.phase,
-        GcEpochPhaseV2::DiscoverRoots
+        GcEpochPhaseV2::CatchUpDirtyRoots
     ));
+    let completed_root_namespaces = restarted.epoch.root_namespace;
 
     current = restarted.epoch;
     for _ in 0..100 {
@@ -81,19 +98,175 @@ async fn partitioned_gc_v2_is_bounded_restartable_and_publication_fenced() {
             .epoch;
     }
     assert!(matches!(current.phase, GcEpochPhaseV2::Ready));
+    assert_eq!(current.root_namespace, completed_root_namespaces);
+    assert!(current.dirty_roots_marked >= 2);
     for _ in 0..100 {
         if matches!(current.phase, GcEpochPhaseV2::Completed) {
             break;
         }
+        current = if matches!(current.phase, GcEpochPhaseV2::CleanupDirtyRoots) {
+            repository
+                .advance_gc_epoch_v2(current.id, 1)
+                .await
+                .unwrap()
+                .epoch
+        } else {
+            repository
+                .sweep_gc_epoch_v2(current.id, 1)
+                .await
+                .unwrap()
+                .epoch
+        };
+    }
+    assert!(
+        matches!(current.phase, GcEpochPhaseV2::Completed),
+        "{current:?}"
+    );
+    assert!(current.deleted_versions >= 1);
+    assert!(plane.head(&orphan_path).await.unwrap().is_none());
+    let dirty = plane
+        .list(ListRequest {
+            prefix: format!(
+                "gc-v2-partitioned/gc/v2/dirty-roots/{}/",
+                hex::encode(current.id.as_bytes())
+            ),
+            continuation: None,
+            limit: 1_000,
+            include_versions: false,
+        })
+        .await
+        .unwrap();
+    assert!(dirty.entries.is_empty());
+    let coordinator = plane
+        .get(GetRequest {
+            path: ObjectPath::new("gc-v2-partitioned/gc/v2/coordinator.cbor").unwrap(),
+            range: None,
+            physical_version: None,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let coordinator: GcCoordinatorV2 =
+        prolly_s3_core::decode_canonical(&coordinator.bytes).unwrap();
+    assert_eq!(coordinator.active_epoch, None);
+}
+
+#[tokio::test]
+async fn active_gc_dirty_sequence_recovers_after_repository_reopen() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        repository_prefix: "gc-v2-reopen".to_string(),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    let epoch = repository
+        .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
+        .await
+        .unwrap();
+    let main = repository.head("main").await.unwrap();
+    repository.create_tag("before-reopen", main).await.unwrap();
+    drop(repository);
+
+    let repository = Repository::open(plane, options).await.unwrap();
+    assert_eq!(
+        repository
+            .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::PreconditionFailed
+    );
+    let mut current = repository.gc_epoch_v2(epoch.id).await.unwrap();
+    for _ in 0..200 {
+        if matches!(current.phase, GcEpochPhaseV2::Ready) {
+            break;
+        }
         current = repository
-            .sweep_gc_epoch_v2(current.id, 1)
+            .advance_gc_epoch_v2(epoch.id, 4)
             .await
             .unwrap()
             .epoch;
     }
-    assert!(matches!(current.phase, GcEpochPhaseV2::Completed));
-    assert!(current.deleted_versions >= 1);
-    assert!(plane.head(&orphan_path).await.unwrap().is_none());
+    assert!(matches!(current.phase, GcEpochPhaseV2::Ready));
+    assert!(current.dirty_roots_marked >= 1);
+}
+
+#[tokio::test]
+async fn dirty_root_journal_preserves_the_pre_publication_head() {
+    let clock = Arc::new(FixedClock::new(10_000_000));
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane,
+        RepositoryOptions {
+            repository_prefix: "gc-v2-old-head".to_string(),
+            clock: clock.clone(),
+            reflog_retention_millis: 1,
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let initial = repository.head("main").await.unwrap();
+    let historical = repository
+        .put_bytes(
+            "main",
+            b"historical.txt".to_vec(),
+            b"must survive".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap()
+        .id;
+    clock.advance(10).unwrap();
+    repository.advance_node_index_v2(1_000).await.unwrap();
+    let mut epoch = repository
+        .start_gc_epoch_v2(2 * 60 * 60 * 1_000)
+        .await
+        .unwrap();
+
+    // Move the only live ref before root discovery. The journal must retain
+    // both sides of the CAS so GC still observes the epoch-start head.
+    repository
+        .reset_branch("main", initial, historical, "exercise dirty old head")
+        .await
+        .unwrap();
+    for _ in 0..200 {
+        if matches!(epoch.phase, GcEpochPhaseV2::Ready) {
+            break;
+        }
+        epoch = repository
+            .advance_gc_epoch_v2(epoch.id, 4)
+            .await
+            .unwrap()
+            .epoch;
+    }
+    assert!(matches!(epoch.phase, GcEpochPhaseV2::Ready));
+    assert!(epoch.dirty_roots_marked >= 2);
+    for _ in 0..200 {
+        if matches!(epoch.phase, GcEpochPhaseV2::Completed) {
+            break;
+        }
+        epoch = if matches!(epoch.phase, GcEpochPhaseV2::CleanupDirtyRoots) {
+            repository
+                .advance_gc_epoch_v2(epoch.id, 4)
+                .await
+                .unwrap()
+                .epoch
+        } else {
+            repository
+                .sweep_gc_epoch_v2(epoch.id, 4)
+                .await
+                .unwrap()
+                .epoch
+        };
+    }
+    assert!(matches!(epoch.phase, GcEpochPhaseV2::Completed));
+    assert!(repository.fsck_commit(historical).await.unwrap().commits >= 2);
 }
 
 #[tokio::test]
@@ -223,11 +396,19 @@ async fn partitioned_gc_retains_an_orphan_envelope_that_supplies_a_shared_live_n
         if matches!(epoch.phase, GcEpochPhaseV2::Completed) {
             break;
         }
-        epoch = repository
-            .sweep_gc_epoch_v2(epoch.id, 2)
-            .await
-            .unwrap()
-            .epoch;
+        epoch = if matches!(epoch.phase, GcEpochPhaseV2::CleanupDirtyRoots) {
+            repository
+                .advance_gc_epoch_v2(epoch.id, 2)
+                .await
+                .unwrap()
+                .epoch
+        } else {
+            repository
+                .sweep_gc_epoch_v2(epoch.id, 2)
+                .await
+                .unwrap()
+                .epoch
+        };
     }
     assert!(matches!(epoch.phase, GcEpochPhaseV2::Completed));
     assert!(plane.head(&orphan_path).await.unwrap().is_some());

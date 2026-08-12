@@ -15,16 +15,17 @@ use crate::{
     CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitGraphEntryV2,
     CommitGraphHeadV2, CommitId, CommitObjectV1, CommitReceipt, CompareExchange,
     CompareExchangeOutcome, CurrentObjectV1, DeleteOutcome, Error, ErrorCode, EtagPredicateV1,
-    GcCandidateV1, GcCommitWorkV2, GcEpochPhaseV2, GcEpochV2, GcFenceV1, GcMarkRunStateV1,
-    GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GcVersionWorkV2,
-    GetRequest, IdSource, ImmutablePut, InitializationIntentV1, ListRequest,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
-    NodeIndexEntryV1, NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1,
-    OperationId, OperationKind, OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1,
-    PhysicalVersion, ProllyObjectStore, RandomIdSource, RefCatalogEntryV2, RefCatalogHeadV2,
-    RefGeneration, ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result, RetentionPinV1,
-    RetryAdvice, StorageToken, SystemClock, TreeRootV1,
+    GcCandidateV1, GcCommitWorkV2, GcCoordinatorV2, GcDirtyRootIdV2, GcDirtyRootV2, GcEpochPhaseV2,
+    GcEpochV2, GcFenceV1, GcMarkRunStateV1, GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1,
+    GcRunStateV1, GcRunV1, GcVersionWorkV2, GetRequest, IdSource, ImmutablePut,
+    InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    MemoryNodeCache, MutableControlKind, MutableControlObserver, NodeCache, NodeIndexEntryV1,
+    NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition,
+    ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1, OperationId,
+    OperationKind, OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1, PhysicalVersion,
+    ProllyObjectStore, RandomIdSource, RefCatalogEntryV2, RefCatalogHeadV2, RefGeneration,
+    ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result, RetentionPinV1, RetryAdvice,
+    StorageToken, SystemClock, TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
@@ -404,6 +405,114 @@ struct RepositoryPerformanceCounters {
     node_index_entries_indexed: AtomicU64,
 }
 
+struct GcDirtyRootObserver<P: ObjectPlane> {
+    plane: Arc<P>,
+    prefix: String,
+    repository: RepositoryId,
+    active_epoch: Arc<RwLock<Option<OperationId>>>,
+    dirty_sequence: Arc<AtomicU64>,
+    process_session: OperationId,
+}
+
+#[async_trait::async_trait]
+impl<P: ObjectPlane> MutableControlObserver for GcDirtyRootObserver<P> {
+    async fn before_compare_exchange(
+        &self,
+        kind: MutableControlKind,
+        request: &CompareExchange,
+    ) -> Result<()> {
+        let active_epoch = *self
+            .active_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+        let Some(epoch) = active_epoch else {
+            return Ok(());
+        };
+        let (
+            namespace,
+            name,
+            target,
+            previous_target,
+            ref_generation,
+            operation,
+            created_at_millis,
+        ) = match kind {
+            MutableControlKind::BranchRefV1 => {
+                let value: crate::RefValueV1 = decode_canonical(&request.bytes)?;
+                (
+                    "branch".to_string(),
+                    value.inline_reflog.branch.clone(),
+                    value.target,
+                    value.previous_target,
+                    value.generation,
+                    value.operation,
+                    value.updated_at_millis,
+                )
+            }
+            MutableControlKind::TagRefV1 => {
+                let value: crate::TagValueV1 = decode_canonical(&request.bytes)?;
+                (
+                    "tag".to_string(),
+                    request.path.as_str().to_string(),
+                    value.target,
+                    value.previous_target,
+                    value.generation,
+                    value.operation,
+                    value.created_at_millis,
+                )
+            }
+            MutableControlKind::RetentionPinV1 => {
+                let value: RetentionPinV1 = decode_canonical(&request.bytes)?;
+                (
+                    "pin".to_string(),
+                    value.name.clone(),
+                    value.target,
+                    None,
+                    RefGeneration(value.generation),
+                    self.process_session,
+                    value.created_at_millis,
+                )
+            }
+            _ => return Ok(()),
+        };
+        let publication_sequence = self
+            .dirty_sequence
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map(|previous| previous + 1)
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "GC dirty-root sequence overflow",
+                )
+            })?;
+        let event = GcDirtyRootV2 {
+            repository: self.repository,
+            epoch,
+            process_session: self.process_session,
+            publication_sequence,
+            namespace,
+            name,
+            target,
+            previous_target,
+            ref_generation,
+            operation,
+            created_at_millis,
+        };
+        let id = event.id()?;
+        let bytes = encode_canonical(&event)?;
+        self.plane
+            .put_immutable(ImmutablePut {
+                path: gc_dirty_root_v2_path(&self.prefix, &event, id)?,
+                expected_sha256: crate::codec::sha256(&bytes),
+                bytes,
+            })
+            .await?;
+        Ok(())
+    }
+}
+
 /// Returns the exclusive version-tree cursor immediately after every version
 /// of `key`. This lets AWS-shaped `key_marker` requests skip the complete key
 /// while keeping the physical Prolly encoding private everywhere else.
@@ -693,6 +802,8 @@ pub struct Repository<P: ObjectPlane> {
     operation_locks: Arc<std::sync::Mutex<BTreeMap<OperationId, Weak<tokio::sync::Mutex<()>>>>>,
     lease_renewal: Arc<tokio::sync::Mutex<()>>,
     performance: Arc<RepositoryPerformanceCounters>,
+    active_gc_epoch: Arc<RwLock<Option<OperationId>>>,
+    gc_dirty_sequence: Arc<AtomicU64>,
     process_session: OperationId,
 }
 
@@ -883,6 +994,7 @@ impl<P: ObjectPlane> Repository<P> {
         repository.load_latest_node_index_checkpoint().await?;
         repository.load_latest_scale_metadata().await?;
         repository.acquire_physical_writer().await?;
+        repository.restore_gc_coordinator_v2().await?;
         Ok(repository)
     }
 
@@ -946,11 +1058,24 @@ impl<P: ObjectPlane> Repository<P> {
         let max_cached_branches = options.max_cached_branches;
         let max_cached_commits = options.max_cached_commits;
         let max_parallel_payload_writes = options.max_parallel_payload_writes;
+        let performance = Arc::new(RepositoryPerformanceCounters::default());
+        let active_gc_epoch = Arc::new(RwLock::new(None));
+        let gc_dirty_sequence = Arc::new(AtomicU64::new(0));
+        let process_session = OperationId(uuid::Uuid::new_v4());
+        let dirty_root_observer = Arc::new(GcDirtyRootObserver {
+            plane: plane.clone(),
+            prefix: options.repository_prefix.clone(),
+            repository: format.repository_id,
+            active_epoch: active_gc_epoch.clone(),
+            dirty_sequence: gc_dirty_sequence.clone(),
+            process_session,
+        });
         let controls = crate::MutableControlStore::new(
             plane.clone(),
             options.repository_prefix.clone(),
             options.mutable_control_versions_to_retain,
-        )?;
+        )?
+        .with_observer(dirty_root_observer);
         Ok(Self {
             plane,
             controls,
@@ -970,8 +1095,10 @@ impl<P: ObjectPlane> Repository<P> {
             payload_writes: Arc::new(tokio::sync::Semaphore::new(max_parallel_payload_writes)),
             operation_locks: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             lease_renewal: Arc::new(tokio::sync::Mutex::new(())),
-            performance: Arc::new(RepositoryPerformanceCounters::default()),
-            process_session: OperationId(uuid::Uuid::new_v4()),
+            performance,
+            active_gc_epoch,
+            gc_dirty_sequence,
+            process_session,
         })
     }
 
@@ -1088,6 +1215,10 @@ impl<P: ObjectPlane> Repository<P> {
         let barrier = self.publication_barrier.write().await;
         self.finish_publication_wait(started);
         barrier
+    }
+
+    async fn preserve_history_for_gc(&self) -> tokio::sync::RwLockReadGuard<'_, ()> {
+        self.publication_barrier.read().await
     }
 
     /// Serialize requests that reuse an idempotency key before they touch the
@@ -2062,6 +2193,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "takeover requires a read-only open and non-empty credential-isolation evidence",
             ));
         }
+        let _publication = self.publication_barrier.clone().write_owned().await;
         let path = writer_lease_path(&self.options.repository_prefix)?;
         let stored = self.plane.load_mutable(&path).await?.ok_or_else(|| {
             Error::new(
@@ -2421,6 +2553,9 @@ impl<P: ObjectPlane> Repository<P> {
         destination: Arc<Q>,
         destination_prefix: &str,
     ) -> Result<CloneReport> {
+        // A transfer may walk roots that source GC would otherwise collect.
+        // This read barrier permits ordinary publications but excludes sweep.
+        let _source_history = self.preserve_history_for_gc().await;
         let format_path = format_path(destination_prefix)?;
         let existing_format = destination
             .get(GetRequest {
@@ -2519,6 +2654,7 @@ impl<P: ObjectPlane> Repository<P> {
         };
 
         for branch in branches {
+            let _publication = target.lock_branch_publication(&branch.name).await;
             let target_id = *commit_map.get(&branch.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
@@ -2593,6 +2729,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
         for tag in tags {
+            let _publication = target.lock_named_publication("tag", &tag.name).await;
             let target_id = *commit_map.get(&tag.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
@@ -3113,7 +3250,7 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
-        let _publication = self.lock_global_publication().await;
+        let _source_history = source.preserve_history_for_gc().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut report) = source
             .replay_physical_history_to(self, &[source_head], false)
@@ -3136,6 +3273,7 @@ impl<P: ObjectPlane> Repository<P> {
         reason: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
+        let _source_history = self.preserve_history_for_gc().await;
         let source_head = self.head(source_branch).await?;
         let _publication = destination
             .lock_branch_publication(destination_branch)
@@ -3186,9 +3324,9 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn create_branch(&self, name: &str, from: CommitId) -> Result<BranchHead> {
         validate_branch(name)?;
+        let _physical_publication = self.lock_branch_publication(name).await;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let _physical_publication = self.lock_branch_publication(name).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
@@ -3491,6 +3629,7 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
+        self.load_commit(target).await?;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
@@ -3724,8 +3863,8 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         validate_branch(name)?;
-        self.load_commit(target).await?;
         let _publication = self.lock_named_publication("tag", name).await;
+        self.load_commit(target).await?;
         self.physical_writer_generation_for_mutation().await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
@@ -4029,8 +4168,8 @@ impl<P: ObjectPlane> Repository<P> {
                 "retention pin owner and reason must be non-empty",
             ));
         }
-        self.load_commit(target).await?;
         let _publication = self.lock_named_publication("pin", name).await;
+        self.load_commit(target).await?;
         self.physical_writer_generation_for_mutation().await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
@@ -7059,9 +7198,13 @@ impl<P: ObjectPlane> Repository<P> {
                             ErrorCode::InternalInvariant,
                             "discovered merge operation disappeared during replay",
                         )
-                    });
+                });
             }
         }
+        // Keep every historical commit and node consulted by the merge live
+        // until the resulting branch ref is published. GC sweep takes the
+        // write side of this barrier before deleting a candidate batch.
+        let _physical_publication = self.lock_branch_publication(target).await;
         let plan = self
             .plan_merge(target, source, selected_base, policy)
             .await?;
@@ -7099,7 +7242,6 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        let _physical_publication = self.lock_branch_publication(target).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
@@ -7316,7 +7458,6 @@ impl<P: ObjectPlane> Repository<P> {
         message: Option<String>,
     ) -> Result<CommitReceipt> {
         validate_branch(branch)?;
-        let source_commit = self.load_commit(source).await?;
         let supplied_operation = operation;
         let operation = operation.unwrap_or_else(|| self.new_operation());
         let input_digest = derive_input_digest(&[
@@ -7334,6 +7475,11 @@ impl<P: ObjectPlane> Repository<P> {
                 return Ok(receipt);
             }
         }
+        // A restore may resurrect versions reachable only from an old commit.
+        // Hold the publication barrier while loading that history and until
+        // the new branch ref makes it reachable again.
+        let _physical_publication = self.lock_branch_publication(branch).await;
+        let source_commit = self.load_commit(source).await?;
         let loaded_ref = self.load_ref(branch).await?;
         if loaded_ref.value.target != expected_head {
             return Err(Error::new(
@@ -7351,7 +7497,6 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let _physical_publication = self.lock_branch_publication(branch).await;
         let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
@@ -7759,6 +7904,7 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<RepairReport> {
         self.validate_sync_identity(source)?;
+        let _source_history = source.preserve_history_for_gc().await;
         let current = self.head(source_branch).await?;
         if let Ok(fsck) = self.fsck_commit(current).await {
             return Ok(RepairReport {
@@ -7770,7 +7916,7 @@ impl<P: ObjectPlane> Repository<P> {
                 fsck,
             });
         }
-        let _publication = self.lock_global_publication().await;
+        let _publication = self.lock_branch_publication(source_branch).await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut sync) = source
             .replay_physical_history_to(self, &[source_head], true)
@@ -8112,6 +8258,167 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    async fn restore_gc_coordinator_v2(&self) -> Result<()> {
+        let active = match self
+            .plane
+            .load_mutable(&gc_coordinator_v2_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            Some(stored) => {
+                let coordinator: GcCoordinatorV2 = decode_canonical(&stored.bytes)?;
+                coordinator.validate(self.format.repository_id)?;
+                coordinator.active_epoch
+            }
+            None => None,
+        };
+        *self
+            .active_gc_epoch
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))? =
+            active;
+        if let Some(epoch) = active {
+            let mut continuation = None;
+            let mut maximum_sequence = 0_u64;
+            loop {
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: gc_dirty_root_v2_prefix(&self.options.repository_prefix, epoch),
+                        continuation,
+                        limit: 1_000,
+                        include_versions: false,
+                    })
+                    .await?;
+                for entry in &page.entries {
+                    let sequence = entry
+                        .path
+                        .as_str()
+                        .rsplit('/')
+                        .nth(1)
+                        .and_then(|component| component.parse::<u64>().ok())
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::CorruptCommit,
+                                "GC dirty-root journal path has an invalid sequence",
+                            )
+                        })?;
+                    maximum_sequence = maximum_sequence.max(sequence);
+                }
+                continuation = page.continuation;
+                if continuation.is_none() {
+                    break;
+                }
+            }
+            self.gc_dirty_sequence
+                .fetch_max(maximum_sequence, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+
+    async fn activate_gc_coordinator_v2(&self, epoch: OperationId, now_millis: u64) -> Result<()> {
+        let path = gc_coordinator_v2_path(&self.options.repository_prefix)?;
+        let loaded = self.plane.load_mutable(&path).await?;
+        let (generation, expected) = match loaded {
+            Some(stored) => {
+                let current: GcCoordinatorV2 = decode_canonical(&stored.bytes)?;
+                current.validate(self.format.repository_id)?;
+                if let Some(active) = current.active_epoch {
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        format!("GC epoch {active} is already active"),
+                    ));
+                }
+                (
+                    current.generation.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::InternalInvariant, "GC coordinator overflow")
+                    })?,
+                    Some(stored.metadata.token),
+                )
+            }
+            None => (1, None),
+        };
+        let coordinator = GcCoordinatorV2 {
+            repository: self.format.repository_id,
+            generation,
+            active_epoch: Some(epoch),
+            updated_at_millis: now_millis,
+        };
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(&coordinator)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                *self.active_gc_epoch.write().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+                })? = Some(epoch);
+                Ok(())
+            }
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC coordinator changed concurrently",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+        }
+    }
+
+    async fn clear_gc_coordinator_v2(&self, epoch: OperationId) -> Result<()> {
+        let path = gc_coordinator_v2_path(&self.options.repository_prefix)?;
+        let Some(stored) = self.plane.load_mutable(&path).await? else {
+            return Err(Error::new(
+                ErrorCode::MissingClosure,
+                "active GC coordinator is missing",
+            ));
+        };
+        let current: GcCoordinatorV2 = decode_canonical(&stored.bytes)?;
+        current.validate(self.format.repository_id)?;
+        if current.active_epoch.is_none() {
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = None;
+            return Ok(());
+        }
+        if current.active_epoch != Some(epoch) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "another GC epoch owns the coordinator",
+            ));
+        }
+        let next = GcCoordinatorV2 {
+            repository: current.repository,
+            generation: current.generation.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "GC coordinator overflow")
+            })?,
+            active_epoch: None,
+            updated_at_millis: self.now_millis()?,
+        };
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected: Some(stored.metadata.token),
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                *self.active_gc_epoch.write().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+                })? = None;
+                Ok(())
+            }
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC coordinator changed while completing an epoch",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+        }
+    }
+
     /// Starts a partitioned GC epoch. Every later call processes a bounded
     /// amount of root discovery, graph marking, version marking, candidate
     /// enumeration, or exact-version deletion.
@@ -8119,6 +8426,16 @@ impl<P: ObjectPlane> Repository<P> {
         self.validate_gc_plan_limits(grace_millis, 1)?;
         self.physical_writer_generation_for_mutation().await?;
         let _publication = self.lock_global_publication().await;
+        if let Some(active) = *self
+            .active_gc_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                format!("GC epoch {active} is already active"),
+            ));
+        }
         let planned_at_millis = self.now_millis()?;
         let cutoff_millis = planned_at_millis
             .checked_sub(grace_millis)
@@ -8151,6 +8468,10 @@ impl<P: ObjectPlane> Repository<P> {
             deleted_bytes: 0,
             skipped_reachable: 0,
             already_missing: 0,
+            dirty_roots_marked: 0,
+            dirty_catch_up_active: false,
+            dirty_root_sequence: self.gc_dirty_sequence.load(Ordering::Acquire),
+            dirty_root_target_sequence: 0,
             updated_at_millis: planned_at_millis,
             abort_reason: None,
         };
@@ -8163,7 +8484,11 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
         {
-            CompareExchangeOutcome::Applied(_) => Ok(epoch),
+            CompareExchangeOutcome::Applied(_) => {
+                self.activate_gc_coordinator_v2(id, planned_at_millis)
+                    .await?;
+                Ok(epoch)
+            }
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "generated GC epoch ID already exists",
@@ -8187,11 +8512,6 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         self.physical_writer_generation_for_mutation().await?;
-        let _publication = self.lock_global_publication().await;
-        let acquisition = self
-            .performance
-            .publication_acquisitions
-            .load(Ordering::Relaxed);
         let loaded = self.load_gc_epoch_v2(id).await?;
         if matches!(
             loaded.value.phase,
@@ -8211,15 +8531,17 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let mut next = loaded.value;
         let restarted_for_new_roots = next.process_session != self.process_session
-            || acquisition != next.publication_acquisition.saturating_add(1);
+            && matches!(
+                next.phase,
+                GcEpochPhaseV2::CatchUpDirtyRoots
+                    | GcEpochPhaseV2::Ready
+                    | GcEpochPhaseV2::Sweeping
+            );
         if restarted_for_new_roots {
-            // Mark state only grows. Re-discovering roots after a writer action
-            // or process restart makes stale candidates safe to skip later.
             next.process_session = self.process_session;
-            next.phase = GcEpochPhaseV2::DiscoverRoots;
-            next.root_namespace = 0;
+            next.phase = GcEpochPhaseV2::CatchUpDirtyRoots;
             next.source_continuation = None;
-            next.sweep_after = None;
+            next.dirty_root_target_sequence = 0;
         }
         let index = self.gc_epoch_index(id)?;
         index.install_root(next.root.root.clone())?;
@@ -8245,11 +8567,17 @@ impl<P: ObjectPlane> Repository<P> {
                 self.gc_v2_scan_candidates(&index, &mut tree, &mut next, max_items)
                     .await?
             }
+            GcEpochPhaseV2::CatchUpDirtyRoots => {
+                self.gc_v2_catch_up_dirty_roots(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::CleanupDirtyRoots => {
+                self.gc_v2_cleanup_dirty_roots(&mut next, max_items).await?
+            }
             GcEpochPhaseV2::Ready | GcEpochPhaseV2::Sweeping => 0,
             GcEpochPhaseV2::Completed | GcEpochPhaseV2::Aborted => unreachable!(),
         };
         next.root = TreeRootV1::from_tree(&tree)?;
-        next.publication_acquisition = acquisition;
         next.generation = next.generation.checked_add(1).ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "GC epoch generation overflow")
         })?;
@@ -8492,8 +8820,13 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<usize> {
         let mut queue = index.engine.prefix(tree, b"qv/").await?;
         let Some(entry) = queue.next().await else {
-            epoch.phase = GcEpochPhaseV2::ScanCandidates;
-            epoch.source_continuation = None;
+            epoch.phase = if epoch.dirty_catch_up_active {
+                epoch.dirty_catch_up_active = false;
+                epoch.source_continuation = None;
+                GcEpochPhaseV2::CatchUpDirtyRoots
+            } else {
+                GcEpochPhaseV2::ScanCandidates
+            };
             return Ok(0);
         };
         let (queue_key, encoded) = entry?;
@@ -8731,14 +9064,170 @@ impl<P: ObjectPlane> Repository<P> {
         }
         epoch.source_continuation = page.continuation;
         if epoch.source_continuation.is_none() {
-            epoch.phase = GcEpochPhaseV2::Ready;
+            epoch.phase = GcEpochPhaseV2::CatchUpDirtyRoots;
+            epoch.source_continuation = None;
         }
         Ok(page.entries.len())
     }
 
+    async fn gc_v2_catch_up_dirty_roots(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        if epoch.dirty_root_target_sequence == 0 {
+            let stable_sequence = {
+                let barrier = self.lock_global_publication().await;
+                let sequence = self.gc_dirty_sequence.load(Ordering::Acquire);
+                drop(barrier);
+                sequence
+            };
+            epoch.dirty_root_target_sequence = stable_sequence;
+            epoch.publication_acquisition = self
+                .performance
+                .publication_acquisitions
+                .load(Ordering::Acquire);
+        }
+        let next_sequence = epoch.dirty_root_sequence.checked_add(1).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "GC dirty-root sequence overflow",
+            )
+        })?;
+        if next_sequence > epoch.dirty_root_target_sequence {
+            epoch.phase = GcEpochPhaseV2::Ready;
+            epoch.source_continuation = None;
+            return Ok(0);
+        }
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_dirty_root_v2_sequence_prefix(
+                    &self.options.repository_prefix,
+                    epoch.id,
+                    next_sequence,
+                ),
+                continuation: epoch.source_continuation.clone(),
+                limit: max_items,
+                include_versions: false,
+            })
+            .await?;
+        let mut mutations = Vec::new();
+        let mut newly_marked = 0_u64;
+        for listed in &page.entries {
+            let stored = self
+                .plane
+                .get(GetRequest {
+                    path: listed.path.clone(),
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "GC dirty-root journal event disappeared",
+                    )
+                })?;
+            let event: GcDirtyRootV2 = decode_canonical(&stored.bytes)?;
+            event.validate()?;
+            let event_id = event.id()?;
+            if event.repository != self.format.repository_id
+                || event.epoch != epoch.id
+                || gc_dirty_root_v2_path(&self.options.repository_prefix, &event, event_id)?
+                    != listed.path
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "GC dirty-root event does not match its journal path",
+                ));
+            }
+            let mark_key = gc_v2_dirty_root_mark_key(event_id);
+            if index.engine.get(tree, &mark_key).await?.is_none() {
+                mutations.push(Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                });
+                let mut roots = vec![event.target];
+                roots.extend(event.previous_target);
+                roots.sort_unstable();
+                roots.dedup();
+                for commit in roots {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_v2_commit_queue_key(commit),
+                        val: encode_canonical(&GcCommitWorkV2 {
+                            commit,
+                            scan_versions: true,
+                        })?,
+                    });
+                    newly_marked = newly_marked.saturating_add(1);
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            *tree = index.engine.batch(tree, mutations).await?;
+        }
+        epoch.dirty_roots_marked = epoch.dirty_roots_marked.saturating_add(newly_marked);
+        epoch.source_continuation = page.continuation;
+        if epoch.source_continuation.is_none() {
+            epoch.dirty_root_sequence = next_sequence;
+            if newly_marked > 0 {
+                epoch.dirty_catch_up_active = true;
+                epoch.phase = GcEpochPhaseV2::MarkCommits;
+            }
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_v2_cleanup_dirty_roots(
+        &self,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        self.clear_gc_coordinator_v2(epoch.id).await?;
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_dirty_root_v2_prefix(&self.options.repository_prefix, epoch.id),
+                continuation: None,
+                limit: max_items,
+                include_versions: false,
+            })
+            .await?;
+        if page.entries.is_empty() {
+            epoch.phase = GcEpochPhaseV2::Completed;
+            return Ok(0);
+        }
+        let targets = page
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let token = entry.metadata.token;
+                let physical = token
+                    .version_id
+                    .clone()
+                    .map(|version_id| PhysicalVersion::Versioned { version_id })
+                    .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+                (entry.path, physical)
+            })
+            .collect::<Vec<_>>();
+        let processed = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if matches!(outcome, DeleteOutcome::TokenMismatch) {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "GC dirty-root event changed during exact cleanup",
+                ));
+            }
+        }
+        Ok(processed)
+    }
+
     /// Deletes at most `max_candidates` exact physical versions from a ready
-    /// epoch. Any intervening publication or process restart forces another
-    /// bounded root-discovery pass before deletion can resume.
+    /// epoch. Intervening publications schedule ordered dirty-root catch-up;
+    /// they never restart the stable root-namespace scan.
     pub async fn sweep_gc_epoch_v2(
         &self,
         id: OperationId,
@@ -8764,6 +9253,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         if matches!(loaded.value.phase, GcEpochPhaseV2::Completed) {
+            self.clear_gc_coordinator_v2(id).await?;
             return Ok(GcEpochStepReport {
                 epoch: loaded.value,
                 processed: 0,
@@ -8777,16 +9267,18 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let mut next = loaded.value;
-        let restarted_for_new_roots = next.process_session != self.process_session
-            || acquisition != next.publication_acquisition.saturating_add(1);
+        let dirty_target = self.gc_dirty_sequence.load(Ordering::Acquire);
+        let restarted_for_new_roots =
+            next.process_session != self.process_session || dirty_target > next.dirty_root_sequence;
         if restarted_for_new_roots {
             next.process_session = self.process_session;
-            next.phase = GcEpochPhaseV2::DiscoverRoots;
-            next.root_namespace = 0;
+            next.phase = GcEpochPhaseV2::CatchUpDirtyRoots;
             next.source_continuation = None;
-            next.sweep_after = None;
+            next.dirty_root_target_sequence = dirty_target;
             next.publication_acquisition = acquisition;
-            next.generation = next.generation.saturating_add(1);
+            next.generation = next.generation.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "GC epoch generation overflow")
+            })?;
             next.updated_at_millis = self.now_millis()?;
             match self
                 .controls
@@ -8807,7 +9299,7 @@ impl<P: ObjectPlane> Repository<P> {
                 CompareExchangeOutcome::Conflict(_) => {
                     return Err(Error::new(
                         ErrorCode::RefConflict,
-                        "GC epoch changed while restarting root discovery",
+                        "GC epoch changed while scheduling dirty-root catch-up",
                     )
                     .retry(RetryAdvice::ReloadHead));
                 }
@@ -8900,7 +9392,7 @@ impl<P: ObjectPlane> Repository<P> {
         // Probe one entry on the next call when the batch fills exactly. This
         // keeps memory bounded without retaining a lookahead candidate.
         if processed < max_candidates && (processed == 0 || exhausted) {
-            next.phase = GcEpochPhaseV2::Completed;
+            next.phase = GcEpochPhaseV2::CleanupDirtyRoots;
         } else {
             next.phase = GcEpochPhaseV2::Sweeping;
         }
@@ -8918,11 +9410,16 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
         {
-            CompareExchangeOutcome::Applied(_) => Ok(GcEpochStepReport {
-                epoch: next,
-                processed,
-                restarted_for_new_roots: false,
-            }),
+            CompareExchangeOutcome::Applied(_) => {
+                if matches!(next.phase, GcEpochPhaseV2::CleanupDirtyRoots) {
+                    self.clear_gc_coordinator_v2(id).await?;
+                }
+                Ok(GcEpochStepReport {
+                    epoch: next,
+                    processed,
+                    restarted_for_new_roots: false,
+                })
+            }
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "GC epoch changed while publishing a sweep checkpoint",
@@ -10209,6 +10706,10 @@ fn gc_v2_node_mark_key(cid: &prolly::Cid) -> Vec<u8> {
     [b"mn/".as_slice(), cid.as_bytes()].concat()
 }
 
+fn gc_v2_dirty_root_mark_key(id: GcDirtyRootIdV2) -> Vec<u8> {
+    [b"mr/".as_slice(), id.as_bytes()].concat()
+}
+
 fn gc_v2_version_queue_key(root: &TreeRootV1) -> Option<Vec<u8>> {
     root.root
         .as_ref()
@@ -10326,6 +10827,38 @@ fn gc_mark_run_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
 fn gc_epoch_v2_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
     ObjectPath::new(format!(
         "{prefix}/gc/v2/epochs/{}/head.cbor",
+        hex::encode(id.as_bytes())
+    ))
+}
+
+fn gc_coordinator_v2_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/gc/v2/coordinator.cbor"))
+}
+
+fn gc_dirty_root_v2_prefix(prefix: &str, epoch: OperationId) -> String {
+    format!(
+        "{prefix}/gc/v2/dirty-roots/{}/",
+        hex::encode(epoch.as_bytes())
+    )
+}
+
+fn gc_dirty_root_v2_sequence_prefix(prefix: &str, epoch: OperationId, sequence: u64) -> String {
+    format!(
+        "{}{:020}/",
+        gc_dirty_root_v2_prefix(prefix, epoch),
+        sequence
+    )
+}
+
+fn gc_dirty_root_v2_path(
+    prefix: &str,
+    event: &GcDirtyRootV2,
+    id: GcDirtyRootIdV2,
+) -> Result<ObjectPath> {
+    ObjectPath::new(format!(
+        "{}{:020}/{}",
+        gc_dirty_root_v2_prefix(prefix, event.epoch),
+        event.publication_sequence,
         hex::encode(id.as_bytes())
     ))
 }
