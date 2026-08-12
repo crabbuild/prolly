@@ -6,6 +6,7 @@ use std::{
     },
 };
 
+use futures_util::StreamExt;
 use prolly::{AsyncStore, BatchOp, Cid};
 
 use crate::{
@@ -566,7 +567,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         }))
     }
 
-    pub(crate) fn commit_node_pack(
+    pub(crate) async fn commit_node_pack(
         &self,
         container: CommitId,
         prepared: PreparedNodePack,
@@ -609,15 +610,21 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 Arc::new(pack),
                 usize::try_from(reference.object_len).unwrap_or(usize::MAX),
             );
-        let mut live_pending = state
-            .pending
-            .write()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?;
-        for (cid, bytes) in pending {
-            if live_pending.get(&cid) == Some(&bytes) {
-                live_pending.remove(&cid);
+        {
+            let mut live_pending = state.pending.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
+            })?;
+            for (cid, bytes) in &pending {
+                if live_pending.get(cid) == Some(bytes) {
+                    live_pending.remove(cid);
+                }
             }
         }
+        futures_util::stream::iter(pending)
+            .for_each_concurrent(Some(16), |(cid, bytes)| async move {
+                self.admit_node(cid, bytes).await;
+            })
+            .await;
         Ok(())
     }
 

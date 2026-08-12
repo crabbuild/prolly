@@ -8,7 +8,11 @@ use std::{
     },
 };
 
-use aws_sdk_s3::{primitives::ByteStream, types::MetadataDirective, Client};
+use aws_sdk_s3::{
+    primitives::ByteStream,
+    types::{Delete, MetadataDirective, ObjectIdentifier},
+    Client,
+};
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use aws_smithy_types::DateTime;
 use aws_types::request_id::RequestId;
@@ -39,6 +43,7 @@ pub struct S3OperationMetrics {
     pub list_objects_v2: u64,
     pub list_object_versions: u64,
     pub delete_object: u64,
+    pub delete_objects: u64,
     pub create_multipart_upload: u64,
     pub upload_part: u64,
     pub upload_part_copy: u64,
@@ -59,6 +64,7 @@ impl S3OperationMetrics {
             + self.list_objects_v2
             + self.list_object_versions
             + self.delete_object
+            + self.delete_objects
             + self.create_multipart_upload
             + self.upload_part
             + self.upload_part_copy
@@ -78,6 +84,7 @@ struct AtomicS3OperationMetrics {
     list_objects_v2: AtomicU64,
     list_object_versions: AtomicU64,
     delete_object: AtomicU64,
+    delete_objects: AtomicU64,
     create_multipart_upload: AtomicU64,
     upload_part: AtomicU64,
     upload_part_copy: AtomicU64,
@@ -99,6 +106,7 @@ impl AtomicS3OperationMetrics {
             list_objects_v2: self.list_objects_v2.load(Ordering::Relaxed),
             list_object_versions: self.list_object_versions.load(Ordering::Relaxed),
             delete_object: self.delete_object.load(Ordering::Relaxed),
+            delete_objects: self.delete_objects.load(Ordering::Relaxed),
             create_multipart_upload: self.create_multipart_upload.load(Ordering::Relaxed),
             upload_part: self.upload_part.load(Ordering::Relaxed),
             upload_part_copy: self.upload_part_copy.load(Ordering::Relaxed),
@@ -120,6 +128,7 @@ impl AtomicS3OperationMetrics {
             list_objects_v2: self.list_objects_v2.swap(0, Ordering::Relaxed),
             list_object_versions: self.list_object_versions.swap(0, Ordering::Relaxed),
             delete_object: self.delete_object.swap(0, Ordering::Relaxed),
+            delete_objects: self.delete_objects.swap(0, Ordering::Relaxed),
             create_multipart_upload: self.create_multipart_upload.swap(0, Ordering::Relaxed),
             upload_part: self.upload_part.swap(0, Ordering::Relaxed),
             upload_part_copy: self.upload_part_copy.swap(0, Ordering::Relaxed),
@@ -453,6 +462,89 @@ impl ObjectPlane for AwsS3ObjectPlane {
             Err(error) if is_precondition_failed(&error) => Ok(DeleteOutcome::TokenMismatch),
             Err(error) => Err(map_sdk_error("DeleteObject", error)),
         }
+    }
+
+    async fn delete_exact_batch(
+        &self,
+        objects: Vec<(ObjectPath, PhysicalVersion)>,
+    ) -> Result<Vec<DeleteOutcome>> {
+        if objects.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "exact delete batch cannot exceed 1,000 versions",
+            ));
+        }
+        if objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        if objects
+            .iter()
+            .any(|(_, version)| !matches!(version, PhysicalVersion::Versioned { .. }))
+        {
+            let mut outcomes = Vec::with_capacity(objects.len());
+            for (path, version) in objects {
+                outcomes.push(self.delete_exact(&path, version).await?);
+            }
+            return Ok(outcomes);
+        }
+
+        let identifiers = objects
+            .iter()
+            .map(|(path, version)| {
+                let PhysicalVersion::Versioned { version_id } = version else {
+                    unreachable!("unversioned objects were handled above");
+                };
+                ObjectIdentifier::builder()
+                    .key(path.as_str())
+                    .version_id(version_id)
+                    .build()
+                    .map_err(|error| {
+                        Error::new(
+                            ErrorCode::InvalidRequest,
+                            format!("invalid exact delete identifier: {error}"),
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let delete = Delete::builder()
+            .set_objects(Some(identifiers))
+            .quiet(true)
+            .build()
+            .map_err(|error| {
+                Error::new(
+                    ErrorCode::InvalidRequest,
+                    format!("invalid exact delete batch: {error}"),
+                )
+            })?;
+        self.metrics.delete_objects.fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .client
+            .delete_objects()
+            .bucket(&self.bucket)
+            .delete(delete)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("DeleteObjects exact versions", error))?;
+        if let Some(error) = output.errors().first() {
+            return Err(Error::new(
+                ErrorCode::Transport,
+                format!(
+                    "DeleteObjects exact versions failed for key {:?}, version {:?}: {}: {}",
+                    error.key(),
+                    error.version_id(),
+                    error.code().unwrap_or("Unknown"),
+                    error
+                        .message()
+                        .unwrap_or("provider omitted an error message")
+                ),
+            )
+            .provider_metadata(
+                error.code().map(ToString::to_string),
+                error.message().map(ToString::to_string),
+            )
+            .retry(RetryAdvice::Safe));
+        }
+        Ok(vec![DeleteOutcome::Deleted; objects.len()])
     }
 
     async fn put_physical(&self, request: PhysicalPut) -> Result<PhysicalObjectWriteResult> {

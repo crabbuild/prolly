@@ -10,7 +10,10 @@ use aws_sdk_s3::{
     config::Region,
     types::{BucketVersioningStatus, VersioningConfiguration},
 };
+use futures_util::StreamExt;
 use md5::{Digest as _, Md5};
+#[cfg(feature = "foyer-cache")]
+use prolly_s3_client::{core::PhysicalBatchMutationV1, FoyerNodeCache, FoyerNodeCacheConfig};
 use prolly_s3_client::{
     core::{ObjectHeaders, PhysicalMultipartCompletedPart, Repository, RepositoryOptions},
     AwsS3ObjectPlane,
@@ -348,4 +351,258 @@ async fn rustfs_32_writer_load_preserves_the_three_call_budget() {
         percentile(99).as_millis(),
         32.0 / wall.as_secs_f64(),
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "operator-run 10K hot-branch release gate"]
+async fn rustfs_10k_concurrent_commits_are_reconciled_and_complete() {
+    if !rustfs_enabled() || std::env::var("PROLLY_S3_RUSTFS_10K").as_deref() != Ok("1") {
+        eprintln!("set PROLLY_S3_RUSTFS=1 and PROLLY_S3_RUSTFS_10K=1");
+        return;
+    }
+
+    let concurrency = std::env::var("PROLLY_RUSTFS_10K_CONCURRENCY")
+        .map(|value| value.parse::<usize>().expect("numeric concurrency"))
+        .unwrap_or(32);
+    let object_bytes = std::env::var("PROLLY_RUSTFS_10K_OBJECT_BYTES")
+        .map(|value| value.parse::<usize>().expect("numeric object size"))
+        .unwrap_or(64 * 1024);
+    let (aws, bucket) = rustfs_client().await;
+    let plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let object_prefix = unique_name("ten-thousand-objects");
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: unique_name("ten-thousand-repository"),
+            writer: "rustfs-10k-writer".to_string(),
+            writer_lease_millis: 60 * 60 * 1_000,
+            max_parallel_payload_writes: concurrency,
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut previous = 0;
+    for target in [1_000, 5_000, 10_000] {
+        plane.reset_metrics();
+        let started = Instant::now();
+        let writes = futures_util::stream::iter(previous..target)
+            .map(|index| {
+                let repository = &repository;
+                let object_prefix = &object_prefix;
+                async move {
+                    let operation_started = Instant::now();
+                    repository
+                        .put_bytes(
+                            "main",
+                            format!("{object_prefix}/{index:05}.bin").into_bytes(),
+                            vec![index as u8; object_bytes],
+                            ObjectHeaders::default(),
+                            BTreeMap::new(),
+                            None,
+                        )
+                        .await
+                        .map(|receipt| (operation_started.elapsed(), receipt.idempotent_replay))
+                }
+            })
+            .buffer_unordered(concurrency)
+            .collect::<Vec<_>>()
+            .await;
+        let wall = started.elapsed();
+        let mut latencies = writes
+            .into_iter()
+            .map(|result| result.expect("10K commit"))
+            .collect::<Vec<_>>();
+        let reconciled = latencies.iter().filter(|(_, replay)| *replay).count();
+        latencies.sort_unstable_by_key(|(latency, _)| *latency);
+        let percentile = |percent: usize| {
+            latencies[(latencies.len() * percent).div_ceil(100) - 1]
+                .0
+                .as_millis()
+        };
+        let metrics = plane.reset_metrics();
+        let tier_writes = target - previous;
+        assert!(
+            metrics.total_calls() <= (tier_writes as u64 * 301).div_ceil(100),
+            "request budget exceeded: {metrics:?}"
+        );
+        eprintln!(
+            "rustfs_10k live_files={target} tier_writes={tier_writes} wall_ms={} writes_per_second={:.2} p50_ms={} p95_ms={} p99_ms={} reconciled={reconciled} s3_calls={} calls_per_write={:.3}",
+            wall.as_millis(),
+            tier_writes as f64 / wall.as_secs_f64(),
+            percentile(50),
+            percentile(95),
+            percentile(99),
+            metrics.total_calls(),
+            metrics.total_calls() as f64 / tier_writes as f64,
+        );
+        previous = target;
+    }
+
+    let head = repository.head("main").await.unwrap();
+    assert_eq!(repository.commit(head).await.unwrap().generation.0, 10_000);
+    let mut after = None;
+    let mut listed = 0;
+    loop {
+        let (objects, truncated) = repository
+            .list_objects_at(head, object_prefix.as_bytes(), after.as_deref(), 1_000)
+            .await
+            .unwrap();
+        listed += objects.len();
+        after = objects.last().map(|object| object.key.clone());
+        if !truncated {
+            break;
+        }
+    }
+    assert_eq!(listed, 10_000);
+    assert_eq!(repository.performance_snapshot().publication_queue_depth, 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[cfg(feature = "foyer-cache")]
+#[ignore = "operator-run 10K batched-ingest and persisted-cache release gate"]
+async fn rustfs_10k_batched_ingest_has_bounded_bytes_and_persisted_cache() {
+    if !rustfs_enabled() || std::env::var("PROLLY_S3_RUSTFS_BATCH_10K").as_deref() != Ok("1") {
+        eprintln!("set PROLLY_S3_RUSTFS=1 and PROLLY_S3_RUSTFS_BATCH_10K=1");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let plane = Arc::new(AwsS3ObjectPlane::new(aws, &bucket));
+    let repository_prefix = unique_name("ten-thousand-batched-repository");
+    let object_prefix = unique_name("ten-thousand-batched-objects");
+    let cache_directory = tempfile::tempdir().unwrap();
+    let cache_config = FoyerNodeCacheConfig {
+        directory: cache_directory.path().to_path_buf(),
+        memory_capacity_bytes: 64 * 1024 * 1024,
+        disk_capacity_bytes: 512 * 1024 * 1024,
+        disk_block_size_bytes: 8 * 1024 * 1024,
+        memory_shards: 16,
+    };
+    let writer_cache = FoyerNodeCache::open(cache_config.clone()).await.unwrap();
+    let options = RepositoryOptions {
+        repository_prefix,
+        writer: "rustfs-batched-10k-writer".to_string(),
+        writer_lease_millis: 60 * 60 * 1_000,
+        max_parallel_payload_writes: 32,
+        max_cached_node_pack_bytes: 1,
+        node_cache: Some(writer_cache.clone()),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    plane.reset_metrics();
+    let started = Instant::now();
+    let mut packed_bytes = 0_u64;
+    let mut max_pack_bytes = 0_u64;
+    for batch_index in 0..100 {
+        let batch = repository
+            .begin_physical_batch("main", "100-file bulk ingest", 60 * 60 * 1_000)
+            .await
+            .unwrap();
+        let mutations = (0..100)
+            .map(|offset| {
+                let index = batch_index * 100 + offset;
+                PhysicalBatchMutationV1::Put {
+                    key: format!("{object_prefix}/{index:05}.bin").into_bytes(),
+                    bytes: vec![index as u8; 64 * 1024],
+                    headers: ObjectHeaders::default(),
+                    user_metadata: BTreeMap::new(),
+                }
+            })
+            .collect();
+        let receipt = repository
+            .publish_physical_batch(batch, mutations)
+            .await
+            .unwrap();
+        let pack_bytes = repository
+            .commit(receipt.id)
+            .await
+            .unwrap()
+            .node_pack
+            .expect("batch node pack")
+            .object_len;
+        packed_bytes += pack_bytes;
+        max_pack_bytes = max_pack_bytes.max(pack_bytes);
+    }
+    let ingest_wall = started.elapsed();
+    let ingest_metrics = plane.reset_metrics();
+    let logical_payload_bytes = 10_000_u64 * 64 * 1024;
+    let upload_ratio = ingest_metrics.uploaded_body_bytes as f64 / logical_payload_bytes as f64;
+    assert_eq!(ingest_metrics.total_calls(), 10_200);
+    assert!(
+        upload_ratio < 1.5,
+        "batch upload byte amplification is {upload_ratio:.3}x: {ingest_metrics:?}"
+    );
+    assert!(
+        max_pack_bytes < 2 * 1024 * 1024,
+        "one 100-file batch packed {max_pack_bytes} transient bytes"
+    );
+    let head = repository.head("main").await.unwrap();
+    eprintln!(
+        "rustfs_batch_10k files=10000 commits=100 wall_ms={} files_per_second={:.2} s3_calls={} calls_per_file={:.3} uploaded_mib={:.2} upload_ratio={:.3} packed_mib={:.2} max_pack_kib={:.2}",
+        ingest_wall.as_millis(),
+        10_000.0 / ingest_wall.as_secs_f64(),
+        ingest_metrics.total_calls(),
+        ingest_metrics.total_calls() as f64 / 10_000.0,
+        ingest_metrics.uploaded_body_bytes as f64 / (1024.0 * 1024.0),
+        upload_ratio,
+        packed_bytes as f64 / (1024.0 * 1024.0),
+        max_pack_bytes as f64 / 1024.0,
+    );
+
+    drop(repository);
+    writer_cache.close().await.unwrap();
+    drop(writer_cache);
+    let reader_cache = FoyerNodeCache::open(cache_config).await.unwrap();
+    let reader = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            read_only: true,
+            node_cache: Some(reader_cache.clone()),
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    plane.reset_metrics();
+    let before = reader.performance_snapshot();
+    let list_started = Instant::now();
+    let mut after = None;
+    let mut listed = 0;
+    loop {
+        let (objects, truncated) = reader
+            .list_objects_at(head, object_prefix.as_bytes(), after.as_deref(), 1_000)
+            .await
+            .unwrap();
+        listed += objects.len();
+        after = objects.last().map(|object| object.key.clone());
+        if !truncated {
+            break;
+        }
+    }
+    let list_wall = list_started.elapsed();
+    let after_snapshot = reader.performance_snapshot();
+    let list_metrics = plane.reset_metrics();
+    let ranged_fetches = after_snapshot
+        .node_ranged_fetches
+        .saturating_sub(before.node_ranged_fetches);
+    let cache_hits = after_snapshot
+        .node_cache_hits
+        .saturating_sub(before.node_cache_hits);
+    assert_eq!(listed, 10_000);
+    assert_eq!(ranged_fetches, 0, "persisted cache missed immutable nodes");
+    assert!(
+        list_metrics.total_calls() <= 1,
+        "persisted-cache list issued unexpected S3 calls: {list_metrics:?}"
+    );
+    eprintln!(
+        "rustfs_persisted_cache files=10000 list_ms={} s3_calls={} ranged_fetches={ranged_fetches} cache_hits={cache_hits}",
+        list_wall.as_millis(),
+        list_metrics.total_calls(),
+    );
+    drop(reader);
+    reader_cache.close().await.unwrap();
 }

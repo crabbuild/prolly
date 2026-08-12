@@ -84,6 +84,14 @@ therefore fetches each distinct node at most once per process at a time; a warm
 lookup performs no metadata-node S3 reads. Fetching the file body remains one
 version-qualified S3 `GetObject`.
 
+After a branch CAS succeeds—or an ambiguous CAS is reconciled by operation
+ID—the writer admits every node in the committed pack to the configured cache.
+Foyer flushes those verified immutable nodes to disk on graceful close. A
+reader reopening the same cache directory can therefore traverse the writer's
+snapshot without re-fetching nodes. A new host can call
+`Client::prewarm_node_cache` for selected snapshots and prefixes before serving
+traffic.
+
 ### Cache keys
 
 Node bytes use this logical cache key:
@@ -235,11 +243,12 @@ Foreground publication remains:
 2. write one immutable commit/node envelope;
 3. conditionally publish the branch ref.
 
-New nodes are placed in the pending/L1 cache while the commit is built. After
-the commit envelope is durable, they are eligible for L2 admission. The
+New nodes remain pending while the commit is built. Only after successful or
+reconciled ref publication are they admitted concurrently to L1/L2. The
 background indexer consumes commit-envelope summaries, creates new index pages,
-and advances the node-index head. Cache warming and index compaction add no
-foreground S3 requests.
+and advances the node-index head. Cache write-through adds local I/O but no
+foreground S3 request; explicit prewarming performs the traversal reads needed
+to populate a new host.
 
 The fenced writer serializes only publication for a single branch. Scale-out
 uses independent branches or repository partitions; a branch with one mutable
@@ -334,7 +343,10 @@ negotiated capability; readers never reinterpret v1 bytes as v2.
 4. Done: paged derived ref catalog with explicit freshness.
 5. Done: epoch-based GC v2 with persisted work/candidate partitions and shared
    node-container safety.
-6. Pending: execute and publish the Tier A/B/C AWS qualification matrix.
+6. Done locally: publication write-through, Foyer close/reopen persistence,
+   and bounded snapshot prewarming. A 10K-file RustFS reopen listed the full
+   snapshot with one commit GET and zero node-range GETs.
+7. Pending: execute and publish the Tier A/B/C AWS qualification matrix.
 
 Foyer is pinned to `0.22.3` with Tokio runtime only. `cargo-deny` contains a
 narrow, reason-bearing exception for RUSTSEC-2024-0436: Foyer's transitive

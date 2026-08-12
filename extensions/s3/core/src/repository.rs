@@ -66,6 +66,12 @@ pub struct RepositoryOptions {
     /// Optional shared memory/disk cache. Cache failures are fail-open and all
     /// returned bytes are verified by CID before use.
     pub node_cache: Option<Arc<dyn NodeCache>>,
+    /// Compact obsolete physical versions of a hot branch ref at this
+    /// generation interval. Zero disables automatic compaction.
+    pub branch_ref_compaction_interval: u64,
+    /// Number of physical ref versions retained during compaction. Logical
+    /// history remains in immutable commits and is unaffected.
+    pub branch_ref_versions_to_retain: usize,
     /// Maximum exact physical deletions per second during GC. Zero disables
     /// pacing. The physical format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
@@ -92,6 +98,8 @@ impl Default for RepositoryOptions {
             max_cached_node_locations: 65_536,
             max_cached_node_bytes: 64 * 1024 * 1024,
             node_cache: None,
+            branch_ref_compaction_interval: 5_000,
+            branch_ref_versions_to_retain: 100,
             gc_delete_rate_limit_per_second: 0,
             clock: Arc::new(SystemClock),
             ids: Arc::new(RandomIdSource),
@@ -180,6 +188,14 @@ pub struct RefMoveReceipt {
     pub new_target: CommitId,
     pub operation: OperationId,
     pub generation: RefGeneration,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RefVersionCompactionReport {
+    pub scanned: usize,
+    pub retained: usize,
+    pub deleted: usize,
+    pub already_missing: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -745,7 +761,7 @@ impl<P: ObjectPlane> Repository<P> {
         };
         let stored = repository.store_commit(&commit, None).await?;
         let commit_id = stored.id;
-        repository.finalize_stored_commit(stored)?;
+        repository.finalize_stored_commit(stored).await?;
 
         let reflog = ReflogEntryV1 {
             branch: options.default_branch.clone(),
@@ -2199,6 +2215,147 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(())
     }
 
+    fn invalidate_branch_cache(&self, branch: &str) -> Result<()> {
+        self.warm_branches
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned"))?
+            .remove(&branch.to_string());
+        Ok(())
+    }
+
+    /// Delete obsolete physical versions of one branch-ref object while
+    /// retaining the current CAS token. Immutable commits remain the logical
+    /// history and are never removed by this maintenance operation.
+    pub async fn compact_branch_ref_versions(
+        &self,
+        branch: &str,
+    ) -> Result<RefVersionCompactionReport> {
+        validate_branch(branch)?;
+        self.physical_writer_generation_for_mutation().await?;
+        let _publication = self.lock_publication().await;
+        let loaded = self.load_ref_including_tombstone(branch).await?;
+        self.compact_branch_ref_versions_inner(branch, &loaded)
+            .await
+    }
+
+    async fn maybe_compact_branch_ref_versions(
+        &self,
+        branch: &str,
+        loaded: &LoadedRef,
+    ) -> Result<()> {
+        let interval = self.options.branch_ref_compaction_interval;
+        if interval != 0
+            && loaded.value.generation.0 != 0
+            && loaded.value.generation.0.is_multiple_of(interval)
+        {
+            self.compact_branch_ref_versions_inner(branch, loaded)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn compact_branch_ref_versions_inner(
+        &self,
+        branch: &str,
+        loaded: &LoadedRef,
+    ) -> Result<RefVersionCompactionReport> {
+        let path = branch_path(&self.options.repository_prefix, branch)?;
+        let current_version = loaded.token.version_id.as_deref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::ProviderNotQualified,
+                "branch-ref compaction requires a versioned physical CAS object",
+            )
+        })?;
+        let mut continuation = None;
+        let mut versions = Vec::new();
+        loop {
+            let page = self
+                .plane
+                .list(ListRequest {
+                    prefix: path.as_str().to_string(),
+                    continuation,
+                    limit: 1_000,
+                    include_versions: true,
+                })
+                .await?;
+            versions.extend(
+                page.entries
+                    .into_iter()
+                    .filter(|entry| entry.path == path && !entry.metadata.delete_marker),
+            );
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+
+        if !versions.iter().any(|entry| {
+            entry.metadata.token.version_id.as_deref() == Some(current_version) && entry.is_latest
+        }) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "current branch-ref version was absent from the version listing",
+            ));
+        }
+        versions.sort_by(|left, right| {
+            right
+                .is_latest
+                .cmp(&left.is_latest)
+                .then_with(|| {
+                    right
+                        .metadata
+                        .last_modified_millis
+                        .cmp(&left.metadata.last_modified_millis)
+                })
+                .then_with(|| {
+                    right
+                        .metadata
+                        .token
+                        .version_id
+                        .cmp(&left.metadata.token.version_id)
+                })
+        });
+        let scanned = versions.len();
+        let mut retained_versions = BTreeSet::new();
+        retained_versions.insert(current_version.to_string());
+        for entry in &versions {
+            if retained_versions.len() >= self.options.branch_ref_versions_to_retain {
+                break;
+            }
+            if let Some(version_id) = entry.metadata.token.version_id.as_ref() {
+                retained_versions.insert(version_id.clone());
+            }
+        }
+        let candidates = versions
+            .into_iter()
+            .filter_map(|entry| {
+                let version_id = entry.metadata.token.version_id?;
+                (!retained_versions.contains(&version_id))
+                    .then_some((entry.path, PhysicalVersion::Versioned { version_id }))
+            })
+            .collect::<Vec<_>>();
+        let mut report = RefVersionCompactionReport {
+            scanned,
+            retained: retained_versions.len(),
+            ..RefVersionCompactionReport::default()
+        };
+        for batch in candidates.chunks(1_000) {
+            for outcome in self.plane.delete_exact_batch(batch.to_vec()).await? {
+                match outcome {
+                    DeleteOutcome::Deleted => report.deleted += 1,
+                    DeleteOutcome::NotFound => report.already_missing += 1,
+                    DeleteOutcome::TokenMismatch => {
+                        return Err(Error::new(
+                            ErrorCode::PreconditionFailed,
+                            "branch-ref version changed during exact compaction",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(report)
+    }
+
     async fn warm_branch_state(&self, branch: &str) -> Result<WarmBranchState> {
         if let Some(cached) = self
             .warm_branches
@@ -2951,7 +3108,7 @@ impl<P: ObjectPlane> Repository<P> {
             };
             let stored = target.store_commit(&destination_commit, prepared).await?;
             let destination_id = stored.id;
-            target.finalize_stored_commit(stored)?;
+            target.finalize_stored_commit(stored).await?;
             report.copied_objects += 1;
             commit_map.insert(source_id, destination_id);
         }
@@ -5320,6 +5477,8 @@ impl<P: ObjectPlane> Repository<P> {
                 idempotent_replay: true,
             });
         }
+        self.maybe_compact_branch_ref_versions(branch, &loaded_ref)
+            .await?;
         let created_at_millis = self.now_millis()?;
         let generation = CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "commit generation overflow")
@@ -5440,17 +5599,17 @@ impl<P: ObjectPlane> Repository<P> {
                 "physical writer fence changed during multi-delete publication",
             ));
         }
-        match self
+        let publication = self
             .plane
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
                 bytes: encode_canonical(&next_ref)?,
             })
-            .await?
-        {
-            CompareExchangeOutcome::Applied(metadata) => {
-                self.finalize_stored_commit(stored)?;
+            .await;
+        match publication {
+            Ok(CompareExchangeOutcome::Applied(metadata)) => {
+                self.finalize_stored_commit(stored).await?;
                 self.cache_branch(branch, next_ref, metadata.token, commit.clone())?;
                 Ok(CommitReceipt {
                     id: commit_id,
@@ -5462,10 +5621,38 @@ impl<P: ObjectPlane> Repository<P> {
                     idempotent_replay: false,
                 })
             }
-            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical branch CAS conflicted; writer is fenced and must reopen",
-            )),
+            Ok(CompareExchangeOutcome::Conflict(_)) => {
+                self.invalidate_branch_cache(branch)?;
+                if let Some(receipt) = self
+                    .reconcile_operation(branch, operation, input_digest)
+                    .await?
+                {
+                    self.finalize_stored_commit(stored).await?;
+                    return Ok(receipt);
+                }
+                Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "physical branch CAS conflicted; writer is fenced and must reopen",
+                )
+                .retry(RetryAdvice::ReloadHead)
+                .operation(operation.to_string()))
+            }
+            Err(error) => {
+                self.invalidate_branch_cache(branch)?;
+                if let Some(receipt) = self
+                    .reconcile_operation(branch, operation, input_digest)
+                    .await?
+                {
+                    self.finalize_stored_commit(stored).await?;
+                    return Ok(receipt);
+                }
+                Err(Error::new(
+                    ErrorCode::OutcomeUnknown,
+                    format!("branch publication outcome is unknown: {error}"),
+                )
+                .retry(RetryAdvice::ReconcileOperation)
+                .operation(operation.to_string()))
+            }
         }
     }
 
@@ -5648,6 +5835,9 @@ impl<P: ObjectPlane> Repository<P> {
             return Ok(receipt);
         }
 
+        self.maybe_compact_branch_ref_versions(branch, &loaded_ref)
+            .await?;
+
         let generation = CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "commit generation overflow")
         })?);
@@ -5795,7 +5985,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         match publication {
             Ok(CompareExchangeOutcome::Applied(metadata)) => {
-                self.finalize_stored_commit(stored)?;
+                self.finalize_stored_commit(stored).await?;
                 let receipt = CommitReceipt {
                     id: commit_id,
                     operation,
@@ -5809,23 +5999,28 @@ impl<P: ObjectPlane> Repository<P> {
                 Ok(receipt)
             }
             Ok(CompareExchangeOutcome::Conflict(_)) => {
-                self.warm_branches
-                    .write()
-                    .map_err(|_| {
-                        Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned")
-                    })?
-                    .remove(&branch.to_string());
-                Err(Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "physical branch CAS conflicted; writer is fenced and must reopen",
-                ))
-            }
-            Err(error) => {
+                self.invalidate_branch_cache(branch)?;
                 if let Some(receipt) = self
                     .reconcile_operation(branch, operation, input_digest)
                     .await?
                 {
-                    self.finalize_stored_commit(stored)?;
+                    self.finalize_stored_commit(stored).await?;
+                    return Ok(receipt);
+                }
+                Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "physical branch CAS conflicted; writer is fenced and must reopen",
+                )
+                .retry(RetryAdvice::ReloadHead)
+                .operation(operation.to_string()))
+            }
+            Err(error) => {
+                self.invalidate_branch_cache(branch)?;
+                if let Some(receipt) = self
+                    .reconcile_operation(branch, operation, input_digest)
+                    .await?
+                {
+                    self.finalize_stored_commit(stored).await?;
                     return Ok(receipt);
                 }
                 Err(Error::new(
@@ -5870,10 +6065,8 @@ impl<P: ObjectPlane> Repository<P> {
                 runtime: RuntimeConfig::default(),
             },
         );
-        let mut objects =
-            self.tree_from_root(&base.state.objects, &self.format.state_tree_format)?;
-        let mut versions =
-            self.tree_from_root(&base.state.versions, &self.format.state_tree_format)?;
+        let objects = self.tree_from_root(&base.state.objects, &self.format.state_tree_format)?;
+        let versions = self.tree_from_root(&base.state.versions, &self.format.state_tree_format)?;
         let operations =
             self.tree_from_root(&base.state.operations, &self.format.state_tree_format)?;
         let generation = CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
@@ -5882,6 +6075,8 @@ impl<P: ObjectPlane> Repository<P> {
         let now = self.now_millis()?;
         let mut transitions = Vec::with_capacity(mutations.len());
         let mut version_ids = Vec::with_capacity(mutations.len());
+        let mut object_mutations = Vec::with_capacity(mutations.len());
+        let mut version_mutations = Vec::with_capacity(mutations.len());
         for (ordinal, mutation) in mutations.values().enumerate() {
             let key = mutation.key();
             let previous = engine
@@ -5931,37 +6126,32 @@ impl<P: ObjectPlane> Repository<P> {
                 body,
                 binding,
             )?;
-            objects = if matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker) {
-                engine.delete(&objects, key).await?
+            let delete_marker =
+                matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker);
+            if delete_marker {
+                object_mutations.push(Mutation::Delete { key: key.to_vec() });
             } else {
-                engine
-                    .put(
-                        &objects,
-                        key.to_vec(),
-                        encode_canonical(&CurrentObjectV1 {
-                            version: version.clone(),
-                        })?,
-                    )
-                    .await?
-            };
-            versions = engine
-                .put(
-                    &versions,
-                    version_tree_key(key, version.body.order, version.id),
-                    encode_canonical(&version)?,
-                )
-                .await?;
+                object_mutations.push(Mutation::Upsert {
+                    key: key.to_vec(),
+                    val: encode_canonical(&CurrentObjectV1 {
+                        version: version.clone(),
+                    })?,
+                });
+            }
+            version_mutations.push(Mutation::Upsert {
+                key: version_tree_key(key, version.body.order, version.id),
+                val: encode_canonical(&version)?,
+            });
             transitions.push(ObjectTransition {
                 key: key.to_vec(),
                 previous,
                 next: version.id,
-                delete_marker: matches!(
-                    version.body.kind,
-                    LogicalObjectVersionKindV1::DeleteMarker
-                ),
+                delete_marker,
             });
             version_ids.push(version.id);
         }
+        let objects = engine.batch(&objects, object_mutations).await?;
+        let versions = engine.batch(&versions, version_mutations).await?;
         let result = CanonicalOperationResult {
             kind: OperationKind::CommitSession,
             object_versions: version_ids.clone(),
@@ -6008,6 +6198,7 @@ impl<P: ObjectPlane> Repository<P> {
             &batch.branch,
             loaded_ref,
             batch.operation,
+            input_digest,
             commit,
             prepared,
             result,
@@ -7105,6 +7296,7 @@ impl<P: ObjectPlane> Repository<P> {
             target,
             loaded_ref,
             operation,
+            input_digest,
             commit,
             prepared,
             operation_result,
@@ -7337,6 +7529,7 @@ impl<P: ObjectPlane> Repository<P> {
             branch,
             loaded_ref,
             operation,
+            input_digest,
             commit,
             prepared,
             operation_result,
@@ -7434,6 +7627,7 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
         loaded_ref: LoadedRef,
         operation: OperationId,
+        input_digest: [u8; 32],
         commit: BucketCommitV1,
         prepared: Option<PreparedNodePack>,
         operation_result: CanonicalOperationResult,
@@ -7446,6 +7640,8 @@ impl<P: ObjectPlane> Repository<P> {
                 "prepared commit has a zero writer fence generation",
             ));
         }
+        self.maybe_compact_branch_ref_versions(branch, &loaded_ref)
+            .await?;
         let stored = self.store_commit(&commit, prepared).await?;
         let commit_id = stored.id;
         let reflog = ReflogEntryV1 {
@@ -7488,7 +7684,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         match publication {
             Ok(CompareExchangeOutcome::Applied(metadata)) => {
-                self.finalize_stored_commit(stored)?;
+                self.finalize_stored_commit(stored).await?;
                 let receipt = CommitReceipt {
                     id: commit_id,
                     operation,
@@ -7501,15 +7697,29 @@ impl<P: ObjectPlane> Repository<P> {
                 self.cache_branch(branch, next_ref, metadata.token, commit)?;
                 Ok(receipt)
             }
-            Ok(CompareExchangeOutcome::Conflict(_)) => Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical branch CAS conflicted; writer is fenced and must reopen",
-            )
-            .retry(RetryAdvice::ReloadHead)
-            .operation(operation.to_string())),
+            Ok(CompareExchangeOutcome::Conflict(_)) => {
+                self.invalidate_branch_cache(branch)?;
+                if let Some(receipt) = self
+                    .reconcile_operation(branch, operation, input_digest)
+                    .await?
+                {
+                    self.finalize_stored_commit(stored).await?;
+                    return Ok(receipt);
+                }
+                Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "physical branch CAS conflicted; writer is fenced and must reopen",
+                )
+                .retry(RetryAdvice::ReloadHead)
+                .operation(operation.to_string()))
+            }
             Err(error) => {
-                if let Some(receipt) = self.lookup_operation(branch, operation).await? {
-                    self.finalize_stored_commit(stored)?;
+                self.invalidate_branch_cache(branch)?;
+                if let Some(receipt) = self
+                    .reconcile_operation(branch, operation, input_digest)
+                    .await?
+                {
+                    self.finalize_stored_commit(stored).await?;
                     return Ok(receipt);
                 }
                 Err(Error::new(
@@ -9621,10 +9831,11 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(StoredCommit { id, pending_pack })
     }
 
-    fn finalize_stored_commit(&self, stored: StoredCommit) -> Result<()> {
+    async fn finalize_stored_commit(&self, stored: StoredCommit) -> Result<()> {
         if let Some((prepared, payload_offset)) = stored.pending_pack {
             self.node_store
-                .commit_node_pack(stored.id, prepared, payload_offset)?;
+                .commit_node_pack(stored.id, prepared, payload_offset)
+                .await?;
         }
         Ok(())
     }
@@ -9760,6 +9971,17 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
             "metadata and node-pack cache bounds must be greater than zero",
+        ));
+    }
+    if options.branch_ref_compaction_interval != 0
+        && (options.branch_ref_compaction_interval < 100
+            || options.branch_ref_versions_to_retain == 0
+            || options.branch_ref_versions_to_retain as u64
+                >= options.branch_ref_compaction_interval)
+    {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "branch-ref compaction requires an interval of at least 100 and a smaller nonzero retention count",
         ));
     }
     if options.gc_delete_rate_limit_per_second > 1_000 {
