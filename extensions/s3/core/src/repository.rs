@@ -3065,157 +3065,146 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    async fn ordered_physical_commit_closure(
-        &self,
-        roots: &[CommitId],
-    ) -> Result<Vec<(CommitId, BucketCommitV1)>> {
-        let mut pending = roots.to_vec();
-        let mut commits = BTreeMap::new();
-        while let Some(id) = pending.pop() {
-            if commits.contains_key(&id) {
-                continue;
-            }
-            if commits.len() >= self.options.history_traversal_limit {
-                return Err(Error::new(
-                    ErrorCode::HistoryLimitExceeded,
-                    "physical transfer commit closure exceeded its configured history limit",
-                ));
-            }
-            let commit = self.load_commit(id).await?;
-            pending.extend(commit.parents.iter().copied());
-            commits.insert(id, commit);
-        }
-        let mut ordered = commits.into_iter().collect::<Vec<_>>();
-        ordered.sort_by(|(left_id, left), (right_id, right)| {
-            left.generation
-                .cmp(&right.generation)
-                .then_with(|| left_id.cmp(right_id))
-        });
-        Ok(ordered)
-    }
-
-    async fn all_physical_commits(&self) -> Result<Vec<(CommitId, BucketCommitV1)>> {
-        let prefix = format!("{}/commits/sha256/", self.options.repository_prefix);
-        let mut continuation = None;
-        let mut commits = BTreeMap::new();
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let encoded = entry.path.as_str().rsplit('/').next().unwrap_or_default();
-                let raw = hex::decode(encoded).map_err(|_| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "physical transfer commit path is not canonical hex",
-                    )
-                })?;
-                let id = CommitId::from_hash(raw.try_into().map_err(|_| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "physical transfer commit path has the wrong ID length",
-                    )
-                })?);
-                let commit = self.load_commit(id).await?;
-                commits.insert(id, commit);
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-        let mut ordered = commits.into_iter().collect::<Vec<_>>();
-        ordered.sort_by(|(left_id, left), (right_id, right)| {
-            left.generation
-                .cmp(&right.generation)
-                .then_with(|| left_id.cmp(right_id))
-        });
-        Ok(ordered)
-    }
-
-    async fn physical_logical_commit_fingerprints(
-        &self,
-        ordered: &[(CommitId, BucketCommitV1)],
-    ) -> Result<BTreeMap<CommitId, [u8; 32]>> {
-        let mut fingerprints: BTreeMap<CommitId, [u8; 32]> = BTreeMap::new();
-        for (id, commit) in ordered {
-            let mut parent_bytes = Vec::with_capacity(commit.parents.len() * 32);
-            for parent in &commit.parents {
-                parent_bytes.extend_from_slice(fingerprints.get(parent).ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "physical logical fingerprint encountered a child before its parent",
-                    )
-                })?);
-            }
-            // Physical S3 version bindings are intentionally stored inline in
-            // the current-object tree. They differ after clone or push, so a
-            // transfer fingerprint must describe logical object identity
-            // rather than the provider-specific tree root.
-            let objects = encode_canonical(&self.current_object_map(commit).await?)?;
-            let operations = encode_canonical(&commit.state.operations)?;
-            let generation = commit.generation.0.to_be_bytes();
-            let delta = encode_canonical(&commit.delta)?;
-            let message = encode_canonical(&commit.message)?;
-            let metadata = encode_canonical(&commit.metadata)?;
-            let fingerprint = derive_input_digest(&[
-                b"physical-logical-commit-v1",
-                &parent_bytes,
-                &objects,
-                &operations,
-                &generation,
-                &delta,
-                commit.author.as_bytes(),
-                &message,
-                &commit.created_at_millis.to_be_bytes(),
-                &metadata,
-            ]);
-            fingerprints.insert(*id, fingerprint);
-        }
-        Ok(fingerprints)
-    }
-
     async fn replay_physical_history_to<Q: ObjectPlane>(
         &self,
         target: &Repository<Q>,
         source_roots: &[CommitId],
         force_rebind: bool,
     ) -> Result<(BTreeMap<CommitId, CommitId>, SyncReport)> {
-        let source_ordered = self.ordered_physical_commit_closure(source_roots).await?;
-        let source_fingerprints = self
-            .physical_logical_commit_fingerprints(&source_ordered)
+        if source_roots.is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "physical transfer requires at least one root",
+            ));
+        }
+        let requested_roots = source_roots.iter().copied().collect::<BTreeSet<_>>();
+        let mut root_pages = source_roots.chunks(1_000);
+        let mut cursor = self
+            .start_commit_closure(root_pages.next().expect("roots are non-empty"))
             .await?;
-        let target_by_fingerprint = if force_rebind {
-            BTreeMap::new()
-        } else {
-            let target_ordered = target.all_physical_commits().await?;
-            let target_fingerprints = target
-                .physical_logical_commit_fingerprints(&target_ordered)
-                .await?;
-            target_fingerprints
-                .into_iter()
-                .map(|(id, fingerprint)| (fingerprint, id))
-                .collect::<BTreeMap<_, _>>()
-        };
-        let mut commit_map = BTreeMap::new();
+        for roots in root_pages {
+            self.extend_commit_closure(&mut cursor, roots).await?;
+        }
+        let index = self.commit_closure_index(cursor.traversal)?;
+        let mut root_map = BTreeMap::new();
         let mut report = SyncReport::default();
-        for (source_id, _) in &source_ordered {
-            if let Some(target_id) = target_by_fingerprint.get(
-                source_fingerprints
-                    .get(source_id)
-                    .expect("source fingerprint exists"),
-            ) {
-                commit_map.insert(*source_id, *target_id);
-                report.already_present += 1;
+        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
+        loop {
+            let page = self.commit_closure_page(&cursor, 4_096, 256).await?;
+            index.install_root(cursor.state.root.clone())?;
+            let prior_tree = index.tree()?;
+            let mut page_mappings = BTreeMap::new();
+            let mut mutations = Vec::with_capacity(page.commits.len());
+            for (source_id, source_commit) in page.commits {
+                if !force_rebind {
+                    if let Some(destination_id) =
+                        target.load_physical_transfer_mapping(source_id).await?
+                    {
+                        match target.load_commit(destination_id).await {
+                            Ok(_) => {
+                                report.already_present += 1;
+                                page_mappings.insert(source_id, destination_id);
+                                mutations.push(Mutation::Upsert {
+                                    key: commit_closure_mapping_key(source_id),
+                                    val: encode_canonical(&destination_id)?,
+                                });
+                                if requested_roots.contains(&source_id) {
+                                    root_map.insert(source_id, destination_id);
+                                }
+                                continue;
+                            }
+                            Err(error) if error.code == ErrorCode::MissingClosure => {
+                                target.delete_physical_transfer_mapping(source_id).await?;
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    }
+                }
+                let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+                for parent in &source_commit.parents {
+                    let mapped = match page_mappings.get(parent) {
+                        Some(mapped) => *mapped,
+                        None => index
+                            .engine
+                            .get(&prior_tree, &commit_closure_mapping_key(*parent))
+                            .await?
+                            .map(|bytes| decode_canonical(&bytes))
+                            .transpose()?
+                            .ok_or_else(|| {
+                                Error::new(
+                                    ErrorCode::MissingClosure,
+                                    "physical transfer parent was not durably mapped",
+                                )
+                            })?,
+                    };
+                    mapped_parents.push(mapped);
+                }
+                let (destination_id, copied_objects, copied_bytes, already_present) = self
+                    .replay_physical_commit_to(
+                        target,
+                        source_id,
+                        source_commit,
+                        mapped_parents,
+                        force_rebind,
+                        writer_fence_generation,
+                    )
+                    .await?;
+                report.copied_objects += copied_objects;
+                report.copied_bytes =
+                    report
+                        .copied_bytes
+                        .checked_add(copied_bytes)
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::EntityTooLarge,
+                                "physical transfer byte count overflow",
+                            )
+                        })?;
+                report.already_present += usize::from(already_present);
+                if !force_rebind {
+                    target
+                        .store_physical_transfer_mapping(source_id, destination_id)
+                        .await?;
+                }
+                page_mappings.insert(source_id, destination_id);
+                mutations.push(Mutation::Upsert {
+                    key: commit_closure_mapping_key(source_id),
+                    val: encode_canonical(&destination_id)?,
+                });
+                if requested_roots.contains(&source_id) {
+                    root_map.insert(source_id, destination_id);
+                }
+            }
+            let mut next_cursor = page.cursor;
+            if !mutations.is_empty() {
+                index.install_root(next_cursor.state.root.clone())?;
+                let tree = index.engine.batch(&index.tree()?, mutations).await?;
+                next_cursor.state = TreeRootV1::from_tree(&tree)?;
+            }
+            let complete = page.complete;
+            cursor = next_cursor;
+            if complete {
+                break;
             }
         }
-        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
+        loop {
+            let cleanup = self.cleanup_commit_closure(&cursor, 1_000).await?;
+            if cleanup.complete {
+                break;
+            }
+        }
+        Ok((root_map, report))
+    }
+
+    async fn replay_physical_commit_to<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        source_id: CommitId,
+        source_commit: BucketCommitV1,
+        mapped_parents: Vec<CommitId>,
+        force_rebind: bool,
+        writer_fence_generation: u64,
+    ) -> Result<(CommitId, usize, u64, bool)> {
         let target_write_store = target.node_store.isolated_write_session();
         let target_engine = AsyncProlly::new(
             target_write_store.clone(),
@@ -3224,179 +3213,225 @@ impl<P: ObjectPlane> Repository<P> {
                 runtime: RuntimeConfig::default(),
             },
         );
-        let mut binding_map: BTreeMap<(Vec<u8>, ObjectVersionId), crate::PhysicalObjectBindingV1> =
-            BTreeMap::new();
-        for (source_id, source_commit) in source_ordered {
-            if commit_map.contains_key(&source_id) {
-                continue;
+        let base = match mapped_parents.first() {
+            Some(parent) => Some(target.load_commit(*parent).await?),
+            None => None,
+        };
+        let empty = target_engine.create();
+        let mut objects = match &base {
+            Some(commit) => {
+                target.tree_from_root(&commit.state.objects, &target.format.state_tree_format)?
             }
-            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
-            for parent in &source_commit.parents {
-                mapped_parents.push(*commit_map.get(parent).ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::MissingClosure,
-                        "physical transfer parent was not mapped",
-                    )
-                })?);
+            None => empty.clone(),
+        };
+        let mut versions = match &base {
+            Some(commit) => {
+                target.tree_from_root(&commit.state.versions, &target.format.state_tree_format)?
             }
-            let base = match mapped_parents.first() {
-                Some(parent) => Some(target.load_commit(*parent).await?),
-                None => None,
-            };
-            let empty = target_engine.create();
-            let mut objects = match &base {
-                Some(commit) => target
-                    .tree_from_root(&commit.state.objects, &target.format.state_tree_format)?,
-                None => empty.clone(),
-            };
-            let mut versions = match &base {
-                Some(commit) => target
-                    .tree_from_root(&commit.state.versions, &target.format.state_tree_format)?,
-                None => empty.clone(),
-            };
-            let mut operations = match &base {
-                Some(commit) => target
-                    .tree_from_root(&commit.state.operations, &target.format.state_tree_format)?,
-                None => empty,
-            };
-            let source_operations = self.tree_from_root(
-                &source_commit.state.operations,
-                &self.format.state_tree_format,
-            )?;
-            let delta = self.load_commit_delta(&source_commit).await?;
-            let physical_operation = delta.operation_ids.first().copied().unwrap_or_else(|| {
-                let mut bytes = [0_u8; 16];
-                bytes.copy_from_slice(&source_id.as_bytes()[..16]);
-                OperationId(uuid::Uuid::from_bytes(bytes))
-            });
-            for transition in &delta.changes {
-                let mut version = self
-                    .find_version(&source_commit, &transition.key, transition.next)
-                    .await?;
-                let binding_key = (transition.key.clone(), version.id);
-                let (binding, copied_payload) = if let Some(binding) = binding_map.get(&binding_key)
-                {
-                    (binding.clone(), false)
-                } else if let Some(base) = &base {
+            None => empty.clone(),
+        };
+        let mut operations = match &base {
+            Some(commit) => {
+                target.tree_from_root(&commit.state.operations, &target.format.state_tree_format)?
+            }
+            None => empty,
+        };
+        let source_operations = self.tree_from_root(
+            &source_commit.state.operations,
+            &self.format.state_tree_format,
+        )?;
+        let delta = self.load_commit_delta(&source_commit).await?;
+        let physical_operation = delta.operation_ids.first().copied().unwrap_or_else(|| {
+            let mut bytes = [0_u8; 16];
+            bytes.copy_from_slice(&source_id.as_bytes()[..16]);
+            OperationId(uuid::Uuid::from_bytes(bytes))
+        });
+        let mut copied_payloads = 0usize;
+        let mut copied_bytes = 0u64;
+        for transition in &delta.changes {
+            let mut version = self
+                .find_version(&source_commit, &transition.key, transition.next)
+                .await?;
+            let mut reusable = None;
+            if !force_rebind {
+                for parent in &mapped_parents {
+                    let parent = target.load_commit(*parent).await?;
                     match target
-                        .find_version(base, &transition.key, transition.next)
+                        .find_version(&parent, &transition.key, transition.next)
                         .await
                     {
-                        Ok(existing) => (existing.binding, false),
-                        Err(error) if error.code == ErrorCode::NoSuchVersion => (
-                            self.clone_physical_version_binding(
-                                target,
-                                &transition.key,
-                                &version,
-                                physical_operation,
-                                writer_fence_generation,
-                            )
-                            .await?,
-                            true,
-                        ),
+                        Ok(existing) => {
+                            reusable = Some(existing.binding);
+                            break;
+                        }
+                        Err(error) if error.code == ErrorCode::NoSuchVersion => {}
                         Err(error) => return Err(error),
                     }
-                } else {
-                    (
-                        self.clone_physical_version_binding(
+                }
+            }
+            let binding = match reusable {
+                Some(binding) => binding,
+                None => {
+                    let binding = self
+                        .clone_physical_version_binding(
                             target,
                             &transition.key,
                             &version,
                             physical_operation,
                             writer_fence_generation,
                         )
-                        .await?,
-                        true,
-                    )
-                };
-                if copied_payload {
+                        .await?;
                     let size = match &version.body.kind {
                         LogicalObjectVersionKindV1::Live { size, .. } => *size,
                         LogicalObjectVersionKindV1::DeleteMarker => 0,
                     };
-                    report.copied_bytes =
-                        report.copied_bytes.checked_add(size).ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::EntityTooLarge,
-                                "physical transfer byte count overflow",
-                            )
-                        })?;
-                    report.copied_objects += 1;
-                }
-                binding_map.insert(binding_key, binding.clone());
-                version.binding = binding;
-                version.validate()?;
-                versions = target_engine
-                    .put(
-                        &versions,
-                        version_tree_key(&transition.key, version.body.order, version.id),
-                        encode_canonical(&version)?,
-                    )
-                    .await?;
-                objects = if transition.delete_marker {
-                    target_engine.delete(&objects, &transition.key).await?
-                } else {
-                    target_engine
-                        .put(
-                            &objects,
-                            transition.key.clone(),
-                            encode_canonical(&CurrentObjectV1 {
-                                version: version.clone(),
-                            })?,
-                        )
-                        .await?
-                };
-            }
-            for operation in &delta.operation_ids {
-                let record = self
-                    .engine
-                    .get(&source_operations, operation.as_bytes())
-                    .await?
-                    .ok_or_else(|| {
+                    copied_bytes = copied_bytes.checked_add(size).ok_or_else(|| {
                         Error::new(
-                            ErrorCode::CorruptCommit,
-                            "physical transfer delta names a missing operation",
+                            ErrorCode::EntityTooLarge,
+                            "physical transfer byte count overflow",
                         )
                     })?;
-                operations = target_engine
-                    .put(&operations, operation.as_bytes().to_vec(), record)
-                    .await?;
-            }
-            let state = BucketStateV1 {
-                objects: TreeRootV1::from_tree(&objects)?,
-                versions: TreeRootV1::from_tree(&versions)?,
-                operations: TreeRootV1::from_tree(&operations)?,
+                    copied_payloads += 1;
+                    binding
+                }
             };
-            if state.operations != source_commit.state.operations {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "physical transfer replay did not reproduce the logical operation state",
-                ));
-            }
-            let prepared = target_write_store.prepare_node_pack(
-                tree_format_digest(&target.format.state_tree_format)?,
-                Vec::new(),
-            )?;
-            let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
-            let destination_commit = BucketCommitV1 {
-                state,
-                parents: mapped_parents,
-                generation: source_commit.generation,
-                delta,
-                node_pack,
-                writer_fence_generation,
-                author: source_commit.author,
-                message: source_commit.message,
-                created_at_millis: source_commit.created_at_millis,
-                metadata: source_commit.metadata,
+            version.binding = binding;
+            version.validate()?;
+            versions = target_engine
+                .put(
+                    &versions,
+                    version_tree_key(&transition.key, version.body.order, version.id),
+                    encode_canonical(&version)?,
+                )
+                .await?;
+            objects = if transition.delete_marker {
+                target_engine.delete(&objects, &transition.key).await?
+            } else {
+                target_engine
+                    .put(
+                        &objects,
+                        transition.key.clone(),
+                        encode_canonical(&CurrentObjectV1 {
+                            version: version.clone(),
+                        })?,
+                    )
+                    .await?
             };
-            let stored = target.store_commit(&destination_commit, prepared).await?;
-            let destination_id = stored.id;
-            target.finalize_stored_commit(stored).await?;
-            report.copied_objects += 1;
-            commit_map.insert(source_id, destination_id);
         }
-        Ok((commit_map, report))
+        for operation in &delta.operation_ids {
+            let record = self
+                .engine
+                .get(&source_operations, operation.as_bytes())
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "physical transfer delta names a missing operation",
+                    )
+                })?;
+            operations = target_engine
+                .put(&operations, operation.as_bytes().to_vec(), record)
+                .await?;
+        }
+        let state = BucketStateV1 {
+            objects: TreeRootV1::from_tree(&objects)?,
+            versions: TreeRootV1::from_tree(&versions)?,
+            operations: TreeRootV1::from_tree(&operations)?,
+        };
+        if state.operations != source_commit.state.operations {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "physical transfer replay did not reproduce the logical operation state",
+            ));
+        }
+        let prepared = target_write_store.prepare_node_pack(
+            tree_format_digest(&target.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
+        let destination_commit = BucketCommitV1 {
+            state,
+            parents: mapped_parents,
+            generation: source_commit.generation,
+            delta,
+            node_pack,
+            writer_fence_generation,
+            author: source_commit.author,
+            message: source_commit.message,
+            created_at_millis: source_commit.created_at_millis,
+            metadata: source_commit.metadata,
+        };
+        let destination_id = destination_commit.id()?;
+        if !force_rebind {
+            match target.load_commit(destination_id).await {
+                Ok(existing) if existing == destination_commit => {
+                    return Ok((destination_id, 0, 0, true));
+                }
+                Ok(_) => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "physical transfer destination commit ID collided",
+                    ));
+                }
+                Err(error) if error.code == ErrorCode::MissingClosure => {}
+                Err(error) => return Err(error),
+            }
+        }
+        let stored = target.store_commit(&destination_commit, prepared).await?;
+        target.finalize_stored_commit(stored).await?;
+        Ok((destination_id, copied_payloads + 1, copied_bytes, false))
+    }
+
+    async fn load_physical_transfer_mapping(&self, source: CommitId) -> Result<Option<CommitId>> {
+        self.plane
+            .get(GetRequest {
+                path: physical_transfer_mapping_path(&self.options.repository_prefix, source)?,
+                range: None,
+                physical_version: None,
+            })
+            .await?
+            .map(|object| decode_canonical(&object.bytes))
+            .transpose()
+    }
+
+    async fn store_physical_transfer_mapping(
+        &self,
+        source: CommitId,
+        destination: CommitId,
+    ) -> Result<()> {
+        self.store_immutable(
+            physical_transfer_mapping_path(&self.options.repository_prefix, source)?,
+            encode_canonical(&destination)?,
+        )
+        .await
+    }
+
+    async fn delete_physical_transfer_mapping(&self, source: CommitId) -> Result<()> {
+        let path = physical_transfer_mapping_path(&self.options.repository_prefix, source)?;
+        let Some(object) = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: None,
+                physical_version: None,
+            })
+            .await?
+        else {
+            return Ok(());
+        };
+        let token = object.metadata.token;
+        let physical = token
+            .version_id
+            .clone()
+            .map(|version_id| PhysicalVersion::Versioned { version_id })
+            .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+        match self.plane.delete_exact(&path, physical).await? {
+            DeleteOutcome::Deleted | DeleteOutcome::NotFound => Ok(()),
+            DeleteOutcome::TokenMismatch => Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "physical transfer mapping changed while removing a stale entry",
+            )),
+        }
     }
 
     /// Import portable immutable repository objects without moving a local
@@ -11540,6 +11575,22 @@ fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
     let mut key = b"s/".to_vec();
     key.extend_from_slice(commit.as_bytes());
     key
+}
+
+fn commit_closure_mapping_key(commit: CommitId) -> Vec<u8> {
+    let mut key = b"m/".to_vec();
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn physical_transfer_mapping_path(prefix: &str, source: CommitId) -> Result<ObjectPath> {
+    let encoded = hex::encode(source.as_bytes());
+    ObjectPath::new(format!(
+        "{prefix}/administration/v2/transfer-mappings/sha256/{}/{}/{}",
+        &encoded[..2],
+        &encoded[2..4],
+        encoded
+    ))
 }
 
 fn gc_dirty_root_v2_prefix(prefix: &str, epoch: OperationId) -> String {

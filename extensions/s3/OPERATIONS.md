@@ -172,6 +172,13 @@ source-to-destination commit mappings before persisting the next cursor. After
 the final result/ref CAS, repeatedly call `cleanup_commit_closure`; abandoned
 jobs require the same explicit bounded cleanup.
 
+The built-in physical clone/fetch/push/repair pipeline consumes at most 256
+commits per page and persists each successful source-to-destination mapping.
+Incremental transfers use point GETs against those mappings and never LIST the
+destination commit namespace. A mapping whose destination commit was reclaimed
+is exact-deleted and rebuilt; monitor stale-mapping rebuilds because frequent
+occurrences indicate transfer/GC retention policies are misaligned.
+
 ## Backup and restore
 
 A raw cross-bucket copy is not a valid repository restore: S3 assigns new

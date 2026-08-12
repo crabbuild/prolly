@@ -26,11 +26,20 @@ cleanup calls.
 Pins and tag/branch reflogs also expose bounded page APIs. A branch reflog
 cursor anchors its original head and remains stable if the live branch moves.
 
+Physical history transfer consumes the cursor in 256-commit pages and stores
+source-to-destination commit mappings both in the job tree and at sharded,
+immutable point-lookup paths in the destination. The destination mapping
+removes the previous repository-wide LIST and fingerprint pass from every
+clone, fetch, push, and repair. A missing mapped commit makes the mapping stale;
+the transfer exact-deletes it and reconstructs the commit idempotently.
+
 ## Consequences
 
 - Traversal memory and cursor size remain bounded at arbitrary DAG size.
 - Pages do not list the commit namespace and do not rediscover prior work.
 - Parent-before-child output removes whole-DAG buffering from clone and repair.
+- Incremental transfer cost is proportional to newly reachable commits and
+  uses no destination commit-namespace listing.
 - Workflow engines must durably save side effects/mappings before advancing the
   cursor and must schedule cleanup for abandoned jobs.
 - Legacy convenience APIs retain configured traversal limits but are not the

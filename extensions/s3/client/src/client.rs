@@ -401,7 +401,14 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
-        relative_pattern: "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
+        relative_pattern:
+            "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "administration/v2/transfer-mappings/sha256/<2>/<2>/<source-commit-id>",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: false,
         gc_managed: false,
@@ -4989,6 +4996,7 @@ mod tests {
             "journal-index/v2/heads/<branch-hex>.cbor",
             "journal-index/v2/<node-or-graph>-tree/nodes/sha256/<2>/<2>/<cid>",
             "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
+            "administration/v2/transfer-mappings/sha256/<2>/<2>/<source-commit-id>",
         ] {
             assert!(
                 PHYSICAL_PATH_FAMILIES

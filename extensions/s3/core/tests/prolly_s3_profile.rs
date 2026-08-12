@@ -191,7 +191,7 @@ async fn physical_push_replays_only_new_history_and_moves_destination_ref() {
         .await
         .unwrap();
     let destination = Repository::open(
-        destination_plane,
+        destination_plane.clone(),
         physical_options(".prolly/prolly-s3/push-destination"),
     )
     .await
@@ -208,6 +208,7 @@ async fn physical_push_replays_only_new_history_and_moves_destination_ref() {
         )
         .await
         .unwrap();
+    destination_plane.reset_request_counts();
 
     let report = source
         .push_to(
@@ -224,6 +225,9 @@ async fn physical_push_replays_only_new_history_and_moves_destination_ref() {
     // standalone node-pack object.
     assert_eq!(report.copied_objects, 2);
     assert_eq!(report.copied_bytes, b"incremental".len() as u64);
+    // The one LIST is bounded mutable-control version compaction for the ref
+    // move. Transfer itself performs no destination commit-namespace LIST.
+    assert_eq!(destination_plane.request_snapshot().list, 1);
     assert_eq!(
         destination
             .get_current("main", b"sync.txt")

@@ -120,6 +120,7 @@ The following are release blockers for a production claim:
 | Throttling | Sustained and burst load including transport retry attempts |
 | Hot branch | Queue latency, timeout policy, and lease renewal under peak load |
 | Scale | 1M live keys and 10M retained versions with reopen, list, diff, fsck, GC |
+| Transfer scale | Interrupted clone/push/repair at 10M commits with bounded RSS, zero commit-namespace LISTs, and stale-mapping rebuild |
 | Failure matrix | Process/network loss before and after every physical step |
 | Operations | Backup/restore, key rotation, takeover, GC, and lifecycle audits |
 | Resource bounds | Exercise the configured atomic-session bound and multipart restart contract |

@@ -18,6 +18,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 | journal-derived node tree | `P/journal-index/v2/node-tree/nodes/sha256/H0/H1/H` |
 | journal-derived graph tree | `P/journal-index/v2/graph-tree/nodes/sha256/H0/H1/H` |
 | resumable commit-closure state | `P/administration/v2/closure/E/tree/nodes/sha256/H0/H1/H` |
+| physical transfer mapping | `P/administration/v2/transfer-mappings/sha256/H0/H1/H` |
 | GC coordinator | `P/gc/v2/coordinator.cbor` |
 | GC dirty root | `P/gc/v2/dirty-roots/E/S/H` |
 
@@ -77,6 +78,16 @@ parent-before-child so clone and repair can checkpoint mappings without
 buffering the DAG. Finished or abandoned jobs exact-delete `E` in bounded
 cleanup calls; the state is not a GC candidate while its externally persisted
 cursor may still be live.
+
+Physical clone, fetch, push, and repair consume that traversal in pages of at
+most 256 commits. Each completed source commit records an immutable
+source-to-destination mapping. A later transfer resolves the mapping with one
+point GET and validates that the destination commit still exists; it never
+lists or fingerprints the destination commit namespace. If GC has removed the
+mapped commit, the stale mapping is exact-deleted and safely rebuilt. Mapping
+nodes inside the active traversal are committed only after all destination
+side effects for that page succeed, so retrying an interrupted page is
+idempotent.
 
 `E` is the hex GC epoch operation ID and `S` is a fixed-width, monotonically
 increasing dirty-root sequence. While an epoch is active, every branch, tag,
