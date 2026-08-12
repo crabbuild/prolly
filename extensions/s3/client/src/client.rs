@@ -40,7 +40,7 @@ use prolly_s3_core::{
     ObjectVersionId, ObjectWriteConditionV1, OperationId, PhysicalBatchV1,
     PhysicalMultipartCompletedPart, PhysicalMultipartPartResult, PhysicalMultipartSessionV1,
     PhysicalVersion, PhysicalVersioning, ProviderAttestationV1, ProviderProfileId, RefValueV1,
-    Repository, RepositoryOptions, Result, RetryAdvice, VersionSummary, WriterLeaseMaintenance,
+    Repository, RepositoryOptions, Result, RetryAdvice, ShardAuthorityMaintenance, VersionSummary,
 };
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -653,7 +653,7 @@ pub struct Client {
     provider_attestation: Arc<RwLock<ProviderAttestationV1>>,
     physical_multipart_parts: Arc<RwLock<BTreeMap<(String, u32), PhysicalMultipartPartResult>>>,
     physical_multipart_sessions: Arc<RwLock<BTreeMap<String, PhysicalMultipartSessionV1>>>,
-    writer_lease_maintenance: Option<Arc<WriterLeaseMaintenance>>,
+    shard_authority_maintenance: Option<Arc<ShardAuthorityMaintenance>>,
     node_index_maintenance: Option<Arc<prolly_s3_core::NodeIndexMaintenance>>,
     max_staged_batch_bytes: usize,
 }
@@ -665,7 +665,7 @@ pub struct ClientBuilder {
     repository_prefix: Option<String>,
     default_branch: Option<String>,
     writer: Option<String>,
-    writer_lease_duration: Option<Duration>,
+    shard_authority_lease_duration: Option<Duration>,
     read_only: bool,
     max_parallel_payload_writes: Option<usize>,
     max_cached_commits: Option<usize>,
@@ -770,32 +770,64 @@ impl Client {
         Ok((nodes, refs, graph))
     }
 
-    /// Perform an operator-authorized writer handoff after the previous
-    /// process and credentials have been independently stopped or revoked.
+    /// Take over one branch authority after the previous process and
+    /// credentials have been independently stopped or revoked.
+    ///
     /// Open this client read-only and ensure no derived branch/snapshot clients
-    /// are alive before calling.
+    /// are alive before calling. The branch-ref CAS is the fencing barrier;
+    /// unrelated branches and their writers are unaffected.
+    pub async fn takeover_branch_writer(
+        &mut self,
+        branch: impl AsRef<str>,
+        expected_writer: &str,
+        expected_generation: u64,
+        handoff_evidence: &str,
+    ) -> Result<u64> {
+        self.ensure_provider_qualified()?;
+        let branch = branch.as_ref();
+        validate_branch_name(branch)?;
+        let generation = {
+            let repository = Arc::get_mut(&mut self.repository).ok_or_else(|| {
+                invalid("branch writer takeover requires an unshared read-only client handle")
+            })?;
+            repository
+                .takeover_branch_writer(
+                    branch,
+                    expected_writer,
+                    expected_generation,
+                    handoff_evidence,
+                )
+                .await?
+        };
+        self.shard_authority_maintenance = Some(Arc::new(
+            self.repository.start_shard_authority_maintenance()?,
+        ));
+        self.node_index_maintenance = Some(Arc::new(
+            self.repository
+                .start_node_index_maintenance(Duration::from_secs(60), 1_000)?,
+        ));
+        Ok(generation)
+    }
+
+    /// Compatibility shorthand that takes over this client's selected branch.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use takeover_branch_writer to make the authority scope explicit"
+    )]
     pub async fn takeover_writer(
         &mut self,
         expected_writer: &str,
         expected_generation: u64,
         handoff_evidence: &str,
     ) -> Result<u64> {
-        self.ensure_provider_qualified()?;
-        let generation = {
-            let repository = Arc::get_mut(&mut self.repository).ok_or_else(|| {
-                invalid("writer takeover requires an unshared read-only client handle")
-            })?;
-            repository
-                .takeover_physical_writer(expected_writer, expected_generation, handoff_evidence)
-                .await?
-        };
-        self.writer_lease_maintenance =
-            Some(Arc::new(self.repository.start_writer_lease_maintenance()?));
-        self.node_index_maintenance = Some(Arc::new(
-            self.repository
-                .start_node_index_maintenance(Duration::from_secs(60), 1_000)?,
-        ));
-        Ok(generation)
+        let branch = self.branch.clone();
+        self.takeover_branch_writer(
+            branch,
+            expected_writer,
+            expected_generation,
+            handoff_evidence,
+        )
+        .await
     }
 
     pub fn on_branch(&self, branch: impl Into<String>) -> Result<Self> {
@@ -814,7 +846,7 @@ impl Client {
             provider_attestation: self.provider_attestation.clone(),
             physical_multipart_parts: self.physical_multipart_parts.clone(),
             physical_multipart_sessions: self.physical_multipart_sessions.clone(),
-            writer_lease_maintenance: self.writer_lease_maintenance.clone(),
+            shard_authority_maintenance: self.shard_authority_maintenance.clone(),
             node_index_maintenance: self.node_index_maintenance.clone(),
             max_staged_batch_bytes: self.max_staged_batch_bytes,
         })
@@ -1877,9 +1909,17 @@ impl ClientBuilder {
         self.writer = Some(writer.into());
         self
     }
-    pub fn writer_lease_duration(mut self, duration: Duration) -> Self {
-        self.writer_lease_duration = Some(duration);
+    pub fn shard_authority_lease_duration(mut self, duration: Duration) -> Self {
+        self.shard_authority_lease_duration = Some(duration);
         self
+    }
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "use shard_authority_lease_duration; authority is scoped per branch/system namespace"
+    )]
+    pub fn writer_lease_duration(self, duration: Duration) -> Self {
+        self.shard_authority_lease_duration(duration)
     }
     pub fn read_only(mut self, value: bool) -> Self {
         self.read_only = value;
@@ -2044,9 +2084,9 @@ impl ClientBuilder {
         if let Some(value) = self.writer {
             options.writer = value;
         }
-        if let Some(value) = self.writer_lease_duration {
+        if let Some(value) = self.shard_authority_lease_duration {
             options.writer_lease_millis = u64::try_from(value.as_millis())
-                .map_err(|_| invalid("writer lease duration exceeds u64 milliseconds"))?;
+                .map_err(|_| invalid("shard-authority lease duration exceeds u64 milliseconds"))?;
         }
         options.read_only = self.read_only;
         if let Some(value) = self.max_parallel_payload_writes {
@@ -2080,7 +2120,7 @@ impl ClientBuilder {
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
         }
-        let maintain_physical_writer = !options.read_only;
+        let maintain_shard_authority = !options.read_only;
         let branch = options.default_branch.clone();
         let plane = Arc::new(AwsS3ObjectPlane::new(aws, bucket.clone()));
         let provider_identity = self
@@ -2132,11 +2172,11 @@ impl ClientBuilder {
             (repository, attestation)
         };
         let repository = Arc::new(repository);
-        let writer_lease_maintenance = maintain_physical_writer
-            .then(|| repository.start_writer_lease_maintenance())
+        let shard_authority_maintenance = maintain_shard_authority
+            .then(|| repository.start_shard_authority_maintenance())
             .transpose()?
             .map(Arc::new);
-        let node_index_maintenance = maintain_physical_writer
+        let node_index_maintenance = maintain_shard_authority
             .then(|| {
                 repository.start_node_index_maintenance(
                     self.node_index_maintenance_interval
@@ -2159,7 +2199,7 @@ impl ClientBuilder {
             provider_attestation: Arc::new(RwLock::new(attestation)),
             physical_multipart_parts: Arc::new(RwLock::new(BTreeMap::new())),
             physical_multipart_sessions: Arc::new(RwLock::new(BTreeMap::new())),
-            writer_lease_maintenance,
+            shard_authority_maintenance,
             node_index_maintenance,
             max_staged_batch_bytes,
         })

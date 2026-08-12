@@ -220,7 +220,7 @@ reachability checks.
 ## Request budgets
 
 These budgets exclude provider retries, cold open, provider qualification,
-lease renewal, checkpointing, GC, and cross-bucket payload transfer:
+authority renewal, checkpointing, GC, and cross-bucket payload transfer:
 
 | Warm logical operation | S3 calls |
 |---|---:|
@@ -247,7 +247,7 @@ Required release evidence includes:
 - AWS general-purpose bucket validation in target regions;
 - latency and request-price measurements for expected traffic mixes;
 - throttling and retry behavior at sustained and burst load;
-- hot-branch queue latency and lease renewal under load;
+- hot-branch queue latency and authority renewal under load;
 - one million live keys and at least ten million retained versions;
 - crash tests around every physical mutation and ref CAS;
 - backup/restore and exact-version GC drills with lifecycle guardrails;

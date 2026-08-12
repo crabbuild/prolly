@@ -284,6 +284,40 @@ run concurrently. The short metadata-publication phase is serialized per
 branch, while independent branches can publish concurrently; a stale expected
 head fails explicitly.
 
+## Hand off one branch writer
+
+Writer authority is branch-scoped. Open the replacement client read-only, make
+the previous process and credentials unable to publish, then perform an
+explicit generation-checked takeover:
+
+```rust
+let mut replacement = Client::builder()
+    .aws_client(aws)
+    .bucket(bucket)
+    .writer("repository-service-b")
+    .read_only(true)
+    .provider_identity(ProviderIdentity::aws_region("us-west-2"))
+    .attestation_signer(attestation_signer)
+    .open()
+    .await?;
+
+let generation = replacement
+    .takeover_branch_writer(
+        "main",
+        "repository-service-a",
+        7,
+        "old credentials revoked and process isolated",
+    )
+    .await?;
+
+assert_eq!(generation, 8);
+```
+
+The no-target-change branch-ref CAS is the fencing barrier. After it succeeds,
+the old writer fails its authority validation before uploading payload bytes.
+Take over additional branches independently; do not use one branch handoff as
+evidence that another branch changed owner.
+
 ## Add a persistent node cache
 
 Foyer keeps verified immutable Prolly nodes in bounded memory and local disk.
@@ -443,7 +477,9 @@ For a large repository, call `advance_node_index` until its report says
 
 ## Limitations
 
-- No unmanaged or multi-process concurrent writers.
+- Managed writers may run in multiple processes when each process owns a
+  distinct branch authority. A branch still has exactly one active writer, and
+  direct S3 mutations outside this client remain unsupported.
 - No repository-level deduplication, chunking, or partial-file updates.
 - Commit sessions buffer bodies in memory and fail closed at the configured
   aggregate byte limit; use physical multipart for large individual files.

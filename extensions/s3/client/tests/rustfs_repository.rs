@@ -16,7 +16,7 @@ use md5::{Digest as _, Md5};
 use prolly_s3_client::{core::PhysicalBatchMutationV1, FoyerNodeCache, FoyerNodeCacheConfig};
 use prolly_s3_client::{
     core::{ObjectHeaders, PhysicalMultipartCompletedPart, Repository, RepositoryOptions},
-    AwsS3ObjectPlane,
+    AwsS3ObjectPlane, Client, HmacAttestationSigner, ProviderIdentity,
 };
 use sha2::Sha256;
 
@@ -30,6 +30,18 @@ fn unique_name(label: &str) -> String {
         .expect("system clock")
         .as_nanos();
     format!("integration/{label}/{nanos}")
+}
+
+fn provider_identity() -> ProviderIdentity {
+    ProviderIdentity::s3_compatible(
+        std::env::var("PROLLY_RUSTFS_ENDPOINT")
+            .unwrap_or_else(|_| "http://127.0.0.1:9000".to_string()),
+        "us-east-1",
+    )
+}
+
+fn attestation_signer() -> Arc<HmacAttestationSigner> {
+    Arc::new(HmacAttestationSigner::single("rustfs-authority-test-v1", vec![0x31; 32]).unwrap())
 }
 
 async fn rustfs_client() -> (aws_sdk_s3::Client, String) {
@@ -180,6 +192,89 @@ async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
         1,
         "unexpected warm historical-read calls: {calls:?}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_branch_takeover_fences_old_client_before_payload_upload() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("client-branch-takeover-repository");
+    let key_prefix = unique_name("client-branch-takeover-object");
+    let old_writer = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-old-branch-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .initialize()
+        .await
+        .unwrap();
+    old_writer
+        .put_object()
+        .bucket(&bucket)
+        .key(format!("{key_prefix}/before-takeover.bin"))
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"before"))
+        .send()
+        .await
+        .unwrap();
+
+    let mut new_writer = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-new-branch-writer")
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .open()
+        .await
+        .unwrap();
+    assert_eq!(
+        new_writer
+            .takeover_branch_writer(
+                "main",
+                "rustfs-old-branch-writer",
+                1,
+                "old test writer credentials revoked and process isolated",
+            )
+            .await
+            .unwrap(),
+        2
+    );
+
+    old_writer.reset_s3_operation_metrics();
+    let error = old_writer
+        .put_object()
+        .bucket(&bucket)
+        .key(format!("{key_prefix}/must-not-upload.bin"))
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"stale"))
+        .send()
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, prolly_s3_client::ErrorCode::PreconditionFailed);
+    let stale_calls = old_writer.reset_s3_operation_metrics();
+    assert_eq!(
+        stale_calls.put_object, 0,
+        "stale client uploaded bytes after branch takeover: {stale_calls:?}"
+    );
+    assert_eq!(
+        stale_calls.get_object, 1,
+        "stale client must fail at the authority point read: {stale_calls:?}"
+    );
+
+    new_writer
+        .put_object()
+        .bucket(&bucket)
+        .key(format!("{key_prefix}/after-takeover.bin"))
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"after"))
+        .send()
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

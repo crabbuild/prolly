@@ -887,11 +887,11 @@ impl<P: ObjectPlane> NodeLocator for ProllyNodeIndex<P> {
     }
 }
 
-pub struct WriterLeaseMaintenance {
+pub struct ShardAuthorityMaintenance {
     task: tokio::task::JoinHandle<()>,
 }
 
-impl Drop for WriterLeaseMaintenance {
+impl Drop for ShardAuthorityMaintenance {
     fn drop(&mut self) {
         self.task.abort();
     }
@@ -2357,7 +2357,7 @@ impl<P: ObjectPlane> Repository<P> {
     /// Renew every cached branch/system authority permit. The repository-wide
     /// v1 lease is renewed only when this instance was opened through the
     /// legacy migration adapter.
-    pub async fn renew_writer_lease(&self) -> Result<()> {
+    pub async fn renew_shard_authorities(&self) -> Result<()> {
         let _authority_renewal = self.authority_renewal.lock().await;
         if self
             .writer_lease
@@ -2395,6 +2395,14 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let _renewal = self.lease_renewal.lock().await;
         self.renew_writer_lease_inner().await
+    }
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "use renew_shard_authorities; this name is retained for source compatibility"
+    )]
+    pub async fn renew_writer_lease(&self) -> Result<()> {
+        self.renew_shard_authorities().await
     }
 
     async fn renew_writer_lease_inner(&self) -> Result<()> {
@@ -2464,11 +2472,13 @@ impl<P: ObjectPlane> Repository<P> {
     /// Run independent shard-authority renewal until the returned handle is
     /// dropped. A failed or ambiguous renewal fences the affected writer
     /// instance before the task exits.
-    pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
+    pub fn start_shard_authority_maintenance(
+        self: &Arc<Self>,
+    ) -> Result<ShardAuthorityMaintenance> {
         if self.options.read_only {
             return Err(Error::new(
                 ErrorCode::MissingCapability,
-                "writer lease maintenance requires a writable physical repository",
+                "shard-authority maintenance requires a writable repository",
             ));
         }
         let interval = Duration::from_millis((self.options.writer_lease_millis / 3).max(100));
@@ -2479,12 +2489,20 @@ impl<P: ObjectPlane> Repository<P> {
                 let Some(repository) = weak.upgrade() else {
                     break;
                 };
-                if repository.renew_writer_lease().await.is_err() {
+                if repository.renew_shard_authorities().await.is_err() {
                     break;
                 }
             }
         });
-        Ok(WriterLeaseMaintenance { task })
+        Ok(ShardAuthorityMaintenance { task })
+    }
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "use start_shard_authority_maintenance; this name is retained for source compatibility"
+    )]
+    pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<ShardAuthorityMaintenance> {
+        self.start_shard_authority_maintenance()
     }
 
     /// Continuously advance the rebuildable v2 node index outside foreground
@@ -2637,6 +2655,10 @@ impl<P: ObjectPlane> Repository<P> {
 
     /// Legacy repository-wide takeover adapter. New deployments should call
     /// `takeover_branch_writer` independently for each authority shard.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use takeover_branch_writer independently for each branch authority scope"
+    )]
     pub async fn takeover_physical_writer(
         &mut self,
         expected_writer: &str,
