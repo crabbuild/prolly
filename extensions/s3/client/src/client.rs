@@ -275,10 +275,16 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: true,
     },
     PhysicalPathFamily {
+        relative_pattern: "publications/v2/sha256/<2>/<2>/<publication-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: true,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
         relative_pattern: "payloads/v2/<repository-id-hex>/sha256/<2>/<2>/<content-id>",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: true,
-        gc_managed: true,
+        gc_managed: false,
     },
     PhysicalPathFamily {
         relative_pattern: "refs/{heads,tags}/<name-hex>",
@@ -4923,6 +4929,7 @@ mod tests {
             "commit-graph/v2/head.cbor",
             "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
             "commits/sha256/<2>/<2>/<commit-id>",
+            "publications/v2/sha256/<2>/<2>/<publication-id>",
             "payloads/v2/<repository-id-hex>/sha256/<2>/<2>/<content-id>",
             "refs/{heads,tags}/<name-hex>",
             "refs/v2/heads/<name-hex>",

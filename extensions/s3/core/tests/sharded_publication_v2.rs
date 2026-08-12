@@ -4,8 +4,8 @@ use prolly_s3_core::{
     AuthorityScopeV2, AuthorityStampV2, BucketCommitV2, BucketDeltaV1, BucketStateV1,
     CommitGeneration, CommitIdV2, CommitObjectV2, CommitPublicationV2, ErrorCode, GetRequest,
     ListRequest, MemoryObjectPlane, NodePackEntryV1, NodePackV1, ObjectPath, ObjectPlane,
-    OperationId, RepositoryId, ShardWriterAuthorityV2, ShardedBranchPublisherV2, TakeoverRequestV2,
-    TreeFormatDigest, TreeRootV1,
+    OperationId, RefGeneration, RepositoryId, ShardWriterAuthorityV2, ShardedBranchPublisherV2,
+    TakeoverRequestV2, TreeFormatDigest, TreeRootV1,
 };
 
 fn operation(value: u128) -> OperationId {
@@ -515,4 +515,122 @@ async fn v2_lease_and_ref_updates_remain_within_the_same_control_version_bound()
     }
     let ref_path = ObjectPath::new(".prolly/v2/refs/v2/heads/6d61696e").unwrap();
     assert!(exact_version_count(&plane, &ref_path).await <= 4);
+}
+
+#[tokio::test]
+async fn publication_journal_pages_a_stable_branch_snapshot_without_listing() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = RepositoryId::from_hash([0xcc; 32]);
+    let authority = Arc::new(
+        ShardWriterAuthorityV2::new(
+            plane.clone(),
+            ".prolly/v2",
+            repository,
+            Duration::from_secs(60),
+        )
+        .unwrap(),
+    );
+    let publisher =
+        ShardedBranchPublisherV2::new(plane, ".prolly/v2", repository, authority.clone()).unwrap();
+    let permit = authority
+        .acquire(scope("main"), "writer-a", 1_000, operation(100))
+        .await
+        .unwrap();
+    let mut root = commit(permit.stamp(), Vec::new(), 0, "root");
+    root.author = "writer-a".to_string();
+    let mut current = publisher
+        .create(CommitPublicationV2 {
+            permit: &permit,
+            branch: "main",
+            commit: &root,
+            node_pack: None,
+            operation: operation(101),
+            message: "root",
+            now_millis: 1_001,
+        })
+        .await
+        .unwrap();
+    for generation in 1..=2 {
+        let mut next = commit(
+            permit.stamp(),
+            vec![current.value.target],
+            generation,
+            "advance",
+        );
+        next.author = "writer-a".to_string();
+        current = publisher
+            .store_and_publish(
+                current,
+                CommitPublicationV2 {
+                    permit: &permit,
+                    branch: "main",
+                    commit: &next,
+                    node_pack: None,
+                    operation: operation(101 + u128::from(generation)),
+                    message: "advance",
+                    now_millis: 1_001 + generation,
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    let snapshot = publisher.open_journal("main").await.unwrap();
+    assert_eq!(snapshot.next_generation, Some(RefGeneration(2)));
+    let snapshot_bytes = prolly_s3_core::encode_canonical(&snapshot).unwrap();
+    let snapshot = prolly_s3_core::decode_canonical(&snapshot_bytes).unwrap();
+
+    let mut next = commit(
+        permit.stamp(),
+        vec![current.value.target],
+        3,
+        "after snapshot",
+    );
+    next.author = "writer-a".to_string();
+    let latest = publisher
+        .store_and_publish(
+            current,
+            CommitPublicationV2 {
+                permit: &permit,
+                branch: "main",
+                commit: &next,
+                node_pack: None,
+                operation: operation(104),
+                message: "after snapshot",
+                now_millis: 1_004,
+            },
+        )
+        .await
+        .unwrap();
+
+    let first = publisher.read_journal_page(&snapshot, 2).await.unwrap();
+    assert_eq!(
+        first
+            .entries
+            .iter()
+            .map(|entry| entry.event.generation)
+            .collect::<Vec<_>>(),
+        vec![RefGeneration(2), RefGeneration(1)]
+    );
+    let second = publisher
+        .read_journal_page(first.continuation.as_ref().unwrap(), 2)
+        .await
+        .unwrap();
+    assert_eq!(second.entries.len(), 1);
+    assert_eq!(second.entries[0].event.generation, RefGeneration(0));
+    assert!(second.continuation.is_none());
+
+    let latest_event = publisher
+        .load_publication(latest.value.publication)
+        .await
+        .unwrap();
+    assert!(latest_event.matches_ref(&latest.value).unwrap());
+    assert_eq!(
+        publisher
+            .open_journal("main")
+            .await
+            .unwrap()
+            .next_generation,
+        Some(RefGeneration(3))
+    );
 }

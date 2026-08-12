@@ -88,6 +88,7 @@ hash_id!(ObjectVersionId, "pov1_");
 hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
 hash_id!(ReflogEntryIdV2, "prl2_");
+hash_id!(PublicationEventIdV2, "ppe2_");
 hash_id!(TreeFormatDigest, "ptf1_");
 hash_id!(ProviderProfileId, "ppf1_");
 hash_id!(GcPlanId, "pgc1_");
@@ -1586,6 +1587,69 @@ impl ReflogEntryV2 {
     }
 }
 
+/// Immutable, content-addressed record for one successful branch-ref
+/// transition. A ref points at the newest event and events point backward,
+/// forming a stable per-branch publication journal without namespace scans.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublicationEventV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub generation: RefGeneration,
+    pub previous: Option<PublicationEventIdV2>,
+    pub old_target: Option<CommitIdV2>,
+    pub new_target: CommitIdV2,
+    pub operation: OperationId,
+    pub reflog: ReflogEntryIdV2,
+    pub authority: AuthorityStampV2,
+    pub created_at_millis: u64,
+}
+
+impl PublicationEventV2 {
+    pub fn id(&self) -> Result<PublicationEventIdV2> {
+        self.validate()?;
+        let bytes = encode_canonical(self)?;
+        Ok(PublicationEventIdV2(domain_hash(
+            b"prolly-s3/publication-event/v2",
+            &[&bytes],
+        )))
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        crate::repository::validate_branch(&self.branch)?;
+        self.authority.validate(
+            self.repository,
+            &AuthorityScopeV2::Branch {
+                name: self.branch.clone(),
+            },
+        )?;
+        let link_shape_is_valid = if self.generation.0 == 0 {
+            self.previous.is_none() && self.old_target.is_none()
+        } else {
+            self.previous.is_some() && self.old_target.is_some()
+        };
+        if self.operation.is_nil() || !link_shape_is_valid {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 publication event has an invalid journal link",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn matches_ref(&self, reference: &RefValueV2) -> Result<bool> {
+        Ok(self.id()? == reference.publication
+            && self.repository == reference.authority.repository
+            && self.branch == reference.inline_reflog.branch
+            && self.generation == reference.generation
+            && self.old_target == reference.previous_target
+            && self.new_target == reference.target
+            && self.operation == reference.operation
+            && self.reflog == reference.reflog
+            && self.authority == reference.authority
+            && self.created_at_millis == reference.updated_at_millis)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefValueV2 {
     pub target: CommitIdV2,
@@ -1593,6 +1657,7 @@ pub struct RefValueV2 {
     pub generation: RefGeneration,
     pub operation: OperationId,
     pub reflog: ReflogEntryIdV2,
+    pub publication: PublicationEventIdV2,
     pub inline_reflog: ReflogEntryV2,
     pub authority: AuthorityStampV2,
     pub updated_at_millis: u64,

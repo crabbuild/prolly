@@ -10,6 +10,7 @@ any protocol v1 record. `P` is the configured repository prefix.
 | maintenance gate | `P/authority/v2/maintenance/gate.cbor` |
 | branch ref | `P/refs/v2/heads/N` |
 | authority-stamped commit object | `P/commits/v2/sha256/H0/H1/H` |
+| publication event | `P/publications/v2/sha256/H0/H1/H` |
 | immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
 
 `N` is lowercase hex of the UTF-8 branch or system-namespace name. The
@@ -25,6 +26,13 @@ Every branch publication requires exact equality between the active permit's
 authority stamp, the commit authority stamp, and the resulting ref authority
 stamp. The ref CAS is reconciled by exact canonical bytes after a lost or
 ambiguous response. A different value at the path is a real ref conflict.
+
+Before the ref CAS, the writer stores a content-addressed
+`PublicationEventV2`. The ref points at that event, and the event points at the
+previous event for the same branch. Consumers open the mutable ref once and
+then page newest-to-oldest through an immutable snapshot without listing a
+namespace. A losing CAS may leave an unreachable event, but it cannot enter the
+journal and is safe for GC to reclaim.
 
 `R` is lowercase hex of the repository ID. A live `ObjectVersionV2` carries
 the full derived payload path and optional provider VersionId; a delete marker

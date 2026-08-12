@@ -29,7 +29,8 @@ pub use object_plane::*;
 pub use payload_v2::ImmutablePayloadStoreV2;
 pub use prolly::Cid;
 pub use publication_v2::{
-    AppliedBranchBarrierV2, CommitPublicationV2, LoadedRefV2, ShardedBranchPublisherV2,
+    AppliedBranchBarrierV2, CommitPublicationV2, LoadedRefV2, PublicationJournalCursorV2,
+    PublicationJournalEntryV2, PublicationJournalPageV2, ShardedBranchPublisherV2,
 };
 pub use repository::{
     version_cursor_after_key, BranchHead, BranchPage, CatalogBranchPage, CatalogTagPage,

@@ -85,6 +85,14 @@ limit. Protocol v2 uses immutable derived payload keys and qualifies finite
 providers only when their per-key limit exceeds the mutable-control bound plus
 two versions of safety headroom.
 
+Protocol-v2 refs point at immutable publication events. Each event links to the
+previous event for the same branch, so an indexer opens the ref once, persists
+the returned journal cursor, and resumes without listing commits or refs. The
+cursor is anchored to its original head; a concurrently advancing branch does
+not change that traversal. Publishing the event adds one immutable write to the
+v2 foreground path. A failed competing ref CAS can leave an unreachable event;
+retain it until the v2 concurrent-GC gate is enabled.
+
 ## Conflict and outage handling
 
 - A stale `expected_head` or branch-ref CAS returns a conflict. Re-read and let

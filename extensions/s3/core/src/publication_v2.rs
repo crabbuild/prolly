@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     encode_canonical, AuthorityPermitV2, AuthorityScopeV2, BranchRefBarrierV2, BucketCommitV2,
     CommitIdV2, CommitObjectV2, CompareExchange, CompareExchangeOutcome, Error, ErrorCode,
     GetRequest, ImmutablePut, MutableControlStore, NodePackV1, ObjectPath, ObjectPlane,
-    OperationId, PendingAuthorityV2, RefGeneration, RefValueV2, ReflogEntryV2, RepositoryId,
-    Result, RetryAdvice, ShardWriterAuthorityV2, StorageToken,
-    DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+    OperationId, PendingAuthorityV2, PublicationEventIdV2, PublicationEventV2, RefGeneration,
+    RefValueV2, ReflogEntryV2, RepositoryId, Result, RetryAdvice, ShardWriterAuthorityV2,
+    StorageToken, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 #[derive(Clone, Debug)]
@@ -19,6 +21,32 @@ pub struct LoadedRefV2 {
 pub struct AppliedBranchBarrierV2 {
     pub reference: LoadedRefV2,
     barrier: BranchRefBarrierV2,
+}
+
+/// Durable cursor for one immutable snapshot of a branch publication journal.
+/// Persist this value between pages; it never depends on the mutable ref after
+/// `open_journal` returns.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublicationJournalCursorV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub snapshot_head: PublicationEventIdV2,
+    pub next: Option<PublicationEventIdV2>,
+    pub next_generation: Option<RefGeneration>,
+    pub next_target: Option<CommitIdV2>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PublicationJournalEntryV2 {
+    pub id: PublicationEventIdV2,
+    pub event: PublicationEventV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PublicationJournalPageV2 {
+    /// Newest-to-oldest events from the cursor's stable snapshot.
+    pub entries: Vec<PublicationJournalEntryV2>,
+    pub continuation: Option<PublicationJournalCursorV2>,
 }
 
 pub struct CommitPublicationV2<'a> {
@@ -127,12 +155,26 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             message: request.message.to_string(),
             created_at_millis: request.now_millis,
         };
+        let event = PublicationEventV2 {
+            repository: self.repository,
+            branch: request.branch.to_string(),
+            generation: RefGeneration(0),
+            previous: None,
+            old_target: None,
+            new_target: target,
+            operation: request.operation,
+            reflog: reflog.id()?,
+            authority: stamp.clone(),
+            created_at_millis: request.now_millis,
+        };
+        let publication = self.store_publication(&event).await?;
         let value = RefValueV2 {
             target,
             previous_target: None,
             generation: RefGeneration(0),
             operation: request.operation,
             reflog: reflog.id()?,
+            publication,
             inline_reflog: reflog,
             authority: stamp,
             updated_at_millis: request.now_millis,
@@ -185,14 +227,30 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             message: request.message.to_string(),
             created_at_millis: request.now_millis,
         };
+        let generation =
+            RefGeneration(current.value.generation.0.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "v2 ref generation overflow")
+            })?);
+        let event = PublicationEventV2 {
+            repository: self.repository,
+            branch: request.branch.to_string(),
+            generation,
+            previous: Some(current.value.publication),
+            old_target: Some(current.value.target),
+            new_target: target,
+            operation: request.operation,
+            reflog: reflog.id()?,
+            authority: stamp.clone(),
+            created_at_millis: request.now_millis,
+        };
+        let publication = self.store_publication(&event).await?;
         let value = RefValueV2 {
             target,
             previous_target: Some(current.value.target),
-            generation: RefGeneration(current.value.generation.0.checked_add(1).ok_or_else(
-                || Error::new(ErrorCode::InternalInvariant, "v2 ref generation overflow"),
-            )?),
+            generation,
             operation: request.operation,
             reflog: reflog.id()?,
+            publication,
             inline_reflog: reflog,
             authority: stamp,
             updated_at_millis: request.now_millis,
@@ -243,14 +301,30 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             message: message.to_string(),
             created_at_millis: now_millis,
         };
+        let generation =
+            RefGeneration(current.value.generation.0.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "v2 ref generation overflow")
+            })?);
+        let event = PublicationEventV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            generation,
+            previous: Some(current.value.publication),
+            old_target: Some(current.value.target),
+            new_target: current.value.target,
+            operation,
+            reflog: reflog.id()?,
+            authority: stamp.clone(),
+            created_at_millis: now_millis,
+        };
+        let publication = self.store_publication(&event).await?;
         let value = RefValueV2 {
             target: current.value.target,
             previous_target: Some(current.value.target),
-            generation: RefGeneration(current.value.generation.0.checked_add(1).ok_or_else(
-                || Error::new(ErrorCode::InternalInvariant, "v2 ref generation overflow"),
-            )?),
+            generation,
             operation,
             reflog: reflog.id()?,
+            publication,
             inline_reflog: reflog,
             authority: stamp.clone(),
             updated_at_millis: now_millis,
@@ -301,6 +375,123 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             })
             .await?;
         Ok(id)
+    }
+
+    async fn store_publication(&self, event: &PublicationEventV2) -> Result<PublicationEventIdV2> {
+        event.validate()?;
+        let id = event.id()?;
+        let bytes = encode_canonical(event)?;
+        self.plane
+            .put_immutable(ImmutablePut {
+                path: self.publication_path(id)?,
+                expected_sha256: crate::codec::sha256(&bytes),
+                bytes,
+            })
+            .await?;
+        Ok(id)
+    }
+
+    pub async fn load_publication(&self, id: PublicationEventIdV2) -> Result<PublicationEventV2> {
+        let stored = self
+            .plane
+            .get(GetRequest {
+                path: self.publication_path(id)?,
+                range: None,
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "v2 publication journal event is missing",
+                )
+            })?;
+        let event: PublicationEventV2 = crate::decode_canonical(&stored.bytes)?;
+        event.validate()?;
+        if event.id()? != id || event.repository != self.repository {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 publication event does not match its content address",
+            ));
+        }
+        Ok(event)
+    }
+
+    pub async fn open_journal(&self, branch: &str) -> Result<PublicationJournalCursorV2> {
+        let reference = self.load(branch).await?;
+        let cursor = PublicationJournalCursorV2 {
+            repository: self.repository,
+            branch: branch.to_string(),
+            snapshot_head: reference.value.publication,
+            next: Some(reference.value.publication),
+            next_generation: Some(reference.value.generation),
+            next_target: Some(reference.value.target),
+        };
+        self.validate_journal_cursor(&cursor)?;
+        Ok(cursor)
+    }
+
+    pub async fn read_journal_page(
+        &self,
+        cursor: &PublicationJournalCursorV2,
+        limit: usize,
+    ) -> Result<PublicationJournalPageV2> {
+        self.validate_journal_cursor(cursor)?;
+        if !(1..=1_000).contains(&limit) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 publication journal page limit must be between 1 and 1,000",
+            ));
+        }
+        let mut next = cursor.next;
+        let mut next_generation = cursor.next_generation;
+        let mut next_target = cursor.next_target;
+        let mut entries = Vec::with_capacity(limit.min(64));
+        while entries.len() < limit {
+            let Some(id) = next else { break };
+            let event = self.load_publication(id).await?;
+            if event.branch != cursor.branch
+                || Some(event.generation) != next_generation
+                || Some(event.new_target) != next_target
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "v2 publication journal event does not match its cursor link",
+                ));
+            }
+            next = event.previous;
+            next_generation = event
+                .previous
+                .map(|_| RefGeneration(event.generation.0.saturating_sub(1)));
+            next_target = event.old_target;
+            entries.push(PublicationJournalEntryV2 { id, event });
+        }
+        let continuation = next.map(|next| PublicationJournalCursorV2 {
+            repository: cursor.repository,
+            branch: cursor.branch.clone(),
+            snapshot_head: cursor.snapshot_head,
+            next: Some(next),
+            next_generation,
+            next_target,
+        });
+        Ok(PublicationJournalPageV2 {
+            entries,
+            continuation,
+        })
+    }
+
+    fn validate_journal_cursor(&self, cursor: &PublicationJournalCursorV2) -> Result<()> {
+        crate::repository::validate_branch(&cursor.branch)?;
+        let link_presence_matches = cursor.next.is_some()
+            && cursor.next_generation.is_some()
+            && cursor.next_target.is_some();
+        if cursor.repository != self.repository || !link_presence_matches {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 publication journal cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
     }
 
     async fn load_commit(&self, id: CommitIdV2) -> Result<BucketCommitV2> {
@@ -386,6 +577,17 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
         let encoded = hex::encode(id.as_bytes());
         ObjectPath::new(format!(
             "{}/commits/v2/sha256/{}/{}/{}",
+            self.prefix,
+            &encoded[..2],
+            &encoded[2..4],
+            encoded
+        ))
+    }
+
+    fn publication_path(&self, id: PublicationEventIdV2) -> Result<ObjectPath> {
+        let encoded = hex::encode(id.as_bytes());
+        ObjectPath::new(format!(
+            "{}/publications/v2/sha256/{}/{}/{}",
             self.prefix,
             &encoded[..2],
             &encoded[2..4],

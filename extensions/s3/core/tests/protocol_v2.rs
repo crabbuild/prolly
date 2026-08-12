@@ -2,8 +2,8 @@ use prolly_s3_core::{
     encode_canonical, AuthorityLeaseStateV2, AuthorityLeaseV2, AuthorityScopeV2, AuthorityStampV2,
     BucketCommitV2, BucketDeltaV1, BucketStateV1, CommitGeneration, CommitIdV2, CommitObjectV1,
     CommitObjectV2, ErrorCode, NodePackEntryV1, NodePackV1, ObjectHeaders, OperationId,
-    PhysicalMultipartSessionV2, PhysicalMutationIdentityV2, RefGeneration, RefValueV2,
-    ReflogEntryV2, RepositoryId, TreeFormatDigest, TreeRootV1,
+    PhysicalMultipartSessionV2, PhysicalMutationIdentityV2, PublicationEventV2, RefGeneration,
+    RefValueV2, ReflogEntryV2, RepositoryId, TreeFormatDigest, TreeRootV1,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -61,18 +61,32 @@ fn v2_publication_records_have_frozen_content_identities() {
         message: "initialize".to_string(),
         created_at_millis: 10_000,
     };
+    let publication = PublicationEventV2 {
+        repository: lease.repository,
+        branch: "main".to_string(),
+        generation: RefGeneration(0),
+        previous: None,
+        old_target: None,
+        new_target: target,
+        operation,
+        reflog: reflog.id().unwrap(),
+        authority: authority.clone(),
+        created_at_millis: 10_000,
+    };
     let reference = RefValueV2 {
         target,
         previous_target: None,
         generation: RefGeneration(0),
         operation,
         reflog: reflog.id().unwrap(),
+        publication: publication.id().unwrap(),
         inline_reflog: reflog.clone(),
         authority: authority.clone(),
         updated_at_millis: 10_000,
         tombstone: false,
     };
     reference.validate(lease.repository, "main").unwrap();
+    assert!(publication.matches_ref(&reference).unwrap());
 
     let root = TreeRootV1 {
         root: None,
@@ -124,8 +138,12 @@ fn v2_publication_records_have_frozen_content_identities() {
         "pbc2_k5quoflouuch4crelfudtng432li2tenqar65viagucs3iuzompa"
     );
     assert_eq!(
+        publication.id().unwrap().to_string(),
+        "ppe2_fue4s3c3apahgop7zerujuxkjk5pjqnurr7psr4nwxnishz2pz4q"
+    );
+    assert_eq!(
         hex::encode(Sha256::digest(encode_canonical(&reference).unwrap())),
-        "31da393c475c9762f6ac6887cf103e46533de5f8b03ee19a6bb2ff1739a0ef4c"
+        "c4df5e499727013a5e5eba5403632a9931ddd467fa4acc0c1f98f5cb200c7d83"
     );
 }
 
