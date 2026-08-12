@@ -35,6 +35,15 @@ the transfer exact-deletes it and reconstructs the commit idempotently.
 `PhysicalTransferCursor` exposes this page boundary to external workflow
 engines and remains process-independent under canonical serialization.
 
+Deep fsck uses the same immutable job tree as a three-phase state machine.
+Commit discovery queues object/version/operation roots; semantic node work is
+deduplicated by `(tree-kind, CID)` while report byte counts are deduplicated by
+CID; version-leaf records queue physical verification work. Large live objects
+are streamed to temporary files rather than buffered in memory, and physical
+delete-marker LIST continuations are stored in the work record after every
+page. `ResumableFsckCursor` therefore bounds both memory and provider work per
+invocation and can resume in a different process.
+
 ## Consequences
 
 - Traversal memory and cursor size remain bounded at arbitrary DAG size.
@@ -42,6 +51,8 @@ engines and remains process-independent under canonical serialization.
 - Parent-before-child output removes whole-DAG buffering from clone and repair.
 - Incremental transfer cost is proportional to newly reachable commits and
   uses no destination commit-namespace listing.
+- Deep verification no longer materializes the commit closure, node-root
+  vector, or physical-version set in process memory.
 - Workflow engines must durably save side effects/mappings before advancing the
   cursor and must schedule cleanup for abandoned jobs.
 - Legacy convenience APIs retain configured traversal limits but are not the

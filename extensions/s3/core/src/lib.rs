@@ -52,9 +52,9 @@ pub use repository::{
     NodeIndexMaintenance,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectSummary, RefCatalogAdvanceReport,
     PhysicalTransferCursor, PhysicalTransferPage, RefMoveReceipt, RefVersionCompactionReport,
-    RepairReport, Repository, RepositoryOptions, RepositoryPerformanceSnapshot, RetentionPinPage,
-    SyncReport, Tag, TagPage, TagReflogPage, TraversalBudget, VersionSummary,
-    WriterLeaseMaintenance,
+    RepairReport, Repository, RepositoryOptions, RepositoryPerformanceSnapshot,
+    ResumableFsckCursor, ResumableFsckPage, ResumableFsckPhase, RetentionPinPage, SyncReport, Tag,
+    TagPage, TagReflogPage, TraversalBudget, VersionSummary, WriterLeaseMaintenance,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

@@ -35,6 +35,9 @@ use sha2::Sha256;
 const MIN_NONFINAL_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 const MAX_GC_CAS_RETRIES: usize = 16;
+const FSCK_OBJECT_TREE: u8 = 0;
+const FSCK_VERSION_TREE: u8 = 1;
+const FSCK_OPERATION_TREE: u8 = 2;
 
 #[derive(Clone)]
 pub struct RepositoryOptions {
@@ -249,7 +252,7 @@ pub struct SyncReport {
     pub ref_move: Option<RefMoveReceipt>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FsckReport {
     pub branches: usize,
     pub tags: usize,
@@ -259,6 +262,45 @@ pub struct FsckReport {
     pub reachable_node_bytes: usize,
     pub logical_versions: usize,
     pub content_bytes_verified: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ResumableFsckPhase {
+    DiscoverCommits,
+    VerifyNodes,
+    VerifyVersions,
+    Complete,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ResumableFsckCursor {
+    pub closure: CommitClosureCursor,
+    pub report: FsckReport,
+    pub phase: ResumableFsckPhase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResumableFsckPage {
+    pub cursor: ResumableFsckCursor,
+    pub processed_commits: usize,
+    pub processed_nodes: usize,
+    pub processed_versions: usize,
+    pub traversal_steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct FsckNodeWork {
+    kind: u8,
+    cid: prolly::Cid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct FsckVersionWork {
+    key: Vec<u8>,
+    version: ObjectVersionV1,
+    continuation: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -8677,20 +8719,71 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn fsck(&self) -> Result<FsckReport> {
-        let branches = self.list_branches().await?;
-        let tags = self.list_tags().await?;
-        let mut roots = branches
-            .iter()
-            .map(|branch| branch.target)
-            .collect::<Vec<_>>();
-        roots.extend(tags.iter().map(|tag| tag.target));
-        self.fsck_roots(roots, branches.len(), tags.len()).await
+        let mut cursor = None;
+        let mut continuation = None;
+        loop {
+            let page = self.list_branches_page(continuation, 1_000).await?;
+            let roots = page
+                .branches
+                .iter()
+                .map(|branch| branch.target)
+                .collect::<Vec<_>>();
+            if !roots.is_empty() {
+                match cursor.as_mut() {
+                    Some(cursor) => {
+                        self.extend_resumable_fsck(cursor, &roots, roots.len(), 0)
+                            .await?;
+                    }
+                    None => {
+                        cursor = Some(
+                            self.start_resumable_fsck(&roots, roots.len(), 0)
+                                .await?,
+                        );
+                    }
+                }
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        continuation = None;
+        loop {
+            let page = self.list_tags_page(continuation, 1_000).await?;
+            let roots = page.tags.iter().map(|tag| tag.target).collect::<Vec<_>>();
+            if !roots.is_empty() {
+                match cursor.as_mut() {
+                    Some(cursor) => {
+                        self.extend_resumable_fsck(cursor, &roots, 0, roots.len())
+                            .await?;
+                    }
+                    None => {
+                        cursor = Some(
+                            self.start_resumable_fsck(&roots, 0, roots.len())
+                                .await?,
+                        );
+                    }
+                }
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        let cursor = cursor.ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "repository fsck found no live branch or tag roots",
+            )
+        })?;
+        self.run_resumable_fsck(cursor).await
     }
 
     /// Verifies one selected commit closure. This is the incremental fsck
     /// primitive used after fetch/push or by a caller walking new heads.
     pub async fn fsck_commit(&self, head: CommitId) -> Result<FsckReport> {
-        self.fsck_roots(vec![head], 0, 0).await
+        let cursor = self.start_resumable_fsck(&[head], 0, 0).await?;
+        self.run_resumable_fsck(cursor).await
     }
 
     /// Copies only missing objects in the selected source closure, then
@@ -8747,147 +8840,535 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(RepairReport { sync, fsck })
     }
 
-    async fn fsck_roots(
+    /// Start a restartable deep verification job. Root enumeration itself is
+    /// paged by the caller; attach later pages with `extend_resumable_fsck`.
+    pub async fn start_resumable_fsck(
         &self,
-        root_ids: Vec<CommitId>,
+        roots: &[CommitId],
         branch_count: usize,
         tag_count: usize,
-    ) -> Result<FsckReport> {
-        let mut report = FsckReport {
-            branches: branch_count,
-            tags: tag_count,
-            ..FsckReport::default()
-        };
-        let mut seen_commits = HashSet::new();
-        let mut stack = root_ids.clone();
-        let mut roots = Vec::new();
-        while let Some(id) = stack.pop() {
-            if !seen_commits.insert(id) {
+    ) -> Result<ResumableFsckCursor> {
+        let closure = self.start_commit_closure(roots).await?;
+        Ok(ResumableFsckCursor {
+            closure,
+            report: FsckReport {
+                branches: branch_count,
+                tags: tag_count,
+                ..FsckReport::default()
+            },
+            phase: ResumableFsckPhase::DiscoverCommits,
+        })
+    }
+
+    pub async fn extend_resumable_fsck(
+        &self,
+        cursor: &mut ResumableFsckCursor,
+        roots: &[CommitId],
+        branch_count: usize,
+        tag_count: usize,
+    ) -> Result<()> {
+        if cursor.phase != ResumableFsckPhase::DiscoverCommits {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck roots cannot be extended after commit discovery starts",
+            ));
+        }
+        self.extend_commit_closure(&mut cursor.closure, roots).await?;
+        cursor.report.branches = cursor
+            .report
+            .branches
+            .checked_add(branch_count)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck branch count overflow"))?;
+        cursor.report.tags = cursor
+            .report
+            .tags
+            .checked_add(tag_count)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck tag count overflow"))?;
+        Ok(())
+    }
+
+    /// Advance one bounded phase of deep verification. `max_items` bounds
+    /// emitted commits, decoded nodes, or physical-version requests depending
+    /// on the current phase; delete-marker pagination consumes one item per
+    /// provider LIST page.
+    pub async fn resumable_fsck_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_steps: usize,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        if !(1..=100_000).contains(&max_steps) || !(1..=1_000).contains(&max_items) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "fsck page requires 1..=100,000 steps and 1..=1,000 items",
+            ));
+        }
+        match cursor.phase {
+            ResumableFsckPhase::DiscoverCommits => {
+                self.resumable_fsck_discover_page(cursor, max_steps, max_items)
+                    .await
+            }
+            ResumableFsckPhase::VerifyNodes => {
+                self.resumable_fsck_node_page(cursor, max_items).await
+            }
+            ResumableFsckPhase::VerifyVersions => {
+                self.resumable_fsck_version_page(cursor, max_items).await
+            }
+            ResumableFsckPhase::Complete => Ok(ResumableFsckPage {
+                cursor: cursor.clone(),
+                processed_commits: 0,
+                processed_nodes: 0,
+                processed_versions: 0,
+                traversal_steps: 0,
+                complete: true,
+                budget_exhausted: false,
+            }),
+        }
+    }
+
+    async fn resumable_fsck_discover_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_steps: usize,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        let page = self
+            .commit_closure_page(&cursor.closure, max_steps, max_items)
+            .await?;
+        let processed_commits = page.commits.len();
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(page.cursor.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut mutations = Vec::with_capacity(processed_commits.saturating_mul(3));
+        let format_digest = tree_format_digest(&self.format.state_tree_format)?;
+        for (_, commit) in page.commits {
+            self.load_commit_delta(&commit).await?;
+            for (kind, root) in [
+                (FSCK_OBJECT_TREE, &commit.state.objects),
+                (FSCK_VERSION_TREE, &commit.state.versions),
+                (FSCK_OPERATION_TREE, &commit.state.operations),
+            ] {
+                if root.format_digest != format_digest {
+                    return Err(Error::new(
+                        ErrorCode::CorruptNode,
+                        "fsck encountered a state root with an incompatible format",
+                    ));
+                }
+                if let Some(cid) = root.root.clone() {
+                    mutations.push(Mutation::Upsert {
+                        key: fsck_node_queue_key(kind, &cid),
+                        val: encode_canonical(&FsckNodeWork { kind, cid })?,
+                    });
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            tree = index.engine.batch(&tree, mutations).await?;
+        }
+        let mut next = cursor.clone();
+        next.closure = page.cursor;
+        next.closure.state = TreeRootV1::from_tree(&tree)?;
+        next.report.commits = next
+            .report
+            .commits
+            .checked_add(processed_commits)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck commit count overflow"))?;
+        next.report.deltas = next
+            .report
+            .deltas
+            .checked_add(processed_commits)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck delta count overflow"))?;
+        if page.complete {
+            next.phase = ResumableFsckPhase::VerifyNodes;
+        }
+        Ok(ResumableFsckPage {
+            cursor: next,
+            processed_commits,
+            processed_nodes: 0,
+            processed_versions: 0,
+            traversal_steps: page.steps,
+            complete: false,
+            budget_exhausted: !page.complete && page.budget_exhausted,
+        })
+    }
+
+    async fn resumable_fsck_node_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut iter = index.engine.prefix(&tree, b"fq/").await?;
+        let mut work = Vec::with_capacity(max_items);
+        while work.len() < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            work.push(entry?);
+        }
+        drop(iter);
+        let mut next = cursor.clone();
+        if work.is_empty() {
+            next.phase = ResumableFsckPhase::VerifyVersions;
+            return Ok(ResumableFsckPage {
+                cursor: next,
+                processed_commits: 0,
+                processed_nodes: 0,
+                processed_versions: 0,
+                traversal_steps: 0,
+                complete: false,
+                budget_exhausted: false,
+            });
+        }
+        let mut mutations = Vec::new();
+        let mut globally_marked = BTreeSet::new();
+        for (queue_key, encoded) in &work {
+            let node_work: FsckNodeWork = decode_canonical(encoded)?;
+            if !matches!(
+                node_work.kind,
+                FSCK_OBJECT_TREE | FSCK_VERSION_TREE | FSCK_OPERATION_TREE
+            ) || fsck_node_queue_key(node_work.kind, &node_work.cid) != *queue_key
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "fsck node queue record is malformed",
+                ));
+            }
+            let semantic_mark = fsck_node_seen_key(node_work.kind, &node_work.cid);
+            mutations.push(Mutation::Delete {
+                key: queue_key.clone(),
+            });
+            if index.engine.get(&tree, &semantic_mark).await?.is_some() {
                 continue;
             }
-            let commit = self.load_commit(id).await?;
-            self.load_commit_delta(&commit).await?;
-            report.commits += 1;
-            report.deltas += 1;
-            roots.push(self.tree_from_root(&commit.state.objects, &self.format.state_tree_format)?);
-            roots
-                .push(self.tree_from_root(&commit.state.versions, &self.format.state_tree_format)?);
-            roots.push(
-                self.tree_from_root(&commit.state.operations, &self.format.state_tree_format)?,
-            );
-            stack.extend(commit.parents);
-        }
-        let reachability = self.engine.mark_reachable(&roots).await?;
-        report.reachable_nodes = reachability.live_nodes;
-        report.reachable_node_bytes = reachability.live_bytes;
-
-        let mut versions_seen = BTreeSet::new();
-        for root in root_ids {
-            let commit = self.load_commit(root).await?;
-            let versions =
-                self.tree_from_root(&commit.state.versions, &self.format.state_tree_format)?;
-            let mut iter = self.engine.range(&versions, &[], None).await?;
-            while let Some(entry) = iter.next().await {
-                let (encoded_key, bytes) = entry?;
-                let version: ObjectVersionV1 = decode_canonical(&bytes)?;
-                if !versions_seen.insert(version.id) {
-                    continue;
+            let bytes = self
+                .node_store
+                .get(node_work.cid.as_bytes())
+                .await?
+                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "fsck node is missing"))?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("fsck could not decode a Prolly node: {error}"),
+                    )
+                })?;
+            if node.leaf {
+                for (key, value) in node.keys.iter().zip(&node.vals) {
+                    match node_work.kind {
+                        FSCK_OBJECT_TREE => {
+                            let current: CurrentObjectV1 = decode_canonical(value)?;
+                            current.version.validate()?;
+                        }
+                        FSCK_VERSION_TREE => {
+                            let version: ObjectVersionV1 = decode_canonical(value)?;
+                            version.validate()?;
+                            let logical_key = decode_version_tree_logical_key(key)?;
+                            let digest = derive_input_digest(&[
+                                b"fsck-version-work-v1",
+                                &logical_key,
+                                value,
+                            ]);
+                            let seen_key = fsck_version_seen_key(&digest);
+                            if index.engine.get(&tree, &seen_key).await?.is_none() {
+                                mutations.push(Mutation::Upsert {
+                                    key: fsck_version_queue_key(&digest),
+                                    val: encode_canonical(&FsckVersionWork {
+                                        key: logical_key,
+                                        version,
+                                        continuation: None,
+                                    })?,
+                                });
+                            }
+                        }
+                        FSCK_OPERATION_TREE => {
+                            let _: OperationRecordV1 = decode_canonical(value)?;
+                        }
+                        _ => {
+                            return Err(Error::new(
+                                ErrorCode::CorruptNode,
+                                "fsck node work has an invalid tree kind",
+                            ));
+                        }
+                    }
                 }
-                report.logical_versions += 1;
-                let key = decode_version_tree_logical_key(&encoded_key)?;
-                let verified = self.verify_physical_version(&key, &version).await?;
-                report.content_bytes_verified = report
-                    .content_bytes_verified
-                    .checked_add(verified)
-                    .ok_or_else(|| {
+            } else {
+                for value in node.vals {
+                    let child = prolly::Cid(value.as_slice().try_into().map_err(|_| {
                         Error::new(
-                            ErrorCode::EntityTooLarge,
-                            "fsck provider byte counter overflow",
+                            ErrorCode::CorruptNode,
+                            "fsck internal node contains an invalid child CID",
                         )
+                    })?);
+                    mutations.push(Mutation::Upsert {
+                        key: fsck_node_queue_key(node_work.kind, &child),
+                        val: encode_canonical(&FsckNodeWork {
+                            kind: node_work.kind,
+                            cid: child,
+                        })?,
+                    });
+                }
+            }
+            mutations.push(Mutation::Upsert {
+                key: semantic_mark,
+                val: Vec::new(),
+            });
+            let global_mark = fsck_global_node_seen_key(&node_work.cid);
+            if globally_marked.insert(node_work.cid.clone())
+                && index.engine.get(&tree, &global_mark).await?.is_none()
+            {
+                mutations.push(Mutation::Upsert {
+                    key: global_mark,
+                    val: Vec::new(),
+                });
+                next.report.reachable_nodes = next
+                    .report
+                    .reachable_nodes
+                    .checked_add(1)
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "fsck node count overflow")
                     })?;
+                next.report.reachable_node_bytes = next
+                    .report
+                    .reachable_node_bytes
+                    .checked_add(bytes.len())
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "fsck node byte count overflow")
+                    })?;
+            }
+        }
+        tree = index.engine.batch(&tree, mutations).await?;
+        next.closure.state = TreeRootV1::from_tree(&tree)?;
+        let mut remaining = index.engine.prefix(&tree, b"fq/").await?;
+        let exhausted = remaining.next().await.is_some();
+        if !exhausted {
+            next.phase = ResumableFsckPhase::VerifyVersions;
+        }
+        Ok(ResumableFsckPage {
+            cursor: next,
+            processed_commits: 0,
+            processed_nodes: work.len(),
+            processed_versions: 0,
+            traversal_steps: 0,
+            complete: false,
+            budget_exhausted: exhausted,
+        })
+    }
+
+    async fn resumable_fsck_version_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut iter = index.engine.prefix(&tree, b"fvq/").await?;
+        let mut work = Vec::with_capacity(max_items);
+        while work.len() < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            work.push(entry?);
+        }
+        drop(iter);
+        let mut next = cursor.clone();
+        if work.is_empty() {
+            next.phase = ResumableFsckPhase::Complete;
+            return Ok(ResumableFsckPage {
+                cursor: next,
+                processed_commits: 0,
+                processed_nodes: 0,
+                processed_versions: 0,
+                traversal_steps: 0,
+                complete: true,
+                budget_exhausted: false,
+            });
+        }
+        let mut mutations = Vec::new();
+        for (queue_key, encoded) in &work {
+            let mut version_work: FsckVersionWork = decode_canonical(encoded)?;
+            let digest = queue_key
+                .strip_prefix(b"fvq/")
+                .and_then(|bytes| <&[u8; 32]>::try_from(bytes).ok())
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::CorruptCommit, "fsck version queue key is malformed")
+                })?;
+            let seen_key = fsck_version_seen_key(digest);
+            let expected_digest = derive_input_digest(&[
+                b"fsck-version-work-v1",
+                &version_work.key,
+                &encode_canonical(&version_work.version)?,
+            ]);
+            if expected_digest.as_slice() != digest {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "fsck version queue record does not match its key",
+                ));
+            }
+            if index.engine.get(&tree, &seen_key).await?.is_some() {
+                mutations.push(Mutation::Delete {
+                    key: queue_key.clone(),
+                });
+                continue;
+            }
+            match self.verify_physical_version_page(&mut version_work).await? {
+                Some(verified_bytes) => {
+                    mutations.push(Mutation::Delete {
+                        key: queue_key.clone(),
+                    });
+                    mutations.push(Mutation::Upsert {
+                        key: seen_key,
+                        val: Vec::new(),
+                    });
+                    next.report.logical_versions = next
+                        .report
+                        .logical_versions
+                        .checked_add(1)
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::EntityTooLarge, "fsck version count overflow")
+                        })?;
+                    next.report.content_bytes_verified = next
+                        .report
+                        .content_bytes_verified
+                        .checked_add(verified_bytes)
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::EntityTooLarge, "fsck provider bytes overflow")
+                        })?;
+                }
+                None => mutations.push(Mutation::Upsert {
+                    key: queue_key.clone(),
+                    val: encode_canonical(&version_work)?,
+                }),
+            }
+        }
+        tree = index.engine.batch(&tree, mutations).await?;
+        next.closure.state = TreeRootV1::from_tree(&tree)?;
+        let mut remaining = index.engine.prefix(&tree, b"fvq/").await?;
+        let exhausted = remaining.next().await.is_some();
+        if !exhausted {
+            next.phase = ResumableFsckPhase::Complete;
+        }
+        Ok(ResumableFsckPage {
+            cursor: next,
+            processed_commits: 0,
+            processed_nodes: 0,
+            processed_versions: work.len(),
+            traversal_steps: 0,
+            complete: !exhausted,
+            budget_exhausted: exhausted,
+        })
+    }
+
+    async fn run_resumable_fsck(
+        &self,
+        mut cursor: ResumableFsckCursor,
+    ) -> Result<FsckReport> {
+        loop {
+            let page = match self.resumable_fsck_page(&cursor, 4_096, 256).await {
+                Ok(page) => page,
+                Err(error) => {
+                    // Compatibility fsck owns its internal cursor. A public
+                    // workflow keeps the cursor and chooses its own retry or
+                    // cleanup policy, but this synchronous wrapper must not
+                    // leak abandoned immutable job state on verification
+                    // failure.
+                    loop {
+                        match self.cleanup_commit_closure(&cursor.closure, 1_000).await {
+                            Ok(cleanup) if cleanup.complete => break,
+                            Ok(_) => {}
+                            Err(_) => break,
+                        }
+                    }
+                    return Err(error);
+                }
+            };
+            cursor = page.cursor;
+            if page.complete {
+                break;
+            }
+        }
+        let report = cursor.report.clone();
+        loop {
+            let cleanup = self.cleanup_commit_closure(&cursor.closure, 1_000).await?;
+            if cleanup.complete {
+                break;
             }
         }
         Ok(report)
     }
 
-    async fn verify_physical_version(&self, key: &[u8], version: &ObjectVersionV1) -> Result<u64> {
-        version.validate()?;
-        let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
+    async fn verify_physical_version_page(
+        &self,
+        work: &mut FsckVersionWork,
+    ) -> Result<Option<u64>> {
+        work.version.validate()?;
+        let path = ObjectPath::new(std::str::from_utf8(&work.key).map_err(|_| {
             Error::new(
                 ErrorCode::CorruptCommit,
                 "physical logical key is not UTF-8",
             )
         })?)?;
-        match &version.binding {
+        match &work.version.binding {
             crate::PhysicalObjectBindingV1::Live {
                 version_id,
                 checksum_sha256,
                 ..
             } => {
+                let spool = tempfile::NamedTempFile::new().map_err(|error| {
+                    Error::new(
+                        ErrorCode::Transport,
+                        format!("could not create fsck spool: {error}"),
+                    )
+                })?;
                 let object = self
                     .plane
-                    .get(GetRequest {
+                    .get_physical_file(crate::PhysicalFileGet {
                         path,
-                        range: None,
-                        physical_version: Some(PhysicalVersion::Versioned {
-                            version_id: version_id.clone(),
-                        }),
+                        version_id: version_id.clone(),
+                        body_path: spool.path().to_path_buf(),
                     })
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(
-                            ErrorCode::MissingClosure,
-                            "retained physical object version is missing",
-                        )
-                    })?;
-                if crate::codec::sha256(&object.bytes) != *checksum_sha256 {
-                    return Err(Error::new(
-                        ErrorCode::CorruptContent,
-                        "retained physical object version checksum mismatch",
-                    ));
-                }
-                let expected_size = match version.body.kind {
+                    .await?;
+                let expected_size = match work.version.body.kind {
                     LogicalObjectVersionKindV1::Live { size, .. } => size,
-                    LogicalObjectVersionKindV1::DeleteMarker => {
-                        unreachable!("binding was validated")
-                    }
+                    LogicalObjectVersionKindV1::DeleteMarker => unreachable!("binding validated"),
                 };
-                if object.bytes.len() as u64 != expected_size {
+                if object.size != expected_size || object.checksum_sha256 != *checksum_sha256 {
                     return Err(Error::new(
                         ErrorCode::CorruptContent,
-                        "retained physical object version size mismatch",
+                        "retained physical object version checksum or size mismatch",
                     ));
                 }
-                Ok(expected_size)
+                Ok(Some(expected_size))
             }
             crate::PhysicalObjectBindingV1::DeleteMarker { version_id } => {
-                let mut continuation = None;
-                loop {
-                    let page = self
-                        .plane
-                        .list(ListRequest {
-                            prefix: path.as_str().to_string(),
-                            continuation,
-                            limit: 1_000,
-                            include_versions: true,
-                        })
-                        .await?;
-                    if page.entries.iter().any(|entry| {
-                        entry.path == path
-                            && entry.metadata.delete_marker
-                            && entry.metadata.token.version_id.as_deref()
-                                == Some(version_id.as_str())
-                    }) {
-                        return Ok(0);
-                    }
-                    continuation = page.continuation;
-                    if continuation.is_none() {
-                        return Err(Error::new(
-                            ErrorCode::MissingClosure,
-                            "retained physical delete marker is missing",
-                        ));
-                    }
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: path.as_str().to_string(),
+                        continuation: work.continuation.take(),
+                        limit: 1_000,
+                        include_versions: true,
+                    })
+                    .await?;
+                if page.entries.iter().any(|entry| {
+                    entry.path == path
+                        && entry.metadata.delete_marker
+                        && entry.metadata.token.version_id.as_deref() == Some(version_id.as_str())
+                }) {
+                    return Ok(Some(0));
                 }
+                work.continuation = page.continuation;
+                if work.continuation.is_none() {
+                    return Err(Error::new(
+                        ErrorCode::MissingClosure,
+                        "retained physical delete marker is missing",
+                    ));
+                }
+                Ok(None)
             }
         }
     }
@@ -11703,6 +12184,38 @@ fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
 fn commit_closure_mapping_key(commit: CommitId) -> Vec<u8> {
     let mut key = b"m/".to_vec();
     key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn fsck_node_queue_key(kind: u8, cid: &prolly::Cid) -> Vec<u8> {
+    let mut key = b"fq/".to_vec();
+    key.push(kind);
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn fsck_node_seen_key(kind: u8, cid: &prolly::Cid) -> Vec<u8> {
+    let mut key = b"fs/".to_vec();
+    key.push(kind);
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn fsck_global_node_seen_key(cid: &prolly::Cid) -> Vec<u8> {
+    let mut key = b"fg/".to_vec();
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn fsck_version_queue_key(digest: &[u8; 32]) -> Vec<u8> {
+    let mut key = b"fvq/".to_vec();
+    key.extend_from_slice(digest);
+    key
+}
+
+fn fsck_version_seen_key(digest: &[u8; 32]) -> Vec<u8> {
+    let mut key = b"fvs/".to_vec();
+    key.extend_from_slice(digest);
     key
 }
 

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use prolly_s3_core::{
     decode_canonical, encode_canonical, MemoryObjectPlane, ObjectHeaders, Repository,
-    RepositoryOptions, TraversalBudget,
+    RepositoryOptions, ResumableFsckPhase, TraversalBudget,
 };
 
 #[tokio::test]
@@ -211,4 +211,103 @@ async fn pins_and_reflogs_have_bounded_stable_pages() {
     assert!(!stable_entries
         .iter()
         .any(|(_, entry)| entry.new_target == new_head));
+}
+
+#[tokio::test]
+async fn deep_fsck_is_bounded_and_resumes_across_every_phase() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        repository_prefix: "administrative-fsck".to_string(),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"one.txt".to_vec(),
+            b"one".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    repository
+        .put_bytes(
+            "main",
+            b"two.txt".to_vec(),
+            b"second".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    repository
+        .delete_object("main", b"one.txt".to_vec(), None)
+        .await
+        .unwrap();
+    let head = repository.head("main").await.unwrap();
+    let mut cursor = repository
+        .start_resumable_fsck(&[head], 0, 0)
+        .await
+        .unwrap();
+    assert!(encode_canonical(&cursor).unwrap().len() < 512);
+    let mut phases = std::collections::BTreeSet::new();
+    let mut pages = 0usize;
+    loop {
+        phases.insert(format!("{:?}", cursor.phase));
+        cursor = decode_canonical(&encode_canonical(&cursor).unwrap()).unwrap();
+        let reader = Repository::open(
+            plane.clone(),
+            RepositoryOptions {
+                read_only: true,
+                ..options.clone()
+            },
+        )
+        .await
+        .unwrap();
+        let page = reader.resumable_fsck_page(&cursor, 2, 1).await.unwrap();
+        assert!(page.processed_commits <= 1);
+        assert!(page.processed_nodes <= 1);
+        assert!(page.processed_versions <= 1);
+        assert!(page.traversal_steps <= 2);
+        cursor = page.cursor;
+        pages += 1;
+        if page.complete {
+            break;
+        }
+        assert!(pages < 1_000);
+    }
+    phases.insert(format!("{:?}", cursor.phase));
+    assert!(phases.contains(&format!("{:?}", ResumableFsckPhase::DiscoverCommits)));
+    assert!(phases.contains(&format!("{:?}", ResumableFsckPhase::VerifyNodes)));
+    assert!(phases.contains(&format!("{:?}", ResumableFsckPhase::VerifyVersions)));
+    assert_eq!(cursor.phase, ResumableFsckPhase::Complete);
+    assert_eq!(cursor.report.commits, 4);
+    assert_eq!(cursor.report.deltas, 4);
+    assert_eq!(cursor.report.logical_versions, 3);
+    assert_eq!(cursor.report.content_bytes_verified, 9);
+    assert!(cursor.report.reachable_nodes > 0);
+    assert!(pages > cursor.report.commits);
+
+    let compatibility = repository.fsck_commit(head).await.unwrap();
+    assert_eq!(compatibility, cursor.report);
+    let repository_wide = repository.fsck().await.unwrap();
+    assert_eq!(repository_wide.branches, 1);
+    assert_eq!(repository_wide.tags, 0);
+    assert_eq!(repository_wide.commits, cursor.report.commits);
+    assert_eq!(repository_wide.logical_versions, cursor.report.logical_versions);
+
+    loop {
+        let cleanup = repository
+            .cleanup_commit_closure(&cursor.closure, 2)
+            .await
+            .unwrap();
+        if cleanup.complete {
+            break;
+        }
+    }
 }

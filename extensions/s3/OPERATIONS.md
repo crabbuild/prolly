@@ -186,6 +186,16 @@ Workflow engines can checkpoint the same pipeline explicitly with
 `physical_transfer_mapping` to resolve final ref targets, publish those refs,
 then clean up `cursor.closure` in bounded pages.
 
+Deep verification follows the same ownership rule. Page branch and tag roots,
+call `start_resumable_fsck`/`extend_resumable_fsck`, then persist each cursor
+returned by `resumable_fsck_page`. Its phases durably deduplicate commit IDs,
+content-addressed node CIDs, and physical version records. Live objects stream
+through disk-backed spools; a delete-marker search checkpoints its provider
+continuation after every LIST page. The compatibility `fsck` and `fsck_commit`
+methods drive this cursor to completion with bounded memory and clean up their
+internal job state automatically. External workflows must clean up
+`cursor.closure` after success or abandonment.
+
 ## Backup and restore
 
 A raw cross-bucket copy is not a valid repository restore: S3 assigns new

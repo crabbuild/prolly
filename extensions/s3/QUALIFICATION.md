@@ -121,6 +121,7 @@ The following are release blockers for a production claim:
 | Hot branch | Queue latency, timeout policy, and lease renewal under peak load |
 | Scale | 1M live keys and 10M retained versions with reopen, list, diff, fsck, GC |
 | Transfer scale | Interrupted clone/push/repair at 10M commits with bounded RSS, zero commit-namespace LISTs, and stale-mapping rebuild |
+| Administrative scale | Restart deep fsck in every phase at 1M keys/10M versions; assert bounded RSS, cursor size, and provider requests per page |
 | Failure matrix | Process/network loss before and after every physical step |
 | Operations | Backup/restore, key rotation, takeover, GC, and lifecycle audits |
 | Resource bounds | Exercise the configured atomic-session bound and multipart restart contract |
