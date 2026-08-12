@@ -319,3 +319,102 @@ async fn native_v2_takeover_fences_old_writer_before_payload_put() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn native_v2_writable_reopen_reacquires_authority_and_fences_the_old_handle() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(40_000));
+    let prefix = ".tests/native-v2-writable-reopen";
+    let options = RepositoryV2Options {
+        repository_prefix: prefix.to_string(),
+        writer: "writer-a".to_string(),
+        clock: clock.clone(),
+        ids: Arc::new(SequenceIdSource::new(0x99, 1)),
+        authority_lease_millis: 10_000,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+        ..RepositoryV2Options::default()
+    };
+    let old = RepositoryV2::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    clock.advance(1).unwrap();
+    old.put_object(
+        "main",
+        b"before-reopen.txt".to_vec(),
+        b"old handle".to_vec(),
+        ObjectHeaders::default(),
+        BTreeMap::new(),
+    )
+    .await
+    .unwrap();
+    old.advance_branch_indexes("main").await.unwrap();
+
+    clock.advance(1).unwrap();
+    let reopened = RepositoryV2::open(plane.clone(), options).await.unwrap();
+    reopened
+        .put_object(
+            "main",
+            b"after-reopen.txt".to_vec(),
+            b"new handle".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+
+    clock.advance(1).unwrap();
+    plane.reset_request_counts();
+    let renewal_error = old.renew_shard_authorities().await.unwrap_err();
+    assert_eq!(
+        renewal_error.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
+    assert_eq!(old.fenced_branches().unwrap(), vec!["main"]);
+    let error = old
+        .put_object(
+            "main",
+            b"stale-after-reopen.txt".to_vec(),
+            b"must not upload".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, prolly_s3_core::ErrorCode::PreconditionFailed);
+    assert_eq!(plane.request_snapshot().immutable_put, 0);
+}
+
+#[tokio::test]
+async fn native_v2_manual_authority_renewal_extends_the_write_window() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(50_000));
+    let repository = RepositoryV2::initialize(
+        plane,
+        RepositoryV2Options {
+            repository_prefix: ".tests/native-v2-renewal".to_string(),
+            writer: "writer-a".to_string(),
+            clock: clock.clone(),
+            ids: Arc::new(SequenceIdSource::new(0xaa, 1)),
+            authority_lease_millis: 10_000,
+            provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+            ..RepositoryV2Options::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    clock.advance(4_000).unwrap();
+    repository.renew_shard_authorities().await.unwrap();
+    clock.advance(7_000).unwrap();
+    repository
+        .put_object(
+            "main",
+            b"after-original-expiry.txt".to_vec(),
+            b"renewed".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    assert!(repository.fenced_branches().unwrap().is_empty());
+}

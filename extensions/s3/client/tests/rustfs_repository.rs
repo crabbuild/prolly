@@ -294,6 +294,7 @@ async fn rustfs_native_v2_client_uses_immutable_payloads_and_fences_takeover() {
         .bucket(&bucket)
         .repository_prefix(&repository_prefix)
         .writer("rustfs-native-v2-old-writer")
+        .authority_lease_duration(Duration::from_secs(10))
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
         .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
@@ -364,6 +365,7 @@ async fn rustfs_native_v2_client_uses_immutable_payloads_and_fences_takeover() {
         .repository_prefix(&repository_prefix)
         .writer("rustfs-native-v2-new-writer")
         .read_only(true)
+        .authority_lease_duration(Duration::from_secs(10))
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
         .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
@@ -395,10 +397,67 @@ async fn rustfs_native_v2_client_uses_immutable_payloads_and_fences_takeover() {
         "unexpected calls: {stale_calls:?}"
     );
 
+    tokio::time::sleep(Duration::from_secs(11)).await;
     replacement
         .put_object("docs/current-v2.txt", b"writer-b".to_vec())
         .await
         .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_writable_reopen_resumes_the_same_writer() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("native-v2-writable-reopen");
+    let original = ClientV2::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-restartable-writer")
+        .authority_lease_duration(Duration::from_secs(10))
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    original
+        .put_object("docs/before-restart.txt", b"before".to_vec())
+        .await
+        .unwrap();
+    original.advance_branch_indexes().await.unwrap();
+    drop(original);
+
+    let reopened = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-restartable-writer")
+        .authority_lease_duration(Duration::from_secs(10))
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    reopened
+        .put_object("docs/after-restart.txt", b"after".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(
+        reopened
+            .get_object("docs/after-restart.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"after"
+    );
+    assert!(reopened.fenced_branches().unwrap().is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
