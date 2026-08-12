@@ -1,5 +1,6 @@
 //! Bucket-level versioned object repository over immutable Prolly trees.
 
+mod authority;
 mod cache;
 mod codec;
 mod error;
@@ -9,6 +10,10 @@ mod repository;
 mod runtime;
 mod store;
 
+pub use authority::{
+    AuthorityLeaseStateV2, AuthorityLeaseV2, AuthorityPermitV2, AuthorityScopeV2, AuthorityStampV2,
+    BranchRefBarrierV2, PendingAuthorityV2, ShardWriterAuthorityV2, TakeoverRequestV2,
+};
 pub use cache::{MemoryNodeCache, NodeCache, NodeCacheError, NodeCacheKey};
 pub use codec::{decode_canonical, encode_canonical};
 pub use error::{Error, ErrorCode, Result, RetryAdvice};

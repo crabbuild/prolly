@@ -255,6 +255,12 @@ can publish concurrently; repository-wide maintenance takes an exclusive
 barrier across those lanes. Scale-out uses independent branches or repository
 partitions; a branch with one mutable head has a finite maximum commit rate.
 
+Cross-process scale-out requires protocol v2 branch authority. Each branch is
+the initial writer shard so its ref CAS is a bounded takeover barrier. A v2
+authority stamp includes scope and generation; v1 scalar fences remain
+repository-exclusive. Destructive global maintenance fails closed until the
+stable-snapshot and dirty-root-journal GC protocol can coordinate all shards.
+
 ## Garbage collection at billion scale
 
 A GC implementation cannot hold all reachable commits, nodes, or physical

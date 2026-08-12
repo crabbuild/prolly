@@ -2,6 +2,11 @@
 
 Status: implemented architecture; production qualification incomplete.
 
+Protocol v1 retains repository-exclusive writer fencing. Protocol v2 authority
+work is additive: branch-scoped leases and explicit authority stamps are being
+introduced without reinterpreting v1's scalar fence. See
+[`spec/prolly-s3/v2/state-machines.md`](spec/prolly-s3/v2/state-machines.md).
+
 ## Decision
 
 The S3 extension has one storage architecture:
