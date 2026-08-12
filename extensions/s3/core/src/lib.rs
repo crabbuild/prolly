@@ -37,7 +37,8 @@ pub use journal_indexes_v2::{
 pub use model::*;
 pub use object_plane::*;
 pub use operation_index_v2::{
-    OperationIndexAdvanceReportV2, SegmentedOperationIndexV2, DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
+    OperationIndexAdvanceReportV2, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2,
+    SegmentedOperationIndexV2, DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
     DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS, DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
 };
 pub use payload_v2::ImmutablePayloadStoreV2;

@@ -89,7 +89,11 @@ must fail closed for a sharded repository.
 - Each apply step consumes one chunk oldest-to-newest and updates fresh node
   and commit-graph roots. It never materializes the complete journal or commit
   set in memory.
+- After node/graph application completes, the operation-index rebuild consumes
+  the same oldest-to-newest chunk chain into bounded LSM segment levels and
+  conditionally publishes its replacement head.
 - Final head CAS is allowed only if the durable index still matches the
   baseline captured at job start. A moving branch does not invalidate the
   immutable snapshot; ordinary incremental catch-up consumes later events.
 - Successful and abandoned jobs exact-delete chunk objects in bounded pages.
+  Cleanup starts only after every consumer of the shared chunks is complete.

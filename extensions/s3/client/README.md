@@ -226,8 +226,23 @@ loop {
     }
 }
 
+// The operation-ID index replays the same linked chunks after the node and
+// graph roots are complete. Persist this cursor after every bounded step too.
+let mut operation = client.start_operation_index_rebuild(&cursor).await?;
+loop {
+    let step = client
+        .advance_operation_index_rebuild(&operation, 256)
+        .await?;
+    operation = step.cursor;
+    let encoded_cursor = prolly_s3_client::core::encode_canonical(&operation)?;
+    std::fs::write("operation-index-rebuild.cbor", encoded_cursor)?;
+    if step.complete {
+        break;
+    }
+}
+
 while !client
-    .cleanup_branch_index_rebuild(&cursor, 1_000)
+    .cleanup_branch_index_rebuild(&cursor, &operation, 1_000)
     .await?
     .complete
 {}
@@ -235,7 +250,8 @@ while !client
 
 Discovery and application are independently paged. Rebuild state consists of
 immutable linked chunks and fresh Prolly roots, so restart does not rediscover
-already scanned history.
+already scanned history. Do not clean up the shared chunks until both the
+node/graph and operation-index cursors are complete.
 
 ## Ingest files in batches (recommended)
 

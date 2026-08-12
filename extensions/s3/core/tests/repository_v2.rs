@@ -702,15 +702,19 @@ async fn native_v2_over_limit_index_lag_rebuilds_in_restartable_pages() {
         clock: clock.clone(),
         ids: Arc::new(SequenceIdSource::new(0xfa, 1)),
         journal_index_max_unindexed_events: 2,
+        operation_index_leaf_entries: 2,
+        operation_index_merge_fanout: 2,
+        operation_index_max_unindexed_events: 8,
         provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
         ..RepositoryV2Options::default()
     };
     let writer = RepositoryV2::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
+    let mut original = None;
     for index in 0..5 {
         clock.advance(1).unwrap();
-        writer
+        let receipt = writer
             .put_object(
                 "main",
                 format!("rebuild/{index}.txt").into_bytes(),
@@ -720,12 +724,17 @@ async fn native_v2_over_limit_index_lag_rebuilds_in_restartable_pages() {
             )
             .await
             .unwrap();
+        if index == 4 {
+            original = Some(receipt);
+        }
     }
+    drop(writer);
     let reader = RepositoryV2::open(
-        plane,
+        plane.clone(),
         RepositoryV2Options {
             read_only: true,
-            ..options
+            operation_index_max_unindexed_events: 2,
+            ..options.clone()
         },
     )
     .await
@@ -771,10 +780,32 @@ async fn native_v2_over_limit_index_lag_rebuilds_in_restartable_pages() {
         b"value-4"
     );
 
+    let mut operation = reader.start_operation_index_rebuild(&cursor).await.unwrap();
+    let early_cleanup = reader
+        .cleanup_branch_index_rebuild(&cursor, &operation, 1)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        early_cleanup.code,
+        prolly_s3_core::ErrorCode::InvalidContinuationToken
+    );
+    loop {
+        let encoded = prolly_s3_core::encode_canonical(&operation).unwrap();
+        operation = prolly_s3_core::decode_canonical(&encoded).unwrap();
+        let step = reader
+            .advance_operation_index_rebuild(&operation, 2)
+            .await
+            .unwrap();
+        operation = step.cursor;
+        if step.complete {
+            break;
+        }
+    }
+
     let mut deleted = 0;
     loop {
         let cleanup = reader
-            .cleanup_branch_index_rebuild(&cursor, 1)
+            .cleanup_branch_index_rebuild(&cursor, &operation, 1)
             .await
             .unwrap();
         deleted += cleanup.deleted_objects;
@@ -783,4 +814,29 @@ async fn native_v2_over_limit_index_lag_rebuilds_in_restartable_pages() {
         }
     }
     assert_eq!(deleted, 3);
+
+    drop(reader);
+    let replay_writer = RepositoryV2::open(
+        plane,
+        RepositoryV2Options {
+            operation_index_max_unindexed_events: 2,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    let original = original.unwrap();
+    let replay = replay_writer
+        .put_object_with_operation(
+            "main",
+            b"rebuild/4.txt".to_vec(),
+            b"value-4".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            original.operation,
+        )
+        .await
+        .unwrap();
+    assert!(replay.idempotent_replay);
+    assert_eq!(replay.id, original.id);
 }

@@ -679,6 +679,7 @@ async fn rustfs_native_v2_over_limit_index_rebuild_resumes_from_canonical_cursor
         .repository_prefix(&repository_prefix)
         .writer("rustfs-native-v2-rebuild-writer")
         .journal_index_max_unindexed_events(2)
+        .operation_index_limits(2, 2, 8)
         .background_index_maintenance(false)
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
@@ -686,23 +687,28 @@ async fn rustfs_native_v2_over_limit_index_rebuild_resumes_from_canonical_cursor
         .initialize()
         .await
         .unwrap();
+    let mut original = None;
     for index in 0..5 {
-        writer
+        let receipt = writer
             .put_object(
                 format!("rebuild/{index}.txt"),
                 format!("value-{index}").into_bytes(),
             )
             .await
             .unwrap();
+        if index == 4 {
+            original = Some(receipt);
+        }
     }
     drop(writer);
 
     let reader = ClientV2::builder()
-        .aws_client(aws)
+        .aws_client(aws.clone())
         .bucket(&bucket)
         .repository_prefix(&repository_prefix)
         .read_only(true)
         .journal_index_max_unindexed_events(2)
+        .operation_index_limits(2, 2, 2)
         .background_index_maintenance(false)
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
@@ -734,6 +740,54 @@ async fn rustfs_native_v2_over_limit_index_rebuild_resumes_from_canonical_cursor
             .bytes,
         b"value-4"
     );
+
+    let mut operation = reader.start_operation_index_rebuild(&cursor).await.unwrap();
+    loop {
+        let bytes = prolly_s3_client::core::encode_canonical(&operation).unwrap();
+        operation = prolly_s3_client::core::decode_canonical(&bytes).unwrap();
+        let step = reader
+            .advance_operation_index_rebuild(&operation, 2)
+            .await
+            .unwrap();
+        operation = step.cursor;
+        if step.complete {
+            break;
+        }
+    }
+
+    loop {
+        if reader
+            .cleanup_branch_index_rebuild(&cursor, &operation, 1)
+            .await
+            .unwrap()
+            .complete
+        {
+            break;
+        }
+    }
+    drop(reader);
+
+    let replay_writer = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-native-v2-rebuild-writer")
+        .journal_index_max_unindexed_events(2)
+        .operation_index_limits(2, 2, 2)
+        .background_index_maintenance(false)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .open()
+        .await
+        .unwrap();
+    let original = original.unwrap();
+    let replay = replay_writer
+        .put_object_with_operation("rebuild/4.txt", b"value-4".to_vec(), original.operation)
+        .await
+        .unwrap();
+    assert!(replay.idempotent_replay);
+    assert_eq!(replay.id, original.id);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

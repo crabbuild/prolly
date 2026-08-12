@@ -70,6 +70,9 @@ bounded journal tail after the checkpoint and then the compact segment levels.
 Index heads must be initialized with branch creation. If lag exceeds the
 configured tail bound, normal advancement fails closed and requires the
 resumable rebuild path instead of scanning unbounded history in one call.
+The operation-index rebuild reuses the journal-index rebuild's immutable
+linked chunks after node/graph application completes. Chunk cleanup therefore
+waits for both replacement heads to publish.
 
 `JournalDerivedIndexesV2` consumes the same stable branch journal to maintain
 the node locator and commit graph. One mutable branch-local checkpoint CAS

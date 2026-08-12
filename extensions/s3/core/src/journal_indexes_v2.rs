@@ -787,7 +787,7 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
         }
     }
 
-    async fn load_rebuild_chunk(
+    pub(crate) async fn load_rebuild_chunk(
         &self,
         branch: &str,
         job: OperationId,

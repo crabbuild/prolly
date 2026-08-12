@@ -11,8 +11,9 @@ use prolly_s3_core::{
     BatchId, BranchIndexAdvanceReportV2, BranchIndexHealthV2, CommitIdV2, CommitReceiptV2, Error,
     ErrorCode, JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2,
     JournalIndexRebuildStepV2, ObjectDataV2, ObjectHeaders, ObjectSummaryV2, ObjectVersionV2,
-    PhysicalBatchV2, ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId,
-    RepositoryV2, RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
+    OperationId, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2, PhysicalBatchV2,
+    ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2,
+    RepositoryV2Options, Result, StagedMutationV2, VersionSummaryV2,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -51,6 +52,9 @@ pub struct ClientV2Builder {
     node_cache: Option<Arc<dyn prolly_s3_core::NodeCache>>,
     mutable_control_versions_to_retain: Option<usize>,
     journal_index_max_unindexed_events: Option<usize>,
+    operation_index_leaf_entries: Option<usize>,
+    operation_index_merge_fanout: Option<usize>,
+    operation_index_max_unindexed_events: Option<usize>,
     provider_identity: Option<ProviderIdentity>,
     attestation_signer: Option<Arc<dyn AttestationSigner>>,
     provider_attestation: Option<ProviderProfileId>,
@@ -108,6 +112,28 @@ impl ClientV2 {
                 bytes,
                 headers,
                 metadata,
+            )
+            .await
+    }
+
+    /// Put one object with a caller-stable operation ID. Reuse the same ID and
+    /// exact input after an ambiguous response to reconcile the committed
+    /// result without uploading the payload again.
+    pub async fn put_object_with_operation(
+        &self,
+        key: impl Into<String>,
+        bytes: Vec<u8>,
+        operation: OperationId,
+    ) -> Result<CommitReceiptV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .put_object_with_operation(
+                &self.branch,
+                key.into().into_bytes(),
+                bytes,
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                operation,
             )
             .await
     }
@@ -298,12 +324,32 @@ impl ClientV2 {
 
     pub async fn cleanup_branch_index_rebuild(
         &self,
-        cursor: &JournalIndexRebuildCursorV2,
+        journal: &JournalIndexRebuildCursorV2,
+        operations: &OperationIndexRebuildCursorV2,
         limit: usize,
     ) -> Result<JournalIndexRebuildCleanupV2> {
         self.ensure_provider_qualified()?;
         self.repository
-            .cleanup_branch_index_rebuild(cursor, limit)
+            .cleanup_branch_index_rebuild(journal, operations, limit)
+            .await
+    }
+
+    pub async fn start_operation_index_rebuild(
+        &self,
+        journal: &JournalIndexRebuildCursorV2,
+    ) -> Result<OperationIndexRebuildCursorV2> {
+        self.ensure_provider_qualified()?;
+        self.repository.start_operation_index_rebuild(journal).await
+    }
+
+    pub async fn advance_operation_index_rebuild(
+        &self,
+        cursor: &OperationIndexRebuildCursorV2,
+        max_events: usize,
+    ) -> Result<OperationIndexRebuildStepV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .advance_operation_index_rebuild(cursor, max_events)
             .await
     }
 
@@ -670,6 +716,21 @@ impl ClientV2Builder {
         self
     }
 
+    /// Configure the bounded operation-index shape. Production deployments
+    /// normally use the defaults; smaller limits are useful for deterministic
+    /// recovery qualification.
+    pub fn operation_index_limits(
+        mut self,
+        leaf_entries: usize,
+        merge_fanout: usize,
+        max_unindexed_events: usize,
+    ) -> Self {
+        self.operation_index_leaf_entries = Some(leaf_entries);
+        self.operation_index_merge_fanout = Some(merge_fanout);
+        self.operation_index_max_unindexed_events = Some(max_unindexed_events);
+        self
+    }
+
     pub fn bucket(mut self, bucket: impl Into<String>) -> Self {
         self.bucket = Some(bucket.into());
         self
@@ -854,6 +915,15 @@ impl ClientV2Builder {
         }
         if let Some(events) = self.journal_index_max_unindexed_events {
             options.journal_index_max_unindexed_events = events;
+        }
+        if let Some(entries) = self.operation_index_leaf_entries {
+            options.operation_index_leaf_entries = entries;
+        }
+        if let Some(fanout) = self.operation_index_merge_fanout {
+            options.operation_index_merge_fanout = fanout;
+        }
+        if let Some(events) = self.operation_index_max_unindexed_events {
+            options.operation_index_max_unindexed_events = events;
         }
         options.node_cache = self.node_cache;
         let branch = options.default_branch.clone();

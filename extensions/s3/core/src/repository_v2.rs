@@ -21,14 +21,15 @@ use crate::{
     CompareExchangeOutcome, CurrentObjectV2, Error, ErrorCode, GetRequest, IdSource,
     IdempotencyRetentionV2, ImmutablePayloadStoreV2, InitializationIntentV2,
     JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, JournalIndexRebuildCleanupV2,
-    JournalIndexRebuildCursorV2, JournalIndexRebuildStepV2, LoadedRefV2,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
-    ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2, ObjectVersionIdV2,
+    JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2, JournalIndexRebuildStepV2,
+    LoadedRefV2, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache,
+    NodeCache, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransitionV2, ObjectVersionIdV2,
     ObjectVersionOrder, ObjectVersionV2, OperationId, OperationIndexAdvanceReportV2,
-    PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2,
-    RandomIdSource, RefGeneration, RepositoryFormatV2, Result, SegmentedOperationIndexV2,
-    ShardWriterAuthorityV2, ShardedBranchPublisherV2, StagedMutationBodyV2, StagedMutationV2,
-    StagedPutV2, SystemClock, TakeoverRequestV2, TreeRootV1,
+    OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2, PhysicalBatchV2,
+    PhysicalMutationIdentityV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2, RandomIdSource,
+    RefGeneration, RepositoryFormatV2, Result, SegmentedOperationIndexV2, ShardWriterAuthorityV2,
+    ShardedBranchPublisherV2, StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock,
+    TakeoverRequestV2, TreeRootV1,
 };
 
 #[derive(Clone)]
@@ -46,6 +47,9 @@ pub struct RepositoryV2Options {
     pub node_cache: Option<Arc<dyn NodeCache>>,
     pub mutable_control_versions_to_retain: usize,
     pub journal_index_max_unindexed_events: usize,
+    pub operation_index_leaf_entries: usize,
+    pub operation_index_merge_fanout: usize,
+    pub operation_index_max_unindexed_events: usize,
     pub idempotency_retention: IdempotencyRetentionV2,
     pub provider_per_key_version_limit: ProviderPerKeyVersionLimitV2,
     pub clock: Arc<dyn Clock>,
@@ -68,6 +72,10 @@ impl Default for RepositoryV2Options {
             node_cache: None,
             mutable_control_versions_to_retain: crate::DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
             journal_index_max_unindexed_events: crate::DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
+            operation_index_leaf_entries: crate::DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
+            operation_index_merge_fanout: crate::DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
+            operation_index_max_unindexed_events:
+                crate::DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS,
             idempotency_retention: IdempotencyRetentionV2::default(),
             provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Unknown,
             clock: Arc::new(SystemClock),
@@ -424,9 +432,9 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             options.repository_prefix.clone(),
             format.repository_id,
             format.idempotency_retention,
-            crate::DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
-            crate::DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
-            crate::DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS,
+            options.operation_index_leaf_entries,
+            options.operation_index_merge_fanout,
+            options.operation_index_max_unindexed_events,
             options.mutable_control_versions_to_retain,
         )?;
         let journal_indexes = Arc::new(JournalDerivedIndexesV2::new_with_limits(
@@ -1638,10 +1646,88 @@ impl<P: ObjectPlane> RepositoryV2<P> {
 
     pub async fn cleanup_branch_index_rebuild(
         &self,
-        cursor: &JournalIndexRebuildCursorV2,
+        journal: &JournalIndexRebuildCursorV2,
+        operations: &OperationIndexRebuildCursorV2,
         limit: usize,
     ) -> Result<JournalIndexRebuildCleanupV2> {
-        self.journal_indexes.cleanup_rebuild(cursor, limit).await
+        if !operations.complete
+            || operations.next_chunk.is_some()
+            || operations.repository != journal.repository
+            || operations.branch != journal.branch
+            || operations.job != journal.job
+            || operations.snapshot != journal.snapshot
+            || operations.snapshot_generation != journal.snapshot_generation
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "journal rebuild chunks remain live until the matching operation-index rebuild completes",
+            ));
+        }
+        self.journal_indexes.cleanup_rebuild(journal, limit).await
+    }
+
+    pub async fn start_operation_index_rebuild(
+        &self,
+        journal: &JournalIndexRebuildCursorV2,
+    ) -> Result<OperationIndexRebuildCursorV2> {
+        if journal.phase != JournalIndexRebuildPhaseV2::Complete {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "operation-index rebuild starts after journal-index application completes",
+            ));
+        }
+        let oldest_chunk = journal.oldest_chunk.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "completed journal-index rebuild has no discovery chunks",
+            )
+        })?;
+        let _lane = self.lock_index_branch(&journal.branch).await;
+        self.operation_index
+            .start_rebuild(
+                &journal.branch,
+                journal.job,
+                journal.snapshot,
+                journal.snapshot_generation,
+                oldest_chunk,
+            )
+            .await
+    }
+
+    pub async fn advance_operation_index_rebuild(
+        &self,
+        cursor: &OperationIndexRebuildCursorV2,
+        max_events: usize,
+    ) -> Result<OperationIndexRebuildStepV2> {
+        if cursor.complete {
+            return Ok(OperationIndexRebuildStepV2 {
+                cursor: cursor.clone(),
+                indexed_events: 0,
+                segments_written: 0,
+                complete: true,
+            });
+        }
+        let expected = cursor.next_chunk.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "completed operation-index rebuild has no next chunk",
+            )
+        })?;
+        let _lane = self.lock_index_branch(&cursor.branch).await;
+        let chunk = self
+            .journal_indexes
+            .load_rebuild_chunk(&cursor.branch, cursor.job, expected)
+            .await?;
+        self.operation_index
+            .advance_rebuild(
+                &self.publisher,
+                cursor,
+                &chunk,
+                expected,
+                max_events,
+                self.options.clock.now_millis()?,
+            )
+            .await
     }
 
     pub async fn branch_index_health(&self, branch: &str) -> Result<BranchIndexHealthV2> {
@@ -2133,6 +2219,10 @@ fn validate_options(options: &RepositoryV2Options) -> Result<()> {
         || options.max_cached_node_bytes == 0
         || options.mutable_control_versions_to_retain < 2
         || !(1..=1_000_000).contains(&options.journal_index_max_unindexed_events)
+        || !(1..=65_536).contains(&options.operation_index_leaf_entries)
+        || !(2..=32).contains(&options.operation_index_merge_fanout)
+        || options.operation_index_max_unindexed_events < options.operation_index_leaf_entries
+        || options.operation_index_max_unindexed_events > 1_000_000
     {
         return Err(Error::new(
             ErrorCode::InvalidRequest,
