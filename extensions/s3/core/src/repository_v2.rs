@@ -156,6 +156,8 @@ pub struct RepositoryV2<P: ObjectPlane> {
     journal_indexes: Arc<JournalDerivedIndexesV2<P>>,
     locator: Arc<JournalNodeLocator<P>>,
     permits: RwLock<BTreeMap<String, AuthorityPermitV2>>,
+    fenced_branches: RwLock<BTreeSet<String>>,
+    authority_renewal: tokio::sync::Mutex<()>,
     publication_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
     writable: AtomicBool,
 }
@@ -313,6 +315,20 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let branch = repository.options.default_branch.clone();
         repository.locator.register(&branch)?;
         repository.register_unindexed_tail(&branch).await?;
+        if !repository.options.read_only {
+            let permit = repository
+                .authority
+                .acquire(
+                    AuthorityScopeV2::Branch {
+                        name: branch.clone(),
+                    },
+                    &repository.options.writer,
+                    repository.options.clock.now_millis()?,
+                    repository.options.ids.operation(),
+                )
+                .await?;
+            repository.install_permit(&branch, permit)?;
+        }
         Ok(repository)
     }
 
@@ -392,6 +408,8 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             journal_indexes,
             locator,
             permits: RwLock::new(BTreeMap::new()),
+            fenced_branches: RwLock::new(BTreeSet::new()),
+            authority_renewal: tokio::sync::Mutex::new(()),
             publication_lanes: std::sync::Mutex::new(BTreeMap::new()),
             writable: AtomicBool::new(writable),
         })
@@ -1004,6 +1022,81 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         })
     }
 
+    /// Renew every locally held branch-authority permit. A failed or ambiguous
+    /// renewal fences only that branch in this repository instance; permits for
+    /// independent branches continue to renew.
+    pub async fn renew_shard_authorities(&self) -> Result<()> {
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "shard-authority renewal requires a writable protocol-v2 repository",
+            ));
+        }
+        let _renewal = self.authority_renewal.lock().await;
+        let now = self.options.clock.now_millis()?;
+        let permits = self
+            .permits
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
+            .clone();
+        let mut first_error = None;
+        for (branch, permit) in permits {
+            match self.authority.renew(permit, now).await {
+                Ok(renewed) => self.install_permit(&branch, renewed)?,
+                Err(error) => {
+                    self.fence_branch(&branch)?;
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
+                }
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Run independent branch-authority renewal until the returned handle is
+    /// dropped. A fenced shard is removed from renewal while healthy shards
+    /// continue to make progress.
+    pub fn start_shard_authority_maintenance(
+        self: &Arc<Self>,
+    ) -> Result<crate::ShardAuthorityMaintenance> {
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::MissingCapability,
+                "shard-authority maintenance requires a writable protocol-v2 repository",
+            ));
+        }
+        let interval = Duration::from_millis((self.options.authority_lease_millis / 3).max(100));
+        let weak = Arc::downgrade(self);
+        let task = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(interval).await;
+                let Some(repository) = weak.upgrade() else {
+                    break;
+                };
+                // Renewal failures fence only their branch. Keep the task alive
+                // so independent branch shards do not lose their authorities.
+                let _ = repository.renew_shard_authorities().await;
+            }
+        });
+        Ok(crate::ShardAuthorityMaintenance::from_task(task))
+    }
+
+    pub fn fenced_branches(&self) -> Result<Vec<String>> {
+        Ok(self
+            .fenced_branches
+            .read()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "v2 fenced-branch lock poisoned",
+                )
+            })?
+            .iter()
+            .cloned()
+            .collect())
+    }
+
     async fn reconcile_operation(
         &self,
         branch: &str,
@@ -1043,20 +1136,79 @@ impl<P: ObjectPlane> RepositoryV2<P> {
     }
 
     async fn active_permit(&self, branch: &str, now: u64) -> Result<AuthorityPermitV2> {
-        let permit = self
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "protocol-v2 repository is read-only",
+            ));
+        }
+        if self.is_branch_fenced(branch)? {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "protocol-v2 branch authority is fenced in this repository instance",
+            ));
+        }
+        let cached = self
             .permits
             .read()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
             .get(branch)
-            .cloned()
-            .ok_or_else(|| {
-                Error::new(
+            .cloned();
+        let permit = if let Some(permit) = cached.filter(|permit| permit.expires_at_millis() > now)
+        {
+            permit
+        } else {
+            let _renewal = self.authority_renewal.lock().await;
+            if self.is_branch_fenced(branch)? {
+                return Err(Error::new(
                     ErrorCode::PreconditionFailed,
-                    "no active local authority permit for this v2 branch; explicitly take over or create the branch",
-                )
-            })?;
-        self.authority.validate_active(&permit, now).await?;
-        Ok(permit)
+                    "protocol-v2 branch authority is fenced in this repository instance",
+                ));
+            }
+            let current = self
+                .permits
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
+                .get(branch)
+                .cloned();
+            let acquired = match current {
+                Some(permit) if permit.expires_at_millis() > now => permit,
+                Some(_) => {
+                    self.fence_branch(branch)?;
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        "protocol-v2 branch authority expired; explicit takeover is required",
+                    ));
+                }
+                None => match self
+                    .authority
+                    .acquire(
+                        AuthorityScopeV2::Branch {
+                            name: branch.to_string(),
+                        },
+                        &self.options.writer,
+                        now,
+                        self.options.ids.operation(),
+                    )
+                    .await
+                {
+                    Ok(permit) => permit,
+                    Err(error) => {
+                        self.fence_branch(branch)?;
+                        return Err(error);
+                    }
+                },
+            };
+            self.install_permit(branch, acquired.clone())?;
+            acquired
+        };
+        match self.authority.validate_active(&permit, now).await {
+            Ok(_) => Ok(permit),
+            Err(error) => {
+                self.fence_branch(branch)?;
+                Err(error)
+            }
+        }
     }
 
     fn install_permit(&self, branch: &str, permit: AuthorityPermitV2) -> Result<()> {
@@ -1064,7 +1216,46 @@ impl<P: ObjectPlane> RepositoryV2<P> {
             .write()
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
             .insert(branch.to_string(), permit);
+        self.fenced_branches
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "v2 fenced-branch lock poisoned",
+                )
+            })?
+            .remove(branch);
         Ok(())
+    }
+
+    fn fence_branch(&self, branch: &str) -> Result<()> {
+        self.permits
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "v2 permit lock poisoned"))?
+            .remove(branch);
+        self.fenced_branches
+            .write()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "v2 fenced-branch lock poisoned",
+                )
+            })?
+            .insert(branch.to_string());
+        Ok(())
+    }
+
+    fn is_branch_fenced(&self, branch: &str) -> Result<bool> {
+        Ok(self
+            .fenced_branches
+            .read()
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "v2 fenced-branch lock poisoned",
+                )
+            })?
+            .contains(branch))
     }
 
     async fn register_unindexed_tail(&self, branch: &str) -> Result<()> {

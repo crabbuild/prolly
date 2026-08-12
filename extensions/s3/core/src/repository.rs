@@ -892,6 +892,12 @@ pub struct ShardAuthorityMaintenance {
     task: tokio::task::JoinHandle<()>,
 }
 
+impl ShardAuthorityMaintenance {
+    pub(crate) fn from_task(task: tokio::task::JoinHandle<()>) -> Self {
+        Self { task }
+    }
+}
+
 impl Drop for ShardAuthorityMaintenance {
     fn drop(&mut self) {
         self.task.abort();

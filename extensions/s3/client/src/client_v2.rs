@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use prolly_s3_core::{
     BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode, ObjectDataV2,
@@ -23,6 +27,7 @@ pub struct ClientV2 {
     bucket: String,
     branch: String,
     provider_attestation: ProviderAttestationV1,
+    shard_authority_maintenance: Arc<Mutex<Option<prolly_s3_core::ShardAuthorityMaintenance>>>,
 }
 
 #[derive(Default)]
@@ -209,14 +214,17 @@ impl ClientV2 {
         handoff_evidence: &str,
     ) -> Result<u64> {
         self.ensure_provider_qualified()?;
-        self.repository
+        let generation = self
+            .repository
             .takeover_branch_writer(
                 branch.as_ref(),
                 expected_writer,
                 expected_generation,
                 handoff_evidence,
             )
-            .await
+            .await?;
+        self.ensure_shard_authority_maintenance()?;
+        Ok(generation)
     }
 
     pub async fn advance_branch_indexes(&self) -> Result<BranchIndexAdvanceReportV2> {
@@ -232,12 +240,27 @@ impl ClientV2 {
         self.repository.plane().reset_metrics()
     }
 
+    pub fn fenced_branches(&self) -> Result<Vec<String>> {
+        self.repository.fenced_branches()
+    }
+
     fn ensure_provider_qualified(&self) -> Result<()> {
         ensure_attestation_current(&self.provider_attestation)?;
         self.provider_attestation
             .body
             .capabilities
             .validate_prolly_s3()
+    }
+
+    fn ensure_shard_authority_maintenance(&self) -> Result<()> {
+        let mut maintenance = self
+            .shard_authority_maintenance
+            .lock()
+            .map_err(|_| invalid("shard-authority maintenance lock is poisoned"))?;
+        if maintenance.is_none() {
+            *maintenance = Some(self.repository.start_shard_authority_maintenance()?);
+        }
+        Ok(())
     }
 }
 
@@ -435,11 +458,18 @@ impl ClientV2Builder {
         } else {
             RepositoryV2::open(plane, options).await?
         };
+        let repository = Arc::new(repository);
+        let shard_authority_maintenance = if self.read_only {
+            None
+        } else {
+            Some(repository.start_shard_authority_maintenance()?)
+        };
         Ok(ClientV2 {
-            repository: Arc::new(repository),
+            repository,
             bucket,
             branch,
             provider_attestation: attestation,
+            shard_authority_maintenance: Arc::new(Mutex::new(shard_authority_maintenance)),
         })
     }
 }
