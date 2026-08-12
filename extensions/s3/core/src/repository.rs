@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::store::{NodeCacheNamespace, NodeLocator, PreparedNodePack};
+use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::{
     decode_canonical, derive_input_digest, derive_repository_id, encode_canonical,
     tree_format_digest, BatchId, BucketCommitV1, BucketDeltaV1, BucketStateV1, CanonicalLimits,
@@ -877,13 +877,14 @@ impl<P: ObjectPlane> ProllyNodeIndex<P> {
 
 #[async_trait::async_trait]
 impl<P: ObjectPlane> NodeLocator for ProllyNodeIndex<P> {
-    async fn locate(&self, cid: &prolly::Cid) -> Result<Option<NodeIndexEntryV1>> {
+    async fn locate(&self, cid: &prolly::Cid) -> Result<Option<LocatedPackedNode>> {
         let tree = self.tree()?;
         self.engine
             .get(&tree, cid.as_bytes())
             .await?
             .map(|bytes| decode_canonical::<NodeIndexEntryV1>(&bytes))
             .transpose()
+            .map(|entry| entry.map(Into::into))
     }
 }
 

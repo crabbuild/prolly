@@ -235,6 +235,39 @@ pub struct InitializationIntentV1 {
     pub operation: OperationId,
 }
 
+/// Create-once format marker for a native protocol-v2 repository.
+///
+/// V2 repositories use a separate marker and namespace from v1. Readers must
+/// never reinterpret a v1 marker as v2 or maintain both formats with dual
+/// writes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepositoryFormatV2 {
+    pub repository_id: RepositoryId,
+    pub format_version: u16,
+    pub state_tree_format: TreeFormat,
+    pub canonical_limits: CanonicalLimits,
+    pub idempotency_retention: IdempotencyRetentionV2,
+    pub min_reader_version: u32,
+    pub min_writer_version: u32,
+    pub created_at_millis: u64,
+    pub required_capability_profile: u16,
+}
+
+impl RepositoryFormatV2 {
+    pub const VERSION: u16 = 2;
+    pub const PROLLY_S3_CAPABILITY_PROFILE: u16 = 2;
+    pub const PROLLY_S3_PROTOCOL_VERSION: u32 = 2;
+    pub const CURRENT_READER_VERSION: u32 = 2;
+    pub const CURRENT_WRITER_VERSION: u32 = 2;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InitializationIntentV2 {
+    pub repository_id: RepositoryId,
+    pub format: RepositoryFormatV2,
+    pub operation: OperationId,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BucketClass {
     GeneralPurpose,
@@ -388,6 +421,17 @@ pub struct BucketStateV1 {
     pub objects: TreeRootV1,
     pub versions: TreeRootV1,
     pub operations: TreeRootV1,
+}
+
+/// Native protocol-v2 logical state.
+///
+/// Operation idempotency is intentionally absent: v2 checkpoints the bounded
+/// branch publication journal into `SegmentedOperationIndexV2` instead of
+/// retaining an operation tree in every repository snapshot.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketStateV2 {
+    pub objects: TreeRootV1,
+    pub versions: TreeRootV1,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -553,6 +597,13 @@ pub struct CurrentObjectV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CurrentObjectV2 {
+    /// Complete current version so a lookup can fetch the immutable payload
+    /// without loading the version-history tree.
+    pub version: ObjectVersionV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OperationKind {
     Put,
     Delete,
@@ -590,6 +641,23 @@ pub struct ObjectTransition {
 pub struct BucketDeltaV1 {
     pub operation_ids: Vec<OperationId>,
     pub changes: Vec<ObjectTransition>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObjectTransitionV2 {
+    pub key: Vec<u8>,
+    pub previous: Option<ObjectVersionIdV2>,
+    pub next: ObjectVersionIdV2,
+    pub delete_marker: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketDeltaV2 {
+    /// Canonical digest used to reject reuse of a publication operation ID
+    /// with different logical input. The operation ID itself lives in the
+    /// authority-stamped publication event and bounded operation index.
+    pub input_digest: [u8; 32],
+    pub changes: Vec<ObjectTransitionV2>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1953,10 +2021,10 @@ impl RefValueV2 {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketCommitV2 {
-    pub state: BucketStateV1,
+    pub state: BucketStateV2,
     pub parents: Vec<CommitIdV2>,
     pub generation: CommitGeneration,
-    pub delta: BucketDeltaV1,
+    pub delta: BucketDeltaV2,
     pub node_pack: Option<NodePackRefV1>,
     pub authority: AuthorityStampV2,
     pub author: String,
@@ -2300,6 +2368,17 @@ pub(crate) fn derive_repository_id(operation: OperationId) -> RepositoryId {
     ))
 }
 
+pub(crate) fn derive_repository_id_v2(operation: OperationId) -> RepositoryId {
+    RepositoryId(domain_hash(
+        b"prolly-s3/repository/v2",
+        &[operation.as_bytes()],
+    ))
+}
+
 pub(crate) fn derive_input_digest(parts: &[&[u8]]) -> [u8; 32] {
     domain_hash(b"prolly-s3/operation-input/v1", parts)
+}
+
+pub(crate) fn derive_input_digest_v2(parts: &[&[u8]]) -> [u8; 32] {
+    domain_hash(b"prolly-s3/operation-input/v2", parts)
 }
