@@ -769,6 +769,64 @@ pub struct CommitGraphHeadV2 {
     pub updated_at_millis: u64,
 }
 
+/// Node location discovered from one authority-stamped v2 commit publication.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalNodeIndexEntryV2 {
+    pub cid: Cid,
+    pub container: CommitIdV2,
+    pub pack: NodePackId,
+    pub absolute_offset: u64,
+    pub len: u32,
+    pub sha256: [u8; 32],
+}
+
+/// Branch-local ancestry acceleration derived only from publication events.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalCommitGraphEntryV2 {
+    pub commit: CommitIdV2,
+    pub generation: CommitGeneration,
+    pub parents: Vec<CommitIdV2>,
+    pub first_parent_jumps: Vec<CommitIdV2>,
+}
+
+/// One atomic checkpoint for all branch-local journal-derived indexes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalDerivedIndexHeadV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub checkpoint: PublicationEventIdV2,
+    pub checkpoint_generation: RefGeneration,
+    pub target: CommitIdV2,
+    pub node_root: TreeRootV1,
+    pub commit_graph_root: TreeRootV1,
+    pub generation: u64,
+    pub indexed_publications: u64,
+    pub indexed_commits: u64,
+    pub updated_at_millis: u64,
+}
+
+impl JournalDerivedIndexHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        branch: &str,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        crate::repository::validate_branch(branch)?;
+        if self.repository != repository
+            || self.branch != branch
+            || self.node_root.format_digest != expected_format
+            || self.commit_graph_root.format_digest != expected_format
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "journal-derived index head namespace or tree format is invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl CommitGraphHeadV2 {
     pub fn validate(
         &self,

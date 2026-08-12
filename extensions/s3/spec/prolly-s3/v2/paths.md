@@ -14,6 +14,9 @@ any protocol v1 record. `P` is the configured repository prefix.
 | immutable payload | `P/payloads/v2/R/sha256/H0/H1/H` |
 | operation-index head | `P/operation-index/v2/heads/N.cbor` |
 | operation-index segment | `P/operation-index/v2/segments/N/sha256/H0/H1/H` |
+| journal-derived index head | `P/journal-index/v2/heads/N.cbor` |
+| journal-derived node tree | `P/journal-index/v2/node-tree/nodes/sha256/H0/H1/H` |
+| journal-derived graph tree | `P/journal-index/v2/graph-tree/nodes/sha256/H0/H1/H` |
 | GC coordinator | `P/gc/v2/coordinator.cbor` |
 | GC dirty root | `P/gc/v2/dirty-roots/E/S/H` |
 
@@ -54,6 +57,16 @@ bounded journal tail after the checkpoint and then the compact segment levels.
 Index heads must be initialized with branch creation. If lag exceeds the
 configured tail bound, normal advancement fails closed and requires the
 resumable rebuild path instead of scanning unbounded history in one call.
+
+`JournalDerivedIndexesV2` consumes the same stable branch journal to maintain
+the node locator and commit graph. One mutable branch-local checkpoint CAS
+publishes both immutable Prolly roots, so readers never observe the indexes at
+different journal positions. Events are applied oldest-to-newest, allowing
+binary-lifting ancestry links to reuse parents indexed in the same batch.
+Steady-state advancement performs no commit- or ref-namespace listing and is
+proportional only to the unindexed journal tail. The head also records the
+derived current target, providing exact per-branch ref freshness; global branch
+enumeration remains a separate resumable administrative concern.
 
 `E` is the hex GC epoch operation ID and `S` is a fixed-width, monotonically
 increasing dirty-root sequence. While an epoch is active, every branch, tag,

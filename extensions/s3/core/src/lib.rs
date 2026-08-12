@@ -5,6 +5,7 @@ mod cache;
 mod codec;
 mod control_versions;
 mod error;
+mod journal_indexes_v2;
 mod model;
 mod object_plane;
 mod operation_index_v2;
@@ -25,6 +26,10 @@ pub use control_versions::{
     MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
+pub use journal_indexes_v2::{
+    JournalDerivedIndexesV2, JournalIndexAdvanceReportV2,
+    DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
+};
 pub use model::*;
 pub use object_plane::*;
 pub use operation_index_v2::{

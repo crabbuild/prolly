@@ -102,6 +102,37 @@ immutable sorted segments merge geometrically, so lookup reads a bounded
 number of levels plus the explicitly bounded unindexed journal tail. Excessive
 lag fails closed with `HistoryLimitExceeded` and must use resumable rebuild.
 
+Initialize `JournalDerivedIndexesV2` in the same branch-creation workflow and
+advance it continuously. It checkpoints the branch publication event together
+with node-locator and commit-graph Prolly roots in one CAS. Normal advancement
+follows immutable journal links and never lists the commit or ref namespaces.
+If initialization is missed or lag exceeds the configured bound, it fails
+closed instead of hiding an unbounded scan in foreground maintenance. Protocol
+v1's older `advance_node_index_v2`, `advance_commit_graph_v2`, and
+`advance_ref_catalog_v2` scan epochs remain compatibility/rebuild tools; do not
+use them as protocol-v2 steady-state maintenance.
+
+```rust
+use prolly::TreeFormat;
+use prolly_s3_core::JournalDerivedIndexesV2;
+
+let indexes = JournalDerivedIndexesV2::new(
+    plane.clone(),
+    ".prolly/v2",
+    repository_id,
+    TreeFormat::default(),
+)?;
+
+// Do this immediately after creating each branch, then on a background loop.
+let report = indexes.advance(&publisher, "main", now_millis).await?;
+println!(
+    "indexed {} publications / {} commits / {} nodes",
+    report.indexed_publications,
+    report.indexed_commits,
+    report.indexed_nodes,
+);
+```
+
 Partitioned GC no longer holds the repository publication barrier while it
 discovers roots, marks commits/nodes/versions, scans candidates, or consumes
 dirty roots. Starting an epoch activates one durable coordinator. Each live

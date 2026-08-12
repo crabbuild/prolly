@@ -494,7 +494,7 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
         Ok(())
     }
 
-    async fn load_commit(&self, id: CommitIdV2) -> Result<BucketCommitV2> {
+    pub async fn load_commit_object(&self, id: CommitIdV2) -> Result<CommitObjectV2> {
         let stored = self
             .plane
             .get(GetRequest {
@@ -504,14 +504,18 @@ impl<P: ObjectPlane> ShardedBranchPublisherV2<P> {
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "v2 parent commit is missing"))?;
-        let commit = CommitObjectV2::decode_object(&stored.bytes)?.commit;
-        if commit.id()? != id {
+        let object = CommitObjectV2::decode_object(&stored.bytes)?;
+        if object.commit.id()? != id {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "v2 parent commit ID does not match its path",
             ));
         }
-        Ok(commit)
+        Ok(object)
+    }
+
+    pub async fn load_commit(&self, id: CommitIdV2) -> Result<BucketCommitV2> {
+        Ok(self.load_commit_object(id).await?.commit)
     }
 
     async fn cas_ref(

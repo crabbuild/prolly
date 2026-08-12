@@ -5,8 +5,9 @@ use std::{
 
 use crate::{
     decode_canonical, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
-    ListRequest, ObjectPath, ObjectPlane, PhysicalVersion, RefValueV1, RefValueV2, Result,
-    StorageToken,
+    CommitGraphHeadV2, JournalDerivedIndexHeadV2, ListRequest, NodeIndexHeadV2, ObjectPath,
+    ObjectPlane, OperationIndexHeadV2, PhysicalVersion, RefCatalogHeadV2, RefValueV1, RefValueV2,
+    Result, StorageToken,
 };
 
 pub const DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN: usize = 100;
@@ -31,6 +32,7 @@ pub enum MutableControlKind {
     GcRunV1,
     GcEpochV2,
     GcCoordinatorV2,
+    JournalDerivedIndexHeadV2,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -123,11 +125,37 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                     let reference: RefValueV2 = decode_canonical(&request.bytes)?;
                     first_update || reference.generation.0.is_multiple_of(ref_interval)
                 }
+                MutableControlKind::NodeIndexHeadV2 => {
+                    let head: NodeIndexHeadV2 = decode_canonical(&request.bytes)?;
+                    first_update || head.generation.is_multiple_of(ref_interval)
+                }
+                MutableControlKind::RefCatalogHeadV2 => {
+                    let head: RefCatalogHeadV2 = decode_canonical(&request.bytes)?;
+                    first_update || head.generation.is_multiple_of(ref_interval)
+                }
+                MutableControlKind::CommitGraphHeadV2 => {
+                    let head: CommitGraphHeadV2 = decode_canonical(&request.bytes)?;
+                    first_update || head.generation.is_multiple_of(ref_interval)
+                }
+                MutableControlKind::OperationIndexHeadV2 => {
+                    let head: OperationIndexHeadV2 = decode_canonical(&request.bytes)?;
+                    first_update || head.generation.is_multiple_of(ref_interval)
+                }
+                MutableControlKind::JournalDerivedIndexHeadV2 => {
+                    let head: JournalDerivedIndexHeadV2 = decode_canonical(&request.bytes)?;
+                    first_update || head.generation.is_multiple_of(ref_interval)
+                }
                 _ => true,
             };
             if scheduled {
                 let target = match kind {
-                    MutableControlKind::BranchRefV1 | MutableControlKind::BranchRefV2 => {
+                    MutableControlKind::BranchRefV1
+                    | MutableControlKind::BranchRefV2
+                    | MutableControlKind::NodeIndexHeadV2
+                    | MutableControlKind::RefCatalogHeadV2
+                    | MutableControlKind::CommitGraphHeadV2
+                    | MutableControlKind::OperationIndexHeadV2
+                    | MutableControlKind::JournalDerivedIndexHeadV2 => {
                         (self.versions_to_retain / 2).max(1)
                     }
                     _ => self.versions_to_retain.saturating_sub(1),
@@ -348,6 +376,9 @@ pub fn classify_mutable_control_path(
         ["gc", "runs", _] => Some(MutableControlKind::GcRunV1),
         ["gc", "v2", "epochs", _, "head.cbor"] => Some(MutableControlKind::GcEpochV2),
         ["gc", "v2", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinatorV2),
+        ["journal-index", "v2", "heads", _] => {
+            Some(MutableControlKind::JournalDerivedIndexHeadV2)
+        }
         _ => None,
     }
 }

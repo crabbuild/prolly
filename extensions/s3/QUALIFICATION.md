@@ -27,6 +27,8 @@ Core tests verify:
 - exact-version GC and corrupt-checkpoint recovery.
 - concurrent partitioned GC with ordered dirty-root catch-up, restart recovery,
   bounded sweep fencing, and journal cleanup;
+- branch-local node and commit-graph indexing from bounded publication-journal
+  tails with zero commit/ref namespace scans and fail-closed late startup;
 - raw cross-bucket restore rejection plus portable archive clone/rebind,
   read-only `fsck`, explicit writer takeover, post-restore write, and cleanup.
 
