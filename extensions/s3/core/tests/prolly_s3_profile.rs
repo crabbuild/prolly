@@ -248,6 +248,106 @@ async fn physical_push_replays_only_new_history_and_moves_destination_ref() {
 }
 
 #[tokio::test]
+async fn physical_transfer_pages_resume_across_source_processes() {
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
+    let source_options = physical_options(".prolly/prolly-s3/resumable-transfer-source");
+    let source = Repository::initialize(source_plane.clone(), source_options.clone())
+        .await
+        .unwrap();
+    source
+        .put_bytes(
+            "main",
+            b"base.txt".to_vec(),
+            b"base".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
+    let destination_plane = Arc::new(MemoryObjectPlane::new(true));
+    source
+        .clone_to(
+            destination_plane.clone(),
+            ".prolly/prolly-s3/resumable-transfer-destination",
+        )
+        .await
+        .unwrap();
+    for ordinal in 0..2 {
+        source
+            .put_bytes(
+                "main",
+                format!("page-{ordinal}.txt").into_bytes(),
+                format!("value-{ordinal}").into_bytes(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let source_head = source.head("main").await.unwrap();
+    let destination = Repository::open(
+        destination_plane,
+        physical_options(".prolly/prolly-s3/resumable-transfer-destination"),
+    )
+    .await
+    .unwrap();
+    let mut cursor = source
+        .start_physical_transfer(&destination, &[source_head], false)
+        .await
+        .unwrap();
+    assert!(prolly_s3_core::encode_canonical(&cursor).unwrap().len() < 320);
+    let mut copied_objects = 0usize;
+    let mut pages = 0usize;
+    loop {
+        let encoded = prolly_s3_core::encode_canonical(&cursor).unwrap();
+        cursor = prolly_s3_core::decode_canonical(&encoded).unwrap();
+        let reader = Repository::open(
+            source_plane.clone(),
+            RepositoryOptions {
+                read_only: true,
+                ..source_options.clone()
+            },
+        )
+        .await
+        .unwrap();
+        let page = reader
+            .physical_transfer_page(&destination, &cursor, 2, 1)
+            .await
+            .unwrap();
+        assert!(page.processed_commits <= 1);
+        assert!(page.traversal_steps <= 2);
+        copied_objects += page.sync.copied_objects;
+        pages += 1;
+        cursor = page.cursor;
+        if page.complete {
+            break;
+        }
+        assert!(pages < 20);
+    }
+    assert!(pages > 1);
+    assert_eq!(copied_objects, 4);
+    let mapped_head = source
+        .physical_transfer_mapping(&cursor, source_head)
+        .await
+        .unwrap()
+        .unwrap();
+    destination
+        .create_branch("resumed", mapped_head)
+        .await
+        .unwrap();
+    assert_eq!(
+        destination
+            .get_current("resumed", b"page-1.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"value-1"
+    );
+}
+
+#[tokio::test]
 async fn physical_repair_rebinds_a_missing_destination_payload() {
     let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(

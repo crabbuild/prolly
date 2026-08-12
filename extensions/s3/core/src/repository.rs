@@ -378,6 +378,26 @@ pub struct CommitClosureCleanupReport {
     pub complete: bool,
 }
 
+/// Constant-size checkpoint for an interruptible physical history transfer.
+/// The source traversal and source-to-destination mappings live in the
+/// closure tree named by this cursor.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalTransferCursor {
+    pub closure: CommitClosureCursor,
+    destination_scope: [u8; 32],
+    force_rebind: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PhysicalTransferPage {
+    pub cursor: PhysicalTransferCursor,
+    pub sync: SyncReport,
+    pub processed_commits: usize,
+    pub traversal_steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct CommitClosureWork {
     commit: CommitId,
@@ -3065,6 +3085,172 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
+    /// Start an interruptible physical clone/fetch/push/repair transfer.
+    /// Callers must keep every root reachable by a ref or retention pin until
+    /// the transfer and closure cleanup have completed.
+    pub async fn start_physical_transfer<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        roots: &[CommitId],
+        force_rebind: bool,
+    ) -> Result<PhysicalTransferCursor> {
+        self.validate_sync_identity(target)?;
+        let closure = self.start_commit_closure(roots).await?;
+        Ok(PhysicalTransferCursor {
+            closure,
+            destination_scope: physical_transfer_destination_scope(target),
+            force_rebind,
+        })
+    }
+
+    /// Attach another bounded root page to an existing transfer job.
+    pub async fn extend_physical_transfer(
+        &self,
+        cursor: &mut PhysicalTransferCursor,
+        roots: &[CommitId],
+    ) -> Result<()> {
+        self.extend_commit_closure(&mut cursor.closure, roots).await
+    }
+
+    /// Resolve one source commit after the page containing it has completed.
+    pub async fn physical_transfer_mapping(
+        &self,
+        cursor: &PhysicalTransferCursor,
+        source: CommitId,
+    ) -> Result<Option<CommitId>> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        index
+            .engine
+            .get(&index.tree()?, &commit_closure_mapping_key(source))
+            .await?
+            .map(|bytes| decode_canonical(&bytes))
+            .transpose()
+    }
+
+    /// Copy one bounded parent-before-child page. Destination side effects are
+    /// idempotent; the returned cursor includes their durable commit mappings
+    /// and is the only cursor the caller should checkpoint.
+    pub async fn physical_transfer_page<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        cursor: &PhysicalTransferCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<PhysicalTransferPage> {
+        self.validate_sync_identity(target)?;
+        if cursor.destination_scope != physical_transfer_destination_scope(target) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "physical transfer cursor belongs to a different destination scope",
+            ));
+        }
+        let page = self
+            .commit_closure_page(&cursor.closure, max_steps, max_commits)
+            .await?;
+        let processed_commits = page.commits.len();
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        let prior_tree = index.tree()?;
+        let mut page_mappings = BTreeMap::new();
+        let mut mutations = Vec::with_capacity(processed_commits);
+        let mut sync = SyncReport::default();
+        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
+        for (source_id, source_commit) in page.commits {
+            if !cursor.force_rebind {
+                if let Some(destination_id) = target
+                    .load_physical_transfer_mapping(source_id)
+                    .await?
+                {
+                    match target.load_commit(destination_id).await {
+                        Ok(_) => {
+                            sync.already_present += 1;
+                            page_mappings.insert(source_id, destination_id);
+                            mutations.push(Mutation::Upsert {
+                                key: commit_closure_mapping_key(source_id),
+                                val: encode_canonical(&destination_id)?,
+                            });
+                            continue;
+                        }
+                        Err(error) if error.code == ErrorCode::MissingClosure => {
+                            target.delete_physical_transfer_mapping(source_id).await?;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+            for parent in &source_commit.parents {
+                let mapped = match page_mappings.get(parent) {
+                    Some(mapped) => *mapped,
+                    None => index
+                        .engine
+                        .get(&prior_tree, &commit_closure_mapping_key(*parent))
+                        .await?
+                        .map(|bytes| decode_canonical(&bytes))
+                        .transpose()?
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::MissingClosure,
+                                "physical transfer parent was not durably mapped",
+                            )
+                        })?,
+                };
+                mapped_parents.push(mapped);
+            }
+            let (destination_id, copied_objects, copied_bytes, already_present) = self
+                .replay_physical_commit_to(
+                    target,
+                    source_id,
+                    source_commit,
+                    mapped_parents,
+                    cursor.force_rebind,
+                    writer_fence_generation,
+                )
+                .await?;
+            sync.copied_objects += copied_objects;
+            sync.copied_bytes = sync
+                .copied_bytes
+                .checked_add(copied_bytes)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::EntityTooLarge,
+                        "physical transfer byte count overflow",
+                    )
+                })?;
+            sync.already_present += usize::from(already_present);
+            if !cursor.force_rebind {
+                target
+                    .store_physical_transfer_mapping(source_id, destination_id)
+                    .await?;
+            }
+            page_mappings.insert(source_id, destination_id);
+            mutations.push(Mutation::Upsert {
+                key: commit_closure_mapping_key(source_id),
+                val: encode_canonical(&destination_id)?,
+            });
+        }
+        let mut next_closure = page.cursor;
+        if !mutations.is_empty() {
+            index.install_root(next_closure.state.root.clone())?;
+            let tree = index.engine.batch(&index.tree()?, mutations).await?;
+            next_closure.state = TreeRootV1::from_tree(&tree)?;
+        }
+        Ok(PhysicalTransferPage {
+            cursor: PhysicalTransferCursor {
+                closure: next_closure,
+                destination_scope: cursor.destination_scope,
+                force_rebind: cursor.force_rebind,
+            },
+            sync,
+            processed_commits,
+            traversal_steps: page.steps,
+            complete: page.complete,
+            budget_exhausted: page.budget_exhausted,
+        })
+    }
+
     async fn replay_physical_history_to<Q: ObjectPlane>(
         &self,
         target: &Repository<Q>,
@@ -3077,118 +3263,55 @@ impl<P: ObjectPlane> Repository<P> {
                 "physical transfer requires at least one root",
             ));
         }
-        let requested_roots = source_roots.iter().copied().collect::<BTreeSet<_>>();
         let mut root_pages = source_roots.chunks(1_000);
         let mut cursor = self
-            .start_commit_closure(root_pages.next().expect("roots are non-empty"))
+            .start_physical_transfer(
+                target,
+                root_pages.next().expect("roots are non-empty"),
+                force_rebind,
+            )
             .await?;
         for roots in root_pages {
-            self.extend_commit_closure(&mut cursor, roots).await?;
+            self.extend_physical_transfer(&mut cursor, roots).await?;
         }
-        let index = self.commit_closure_index(cursor.traversal)?;
-        let mut root_map = BTreeMap::new();
         let mut report = SyncReport::default();
-        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
         loop {
-            let page = self.commit_closure_page(&cursor, 4_096, 256).await?;
-            index.install_root(cursor.state.root.clone())?;
-            let prior_tree = index.tree()?;
-            let mut page_mappings = BTreeMap::new();
-            let mut mutations = Vec::with_capacity(page.commits.len());
-            for (source_id, source_commit) in page.commits {
-                if !force_rebind {
-                    if let Some(destination_id) =
-                        target.load_physical_transfer_mapping(source_id).await?
-                    {
-                        match target.load_commit(destination_id).await {
-                            Ok(_) => {
-                                report.already_present += 1;
-                                page_mappings.insert(source_id, destination_id);
-                                mutations.push(Mutation::Upsert {
-                                    key: commit_closure_mapping_key(source_id),
-                                    val: encode_canonical(&destination_id)?,
-                                });
-                                if requested_roots.contains(&source_id) {
-                                    root_map.insert(source_id, destination_id);
-                                }
-                                continue;
-                            }
-                            Err(error) if error.code == ErrorCode::MissingClosure => {
-                                target.delete_physical_transfer_mapping(source_id).await?;
-                            }
-                            Err(error) => return Err(error),
-                        }
-                    }
-                }
-                let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
-                for parent in &source_commit.parents {
-                    let mapped = match page_mappings.get(parent) {
-                        Some(mapped) => *mapped,
-                        None => index
-                            .engine
-                            .get(&prior_tree, &commit_closure_mapping_key(*parent))
-                            .await?
-                            .map(|bytes| decode_canonical(&bytes))
-                            .transpose()?
-                            .ok_or_else(|| {
-                                Error::new(
-                                    ErrorCode::MissingClosure,
-                                    "physical transfer parent was not durably mapped",
-                                )
-                            })?,
-                    };
-                    mapped_parents.push(mapped);
-                }
-                let (destination_id, copied_objects, copied_bytes, already_present) = self
-                    .replay_physical_commit_to(
-                        target,
-                        source_id,
-                        source_commit,
-                        mapped_parents,
-                        force_rebind,
-                        writer_fence_generation,
+            let page = self
+                .physical_transfer_page(target, &cursor, 4_096, 256)
+                .await?;
+            report.copied_objects += page.sync.copied_objects;
+            report.copied_bytes = report
+                .copied_bytes
+                .checked_add(page.sync.copied_bytes)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::EntityTooLarge,
+                        "physical transfer byte count overflow",
                     )
-                    .await?;
-                report.copied_objects += copied_objects;
-                report.copied_bytes =
-                    report
-                        .copied_bytes
-                        .checked_add(copied_bytes)
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::EntityTooLarge,
-                                "physical transfer byte count overflow",
-                            )
-                        })?;
-                report.already_present += usize::from(already_present);
-                if !force_rebind {
-                    target
-                        .store_physical_transfer_mapping(source_id, destination_id)
-                        .await?;
-                }
-                page_mappings.insert(source_id, destination_id);
-                mutations.push(Mutation::Upsert {
-                    key: commit_closure_mapping_key(source_id),
-                    val: encode_canonical(&destination_id)?,
-                });
-                if requested_roots.contains(&source_id) {
-                    root_map.insert(source_id, destination_id);
-                }
-            }
-            let mut next_cursor = page.cursor;
-            if !mutations.is_empty() {
-                index.install_root(next_cursor.state.root.clone())?;
-                let tree = index.engine.batch(&index.tree()?, mutations).await?;
-                next_cursor.state = TreeRootV1::from_tree(&tree)?;
-            }
-            let complete = page.complete;
-            cursor = next_cursor;
-            if complete {
+                })?;
+            report.already_present += page.sync.already_present;
+            cursor = page.cursor;
+            if page.complete {
                 break;
             }
         }
+        let mut root_map = BTreeMap::new();
+        for source in source_roots.iter().copied().collect::<BTreeSet<_>>() {
+            let destination = self
+                .physical_transfer_mapping(&cursor, source)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "physical transfer root was not durably mapped",
+                    )
+                })?;
+            root_map.insert(source, destination);
+        }
         loop {
-            let cleanup = self.cleanup_commit_closure(&cursor, 1_000).await?;
+            let cleanup = self
+                .cleanup_commit_closure(&cursor.closure, 1_000)
+                .await?;
             if cleanup.complete {
                 break;
             }
@@ -11591,6 +11714,14 @@ fn physical_transfer_mapping_path(prefix: &str, source: CommitId) -> Result<Obje
         &encoded[2..4],
         encoded
     ))
+}
+
+fn physical_transfer_destination_scope<Q: ObjectPlane>(target: &Repository<Q>) -> [u8; 32] {
+    derive_input_digest(&[
+        b"physical-transfer-destination-v1",
+        target.format.repository_id.as_bytes(),
+        target.options.repository_prefix.as_bytes(),
+    ])
 }
 
 fn gc_dirty_root_v2_prefix(prefix: &str, epoch: OperationId) -> String {

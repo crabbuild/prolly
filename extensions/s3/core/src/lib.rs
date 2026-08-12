@@ -51,9 +51,10 @@ pub use repository::{
     InternalNodePrewarmReport, MergeConflict, MergePlan, MergePolicy, NodeIndexAdvanceReport,
     NodeIndexMaintenance,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectSummary, RefCatalogAdvanceReport,
-    RefMoveReceipt, RefVersionCompactionReport, RepairReport, Repository, RepositoryOptions,
-    RepositoryPerformanceSnapshot, RetentionPinPage, SyncReport, Tag, TagPage, TagReflogPage,
-    TraversalBudget, VersionSummary, WriterLeaseMaintenance,
+    PhysicalTransferCursor, PhysicalTransferPage, RefMoveReceipt, RefVersionCompactionReport,
+    RepairReport, Repository, RepositoryOptions, RepositoryPerformanceSnapshot, RetentionPinPage,
+    SyncReport, Tag, TagPage, TagReflogPage, TraversalBudget, VersionSummary,
+    WriterLeaseMaintenance,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

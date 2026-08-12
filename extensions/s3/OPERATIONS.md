@@ -179,6 +179,13 @@ destination commit namespace. A mapping whose destination commit was reclaimed
 is exact-deleted and rebuilt; monitor stale-mapping rebuilds because frequent
 occurrences indicate transfer/GC retention policies are misaligned.
 
+Workflow engines can checkpoint the same pipeline explicitly with
+`start_physical_transfer`, `extend_physical_transfer`, and
+`physical_transfer_page`. Canonically serialize only the returned
+`PhysicalTransferCursor`, never the input cursor after a successful page. Use
+`physical_transfer_mapping` to resolve final ref targets, publish those refs,
+then clean up `cursor.closure` in bounded pages.
+
 ## Backup and restore
 
 A raw cross-bucket copy is not a valid repository restore: S3 assigns new

@@ -32,6 +32,8 @@ immutable point-lookup paths in the destination. The destination mapping
 removes the previous repository-wide LIST and fingerprint pass from every
 clone, fetch, push, and repair. A missing mapped commit makes the mapping stale;
 the transfer exact-deletes it and reconstructs the commit idempotently.
+`PhysicalTransferCursor` exposes this page boundary to external workflow
+engines and remains process-independent under canonical serialization.
 
 ## Consequences
 
