@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    decode_canonical, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
-    CommitGraphHeadV2, JournalDerivedIndexHeadV2, ListRequest, NodeIndexHeadV2, ObjectPath,
+    decode_canonical, CommitGraphHeadV2, CompareExchange, CompareExchangeOutcome, DeleteOutcome,
+    Error, ErrorCode, JournalDerivedIndexHeadV2, ListRequest, NodeIndexHeadV2, ObjectPath,
     ObjectPlane, OperationIndexHeadV2, PhysicalVersion, RefCatalogHeadV2, RefValueV1, RefValueV2,
     Result, StorageToken,
 };
@@ -376,9 +376,7 @@ pub fn classify_mutable_control_path(
         ["gc", "runs", _] => Some(MutableControlKind::GcRunV1),
         ["gc", "v2", "epochs", _, "head.cbor"] => Some(MutableControlKind::GcEpochV2),
         ["gc", "v2", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinatorV2),
-        ["journal-index", "v2", "heads", _] => {
-            Some(MutableControlKind::JournalDerivedIndexHeadV2)
-        }
+        ["journal-index", "v2", "heads", _] => Some(MutableControlKind::JournalDerivedIndexHeadV2),
         _ => None,
     }
 }

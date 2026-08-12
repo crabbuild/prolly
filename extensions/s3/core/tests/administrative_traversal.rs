@@ -91,35 +91,39 @@ async fn commit_closure_cursor_is_constant_size_parent_first_and_restartable() {
     }
 
     assert!(pages > emitted.len());
-    let unique = emitted.iter().copied().collect::<std::collections::BTreeSet<_>>();
+    let unique = emitted
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(unique.len(), emitted.len());
     assert_eq!(unique.len(), 4);
-    let position = |id| emitted.iter().position(|candidate| *candidate == id).unwrap();
+    let position = |id| {
+        emitted
+            .iter()
+            .position(|candidate| *candidate == id)
+            .unwrap()
+    };
     assert!(position(root) < position(main_one));
     assert!(position(main_one) < position(main_two));
     assert!(position(root) < position(side));
     assert_eq!(plane.request_snapshot().list, 0);
 
-    let complete = repository
-        .commit_closure_page(&cursor, 2, 1)
-        .await
-        .unwrap();
+    let complete = repository.commit_closure_page(&cursor, 2, 1).await.unwrap();
     assert!(complete.complete);
     assert!(complete.commits.is_empty());
     for _ in 0..100 {
-        let cleanup = repository
-            .cleanup_commit_closure(&cursor, 1)
-            .await
-            .unwrap();
+        let cleanup = repository.cleanup_commit_closure(&cursor, 1).await.unwrap();
         if cleanup.complete {
             break;
         }
     }
-    assert!(repository
-        .cleanup_commit_closure(&cursor, 1)
-        .await
-        .unwrap()
-        .complete);
+    assert!(
+        repository
+            .cleanup_commit_closure(&cursor, 1)
+            .await
+            .unwrap()
+            .complete
+    );
 }
 
 #[tokio::test]
@@ -299,7 +303,10 @@ async fn deep_fsck_is_bounded_and_resumes_across_every_phase() {
     assert_eq!(repository_wide.branches, 1);
     assert_eq!(repository_wide.tags, 0);
     assert_eq!(repository_wide.commits, cursor.report.commits);
-    assert_eq!(repository_wide.logical_versions, cursor.report.logical_versions);
+    assert_eq!(
+        repository_wide.logical_versions,
+        cursor.report.logical_versions
+    );
 
     loop {
         let cleanup = repository

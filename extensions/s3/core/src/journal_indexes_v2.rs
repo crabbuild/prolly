@@ -97,11 +97,8 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             digest,
             node_cache,
         );
-        let controls = MutableControlStore::new(
-            plane.clone(),
-            prefix.clone(),
-            control_versions_to_retain,
-        )?;
+        let controls =
+            MutableControlStore::new(plane.clone(), prefix.clone(), control_versions_to_retain)?;
         Ok(Self {
             plane,
             controls,
@@ -188,9 +185,11 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             )
         } else {
             (
-                vec![publisher
-                    .load_publication(current.value.publication)
-                    .await?],
+                vec![
+                    publisher
+                        .load_publication(current.value.publication)
+                        .await?,
+                ],
                 true,
             )
         };
@@ -232,8 +231,13 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
                 continue;
             }
             let object = publisher.load_commit_object(event.new_target).await?;
-            self.index_node_pack(&mut node_tree, event.new_target, &object, &mut indexed_nodes)
-                .await?;
+            self.index_node_pack(
+                &mut node_tree,
+                event.new_target,
+                &object,
+                &mut indexed_nodes,
+            )
+            .await?;
             self.index_commit_graph(&mut graph_tree, event.new_target, object)
                 .await?;
             indexed_commits += 1;
@@ -265,7 +269,10 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
                 .as_ref()
                 .map_or(0, |head| head.value.indexed_publications)
                 .checked_add(u64::try_from(indexed_publications).map_err(|_| {
-                    Error::new(ErrorCode::InternalInvariant, "publication count exceeds u64")
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "publication count exceeds u64",
+                    )
                 })?)
                 .ok_or_else(|| {
                     Error::new(
@@ -536,11 +543,7 @@ impl<P: ObjectPlane> JournalDerivedIndexesV2<P> {
             return Ok(None);
         };
         let value: JournalDerivedIndexHeadV2 = decode_canonical(&stored.bytes)?;
-        value.validate(
-            self.repository,
-            branch,
-            tree_format_digest(&self.format)?,
-        )?;
+        value.validate(self.repository, branch, tree_format_digest(&self.format)?)?;
         Ok(Some(LoadedHead {
             value,
             token: stored.metadata.token,

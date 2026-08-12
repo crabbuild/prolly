@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use prolly::TreeFormat;
 use prolly_s3_core::{
     AuthorityScopeV2, AuthorityStampV2, BucketCommitV2, BucketDeltaV1, BucketStateV1,
-    CommitGeneration, CommitIdV2, CommitPublicationV2, JournalDerivedIndexesV2,
-    MemoryObjectPlane, NodePackEntryV1, NodePackV1, OperationId, RepositoryId,
-    ShardWriterAuthorityV2, ShardedBranchPublisherV2, TreeFormatDigest, TreeRootV1,
+    CommitGeneration, CommitIdV2, CommitPublicationV2, JournalDerivedIndexesV2, MemoryObjectPlane,
+    NodePackEntryV1, NodePackV1, OperationId, RepositoryId, ShardWriterAuthorityV2,
+    ShardedBranchPublisherV2, TreeFormatDigest, TreeRootV1,
 };
 
 fn operation(value: u128) -> OperationId {
@@ -71,13 +71,9 @@ async fn node_and_graph_indexes_advance_only_from_the_branch_journal() {
         )
         .unwrap(),
     );
-    let publisher = ShardedBranchPublisherV2::new(
-        plane.clone(),
-        ".prolly/v2",
-        repository,
-        authority.clone(),
-    )
-    .unwrap();
+    let publisher =
+        ShardedBranchPublisherV2::new(plane.clone(), ".prolly/v2", repository, authority.clone())
+            .unwrap();
     let indexes = JournalDerivedIndexesV2::new(
         plane.clone(),
         ".prolly/v2",
