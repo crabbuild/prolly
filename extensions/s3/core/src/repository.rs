@@ -46,8 +46,7 @@ pub struct RepositoryOptions {
     pub writer: String,
     pub limits: CanonicalLimits,
     pub state_tree_format: TreeFormat,
-    /// Duration of the repository-scoped physical writer lease. Renewal is
-    /// amortized and is not part of an ordinary operation's foreground calls.
+    /// Duration of each branch/system writer-authority lease.
     pub writer_lease_millis: u64,
     /// Open without acquiring mutation authority.
     pub read_only: bool,
@@ -924,6 +923,9 @@ pub struct Repository<P: ObjectPlane> {
     ref_catalog: Arc<ProllyMetadataIndex<P>>,
     commit_graph: Arc<ProllyMetadataIndex<P>>,
     engine: AsyncProlly<ProllyObjectStore<P>>,
+    shard_authority: Arc<crate::ShardWriterAuthorityV2<P>>,
+    authority_permits: Arc<RwLock<BTreeMap<crate::AuthorityScopeV2, crate::AuthorityPermitV2>>>,
+    authority_renewal: Arc<tokio::sync::Mutex<()>>,
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
     warm_branches: Arc<RwLock<BoundedCache<String, WarmBranchState>>>,
     commit_cache: Arc<RwLock<BoundedCache<CommitId, BucketCommitV1>>>,
@@ -986,9 +988,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
         };
         validate_format_compatibility(&intent.format, &options)?;
-        let mut repository =
-            Self::from_format(plane.clone(), options.clone(), intent.format.clone())?;
-        repository.acquire_physical_writer().await?;
+        let repository = Self::from_format(plane.clone(), options.clone(), intent.format.clone())?;
 
         let empty = repository.engine.create();
         let empty_state = BucketStateV1 {
@@ -1000,7 +1000,9 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: Vec::new(),
             changes: Vec::new(),
         };
-        let writer_fence_generation = repository.writer_fence_generation()?;
+        let writer_fence_generation = repository
+            .branch_writer_generation(&options.default_branch)
+            .await?;
         let commit = BucketCommitV1 {
             state: empty_state,
             parents: Vec::new(),
@@ -1121,10 +1123,9 @@ impl<P: ObjectPlane> Repository<P> {
             })?;
         let format = decode_repository_format(&object.bytes)?;
         validate_format_compatibility(&format, &options)?;
-        let mut repository = Self::from_format(plane, options, format)?;
+        let repository = Self::from_format(plane, options, format)?;
         repository.load_latest_node_index_checkpoint().await?;
         repository.load_latest_scale_metadata().await?;
-        repository.acquire_physical_writer().await?;
         repository.restore_gc_coordinator_v2().await?;
         Ok(repository)
     }
@@ -1207,6 +1208,13 @@ impl<P: ObjectPlane> Repository<P> {
             options.mutable_control_versions_to_retain,
         )?
         .with_observer(dirty_root_observer);
+        let shard_authority = Arc::new(crate::ShardWriterAuthorityV2::new_with_control_retention(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            format.repository_id,
+            Duration::from_millis(options.writer_lease_millis),
+            options.mutable_control_versions_to_retain,
+        )?);
         Ok(Self {
             plane,
             controls,
@@ -1218,6 +1226,9 @@ impl<P: ObjectPlane> Repository<P> {
             ref_catalog,
             commit_graph,
             engine,
+            shard_authority,
+            authority_permits: Arc::new(RwLock::new(BTreeMap::new())),
+            authority_renewal: Arc::new(tokio::sync::Mutex::new(())),
             writer_lease: Arc::new(RwLock::new(None)),
             warm_branches: Arc::new(RwLock::new(BoundedCache::new(max_cached_branches))),
             commit_cache: Arc::new(RwLock::new(BoundedCache::new(max_cached_commits))),
@@ -1341,7 +1352,10 @@ impl<P: ObjectPlane> Repository<P> {
             })?;
             if node.level == 1 {
                 leaves_skipped = leaves_skipped.checked_add(node.vals.len()).ok_or_else(|| {
-                    Error::new(ErrorCode::InternalInvariant, "prewarm leaf counter overflow")
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "prewarm leaf counter overflow",
+                    )
                 })?;
                 continue;
             }
@@ -1484,6 +1498,7 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
     ) -> Result<crate::NodeIndexCheckpointV1> {
         validate_branch(branch)?;
+        self.system_writer_generation("node-index-v1").await?;
         self.node_store.rebuild_node_index().await?;
         let head = self.head(branch).await?;
         let commit = self.load_commit(head).await?;
@@ -1549,6 +1564,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "node-index advance must process between 1 and 1,000 commit objects",
             ));
         }
+        self.system_writer_generation("node-index-v2").await?;
         let head_path = node_index_v2_head_path(&self.options.repository_prefix)?;
         let loaded = self.plane.load_mutable(&head_path).await?;
         let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
@@ -1748,6 +1764,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "ref-catalog advance must process between 1 and 1,000 refs",
             ));
         }
+        self.system_writer_generation("ref-catalog-v2").await?;
         let head_path = ref_catalog_v2_head_path(&self.options.repository_prefix)?;
         let loaded = self.plane.load_mutable(&head_path).await?;
         let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
@@ -1930,6 +1947,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "commit-graph advance must process between 1 and 1,000 commits",
             ));
         }
+        self.system_writer_generation("commit-graph-v2").await?;
         let head_path = commit_graph_v2_head_path(&self.options.repository_prefix)?;
         let loaded = self.plane.load_mutable(&head_path).await?;
         let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
@@ -2175,6 +2193,88 @@ impl<P: ObjectPlane> Repository<P> {
         self.options.clock.now_millis()
     }
 
+    async fn authority_generation(&self, scope: crate::AuthorityScopeV2) -> Result<u64> {
+        if self.options.read_only {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository was opened read-only",
+            ));
+        }
+        let now = self.now_millis()?;
+        let cached = self
+            .authority_permits
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "authority cache poisoned"))?
+            .get(&scope)
+            .cloned();
+        let permit = match cached {
+            Some(permit) if permit.expires_at_millis() > now => permit,
+            _ => {
+                // Cold acquisition and renewal are rare control-plane work.
+                // Serialize only those transitions, then let steady-state
+                // validation and branch publication proceed independently.
+                let _renewal = self.authority_renewal.lock().await;
+                let current = self
+                    .authority_permits
+                    .read()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .get(&scope)
+                    .cloned();
+                let permit = match current {
+                    Some(permit) if permit.expires_at_millis() > now => permit,
+                    Some(permit) => self.shard_authority.renew(permit, now).await?,
+                    None => {
+                        self.shard_authority
+                            .acquire(
+                                scope.clone(),
+                                &self.options.writer,
+                                now,
+                                self.new_operation(),
+                            )
+                            .await?
+                    }
+                };
+                self.authority_permits
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .insert(scope.clone(), permit.clone());
+                permit
+            }
+        };
+        match self.shard_authority.validate_active(&permit, now).await {
+            Ok(stamp) => Ok(stamp.generation),
+            Err(error) => {
+                self.authority_permits
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .remove(&scope);
+                Err(error)
+            }
+        }
+    }
+
+    async fn branch_writer_generation(&self, branch: &str) -> Result<u64> {
+        validate_branch(branch)?;
+        self.authority_generation(crate::AuthorityScopeV2::Branch {
+            name: branch.to_string(),
+        })
+        .await
+    }
+
+    async fn system_writer_generation(&self, namespace: &str) -> Result<u64> {
+        self.authority_generation(crate::AuthorityScopeV2::System {
+            namespace: namespace.to_string(),
+        })
+        .await
+    }
+
+    #[allow(dead_code)] // Legacy v1 migration adapter; normal opens use sharded authority.
     async fn acquire_physical_writer(&mut self) -> Result<()> {
         if self.options.read_only {
             return Ok(());
@@ -2254,10 +2354,45 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    /// Renew the repository-scoped exclusive writer lease. Services should
-    /// call this from an independent maintenance loop; mutations also renew
-    /// opportunistically near the deadline.
+    /// Renew every cached branch/system authority permit. The repository-wide
+    /// v1 lease is renewed only when this instance was opened through the
+    /// legacy migration adapter.
     pub async fn renew_writer_lease(&self) -> Result<()> {
+        let _authority_renewal = self.authority_renewal.lock().await;
+        if self
+            .writer_lease
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
+            .is_none()
+        {
+            let now = self.now_millis()?;
+            let permits = self
+                .authority_permits
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "authority cache poisoned"))?
+                .clone();
+            for (scope, permit) in permits {
+                let renewed = match self.shard_authority.renew(permit, now).await {
+                    Ok(renewed) => renewed,
+                    Err(error) => {
+                        self.authority_permits
+                            .write()
+                            .map_err(|_| {
+                                Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                            })?
+                            .remove(&scope);
+                        return Err(error);
+                    }
+                };
+                self.authority_permits
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .insert(scope, renewed);
+            }
+            return Ok(());
+        }
         let _renewal = self.lease_renewal.lock().await;
         self.renew_writer_lease_inner().await
     }
@@ -2326,9 +2461,9 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    /// Run independent physical-writer lease renewal until the returned handle
-    /// is dropped. A failed or ambiguous renewal fences this repository before
-    /// the task exits.
+    /// Run independent shard-authority renewal until the returned handle is
+    /// dropped. A failed or ambiguous renewal fences the affected writer
+    /// instance before the task exits.
     pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
         if self.options.read_only {
             return Err(Error::new(
@@ -2400,6 +2535,108 @@ impl<P: ObjectPlane> Repository<P> {
     /// Explicitly take over an expired or credential-revoked physical writer.
     /// The caller must have independently stopped/revoked the old writer; S3
     /// cannot make ref CAS conditional on this separate lease object.
+    pub async fn takeover_branch_writer(
+        &mut self,
+        branch: &str,
+        expected_writer: &str,
+        expected_generation: u64,
+        handoff_evidence: &str,
+    ) -> Result<u64> {
+        if !self.options.read_only || handoff_evidence.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "branch takeover requires a read-only open and credential-isolation evidence",
+            ));
+        }
+        validate_branch(branch)?;
+        let scope = crate::AuthorityScopeV2::Branch {
+            name: branch.to_string(),
+        };
+        let pending = self
+            .shard_authority
+            .begin_takeover(crate::TakeoverRequestV2 {
+                scope: scope.clone(),
+                expected_writer: expected_writer.to_string(),
+                expected_generation,
+                next_writer: self.options.writer.clone(),
+                handoff_evidence: handoff_evidence.to_string(),
+                now_millis: self.now_millis()?,
+                nonce: self.new_operation(),
+            })
+            .await?;
+        let stamp = pending.stamp();
+        let _publication = self.lock_branch_publication(branch).await;
+        let loaded = self.load_ref_including_tombstone(branch).await?;
+        if loaded.value.writer_fence_generation != expected_generation
+            && loaded.value.writer_fence_generation != stamp.generation
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch ref fence does not match the takeover expectation",
+            ));
+        }
+        if loaded.value.writer_fence_generation != stamp.generation {
+            let operation = self.new_operation();
+            let created_at_millis = self.now_millis()?;
+            let reflog = ReflogEntryV1 {
+                branch: branch.to_string(),
+                old_target: Some(loaded.value.target),
+                new_target: loaded.value.target,
+                operation,
+                actor: self.options.writer.clone(),
+                message: format!("branch writer takeover: {}", handoff_evidence.trim()),
+                created_at_millis,
+            };
+            let mut barrier = loaded.value;
+            barrier.previous_target = Some(barrier.target);
+            barrier.generation =
+                RefGeneration(barrier.generation.0.checked_add(1).ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "ref generation overflow")
+                })?);
+            barrier.operation = operation;
+            barrier.reflog = reflog.id()?;
+            barrier.inline_reflog = reflog;
+            barrier.writer = self.options.writer.clone();
+            barrier.updated_at_millis = created_at_millis;
+            barrier.writer_fence_generation = stamp.generation;
+            match self
+                .controls
+                .compare_exchange(CompareExchange {
+                    path: branch_path(&self.options.repository_prefix, branch)?,
+                    expected: Some(loaded.token),
+                    bytes: encode_canonical(&barrier)?,
+                })
+                .await?
+            {
+                CompareExchangeOutcome::Applied(_) => {}
+                CompareExchangeOutcome::Conflict(_) => {
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        "branch changed during writer takeover barrier",
+                    ));
+                }
+            }
+        }
+        let active = self
+            .shard_authority
+            .activate_after_barrier(
+                pending,
+                crate::BranchRefBarrierV2::new(stamp.clone()),
+                self.now_millis()?,
+            )
+            .await?;
+        self.authority_permits
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "authority cache poisoned"))?
+            .insert(scope, active);
+        drop(_publication);
+        self.options.read_only = false;
+        self.invalidate_branch_cache(branch)?;
+        Ok(stamp.generation)
+    }
+
+    /// Legacy repository-wide takeover adapter. New deployments should call
+    /// `takeover_branch_writer` independently for each authority shard.
     pub async fn takeover_physical_writer(
         &mut self,
         expected_writer: &str,
@@ -2550,70 +2787,6 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(next_generation)
     }
 
-    async fn physical_writer_generation_for_mutation(&self) -> Result<u64> {
-        let held = self
-            .writer_lease
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
-            .clone()
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "physical repository has no exclusive writer authority",
-                )
-            })?;
-        let now = self.now_millis()?;
-        if held.value.expires_at_millis <= now {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer lease expired; publication is fenced",
-            ));
-        }
-        let renew_at = held
-            .value
-            .expires_at_millis
-            .saturating_sub(self.options.writer_lease_millis / 3);
-        if now >= renew_at {
-            let _renewal = self.lease_renewal.lock().await;
-            let current = self
-                .writer_lease
-                .read()
-                .map_err(|_| {
-                    Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned")
-                })?
-                .clone()
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::PreconditionFailed,
-                        "physical repository has no exclusive writer authority",
-                    )
-                })?;
-            let now = self.now_millis()?;
-            let renew_at = current
-                .value
-                .expires_at_millis
-                .saturating_sub(self.options.writer_lease_millis / 3);
-            if now >= renew_at {
-                self.renew_writer_lease_inner().await?;
-            }
-        }
-        self.writer_fence_generation()
-    }
-
-    fn writer_fence_generation(&self) -> Result<u64> {
-        self.writer_lease
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
-            .as_ref()
-            .map(|lease| lease.value.generation)
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "physical repository has no exclusive writer authority",
-                )
-            })
-    }
-
     fn cache_branch(
         &self,
         branch: &str,
@@ -2651,7 +2824,7 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
     ) -> Result<RefVersionCompactionReport> {
         validate_branch(branch)?;
-        self.physical_writer_generation_for_mutation().await?;
+        self.branch_writer_generation(branch).await?;
         let _publication = self.lock_branch_publication(branch).await;
         let loaded = self.load_ref_including_tombstone(branch).await?;
         self.compact_branch_ref_versions_inner(branch, &loaded)
@@ -2849,11 +3022,11 @@ impl<P: ObjectPlane> Repository<P> {
         let mut target_options = self.options.clone();
         target_options.repository_prefix = destination_prefix.to_string();
         target_options.read_only = false;
-        let mut target =
-            Repository::<Q>::from_format(destination, target_options, self.format.clone())?;
-        target.acquire_physical_writer().await?;
-        let target = Arc::new(target);
-        let _lease_maintenance = target.start_writer_lease_maintenance()?;
+        let target = Arc::new(Repository::<Q>::from_format(
+            destination,
+            target_options,
+            self.format.clone(),
+        )?);
 
         let branches = self.list_branches().await?;
         let tags = self.list_tags().await?;
@@ -2865,7 +3038,6 @@ impl<P: ObjectPlane> Repository<P> {
         let (commit_map, sync) = self
             .replay_physical_history_to(target.as_ref(), &roots, false)
             .await?;
-        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
         let mut report = CloneReport {
             immutable_objects: sync.copied_objects + usize::from(format_created),
             immutable_bytes: sync.copied_bytes,
@@ -2874,6 +3046,7 @@ impl<P: ObjectPlane> Repository<P> {
 
         for branch in branches {
             let _publication = target.lock_branch_publication(&branch.name).await;
+            let writer_fence_generation = target.branch_writer_generation(&branch.name).await?;
             let target_id = *commit_map.get(&branch.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
@@ -2949,6 +3122,9 @@ impl<P: ObjectPlane> Repository<P> {
         }
         for tag in tags {
             let _publication = target.lock_named_publication("tag", &tag.name).await;
+            target
+                .system_writer_generation(&format!("tag/{}", tag.name))
+                .await?;
             let target_id = *commit_map.get(&tag.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
@@ -3198,12 +3374,11 @@ impl<P: ObjectPlane> Repository<P> {
         let mut page_mappings = BTreeMap::new();
         let mut mutations = Vec::with_capacity(processed_commits);
         let mut sync = SyncReport::default();
-        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = target.system_writer_generation("transfer").await?;
         for (source_id, source_commit) in page.commits {
             if !cursor.force_rebind {
-                if let Some(destination_id) = target
-                    .load_physical_transfer_mapping(source_id)
-                    .await?
+                if let Some(destination_id) =
+                    target.load_physical_transfer_mapping(source_id).await?
                 {
                     match target.load_commit(destination_id).await {
                         Ok(_) => {
@@ -3252,15 +3427,12 @@ impl<P: ObjectPlane> Repository<P> {
                 )
                 .await?;
             sync.copied_objects += copied_objects;
-            sync.copied_bytes = sync
-                .copied_bytes
-                .checked_add(copied_bytes)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::EntityTooLarge,
-                        "physical transfer byte count overflow",
-                    )
-                })?;
+            sync.copied_bytes = sync.copied_bytes.checked_add(copied_bytes).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "physical transfer byte count overflow",
+                )
+            })?;
             sync.already_present += usize::from(already_present);
             if !cursor.force_rebind {
                 target
@@ -3351,9 +3523,7 @@ impl<P: ObjectPlane> Repository<P> {
             root_map.insert(source, destination);
         }
         loop {
-            let cleanup = self
-                .cleanup_commit_closure(&cursor.closure, 1_000)
-                .await?;
+            let cleanup = self.cleanup_commit_closure(&cursor.closure, 1_000).await?;
             if cleanup.complete {
                 break;
             }
@@ -3684,7 +3854,7 @@ impl<P: ObjectPlane> Repository<P> {
         let _physical_publication = self.lock_branch_publication(name).await;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(name).await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
             branch: name.to_string(),
@@ -3753,7 +3923,7 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn delete_branch(&self, name: &str, expected: CommitId) -> Result<()> {
         let _physical_publication = self.lock_branch_publication(name).await;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(name).await?;
         let loaded = self.load_ref(name).await?;
         if loaded.value.target != expected {
             return Err(Error::new(
@@ -3981,12 +4151,7 @@ impl<P: ObjectPlane> Repository<P> {
         if entries.len() < limit {
             if let Some(history) = state.history.as_ref() {
                 let page = self
-                    .log_page_bounded(
-                        state.root,
-                        Some(history),
-                        limit - entries.len(),
-                        budget,
-                    )
+                    .log_page_bounded(state.root, Some(history), limit - entries.len(), budget)
                     .await?;
                 for (id, commit) in page.commits {
                     let delta = self.load_commit_delta(&commit).await?;
@@ -4089,7 +4254,7 @@ impl<P: ObjectPlane> Repository<P> {
         reason: &str,
     ) -> Result<RefMoveReceipt> {
         self.load_commit(target).await?;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
         let reflog_entry = ReflogEntryV1 {
@@ -4324,7 +4489,8 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(name)?;
         let _publication = self.lock_named_publication("tag", name).await;
         self.load_commit(target).await?;
-        self.physical_writer_generation_for_mutation().await?;
+        self.system_writer_generation(&format!("tag/{name}"))
+            .await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
         let reflog = self
@@ -4537,7 +4703,10 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_tag(&self, name: &str, expected: CommitId) -> Result<()> {
+        validate_branch(name)?;
         let _publication = self.lock_named_publication("tag", name).await;
+        self.system_writer_generation(&format!("tag/{name}"))
+            .await?;
         let path = tag_path(&self.options.repository_prefix, name)?;
         let stored = self
             .plane
@@ -4629,7 +4798,8 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let _publication = self.lock_named_publication("pin", name).await;
         self.load_commit(target).await?;
-        self.physical_writer_generation_for_mutation().await?;
+        self.system_writer_generation(&format!("pin/{name}"))
+            .await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
         let now = self.now_millis()?;
@@ -4686,7 +4856,10 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_retention_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        validate_branch(name)?;
         let _publication = self.lock_named_publication("pin", name).await;
+        self.system_writer_generation(&format!("pin/{name}"))
+            .await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let stored =
             self.plane.load_mutable(&path).await?.ok_or_else(|| {
@@ -4725,9 +4898,7 @@ impl<P: ObjectPlane> Repository<P> {
         let mut continuation = None;
         let mut pins = Vec::new();
         loop {
-            let page = self
-                .list_retention_pins_page(continuation, 1_000)
-                .await?;
+            let page = self.list_retention_pins_page(continuation, 1_000).await?;
             pins.extend(page.pins);
             continuation = page.continuation;
             if continuation.is_none() {
@@ -4865,6 +5036,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let _publication = self.lock_named_publication("tag", tag).await;
+        self.system_writer_generation(&format!("tag/{tag}")).await?;
         let entry = self.tag_reflog(tag, reflog).await?;
         let target = entry.old_target.ok_or_else(|| {
             Error::new(
@@ -5206,7 +5378,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -5250,6 +5422,7 @@ impl<P: ObjectPlane> Repository<P> {
             key,
             kind,
             physical.binding,
+            writer_fence_generation,
             OperationKind::Put,
             operation,
             input_digest,
@@ -5314,7 +5487,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -5361,6 +5534,7 @@ impl<P: ObjectPlane> Repository<P> {
             key,
             kind,
             physical.binding,
+            writer_fence_generation,
             OperationKind::Put,
             operation,
             input_digest,
@@ -5422,7 +5596,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -5729,7 +5903,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        if self.physical_writer_generation_for_mutation().await? != session.writer_fence_generation
+        if self.branch_writer_generation(&session.branch).await? != session.writer_fence_generation
         {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
@@ -5779,6 +5953,7 @@ impl<P: ObjectPlane> Repository<P> {
             session.key,
             kind,
             completed.binding,
+            session.writer_fence_generation,
             OperationKind::Put,
             session.operation,
             input_digest,
@@ -5871,7 +6046,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "branch moved since physical batch creation",
             ));
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(&batch.branch).await?;
         let results =
             futures_util::stream::iter(mutations.into_iter().map(|mutation| async move {
                 self.prepare_physical_batch_mutation(
@@ -5890,7 +6065,8 @@ impl<P: ObjectPlane> Repository<P> {
             prepared.insert(key, mutation);
         }
         let _publication = self.lock_branch_publication(&batch.branch).await;
-        self.commit_batch(&batch, &prepared, request_digest).await
+        self.commit_batch(&batch, &prepared, request_digest, writer_fence_generation)
+            .await
     }
 
     async fn prepare_physical_batch_mutation(
@@ -5987,7 +6163,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -6016,6 +6192,7 @@ impl<P: ObjectPlane> Repository<P> {
             key,
             kind,
             binding,
+            writer_fence_generation,
             OperationKind::Delete,
             operation,
             input_digest,
@@ -6082,7 +6259,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let results = futures_util::stream::iter(keys.iter().map(|key| async move {
             let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -6271,12 +6448,6 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        if self.physical_writer_generation_for_mutation().await? != writer_fence_generation {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer fence changed during multi-delete publication",
-            ));
-        }
         let publication = self
             .controls
             .compare_exchange(CompareExchange {
@@ -6374,7 +6545,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let crate::PhysicalObjectBindingV1::Live {
             version_id,
             checksum_sha256,
@@ -6440,6 +6611,7 @@ impl<P: ObjectPlane> Repository<P> {
             destination_key,
             kind,
             binding,
+            writer_fence_generation,
             OperationKind::Copy,
             operation,
             input_digest,
@@ -6456,6 +6628,7 @@ impl<P: ObjectPlane> Repository<P> {
         key: Vec<u8>,
         kind: LogicalObjectVersionKindV1,
         binding: crate::PhysicalObjectBindingV1,
+        writer_fence_generation: u64,
         operation_kind: OperationKind,
         operation: OperationId,
         input_digest: [u8; 32],
@@ -6464,7 +6637,6 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<CommitReceipt> {
         validate_branch(branch)?;
         let created_at_millis = self.now_millis()?;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -6647,13 +6819,6 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        let current_fence = self.physical_writer_generation_for_mutation().await?;
-        if current_fence != writer_fence_generation {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer fence changed during publication",
-            ));
-        }
         let publication = self
             .controls
             .compare_exchange(CompareExchange {
@@ -6717,6 +6882,7 @@ impl<P: ObjectPlane> Repository<P> {
         batch: &PhysicalBatchV1,
         mutations: &BTreeMap<Vec<u8>, PhysicalPreparedMutationV1>,
         input_digest: [u8; 32],
+        writer_fence_generation: u64,
     ) -> Result<CommitReceipt> {
         let warm = self.warm_branch_state(&batch.branch).await?;
         let loaded_ref = LoadedRef {
@@ -6736,7 +6902,6 @@ impl<P: ObjectPlane> Repository<P> {
                 "branch moved since batch creation",
             ));
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -7245,10 +7410,7 @@ impl<P: ObjectPlane> Repository<P> {
     /// Start a constant-size-cursor traversal over one or more commit roots.
     /// Additional paged branch/tag roots may be attached later with
     /// [`Self::extend_commit_closure`].
-    pub async fn start_commit_closure(
-        &self,
-        roots: &[CommitId],
-    ) -> Result<CommitClosureCursor> {
+    pub async fn start_commit_closure(&self, roots: &[CommitId]) -> Result<CommitClosureCursor> {
         if roots.is_empty() || roots.len() > 1_000 {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
@@ -7305,10 +7467,8 @@ impl<P: ObjectPlane> Repository<P> {
                     finish: false,
                 })?,
             });
-            cursor.next_stack_sequence = cursor
-                .next_stack_sequence
-                .checked_sub(1)
-                .ok_or_else(|| {
+            cursor.next_stack_sequence =
+                cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
                     Error::new(
                         ErrorCode::HistoryLimitExceeded,
                         "commit-closure stack sequence is exhausted",
@@ -7496,10 +7656,8 @@ impl<P: ObjectPlane> Repository<P> {
             key: commit_closure_stack_key(cursor.next_stack_sequence),
             val: encode_canonical(&CommitClosureWork { commit, finish })?,
         });
-        cursor.next_stack_sequence = cursor
-            .next_stack_sequence
-            .checked_sub(1)
-            .ok_or_else(|| {
+        cursor.next_stack_sequence =
+            cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
                 Error::new(
                     ErrorCode::HistoryLimitExceeded,
                     "commit-closure stack sequence is exhausted",
@@ -8039,7 +8197,7 @@ impl<P: ObjectPlane> Repository<P> {
                             ErrorCode::InternalInvariant,
                             "discovered merge operation disappeared during replay",
                         )
-                });
+                    });
             }
         }
         // Keep every historical commit and node consulted by the merge live
@@ -8083,7 +8241,7 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(target).await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -8338,7 +8496,7 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -8654,12 +8812,6 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        if self.physical_writer_generation_for_mutation().await? != writer_fence_generation {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer fence changed during prepared publication",
-            ));
-        }
         let publication = self
             .controls
             .compare_exchange(CompareExchange {
@@ -8735,10 +8887,7 @@ impl<P: ObjectPlane> Repository<P> {
                             .await?;
                     }
                     None => {
-                        cursor = Some(
-                            self.start_resumable_fsck(&roots, roots.len(), 0)
-                                .await?,
-                        );
+                        cursor = Some(self.start_resumable_fsck(&roots, roots.len(), 0).await?);
                     }
                 }
             }
@@ -8758,10 +8907,7 @@ impl<P: ObjectPlane> Repository<P> {
                             .await?;
                     }
                     None => {
-                        cursor = Some(
-                            self.start_resumable_fsck(&roots, 0, roots.len())
-                                .await?,
-                        );
+                        cursor = Some(self.start_resumable_fsck(&roots, 0, roots.len()).await?);
                     }
                 }
             }
@@ -8873,7 +9019,8 @@ impl<P: ObjectPlane> Repository<P> {
                 "fsck roots cannot be extended after commit discovery starts",
             ));
         }
-        self.extend_commit_closure(&mut cursor.closure, roots).await?;
+        self.extend_commit_closure(&mut cursor.closure, roots)
+            .await?;
         cursor.report.branches = cursor
             .report
             .branches
@@ -9124,11 +9271,8 @@ impl<P: ObjectPlane> Repository<P> {
                     key: global_mark,
                     val: Vec::new(),
                 });
-                next.report.reachable_nodes = next
-                    .report
-                    .reachable_nodes
-                    .checked_add(1)
-                    .ok_or_else(|| {
+                next.report.reachable_nodes =
+                    next.report.reachable_nodes.checked_add(1).ok_or_else(|| {
                         Error::new(ErrorCode::EntityTooLarge, "fsck node count overflow")
                     })?;
                 next.report.reachable_node_bytes = next
@@ -9195,7 +9339,10 @@ impl<P: ObjectPlane> Repository<P> {
                 .strip_prefix(b"fvq/")
                 .and_then(|bytes| <&[u8; 32]>::try_from(bytes).ok())
                 .ok_or_else(|| {
-                    Error::new(ErrorCode::CorruptCommit, "fsck version queue key is malformed")
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "fsck version queue key is malformed",
+                    )
                 })?;
             let seen_key = fsck_version_seen_key(digest);
             let expected_digest = derive_input_digest(&[
@@ -9224,11 +9371,8 @@ impl<P: ObjectPlane> Repository<P> {
                         key: seen_key,
                         val: Vec::new(),
                     });
-                    next.report.logical_versions = next
-                        .report
-                        .logical_versions
-                        .checked_add(1)
-                        .ok_or_else(|| {
+                    next.report.logical_versions =
+                        next.report.logical_versions.checked_add(1).ok_or_else(|| {
                             Error::new(ErrorCode::EntityTooLarge, "fsck version count overflow")
                         })?;
                     next.report.content_bytes_verified = next
@@ -9263,10 +9407,7 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    async fn run_resumable_fsck(
-        &self,
-        mut cursor: ResumableFsckCursor,
-    ) -> Result<FsckReport> {
+    async fn run_resumable_fsck(&self, mut cursor: ResumableFsckCursor) -> Result<FsckReport> {
         loop {
             let page = match self.resumable_fsck_page(&cursor, 4_096, 256).await {
                 Ok(page) => page,
@@ -9704,7 +9845,7 @@ impl<P: ObjectPlane> Repository<P> {
     /// enumeration, or exact-version deletion.
     pub async fn start_gc_epoch_v2(&self, grace_millis: u64) -> Result<GcEpochV2> {
         self.validate_gc_plan_limits(grace_millis, 1)?;
-        self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.system_writer_generation("gc").await?;
         let _publication = self.lock_global_publication().await;
         if let Some(active) = *self
             .active_gc_epoch
@@ -9726,7 +9867,7 @@ impl<P: ObjectPlane> Repository<P> {
             id,
             repository: self.format.repository_id,
             process_session: self.process_session,
-            writer_fence_generation: self.writer_fence_generation()?,
+            writer_fence_generation,
             publication_acquisition: self
                 .performance
                 .publication_acquisitions
@@ -9791,7 +9932,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC epoch step must process between 1 and 1,000 items",
             ));
         }
-        self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.system_writer_generation("gc").await?;
         let loaded = self.load_gc_epoch_v2(id).await?;
         if matches!(
             loaded.value.phase,
@@ -9803,7 +9944,7 @@ impl<P: ObjectPlane> Repository<P> {
                 restarted_for_new_roots: false,
             });
         }
-        if loaded.value.writer_fence_generation != self.writer_fence_generation()? {
+        if loaded.value.writer_fence_generation != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "GC epoch writer fence no longer matches",
@@ -10519,14 +10660,14 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC sweep batch must contain between 1 and 1,000 candidates",
             ));
         }
-        self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.system_writer_generation("gc").await?;
         let _publication = self.lock_global_publication().await;
         let acquisition = self
             .performance
             .publication_acquisitions
             .load(Ordering::Relaxed);
         let loaded = self.load_gc_epoch_v2(id).await?;
-        if loaded.value.writer_fence_generation != self.writer_fence_generation()? {
+        if loaded.value.writer_fence_generation != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "GC epoch writer fence no longer matches",
@@ -10849,6 +10990,7 @@ impl<P: ObjectPlane> Repository<P> {
         max_candidates: usize,
     ) -> Result<GcMarkRunV1> {
         self.validate_gc_plan_limits(grace_millis, max_candidates)?;
+        self.system_writer_generation("gc").await?;
         let max_candidates_u64 = u64::try_from(max_candidates).map_err(|_| {
             Error::new(
                 ErrorCode::InvalidLimit,
@@ -10987,6 +11129,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC batch size must be greater than zero",
             ));
         }
+        self.system_writer_generation("gc").await?;
         let plan = self.load_gc_plan(id).await?;
         let path = gc_run_path(&self.options.repository_prefix, id)?;
         if self.plane.load_mutable(&path).await?.is_none() {
@@ -11227,6 +11370,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC abort requires a non-empty operator reason",
             ));
         }
+        self.system_writer_generation("gc").await?;
         let loaded = self.load_gc_run(id).await?;
         if loaded.value.generation != expected_generation
             || matches!(loaded.value.state, GcRunStateV1::Completed)

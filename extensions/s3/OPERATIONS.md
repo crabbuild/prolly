@@ -3,7 +3,9 @@
 ## Deployment contract
 
 - Enable bucket versioning before repository initialization.
-- Route all managed-key mutations through one writer service.
+- Route all managed-key mutations through Prolly S3 writer services.
+- Assign each branch to exactly one writer identity at a time; different
+  services may own different branches.
 - Give reader processes `.read_only(true)` clients.
 - Keep `.prolly/v1/` reserved from application keys.
 - Disable lifecycle expiry for managed current and noncurrent versions.
@@ -17,14 +19,15 @@ version listing for recovery/GC, exact-version deletion for explicit GC, and
 conditional metadata writes under `.prolly/v1/`. Readers need exact-version
 gets plus repository metadata reads.
 
-Do not grant a second service permission to mutate managed user keys. IAM and
-service ownership are part of the exclusive-writer invariant.
+Do not grant a service permission to mutate managed user keys except through
+this client. IAM and service ownership are part of the exclusive-wrapper
+invariant.
 
 ## Start and reopen
 
 Use `initialize()` once. It qualifies the provider and creates format v1. Use
-`open()` afterward. A writable open acquires and maintains the writer lease;
-a read-only open does not.
+`open()` afterward. A writable client lazily acquires and maintains authority
+for the branches and system scopes it mutates; a read-only open acquires none.
 
 Provider qualification is signed and bound to endpoint, region, bucket,
 capabilities, and expiry. Expired or mismatched attestations fail closed.
@@ -37,13 +40,13 @@ Track separately:
 - object-plane SDK calls from `s3_operation_metrics()`;
 - Smithy wire attempts and provider throttling;
 - publication queue depth and wait time from `performance_snapshot()`;
-- lease renewal latency, ambiguity, and fencing events;
+- shard-authority renewal latency, ambiguity, and fencing events;
 - unreachable physical versions and commit envelopes;
 - GC candidate bytes, exact-version deletes, and failures;
 - node-index checkpoint age and rebuild fallbacks.
 - branch-ref physical version count and compaction failures.
 
-The three-call write budget counts SDK operations, not internal HTTP retry
+The four-call write budget counts SDK operations, not internal HTTP retry
 attempts. Alert on either dimension independently.
 
 Tune `max_parallel_payload_writes` to the service's connection pool and S3
@@ -225,7 +228,7 @@ v2 epoch workflow rather than the in-memory v1 dry run:
 5. Continue advancing instead of sweeping whenever a write or restart returns
    the epoch to `CatchUpDirtyRoots`; cleanup is also advanced in bounded steps.
 
-GC v2 requires the authoritative writer lease. It marks reachable CIDs and the
+GC v2 requires the fenced `system/gc` authority scope. It marks reachable CIDs and the
 actual envelopes supplying them before deletion, then names every exact
 physical `VersionId`. Never bypass a `MissingCapability`, dirty-root catch-up, or
 writer-fence error. Export marked-node, candidate, deleted, skipped-reachable,

@@ -80,7 +80,7 @@ async fn rustfs_client() -> (aws_sdk_s3::Client, String) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn rustfs_whole_object_write_uses_three_s3_calls_and_preserves_history() {
+async fn rustfs_whole_object_write_uses_four_s3_calls_and_preserves_history() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
         return;
@@ -126,7 +126,8 @@ async fn rustfs_whole_object_write_uses_three_s3_calls_and_preserves_history() {
         .unwrap();
     let calls = plane.reset_metrics();
     assert_eq!(calls.put_object, 3, "unexpected calls: {calls:?}");
-    assert_eq!(calls.total_calls(), 3, "unexpected calls: {calls:?}");
+    assert_eq!(calls.get_object, 1, "unexpected calls: {calls:?}");
+    assert_eq!(calls.total_calls(), 4, "unexpected calls: {calls:?}");
 
     plane.reset_metrics();
     assert_eq!(
@@ -182,7 +183,7 @@ async fn rustfs_whole_object_write_uses_three_s3_calls_and_preserves_history() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn rustfs_two_part_multipart_write_uses_six_s3_calls() {
+async fn rustfs_two_part_multipart_write_uses_eight_s3_calls() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
         return;
@@ -265,7 +266,8 @@ async fn rustfs_two_part_multipart_write_uses_six_s3_calls() {
     assert_eq!(calls.upload_part, 2);
     assert_eq!(calls.complete_multipart_upload, 1);
     assert_eq!(calls.put_object, 2);
-    assert_eq!(calls.total_calls(), 6, "unexpected calls: {calls:?}");
+    assert_eq!(calls.get_object, 2);
+    assert_eq!(calls.total_calls(), 8, "unexpected calls: {calls:?}");
     assert_eq!(
         repository
             .get_current("main", key.as_bytes())
@@ -277,7 +279,7 @@ async fn rustfs_two_part_multipart_write_uses_six_s3_calls() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-async fn rustfs_32_writer_load_preserves_the_three_call_budget() {
+async fn rustfs_32_writer_load_preserves_the_four_call_budget() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
         return;
@@ -341,10 +343,11 @@ async fn rustfs_32_writer_load_preserves_the_three_call_budget() {
     let percentile = |percent: usize| latencies[(latencies.len() * percent).div_ceil(100) - 1];
     let calls = plane.reset_metrics();
     assert_eq!(calls.put_object, 96, "unexpected calls: {calls:?}");
-    assert_eq!(calls.total_calls(), 96, "unexpected calls: {calls:?}");
+    assert_eq!(calls.get_object, 32, "unexpected calls: {calls:?}");
+    assert_eq!(calls.total_calls(), 128, "unexpected calls: {calls:?}");
     assert_eq!(repository.performance_snapshot().publication_queue_depth, 0);
     eprintln!(
-        "rustfs_load writers=32 object_bytes=65536 calls_per_write=3 wall_ms={} p50_ms={} p95_ms={} p99_ms={} writes_per_second={:.2}",
+        "rustfs_load writers=32 object_bytes=65536 calls_per_write=4 wall_ms={} p50_ms={} p95_ms={} p99_ms={} writes_per_second={:.2}",
         wall.as_millis(),
         percentile(50).as_millis(),
         percentile(95).as_millis(),
@@ -424,7 +427,7 @@ async fn rustfs_10k_concurrent_commits_are_reconciled_and_complete() {
         let metrics = plane.reset_metrics();
         let tier_writes = target - previous;
         assert!(
-            metrics.total_calls() <= (tier_writes as u64 * 301).div_ceil(100),
+            metrics.total_calls() <= (tier_writes as u64 * 401).div_ceil(100),
             "request budget exceeded: {metrics:?}"
         );
         eprintln!(
@@ -531,7 +534,7 @@ async fn rustfs_10k_batched_ingest_has_bounded_bytes_and_persisted_cache() {
     let ingest_metrics = plane.reset_metrics();
     let logical_payload_bytes = 10_000_u64 * 64 * 1024;
     let upload_ratio = ingest_metrics.uploaded_body_bytes as f64 / logical_payload_bytes as f64;
-    assert_eq!(ingest_metrics.total_calls(), 10_200);
+    assert_eq!(ingest_metrics.total_calls(), 10_300);
     assert!(
         upload_ratio < 1.5,
         "batch upload byte amplification is {upload_ratio:.3}x: {ingest_metrics:?}"

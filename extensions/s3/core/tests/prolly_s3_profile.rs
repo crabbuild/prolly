@@ -225,9 +225,10 @@ async fn physical_push_replays_only_new_history_and_moves_destination_ref() {
     // standalone node-pack object.
     assert_eq!(report.copied_objects, 2);
     assert_eq!(report.copied_bytes, b"incremental".len() as u64);
-    // The one LIST is bounded mutable-control version compaction for the ref
-    // move. Transfer itself performs no destination commit-namespace LIST.
-    assert_eq!(destination_plane.request_snapshot().list, 1);
+    // These three LISTs are bounded mutable-control compaction for the cold
+    // transfer authority, branch authority, and ref move. Transfer itself
+    // performs no destination commit-namespace LIST.
+    assert_eq!(destination_plane.request_snapshot().list, 3);
     assert_eq!(
         destination
             .get_current("main", b"sync.txt")
@@ -487,7 +488,7 @@ async fn physical_fetch_returns_a_destination_local_mapped_head() {
 }
 
 #[tokio::test]
-async fn physical_multipart_uses_n_plus_four_calls_and_replays_without_io() {
+async fn physical_multipart_uses_n_plus_six_calls_and_replays_without_io() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -560,7 +561,8 @@ async fn physical_multipart_uses_n_plus_four_calls_and_replays_without_io() {
     assert_eq!(requests.physical_multipart_complete, 1);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 6, "unexpected calls: {requests:?}");
+    assert_eq!(requests.get, 2);
+    assert_eq!(requests.total(), 8, "unexpected calls: {requests:?}");
     assert_eq!(
         repository
             .get_current("main", b"multipart.bin")
@@ -588,7 +590,7 @@ async fn physical_multipart_uses_n_plus_four_calls_and_replays_without_io() {
 }
 
 #[tokio::test]
-async fn two_object_physical_batch_is_exactly_four_calls() {
+async fn two_object_physical_batch_is_exactly_five_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -637,7 +639,8 @@ async fn two_object_physical_batch_is_exactly_four_calls() {
     assert_eq!(requests.physical_put, 2);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
+    assert_eq!(requests.get, 1);
+    assert_eq!(requests.total(), 5, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test]
@@ -785,12 +788,9 @@ async fn hot_branch_ref_versions_are_compacted_without_losing_history() {
 async fn hundred_object_batch_packs_only_final_reachable_nodes() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let prefix = ".prolly/prolly-s3/final-batch-nodes";
-    let repository = Repository::initialize(
-        plane.clone(),
-        physical_options(prefix),
-    )
-    .await
-    .unwrap();
+    let repository = Repository::initialize(plane.clone(), physical_options(prefix))
+        .await
+        .unwrap();
     let batch = repository
         .begin_physical_batch("main", "one hundred objects", 60_000)
         .await
@@ -839,7 +839,9 @@ async fn hundred_object_batch_packs_only_final_reachable_nodes() {
 
     // A fresh repository process can reuse the same persistent/shared cache
     // without refetching any warmed routing node from S3.
-    let reopened = Repository::open(plane.clone(), reader_options).await.unwrap();
+    let reopened = Repository::open(plane.clone(), reader_options)
+        .await
+        .unwrap();
     plane.reset_request_counts();
     let warm = reopened.prewarm_internal_nodes(receipt.id).await.unwrap();
     assert_eq!(warm, cold);
@@ -848,7 +850,7 @@ async fn hundred_object_batch_packs_only_final_reachable_nodes() {
 }
 
 #[tokio::test]
-async fn two_object_physical_multi_delete_is_exactly_four_calls() {
+async fn two_object_physical_multi_delete_is_exactly_five_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -884,7 +886,8 @@ async fn two_object_physical_multi_delete_is_exactly_four_calls() {
     assert_eq!(requests.physical_delete, 2);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
+    assert_eq!(requests.get, 1);
+    assert_eq!(requests.total(), 5, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -963,8 +966,76 @@ async fn independent_branches_publish_their_refs_concurrently() {
     repository.fsck_commit(beta.id).await.unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn separate_repository_writers_own_and_publish_independent_branches() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    plane.set_compare_exchange_delay_millis(30);
+    let prefix = ".prolly/prolly-s3/separate-branch-writers";
+    let main_writer = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: prefix.to_string(),
+            writer: "main-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let root = main_writer.head("main").await.unwrap();
+    let feature_writer = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: prefix.to_string(),
+            writer: "feature-writer".to_string(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    feature_writer.create_branch("feature", root).await.unwrap();
+
+    let started = std::time::Instant::now();
+    let (main, feature) = tokio::join!(
+        main_writer.put_bytes(
+            "main",
+            b"main.txt".to_vec(),
+            b"main".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        ),
+        feature_writer.put_bytes(
+            "feature",
+            b"feature.txt".to_vec(),
+            b"feature".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+            None,
+        )
+    );
+    main.unwrap();
+    feature.unwrap();
+    assert!(started.elapsed() < Duration::from_millis(55));
+    assert_eq!(
+        main_writer
+            .get_current("main", b"main.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"main"
+    );
+    assert_eq!(
+        feature_writer
+            .get_current("feature", b"feature.txt")
+            .await
+            .unwrap()
+            .bytes,
+        b"feature"
+    );
+}
+
 #[tokio::test]
-async fn warm_physical_merge_reuses_bindings_in_two_calls() {
+async fn warm_physical_merge_reuses_bindings_in_three_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -1022,7 +1093,8 @@ async fn warm_physical_merge_reuses_bindings_in_two_calls() {
     let requests = plane.request_snapshot();
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 2, "unexpected calls: {requests:?}");
+    assert_eq!(requests.get, 1);
+    assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
     assert_eq!(
         repository
             .get_current("main", b"feature.bin")
@@ -1034,7 +1106,7 @@ async fn warm_physical_merge_reuses_bindings_in_two_calls() {
 }
 
 #[tokio::test]
-async fn warm_physical_restore_reuses_live_binding_in_two_calls() {
+async fn warm_physical_restore_reuses_live_binding_in_three_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -1073,7 +1145,8 @@ async fn warm_physical_restore_reuses_live_binding_in_two_calls() {
     let requests = plane.request_snapshot();
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 2, "unexpected calls: {requests:?}");
+    assert_eq!(requests.get, 1);
+    assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
     assert_eq!(
         repository
             .get_current("main", b"restore.bin")
@@ -1561,7 +1634,7 @@ async fn physical_repository_round_trips_exact_physical_versions() {
 }
 
 #[tokio::test]
-async fn warm_physical_put_is_exactly_three_foreground_calls() {
+async fn warm_physical_put_is_exactly_four_foreground_calls() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -1598,11 +1671,12 @@ async fn warm_physical_put_is_exactly_three_foreground_calls() {
     assert_eq!(requests.physical_put, 1);
     assert_eq!(requests.immutable_put, 1);
     assert_eq!(requests.compare_exchange, 1);
-    assert_eq!(requests.total(), 3, "unexpected calls: {requests:?}");
+    assert_eq!(requests.get, 1);
+    assert_eq!(requests.total(), 4, "unexpected calls: {requests:?}");
 }
 
 #[tokio::test]
-async fn physical_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
+async fn physical_writer_queue_preserves_four_calls_at_1_8_and_32_callers() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
         plane.clone(),
@@ -1640,12 +1714,13 @@ async fn physical_writer_queue_preserves_three_calls_at_1_8_and_32_callers() {
         let requests = plane.request_snapshot();
         assert_eq!(
             requests.total(),
-            (writers * 3) as u64,
+            (writers * 4) as u64,
             "{writers}-writer tier made unexpected calls: {requests:?}"
         );
         assert_eq!(requests.physical_put, writers as u64);
         assert_eq!(requests.immutable_put, writers as u64);
         assert_eq!(requests.compare_exchange, writers as u64);
+        assert_eq!(requests.get, writers as u64);
     }
 }
 
@@ -2393,7 +2468,8 @@ async fn explicit_takeover_barrier_fences_the_old_writer() {
     .unwrap();
     assert_eq!(
         new_writer
-            .takeover_physical_writer(
+            .takeover_branch_writer(
+                "main",
                 "physical-writer",
                 1,
                 "old credentials revoked and process stopped",

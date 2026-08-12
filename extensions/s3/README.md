@@ -13,18 +13,19 @@ its compatibility surface have been removed.
 
 ## What a write does
 
-A warm single-object write uses three foreground S3 operations:
+A warm single-object write uses four foreground S3 operations:
 
-1. Upload the whole file to its original key and capture its S3 `VersionId`.
-2. Upload one immutable commit envelope containing the logical commit and its
+1. Validate the branch-scoped writer-authority permit.
+2. Upload the whole file to its original key and capture its S3 `VersionId`.
+3. Upload one immutable commit envelope containing the logical commit and its
    new Prolly nodes.
-3. Compare-and-exchange the branch ref; this is the visibility point.
+4. Compare-and-exchange the branch ref; this is the visibility point.
 
-![Three-call write path](diagram/prolly-s3-write-path.svg)
+![Four-call write path](diagram/prolly-s3-write-path.svg)
 
-No content chunks, content manifests, publication leases, durable staging
-workspaces, or post-CAS readback are created. A two-object atomic commit uses
-four calls: two parallelizable payload writes, one commit envelope, and one
+No content chunks, content manifests, durable staging workspaces, or post-CAS
+readback are created. A two-object atomic commit uses five calls: one authority
+validation, two parallelizable payload writes, one commit envelope, and one
 branch-ref CAS. For bulk ingestion, `Client::ingest_objects` is the recommended
 path and publishes up to 100 whole files per commit by default.
 
@@ -34,9 +35,9 @@ path and publishes up to 100 whole files per commit by default.
   this client.
 - The bucket must have physical versioning enabled.
 - The wrapper must be the exclusive writer for managed object keys.
-- One fenced writer service owns mutations. Concurrent payload requests run in
-  parallel; commit construction and ref publication are serialized per branch,
-  and independent branches publish concurrently.
+- Each branch has one fenced writer owner at a time. Different services may
+  own different branches and publish concurrently; only same-branch commit
+  construction and ref publication are serialized.
 - Reads always use the exact S3 `VersionId` recorded by the selected Prolly
   commit. A raw `GetObject` without `version_id` is not a canonical read.
 - Bucket lifecycle rules must not expire versions managed by the repository.
@@ -76,15 +77,15 @@ The integration tests enforce these warm-path budgets:
 
 | Operation | Foreground S3 calls |
 |---|---:|
-| 64 KiB whole-object put | 3 |
-| Two-object atomic commit | 4 |
-| Merge or restore | 2 |
-| Multipart with `N` parts | `N + 4` |
+| 64 KiB whole-object put | 4 |
+| Two-object atomic commit | 5 |
+| Merge or restore | 3 |
+| Multipart with `N` parts | `N + 6` |
 | Warm current or historical read | 1 |
 | Bulk ingest with 100 files/commit | 1.02 per file |
 
 The core contract also exercises 1, 8, and 32 concurrent callers and requires
-three calls per completed whole-object write. The RustFS probes include 32
+four calls per completed whole-object write. The RustFS probes include 32
 concurrent 64 KiB writes and an ignored-by-default 10K hot-branch regression
 gate that validates the complete logical key set and operation-ID
 reconciliation.

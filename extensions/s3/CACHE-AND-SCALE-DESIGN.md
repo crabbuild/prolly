@@ -29,7 +29,7 @@ cardinality ceiling.
 - Make exact key lookup logarithmic in the Prolly tree size and independent of
   total commit count.
 - Bound RAM, local disk, S3 calls, concurrency, and CPU for every request.
-- Keep the existing three-call foreground write path.
+- Keep the foreground write path below five S3 calls.
 - Let caches fail open without changing repository correctness.
 - Make scans, history walks, indexing, and garbage collection resumable.
 
@@ -171,7 +171,7 @@ Checkpoint construction is background work. It merges new commit-envelope
 indexes into affected copy-on-write pages and conditionally advances the head.
 The commit envelope remains a self-describing correctness fallback, so a lost
 checkpoint update delays lookup optimization but cannot lose committed data.
-No index-maintenance S3 call is added to the three-call foreground write.
+No index-maintenance S3 call is added to the four-call foreground write.
 
 Each lookup clones one validated head root before traversing it. Immutable nodes
 therefore remain readable while a concurrent maintainer publishes a newer

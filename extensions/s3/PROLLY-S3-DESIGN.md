@@ -2,9 +2,10 @@
 
 Status: implemented architecture; production qualification incomplete.
 
-Protocol v1 retains repository-exclusive writer fencing. Protocol v2 authority
-work is additive: branch-scoped leases and explicit authority stamps are being
-introduced without reinterpreting v1's scalar fence. See
+The high-level repository uses protocol-v2 branch-scoped authority while
+retaining protocol-v1 logical commit/ref encodings for compatibility. The
+scalar commit/ref fence records the selected shard generation; the branch ref
+CAS remains the stale-writer publication barrier. See
 [`spec/prolly-s3/v2/state-machines.md`](spec/prolly-s3/v2/state-machines.md).
 
 ## Decision
@@ -15,8 +16,8 @@ The S3 extension has one storage architecture:
 - Prolly commits are authoritative for current state and history;
 - each logical version records the exact provider-issued `VersionId`;
 - the Prolly wrapper is the exclusive writer for managed keys;
-- one fenced writer service serializes publication per branch while allowing
-  independent branches to publish concurrently;
+- each branch has one fenced writer owner while independent writer services
+  may own and publish different branches concurrently;
 - repository metadata uses format v1 under `.prolly/v1/`.
 
 Those bullets describe frozen protocol v1. Protocol v2 deliberately changes
@@ -59,7 +60,7 @@ keeps each concern in the layer that owns it:
    before the ref CAS.
 6. Only the branch-ref CAS changes logical visibility.
 7. A writer-fence generation is carried by refs and commits.
-8. A stale or ambiguous writer lease fails closed.
+8. A stale or ambiguous branch/system authority permit fails closed.
 9. Lifecycle configuration cannot expire any retained managed version.
 10. GC deletes only exact, unreachable `(key, VersionId)` pairs.
 
@@ -88,7 +89,9 @@ photos/launch.jpg                          # S3 version v1, v2, ...
 ├── format/v1.cbor                         # create-once RepositoryFormatV1
 ├── format/initialization.cbor             # create-once initialization intent
 ├── providers/<profile-id>.cbor            # signed provider qualification
-├── writers/lease.cbor                     # exclusive writer fence
+├── authority/v2/branches/.../lease.cbor   # independent branch writer fences
+├── authority/v2/system/.../lease.cbor     # scoped maintenance fences
+├── writers/lease.cbor                     # legacy v1 migration adapter only
 ├── refs/heads/<encoded-branch>            # mutable CAS ref + inline reflog
 ├── refs/tags/<encoded-tag>                 # mutable CAS ref
 ├── node-index/checkpoints/...              # rebuildable locator checkpoints
@@ -107,15 +110,18 @@ workspaces, publication leases, or repository multipart-part objects.
 
 For a warm writer:
 
-1. The writer validates the current branch head and write conditions.
-2. `PutObject(key, body)` creates one physical object version.
-3. The returned `VersionId`, checksums, headers, and logical metadata are added
+1. The writer validates its branch-scoped authority permit.
+2. The writer validates the current branch head and write conditions.
+3. `PutObject(key, body)` creates one physical object version.
+4. The returned `VersionId`, checksums, headers, and logical metadata are added
    to the in-memory Prolly state transition.
-4. New tree nodes and `BucketCommitV1` are encoded in one immutable commit
+5. New tree nodes and `BucketCommitV1` are encoded in one immutable commit
    envelope.
-5. One conditional ref update publishes the commit.
+6. One conditional ref update publishes the commit.
 
-Foreground request budget: exactly three S3 calls. No CAS readback is issued.
+Foreground request budget: exactly four S3 calls. The authority point GET
+prevents a stale writer from uploading a payload after branch takeover. No CAS
+readback is issued.
 If the ref CAS conflicts, the prepared payload and metadata are unreachable
 orphans until GC; the client reports the conflict and never silently rebases.
 
@@ -125,7 +131,7 @@ orphans until GC; the client reports the conflict and never silently rebases.
 writer performs all `N` physical mutations with bounded parallelism, builds one
 final Prolly state, uploads one commit envelope, then performs one ref CAS.
 
-Budget: `N + 2` S3 calls. Two keys therefore require four calls.
+Budget: `N + 3` S3 calls. Two keys therefore require five calls.
 
 The session is atomic but not durable before `publish`. Process loss discards
 the in-memory session; any physical versions created during a failed publish
@@ -152,7 +158,7 @@ another branch or an older Prolly snapshot.
 - Cross-bucket clone/fetch/push/repair copies each required payload and records
   the new destination `VersionId`; provider IDs never cross bucket boundaries.
 
-Warm merge and restore each use two S3 calls when no payload transfer is
+Warm merge and restore each use three S3 calls when no payload transfer is
 needed.
 
 ## Multipart
@@ -166,25 +172,27 @@ or a chunk index. For `N` parts the foreground protocol is:
 4. upload one commit envelope;
 5. CAS the branch ref.
 
-Budget: `N + 4` S3 calls. The upload handle contains the canonical session; a
+Budget: `N + 6` S3 calls: authority is checked at multipart creation and again
+before completion. The upload handle contains the canonical session; a
 new process can complete it when the caller supplies persisted part ETags,
 SHA-256 values, sizes, and whole-object checksums.
 
 ## Concurrency and fencing
 
 The architecture intentionally does not use optimistic multi-writer retry
-loops. A repository-scoped lease grants one process mutation authority.
-Concurrent callers inside that process upload payloads before entering a
-branch-keyed publication lane. Callers on one branch remain ordered, while
-independent branches can construct commits and CAS their refs concurrently.
+loops. Each branch has an independent authority lease and publication lane.
+Separate processes can own and publish different branches concurrently.
+Callers on one branch remain ordered by its ref CAS, while independent branches
+construct commits and CAS refs concurrently.
 Repository-wide maintenance, including GC and repair, takes an exclusive
 barrier across all lanes. Batch payload mutations use configurable bounded
-parallelism. This keeps each completed warm write at three calls under 1, 8,
+parallelism. This keeps each completed warm write at four calls under 1, 8,
 or 32 callers without serializing network upload time.
 
-An operator may perform an explicit takeover after the old writer is stopped
-or fenced. Commits and refs carry the lease generation, so the old writer
-cannot publish after takeover. Read-only clients do not acquire the lease.
+An operator may take over one branch after the old writer is stopped or
+fenced. The branch ref CAS is the takeover barrier; unrelated branch leases are
+unchanged. Commits and refs carry that branch generation. Read-only clients do
+not acquire authority.
 
 ## Idempotency and ambiguous responses
 
@@ -216,10 +224,10 @@ lease renewal, checkpointing, GC, and cross-bucket payload transfer:
 
 | Warm logical operation | S3 calls |
 |---|---:|
-| Whole-object put/copy/delete | 3 |
-| Atomic commit of `N` keys | `N + 2` |
-| Merge or restore without transfer | 2 |
-| Multipart with `N` parts | `N + 4` |
+| Whole-object put/copy/delete | 4 |
+| Atomic commit of `N` keys | `N + 3` |
+| Merge or restore without transfer | 3 |
+| Multipart with `N` parts | `N + 6` |
 | Warm exact current/historical read | 1 |
 
 Cold reads additionally load the selected ref/commit and range-read uncached
