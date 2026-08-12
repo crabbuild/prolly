@@ -52,8 +52,13 @@ pub use repository::{
     ObjectDiffPage, ObjectSummary, PhysicalTransferCursor, PhysicalTransferPage,
     RefCatalogAdvanceReport, RefMoveReceipt, RefVersionCompactionReport, RepairReport, Repository,
     RepositoryOptions, RepositoryPerformanceSnapshot, ResumableFsckCursor, ResumableFsckPage,
-    ResumableFsckPhase, RetentionPinPage, SyncReport, Tag, TagPage, TagReflogPage, TraversalBudget,
-    VersionSummary, WriterLeaseMaintenance,
+    ResumableFsckPhase, RetentionPinPage, ShardAuthorityMaintenance, SyncReport, Tag, TagPage,
+    TagReflogPage, TraversalBudget, VersionSummary,
 };
+#[deprecated(
+    since = "0.1.0",
+    note = "use ShardAuthorityMaintenance; repository writes use branch/system authority scopes"
+)]
+pub type WriterLeaseMaintenance = ShardAuthorityMaintenance;
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

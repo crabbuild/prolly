@@ -154,7 +154,7 @@ are exact-deleted in restartable batches. Only one GC epoch may be active.
   the application decide whether to retry or merge.
 - Never automatically rebase an atomic commit.
 - Reuse a stable `OperationId` after an ambiguous response.
-- Stop writes when lease renewal is ambiguous or the fence is lost.
+- Stop writes when authority renewal is ambiguous or the fence is lost.
 - Perform takeover only after establishing that the previous writer cannot
   continue publishing.
 
@@ -209,8 +209,9 @@ For a portable backup, use `clone_to` to create a complete logical repository
 in a versioned archive bucket. Restore by opening that archive read-only and
 cloning it to the destination; both hops replay history and bind every logical
 version to the destination provider's exact ID. Open the result read-only, run
-`fsck`, and only then call `takeover_writer` with the previous writer ID, lease
-generation, and auditable credential/process-isolation evidence.
+`fsck`, and only then call `takeover_branch_writer` for each branch that the
+restored service will own, using the previous writer ID, authority generation,
+and auditable credential/process-isolation evidence.
 
 A provider-native physical snapshot is usable in place only when the restore
 mechanism explicitly guarantees preservation of every opaque `VersionId` and

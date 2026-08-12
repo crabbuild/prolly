@@ -27,7 +27,7 @@ branches, diffs, conditional publication, and idempotency.
 | Partitioned GC | `start_gc_epoch`, `advance_gc_epoch`, `sweep_gc_epoch` |
 | Merge/restore | `merge`, `restore` |
 | Verify repository | `fsck` |
-| Explicit writer handoff | `takeover_writer` |
+| Explicit branch-writer handoff | `takeover_branch_writer` |
 | SDK request counters | `s3_operation_metrics` |
 | Publication queue/wait counters | `performance_snapshot` |
 

@@ -120,7 +120,7 @@ The following are release blockers for a production claim:
 | Request cost | Measured traffic mix using current AWS request prices |
 | Latency | p50/p95/p99 for writes, reads, batches, multipart, merge, restore |
 | Throttling | Sustained and burst load including transport retry attempts |
-| Hot branch | Queue latency, timeout policy, and lease renewal under peak load |
+| Hot branch | Queue latency, timeout policy, and authority renewal under peak load |
 | Scale | 1M live keys and 10M retained versions with reopen, list, diff, fsck, GC |
 | Transfer scale | Interrupted clone/push/repair at 10M commits with bounded RSS, zero commit-namespace LISTs, and stale-mapping rebuild |
 | Administrative scale | Restart deep fsck in every phase at 1M keys/10M versions; assert bounded RSS, cursor size, and provider requests per page |
