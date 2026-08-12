@@ -8,7 +8,7 @@ use std::{
 };
 
 use md5::{Digest as _, Md5};
-use prolly::{AsyncProlly, Config, RuntimeConfig, Tree, TreeFormat};
+use prolly::{AsyncProlly, Config, Mutation, RuntimeConfig, Tree, TreeFormat};
 use sha2::Sha256;
 
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
@@ -21,9 +21,11 @@ use crate::{
     JournalDerivedIndexesV2, JournalIndexAdvanceReportV2, LogicalObjectVersionBodyV1,
     LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
     ObjectTransitionV2, ObjectVersionIdV2, ObjectVersionOrder, ObjectVersionV2, OperationId,
-    OperationIndexAdvanceReportV2, ProllyObjectStore, ProviderPerKeyVersionLimitV2, RandomIdSource,
-    RepositoryFormatV2, Result, SegmentedOperationIndexV2, ShardWriterAuthorityV2,
-    ShardedBranchPublisherV2, SystemClock, TakeoverRequestV2, TreeRootV1,
+    OperationIndexAdvanceReportV2, PhysicalBatchV2, PhysicalMutationIdentityV2, ProllyObjectStore,
+    ProviderPerKeyVersionLimitV2, RandomIdSource, RepositoryFormatV2, Result,
+    SegmentedOperationIndexV2, ShardWriterAuthorityV2, ShardedBranchPublisherV2,
+    StagedMutationBodyV2, StagedMutationV2, StagedPutV2, SystemClock, TakeoverRequestV2,
+    TreeRootV1,
 };
 
 #[derive(Clone)]
@@ -487,6 +489,312 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         Ok(generation)
     }
 
+    pub async fn begin_commit_session(
+        &self,
+        branch: &str,
+        message: impl Into<String>,
+        expires_after_millis: u64,
+    ) -> Result<PhysicalBatchV2> {
+        crate::repository::validate_branch(branch)?;
+        let message = message.into();
+        let now = self.options.clock.now_millis()?;
+        let expires_at_millis = now.checked_add(expires_after_millis).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidLimit,
+                "protocol-v2 commit-session expiry overflow",
+            )
+        })?;
+        let permit = self.active_permit(branch, now).await?;
+        let session = PhysicalBatchV2 {
+            id: self.options.ids.batch(),
+            branch: branch.to_string(),
+            base_commit: self.publisher.load(branch).await?.value.target,
+            identity: PhysicalMutationIdentityV2 {
+                repository: self.format.repository_id,
+                operation: self.options.ids.operation(),
+                authority: permit.stamp(),
+            },
+            message,
+            created_at_millis: now,
+            expires_at_millis,
+        };
+        session.validate(self.format.repository_id)?;
+        Ok(session)
+    }
+
+    pub async fn stage_commit_session_put(
+        &self,
+        session: &PhysicalBatchV2,
+        key: Vec<u8>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutationV2> {
+        self.validate_commit_session(session).await?;
+        self.validate_key(&key)?;
+        if bytes.len() as u64 > self.format.canonical_limits.max_object_bytes {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "v2 object exceeds the repository object-size limit",
+            ));
+        }
+        let size = bytes.len() as u64;
+        let checksum_md5: [u8; 16] = Md5::digest(&bytes).into();
+        let checksum_sha256: [u8; 32] = Sha256::digest(&bytes).into();
+        let binding = self.payloads.put(bytes).await?;
+        Ok(StagedMutationV2 {
+            body: StagedMutationBodyV2::Put(Box::new(StagedPutV2 {
+                key,
+                size,
+                logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+                checksums: Checksums {
+                    md5: Some(checksum_md5),
+                    sha256: Some(checksum_sha256),
+                    algorithm_values: BTreeMap::new(),
+                },
+                headers,
+                user_metadata,
+                binding,
+            })),
+        })
+    }
+
+    pub async fn publish_commit_session(
+        &self,
+        session: PhysicalBatchV2,
+        mutations: Vec<StagedMutationV2>,
+    ) -> Result<CommitReceiptV2> {
+        session.validate(self.format.repository_id)?;
+        if mutations.is_empty()
+            || mutations.len() > self.format.canonical_limits.max_mutations_per_commit as usize
+            || session.expires_at_millis < self.options.clock.now_millis()?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "protocol-v2 commit session is empty, expired, or exceeds the mutation limit",
+            ));
+        }
+        let mut ordered = BTreeMap::new();
+        for mutation in mutations {
+            self.validate_key(mutation.key())?;
+            if ordered.insert(mutation.key().to_vec(), mutation).is_some() {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "protocol-v2 commit session contains the same key more than once",
+                ));
+            }
+        }
+        let canonical_mutations = ordered.values().cloned().collect::<Vec<_>>();
+        let input_digest = crate::model::derive_input_digest_v2(&[
+            b"commit-session",
+            session.branch.as_bytes(),
+            session.base_commit.as_bytes(),
+            &encode_canonical(&canonical_mutations)?,
+        ]);
+        let _lane = self.lock_branch(&session.branch).await;
+        let now = self.options.clock.now_millis()?;
+        if let Some(receipt) = self
+            .reconcile_operation(
+                &session.branch,
+                session.identity.operation,
+                input_digest,
+                now,
+            )
+            .await?
+        {
+            return Ok(receipt);
+        }
+        let permit = self.active_permit(&session.branch, now).await?;
+        if permit.stamp() != session.identity.authority {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "protocol-v2 commit session belongs to another authority epoch",
+            ));
+        }
+        let current = self.publisher.load(&session.branch).await?;
+        if current.value.target != session.base_commit {
+            return Err(Error::new(
+                ErrorCode::BatchConflict,
+                "protocol-v2 branch moved since commit-session creation",
+            )
+            .operation(session.identity.operation.to_string()));
+        }
+        let base = self.load_commit_object(current.value.target).await?.commit;
+        let write_store = self.node_store.isolated_write_session();
+        let engine = self.engine(write_store.clone());
+        let objects = self.tree_from_root(&base.state.objects)?;
+        let versions = self.tree_from_root(&base.state.versions)?;
+        let keys = ordered.keys().cloned().collect::<Vec<_>>();
+        let previous_values = engine.get_many(&objects, &keys).await?;
+        let generation = CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 commit generation overflow",
+            )
+        })?);
+        let mut object_mutations = Vec::with_capacity(ordered.len());
+        let mut version_mutations = Vec::with_capacity(ordered.len());
+        let mut transitions = Vec::with_capacity(ordered.len());
+        let mut object_versions = Vec::with_capacity(ordered.len());
+        for (ordinal, ((key, mutation), previous)) in
+            ordered.iter().zip(previous_values).enumerate()
+        {
+            let previous = previous
+                .map(|encoded| decode_canonical::<CurrentObjectV2>(&encoded))
+                .transpose()?
+                .map(|current| current.version.id);
+            let (kind, binding) = match &mutation.body {
+                StagedMutationBodyV2::Put(staged) => {
+                    let StagedPutV2 {
+                        size,
+                        logical_etag,
+                        checksums,
+                        headers,
+                        user_metadata,
+                        binding,
+                        ..
+                    } = staged.as_ref();
+                    binding.validate()?;
+                    let expected_etag =
+                        checksums.md5.map(|md5| format!("\"{}\"", hex::encode(md5)));
+                    if *size > self.format.canonical_limits.max_object_bytes
+                        || binding.path != self.payloads.path(binding.checksum_sha256)?
+                        || checksums.sha256 != Some(binding.checksum_sha256)
+                        || expected_etag.as_deref() != Some(logical_etag)
+                    {
+                        return Err(Error::new(
+                            ErrorCode::ChecksumMismatch,
+                            "staged v2 payload identity does not match its immutable binding",
+                        ));
+                    }
+                    (
+                        LogicalObjectVersionKindV1::Live {
+                            size: *size,
+                            logical_etag: logical_etag.clone(),
+                            headers: headers.clone(),
+                            checksums: checksums.clone(),
+                            user_metadata: user_metadata.clone(),
+                            tags: BTreeMap::new(),
+                        },
+                        Some(binding.clone()),
+                    )
+                }
+                StagedMutationBodyV2::Delete { .. } => {
+                    (LogicalObjectVersionKindV1::DeleteMarker, None)
+                }
+            };
+            let version = ObjectVersionV2::derive(
+                self.format.repository_id,
+                key,
+                session.identity.operation,
+                LogicalObjectVersionBodyV1 {
+                    order: ObjectVersionOrder {
+                        commit_generation: generation,
+                        mutation_ordinal: u32::try_from(ordinal).map_err(|_| {
+                            Error::new(ErrorCode::InvalidLimit, "v2 mutation ordinal overflow")
+                        })?,
+                    },
+                    created_at_millis: now,
+                    kind,
+                },
+                binding,
+            )?;
+            let delete_marker =
+                matches!(version.body.kind, LogicalObjectVersionKindV1::DeleteMarker);
+            if delete_marker {
+                object_mutations.push(Mutation::Delete { key: key.clone() });
+            } else {
+                object_mutations.push(Mutation::Upsert {
+                    key: key.clone(),
+                    val: encode_canonical(&CurrentObjectV2 {
+                        version: version.clone(),
+                    })?,
+                });
+            }
+            version_mutations.push(Mutation::Upsert {
+                key: version_tree_key(key, version.body.order, version.id),
+                val: encode_canonical(&version)?,
+            });
+            transitions.push(ObjectTransitionV2 {
+                key: key.clone(),
+                previous,
+                next: version.id,
+                delete_marker,
+            });
+            object_versions.push(version.id);
+        }
+        let objects = engine.batch(&objects, object_mutations).await?;
+        let versions = engine.batch(&versions, version_mutations).await?;
+        let prepared = write_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let commit = BucketCommitV2 {
+            state: BucketStateV2 {
+                objects: TreeRootV1::from_tree(&objects)?,
+                versions: TreeRootV1::from_tree(&versions)?,
+            },
+            parents: vec![current.value.target],
+            generation,
+            delta: BucketDeltaV2 {
+                input_digest,
+                changes: transitions,
+            },
+            node_pack: prepared.as_ref().map(PreparedNodePack::reference),
+            authority: permit.stamp(),
+            author: self.options.writer.clone(),
+            message: Some(session.message.clone()),
+            created_at_millis: now,
+            metadata: BTreeMap::new(),
+        };
+        let publication = self
+            .publisher
+            .store_and_publish(
+                current,
+                CommitPublicationV2 {
+                    permit: &permit,
+                    branch: &session.branch,
+                    commit: &commit,
+                    node_pack: prepared.as_ref().map(PreparedNodePack::pack),
+                    operation: session.identity.operation,
+                    message: &session.message,
+                    now_millis: now,
+                },
+            )
+            .await;
+        match publication {
+            Ok(published) => {
+                self.finalize_pack(published.value.target, &commit, prepared)
+                    .await?;
+                Ok(CommitReceiptV2 {
+                    id: published.value.target,
+                    operation: session.identity.operation,
+                    branch: session.branch,
+                    parents: commit.parents,
+                    changed_keys: object_versions.len() as u64,
+                    object_versions,
+                    idempotent_replay: false,
+                })
+            }
+            Err(error) => {
+                if let Some(receipt) = self
+                    .reconcile_operation(
+                        &session.branch,
+                        session.identity.operation,
+                        input_digest,
+                        now,
+                    )
+                    .await?
+                {
+                    self.finalize_pack(receipt.id, &commit, prepared).await?;
+                    return Ok(receipt);
+                }
+                self.fence_branch(&session.branch)?;
+                Err(error)
+            }
+        }
+    }
+
     pub async fn put_object(
         &self,
         branch: &str,
@@ -498,6 +806,25 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         let operation = self.options.ids.operation();
         self.put_object_with_operation(branch, key, bytes, headers, user_metadata, operation)
             .await
+    }
+
+    async fn validate_commit_session(&self, session: &PhysicalBatchV2) -> Result<()> {
+        session.validate(self.format.repository_id)?;
+        let now = self.options.clock.now_millis()?;
+        if session.expires_at_millis < now {
+            return Err(Error::new(
+                ErrorCode::BatchExpired,
+                "protocol-v2 commit session expired",
+            ));
+        }
+        let permit = self.active_permit(&session.branch, now).await?;
+        if permit.stamp() != session.identity.authority {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "protocol-v2 commit session belongs to another authority epoch",
+            ));
+        }
+        Ok(())
     }
 
     pub async fn put_object_with_operation(

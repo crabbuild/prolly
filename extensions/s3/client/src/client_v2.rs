@@ -6,9 +6,9 @@ use std::{
 
 use prolly_s3_core::{
     BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode, ObjectDataV2,
-    ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, ProviderAttestationV1,
+    ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, PhysicalBatchV2, ProviderAttestationV1,
     ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2, RepositoryV2Options, Result,
-    VersionSummaryV2,
+    StagedMutationV2, VersionSummaryV2,
 };
 
 use crate::{
@@ -127,6 +127,17 @@ impl ClientV2 {
         self.repository
             .delete_object(&self.branch, key.into().into_bytes())
             .await
+    }
+
+    /// Begin an atomic protocol-v2 commit session. Payloads are uploaded as
+    /// they are staged, so the session retains metadata rather than complete
+    /// object bodies in process memory.
+    pub fn begin_commit(&self) -> CommitSessionV2Builder {
+        CommitSessionV2Builder {
+            client: self.clone(),
+            message: "atomic protocol-v2 commit".to_string(),
+            expires_after: Duration::from_secs(60 * 60),
+        }
     }
 
     pub async fn list_objects(
@@ -262,6 +273,114 @@ impl ClientV2 {
         }
         Ok(())
     }
+}
+
+pub struct CommitSessionV2Builder {
+    client: ClientV2,
+    message: String,
+    expires_after: Duration,
+}
+
+impl CommitSessionV2Builder {
+    pub fn message(mut self, message: impl Into<String>) -> Self {
+        self.message = message.into();
+        self
+    }
+
+    pub fn expires_after(mut self, expires_after: Duration) -> Self {
+        self.expires_after = expires_after;
+        self
+    }
+
+    pub async fn start(self) -> Result<CommitSessionV2> {
+        self.client.ensure_provider_qualified()?;
+        let expires_after_millis = u64::try_from(self.expires_after.as_millis())
+            .map_err(|_| invalid("v2 commit-session expiry exceeds u64 milliseconds"))?;
+        let manifest = self
+            .client
+            .repository
+            .begin_commit_session(&self.client.branch, self.message, expires_after_millis)
+            .await?;
+        Ok(CommitSessionV2 {
+            client: self.client,
+            manifest,
+            staged: BTreeMap::new(),
+        })
+    }
+}
+
+pub struct CommitSessionV2 {
+    client: ClientV2,
+    manifest: PhysicalBatchV2,
+    staged: BTreeMap<Vec<u8>, StagedMutationV2>,
+}
+
+impl CommitSessionV2 {
+    pub fn id(&self) -> prolly_s3_core::BatchId {
+        self.manifest.id
+    }
+
+    pub fn operation(&self) -> prolly_s3_core::OperationId {
+        self.manifest.identity.operation
+    }
+
+    pub fn base_commit(&self) -> CommitIdV2 {
+        self.manifest.base_commit
+    }
+
+    pub fn staged_objects(&self) -> usize {
+        self.staged.len()
+    }
+
+    pub async fn put_object(&mut self, key: impl Into<String>, bytes: Vec<u8>) -> Result<()> {
+        self.put_object_with_metadata(key, bytes, ObjectHeaders::default(), BTreeMap::new())
+            .await
+    }
+
+    pub async fn put_object_with_metadata(
+        &mut self,
+        key: impl Into<String>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        metadata: BTreeMap<String, String>,
+    ) -> Result<()> {
+        self.client.ensure_provider_qualified()?;
+        let staged = self
+            .client
+            .repository
+            .stage_commit_session_put(
+                &self.manifest,
+                key.into().into_bytes(),
+                bytes,
+                headers,
+                metadata,
+            )
+            .await?;
+        self.staged.insert(staged.key().to_vec(), staged);
+        Ok(())
+    }
+
+    pub fn delete_object(&mut self, key: impl Into<String>) -> Result<()> {
+        let key = key.into().into_bytes();
+        if key.is_empty() {
+            return Err(invalid("v2 commit-session delete key is empty"));
+        }
+        self.staged
+            .insert(key.clone(), StagedMutationV2::delete(key));
+        Ok(())
+    }
+
+    pub async fn publish(self) -> Result<CommitReceiptV2> {
+        self.client.ensure_provider_qualified()?;
+        self.client
+            .repository
+            .publish_commit_session(self.manifest, self.staged.into_values().collect())
+            .await
+    }
+
+    /// Aborting leaves only content-addressed payload candidates. A bounded v2
+    /// staging/GC workflow will reclaim payloads that no commit references.
+    pub fn abort(self) {}
 }
 
 impl ClientV2Builder {

@@ -418,3 +418,91 @@ async fn native_v2_manual_authority_renewal_extends_the_write_window() {
         .unwrap();
     assert!(repository.fenced_branches().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn native_v2_commit_session_batches_payloads_into_one_replayable_publication() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(60_000));
+    let repository = RepositoryV2::initialize(
+        plane.clone(),
+        RepositoryV2Options {
+            repository_prefix: ".tests/native-v2-commit-session".to_string(),
+            writer: "writer-a".to_string(),
+            clock: clock.clone(),
+            ids: Arc::new(SequenceIdSource::new(0xbb, 1)),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimitV2::Finite(10_000),
+            ..RepositoryV2Options::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "atomic import", 60_000)
+        .await
+        .unwrap();
+    let first = repository
+        .stage_commit_session_put(
+            &session,
+            b"batch/a.txt".to_vec(),
+            b"first".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    let second = repository
+        .stage_commit_session_put(
+            &session,
+            b"batch/b.txt".to_vec(),
+            b"second".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    let mutations = vec![
+        second,
+        prolly_s3_core::StagedMutationV2::delete(b"batch/removed.txt".to_vec()),
+        first,
+    ];
+
+    clock.advance(1).unwrap();
+    let receipt = repository
+        .publish_commit_session(session.clone(), mutations.clone())
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 3);
+    assert_eq!(receipt.object_versions.len(), 3);
+    assert!(!receipt.idempotent_replay);
+    assert_eq!(repository.head("main").await.unwrap(), receipt.id);
+    assert_eq!(
+        repository
+            .get_object("main", b"batch/a.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"first"
+    );
+    assert_eq!(
+        repository
+            .get_object("main", b"batch/b.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"second"
+    );
+    assert!(repository
+        .get_object("main", b"batch/removed.txt")
+        .await
+        .unwrap()
+        .is_none());
+
+    let replay = repository
+        .publish_commit_session(session, mutations)
+        .await
+        .unwrap();
+    assert_eq!(replay.id, receipt.id);
+    assert!(replay.idempotent_replay);
+}

@@ -461,6 +461,73 @@ async fn rustfs_native_v2_writable_reopen_resumes_the_same_writer() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_native_v2_commit_session_preserves_n_plus_three_puts() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let client = ClientV2::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("native-v2-commit-session"))
+        .writer("rustfs-native-v2-batch-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimitV2::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    let mut session = client
+        .begin_commit()
+        .message("two puts and one delete")
+        .start()
+        .await
+        .unwrap();
+    client.reset_s3_operation_metrics();
+    session
+        .put_object("batch/a.txt", b"first".to_vec())
+        .await
+        .unwrap();
+    session
+        .put_object("batch/b.txt", b"second".to_vec())
+        .await
+        .unwrap();
+    session.delete_object("batch/removed.txt").unwrap();
+    let receipt = session.publish().await.unwrap();
+    assert_eq!(receipt.changed_keys, 3);
+    let calls = client.reset_s3_operation_metrics();
+    assert_eq!(
+        calls.put_object, 5,
+        "two immutable payload PUTs plus commit/event/ref publication must preserve N + 3: {calls:?}"
+    );
+    assert_eq!(
+        client
+            .get_object("batch/a.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"first"
+    );
+    assert_eq!(
+        client
+            .get_object("batch/b.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"second"
+    );
+    assert!(client
+        .get_object("batch/removed.txt")
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_two_part_multipart_write_uses_eight_s3_calls() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
