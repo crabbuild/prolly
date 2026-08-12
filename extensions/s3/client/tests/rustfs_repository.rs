@@ -16,8 +16,8 @@ use md5::{Digest as _, Md5};
 use prolly_s3_client::{core::PhysicalBatchMutationV1, FoyerNodeCache, FoyerNodeCacheConfig};
 use prolly_s3_client::{
     core::{
-        ObjectHeaders, PhysicalMultipartCompletedPart, ProviderPerKeyVersionLimitV2, Repository,
-        RepositoryOptions,
+        LogicalObjectVersionKindV1, ObjectHeaders, PhysicalMultipartCompletedPart,
+        ProviderPerKeyVersionLimitV2, Repository, RepositoryOptions,
     },
     AwsS3ObjectPlane, Client, ClientV2, HmacAttestationSigner, ProviderIdentity,
 };
@@ -300,7 +300,7 @@ async fn rustfs_native_v2_client_uses_immutable_payloads_and_fences_takeover() {
         .initialize()
         .await
         .unwrap();
-    old_writer
+    let first = old_writer
         .put_object("docs/native-v2.txt", b"before takeover".to_vec())
         .await
         .unwrap();
@@ -317,6 +317,46 @@ async fn rustfs_native_v2_client_uses_immutable_payloads_and_fences_takeover() {
         .path
         .as_str()
         .contains("/payloads/v2/"));
+    old_writer
+        .put_object("docs/native-v2.txt", b"updated before takeover".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(
+        old_writer
+            .get_object_at(first.id, "docs/native-v2.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"before takeover"
+    );
+    let (_, listed, truncated) = old_writer.list_objects("docs/", None, 10).await.unwrap();
+    assert!(!truncated);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].key, b"docs/native-v2.txt");
+    let (_, versions) = old_writer
+        .list_object_versions("docs/native-v2.txt", 10)
+        .await
+        .unwrap();
+    assert_eq!(versions.len(), 2);
+    old_writer
+        .delete_object("docs/native-v2.txt")
+        .await
+        .unwrap();
+    assert!(old_writer
+        .get_object("docs/native-v2.txt")
+        .await
+        .unwrap()
+        .is_none());
+    let (_, versions) = old_writer
+        .list_object_versions("docs/native-v2.txt", 10)
+        .await
+        .unwrap();
+    assert_eq!(versions.len(), 3);
+    assert!(matches!(
+        versions[0].body.kind,
+        LogicalObjectVersionKindV1::DeleteMarker
+    ));
 
     let replacement = ClientV2::builder()
         .aws_client(aws)

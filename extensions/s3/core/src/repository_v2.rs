@@ -89,6 +89,19 @@ pub struct ObjectDataV2 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectSummaryV2 {
+    pub key: Vec<u8>,
+    pub version: ObjectVersionV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VersionSummaryV2 {
+    pub key: Vec<u8>,
+    pub version: ObjectVersionV2,
+    pub cursor: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchIndexAdvanceReportV2 {
     pub operations: OperationIndexAdvanceReportV2,
     pub journal: JournalIndexAdvanceReportV2,
@@ -668,6 +681,312 @@ impl<P: ObjectPlane> RepositoryV2<P> {
         }))
     }
 
+    pub async fn get_object_at(
+        &self,
+        branch: &str,
+        snapshot: CommitIdV2,
+        key: &[u8],
+    ) -> Result<Option<ObjectDataV2>> {
+        self.validate_key(key)?;
+        self.locator.register(branch)?;
+        self.register_unindexed_tail(branch).await?;
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let objects = self.tree_from_root(&commit.state.objects)?;
+        let Some(encoded) = self
+            .engine(self.node_store.clone())
+            .get(&objects, key)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let current: CurrentObjectV2 = decode_canonical(&encoded)?;
+        current.version.validate()?;
+        let binding = current.version.binding.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "live historical v2 object has no immutable payload binding",
+            )
+        })?;
+        let bytes = self.payloads.get(binding).await?;
+        Ok(Some(ObjectDataV2 {
+            key: key.to_vec(),
+            version: current.version,
+            bytes,
+            snapshot,
+        }))
+    }
+
+    pub async fn delete_object(&self, branch: &str, key: Vec<u8>) -> Result<CommitReceiptV2> {
+        let operation = self.options.ids.operation();
+        self.delete_object_with_operation(branch, key, operation)
+            .await
+    }
+
+    pub async fn delete_object_with_operation(
+        &self,
+        branch: &str,
+        key: Vec<u8>,
+        operation: OperationId,
+    ) -> Result<CommitReceiptV2> {
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "protocol-v2 repository is read-only",
+            ));
+        }
+        self.validate_key(&key)?;
+        let input_digest =
+            crate::model::derive_input_digest_v2(&[b"delete", branch.as_bytes(), &key]);
+        let _lane = self.lock_branch(branch).await;
+        let now = self.options.clock.now_millis()?;
+        if let Some(receipt) = self
+            .reconcile_operation(branch, operation, input_digest, now)
+            .await?
+        {
+            return Ok(receipt);
+        }
+        let permit = self.active_permit(branch, now).await?;
+        self.authority.validate_active(&permit, now).await?;
+        let current = self.publisher.load(branch).await?;
+        let base = self.load_commit_object(current.value.target).await?.commit;
+        let write_store = self.node_store.isolated_write_session();
+        let engine = self.engine(write_store.clone());
+        let mut objects = self.tree_from_root(&base.state.objects)?;
+        let mut versions = self.tree_from_root(&base.state.versions)?;
+        let previous = engine
+            .get(&objects, &key)
+            .await?
+            .map(|encoded| decode_canonical::<CurrentObjectV2>(&encoded))
+            .transpose()?
+            .map(|current| current.version.id);
+        let generation = CommitGeneration(base.generation.0.checked_add(1).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "v2 commit generation overflow",
+            )
+        })?);
+        let version = ObjectVersionV2::derive(
+            self.format.repository_id,
+            &key,
+            operation,
+            LogicalObjectVersionBodyV1 {
+                order: ObjectVersionOrder {
+                    commit_generation: generation,
+                    mutation_ordinal: 0,
+                },
+                created_at_millis: now,
+                kind: LogicalObjectVersionKindV1::DeleteMarker,
+            },
+            None,
+        )?;
+        objects = engine.delete(&objects, &key).await?;
+        versions = engine
+            .put(
+                &versions,
+                version_tree_key(&key, version.body.order, version.id),
+                encode_canonical(&version)?,
+            )
+            .await?;
+        let prepared = write_store.prepare_node_pack(
+            tree_format_digest(&self.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let commit = BucketCommitV2 {
+            state: BucketStateV2 {
+                objects: TreeRootV1::from_tree(&objects)?,
+                versions: TreeRootV1::from_tree(&versions)?,
+            },
+            parents: vec![current.value.target],
+            generation,
+            delta: BucketDeltaV2 {
+                input_digest,
+                changes: vec![ObjectTransitionV2 {
+                    key: key.clone(),
+                    previous,
+                    next: version.id,
+                    delete_marker: true,
+                }],
+            },
+            node_pack: prepared.as_ref().map(PreparedNodePack::reference),
+            authority: permit.stamp(),
+            author: self.options.writer.clone(),
+            message: Some("DeleteObject".to_string()),
+            created_at_millis: now,
+            metadata: BTreeMap::new(),
+        };
+        let published = self
+            .publisher
+            .store_and_publish(
+                current,
+                CommitPublicationV2 {
+                    permit: &permit,
+                    branch,
+                    commit: &commit,
+                    node_pack: prepared.as_ref().map(PreparedNodePack::pack),
+                    operation,
+                    message: "DeleteObject",
+                    now_millis: now,
+                },
+            )
+            .await?;
+        self.finalize_pack(published.value.target, &commit, prepared)
+            .await?;
+        Ok(CommitReceiptV2 {
+            id: published.value.target,
+            operation,
+            branch: branch.to_string(),
+            parents: commit.parents,
+            changed_keys: 1,
+            object_versions: vec![version.id],
+            idempotent_replay: false,
+        })
+    }
+
+    pub async fn list_objects(
+        &self,
+        branch: &str,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(CommitIdV2, Vec<ObjectSummaryV2>, bool)> {
+        std::str::from_utf8(prefix)
+            .map_err(|_| Error::new(ErrorCode::InvalidKey, "v2 list prefix is not UTF-8"))?;
+        let snapshot = self.head(branch).await?;
+        let (objects, truncated) = self
+            .list_objects_at(branch, snapshot, prefix, after, limit)
+            .await?;
+        Ok((snapshot, objects, truncated))
+    }
+
+    pub async fn list_objects_at(
+        &self,
+        branch: &str,
+        snapshot: CommitIdV2,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<ObjectSummaryV2>, bool)> {
+        std::str::from_utf8(prefix)
+            .map_err(|_| Error::new(ErrorCode::InvalidKey, "v2 list prefix is not UTF-8"))?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Ok((Vec::new(), false));
+        }
+        self.locator.register(branch)?;
+        self.register_unindexed_tail(branch).await?;
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let objects = self.tree_from_root(&commit.state.objects)?;
+        let engine = self.engine(self.node_store.clone());
+        let mut iter = engine.prefix(&objects, prefix).await?;
+        let mut result = Vec::with_capacity(limit);
+        while result.len() <= limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if after.is_some_and(|after| key.as_slice() <= after) {
+                continue;
+            }
+            let current: CurrentObjectV2 = decode_canonical(&encoded)?;
+            current.version.validate()?;
+            result.push(ObjectSummaryV2 {
+                key,
+                version: current.version,
+            });
+        }
+        let truncated = result.len() > limit;
+        result.truncate(limit);
+        Ok((result, truncated))
+    }
+
+    pub async fn list_object_versions(
+        &self,
+        branch: &str,
+        key: &[u8],
+        limit: usize,
+    ) -> Result<(CommitIdV2, Vec<ObjectVersionV2>)> {
+        self.validate_key(key)?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        let snapshot = self.head(branch).await?;
+        self.locator.register(branch)?;
+        self.register_unindexed_tail(branch).await?;
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let versions = self.tree_from_root(&commit.state.versions)?;
+        let prefix = version_tree_prefix(key);
+        let engine = self.engine(self.node_store.clone());
+        let mut iter = engine.prefix(&versions, &prefix).await?;
+        let mut result = Vec::with_capacity(limit);
+        while result.len() < limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (_, encoded) = entry?;
+            let version: ObjectVersionV2 = decode_canonical(&encoded)?;
+            version.validate()?;
+            result.push(version);
+        }
+        Ok((snapshot, result))
+    }
+
+    pub async fn list_versions_prefix(
+        &self,
+        branch: &str,
+        prefix: &[u8],
+        limit: usize,
+    ) -> Result<(CommitIdV2, Vec<VersionSummaryV2>)> {
+        std::str::from_utf8(prefix)
+            .map_err(|_| Error::new(ErrorCode::InvalidKey, "v2 version prefix is not UTF-8"))?;
+        let snapshot = self.head(branch).await?;
+        let (versions, _) = self
+            .list_versions_at(branch, snapshot, prefix, None, limit)
+            .await?;
+        Ok((snapshot, versions))
+    }
+
+    pub async fn list_versions_at(
+        &self,
+        branch: &str,
+        snapshot: CommitIdV2,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<VersionSummaryV2>, bool)> {
+        std::str::from_utf8(prefix)
+            .map_err(|_| Error::new(ErrorCode::InvalidKey, "v2 version prefix is not UTF-8"))?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Ok((Vec::new(), false));
+        }
+        self.locator.register(branch)?;
+        self.register_unindexed_tail(branch).await?;
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let versions = self.tree_from_root(&commit.state.versions)?;
+        let encoded_prefix = version_tree_partial_prefix(prefix);
+        let engine = self.engine(self.node_store.clone());
+        let mut iter = engine.prefix(&versions, &encoded_prefix).await?;
+        let mut result = Vec::with_capacity(limit);
+        while result.len() <= limit {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            let (encoded_key, encoded) = entry?;
+            if after.is_some_and(|after| encoded_key.as_slice() <= after) {
+                continue;
+            }
+            let key = decode_version_tree_logical_key(&encoded_key)?;
+            let version: ObjectVersionV2 = decode_canonical(&encoded)?;
+            version.validate()?;
+            result.push(VersionSummaryV2 {
+                key,
+                version,
+                cursor: encoded_key,
+            });
+        }
+        let truncated = result.len() > limit;
+        result.truncate(limit);
+        Ok((result, truncated))
+    }
+
     pub async fn advance_branch_indexes(&self, branch: &str) -> Result<BranchIndexAdvanceReportV2> {
         self.locator.register(branch)?;
         let now = self.options.clock.now_millis()?;
@@ -950,7 +1269,22 @@ fn intent_path(prefix: &str) -> Result<ObjectPath> {
 }
 
 fn version_tree_key(key: &[u8], order: ObjectVersionOrder, version: ObjectVersionIdV2) -> Vec<u8> {
-    let mut output = Vec::with_capacity(key.len() + 2 + 8 + 4 + 32);
+    let mut output = version_tree_prefix(key);
+    output.reserve(8 + 4 + 32);
+    output.extend(order.commit_generation.0.to_be_bytes().map(|byte| !byte));
+    output.extend(order.mutation_ordinal.to_be_bytes().map(|byte| !byte));
+    output.extend(version.as_bytes().iter().map(|byte| !byte));
+    output
+}
+
+fn version_tree_prefix(key: &[u8]) -> Vec<u8> {
+    let mut output = version_tree_partial_prefix(key);
+    output.extend_from_slice(&[0, 0]);
+    output
+}
+
+fn version_tree_partial_prefix(key: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(key.len() + 2);
     for byte in key {
         if *byte == 0 {
             output.extend_from_slice(&[0, 0xff]);
@@ -958,9 +1292,33 @@ fn version_tree_key(key: &[u8], order: ObjectVersionOrder, version: ObjectVersio
             output.push(*byte);
         }
     }
-    output.extend_from_slice(&[0, 0]);
-    output.extend(order.commit_generation.0.to_be_bytes().map(|byte| !byte));
-    output.extend(order.mutation_ordinal.to_be_bytes().map(|byte| !byte));
-    output.extend(version.as_bytes().iter().map(|byte| !byte));
     output
+}
+
+fn decode_version_tree_logical_key(encoded: &[u8]) -> Result<Vec<u8>> {
+    let mut key = Vec::new();
+    let mut index = 0;
+    while index < encoded.len() {
+        match encoded[index] {
+            0 if encoded.get(index + 1) == Some(&0) => return Ok(key),
+            0 if encoded.get(index + 1) == Some(&0xff) => {
+                key.push(0);
+                index += 2;
+            }
+            0 => {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "noncanonical v2 version-tree key escape",
+                ))
+            }
+            byte => {
+                key.push(byte);
+                index += 1;
+            }
+        }
+    }
+    Err(Error::new(
+        ErrorCode::CorruptCommit,
+        "unterminated v2 version-tree logical key",
+    ))
 }

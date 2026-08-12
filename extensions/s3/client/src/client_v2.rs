@@ -1,9 +1,10 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly_s3_core::{
-    BranchIndexAdvanceReportV2, CommitReceiptV2, Error, ErrorCode, ObjectDataV2, ObjectHeaders,
-    ProviderAttestationV1, ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2,
-    RepositoryV2Options, Result,
+    BranchIndexAdvanceReportV2, CommitIdV2, CommitReceiptV2, Error, ErrorCode, ObjectDataV2,
+    ObjectHeaders, ObjectSummaryV2, ObjectVersionV2, ProviderAttestationV1,
+    ProviderPerKeyVersionLimitV2, ProviderProfileId, RepositoryV2, RepositoryV2Options, Result,
+    VersionSummaryV2,
 };
 
 use crate::{
@@ -102,6 +103,101 @@ impl ClientV2 {
         self.ensure_provider_qualified()?;
         self.repository
             .get_object(&self.branch, key.as_ref().as_bytes())
+            .await
+    }
+
+    pub async fn get_object_at(
+        &self,
+        snapshot: CommitIdV2,
+        key: impl AsRef<str>,
+    ) -> Result<Option<ObjectDataV2>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .get_object_at(&self.branch, snapshot, key.as_ref().as_bytes())
+            .await
+    }
+
+    pub async fn delete_object(&self, key: impl Into<String>) -> Result<CommitReceiptV2> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .delete_object(&self.branch, key.into().into_bytes())
+            .await
+    }
+
+    pub async fn list_objects(
+        &self,
+        prefix: impl AsRef<str>,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<(CommitIdV2, Vec<ObjectSummaryV2>, bool)> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_objects(
+                &self.branch,
+                prefix.as_ref().as_bytes(),
+                after.map(str::as_bytes),
+                limit,
+            )
+            .await
+    }
+
+    pub async fn list_objects_at(
+        &self,
+        snapshot: CommitIdV2,
+        prefix: impl AsRef<str>,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<(Vec<ObjectSummaryV2>, bool)> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_objects_at(
+                &self.branch,
+                snapshot,
+                prefix.as_ref().as_bytes(),
+                after.map(str::as_bytes),
+                limit,
+            )
+            .await
+    }
+
+    pub async fn list_object_versions(
+        &self,
+        key: impl AsRef<str>,
+        limit: usize,
+    ) -> Result<(CommitIdV2, Vec<ObjectVersionV2>)> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_object_versions(&self.branch, key.as_ref().as_bytes(), limit)
+            .await
+    }
+
+    pub async fn list_versions_prefix(
+        &self,
+        prefix: impl AsRef<str>,
+        limit: usize,
+    ) -> Result<(CommitIdV2, Vec<VersionSummaryV2>)> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_versions_prefix(&self.branch, prefix.as_ref().as_bytes(), limit)
+            .await
+    }
+
+    pub async fn list_versions_at(
+        &self,
+        snapshot: CommitIdV2,
+        prefix: impl AsRef<str>,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<VersionSummaryV2>, bool)> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_versions_at(
+                &self.branch,
+                snapshot,
+                prefix.as_ref().as_bytes(),
+                after,
+                limit,
+            )
             .await
     }
 
