@@ -29,7 +29,7 @@ cardinality ceiling.
 - Make exact key lookup logarithmic in the Prolly tree size and independent of
   total commit count.
 - Bound RAM, local disk, S3 calls, concurrency, and CPU for every request.
-- Keep the existing three-call foreground write path.
+- Keep the foreground write path below five S3 calls.
 - Let caches fail open without changing repository correctness.
 - Make scans, history walks, indexing, and garbage collection resumable.
 
@@ -89,8 +89,10 @@ ID—the writer admits every node in the committed pack to the configured cache.
 Foyer flushes those verified immutable nodes to disk on graceful close. A
 reader reopening the same cache directory can therefore traverse the writer's
 snapshot without re-fetching nodes. A new host can call
-`Client::prewarm_node_cache` for selected snapshots and prefixes before serving
-traffic.
+`Client::prewarm_internal_node_cache` for selected snapshots before serving
+traffic. Prewarm follows only roots and internal descendants; level-one child
+links are counted but their leaf nodes are not fetched. This bounds warm-up by
+the routing structure rather than the number of files.
 
 ### Cache keys
 
@@ -169,7 +171,7 @@ Checkpoint construction is background work. It merges new commit-envelope
 indexes into affected copy-on-write pages and conditionally advances the head.
 The commit envelope remains a self-describing correctness fallback, so a lost
 checkpoint update delays lookup optimization but cannot lose committed data.
-No index-maintenance S3 call is added to the three-call foreground write.
+No index-maintenance S3 call is added to the four-call foreground write.
 
 Each lookup clones one validated head root before traversing it. Immutable nodes
 therefore remain readable while a concurrent maintainer publishes a newer
@@ -254,6 +256,12 @@ The fenced writer uses one publication lane per branch. Different branch refs
 can publish concurrently; repository-wide maintenance takes an exclusive
 barrier across those lanes. Scale-out uses independent branches or repository
 partitions; a branch with one mutable head has a finite maximum commit rate.
+
+Cross-process scale-out requires protocol v2 branch authority. Each branch is
+the initial writer shard so its ref CAS is a bounded takeover barrier. A v2
+authority stamp includes scope and generation; v1 scalar fences remain
+repository-exclusive. Destructive global maintenance fails closed until the
+stable-snapshot and dirty-root-journal GC protocol can coordinate all shards.
 
 ## Garbage collection at billion scale
 

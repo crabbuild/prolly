@@ -15,16 +15,17 @@ use crate::{
     CanonicalOperationResult, ChecksumExpectation, Clock, CommitGeneration, CommitGraphEntryV2,
     CommitGraphHeadV2, CommitId, CommitObjectV1, CommitReceipt, CompareExchange,
     CompareExchangeOutcome, CurrentObjectV1, DeleteOutcome, Error, ErrorCode, EtagPredicateV1,
-    GcCandidateV1, GcCommitWorkV2, GcEpochPhaseV2, GcEpochV2, GcFenceV1, GcMarkRunStateV1,
-    GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1, GcRunStateV1, GcRunV1, GcVersionWorkV2,
-    GetRequest, IdSource, ImmutablePut, InitializationIntentV1, ListRequest,
-    LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1, MemoryNodeCache, NodeCache,
-    NodeIndexEntryV1, NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransition, ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1,
-    OperationId, OperationKind, OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1,
-    PhysicalVersion, ProllyObjectStore, RandomIdSource, RefCatalogEntryV2, RefCatalogHeadV2,
-    RefGeneration, ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result, RetentionPinV1,
-    RetryAdvice, StorageToken, SystemClock, TreeRootV1,
+    GcCandidateV1, GcCommitWorkV2, GcCoordinatorV2, GcDirtyRootIdV2, GcDirtyRootV2, GcEpochPhaseV2,
+    GcEpochV2, GcFenceV1, GcMarkRunStateV1, GcMarkRunV1, GcPlanBodyV1, GcPlanId, GcPlanV1,
+    GcRunStateV1, GcRunV1, GcVersionWorkV2, GetRequest, IdSource, ImmutablePut,
+    InitializationIntentV1, ListRequest, LogicalObjectVersionBodyV1, LogicalObjectVersionKindV1,
+    MemoryNodeCache, MutableControlKind, MutableControlObserver, NodeCache, NodeIndexEntryV1,
+    NodeIndexHeadV2, ObjectData, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition,
+    ObjectVersionId, ObjectVersionOrder, ObjectVersionV1, ObjectWriteConditionV1, OperationId,
+    OperationKind, OperationRecordV1, PhysicalBatchV1, PhysicalPreparedMutationV1, PhysicalVersion,
+    ProllyObjectStore, RandomIdSource, RefCatalogEntryV2, RefCatalogHeadV2, RefGeneration,
+    ReflogEntryV1, RepositoryFormatV1, RepositoryId, Result, RetentionPinV1, RetryAdvice,
+    StorageToken, SystemClock, TreeRootV1,
 };
 use futures_util::{stream::BoxStream, Stream, StreamExt};
 use md5::{Digest as _, Md5};
@@ -34,6 +35,9 @@ use sha2::Sha256;
 const MIN_NONFINAL_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_MULTIPART_PART_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 const MAX_GC_CAS_RETRIES: usize = 16;
+const FSCK_OBJECT_TREE: u8 = 0;
+const FSCK_VERSION_TREE: u8 = 1;
+const FSCK_OPERATION_TREE: u8 = 2;
 
 #[derive(Clone)]
 pub struct RepositoryOptions {
@@ -42,8 +46,7 @@ pub struct RepositoryOptions {
     pub writer: String,
     pub limits: CanonicalLimits,
     pub state_tree_format: TreeFormat,
-    /// Duration of the repository-scoped physical writer lease. Renewal is
-    /// amortized and is not part of an ordinary operation's foreground calls.
+    /// Duration of each branch/system writer-authority lease.
     pub writer_lease_millis: u64,
     /// Open without acquiring mutation authority.
     pub read_only: bool,
@@ -72,6 +75,10 @@ pub struct RepositoryOptions {
     /// Number of physical ref versions retained during compaction. Logical
     /// history remains in immutable commits and is unaffected.
     pub branch_ref_versions_to_retain: usize,
+    /// Maximum physical versions retained for every recurring mutable control
+    /// object. Compaction runs before each successful CAS update, reserving
+    /// one slot for the new version.
+    pub mutable_control_versions_to_retain: usize,
     /// Maximum exact physical deletions per second during GC. Zero disables
     /// pacing. The physical format accepts 1..=1,000 when configured.
     pub gc_delete_rate_limit_per_second: u32,
@@ -100,6 +107,7 @@ impl Default for RepositoryOptions {
             node_cache: None,
             branch_ref_compaction_interval: 5_000,
             branch_ref_versions_to_retain: 100,
+            mutable_control_versions_to_retain: crate::DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
             gc_delete_rate_limit_per_second: 0,
             clock: Arc::new(SystemClock),
             ids: Arc::new(RandomIdSource),
@@ -243,7 +251,7 @@ pub struct SyncReport {
     pub ref_move: Option<RefMoveReceipt>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FsckReport {
     pub branches: usize,
     pub tags: usize,
@@ -253,6 +261,45 @@ pub struct FsckReport {
     pub reachable_node_bytes: usize,
     pub logical_versions: usize,
     pub content_bytes_verified: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ResumableFsckPhase {
+    DiscoverCommits,
+    VerifyNodes,
+    VerifyVersions,
+    Complete,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ResumableFsckCursor {
+    pub closure: CommitClosureCursor,
+    pub report: FsckReport,
+    pub phase: ResumableFsckPhase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResumableFsckPage {
+    pub cursor: ResumableFsckCursor,
+    pub processed_commits: usize,
+    pub processed_nodes: usize,
+    pub processed_versions: usize,
+    pub traversal_steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct FsckNodeWork {
+    kind: u8,
+    cid: prolly::Cid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct FsckVersionWork {
+    key: Vec<u8>,
+    version: ObjectVersionV1,
+    continuation: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -268,6 +315,14 @@ pub struct NodeIndexAdvanceReport {
     pub indexed_commit_objects: usize,
     pub indexed_node_entries: usize,
     pub completed_scan: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InternalNodePrewarmReport {
+    pub roots: usize,
+    pub internal_nodes: usize,
+    pub root_leaves: usize,
+    pub leaves_skipped: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -337,6 +392,59 @@ pub struct CommitPage {
     pub budget_exhausted: bool,
 }
 
+/// Durable state for a parent-before-child traversal of an arbitrary commit
+/// DAG closure. The large stack and visited set live in immutable Prolly nodes;
+/// serializing this cursor remains constant-size.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommitClosureCursor {
+    pub repository: RepositoryId,
+    pub traversal: OperationId,
+    pub state: TreeRootV1,
+    pub next_stack_sequence: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitClosurePage {
+    /// Parent-before-child commits, each emitted exactly once per traversal.
+    pub commits: Vec<(CommitId, BucketCommitV1)>,
+    pub cursor: CommitClosureCursor,
+    pub steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CommitClosureCleanupReport {
+    pub deleted_objects: usize,
+    pub complete: bool,
+}
+
+/// Constant-size checkpoint for an interruptible physical history transfer.
+/// The source traversal and source-to-destination mappings live in the
+/// closure tree named by this cursor.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalTransferCursor {
+    pub closure: CommitClosureCursor,
+    destination_scope: [u8; 32],
+    force_rebind: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PhysicalTransferPage {
+    pub cursor: PhysicalTransferCursor,
+    pub sync: SyncReport,
+    pub processed_commits: usize,
+    pub traversal_steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct CommitClosureWork {
+    commit: CommitId,
+    finish: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FirstParentCursor {
     root: CommitId,
@@ -365,6 +473,34 @@ pub struct BranchPage {
 pub struct TagPage {
     pub tags: Vec<Tag>,
     pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetentionPinPage {
+    pub pins: Vec<RetentionPinV1>,
+    pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagReflogPage {
+    pub entries: Vec<(crate::ReflogEntryId, ReflogEntryV1)>,
+    pub continuation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchReflogPage {
+    pub entries: Vec<(crate::ReflogEntryId, ReflogEntryV1)>,
+    pub continuation: Option<BranchReflogCursor>,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BranchReflogCursor {
+    branch: String,
+    root: CommitId,
+    history: Option<HistoryCursor>,
+    inline_id: crate::ReflogEntryId,
+    inline_emitted: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -397,6 +533,114 @@ struct RepositoryPerformanceCounters {
     node_index_advances: AtomicU64,
     node_index_advance_errors: AtomicU64,
     node_index_entries_indexed: AtomicU64,
+}
+
+struct GcDirtyRootObserver<P: ObjectPlane> {
+    plane: Arc<P>,
+    prefix: String,
+    repository: RepositoryId,
+    active_epoch: Arc<RwLock<Option<OperationId>>>,
+    dirty_sequence: Arc<AtomicU64>,
+    process_session: OperationId,
+}
+
+#[async_trait::async_trait]
+impl<P: ObjectPlane> MutableControlObserver for GcDirtyRootObserver<P> {
+    async fn before_compare_exchange(
+        &self,
+        kind: MutableControlKind,
+        request: &CompareExchange,
+    ) -> Result<()> {
+        let active_epoch = *self
+            .active_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+        let Some(epoch) = active_epoch else {
+            return Ok(());
+        };
+        let (
+            namespace,
+            name,
+            target,
+            previous_target,
+            ref_generation,
+            operation,
+            created_at_millis,
+        ) = match kind {
+            MutableControlKind::BranchRefV1 => {
+                let value: crate::RefValueV1 = decode_canonical(&request.bytes)?;
+                (
+                    "branch".to_string(),
+                    value.inline_reflog.branch.clone(),
+                    value.target,
+                    value.previous_target,
+                    value.generation,
+                    value.operation,
+                    value.updated_at_millis,
+                )
+            }
+            MutableControlKind::TagRefV1 => {
+                let value: crate::TagValueV1 = decode_canonical(&request.bytes)?;
+                (
+                    "tag".to_string(),
+                    request.path.as_str().to_string(),
+                    value.target,
+                    value.previous_target,
+                    value.generation,
+                    value.operation,
+                    value.created_at_millis,
+                )
+            }
+            MutableControlKind::RetentionPinV1 => {
+                let value: RetentionPinV1 = decode_canonical(&request.bytes)?;
+                (
+                    "pin".to_string(),
+                    value.name.clone(),
+                    value.target,
+                    None,
+                    RefGeneration(value.generation),
+                    self.process_session,
+                    value.created_at_millis,
+                )
+            }
+            _ => return Ok(()),
+        };
+        let publication_sequence = self
+            .dirty_sequence
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map(|previous| previous + 1)
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "GC dirty-root sequence overflow",
+                )
+            })?;
+        let event = GcDirtyRootV2 {
+            repository: self.repository,
+            epoch,
+            process_session: self.process_session,
+            publication_sequence,
+            namespace,
+            name,
+            target,
+            previous_target,
+            ref_generation,
+            operation,
+            created_at_millis,
+        };
+        let id = event.id()?;
+        let bytes = encode_canonical(&event)?;
+        self.plane
+            .put_immutable(ImmutablePut {
+                path: gc_dirty_root_v2_path(&self.prefix, &event, id)?,
+                expected_sha256: crate::codec::sha256(&bytes),
+                bytes,
+            })
+            .await?;
+        Ok(())
+    }
 }
 
 /// Returns the exclusive version-tree cursor immediately after every version
@@ -670,6 +914,7 @@ impl Drop for NodeIndexMaintenance {
 
 pub struct Repository<P: ObjectPlane> {
     plane: Arc<P>,
+    controls: crate::MutableControlStore<P>,
     options: RepositoryOptions,
     format: RepositoryFormatV1,
     node_store: ProllyObjectStore<P>,
@@ -678,6 +923,9 @@ pub struct Repository<P: ObjectPlane> {
     ref_catalog: Arc<ProllyMetadataIndex<P>>,
     commit_graph: Arc<ProllyMetadataIndex<P>>,
     engine: AsyncProlly<ProllyObjectStore<P>>,
+    shard_authority: Arc<crate::ShardWriterAuthorityV2<P>>,
+    authority_permits: Arc<RwLock<BTreeMap<crate::AuthorityScopeV2, crate::AuthorityPermitV2>>>,
+    authority_renewal: Arc<tokio::sync::Mutex<()>>,
     writer_lease: Arc<RwLock<Option<HeldWriterLease>>>,
     warm_branches: Arc<RwLock<BoundedCache<String, WarmBranchState>>>,
     commit_cache: Arc<RwLock<BoundedCache<CommitId, BucketCommitV1>>>,
@@ -687,6 +935,8 @@ pub struct Repository<P: ObjectPlane> {
     operation_locks: Arc<std::sync::Mutex<BTreeMap<OperationId, Weak<tokio::sync::Mutex<()>>>>>,
     lease_renewal: Arc<tokio::sync::Mutex<()>>,
     performance: Arc<RepositoryPerformanceCounters>,
+    active_gc_epoch: Arc<RwLock<Option<OperationId>>>,
+    gc_dirty_sequence: Arc<AtomicU64>,
     process_session: OperationId,
 }
 
@@ -738,9 +988,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
         };
         validate_format_compatibility(&intent.format, &options)?;
-        let mut repository =
-            Self::from_format(plane.clone(), options.clone(), intent.format.clone())?;
-        repository.acquire_physical_writer().await?;
+        let repository = Self::from_format(plane.clone(), options.clone(), intent.format.clone())?;
 
         let empty = repository.engine.create();
         let empty_state = BucketStateV1 {
@@ -752,7 +1000,9 @@ impl<P: ObjectPlane> Repository<P> {
             operation_ids: Vec::new(),
             changes: Vec::new(),
         };
-        let writer_fence_generation = repository.writer_fence_generation()?;
+        let writer_fence_generation = repository
+            .branch_writer_generation(&options.default_branch)
+            .await?;
         let commit = BucketCommitV1 {
             state: empty_state,
             parents: Vec::new(),
@@ -812,7 +1062,8 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog,
         };
         let initial_ref_bytes = encode_canonical(&initial_ref)?;
-        match plane
+        match repository
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&options.repository_prefix, &options.default_branch)?,
                 expected: None,
@@ -872,10 +1123,10 @@ impl<P: ObjectPlane> Repository<P> {
             })?;
         let format = decode_repository_format(&object.bytes)?;
         validate_format_compatibility(&format, &options)?;
-        let mut repository = Self::from_format(plane, options, format)?;
+        let repository = Self::from_format(plane, options, format)?;
         repository.load_latest_node_index_checkpoint().await?;
         repository.load_latest_scale_metadata().await?;
-        repository.acquire_physical_writer().await?;
+        repository.restore_gc_coordinator_v2().await?;
         Ok(repository)
     }
 
@@ -939,8 +1190,34 @@ impl<P: ObjectPlane> Repository<P> {
         let max_cached_branches = options.max_cached_branches;
         let max_cached_commits = options.max_cached_commits;
         let max_parallel_payload_writes = options.max_parallel_payload_writes;
+        let performance = Arc::new(RepositoryPerformanceCounters::default());
+        let active_gc_epoch = Arc::new(RwLock::new(None));
+        let gc_dirty_sequence = Arc::new(AtomicU64::new(0));
+        let process_session = OperationId(uuid::Uuid::new_v4());
+        let dirty_root_observer = Arc::new(GcDirtyRootObserver {
+            plane: plane.clone(),
+            prefix: options.repository_prefix.clone(),
+            repository: format.repository_id,
+            active_epoch: active_gc_epoch.clone(),
+            dirty_sequence: gc_dirty_sequence.clone(),
+            process_session,
+        });
+        let controls = crate::MutableControlStore::new(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            options.mutable_control_versions_to_retain,
+        )?
+        .with_observer(dirty_root_observer);
+        let shard_authority = Arc::new(crate::ShardWriterAuthorityV2::new_with_control_retention(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            format.repository_id,
+            Duration::from_millis(options.writer_lease_millis),
+            options.mutable_control_versions_to_retain,
+        )?);
         Ok(Self {
             plane,
+            controls,
             options,
             format,
             node_store,
@@ -949,6 +1226,9 @@ impl<P: ObjectPlane> Repository<P> {
             ref_catalog,
             commit_graph,
             engine,
+            shard_authority,
+            authority_permits: Arc::new(RwLock::new(BTreeMap::new())),
+            authority_renewal: Arc::new(tokio::sync::Mutex::new(())),
             writer_lease: Arc::new(RwLock::new(None)),
             warm_branches: Arc::new(RwLock::new(BoundedCache::new(max_cached_branches))),
             commit_cache: Arc::new(RwLock::new(BoundedCache::new(max_cached_commits))),
@@ -957,8 +1237,10 @@ impl<P: ObjectPlane> Repository<P> {
             payload_writes: Arc::new(tokio::sync::Semaphore::new(max_parallel_payload_writes)),
             operation_locks: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             lease_renewal: Arc::new(tokio::sync::Mutex::new(())),
-            performance: Arc::new(RepositoryPerformanceCounters::default()),
-            process_session: OperationId(uuid::Uuid::new_v4()),
+            performance,
+            active_gc_epoch,
+            gc_dirty_sequence,
+            process_session,
         })
     }
 
@@ -1002,6 +1284,97 @@ impl<P: ObjectPlane> Repository<P> {
                 .node_index_entries_indexed
                 .load(Ordering::Relaxed),
         }
+    }
+
+    /// Fetch only the three state-tree roots and their internal descendants.
+    /// Leaf nodes and object payloads are intentionally not read.
+    pub async fn prewarm_internal_nodes(
+        &self,
+        snapshot: CommitId,
+    ) -> Result<InternalNodePrewarmReport> {
+        let commit = self.load_commit_metadata(snapshot).await?;
+        let mut pending = Vec::new();
+        for root in [
+            &commit.state.objects,
+            &commit.state.versions,
+            &commit.state.operations,
+        ] {
+            if root.format_digest != tree_format_digest(&self.format.state_tree_format)? {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "prewarm root uses an incompatible tree format",
+                ));
+            }
+            if let Some(cid) = root.root.clone() {
+                pending.push(cid);
+            }
+        }
+        let roots = pending.len();
+        let mut seen = HashSet::new();
+        let mut internal_nodes = 0usize;
+        let mut root_leaves = 0usize;
+        let mut leaves_skipped = 0usize;
+        while let Some(cid) = pending.pop() {
+            if !seen.insert(cid.clone()) {
+                continue;
+            }
+            let bytes = self
+                .node_store
+                .get_indexed_packed(cid.as_bytes())
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "prewarm node is absent from the bounded node index",
+                    )
+                })?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("prewarm could not decode a Prolly node: {error}"),
+                    )
+                })?;
+            if node.leaf {
+                root_leaves = root_leaves.checked_add(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "prewarm root-leaf counter overflow",
+                    )
+                })?;
+                continue;
+            }
+            internal_nodes = internal_nodes.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "prewarm internal-node counter overflow",
+                )
+            })?;
+            if node.level == 1 {
+                leaves_skipped = leaves_skipped.checked_add(node.vals.len()).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InternalInvariant,
+                        "prewarm leaf counter overflow",
+                    )
+                })?;
+                continue;
+            }
+            for encoded in node.vals {
+                let child = prolly::Cid(encoded.try_into().map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        "prewarm internal node contains a malformed child CID",
+                    )
+                })?);
+                pending.push(child);
+            }
+        }
+        Ok(InternalNodePrewarmReport {
+            roots,
+            internal_nodes,
+            root_leaves,
+            leaves_skipped,
+        })
     }
 
     fn begin_publication_wait(&self) -> std::time::Instant {
@@ -1077,6 +1450,10 @@ impl<P: ObjectPlane> Repository<P> {
         barrier
     }
 
+    async fn preserve_history_for_gc(&self) -> tokio::sync::RwLockReadGuard<'_, ()> {
+        self.publication_barrier.read().await
+    }
+
     /// Serialize requests that reuse an idempotency key before they touch the
     /// data plane. This prevents concurrent retries in one writer process from
     /// creating duplicate, unreachable physical S3 versions.
@@ -1121,6 +1498,7 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
     ) -> Result<crate::NodeIndexCheckpointV1> {
         validate_branch(branch)?;
+        self.system_writer_generation("node-index-v1").await?;
         self.node_store.rebuild_node_index().await?;
         let head = self.head(branch).await?;
         let commit = self.load_commit(head).await?;
@@ -1151,7 +1529,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: pointer_path,
                 expected: current.map(|stored| stored.metadata.token),
@@ -1186,6 +1564,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "node-index advance must process between 1 and 1,000 commit objects",
             ));
         }
+        self.system_writer_generation("node-index-v2").await?;
         let head_path = node_index_v2_head_path(&self.options.repository_prefix)?;
         let loaded = self.plane.load_mutable(&head_path).await?;
         let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
@@ -1334,7 +1713,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: head_path,
                 expected,
@@ -1385,6 +1764,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "ref-catalog advance must process between 1 and 1,000 refs",
             ));
         }
+        self.system_writer_generation("ref-catalog-v2").await?;
         let head_path = ref_catalog_v2_head_path(&self.options.repository_prefix)?;
         let loaded = self.plane.load_mutable(&head_path).await?;
         let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
@@ -1524,7 +1904,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: head_path,
                 expected,
@@ -1567,6 +1947,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "commit-graph advance must process between 1 and 1,000 commits",
             ));
         }
+        self.system_writer_generation("commit-graph-v2").await?;
         let head_path = commit_graph_v2_head_path(&self.options.repository_prefix)?;
         let loaded = self.plane.load_mutable(&head_path).await?;
         let expected = loaded.as_ref().map(|stored| stored.metadata.token.clone());
@@ -1689,7 +2070,7 @@ impl<P: ObjectPlane> Repository<P> {
             updated_at_millis: self.now_millis()?,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: head_path,
                 expected,
@@ -1812,6 +2193,88 @@ impl<P: ObjectPlane> Repository<P> {
         self.options.clock.now_millis()
     }
 
+    async fn authority_generation(&self, scope: crate::AuthorityScopeV2) -> Result<u64> {
+        if self.options.read_only {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository was opened read-only",
+            ));
+        }
+        let now = self.now_millis()?;
+        let cached = self
+            .authority_permits
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "authority cache poisoned"))?
+            .get(&scope)
+            .cloned();
+        let permit = match cached {
+            Some(permit) if permit.expires_at_millis() > now => permit,
+            _ => {
+                // Cold acquisition and renewal are rare control-plane work.
+                // Serialize only those transitions, then let steady-state
+                // validation and branch publication proceed independently.
+                let _renewal = self.authority_renewal.lock().await;
+                let current = self
+                    .authority_permits
+                    .read()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .get(&scope)
+                    .cloned();
+                let permit = match current {
+                    Some(permit) if permit.expires_at_millis() > now => permit,
+                    Some(permit) => self.shard_authority.renew(permit, now).await?,
+                    None => {
+                        self.shard_authority
+                            .acquire(
+                                scope.clone(),
+                                &self.options.writer,
+                                now,
+                                self.new_operation(),
+                            )
+                            .await?
+                    }
+                };
+                self.authority_permits
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .insert(scope.clone(), permit.clone());
+                permit
+            }
+        };
+        match self.shard_authority.validate_active(&permit, now).await {
+            Ok(stamp) => Ok(stamp.generation),
+            Err(error) => {
+                self.authority_permits
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .remove(&scope);
+                Err(error)
+            }
+        }
+    }
+
+    async fn branch_writer_generation(&self, branch: &str) -> Result<u64> {
+        validate_branch(branch)?;
+        self.authority_generation(crate::AuthorityScopeV2::Branch {
+            name: branch.to_string(),
+        })
+        .await
+    }
+
+    async fn system_writer_generation(&self, namespace: &str) -> Result<u64> {
+        self.authority_generation(crate::AuthorityScopeV2::System {
+            namespace: namespace.to_string(),
+        })
+        .await
+    }
+
+    #[allow(dead_code)] // Legacy v1 migration adapter; normal opens use sharded authority.
     async fn acquire_physical_writer(&mut self) -> Result<()> {
         if self.options.read_only {
             return Ok(());
@@ -1867,7 +2330,7 @@ impl<P: ObjectPlane> Repository<P> {
             }
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -1891,10 +2354,45 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    /// Renew the repository-scoped exclusive writer lease. Services should
-    /// call this from an independent maintenance loop; mutations also renew
-    /// opportunistically near the deadline.
+    /// Renew every cached branch/system authority permit. The repository-wide
+    /// v1 lease is renewed only when this instance was opened through the
+    /// legacy migration adapter.
     pub async fn renew_writer_lease(&self) -> Result<()> {
+        let _authority_renewal = self.authority_renewal.lock().await;
+        if self
+            .writer_lease
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
+            .is_none()
+        {
+            let now = self.now_millis()?;
+            let permits = self
+                .authority_permits
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "authority cache poisoned"))?
+                .clone();
+            for (scope, permit) in permits {
+                let renewed = match self.shard_authority.renew(permit, now).await {
+                    Ok(renewed) => renewed,
+                    Err(error) => {
+                        self.authority_permits
+                            .write()
+                            .map_err(|_| {
+                                Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                            })?
+                            .remove(&scope);
+                        return Err(error);
+                    }
+                };
+                self.authority_permits
+                    .write()
+                    .map_err(|_| {
+                        Error::new(ErrorCode::InternalInvariant, "authority cache poisoned")
+                    })?
+                    .insert(scope, renewed);
+            }
+            return Ok(());
+        }
         let _renewal = self.lease_renewal.lock().await;
         self.renew_writer_lease_inner().await
     }
@@ -1924,7 +2422,7 @@ impl<P: ObjectPlane> Repository<P> {
             .checked_add(self.options.writer_lease_millis)
             .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "writer lease expiry overflow"))?;
         let renewal = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: writer_lease_path(&self.options.repository_prefix)?,
                 expected: Some(held.token),
@@ -1963,9 +2461,9 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    /// Run independent physical-writer lease renewal until the returned handle
-    /// is dropped. A failed or ambiguous renewal fences this repository before
-    /// the task exits.
+    /// Run independent shard-authority renewal until the returned handle is
+    /// dropped. A failed or ambiguous renewal fences the affected writer
+    /// instance before the task exits.
     pub fn start_writer_lease_maintenance(self: &Arc<Self>) -> Result<WriterLeaseMaintenance> {
         if self.options.read_only {
             return Err(Error::new(
@@ -2037,6 +2535,108 @@ impl<P: ObjectPlane> Repository<P> {
     /// Explicitly take over an expired or credential-revoked physical writer.
     /// The caller must have independently stopped/revoked the old writer; S3
     /// cannot make ref CAS conditional on this separate lease object.
+    pub async fn takeover_branch_writer(
+        &mut self,
+        branch: &str,
+        expected_writer: &str,
+        expected_generation: u64,
+        handoff_evidence: &str,
+    ) -> Result<u64> {
+        if !self.options.read_only || handoff_evidence.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "branch takeover requires a read-only open and credential-isolation evidence",
+            ));
+        }
+        validate_branch(branch)?;
+        let scope = crate::AuthorityScopeV2::Branch {
+            name: branch.to_string(),
+        };
+        let pending = self
+            .shard_authority
+            .begin_takeover(crate::TakeoverRequestV2 {
+                scope: scope.clone(),
+                expected_writer: expected_writer.to_string(),
+                expected_generation,
+                next_writer: self.options.writer.clone(),
+                handoff_evidence: handoff_evidence.to_string(),
+                now_millis: self.now_millis()?,
+                nonce: self.new_operation(),
+            })
+            .await?;
+        let stamp = pending.stamp();
+        let _publication = self.lock_branch_publication(branch).await;
+        let loaded = self.load_ref_including_tombstone(branch).await?;
+        if loaded.value.writer_fence_generation != expected_generation
+            && loaded.value.writer_fence_generation != stamp.generation
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch ref fence does not match the takeover expectation",
+            ));
+        }
+        if loaded.value.writer_fence_generation != stamp.generation {
+            let operation = self.new_operation();
+            let created_at_millis = self.now_millis()?;
+            let reflog = ReflogEntryV1 {
+                branch: branch.to_string(),
+                old_target: Some(loaded.value.target),
+                new_target: loaded.value.target,
+                operation,
+                actor: self.options.writer.clone(),
+                message: format!("branch writer takeover: {}", handoff_evidence.trim()),
+                created_at_millis,
+            };
+            let mut barrier = loaded.value;
+            barrier.previous_target = Some(barrier.target);
+            barrier.generation =
+                RefGeneration(barrier.generation.0.checked_add(1).ok_or_else(|| {
+                    Error::new(ErrorCode::InternalInvariant, "ref generation overflow")
+                })?);
+            barrier.operation = operation;
+            barrier.reflog = reflog.id()?;
+            barrier.inline_reflog = reflog;
+            barrier.writer = self.options.writer.clone();
+            barrier.updated_at_millis = created_at_millis;
+            barrier.writer_fence_generation = stamp.generation;
+            match self
+                .controls
+                .compare_exchange(CompareExchange {
+                    path: branch_path(&self.options.repository_prefix, branch)?,
+                    expected: Some(loaded.token),
+                    bytes: encode_canonical(&barrier)?,
+                })
+                .await?
+            {
+                CompareExchangeOutcome::Applied(_) => {}
+                CompareExchangeOutcome::Conflict(_) => {
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        "branch changed during writer takeover barrier",
+                    ));
+                }
+            }
+        }
+        let active = self
+            .shard_authority
+            .activate_after_barrier(
+                pending,
+                crate::BranchRefBarrierV2::new(stamp.clone()),
+                self.now_millis()?,
+            )
+            .await?;
+        self.authority_permits
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "authority cache poisoned"))?
+            .insert(scope, active);
+        drop(_publication);
+        self.options.read_only = false;
+        self.invalidate_branch_cache(branch)?;
+        Ok(stamp.generation)
+    }
+
+    /// Legacy repository-wide takeover adapter. New deployments should call
+    /// `takeover_branch_writer` independently for each authority shard.
     pub async fn takeover_physical_writer(
         &mut self,
         expected_writer: &str,
@@ -2049,6 +2649,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "takeover requires a read-only open and non-empty credential-isolation evidence",
             ));
         }
+        let _publication = self.publication_barrier.clone().write_owned().await;
         let path = writer_lease_path(&self.options.repository_prefix)?;
         let stored = self.plane.load_mutable(&path).await?.ok_or_else(|| {
             Error::new(
@@ -2097,7 +2698,7 @@ impl<P: ObjectPlane> Repository<P> {
                 updated_at_millis: now,
             };
             let token = match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: path.clone(),
                     expected: Some(stored.metadata.token),
@@ -2158,7 +2759,7 @@ impl<P: ObjectPlane> Repository<P> {
             barrier.updated_at_millis = now;
             barrier.writer_fence_generation = next_generation;
             match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: branch_path(&self.options.repository_prefix, &branch.name)?,
                     expected: Some(loaded.token),
@@ -2184,70 +2785,6 @@ impl<P: ObjectPlane> Repository<P> {
             .map_err(|_| Error::new(ErrorCode::InternalInvariant, "branch-cache lock poisoned"))?
             .clear();
         Ok(next_generation)
-    }
-
-    async fn physical_writer_generation_for_mutation(&self) -> Result<u64> {
-        let held = self
-            .writer_lease
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
-            .clone()
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "physical repository has no exclusive writer authority",
-                )
-            })?;
-        let now = self.now_millis()?;
-        if held.value.expires_at_millis <= now {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer lease expired; publication is fenced",
-            ));
-        }
-        let renew_at = held
-            .value
-            .expires_at_millis
-            .saturating_sub(self.options.writer_lease_millis / 3);
-        if now >= renew_at {
-            let _renewal = self.lease_renewal.lock().await;
-            let current = self
-                .writer_lease
-                .read()
-                .map_err(|_| {
-                    Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned")
-                })?
-                .clone()
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::PreconditionFailed,
-                        "physical repository has no exclusive writer authority",
-                    )
-                })?;
-            let now = self.now_millis()?;
-            let renew_at = current
-                .value
-                .expires_at_millis
-                .saturating_sub(self.options.writer_lease_millis / 3);
-            if now >= renew_at {
-                self.renew_writer_lease_inner().await?;
-            }
-        }
-        self.writer_fence_generation()
-    }
-
-    fn writer_fence_generation(&self) -> Result<u64> {
-        self.writer_lease
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "writer-lease lock poisoned"))?
-            .as_ref()
-            .map(|lease| lease.value.generation)
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "physical repository has no exclusive writer authority",
-                )
-            })
     }
 
     fn cache_branch(
@@ -2287,7 +2824,7 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
     ) -> Result<RefVersionCompactionReport> {
         validate_branch(branch)?;
-        self.physical_writer_generation_for_mutation().await?;
+        self.branch_writer_generation(branch).await?;
         let _publication = self.lock_branch_publication(branch).await;
         let loaded = self.load_ref_including_tombstone(branch).await?;
         self.compact_branch_ref_versions_inner(branch, &loaded)
@@ -2313,103 +2850,19 @@ impl<P: ObjectPlane> Repository<P> {
     async fn compact_branch_ref_versions_inner(
         &self,
         branch: &str,
-        loaded: &LoadedRef,
+        _loaded: &LoadedRef,
     ) -> Result<RefVersionCompactionReport> {
         let path = branch_path(&self.options.repository_prefix, branch)?;
-        let current_version = loaded.token.version_id.as_deref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::ProviderNotQualified,
-                "branch-ref compaction requires a versioned physical CAS object",
-            )
-        })?;
-        let mut continuation = None;
-        let mut versions = Vec::new();
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: path.as_str().to_string(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: true,
-                })
-                .await?;
-            versions.extend(
-                page.entries
-                    .into_iter()
-                    .filter(|entry| entry.path == path && !entry.metadata.delete_marker),
-            );
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-
-        if !versions.iter().any(|entry| {
-            entry.metadata.token.version_id.as_deref() == Some(current_version) && entry.is_latest
-        }) {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "current branch-ref version was absent from the version listing",
-            ));
-        }
-        versions.sort_by(|left, right| {
-            right
-                .is_latest
-                .cmp(&left.is_latest)
-                .then_with(|| {
-                    right
-                        .metadata
-                        .last_modified_millis
-                        .cmp(&left.metadata.last_modified_millis)
-                })
-                .then_with(|| {
-                    right
-                        .metadata
-                        .token
-                        .version_id
-                        .cmp(&left.metadata.token.version_id)
-                })
-        });
-        let scanned = versions.len();
-        let mut retained_versions = BTreeSet::new();
-        retained_versions.insert(current_version.to_string());
-        for entry in &versions {
-            if retained_versions.len() >= self.options.branch_ref_versions_to_retain {
-                break;
-            }
-            if let Some(version_id) = entry.metadata.token.version_id.as_ref() {
-                retained_versions.insert(version_id.clone());
-            }
-        }
-        let candidates = versions
-            .into_iter()
-            .filter_map(|entry| {
-                let version_id = entry.metadata.token.version_id?;
-                (!retained_versions.contains(&version_id))
-                    .then_some((entry.path, PhysicalVersion::Versioned { version_id }))
-            })
-            .collect::<Vec<_>>();
-        let mut report = RefVersionCompactionReport {
-            scanned,
-            retained: retained_versions.len(),
-            ..RefVersionCompactionReport::default()
-        };
-        for batch in candidates.chunks(1_000) {
-            for outcome in self.plane.delete_exact_batch(batch.to_vec()).await? {
-                match outcome {
-                    DeleteOutcome::Deleted => report.deleted += 1,
-                    DeleteOutcome::NotFound => report.already_missing += 1,
-                    DeleteOutcome::TokenMismatch => {
-                        return Err(Error::new(
-                            ErrorCode::PreconditionFailed,
-                            "branch-ref version changed during exact compaction",
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(report)
+        let report = self
+            .controls
+            .compact_path_with_retention(&path, self.options.branch_ref_versions_to_retain)
+            .await?;
+        Ok(RefVersionCompactionReport {
+            scanned: report.scanned,
+            retained: report.retained,
+            deleted: report.deleted,
+            already_missing: report.already_missing,
+        })
     }
 
     async fn warm_branch_state(&self, branch: &str) -> Result<WarmBranchState> {
@@ -2492,6 +2945,9 @@ impl<P: ObjectPlane> Repository<P> {
         destination: Arc<Q>,
         destination_prefix: &str,
     ) -> Result<CloneReport> {
+        // A transfer may walk roots that source GC would otherwise collect.
+        // This read barrier permits ordinary publications but excludes sweep.
+        let _source_history = self.preserve_history_for_gc().await;
         let format_path = format_path(destination_prefix)?;
         let existing_format = destination
             .get(GetRequest {
@@ -2566,11 +3022,11 @@ impl<P: ObjectPlane> Repository<P> {
         let mut target_options = self.options.clone();
         target_options.repository_prefix = destination_prefix.to_string();
         target_options.read_only = false;
-        let mut target =
-            Repository::<Q>::from_format(destination, target_options, self.format.clone())?;
-        target.acquire_physical_writer().await?;
-        let target = Arc::new(target);
-        let _lease_maintenance = target.start_writer_lease_maintenance()?;
+        let target = Arc::new(Repository::<Q>::from_format(
+            destination,
+            target_options,
+            self.format.clone(),
+        )?);
 
         let branches = self.list_branches().await?;
         let tags = self.list_tags().await?;
@@ -2582,7 +3038,6 @@ impl<P: ObjectPlane> Repository<P> {
         let (commit_map, sync) = self
             .replay_physical_history_to(target.as_ref(), &roots, false)
             .await?;
-        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
         let mut report = CloneReport {
             immutable_objects: sync.copied_objects + usize::from(format_created),
             immutable_bytes: sync.copied_bytes,
@@ -2590,6 +3045,8 @@ impl<P: ObjectPlane> Repository<P> {
         };
 
         for branch in branches {
+            let _publication = target.lock_branch_publication(&branch.name).await;
+            let writer_fence_generation = target.branch_writer_generation(&branch.name).await?;
             let target_id = *commit_map.get(&branch.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
@@ -2632,7 +3089,7 @@ impl<P: ObjectPlane> Repository<P> {
                 inline_reflog: reflog,
             };
             match target
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path,
                     expected: None,
@@ -2664,6 +3121,10 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
         for tag in tags {
+            let _publication = target.lock_named_publication("tag", &tag.name).await;
+            target
+                .system_writer_generation(&format!("tag/{}", tag.name))
+                .await?;
             let target_id = *commit_map.get(&tag.target).ok_or_else(|| {
                 Error::new(
                     ErrorCode::MissingClosure,
@@ -2706,7 +3167,7 @@ impl<P: ObjectPlane> Repository<P> {
                 tombstone: false,
             };
             match target
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path,
                     expected: None,
@@ -2842,120 +3303,166 @@ impl<P: ObjectPlane> Repository<P> {
         }
     }
 
-    async fn ordered_physical_commit_closure(
+    /// Start an interruptible physical clone/fetch/push/repair transfer.
+    /// Callers must keep every root reachable by a ref or retention pin until
+    /// the transfer and closure cleanup have completed.
+    pub async fn start_physical_transfer<Q: ObjectPlane>(
         &self,
+        target: &Repository<Q>,
         roots: &[CommitId],
-    ) -> Result<Vec<(CommitId, BucketCommitV1)>> {
-        let mut pending = roots.to_vec();
-        let mut commits = BTreeMap::new();
-        while let Some(id) = pending.pop() {
-            if commits.contains_key(&id) {
-                continue;
-            }
-            if commits.len() >= self.options.history_traversal_limit {
-                return Err(Error::new(
-                    ErrorCode::HistoryLimitExceeded,
-                    "physical transfer commit closure exceeded its configured history limit",
-                ));
-            }
-            let commit = self.load_commit(id).await?;
-            pending.extend(commit.parents.iter().copied());
-            commits.insert(id, commit);
-        }
-        let mut ordered = commits.into_iter().collect::<Vec<_>>();
-        ordered.sort_by(|(left_id, left), (right_id, right)| {
-            left.generation
-                .cmp(&right.generation)
-                .then_with(|| left_id.cmp(right_id))
-        });
-        Ok(ordered)
+        force_rebind: bool,
+    ) -> Result<PhysicalTransferCursor> {
+        self.validate_sync_identity(target)?;
+        let closure = self.start_commit_closure(roots).await?;
+        Ok(PhysicalTransferCursor {
+            closure,
+            destination_scope: physical_transfer_destination_scope(target),
+            force_rebind,
+        })
     }
 
-    async fn all_physical_commits(&self) -> Result<Vec<(CommitId, BucketCommitV1)>> {
-        let prefix = format!("{}/commits/sha256/", self.options.repository_prefix);
-        let mut continuation = None;
-        let mut commits = BTreeMap::new();
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let encoded = entry.path.as_str().rsplit('/').next().unwrap_or_default();
-                let raw = hex::decode(encoded).map_err(|_| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "physical transfer commit path is not canonical hex",
-                    )
-                })?;
-                let id = CommitId::from_hash(raw.try_into().map_err(|_| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "physical transfer commit path has the wrong ID length",
-                    )
-                })?);
-                let commit = self.load_commit(id).await?;
-                commits.insert(id, commit);
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                break;
-            }
-        }
-        let mut ordered = commits.into_iter().collect::<Vec<_>>();
-        ordered.sort_by(|(left_id, left), (right_id, right)| {
-            left.generation
-                .cmp(&right.generation)
-                .then_with(|| left_id.cmp(right_id))
-        });
-        Ok(ordered)
-    }
-
-    async fn physical_logical_commit_fingerprints(
+    /// Attach another bounded root page to an existing transfer job.
+    pub async fn extend_physical_transfer(
         &self,
-        ordered: &[(CommitId, BucketCommitV1)],
-    ) -> Result<BTreeMap<CommitId, [u8; 32]>> {
-        let mut fingerprints: BTreeMap<CommitId, [u8; 32]> = BTreeMap::new();
-        for (id, commit) in ordered {
-            let mut parent_bytes = Vec::with_capacity(commit.parents.len() * 32);
-            for parent in &commit.parents {
-                parent_bytes.extend_from_slice(fingerprints.get(parent).ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::CorruptCommit,
-                        "physical logical fingerprint encountered a child before its parent",
-                    )
-                })?);
-            }
-            // Physical S3 version bindings are intentionally stored inline in
-            // the current-object tree. They differ after clone or push, so a
-            // transfer fingerprint must describe logical object identity
-            // rather than the provider-specific tree root.
-            let objects = encode_canonical(&self.current_object_map(commit).await?)?;
-            let operations = encode_canonical(&commit.state.operations)?;
-            let generation = commit.generation.0.to_be_bytes();
-            let delta = encode_canonical(&commit.delta)?;
-            let message = encode_canonical(&commit.message)?;
-            let metadata = encode_canonical(&commit.metadata)?;
-            let fingerprint = derive_input_digest(&[
-                b"physical-logical-commit-v1",
-                &parent_bytes,
-                &objects,
-                &operations,
-                &generation,
-                &delta,
-                commit.author.as_bytes(),
-                &message,
-                &commit.created_at_millis.to_be_bytes(),
-                &metadata,
-            ]);
-            fingerprints.insert(*id, fingerprint);
+        cursor: &mut PhysicalTransferCursor,
+        roots: &[CommitId],
+    ) -> Result<()> {
+        self.extend_commit_closure(&mut cursor.closure, roots).await
+    }
+
+    /// Resolve one source commit after the page containing it has completed.
+    pub async fn physical_transfer_mapping(
+        &self,
+        cursor: &PhysicalTransferCursor,
+        source: CommitId,
+    ) -> Result<Option<CommitId>> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        index
+            .engine
+            .get(&index.tree()?, &commit_closure_mapping_key(source))
+            .await?
+            .map(|bytes| decode_canonical(&bytes))
+            .transpose()
+    }
+
+    /// Copy one bounded parent-before-child page. Destination side effects are
+    /// idempotent; the returned cursor includes their durable commit mappings
+    /// and is the only cursor the caller should checkpoint.
+    pub async fn physical_transfer_page<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        cursor: &PhysicalTransferCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<PhysicalTransferPage> {
+        self.validate_sync_identity(target)?;
+        if cursor.destination_scope != physical_transfer_destination_scope(target) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "physical transfer cursor belongs to a different destination scope",
+            ));
         }
-        Ok(fingerprints)
+        let page = self
+            .commit_closure_page(&cursor.closure, max_steps, max_commits)
+            .await?;
+        let processed_commits = page.commits.len();
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        let prior_tree = index.tree()?;
+        let mut page_mappings = BTreeMap::new();
+        let mut mutations = Vec::with_capacity(processed_commits);
+        let mut sync = SyncReport::default();
+        let writer_fence_generation = target.system_writer_generation("transfer").await?;
+        for (source_id, source_commit) in page.commits {
+            if !cursor.force_rebind {
+                if let Some(destination_id) =
+                    target.load_physical_transfer_mapping(source_id).await?
+                {
+                    match target.load_commit(destination_id).await {
+                        Ok(_) => {
+                            sync.already_present += 1;
+                            page_mappings.insert(source_id, destination_id);
+                            mutations.push(Mutation::Upsert {
+                                key: commit_closure_mapping_key(source_id),
+                                val: encode_canonical(&destination_id)?,
+                            });
+                            continue;
+                        }
+                        Err(error) if error.code == ErrorCode::MissingClosure => {
+                            target.delete_physical_transfer_mapping(source_id).await?;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+            for parent in &source_commit.parents {
+                let mapped = match page_mappings.get(parent) {
+                    Some(mapped) => *mapped,
+                    None => index
+                        .engine
+                        .get(&prior_tree, &commit_closure_mapping_key(*parent))
+                        .await?
+                        .map(|bytes| decode_canonical(&bytes))
+                        .transpose()?
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::MissingClosure,
+                                "physical transfer parent was not durably mapped",
+                            )
+                        })?,
+                };
+                mapped_parents.push(mapped);
+            }
+            let (destination_id, copied_objects, copied_bytes, already_present) = self
+                .replay_physical_commit_to(
+                    target,
+                    source_id,
+                    source_commit,
+                    mapped_parents,
+                    cursor.force_rebind,
+                    writer_fence_generation,
+                )
+                .await?;
+            sync.copied_objects += copied_objects;
+            sync.copied_bytes = sync.copied_bytes.checked_add(copied_bytes).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "physical transfer byte count overflow",
+                )
+            })?;
+            sync.already_present += usize::from(already_present);
+            if !cursor.force_rebind {
+                target
+                    .store_physical_transfer_mapping(source_id, destination_id)
+                    .await?;
+            }
+            page_mappings.insert(source_id, destination_id);
+            mutations.push(Mutation::Upsert {
+                key: commit_closure_mapping_key(source_id),
+                val: encode_canonical(&destination_id)?,
+            });
+        }
+        let mut next_closure = page.cursor;
+        if !mutations.is_empty() {
+            index.install_root(next_closure.state.root.clone())?;
+            let tree = index.engine.batch(&index.tree()?, mutations).await?;
+            next_closure.state = TreeRootV1::from_tree(&tree)?;
+        }
+        Ok(PhysicalTransferPage {
+            cursor: PhysicalTransferCursor {
+                closure: next_closure,
+                destination_scope: cursor.destination_scope,
+                force_rebind: cursor.force_rebind,
+            },
+            sync,
+            processed_commits,
+            traversal_steps: page.steps,
+            complete: page.complete,
+            budget_exhausted: page.budget_exhausted,
+        })
     }
 
     async fn replay_physical_history_to<Q: ObjectPlane>(
@@ -2964,35 +3471,75 @@ impl<P: ObjectPlane> Repository<P> {
         source_roots: &[CommitId],
         force_rebind: bool,
     ) -> Result<(BTreeMap<CommitId, CommitId>, SyncReport)> {
-        let source_ordered = self.ordered_physical_commit_closure(source_roots).await?;
-        let source_fingerprints = self
-            .physical_logical_commit_fingerprints(&source_ordered)
+        if source_roots.is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "physical transfer requires at least one root",
+            ));
+        }
+        let mut root_pages = source_roots.chunks(1_000);
+        let mut cursor = self
+            .start_physical_transfer(
+                target,
+                root_pages.next().expect("roots are non-empty"),
+                force_rebind,
+            )
             .await?;
-        let target_by_fingerprint = if force_rebind {
-            BTreeMap::new()
-        } else {
-            let target_ordered = target.all_physical_commits().await?;
-            let target_fingerprints = target
-                .physical_logical_commit_fingerprints(&target_ordered)
-                .await?;
-            target_fingerprints
-                .into_iter()
-                .map(|(id, fingerprint)| (fingerprint, id))
-                .collect::<BTreeMap<_, _>>()
-        };
-        let mut commit_map = BTreeMap::new();
+        for roots in root_pages {
+            self.extend_physical_transfer(&mut cursor, roots).await?;
+        }
         let mut report = SyncReport::default();
-        for (source_id, _) in &source_ordered {
-            if let Some(target_id) = target_by_fingerprint.get(
-                source_fingerprints
-                    .get(source_id)
-                    .expect("source fingerprint exists"),
-            ) {
-                commit_map.insert(*source_id, *target_id);
-                report.already_present += 1;
+        loop {
+            let page = self
+                .physical_transfer_page(target, &cursor, 4_096, 256)
+                .await?;
+            report.copied_objects += page.sync.copied_objects;
+            report.copied_bytes = report
+                .copied_bytes
+                .checked_add(page.sync.copied_bytes)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::EntityTooLarge,
+                        "physical transfer byte count overflow",
+                    )
+                })?;
+            report.already_present += page.sync.already_present;
+            cursor = page.cursor;
+            if page.complete {
+                break;
             }
         }
-        let writer_fence_generation = target.physical_writer_generation_for_mutation().await?;
+        let mut root_map = BTreeMap::new();
+        for source in source_roots.iter().copied().collect::<BTreeSet<_>>() {
+            let destination = self
+                .physical_transfer_mapping(&cursor, source)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "physical transfer root was not durably mapped",
+                    )
+                })?;
+            root_map.insert(source, destination);
+        }
+        loop {
+            let cleanup = self.cleanup_commit_closure(&cursor.closure, 1_000).await?;
+            if cleanup.complete {
+                break;
+            }
+        }
+        Ok((root_map, report))
+    }
+
+    async fn replay_physical_commit_to<Q: ObjectPlane>(
+        &self,
+        target: &Repository<Q>,
+        source_id: CommitId,
+        source_commit: BucketCommitV1,
+        mapped_parents: Vec<CommitId>,
+        force_rebind: bool,
+        writer_fence_generation: u64,
+    ) -> Result<(CommitId, usize, u64, bool)> {
         let target_write_store = target.node_store.isolated_write_session();
         let target_engine = AsyncProlly::new(
             target_write_store.clone(),
@@ -3001,179 +3548,225 @@ impl<P: ObjectPlane> Repository<P> {
                 runtime: RuntimeConfig::default(),
             },
         );
-        let mut binding_map: BTreeMap<(Vec<u8>, ObjectVersionId), crate::PhysicalObjectBindingV1> =
-            BTreeMap::new();
-        for (source_id, source_commit) in source_ordered {
-            if commit_map.contains_key(&source_id) {
-                continue;
+        let base = match mapped_parents.first() {
+            Some(parent) => Some(target.load_commit(*parent).await?),
+            None => None,
+        };
+        let empty = target_engine.create();
+        let mut objects = match &base {
+            Some(commit) => {
+                target.tree_from_root(&commit.state.objects, &target.format.state_tree_format)?
             }
-            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
-            for parent in &source_commit.parents {
-                mapped_parents.push(*commit_map.get(parent).ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::MissingClosure,
-                        "physical transfer parent was not mapped",
-                    )
-                })?);
+            None => empty.clone(),
+        };
+        let mut versions = match &base {
+            Some(commit) => {
+                target.tree_from_root(&commit.state.versions, &target.format.state_tree_format)?
             }
-            let base = match mapped_parents.first() {
-                Some(parent) => Some(target.load_commit(*parent).await?),
-                None => None,
-            };
-            let empty = target_engine.create();
-            let mut objects = match &base {
-                Some(commit) => target
-                    .tree_from_root(&commit.state.objects, &target.format.state_tree_format)?,
-                None => empty.clone(),
-            };
-            let mut versions = match &base {
-                Some(commit) => target
-                    .tree_from_root(&commit.state.versions, &target.format.state_tree_format)?,
-                None => empty.clone(),
-            };
-            let mut operations = match &base {
-                Some(commit) => target
-                    .tree_from_root(&commit.state.operations, &target.format.state_tree_format)?,
-                None => empty,
-            };
-            let source_operations = self.tree_from_root(
-                &source_commit.state.operations,
-                &self.format.state_tree_format,
-            )?;
-            let delta = self.load_commit_delta(&source_commit).await?;
-            let physical_operation = delta.operation_ids.first().copied().unwrap_or_else(|| {
-                let mut bytes = [0_u8; 16];
-                bytes.copy_from_slice(&source_id.as_bytes()[..16]);
-                OperationId(uuid::Uuid::from_bytes(bytes))
-            });
-            for transition in &delta.changes {
-                let mut version = self
-                    .find_version(&source_commit, &transition.key, transition.next)
-                    .await?;
-                let binding_key = (transition.key.clone(), version.id);
-                let (binding, copied_payload) = if let Some(binding) = binding_map.get(&binding_key)
-                {
-                    (binding.clone(), false)
-                } else if let Some(base) = &base {
+            None => empty.clone(),
+        };
+        let mut operations = match &base {
+            Some(commit) => {
+                target.tree_from_root(&commit.state.operations, &target.format.state_tree_format)?
+            }
+            None => empty,
+        };
+        let source_operations = self.tree_from_root(
+            &source_commit.state.operations,
+            &self.format.state_tree_format,
+        )?;
+        let delta = self.load_commit_delta(&source_commit).await?;
+        let physical_operation = delta.operation_ids.first().copied().unwrap_or_else(|| {
+            let mut bytes = [0_u8; 16];
+            bytes.copy_from_slice(&source_id.as_bytes()[..16]);
+            OperationId(uuid::Uuid::from_bytes(bytes))
+        });
+        let mut copied_payloads = 0usize;
+        let mut copied_bytes = 0u64;
+        for transition in &delta.changes {
+            let mut version = self
+                .find_version(&source_commit, &transition.key, transition.next)
+                .await?;
+            let mut reusable = None;
+            if !force_rebind {
+                for parent in &mapped_parents {
+                    let parent = target.load_commit(*parent).await?;
                     match target
-                        .find_version(base, &transition.key, transition.next)
+                        .find_version(&parent, &transition.key, transition.next)
                         .await
                     {
-                        Ok(existing) => (existing.binding, false),
-                        Err(error) if error.code == ErrorCode::NoSuchVersion => (
-                            self.clone_physical_version_binding(
-                                target,
-                                &transition.key,
-                                &version,
-                                physical_operation,
-                                writer_fence_generation,
-                            )
-                            .await?,
-                            true,
-                        ),
+                        Ok(existing) => {
+                            reusable = Some(existing.binding);
+                            break;
+                        }
+                        Err(error) if error.code == ErrorCode::NoSuchVersion => {}
                         Err(error) => return Err(error),
                     }
-                } else {
-                    (
-                        self.clone_physical_version_binding(
+                }
+            }
+            let binding = match reusable {
+                Some(binding) => binding,
+                None => {
+                    let binding = self
+                        .clone_physical_version_binding(
                             target,
                             &transition.key,
                             &version,
                             physical_operation,
                             writer_fence_generation,
                         )
-                        .await?,
-                        true,
-                    )
-                };
-                if copied_payload {
+                        .await?;
                     let size = match &version.body.kind {
                         LogicalObjectVersionKindV1::Live { size, .. } => *size,
                         LogicalObjectVersionKindV1::DeleteMarker => 0,
                     };
-                    report.copied_bytes =
-                        report.copied_bytes.checked_add(size).ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::EntityTooLarge,
-                                "physical transfer byte count overflow",
-                            )
-                        })?;
-                    report.copied_objects += 1;
-                }
-                binding_map.insert(binding_key, binding.clone());
-                version.binding = binding;
-                version.validate()?;
-                versions = target_engine
-                    .put(
-                        &versions,
-                        version_tree_key(&transition.key, version.body.order, version.id),
-                        encode_canonical(&version)?,
-                    )
-                    .await?;
-                objects = if transition.delete_marker {
-                    target_engine.delete(&objects, &transition.key).await?
-                } else {
-                    target_engine
-                        .put(
-                            &objects,
-                            transition.key.clone(),
-                            encode_canonical(&CurrentObjectV1 {
-                                version: version.clone(),
-                            })?,
-                        )
-                        .await?
-                };
-            }
-            for operation in &delta.operation_ids {
-                let record = self
-                    .engine
-                    .get(&source_operations, operation.as_bytes())
-                    .await?
-                    .ok_or_else(|| {
+                    copied_bytes = copied_bytes.checked_add(size).ok_or_else(|| {
                         Error::new(
-                            ErrorCode::CorruptCommit,
-                            "physical transfer delta names a missing operation",
+                            ErrorCode::EntityTooLarge,
+                            "physical transfer byte count overflow",
                         )
                     })?;
-                operations = target_engine
-                    .put(&operations, operation.as_bytes().to_vec(), record)
-                    .await?;
-            }
-            let state = BucketStateV1 {
-                objects: TreeRootV1::from_tree(&objects)?,
-                versions: TreeRootV1::from_tree(&versions)?,
-                operations: TreeRootV1::from_tree(&operations)?,
+                    copied_payloads += 1;
+                    binding
+                }
             };
-            if state.operations != source_commit.state.operations {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "physical transfer replay did not reproduce the logical operation state",
-                ));
-            }
-            let prepared = target_write_store.prepare_node_pack(
-                tree_format_digest(&target.format.state_tree_format)?,
-                Vec::new(),
-            )?;
-            let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
-            let destination_commit = BucketCommitV1 {
-                state,
-                parents: mapped_parents,
-                generation: source_commit.generation,
-                delta,
-                node_pack,
-                writer_fence_generation,
-                author: source_commit.author,
-                message: source_commit.message,
-                created_at_millis: source_commit.created_at_millis,
-                metadata: source_commit.metadata,
+            version.binding = binding;
+            version.validate()?;
+            versions = target_engine
+                .put(
+                    &versions,
+                    version_tree_key(&transition.key, version.body.order, version.id),
+                    encode_canonical(&version)?,
+                )
+                .await?;
+            objects = if transition.delete_marker {
+                target_engine.delete(&objects, &transition.key).await?
+            } else {
+                target_engine
+                    .put(
+                        &objects,
+                        transition.key.clone(),
+                        encode_canonical(&CurrentObjectV1 {
+                            version: version.clone(),
+                        })?,
+                    )
+                    .await?
             };
-            let stored = target.store_commit(&destination_commit, prepared).await?;
-            let destination_id = stored.id;
-            target.finalize_stored_commit(stored).await?;
-            report.copied_objects += 1;
-            commit_map.insert(source_id, destination_id);
         }
-        Ok((commit_map, report))
+        for operation in &delta.operation_ids {
+            let record = self
+                .engine
+                .get(&source_operations, operation.as_bytes())
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "physical transfer delta names a missing operation",
+                    )
+                })?;
+            operations = target_engine
+                .put(&operations, operation.as_bytes().to_vec(), record)
+                .await?;
+        }
+        let state = BucketStateV1 {
+            objects: TreeRootV1::from_tree(&objects)?,
+            versions: TreeRootV1::from_tree(&versions)?,
+            operations: TreeRootV1::from_tree(&operations)?,
+        };
+        if state.operations != source_commit.state.operations {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "physical transfer replay did not reproduce the logical operation state",
+            ));
+        }
+        let prepared = target_write_store.prepare_node_pack(
+            tree_format_digest(&target.format.state_tree_format)?,
+            Vec::new(),
+        )?;
+        let node_pack = prepared.as_ref().map(PreparedNodePack::reference);
+        let destination_commit = BucketCommitV1 {
+            state,
+            parents: mapped_parents,
+            generation: source_commit.generation,
+            delta,
+            node_pack,
+            writer_fence_generation,
+            author: source_commit.author,
+            message: source_commit.message,
+            created_at_millis: source_commit.created_at_millis,
+            metadata: source_commit.metadata,
+        };
+        let destination_id = destination_commit.id()?;
+        if !force_rebind {
+            match target.load_commit(destination_id).await {
+                Ok(existing) if existing == destination_commit => {
+                    return Ok((destination_id, 0, 0, true));
+                }
+                Ok(_) => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "physical transfer destination commit ID collided",
+                    ));
+                }
+                Err(error) if error.code == ErrorCode::MissingClosure => {}
+                Err(error) => return Err(error),
+            }
+        }
+        let stored = target.store_commit(&destination_commit, prepared).await?;
+        target.finalize_stored_commit(stored).await?;
+        Ok((destination_id, copied_payloads + 1, copied_bytes, false))
+    }
+
+    async fn load_physical_transfer_mapping(&self, source: CommitId) -> Result<Option<CommitId>> {
+        self.plane
+            .get(GetRequest {
+                path: physical_transfer_mapping_path(&self.options.repository_prefix, source)?,
+                range: None,
+                physical_version: None,
+            })
+            .await?
+            .map(|object| decode_canonical(&object.bytes))
+            .transpose()
+    }
+
+    async fn store_physical_transfer_mapping(
+        &self,
+        source: CommitId,
+        destination: CommitId,
+    ) -> Result<()> {
+        self.store_immutable(
+            physical_transfer_mapping_path(&self.options.repository_prefix, source)?,
+            encode_canonical(&destination)?,
+        )
+        .await
+    }
+
+    async fn delete_physical_transfer_mapping(&self, source: CommitId) -> Result<()> {
+        let path = physical_transfer_mapping_path(&self.options.repository_prefix, source)?;
+        let Some(object) = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: None,
+                physical_version: None,
+            })
+            .await?
+        else {
+            return Ok(());
+        };
+        let token = object.metadata.token;
+        let physical = token
+            .version_id
+            .clone()
+            .map(|version_id| PhysicalVersion::Versioned { version_id })
+            .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+        match self.plane.delete_exact(&path, physical).await? {
+            DeleteOutcome::Deleted | DeleteOutcome::NotFound => Ok(()),
+            DeleteOutcome::TokenMismatch => Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "physical transfer mapping changed while removing a stale entry",
+            )),
+        }
     }
 
     /// Import portable immutable repository objects without moving a local
@@ -3184,7 +3777,7 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(source)?;
-        let _publication = self.lock_global_publication().await;
+        let _source_history = source.preserve_history_for_gc().await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut report) = source
             .replay_physical_history_to(self, &[source_head], false)
@@ -3207,6 +3800,7 @@ impl<P: ObjectPlane> Repository<P> {
         reason: &str,
     ) -> Result<SyncReport> {
         self.validate_sync_identity(destination)?;
+        let _source_history = self.preserve_history_for_gc().await;
         let source_head = self.head(source_branch).await?;
         let _publication = destination
             .lock_branch_publication(destination_branch)
@@ -3257,10 +3851,10 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn create_branch(&self, name: &str, from: CommitId) -> Result<BranchHead> {
         validate_branch(name)?;
+        let _physical_publication = self.lock_branch_publication(name).await;
         let commit = self.load_commit(from).await?;
         let operation = self.new_operation();
-        let _physical_publication = self.lock_branch_publication(name).await;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(name).await?;
         let created_at_millis = self.now_millis()?;
         let reflog = ReflogEntryV1 {
             branch: name.to_string(),
@@ -3285,7 +3879,7 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, name)?,
                 expected: None,
@@ -3329,7 +3923,7 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn delete_branch(&self, name: &str, expected: CommitId) -> Result<()> {
         let _physical_publication = self.lock_branch_publication(name).await;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(name).await?;
         let loaded = self.load_ref(name).await?;
         if loaded.value.target != expected {
             return Err(Error::new(
@@ -3364,7 +3958,7 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog_entry,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, name)?,
                 expected: Some(loaded.token),
@@ -3494,6 +4088,103 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(entries)
     }
 
+    /// Bounded newest-to-oldest branch reflog traversal. Administrative ref
+    /// movements are emitted from the inline ref record; commit publications
+    /// then resume through the first-parent history cursor.
+    pub async fn list_branch_reflog_page(
+        &self,
+        branch: &str,
+        cursor: Option<&BranchReflogCursor>,
+        limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<BranchReflogPage> {
+        validate_branch(branch)?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "branch reflog page limit must be greater than zero",
+            ));
+        }
+        let (mut state, inline) = if let Some(cursor) = cursor {
+            (cursor.clone(), None)
+        } else {
+            let loaded = self.load_ref_including_tombstone(branch).await?;
+            (
+                BranchReflogCursor {
+                    branch: branch.to_string(),
+                    root: loaded.value.target,
+                    history: Some(HistoryCursor {
+                        root: loaded.value.target,
+                        next: loaded.value.target,
+                    }),
+                    inline_id: loaded.value.reflog,
+                    inline_emitted: false,
+                },
+                Some((loaded.value.reflog, loaded.value.inline_reflog)),
+            )
+        };
+        if state.branch != branch {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "branch reflog cursor belongs to another branch",
+            ));
+        }
+        let mut entries = Vec::with_capacity(limit);
+        if !state.inline_emitted {
+            let (id, entry) = inline.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidContinuationToken,
+                    "branch reflog cursor omitted its inline-entry state",
+                )
+            })?;
+            if entry.id()? != id {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "ref inline reflog identity mismatch",
+                ));
+            }
+            entries.push((id, entry));
+            state.inline_emitted = true;
+        }
+        let mut budget_exhausted = false;
+        if entries.len() < limit {
+            if let Some(history) = state.history.as_ref() {
+                let page = self
+                    .log_page_bounded(state.root, Some(history), limit - entries.len(), budget)
+                    .await?;
+                for (id, commit) in page.commits {
+                    let delta = self.load_commit_delta(&commit).await?;
+                    if let Some(operation) = delta.operation_ids.first().copied() {
+                        let entry = ReflogEntryV1 {
+                            branch: branch.to_string(),
+                            old_target: commit.parents.first().copied(),
+                            new_target: id,
+                            operation,
+                            actor: commit.author,
+                            message: commit.message.unwrap_or_default(),
+                            created_at_millis: commit.created_at_millis,
+                        };
+                        let id = entry.id()?;
+                        if id != state.inline_id
+                            && !entries.iter().any(|(existing, _)| *existing == id)
+                        {
+                            entries.push((id, entry));
+                        }
+                    }
+                }
+                state.history = page.continuation;
+                budget_exhausted = page.budget_exhausted;
+            }
+        }
+        let continuation = state.history.is_some().then_some(state);
+        Ok(BranchReflogPage {
+            entries,
+            continuation,
+            budget_exhausted,
+        })
+    }
+
     async fn physical_reflog_history(
         &self,
         branch: &str,
@@ -3562,7 +4253,8 @@ impl<P: ObjectPlane> Repository<P> {
         target: CommitId,
         reason: &str,
     ) -> Result<RefMoveReceipt> {
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        self.load_commit(target).await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
         let reflog_entry = ReflogEntryV1 {
@@ -3592,7 +4284,7 @@ impl<P: ObjectPlane> Repository<P> {
             inline_reflog: reflog_entry,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded.token),
@@ -3795,9 +4487,10 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         validate_branch(name)?;
-        self.load_commit(target).await?;
         let _publication = self.lock_named_publication("tag", name).await;
-        self.physical_writer_generation_for_mutation().await?;
+        self.load_commit(target).await?;
+        self.system_writer_generation(&format!("tag/{name}"))
+            .await?;
         let operation = self.new_operation();
         let created_at_millis = self.now_millis()?;
         let reflog = self
@@ -3822,7 +4515,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: false,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: tag_path(&self.options.repository_prefix, name)?,
                 expected: None,
@@ -4010,7 +4703,10 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_tag(&self, name: &str, expected: CommitId) -> Result<()> {
+        validate_branch(name)?;
         let _publication = self.lock_named_publication("tag", name).await;
+        self.system_writer_generation(&format!("tag/{name}"))
+            .await?;
         let path = tag_path(&self.options.repository_prefix, name)?;
         let stored = self
             .plane
@@ -4050,7 +4746,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: true,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: path.clone(),
                 expected: Some(stored.metadata.token),
@@ -4100,9 +4796,10 @@ impl<P: ObjectPlane> Repository<P> {
                 "retention pin owner and reason must be non-empty",
             ));
         }
-        self.load_commit(target).await?;
         let _publication = self.lock_named_publication("pin", name).await;
-        self.physical_writer_generation_for_mutation().await?;
+        self.load_commit(target).await?;
+        self.system_writer_generation(&format!("pin/{name}"))
+            .await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let current = self.plane.load_mutable(&path).await?;
         let now = self.now_millis()?;
@@ -4142,7 +4839,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: false,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -4159,7 +4856,10 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn delete_retention_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        validate_branch(name)?;
         let _publication = self.lock_named_publication("pin", name).await;
+        self.system_writer_generation(&format!("pin/{name}"))
+            .await?;
         let path = retention_pin_path(&self.options.repository_prefix, name)?;
         let stored =
             self.plane.load_mutable(&path).await?.ok_or_else(|| {
@@ -4178,7 +4878,7 @@ impl<P: ObjectPlane> Repository<P> {
             .checked_add(1)
             .ok_or_else(|| Error::new(ErrorCode::InternalInvariant, "pin generation overflow"))?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected: Some(stored.metadata.token),
@@ -4195,29 +4895,11 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn list_retention_pins(&self) -> Result<Vec<RetentionPinV1>> {
-        let prefix = format!("{}/retention/pins/", self.options.repository_prefix);
-        let now = self.now_millis()?;
         let mut continuation = None;
         let mut pins = Vec::new();
         loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for entry in page.entries {
-                let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
-                    continue;
-                };
-                let pin: RetentionPinV1 = decode_canonical(&stored.bytes)?;
-                if !pin.tombstone && (pin.expires_at_millis == 0 || pin.expires_at_millis > now) {
-                    pins.push(pin);
-                }
-            }
+            let page = self.list_retention_pins_page(continuation, 1_000).await?;
+            pins.extend(page.pins);
             continuation = page.continuation;
             if continuation.is_none() {
                 break;
@@ -4225,6 +4907,45 @@ impl<P: ObjectPlane> Repository<P> {
         }
         pins.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(pins)
+    }
+
+    pub async fn list_retention_pins_page(
+        &self,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<RetentionPinPage> {
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "retention-pin page limit must be greater than zero",
+            ));
+        }
+        let now = self.now_millis()?;
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/retention/pins/", self.options.repository_prefix),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut pins = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            let pin: RetentionPinV1 = decode_canonical(&stored.bytes)?;
+            if !pin.tombstone && (pin.expires_at_millis == 0 || pin.expires_at_millis > now) {
+                pins.push(pin);
+            }
+        }
+        pins.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(RetentionPinPage {
+            pins,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn list_tag_reflog(
@@ -4238,6 +4959,67 @@ impl<P: ObjectPlane> Repository<P> {
             hex::encode(tag.as_bytes())
         );
         self.list_reflog_prefix(tag, prefix).await
+    }
+
+    pub async fn list_tag_reflog_page(
+        &self,
+        tag: &str,
+        continuation: Option<String>,
+        limit: usize,
+    ) -> Result<TagReflogPage> {
+        validate_branch(tag)?;
+        let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "tag reflog page limit must be greater than zero",
+            ));
+        }
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!(
+                    "{}/reflogs/tags/{}/",
+                    self.options.repository_prefix,
+                    hex::encode(tag.as_bytes())
+                ),
+                continuation,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        let mut entries = Vec::with_capacity(page.entries.len());
+        for listed in page.entries {
+            let object = self
+                .plane
+                .get(GetRequest {
+                    path: listed.path,
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "listed reflog entry disappeared")
+                })?;
+            let entry: ReflogEntryV1 = decode_canonical(&object.bytes)?;
+            if entry.branch != tag {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "reflog entry escaped its ref namespace",
+                ));
+            }
+            entries.push((entry.id()?, entry));
+        }
+        entries.sort_by(|left, right| {
+            left.1
+                .created_at_millis
+                .cmp(&right.1.created_at_millis)
+                .then_with(|| left.0.cmp(&right.0))
+        });
+        Ok(TagReflogPage {
+            entries,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn recover_tag(
@@ -4254,6 +5036,7 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let _publication = self.lock_named_publication("tag", tag).await;
+        self.system_writer_generation(&format!("tag/{tag}")).await?;
         let entry = self.tag_reflog(tag, reflog).await?;
         let target = entry.old_target.ok_or_else(|| {
             Error::new(
@@ -4301,7 +5084,7 @@ impl<P: ObjectPlane> Repository<P> {
             tombstone: false,
         };
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: path.clone(),
                 expected: Some(stored.metadata.token),
@@ -4595,7 +5378,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -4639,6 +5422,7 @@ impl<P: ObjectPlane> Repository<P> {
             key,
             kind,
             physical.binding,
+            writer_fence_generation,
             OperationKind::Put,
             operation,
             input_digest,
@@ -4703,7 +5487,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -4750,6 +5534,7 @@ impl<P: ObjectPlane> Repository<P> {
             key,
             kind,
             physical.binding,
+            writer_fence_generation,
             OperationKind::Put,
             operation,
             input_digest,
@@ -4811,7 +5596,7 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         self.validate_key(&key)?;
         let operation = operation.unwrap_or_else(|| self.new_operation());
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -5118,7 +5903,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        if self.physical_writer_generation_for_mutation().await? != session.writer_fence_generation
+        if self.branch_writer_generation(&session.branch).await? != session.writer_fence_generation
         {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
@@ -5168,6 +5953,7 @@ impl<P: ObjectPlane> Repository<P> {
             session.key,
             kind,
             completed.binding,
+            session.writer_fence_generation,
             OperationKind::Put,
             session.operation,
             input_digest,
@@ -5260,7 +6046,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "branch moved since physical batch creation",
             ));
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(&batch.branch).await?;
         let results =
             futures_util::stream::iter(mutations.into_iter().map(|mutation| async move {
                 self.prepare_physical_batch_mutation(
@@ -5279,7 +6065,8 @@ impl<P: ObjectPlane> Repository<P> {
             prepared.insert(key, mutation);
         }
         let _publication = self.lock_branch_publication(&batch.branch).await;
-        self.commit_batch(&batch, &prepared, request_digest).await
+        self.commit_batch(&batch, &prepared, request_digest, writer_fence_generation)
+            .await
     }
 
     async fn prepare_physical_batch_mutation(
@@ -5376,7 +6163,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let path =
             ObjectPath::new(std::str::from_utf8(&key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -5405,6 +6192,7 @@ impl<P: ObjectPlane> Repository<P> {
             key,
             kind,
             binding,
+            writer_fence_generation,
             OperationKind::Delete,
             operation,
             input_digest,
@@ -5471,7 +6259,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let results = futures_util::stream::iter(keys.iter().map(|key| async move {
             let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
                 Error::new(ErrorCode::InvalidKey, "logical key is not valid UTF-8")
@@ -5660,14 +6448,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        if self.physical_writer_generation_for_mutation().await? != writer_fence_generation {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer fence changed during multi-delete publication",
-            ));
-        }
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
@@ -5763,7 +6545,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let crate::PhysicalObjectBindingV1::Live {
             version_id,
             checksum_sha256,
@@ -5829,6 +6611,7 @@ impl<P: ObjectPlane> Repository<P> {
             destination_key,
             kind,
             binding,
+            writer_fence_generation,
             OperationKind::Copy,
             operation,
             input_digest,
@@ -5845,6 +6628,7 @@ impl<P: ObjectPlane> Repository<P> {
         key: Vec<u8>,
         kind: LogicalObjectVersionKindV1,
         binding: crate::PhysicalObjectBindingV1,
+        writer_fence_generation: u64,
         operation_kind: OperationKind,
         operation: OperationId,
         input_digest: [u8; 32],
@@ -5853,7 +6637,6 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<CommitReceipt> {
         validate_branch(branch)?;
         let created_at_millis = self.now_millis()?;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -6036,15 +6819,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        let current_fence = self.physical_writer_generation_for_mutation().await?;
-        if current_fence != writer_fence_generation {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer fence changed during publication",
-            ));
-        }
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
@@ -6106,6 +6882,7 @@ impl<P: ObjectPlane> Repository<P> {
         batch: &PhysicalBatchV1,
         mutations: &BTreeMap<Vec<u8>, PhysicalPreparedMutationV1>,
         input_digest: [u8; 32],
+        writer_fence_generation: u64,
     ) -> Result<CommitReceipt> {
         let warm = self.warm_branch_state(&batch.branch).await?;
         let loaded_ref = LoadedRef {
@@ -6125,7 +6902,6 @@ impl<P: ObjectPlane> Repository<P> {
                 "branch moved since batch creation",
             ));
         }
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -6631,6 +7407,297 @@ impl<P: ObjectPlane> Repository<P> {
         self.log_at(self.head(branch).await?, None, limit).await
     }
 
+    /// Start a constant-size-cursor traversal over one or more commit roots.
+    /// Additional paged branch/tag roots may be attached later with
+    /// [`Self::extend_commit_closure`].
+    pub async fn start_commit_closure(&self, roots: &[CommitId]) -> Result<CommitClosureCursor> {
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure start requires between 1 and 1,000 roots",
+            ));
+        }
+        let traversal = self.new_operation();
+        let index = self.commit_closure_index(traversal)?;
+        let mut cursor = CommitClosureCursor {
+            repository: self.format.repository_id,
+            traversal,
+            state: TreeRootV1::from_tree(&index.engine.create())?,
+            next_stack_sequence: u64::MAX,
+        };
+        self.extend_commit_closure(&mut cursor, roots).await?;
+        Ok(cursor)
+    }
+
+    /// Attach another bounded page of roots to an existing traversal. This is
+    /// how repository-wide fsck/clone/repair first page refs without retaining
+    /// all ref targets in memory.
+    pub async fn extend_commit_closure(
+        &self,
+        cursor: &mut CommitClosureCursor,
+        roots: &[CommitId],
+    ) -> Result<()> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure extension requires between 1 and 1,000 roots",
+            ));
+        }
+        let index = self.commit_closure_index(cursor.traversal)?;
+        index.install_root(cursor.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut unique = roots.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        let mut mutations = Vec::with_capacity(unique.len());
+        for commit in unique.into_iter().rev() {
+            if index
+                .engine
+                .get(&tree, &commit_closure_seen_key(commit))
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key: commit_closure_stack_key(cursor.next_stack_sequence),
+                val: encode_canonical(&CommitClosureWork {
+                    commit,
+                    finish: false,
+                })?,
+            });
+            cursor.next_stack_sequence =
+                cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::HistoryLimitExceeded,
+                        "commit-closure stack sequence is exhausted",
+                    )
+                })?;
+        }
+        if !mutations.is_empty() {
+            tree = index.engine.batch(&tree, mutations).await?;
+            cursor.state = TreeRootV1::from_tree(&tree)?;
+        }
+        Ok(())
+    }
+
+    /// Advance a durable DAG traversal under explicit work and output bounds.
+    /// Commits are emitted parent-before-child so clone/repair pipelines can
+    /// materialize parent mappings without buffering the complete history.
+    pub async fn commit_closure_page(
+        &self,
+        cursor: &CommitClosureCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<CommitClosurePage> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if !(1..=100_000).contains(&max_steps) || !(1..=1_000).contains(&max_commits) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure page requires 1..=100,000 steps and 1..=1,000 commits",
+            ));
+        }
+        let index = self.commit_closure_index(cursor.traversal)?;
+        index.install_root(cursor.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut next_cursor = cursor.clone();
+        let mut commits = Vec::with_capacity(max_commits.min(64));
+        let mut steps = 0usize;
+        while steps < max_steps && commits.len() < max_commits {
+            let mut queue = index.engine.prefix(&tree, b"q/").await?;
+            let Some(entry) = queue.next().await else {
+                break;
+            };
+            let (stack_key, encoded) = entry?;
+            drop(queue);
+            let work: CommitClosureWork = decode_canonical(&encoded)?;
+            let seen_key = commit_closure_seen_key(work.commit);
+            let state = index.engine.get(&tree, &seen_key).await?;
+            let mut mutations = vec![Mutation::Delete { key: stack_key }];
+            if work.finish {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        let commit = self.load_commit(work.commit).await?;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![1],
+                        });
+                        commits.push((work.commit, commit));
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure finish record has invalid state",
+                        ));
+                    }
+                }
+            } else {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit graph contains a cycle",
+                        ));
+                    }
+                    None => {
+                        let commit = self.load_commit(work.commit).await?;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![0],
+                        });
+                        self.push_commit_closure_work(
+                            &mut next_cursor,
+                            &mut mutations,
+                            work.commit,
+                            true,
+                        )?;
+                        for parent in commit.parents.iter().rev() {
+                            self.push_commit_closure_work(
+                                &mut next_cursor,
+                                &mut mutations,
+                                *parent,
+                                false,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure visited state is malformed",
+                        ));
+                    }
+                }
+            }
+            tree = index.engine.batch(&tree, mutations).await?;
+            steps += 1;
+        }
+        next_cursor.state = TreeRootV1::from_tree(&tree)?;
+        let mut remaining = index.engine.prefix(&tree, b"q/").await?;
+        let complete = remaining.next().await.is_none();
+        Ok(CommitClosurePage {
+            commits,
+            cursor: next_cursor,
+            steps,
+            complete,
+            budget_exhausted: !complete && steps == max_steps,
+        })
+    }
+
+    /// Exact-delete one bounded page of immutable traversal-state nodes after
+    /// a clone/fsck/repair job has durably committed its final result.
+    pub async fn cleanup_commit_closure(
+        &self,
+        cursor: &CommitClosureCursor,
+        limit: usize,
+    ) -> Result<CommitClosureCleanupReport> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if !(1..=1_000).contains(&limit) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure cleanup limit must be between 1 and 1,000",
+            ));
+        }
+        let prefix = format!(
+            "{}/administration/v2/closure/{}/tree/nodes/sha256/",
+            self.options.repository_prefix,
+            hex::encode(cursor.traversal.as_bytes())
+        );
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix,
+                continuation: None,
+                limit,
+                include_versions: false,
+            })
+            .await?;
+        if page.entries.is_empty() {
+            return Ok(CommitClosureCleanupReport {
+                deleted_objects: 0,
+                complete: true,
+            });
+        }
+        let mut targets = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            let token = entry.metadata.token;
+            let physical = token
+                .version_id
+                .clone()
+                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+            targets.push((entry.path, physical));
+        }
+        let deleted_objects = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if matches!(outcome, DeleteOutcome::TokenMismatch) {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "commit-closure state changed during exact cleanup",
+                ));
+            }
+        }
+        Ok(CommitClosureCleanupReport {
+            deleted_objects,
+            complete: page.continuation.is_none(),
+        })
+    }
+
+    fn push_commit_closure_work(
+        &self,
+        cursor: &mut CommitClosureCursor,
+        mutations: &mut Vec<Mutation>,
+        commit: CommitId,
+        finish: bool,
+    ) -> Result<()> {
+        mutations.push(Mutation::Upsert {
+            key: commit_closure_stack_key(cursor.next_stack_sequence),
+            val: encode_canonical(&CommitClosureWork { commit, finish })?,
+        });
+        cursor.next_stack_sequence =
+            cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::HistoryLimitExceeded,
+                    "commit-closure stack sequence is exhausted",
+                )
+            })?;
+        Ok(())
+    }
+
+    fn validate_commit_closure_cursor(&self, cursor: &CommitClosureCursor) -> Result<()> {
+        if cursor.repository != self.format.repository_id
+            || cursor.traversal.is_nil()
+            || cursor.state.format_digest != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "commit-closure cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
+    fn commit_closure_index(&self, traversal: OperationId) -> Result<ProllyMetadataIndex<P>> {
+        let path = format!(
+            "administration/v2/closure/{}/tree",
+            hex::encode(traversal.as_bytes())
+        );
+        ProllyMetadataIndex::new(
+            self.plane.clone(),
+            &self.options.repository_prefix,
+            self.format.repository_id,
+            self.format.state_tree_format.clone(),
+            self.node_cache.clone(),
+            MetadataIndexSpec {
+                path: &path,
+                protocol_version: 6,
+                name: "commit-closure",
+            },
+        )
+    }
+
     /// Bounded, resumable first-parent traversal. Unlike `log_at`, resuming
     /// starts directly at the cursor commit and never walks from the root to
     /// rediscover the previous page boundary.
@@ -7133,6 +8200,10 @@ impl<P: ObjectPlane> Repository<P> {
                     });
             }
         }
+        // Keep every historical commit and node consulted by the merge live
+        // until the resulting branch ref is published. GC sweep takes the
+        // write side of this barrier before deleting a candidate batch.
+        let _physical_publication = self.lock_branch_publication(target).await;
         let plan = self
             .plan_merge(target, source, selected_base, policy)
             .await?;
@@ -7170,8 +8241,7 @@ impl<P: ObjectPlane> Repository<P> {
             base.as_bytes(),
             &[policy_byte],
         ]);
-        let _physical_publication = self.lock_branch_publication(target).await;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(target).await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -7387,7 +8457,6 @@ impl<P: ObjectPlane> Repository<P> {
         message: Option<String>,
     ) -> Result<CommitReceipt> {
         validate_branch(branch)?;
-        let source_commit = self.load_commit(source).await?;
         let supplied_operation = operation;
         let operation = operation.unwrap_or_else(|| self.new_operation());
         let input_digest = derive_input_digest(&[
@@ -7405,6 +8474,11 @@ impl<P: ObjectPlane> Repository<P> {
                 return Ok(receipt);
             }
         }
+        // A restore may resurrect versions reachable only from an old commit.
+        // Hold the publication barrier while loading that history and until
+        // the new branch ref makes it reachable again.
+        let _physical_publication = self.lock_branch_publication(branch).await;
+        let source_commit = self.load_commit(source).await?;
         let loaded_ref = self.load_ref(branch).await?;
         if loaded_ref.value.target != expected_head {
             return Err(Error::new(
@@ -7422,8 +8496,7 @@ impl<P: ObjectPlane> Repository<P> {
             .into_iter()
             .filter(|key| ours_map.get(key) != source_map.get(key))
             .collect();
-        let _physical_publication = self.lock_branch_publication(branch).await;
-        let writer_fence_generation = self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.branch_writer_generation(branch).await?;
         let write_store = self.node_store.isolated_write_session();
         let engine = AsyncProlly::new(
             write_store.clone(),
@@ -7739,14 +8812,8 @@ impl<P: ObjectPlane> Repository<P> {
             writer_fence_generation,
             inline_reflog: reflog,
         };
-        if self.physical_writer_generation_for_mutation().await? != writer_fence_generation {
-            return Err(Error::new(
-                ErrorCode::PreconditionFailed,
-                "physical writer fence changed during prepared publication",
-            ));
-        }
         let publication = self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: branch_path(&self.options.repository_prefix, branch)?,
                 expected: Some(loaded_ref.token),
@@ -7804,20 +8871,65 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn fsck(&self) -> Result<FsckReport> {
-        let branches = self.list_branches().await?;
-        let tags = self.list_tags().await?;
-        let mut roots = branches
-            .iter()
-            .map(|branch| branch.target)
-            .collect::<Vec<_>>();
-        roots.extend(tags.iter().map(|tag| tag.target));
-        self.fsck_roots(roots, branches.len(), tags.len()).await
+        let mut cursor = None;
+        let mut continuation = None;
+        loop {
+            let page = self.list_branches_page(continuation, 1_000).await?;
+            let roots = page
+                .branches
+                .iter()
+                .map(|branch| branch.target)
+                .collect::<Vec<_>>();
+            if !roots.is_empty() {
+                match cursor.as_mut() {
+                    Some(cursor) => {
+                        self.extend_resumable_fsck(cursor, &roots, roots.len(), 0)
+                            .await?;
+                    }
+                    None => {
+                        cursor = Some(self.start_resumable_fsck(&roots, roots.len(), 0).await?);
+                    }
+                }
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        continuation = None;
+        loop {
+            let page = self.list_tags_page(continuation, 1_000).await?;
+            let roots = page.tags.iter().map(|tag| tag.target).collect::<Vec<_>>();
+            if !roots.is_empty() {
+                match cursor.as_mut() {
+                    Some(cursor) => {
+                        self.extend_resumable_fsck(cursor, &roots, 0, roots.len())
+                            .await?;
+                    }
+                    None => {
+                        cursor = Some(self.start_resumable_fsck(&roots, 0, roots.len()).await?);
+                    }
+                }
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        let cursor = cursor.ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "repository fsck found no live branch or tag roots",
+            )
+        })?;
+        self.run_resumable_fsck(cursor).await
     }
 
     /// Verifies one selected commit closure. This is the incremental fsck
     /// primitive used after fetch/push or by a caller walking new heads.
     pub async fn fsck_commit(&self, head: CommitId) -> Result<FsckReport> {
-        self.fsck_roots(vec![head], 0, 0).await
+        let cursor = self.start_resumable_fsck(&[head], 0, 0).await?;
+        self.run_resumable_fsck(cursor).await
     }
 
     /// Copies only missing objects in the selected source closure, then
@@ -7830,6 +8942,7 @@ impl<P: ObjectPlane> Repository<P> {
         source_branch: &str,
     ) -> Result<RepairReport> {
         self.validate_sync_identity(source)?;
+        let _source_history = source.preserve_history_for_gc().await;
         let current = self.head(source_branch).await?;
         if let Ok(fsck) = self.fsck_commit(current).await {
             return Ok(RepairReport {
@@ -7841,7 +8954,7 @@ impl<P: ObjectPlane> Repository<P> {
                 fsck,
             });
         }
-        let _publication = self.lock_global_publication().await;
+        let _publication = self.lock_branch_publication(source_branch).await;
         let source_head = source.head(source_branch).await?;
         let (mapped, mut sync) = source
             .replay_physical_history_to(self, &[source_head], true)
@@ -7873,147 +8986,530 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(RepairReport { sync, fsck })
     }
 
-    async fn fsck_roots(
+    /// Start a restartable deep verification job. Root enumeration itself is
+    /// paged by the caller; attach later pages with `extend_resumable_fsck`.
+    pub async fn start_resumable_fsck(
         &self,
-        root_ids: Vec<CommitId>,
+        roots: &[CommitId],
         branch_count: usize,
         tag_count: usize,
-    ) -> Result<FsckReport> {
-        let mut report = FsckReport {
-            branches: branch_count,
-            tags: tag_count,
-            ..FsckReport::default()
-        };
-        let mut seen_commits = HashSet::new();
-        let mut stack = root_ids.clone();
-        let mut roots = Vec::new();
-        while let Some(id) = stack.pop() {
-            if !seen_commits.insert(id) {
+    ) -> Result<ResumableFsckCursor> {
+        let closure = self.start_commit_closure(roots).await?;
+        Ok(ResumableFsckCursor {
+            closure,
+            report: FsckReport {
+                branches: branch_count,
+                tags: tag_count,
+                ..FsckReport::default()
+            },
+            phase: ResumableFsckPhase::DiscoverCommits,
+        })
+    }
+
+    pub async fn extend_resumable_fsck(
+        &self,
+        cursor: &mut ResumableFsckCursor,
+        roots: &[CommitId],
+        branch_count: usize,
+        tag_count: usize,
+    ) -> Result<()> {
+        if cursor.phase != ResumableFsckPhase::DiscoverCommits {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck roots cannot be extended after commit discovery starts",
+            ));
+        }
+        self.extend_commit_closure(&mut cursor.closure, roots)
+            .await?;
+        cursor.report.branches = cursor
+            .report
+            .branches
+            .checked_add(branch_count)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck branch count overflow"))?;
+        cursor.report.tags = cursor
+            .report
+            .tags
+            .checked_add(tag_count)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck tag count overflow"))?;
+        Ok(())
+    }
+
+    /// Advance one bounded phase of deep verification. `max_items` bounds
+    /// emitted commits, decoded nodes, or physical-version requests depending
+    /// on the current phase; delete-marker pagination consumes one item per
+    /// provider LIST page.
+    pub async fn resumable_fsck_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_steps: usize,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        if !(1..=100_000).contains(&max_steps) || !(1..=1_000).contains(&max_items) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "fsck page requires 1..=100,000 steps and 1..=1,000 items",
+            ));
+        }
+        match cursor.phase {
+            ResumableFsckPhase::DiscoverCommits => {
+                self.resumable_fsck_discover_page(cursor, max_steps, max_items)
+                    .await
+            }
+            ResumableFsckPhase::VerifyNodes => {
+                self.resumable_fsck_node_page(cursor, max_items).await
+            }
+            ResumableFsckPhase::VerifyVersions => {
+                self.resumable_fsck_version_page(cursor, max_items).await
+            }
+            ResumableFsckPhase::Complete => Ok(ResumableFsckPage {
+                cursor: cursor.clone(),
+                processed_commits: 0,
+                processed_nodes: 0,
+                processed_versions: 0,
+                traversal_steps: 0,
+                complete: true,
+                budget_exhausted: false,
+            }),
+        }
+    }
+
+    async fn resumable_fsck_discover_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_steps: usize,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        let page = self
+            .commit_closure_page(&cursor.closure, max_steps, max_items)
+            .await?;
+        let processed_commits = page.commits.len();
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(page.cursor.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut mutations = Vec::with_capacity(processed_commits.saturating_mul(3));
+        let format_digest = tree_format_digest(&self.format.state_tree_format)?;
+        for (_, commit) in page.commits {
+            self.load_commit_delta(&commit).await?;
+            for (kind, root) in [
+                (FSCK_OBJECT_TREE, &commit.state.objects),
+                (FSCK_VERSION_TREE, &commit.state.versions),
+                (FSCK_OPERATION_TREE, &commit.state.operations),
+            ] {
+                if root.format_digest != format_digest {
+                    return Err(Error::new(
+                        ErrorCode::CorruptNode,
+                        "fsck encountered a state root with an incompatible format",
+                    ));
+                }
+                if let Some(cid) = root.root.clone() {
+                    mutations.push(Mutation::Upsert {
+                        key: fsck_node_queue_key(kind, &cid),
+                        val: encode_canonical(&FsckNodeWork { kind, cid })?,
+                    });
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            tree = index.engine.batch(&tree, mutations).await?;
+        }
+        let mut next = cursor.clone();
+        next.closure = page.cursor;
+        next.closure.state = TreeRootV1::from_tree(&tree)?;
+        next.report.commits = next
+            .report
+            .commits
+            .checked_add(processed_commits)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck commit count overflow"))?;
+        next.report.deltas = next
+            .report
+            .deltas
+            .checked_add(processed_commits)
+            .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "fsck delta count overflow"))?;
+        if page.complete {
+            next.phase = ResumableFsckPhase::VerifyNodes;
+        }
+        Ok(ResumableFsckPage {
+            cursor: next,
+            processed_commits,
+            processed_nodes: 0,
+            processed_versions: 0,
+            traversal_steps: page.steps,
+            complete: false,
+            budget_exhausted: !page.complete && page.budget_exhausted,
+        })
+    }
+
+    async fn resumable_fsck_node_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut iter = index.engine.prefix(&tree, b"fq/").await?;
+        let mut work = Vec::with_capacity(max_items);
+        while work.len() < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            work.push(entry?);
+        }
+        drop(iter);
+        let mut next = cursor.clone();
+        if work.is_empty() {
+            next.phase = ResumableFsckPhase::VerifyVersions;
+            return Ok(ResumableFsckPage {
+                cursor: next,
+                processed_commits: 0,
+                processed_nodes: 0,
+                processed_versions: 0,
+                traversal_steps: 0,
+                complete: false,
+                budget_exhausted: false,
+            });
+        }
+        let mut mutations = Vec::new();
+        let mut globally_marked = BTreeSet::new();
+        for (queue_key, encoded) in &work {
+            let node_work: FsckNodeWork = decode_canonical(encoded)?;
+            if !matches!(
+                node_work.kind,
+                FSCK_OBJECT_TREE | FSCK_VERSION_TREE | FSCK_OPERATION_TREE
+            ) || fsck_node_queue_key(node_work.kind, &node_work.cid) != *queue_key
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptNode,
+                    "fsck node queue record is malformed",
+                ));
+            }
+            let semantic_mark = fsck_node_seen_key(node_work.kind, &node_work.cid);
+            mutations.push(Mutation::Delete {
+                key: queue_key.clone(),
+            });
+            if index.engine.get(&tree, &semantic_mark).await?.is_some() {
                 continue;
             }
-            let commit = self.load_commit(id).await?;
-            self.load_commit_delta(&commit).await?;
-            report.commits += 1;
-            report.deltas += 1;
-            roots.push(self.tree_from_root(&commit.state.objects, &self.format.state_tree_format)?);
-            roots
-                .push(self.tree_from_root(&commit.state.versions, &self.format.state_tree_format)?);
-            roots.push(
-                self.tree_from_root(&commit.state.operations, &self.format.state_tree_format)?,
-            );
-            stack.extend(commit.parents);
-        }
-        let reachability = self.engine.mark_reachable(&roots).await?;
-        report.reachable_nodes = reachability.live_nodes;
-        report.reachable_node_bytes = reachability.live_bytes;
-
-        let mut versions_seen = BTreeSet::new();
-        for root in root_ids {
-            let commit = self.load_commit(root).await?;
-            let versions =
-                self.tree_from_root(&commit.state.versions, &self.format.state_tree_format)?;
-            let mut iter = self.engine.range(&versions, &[], None).await?;
-            while let Some(entry) = iter.next().await {
-                let (encoded_key, bytes) = entry?;
-                let version: ObjectVersionV1 = decode_canonical(&bytes)?;
-                if !versions_seen.insert(version.id) {
-                    continue;
+            let bytes = self
+                .node_store
+                .get(node_work.cid.as_bytes())
+                .await?
+                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "fsck node is missing"))?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("fsck could not decode a Prolly node: {error}"),
+                    )
+                })?;
+            if node.leaf {
+                for (key, value) in node.keys.iter().zip(&node.vals) {
+                    match node_work.kind {
+                        FSCK_OBJECT_TREE => {
+                            let current: CurrentObjectV1 = decode_canonical(value)?;
+                            current.version.validate()?;
+                        }
+                        FSCK_VERSION_TREE => {
+                            let version: ObjectVersionV1 = decode_canonical(value)?;
+                            version.validate()?;
+                            let logical_key = decode_version_tree_logical_key(key)?;
+                            let digest = derive_input_digest(&[
+                                b"fsck-version-work-v1",
+                                &logical_key,
+                                value,
+                            ]);
+                            let seen_key = fsck_version_seen_key(&digest);
+                            if index.engine.get(&tree, &seen_key).await?.is_none() {
+                                mutations.push(Mutation::Upsert {
+                                    key: fsck_version_queue_key(&digest),
+                                    val: encode_canonical(&FsckVersionWork {
+                                        key: logical_key,
+                                        version,
+                                        continuation: None,
+                                    })?,
+                                });
+                            }
+                        }
+                        FSCK_OPERATION_TREE => {
+                            let _: OperationRecordV1 = decode_canonical(value)?;
+                        }
+                        _ => {
+                            return Err(Error::new(
+                                ErrorCode::CorruptNode,
+                                "fsck node work has an invalid tree kind",
+                            ));
+                        }
+                    }
                 }
-                report.logical_versions += 1;
-                let key = decode_version_tree_logical_key(&encoded_key)?;
-                let verified = self.verify_physical_version(&key, &version).await?;
-                report.content_bytes_verified = report
-                    .content_bytes_verified
-                    .checked_add(verified)
-                    .ok_or_else(|| {
+            } else {
+                for value in node.vals {
+                    let child = prolly::Cid(value.as_slice().try_into().map_err(|_| {
                         Error::new(
-                            ErrorCode::EntityTooLarge,
-                            "fsck provider byte counter overflow",
+                            ErrorCode::CorruptNode,
+                            "fsck internal node contains an invalid child CID",
                         )
+                    })?);
+                    mutations.push(Mutation::Upsert {
+                        key: fsck_node_queue_key(node_work.kind, &child),
+                        val: encode_canonical(&FsckNodeWork {
+                            kind: node_work.kind,
+                            cid: child,
+                        })?,
+                    });
+                }
+            }
+            mutations.push(Mutation::Upsert {
+                key: semantic_mark,
+                val: Vec::new(),
+            });
+            let global_mark = fsck_global_node_seen_key(&node_work.cid);
+            if globally_marked.insert(node_work.cid.clone())
+                && index.engine.get(&tree, &global_mark).await?.is_none()
+            {
+                mutations.push(Mutation::Upsert {
+                    key: global_mark,
+                    val: Vec::new(),
+                });
+                next.report.reachable_nodes =
+                    next.report.reachable_nodes.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "fsck node count overflow")
                     })?;
+                next.report.reachable_node_bytes = next
+                    .report
+                    .reachable_node_bytes
+                    .checked_add(bytes.len())
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "fsck node byte count overflow")
+                    })?;
+            }
+        }
+        tree = index.engine.batch(&tree, mutations).await?;
+        next.closure.state = TreeRootV1::from_tree(&tree)?;
+        let mut remaining = index.engine.prefix(&tree, b"fq/").await?;
+        let exhausted = remaining.next().await.is_some();
+        if !exhausted {
+            next.phase = ResumableFsckPhase::VerifyVersions;
+        }
+        Ok(ResumableFsckPage {
+            cursor: next,
+            processed_commits: 0,
+            processed_nodes: work.len(),
+            processed_versions: 0,
+            traversal_steps: 0,
+            complete: false,
+            budget_exhausted: exhausted,
+        })
+    }
+
+    async fn resumable_fsck_version_page(
+        &self,
+        cursor: &ResumableFsckCursor,
+        max_items: usize,
+    ) -> Result<ResumableFsckPage> {
+        let index = self.commit_closure_index(cursor.closure.traversal)?;
+        index.install_root(cursor.closure.state.root.clone())?;
+        let mut tree = index.tree()?;
+        let mut iter = index.engine.prefix(&tree, b"fvq/").await?;
+        let mut work = Vec::with_capacity(max_items);
+        while work.len() < max_items {
+            let Some(entry) = iter.next().await else {
+                break;
+            };
+            work.push(entry?);
+        }
+        drop(iter);
+        let mut next = cursor.clone();
+        if work.is_empty() {
+            next.phase = ResumableFsckPhase::Complete;
+            return Ok(ResumableFsckPage {
+                cursor: next,
+                processed_commits: 0,
+                processed_nodes: 0,
+                processed_versions: 0,
+                traversal_steps: 0,
+                complete: true,
+                budget_exhausted: false,
+            });
+        }
+        let mut mutations = Vec::new();
+        for (queue_key, encoded) in &work {
+            let mut version_work: FsckVersionWork = decode_canonical(encoded)?;
+            let digest = queue_key
+                .strip_prefix(b"fvq/")
+                .and_then(|bytes| <&[u8; 32]>::try_from(bytes).ok())
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "fsck version queue key is malformed",
+                    )
+                })?;
+            let seen_key = fsck_version_seen_key(digest);
+            let expected_digest = derive_input_digest(&[
+                b"fsck-version-work-v1",
+                &version_work.key,
+                &encode_canonical(&version_work.version)?,
+            ]);
+            if expected_digest.as_slice() != digest {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "fsck version queue record does not match its key",
+                ));
+            }
+            if index.engine.get(&tree, &seen_key).await?.is_some() {
+                mutations.push(Mutation::Delete {
+                    key: queue_key.clone(),
+                });
+                continue;
+            }
+            match self.verify_physical_version_page(&mut version_work).await? {
+                Some(verified_bytes) => {
+                    mutations.push(Mutation::Delete {
+                        key: queue_key.clone(),
+                    });
+                    mutations.push(Mutation::Upsert {
+                        key: seen_key,
+                        val: Vec::new(),
+                    });
+                    next.report.logical_versions =
+                        next.report.logical_versions.checked_add(1).ok_or_else(|| {
+                            Error::new(ErrorCode::EntityTooLarge, "fsck version count overflow")
+                        })?;
+                    next.report.content_bytes_verified = next
+                        .report
+                        .content_bytes_verified
+                        .checked_add(verified_bytes)
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::EntityTooLarge, "fsck provider bytes overflow")
+                        })?;
+                }
+                None => mutations.push(Mutation::Upsert {
+                    key: queue_key.clone(),
+                    val: encode_canonical(&version_work)?,
+                }),
+            }
+        }
+        tree = index.engine.batch(&tree, mutations).await?;
+        next.closure.state = TreeRootV1::from_tree(&tree)?;
+        let mut remaining = index.engine.prefix(&tree, b"fvq/").await?;
+        let exhausted = remaining.next().await.is_some();
+        if !exhausted {
+            next.phase = ResumableFsckPhase::Complete;
+        }
+        Ok(ResumableFsckPage {
+            cursor: next,
+            processed_commits: 0,
+            processed_nodes: 0,
+            processed_versions: work.len(),
+            traversal_steps: 0,
+            complete: !exhausted,
+            budget_exhausted: exhausted,
+        })
+    }
+
+    async fn run_resumable_fsck(&self, mut cursor: ResumableFsckCursor) -> Result<FsckReport> {
+        loop {
+            let page = match self.resumable_fsck_page(&cursor, 4_096, 256).await {
+                Ok(page) => page,
+                Err(error) => {
+                    // Compatibility fsck owns its internal cursor. A public
+                    // workflow keeps the cursor and chooses its own retry or
+                    // cleanup policy, but this synchronous wrapper must not
+                    // leak abandoned immutable job state on verification
+                    // failure.
+                    loop {
+                        match self.cleanup_commit_closure(&cursor.closure, 1_000).await {
+                            Ok(cleanup) if cleanup.complete => break,
+                            Ok(_) => {}
+                            Err(_) => break,
+                        }
+                    }
+                    return Err(error);
+                }
+            };
+            cursor = page.cursor;
+            if page.complete {
+                break;
+            }
+        }
+        let report = cursor.report.clone();
+        loop {
+            let cleanup = self.cleanup_commit_closure(&cursor.closure, 1_000).await?;
+            if cleanup.complete {
+                break;
             }
         }
         Ok(report)
     }
 
-    async fn verify_physical_version(&self, key: &[u8], version: &ObjectVersionV1) -> Result<u64> {
-        version.validate()?;
-        let path = ObjectPath::new(std::str::from_utf8(key).map_err(|_| {
+    async fn verify_physical_version_page(
+        &self,
+        work: &mut FsckVersionWork,
+    ) -> Result<Option<u64>> {
+        work.version.validate()?;
+        let path = ObjectPath::new(std::str::from_utf8(&work.key).map_err(|_| {
             Error::new(
                 ErrorCode::CorruptCommit,
                 "physical logical key is not UTF-8",
             )
         })?)?;
-        match &version.binding {
+        match &work.version.binding {
             crate::PhysicalObjectBindingV1::Live {
                 version_id,
                 checksum_sha256,
                 ..
             } => {
+                let spool = tempfile::NamedTempFile::new().map_err(|error| {
+                    Error::new(
+                        ErrorCode::Transport,
+                        format!("could not create fsck spool: {error}"),
+                    )
+                })?;
                 let object = self
                     .plane
-                    .get(GetRequest {
+                    .get_physical_file(crate::PhysicalFileGet {
                         path,
-                        range: None,
-                        physical_version: Some(PhysicalVersion::Versioned {
-                            version_id: version_id.clone(),
-                        }),
+                        version_id: version_id.clone(),
+                        body_path: spool.path().to_path_buf(),
                     })
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(
-                            ErrorCode::MissingClosure,
-                            "retained physical object version is missing",
-                        )
-                    })?;
-                if crate::codec::sha256(&object.bytes) != *checksum_sha256 {
-                    return Err(Error::new(
-                        ErrorCode::CorruptContent,
-                        "retained physical object version checksum mismatch",
-                    ));
-                }
-                let expected_size = match version.body.kind {
+                    .await?;
+                let expected_size = match work.version.body.kind {
                     LogicalObjectVersionKindV1::Live { size, .. } => size,
-                    LogicalObjectVersionKindV1::DeleteMarker => {
-                        unreachable!("binding was validated")
-                    }
+                    LogicalObjectVersionKindV1::DeleteMarker => unreachable!("binding validated"),
                 };
-                if object.bytes.len() as u64 != expected_size {
+                if object.size != expected_size || object.checksum_sha256 != *checksum_sha256 {
                     return Err(Error::new(
                         ErrorCode::CorruptContent,
-                        "retained physical object version size mismatch",
+                        "retained physical object version checksum or size mismatch",
                     ));
                 }
-                Ok(expected_size)
+                Ok(Some(expected_size))
             }
             crate::PhysicalObjectBindingV1::DeleteMarker { version_id } => {
-                let mut continuation = None;
-                loop {
-                    let page = self
-                        .plane
-                        .list(ListRequest {
-                            prefix: path.as_str().to_string(),
-                            continuation,
-                            limit: 1_000,
-                            include_versions: true,
-                        })
-                        .await?;
-                    if page.entries.iter().any(|entry| {
-                        entry.path == path
-                            && entry.metadata.delete_marker
-                            && entry.metadata.token.version_id.as_deref()
-                                == Some(version_id.as_str())
-                    }) {
-                        return Ok(0);
-                    }
-                    continuation = page.continuation;
-                    if continuation.is_none() {
-                        return Err(Error::new(
-                            ErrorCode::MissingClosure,
-                            "retained physical delete marker is missing",
-                        ));
-                    }
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: path.as_str().to_string(),
+                        continuation: work.continuation.take(),
+                        limit: 1_000,
+                        include_versions: true,
+                    })
+                    .await?;
+                if page.entries.iter().any(|entry| {
+                    entry.path == path
+                        && entry.metadata.delete_marker
+                        && entry.metadata.token.version_id.as_deref() == Some(version_id.as_str())
+                }) {
+                    return Ok(Some(0));
                 }
+                work.continuation = page.continuation;
+                if work.continuation.is_none() {
+                    return Err(Error::new(
+                        ErrorCode::MissingClosure,
+                        "retained physical delete marker is missing",
+                    ));
+                }
+                Ok(None)
             }
         }
     }
@@ -8183,13 +9679,184 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    async fn restore_gc_coordinator_v2(&self) -> Result<()> {
+        let active = match self
+            .plane
+            .load_mutable(&gc_coordinator_v2_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            Some(stored) => {
+                let coordinator: GcCoordinatorV2 = decode_canonical(&stored.bytes)?;
+                coordinator.validate(self.format.repository_id)?;
+                coordinator.active_epoch
+            }
+            None => None,
+        };
+        *self
+            .active_gc_epoch
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))? =
+            active;
+        if let Some(epoch) = active {
+            let mut continuation = None;
+            let mut maximum_sequence = 0_u64;
+            loop {
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: gc_dirty_root_v2_prefix(&self.options.repository_prefix, epoch),
+                        continuation,
+                        limit: 1_000,
+                        include_versions: false,
+                    })
+                    .await?;
+                for entry in &page.entries {
+                    let sequence = entry
+                        .path
+                        .as_str()
+                        .rsplit('/')
+                        .nth(1)
+                        .and_then(|component| component.parse::<u64>().ok())
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::CorruptCommit,
+                                "GC dirty-root journal path has an invalid sequence",
+                            )
+                        })?;
+                    maximum_sequence = maximum_sequence.max(sequence);
+                }
+                continuation = page.continuation;
+                if continuation.is_none() {
+                    break;
+                }
+            }
+            self.gc_dirty_sequence
+                .fetch_max(maximum_sequence, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+
+    async fn activate_gc_coordinator_v2(&self, epoch: OperationId, now_millis: u64) -> Result<()> {
+        let path = gc_coordinator_v2_path(&self.options.repository_prefix)?;
+        let loaded = self.plane.load_mutable(&path).await?;
+        let (generation, expected) = match loaded {
+            Some(stored) => {
+                let current: GcCoordinatorV2 = decode_canonical(&stored.bytes)?;
+                current.validate(self.format.repository_id)?;
+                if let Some(active) = current.active_epoch {
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        format!("GC epoch {active} is already active"),
+                    ));
+                }
+                (
+                    current.generation.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::InternalInvariant, "GC coordinator overflow")
+                    })?,
+                    Some(stored.metadata.token),
+                )
+            }
+            None => (1, None),
+        };
+        let coordinator = GcCoordinatorV2 {
+            repository: self.format.repository_id,
+            generation,
+            active_epoch: Some(epoch),
+            updated_at_millis: now_millis,
+        };
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(&coordinator)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                *self.active_gc_epoch.write().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+                })? = Some(epoch);
+                Ok(())
+            }
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC coordinator changed concurrently",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+        }
+    }
+
+    async fn clear_gc_coordinator_v2(&self, epoch: OperationId) -> Result<()> {
+        let path = gc_coordinator_v2_path(&self.options.repository_prefix)?;
+        let Some(stored) = self.plane.load_mutable(&path).await? else {
+            return Err(Error::new(
+                ErrorCode::MissingClosure,
+                "active GC coordinator is missing",
+            ));
+        };
+        let current: GcCoordinatorV2 = decode_canonical(&stored.bytes)?;
+        current.validate(self.format.repository_id)?;
+        if current.active_epoch.is_none() {
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = None;
+            return Ok(());
+        }
+        if current.active_epoch != Some(epoch) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "another GC epoch owns the coordinator",
+            ));
+        }
+        let next = GcCoordinatorV2 {
+            repository: current.repository,
+            generation: current.generation.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "GC coordinator overflow")
+            })?,
+            active_epoch: None,
+            updated_at_millis: self.now_millis()?,
+        };
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected: Some(stored.metadata.token),
+                bytes: encode_canonical(&next)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => {
+                *self.active_gc_epoch.write().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+                })? = None;
+                Ok(())
+            }
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC coordinator changed while completing an epoch",
+            )
+            .retry(RetryAdvice::ReloadHead)),
+        }
+    }
+
     /// Starts a partitioned GC epoch. Every later call processes a bounded
     /// amount of root discovery, graph marking, version marking, candidate
     /// enumeration, or exact-version deletion.
     pub async fn start_gc_epoch_v2(&self, grace_millis: u64) -> Result<GcEpochV2> {
         self.validate_gc_plan_limits(grace_millis, 1)?;
-        self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.system_writer_generation("gc").await?;
         let _publication = self.lock_global_publication().await;
+        if let Some(active) = *self
+            .active_gc_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                format!("GC epoch {active} is already active"),
+            ));
+        }
         let planned_at_millis = self.now_millis()?;
         let cutoff_millis = planned_at_millis
             .checked_sub(grace_millis)
@@ -8200,7 +9867,7 @@ impl<P: ObjectPlane> Repository<P> {
             id,
             repository: self.format.repository_id,
             process_session: self.process_session,
-            writer_fence_generation: self.writer_fence_generation()?,
+            writer_fence_generation,
             publication_acquisition: self
                 .performance
                 .publication_acquisitions
@@ -8222,11 +9889,15 @@ impl<P: ObjectPlane> Repository<P> {
             deleted_bytes: 0,
             skipped_reachable: 0,
             already_missing: 0,
+            dirty_roots_marked: 0,
+            dirty_catch_up_active: false,
+            dirty_root_sequence: self.gc_dirty_sequence.load(Ordering::Acquire),
+            dirty_root_target_sequence: 0,
             updated_at_millis: planned_at_millis,
             abort_reason: None,
         };
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                 expected: None,
@@ -8234,7 +9905,11 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
         {
-            CompareExchangeOutcome::Applied(_) => Ok(epoch),
+            CompareExchangeOutcome::Applied(_) => {
+                self.activate_gc_coordinator_v2(id, planned_at_millis)
+                    .await?;
+                Ok(epoch)
+            }
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "generated GC epoch ID already exists",
@@ -8257,12 +9932,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC epoch step must process between 1 and 1,000 items",
             ));
         }
-        self.physical_writer_generation_for_mutation().await?;
-        let _publication = self.lock_global_publication().await;
-        let acquisition = self
-            .performance
-            .publication_acquisitions
-            .load(Ordering::Relaxed);
+        let writer_fence_generation = self.system_writer_generation("gc").await?;
         let loaded = self.load_gc_epoch_v2(id).await?;
         if matches!(
             loaded.value.phase,
@@ -8274,7 +9944,7 @@ impl<P: ObjectPlane> Repository<P> {
                 restarted_for_new_roots: false,
             });
         }
-        if loaded.value.writer_fence_generation != self.writer_fence_generation()? {
+        if loaded.value.writer_fence_generation != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "GC epoch writer fence no longer matches",
@@ -8282,15 +9952,17 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let mut next = loaded.value;
         let restarted_for_new_roots = next.process_session != self.process_session
-            || acquisition != next.publication_acquisition.saturating_add(1);
+            && matches!(
+                next.phase,
+                GcEpochPhaseV2::CatchUpDirtyRoots
+                    | GcEpochPhaseV2::Ready
+                    | GcEpochPhaseV2::Sweeping
+            );
         if restarted_for_new_roots {
-            // Mark state only grows. Re-discovering roots after a writer action
-            // or process restart makes stale candidates safe to skip later.
             next.process_session = self.process_session;
-            next.phase = GcEpochPhaseV2::DiscoverRoots;
-            next.root_namespace = 0;
+            next.phase = GcEpochPhaseV2::CatchUpDirtyRoots;
             next.source_continuation = None;
-            next.sweep_after = None;
+            next.dirty_root_target_sequence = 0;
         }
         let index = self.gc_epoch_index(id)?;
         index.install_root(next.root.root.clone())?;
@@ -8316,17 +9988,23 @@ impl<P: ObjectPlane> Repository<P> {
                 self.gc_v2_scan_candidates(&index, &mut tree, &mut next, max_items)
                     .await?
             }
+            GcEpochPhaseV2::CatchUpDirtyRoots => {
+                self.gc_v2_catch_up_dirty_roots(&index, &mut tree, &mut next, max_items)
+                    .await?
+            }
+            GcEpochPhaseV2::CleanupDirtyRoots => {
+                self.gc_v2_cleanup_dirty_roots(&mut next, max_items).await?
+            }
             GcEpochPhaseV2::Ready | GcEpochPhaseV2::Sweeping => 0,
             GcEpochPhaseV2::Completed | GcEpochPhaseV2::Aborted => unreachable!(),
         };
         next.root = TreeRootV1::from_tree(&tree)?;
-        next.publication_acquisition = acquisition;
         next.generation = next.generation.checked_add(1).ok_or_else(|| {
             Error::new(ErrorCode::InternalInvariant, "GC epoch generation overflow")
         })?;
         next.updated_at_millis = self.now_millis()?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                 expected: Some(loaded.token),
@@ -8563,8 +10241,13 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<usize> {
         let mut queue = index.engine.prefix(tree, b"qv/").await?;
         let Some(entry) = queue.next().await else {
-            epoch.phase = GcEpochPhaseV2::ScanCandidates;
-            epoch.source_continuation = None;
+            epoch.phase = if epoch.dirty_catch_up_active {
+                epoch.dirty_catch_up_active = false;
+                epoch.source_continuation = None;
+                GcEpochPhaseV2::CatchUpDirtyRoots
+            } else {
+                GcEpochPhaseV2::ScanCandidates
+            };
             return Ok(0);
         };
         let (queue_key, encoded) = entry?;
@@ -8802,14 +10485,170 @@ impl<P: ObjectPlane> Repository<P> {
         }
         epoch.source_continuation = page.continuation;
         if epoch.source_continuation.is_none() {
-            epoch.phase = GcEpochPhaseV2::Ready;
+            epoch.phase = GcEpochPhaseV2::CatchUpDirtyRoots;
+            epoch.source_continuation = None;
         }
         Ok(page.entries.len())
     }
 
+    async fn gc_v2_catch_up_dirty_roots(
+        &self,
+        index: &ProllyMetadataIndex<P>,
+        tree: &mut Tree,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        if epoch.dirty_root_target_sequence == 0 {
+            let stable_sequence = {
+                let barrier = self.lock_global_publication().await;
+                let sequence = self.gc_dirty_sequence.load(Ordering::Acquire);
+                drop(barrier);
+                sequence
+            };
+            epoch.dirty_root_target_sequence = stable_sequence;
+            epoch.publication_acquisition = self
+                .performance
+                .publication_acquisitions
+                .load(Ordering::Acquire);
+        }
+        let next_sequence = epoch.dirty_root_sequence.checked_add(1).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "GC dirty-root sequence overflow",
+            )
+        })?;
+        if next_sequence > epoch.dirty_root_target_sequence {
+            epoch.phase = GcEpochPhaseV2::Ready;
+            epoch.source_continuation = None;
+            return Ok(0);
+        }
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_dirty_root_v2_sequence_prefix(
+                    &self.options.repository_prefix,
+                    epoch.id,
+                    next_sequence,
+                ),
+                continuation: epoch.source_continuation.clone(),
+                limit: max_items,
+                include_versions: false,
+            })
+            .await?;
+        let mut mutations = Vec::new();
+        let mut newly_marked = 0_u64;
+        for listed in &page.entries {
+            let stored = self
+                .plane
+                .get(GetRequest {
+                    path: listed.path.clone(),
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "GC dirty-root journal event disappeared",
+                    )
+                })?;
+            let event: GcDirtyRootV2 = decode_canonical(&stored.bytes)?;
+            event.validate()?;
+            let event_id = event.id()?;
+            if event.repository != self.format.repository_id
+                || event.epoch != epoch.id
+                || gc_dirty_root_v2_path(&self.options.repository_prefix, &event, event_id)?
+                    != listed.path
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "GC dirty-root event does not match its journal path",
+                ));
+            }
+            let mark_key = gc_v2_dirty_root_mark_key(event_id);
+            if index.engine.get(tree, &mark_key).await?.is_none() {
+                mutations.push(Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                });
+                let mut roots = vec![event.target];
+                roots.extend(event.previous_target);
+                roots.sort_unstable();
+                roots.dedup();
+                for commit in roots {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_v2_commit_queue_key(commit),
+                        val: encode_canonical(&GcCommitWorkV2 {
+                            commit,
+                            scan_versions: true,
+                        })?,
+                    });
+                    newly_marked = newly_marked.saturating_add(1);
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            *tree = index.engine.batch(tree, mutations).await?;
+        }
+        epoch.dirty_roots_marked = epoch.dirty_roots_marked.saturating_add(newly_marked);
+        epoch.source_continuation = page.continuation;
+        if epoch.source_continuation.is_none() {
+            epoch.dirty_root_sequence = next_sequence;
+            if newly_marked > 0 {
+                epoch.dirty_catch_up_active = true;
+                epoch.phase = GcEpochPhaseV2::MarkCommits;
+            }
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_v2_cleanup_dirty_roots(
+        &self,
+        epoch: &mut GcEpochV2,
+        max_items: usize,
+    ) -> Result<usize> {
+        self.clear_gc_coordinator_v2(epoch.id).await?;
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_dirty_root_v2_prefix(&self.options.repository_prefix, epoch.id),
+                continuation: None,
+                limit: max_items,
+                include_versions: false,
+            })
+            .await?;
+        if page.entries.is_empty() {
+            epoch.phase = GcEpochPhaseV2::Completed;
+            return Ok(0);
+        }
+        let targets = page
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let token = entry.metadata.token;
+                let physical = token
+                    .version_id
+                    .clone()
+                    .map(|version_id| PhysicalVersion::Versioned { version_id })
+                    .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+                (entry.path, physical)
+            })
+            .collect::<Vec<_>>();
+        let processed = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if matches!(outcome, DeleteOutcome::TokenMismatch) {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "GC dirty-root event changed during exact cleanup",
+                ));
+            }
+        }
+        Ok(processed)
+    }
+
     /// Deletes at most `max_candidates` exact physical versions from a ready
-    /// epoch. Any intervening publication or process restart forces another
-    /// bounded root-discovery pass before deletion can resume.
+    /// epoch. Intervening publications schedule ordered dirty-root catch-up;
+    /// they never restart the stable root-namespace scan.
     pub async fn sweep_gc_epoch_v2(
         &self,
         id: OperationId,
@@ -8821,20 +10660,21 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC sweep batch must contain between 1 and 1,000 candidates",
             ));
         }
-        self.physical_writer_generation_for_mutation().await?;
+        let writer_fence_generation = self.system_writer_generation("gc").await?;
         let _publication = self.lock_global_publication().await;
         let acquisition = self
             .performance
             .publication_acquisitions
             .load(Ordering::Relaxed);
         let loaded = self.load_gc_epoch_v2(id).await?;
-        if loaded.value.writer_fence_generation != self.writer_fence_generation()? {
+        if loaded.value.writer_fence_generation != writer_fence_generation {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "GC epoch writer fence no longer matches",
             ));
         }
         if matches!(loaded.value.phase, GcEpochPhaseV2::Completed) {
+            self.clear_gc_coordinator_v2(id).await?;
             return Ok(GcEpochStepReport {
                 epoch: loaded.value,
                 processed: 0,
@@ -8848,19 +10688,21 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let mut next = loaded.value;
-        let restarted_for_new_roots = next.process_session != self.process_session
-            || acquisition != next.publication_acquisition.saturating_add(1);
+        let dirty_target = self.gc_dirty_sequence.load(Ordering::Acquire);
+        let restarted_for_new_roots =
+            next.process_session != self.process_session || dirty_target > next.dirty_root_sequence;
         if restarted_for_new_roots {
             next.process_session = self.process_session;
-            next.phase = GcEpochPhaseV2::DiscoverRoots;
-            next.root_namespace = 0;
+            next.phase = GcEpochPhaseV2::CatchUpDirtyRoots;
             next.source_continuation = None;
-            next.sweep_after = None;
+            next.dirty_root_target_sequence = dirty_target;
             next.publication_acquisition = acquisition;
-            next.generation = next.generation.saturating_add(1);
+            next.generation = next.generation.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "GC epoch generation overflow")
+            })?;
             next.updated_at_millis = self.now_millis()?;
             match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                     expected: Some(loaded.token),
@@ -8878,7 +10720,7 @@ impl<P: ObjectPlane> Repository<P> {
                 CompareExchangeOutcome::Conflict(_) => {
                     return Err(Error::new(
                         ErrorCode::RefConflict,
-                        "GC epoch changed while restarting root discovery",
+                        "GC epoch changed while scheduling dirty-root catch-up",
                     )
                     .retry(RetryAdvice::ReloadHead));
                 }
@@ -8971,7 +10813,7 @@ impl<P: ObjectPlane> Repository<P> {
         // Probe one entry on the next call when the batch fills exactly. This
         // keeps memory bounded without retaining a lookahead candidate.
         if processed < max_candidates && (processed == 0 || exhausted) {
-            next.phase = GcEpochPhaseV2::Completed;
+            next.phase = GcEpochPhaseV2::CleanupDirtyRoots;
         } else {
             next.phase = GcEpochPhaseV2::Sweeping;
         }
@@ -8981,7 +10823,7 @@ impl<P: ObjectPlane> Repository<P> {
         })?;
         next.updated_at_millis = self.now_millis()?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_epoch_v2_path(&self.options.repository_prefix, id)?,
                 expected: Some(loaded.token),
@@ -8989,11 +10831,16 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
         {
-            CompareExchangeOutcome::Applied(_) => Ok(GcEpochStepReport {
-                epoch: next,
-                processed,
-                restarted_for_new_roots: false,
-            }),
+            CompareExchangeOutcome::Applied(_) => {
+                if matches!(next.phase, GcEpochPhaseV2::CleanupDirtyRoots) {
+                    self.clear_gc_coordinator_v2(id).await?;
+                }
+                Ok(GcEpochStepReport {
+                    epoch: next,
+                    processed,
+                    restarted_for_new_roots: false,
+                })
+            }
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "GC epoch changed while publishing a sweep checkpoint",
@@ -9143,6 +10990,7 @@ impl<P: ObjectPlane> Repository<P> {
         max_candidates: usize,
     ) -> Result<GcMarkRunV1> {
         self.validate_gc_plan_limits(grace_millis, max_candidates)?;
+        self.system_writer_generation("gc").await?;
         let max_candidates_u64 = u64::try_from(max_candidates).map_err(|_| {
             Error::new(
                 ErrorCode::InvalidLimit,
@@ -9168,7 +11016,7 @@ impl<P: ObjectPlane> Repository<P> {
                     updated_at_millis: now,
                 };
                 match self
-                    .plane
+                    .controls
                     .compare_exchange(CompareExchange {
                         path: path.clone(),
                         expected: None,
@@ -9225,7 +11073,7 @@ impl<P: ObjectPlane> Repository<P> {
         })?;
         next.updated_at_millis = self.now_millis()?;
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path,
                 expected: Some(loaded.token),
@@ -9281,6 +11129,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC batch size must be greater than zero",
             ));
         }
+        self.system_writer_generation("gc").await?;
         let plan = self.load_gc_plan(id).await?;
         let path = gc_run_path(&self.options.repository_prefix, id)?;
         if self.plane.load_mutable(&path).await?.is_none() {
@@ -9301,7 +11150,7 @@ impl<P: ObjectPlane> Repository<P> {
                 last_delete_at_millis: 0,
             };
             let _ = self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: path.clone(),
                     expected: None,
@@ -9333,7 +11182,7 @@ impl<P: ObjectPlane> Repository<P> {
                 })?;
                 running.updated_at_millis = self.now_millis()?;
                 if matches!(
-                    self.plane
+                    self.controls
                         .compare_exchange(CompareExchange {
                             path: path.clone(),
                             expected: Some(loaded.token),
@@ -9354,7 +11203,7 @@ impl<P: ObjectPlane> Repository<P> {
                 aborted.generation = aborted.generation.saturating_add(1);
                 aborted.updated_at_millis = self.now_millis()?;
                 let _ = self
-                    .plane
+                    .controls
                     .compare_exchange(CompareExchange {
                         path: path.clone(),
                         expected: Some(loaded.token),
@@ -9441,7 +11290,7 @@ impl<P: ObjectPlane> Repository<P> {
                 next.state = GcRunStateV1::Paused;
             }
             match self
-                .plane
+                .controls
                 .compare_exchange(CompareExchange {
                     path: path.clone(),
                     expected: Some(loaded.token),
@@ -9521,6 +11370,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC abort requires a non-empty operator reason",
             ));
         }
+        self.system_writer_generation("gc").await?;
         let loaded = self.load_gc_run(id).await?;
         if loaded.value.generation != expected_generation
             || matches!(loaded.value.state, GcRunStateV1::Completed)
@@ -9541,7 +11391,7 @@ impl<P: ObjectPlane> Repository<P> {
         aborted.updated_at_millis = self.now_millis()?;
         aborted.abort_reason = Some(reason.to_string());
         match self
-            .plane
+            .controls
             .compare_exchange(CompareExchange {
                 path: gc_run_path(&self.options.repository_prefix, id)?,
                 expected: Some(loaded.token),
@@ -9859,6 +11709,62 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(commit)
     }
 
+    async fn load_commit_metadata(&self, id: CommitId) -> Result<BucketCommitV1> {
+        if let Some(commit) = self
+            .commit_cache
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
+            .get(&id)
+        {
+            return Ok(commit);
+        }
+        let path = commit_path(&self.options.repository_prefix, id)?;
+        let header = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: Some(0..=19),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "commit object is missing"))?;
+        let (commit_len, _) = CommitObjectV1::header_lengths(&header.bytes)?;
+        if commit_len == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object has an empty canonical commit",
+            ));
+        }
+        let end = 20_u64
+            .checked_add(u64::from(commit_len))
+            .and_then(|exclusive| exclusive.checked_sub(1))
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "commit range overflow"))?;
+        let encoded = self
+            .plane
+            .get(GetRequest {
+                path,
+                range: Some(20..=end),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "commit object is missing"))?;
+        if encoded.bytes.len() != commit_len as usize {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "ranged commit metadata has the wrong length",
+            ));
+        }
+        let commit: BucketCommitV1 = decode_canonical(&encoded.bytes)?;
+        if commit.id()? != id {
+            return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
+        }
+        self.commit_cache
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit-cache lock poisoned"))?
+            .insert(id, commit.clone());
+        Ok(commit)
+    }
+
     async fn load_commit_delta(&self, commit: &BucketCommitV1) -> Result<BucketDeltaV1> {
         if commit.writer_fence_generation == 0 {
             return Err(Error::new(
@@ -10053,6 +11959,18 @@ fn validate_options(options: &RepositoryOptions) -> Result<()> {
         return Err(Error::new(
             ErrorCode::InvalidLimit,
             "branch-ref compaction requires an interval of at least 100 and a smaller nonzero retention count",
+        ));
+    }
+    if !(2..=10_000).contains(&options.mutable_control_versions_to_retain) {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "mutable-control retention must keep between 2 and 10,000 versions",
+        ));
+    }
+    if options.branch_ref_versions_to_retain > options.mutable_control_versions_to_retain {
+        return Err(Error::new(
+            ErrorCode::InvalidLimit,
+            "branch-ref retention cannot exceed the repository mutable-control bound",
         ));
     }
     if options.gc_delete_rate_limit_per_second > 1_000 {
@@ -10268,6 +12186,10 @@ fn gc_v2_node_mark_key(cid: &prolly::Cid) -> Vec<u8> {
     [b"mn/".as_slice(), cid.as_bytes()].concat()
 }
 
+fn gc_v2_dirty_root_mark_key(id: GcDirtyRootIdV2) -> Vec<u8> {
+    [b"mr/".as_slice(), id.as_bytes()].concat()
+}
+
 fn gc_v2_version_queue_key(root: &TreeRootV1) -> Option<Vec<u8>> {
     root.root
         .as_ref()
@@ -10385,6 +12307,104 @@ fn gc_mark_run_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
 fn gc_epoch_v2_path(prefix: &str, id: OperationId) -> Result<ObjectPath> {
     ObjectPath::new(format!(
         "{prefix}/gc/v2/epochs/{}/head.cbor",
+        hex::encode(id.as_bytes())
+    ))
+}
+
+fn gc_coordinator_v2_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/gc/v2/coordinator.cbor"))
+}
+
+fn commit_closure_stack_key(sequence: u64) -> Vec<u8> {
+    format!("q/{sequence:020}").into_bytes()
+}
+
+fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
+    let mut key = b"s/".to_vec();
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn commit_closure_mapping_key(commit: CommitId) -> Vec<u8> {
+    let mut key = b"m/".to_vec();
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn fsck_node_queue_key(kind: u8, cid: &prolly::Cid) -> Vec<u8> {
+    let mut key = b"fq/".to_vec();
+    key.push(kind);
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn fsck_node_seen_key(kind: u8, cid: &prolly::Cid) -> Vec<u8> {
+    let mut key = b"fs/".to_vec();
+    key.push(kind);
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn fsck_global_node_seen_key(cid: &prolly::Cid) -> Vec<u8> {
+    let mut key = b"fg/".to_vec();
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn fsck_version_queue_key(digest: &[u8; 32]) -> Vec<u8> {
+    let mut key = b"fvq/".to_vec();
+    key.extend_from_slice(digest);
+    key
+}
+
+fn fsck_version_seen_key(digest: &[u8; 32]) -> Vec<u8> {
+    let mut key = b"fvs/".to_vec();
+    key.extend_from_slice(digest);
+    key
+}
+
+fn physical_transfer_mapping_path(prefix: &str, source: CommitId) -> Result<ObjectPath> {
+    let encoded = hex::encode(source.as_bytes());
+    ObjectPath::new(format!(
+        "{prefix}/administration/v2/transfer-mappings/sha256/{}/{}/{}",
+        &encoded[..2],
+        &encoded[2..4],
+        encoded
+    ))
+}
+
+fn physical_transfer_destination_scope<Q: ObjectPlane>(target: &Repository<Q>) -> [u8; 32] {
+    derive_input_digest(&[
+        b"physical-transfer-destination-v1",
+        target.format.repository_id.as_bytes(),
+        target.options.repository_prefix.as_bytes(),
+    ])
+}
+
+fn gc_dirty_root_v2_prefix(prefix: &str, epoch: OperationId) -> String {
+    format!(
+        "{prefix}/gc/v2/dirty-roots/{}/",
+        hex::encode(epoch.as_bytes())
+    )
+}
+
+fn gc_dirty_root_v2_sequence_prefix(prefix: &str, epoch: OperationId, sequence: u64) -> String {
+    format!(
+        "{}{:020}/",
+        gc_dirty_root_v2_prefix(prefix, epoch),
+        sequence
+    )
+}
+
+fn gc_dirty_root_v2_path(
+    prefix: &str,
+    event: &GcDirtyRootV2,
+    id: GcDirtyRootIdV2,
+) -> Result<ObjectPath> {
+    ObjectPath::new(format!(
+        "{}{:020}/{}",
+        gc_dirty_root_v2_prefix(prefix, event.epoch),
+        event.publication_sequence,
         hex::encode(id.as_bytes())
     ))
 }

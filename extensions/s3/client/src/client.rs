@@ -101,7 +101,13 @@ pub struct IngestReport {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NodeCachePrewarmReport {
     pub snapshot: CommitId,
+    pub roots: usize,
+    pub internal_nodes: usize,
+    pub root_leaves: usize,
+    pub leaves_skipped: usize,
+    /// Compatibility field: internal-only prewarm does not enumerate objects.
     pub object_count: usize,
+    /// Compatibility field: internal-only prewarm does not page objects.
     pub pages: usize,
 }
 
@@ -186,7 +192,8 @@ pub enum PhysicalPathDiscipline {
     Immutable,
     /// Installed exactly once with conditional create during repository initialization.
     CreateOnce,
-    /// Updated through provider-token compare-and-exchange.
+    /// Updated through provider-token compare-and-exchange and bounded by the
+    /// repository mutable-control version-retention policy.
     MutableCas,
     /// Temporary qualification data that is removed after the probe completes.
     EphemeralProbe,
@@ -238,6 +245,36 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: false,
     },
     PhysicalPathFamily {
+        relative_pattern: "node-index/v2/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "ref-catalog/v2/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "commit-graph/v2/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "operation-index/v2/heads/<branch-hex>.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "operation-index/v2/segments/<branch-hex>/sha256/<2>/<2>/<segment-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
         relative_pattern: "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
         discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: false,
@@ -250,7 +287,31 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
         gc_managed: true,
     },
     PhysicalPathFamily {
+        relative_pattern: "commits/v2/sha256/<2>/<2>/<commit-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: true,
+        gc_managed: true,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "publications/v2/sha256/<2>/<2>/<publication-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: true,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "payloads/v2/<repository-id-hex>/sha256/<2>/<2>/<content-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: true,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
         relative_pattern: "refs/{heads,tags}/<name-hex>",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: true,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "refs/v2/heads/<name-hex>",
         discipline: PhysicalPathDiscipline::MutableCas,
         portable_clone: true,
         gc_managed: false,
@@ -263,6 +324,18 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
     },
     PhysicalPathFamily {
         relative_pattern: "writers/lease.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "authority/v2/{branches,system}/<scope-hex>/lease.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "authority/v2/maintenance/gate.cbor",
         discipline: PhysicalPathDiscipline::MutableCas,
         portable_clone: false,
         gc_managed: false,
@@ -294,6 +367,49 @@ const PHYSICAL_PATH_FAMILIES: &[PhysicalPathFamily] = &[
     PhysicalPathFamily {
         relative_pattern: "gc/runs/<plan-id>.cbor",
         discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "gc/v2/epochs/<operation-id-hex>/head.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "gc/v2/coordinator.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "gc/v2/dirty-roots/<operation-id-hex>/<sequence>/<dirty-root-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "journal-index/v2/heads/<branch-hex>.cbor",
+        discipline: PhysicalPathDiscipline::MutableCas,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "journal-index/v2/<node-or-graph>-tree/nodes/sha256/<2>/<2>/<cid>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern:
+            "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
+        discipline: PhysicalPathDiscipline::Immutable,
+        portable_clone: false,
+        gc_managed: false,
+    },
+    PhysicalPathFamily {
+        relative_pattern: "administration/v2/transfer-mappings/sha256/<2>/<2>/<source-commit-id>",
+        discipline: PhysicalPathDiscipline::Immutable,
         portable_clone: false,
         gc_managed: false,
     },
@@ -560,6 +676,7 @@ pub struct ClientBuilder {
     node_cache: Option<Arc<dyn prolly_s3_core::NodeCache>>,
     branch_ref_compaction_interval: Option<u64>,
     branch_ref_versions_to_retain: Option<usize>,
+    mutable_control_versions_to_retain: Option<usize>,
     node_index_maintenance_interval: Option<Duration>,
     node_index_maintenance_batch: Option<usize>,
     max_staged_batch_bytes: Option<usize>,
@@ -950,42 +1067,37 @@ impl Client {
         Ok(receipt)
     }
 
-    /// Traverse one immutable object snapshot and populate the configured
-    /// verified node cache without downloading object payloads.
+    /// Populate the verified node cache with state roots and internal nodes.
+    /// The legacy prefix and page size are accepted for source compatibility;
+    /// no object enumeration is performed.
     pub async fn prewarm_node_cache(
         &self,
         snapshot: CommitId,
-        prefix: &[u8],
+        _prefix: &[u8],
         page_size: usize,
     ) -> Result<NodeCachePrewarmReport> {
         self.ensure_provider_qualified()?;
         if page_size == 0 {
             return Err(invalid("prewarm page_size must be greater than zero"));
         }
-        let mut after = None;
-        let mut object_count = 0usize;
-        let mut pages = 0usize;
-        loop {
-            let (objects, truncated) = self
-                .repository
-                .list_objects_at(snapshot, prefix, after.as_deref(), page_size)
-                .await?;
-            pages = pages
-                .checked_add(1)
-                .ok_or_else(|| invalid("prewarm page count overflow"))?;
-            object_count = object_count
-                .checked_add(objects.len())
-                .ok_or_else(|| invalid("prewarm object count overflow"))?;
-            after = objects.last().map(|object| object.key.clone());
-            if !truncated {
-                break;
-            }
-        }
+        let warmed = self.repository.prewarm_internal_nodes(snapshot).await?;
         Ok(NodeCachePrewarmReport {
             snapshot,
-            object_count,
-            pages,
+            roots: warmed.roots,
+            internal_nodes: warmed.internal_nodes,
+            root_leaves: warmed.root_leaves,
+            leaves_skipped: warmed.leaves_skipped,
+            object_count: 0,
+            pages: 0,
         })
+    }
+
+    /// Preferred internal-only cache warming API.
+    pub async fn prewarm_internal_node_cache(
+        &self,
+        snapshot: CommitId,
+    ) -> Result<NodeCachePrewarmReport> {
+        self.prewarm_node_cache(snapshot, b"", 1).await
     }
     pub async fn at(&self, commit: CommitId) -> Result<Snapshot> {
         self.ensure_provider_qualified()?;
@@ -1806,6 +1918,10 @@ impl ClientBuilder {
         self.branch_ref_versions_to_retain = Some(versions_to_retain);
         self
     }
+    pub fn mutable_control_version_retention(mut self, versions_to_retain: usize) -> Self {
+        self.mutable_control_versions_to_retain = Some(versions_to_retain);
+        self
+    }
     pub fn node_index_maintenance(mut self, interval: Duration, batch: usize) -> Self {
         self.node_index_maintenance_interval = Some(interval);
         self.node_index_maintenance_batch = Some(batch);
@@ -1957,6 +2073,9 @@ impl ClientBuilder {
         }
         if let Some(value) = self.branch_ref_versions_to_retain {
             options.branch_ref_versions_to_retain = value;
+        }
+        if let Some(value) = self.mutable_control_versions_to_retain {
+            options.mutable_control_versions_to_retain = value;
         }
         if let Some(value) = self.gc_delete_rate_limit_per_second {
             options.gc_delete_rate_limit_per_second = value;
@@ -4850,17 +4969,34 @@ mod tests {
 
     #[test]
     fn physical_layout_classifies_every_stable_namespace_family() {
-        assert_eq!(PHYSICAL_PATH_FAMILIES.len(), 14);
+        assert!(PHYSICAL_PATH_FAMILIES.len() >= 23);
         for required in [
             "format/v1.cbor",
             "providers/<provider-profile-id>.cbor",
             "node-index/latest.cbor",
+            "node-index/v2/head.cbor",
+            "ref-catalog/v2/head.cbor",
+            "commit-graph/v2/head.cbor",
+            "operation-index/v2/heads/<branch-hex>.cbor",
+            "operation-index/v2/segments/<branch-hex>/sha256/<2>/<2>/<segment-id>",
             "node-index/checkpoints/<generation>-<checkpoint-id>.cbor",
             "commits/sha256/<2>/<2>/<commit-id>",
+            "publications/v2/sha256/<2>/<2>/<publication-id>",
+            "payloads/v2/<repository-id-hex>/sha256/<2>/<2>/<content-id>",
             "refs/{heads,tags}/<name-hex>",
+            "refs/v2/heads/<name-hex>",
             "writers/lease.cbor",
+            "authority/v2/{branches,system}/<scope-hex>/lease.cbor",
+            "authority/v2/maintenance/gate.cbor",
             "gc/plans/<plan-id>.cbor",
             "gc/runs/<plan-id>.cbor",
+            "gc/v2/epochs/<operation-id-hex>/head.cbor",
+            "gc/v2/coordinator.cbor",
+            "gc/v2/dirty-roots/<operation-id-hex>/<sequence>/<dirty-root-id>",
+            "journal-index/v2/heads/<branch-hex>.cbor",
+            "journal-index/v2/<node-or-graph>-tree/nodes/sha256/<2>/<2>/<cid>",
+            "administration/v2/closure/<operation-id-hex>/tree/nodes/sha256/<2>/<2>/<cid>",
+            "administration/v2/transfer-mappings/sha256/<2>/<2>/<source-commit-id>",
         ] {
             assert!(
                 PHYSICAL_PATH_FAMILIES

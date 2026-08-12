@@ -82,6 +82,7 @@ def check_source_defaults() -> None:
     repository = (S3 / "core/src/repository.rs").read_text()
     client = (S3 / "client/src/client.rs").read_text()
     combined = model + repository + client
+    default_surface = repository + client
     required = [
         'hash_id!(CommitId, "pbc1_")',
         'hash_id!(ObjectVersionId, "pov1_")',
@@ -95,13 +96,16 @@ def check_source_defaults() -> None:
     ]
     for marker in required:
         assert marker in combined, f"missing v1 source marker: {marker}"
-    forbidden = [
+    # Protocol-v2 records intentionally coexist in model.rs. The v1 verifier
+    # protects the default high-level repository/client surface from silently
+    # switching wire formats; it must not reject side-by-side protocol types.
+    forbidden_defaults = [
         "RepositoryFormatV2", "BucketCommitV2", "RefValueV2",
         '"pbc2_"', '"pov2_"', "/format/v2.cbor", '".prolly/v2"',
         "prolly-s3/object-version/v2", "prolly-s3/commit/v2",
     ]
-    for marker in forbidden:
-        assert marker not in combined, f"forbidden v2 source marker: {marker}"
+    for marker in forbidden_defaults:
+        assert marker not in default_surface, f"forbidden v2 default marker: {marker}"
     constants = re.findall(
         r"(?:VERSION|CAPABILITY_PROFILE|PROTOCOL_VERSION|CURRENT_READER_VERSION|CURRENT_WRITER_VERSION):\s*u(?:16|32)\s*=\s*(\d+)",
         model,

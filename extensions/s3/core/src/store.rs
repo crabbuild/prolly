@@ -692,6 +692,18 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
     }
 
     async fn get_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.get_packed_with_fallback(key, true).await
+    }
+
+    pub(crate) async fn get_indexed_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.get_packed_with_fallback(key, false).await
+    }
+
+    async fn get_packed_with_fallback(
+        &self,
+        key: &[u8],
+        allow_namespace_scan: bool,
+    ) -> Result<Option<Vec<u8>>> {
         if key.len() != 32 {
             return Err(Error::new(
                 ErrorCode::CorruptNode,
@@ -761,9 +773,11 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             self.admit_node(cid.clone(), bytes.clone()).await;
             return Ok(Some(bytes));
         }
-        if let Some(bytes) = self.scan_commit_objects_for(Some(&cid)).await? {
-            self.admit_node(cid.clone(), bytes.clone()).await;
-            return Ok(Some(bytes));
+        if allow_namespace_scan {
+            if let Some(bytes) = self.scan_commit_objects_for(Some(&cid)).await? {
+                self.admit_node(cid.clone(), bytes.clone()).await;
+                return Ok(Some(bytes));
+            }
         }
         Ok(None)
     }

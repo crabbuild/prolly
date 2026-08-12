@@ -1,0 +1,50 @@
+# Protocol v2 authority state machines
+
+## Branch-shard lease
+
+Each branch is initially its own authority shard. This makes one branch-ref
+CAS the complete takeover barrier and avoids provider listing in the authority
+path.
+
+States:
+
+`Absent → Active(g) → Renewed(g) → BarrierPending(g+1) → Active(g+1)`
+
+- `Absent → Active(1)` uses create-if-absent.
+- Only the current unexpired active permit may renew through its storage-token
+  compare-and-swap.
+- Expiry never permits automatic reacquisition. It requires explicit takeover.
+- Ambiguous or conflicting renewal invalidates only that shard's local permit.
+- Different branch lease objects can be acquired and renewed independently.
+
+## Takeover barrier
+
+Takeover separates lease acquisition from publication authority because S3
+cannot make a branch-ref CAS conditional on a separate lease object.
+
+1. Compare-and-swap the expected lease to `BarrierPending(g+1)`.
+2. Compare-and-swap the branch ref without changing its target, stamping it
+   with the new authority generation and changing its storage token.
+3. Compare-and-swap the lease to `Active(g+1)`.
+
+Step 1 is resumable by the same next writer and expected generation. A pending
+permit cannot mutate payloads or publish commits. Failure before step 2 leaves
+the old ref authoritative. Failure after step 2 leaves the new ref fence in
+place; retrying step 3 activates the same permit. A stale writer with a cached
+ref loses its CAS, while a stale writer that reloads the ref rejects its
+different authority stamp.
+
+## Authority stamps
+
+`AuthorityStampV2` contains the full scope, generation, writer ID, and digest
+of the opaque fencing token. The same stamp must appear in the physical
+mutation metadata, multipart handle, commit, and branch ref for one
+publication. Repository ID plus operation ID alone is not a v2 idempotency
+identity; the authority scope is also required.
+
+## Global maintenance
+
+Repository-wide maintenance may not infer exclusivity from one branch permit.
+Until the v2 maintenance gate, stable snapshot generations, and dirty-root
+journal are implemented, GC and other destructive whole-repository operations
+must fail closed for a sharded repository.

@@ -138,14 +138,15 @@ async fn aws_hot_branch_performance_release_gate() {
 
         assert_eq!(
             calls.total_calls(),
-            (writes_per_tier * 3) as u64,
-            "tier {concurrency} exceeded the three-call logical-write budget: {calls:?}"
+            (writes_per_tier * 4) as u64,
+            "tier {concurrency} exceeded the four-call logical-write budget: {calls:?}"
         );
         assert_eq!(
             calls.put_object,
             (writes_per_tier * 3) as u64,
             "tier {concurrency} used an unexpected AWS operation mix: {calls:?}"
         );
+        assert_eq!(calls.get_object, writes_per_tier as u64);
         assert!(
             p99.as_millis() <= max_p99_millis,
             "tier {concurrency} p99 {}ms exceeds {}ms",
@@ -157,7 +158,7 @@ async fn aws_hot_branch_performance_release_gate() {
             "tier {concurrency} throughput {writes_per_second:.2}/s is below {min_writes_per_second:.2}/s"
         );
         eprintln!(
-            "aws_hot_branch run={run_id} region={region_name} tier={concurrency} writes={writes_per_tier} object_bytes=65536 s3_calls={} calls_per_write=3 wall_ms={} p50_ms={} p95_ms={} p99_ms={} writes_per_second={writes_per_second:.2}",
+            "aws_hot_branch run={run_id} region={region_name} tier={concurrency} writes={writes_per_tier} object_bytes=65536 s3_calls={} calls_per_write=4 wall_ms={} p50_ms={} p95_ms={} p99_ms={} writes_per_second={writes_per_second:.2}",
             calls.total_calls(),
             wall.as_millis(),
             p50.as_millis(),

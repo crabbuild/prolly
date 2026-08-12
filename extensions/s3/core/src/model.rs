@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    authority::{AuthorityScopeV2, AuthorityStampV2},
     codec::{domain_hash, sha256},
     decode_canonical, encode_canonical, Error, ErrorCode, ObjectPath, Result,
 };
@@ -82,8 +83,14 @@ macro_rules! hash_id {
 
 hash_id!(RepositoryId, "pr1_");
 hash_id!(CommitId, "pbc1_");
+hash_id!(CommitIdV2, "pbc2_");
 hash_id!(ObjectVersionId, "pov1_");
+hash_id!(ObjectVersionIdV2, "pov2_");
 hash_id!(ReflogEntryId, "prl1_");
+hash_id!(ReflogEntryIdV2, "prl2_");
+hash_id!(PublicationEventIdV2, "ppe2_");
+hash_id!(OperationIndexSegmentIdV2, "poi2_");
+hash_id!(GcDirtyRootIdV2, "pdr2_");
 hash_id!(TreeFormatDigest, "ptf1_");
 hash_id!(ProviderProfileId, "ppf1_");
 hash_id!(GcPlanId, "pgc1_");
@@ -762,6 +769,64 @@ pub struct CommitGraphHeadV2 {
     pub updated_at_millis: u64,
 }
 
+/// Node location discovered from one authority-stamped v2 commit publication.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalNodeIndexEntryV2 {
+    pub cid: Cid,
+    pub container: CommitIdV2,
+    pub pack: NodePackId,
+    pub absolute_offset: u64,
+    pub len: u32,
+    pub sha256: [u8; 32],
+}
+
+/// Branch-local ancestry acceleration derived only from publication events.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalCommitGraphEntryV2 {
+    pub commit: CommitIdV2,
+    pub generation: CommitGeneration,
+    pub parents: Vec<CommitIdV2>,
+    pub first_parent_jumps: Vec<CommitIdV2>,
+}
+
+/// One atomic checkpoint for all branch-local journal-derived indexes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalDerivedIndexHeadV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub checkpoint: PublicationEventIdV2,
+    pub checkpoint_generation: RefGeneration,
+    pub target: CommitIdV2,
+    pub node_root: TreeRootV1,
+    pub commit_graph_root: TreeRootV1,
+    pub generation: u64,
+    pub indexed_publications: u64,
+    pub indexed_commits: u64,
+    pub updated_at_millis: u64,
+}
+
+impl JournalDerivedIndexHeadV2 {
+    pub fn validate(
+        &self,
+        repository: RepositoryId,
+        branch: &str,
+        expected_format: TreeFormatDigest,
+    ) -> Result<()> {
+        crate::repository::validate_branch(branch)?;
+        if self.repository != repository
+            || self.branch != branch
+            || self.node_root.format_digest != expected_format
+            || self.commit_graph_root.format_digest != expected_format
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "journal-derived index head namespace or tree format is invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl CommitGraphHeadV2 {
     pub fn validate(
         &self,
@@ -1113,6 +1178,19 @@ pub struct CommitObjectV1 {
 }
 
 impl CommitObjectV1 {
+    pub fn header_lengths(encoded: &[u8]) -> Result<(u32, u64)> {
+        if encoded.len() != COMMIT_OBJECT_HEADER_LEN || &encoded[..8] != COMMIT_OBJECT_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object has an invalid wire header",
+            ));
+        }
+        Ok((
+            u32::from_be_bytes(encoded[8..12].try_into().expect("fixed range")),
+            u64::from_be_bytes(encoded[12..20].try_into().expect("fixed range")),
+        ))
+    }
+
     pub fn new(commit: BucketCommitV1, node_pack: Option<NodePackV1>) -> Result<Self> {
         let object = Self { commit, node_pack };
         object.validate()?;
@@ -1300,8 +1378,10 @@ pub enum GcEpochPhaseV2 {
     MarkNodes,
     MarkVersions,
     ScanCandidates,
+    CatchUpDirtyRoots,
     Ready,
     Sweeping,
+    CleanupDirtyRoots,
     Completed,
     Aborted,
 }
@@ -1333,8 +1413,78 @@ pub struct GcEpochV2 {
     pub deleted_bytes: u64,
     pub skipped_reachable: u64,
     pub already_missing: u64,
+    #[serde(default)]
+    pub dirty_roots_marked: u64,
+    #[serde(default)]
+    pub dirty_catch_up_active: bool,
+    #[serde(default)]
+    pub dirty_root_sequence: u64,
+    #[serde(default)]
+    pub dirty_root_target_sequence: u64,
     pub updated_at_millis: u64,
     pub abort_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcCoordinatorV2 {
+    pub repository: RepositoryId,
+    pub generation: u64,
+    pub active_epoch: Option<OperationId>,
+    pub updated_at_millis: u64,
+}
+
+impl GcCoordinatorV2 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        if self.repository != repository || self.generation == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "GC coordinator is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GcDirtyRootV2 {
+    pub repository: RepositoryId,
+    pub epoch: OperationId,
+    pub process_session: OperationId,
+    pub publication_sequence: u64,
+    pub namespace: String,
+    pub name: String,
+    pub target: CommitId,
+    pub previous_target: Option<CommitId>,
+    pub ref_generation: RefGeneration,
+    pub operation: OperationId,
+    pub created_at_millis: u64,
+}
+
+impl GcDirtyRootV2 {
+    pub fn validate(&self) -> Result<()> {
+        if self.epoch.is_nil()
+            || self.process_session.is_nil()
+            || self.operation.is_nil()
+            || self.publication_sequence == 0
+            || self.namespace.is_empty()
+            || self.name.is_empty()
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "GC dirty-root event is malformed",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn id(&self) -> Result<GcDirtyRootIdV2> {
+        self.validate()?;
+        let bytes = encode_canonical(self)?;
+        Ok(GcDirtyRootIdV2(domain_hash(
+            b"prolly-s3/gc-dirty-root/v2",
+            &[&bytes],
+        )))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1558,6 +1708,581 @@ pub struct PhysicalBatchV1 {
     pub message: String,
     pub created_at_millis: u64,
     pub expires_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReflogEntryV2 {
+    pub branch: String,
+    pub old_target: Option<CommitIdV2>,
+    pub new_target: CommitIdV2,
+    pub operation: OperationId,
+    pub actor: String,
+    pub message: String,
+    pub created_at_millis: u64,
+}
+
+impl ReflogEntryV2 {
+    pub fn id(&self) -> Result<ReflogEntryIdV2> {
+        crate::repository::validate_branch(&self.branch)?;
+        let bytes = encode_canonical(self)?;
+        Ok(ReflogEntryIdV2(domain_hash(
+            b"prolly-s3/reflog/v2",
+            &[&bytes],
+        )))
+    }
+}
+
+/// Immutable, content-addressed record for one successful branch-ref
+/// transition. A ref points at the newest event and events point backward,
+/// forming a stable per-branch publication journal without namespace scans.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublicationEventV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub generation: RefGeneration,
+    pub previous: Option<PublicationEventIdV2>,
+    pub old_target: Option<CommitIdV2>,
+    pub new_target: CommitIdV2,
+    pub operation: OperationId,
+    pub reflog: ReflogEntryIdV2,
+    pub authority: AuthorityStampV2,
+    pub created_at_millis: u64,
+}
+
+impl PublicationEventV2 {
+    pub fn id(&self) -> Result<PublicationEventIdV2> {
+        self.validate()?;
+        let bytes = encode_canonical(self)?;
+        Ok(PublicationEventIdV2(domain_hash(
+            b"prolly-s3/publication-event/v2",
+            &[&bytes],
+        )))
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        crate::repository::validate_branch(&self.branch)?;
+        self.authority.validate(
+            self.repository,
+            &AuthorityScopeV2::Branch {
+                name: self.branch.clone(),
+            },
+        )?;
+        let link_shape_is_valid = if self.generation.0 == 0 {
+            self.previous.is_none() && self.old_target.is_none()
+        } else {
+            self.previous.is_some() && self.old_target.is_some()
+        };
+        if self.operation.is_nil() || !link_shape_is_valid {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 publication event has an invalid journal link",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn matches_ref(&self, reference: &RefValueV2) -> Result<bool> {
+        Ok(self.id()? == reference.publication
+            && self.repository == reference.authority.repository
+            && self.branch == reference.inline_reflog.branch
+            && self.generation == reference.generation
+            && self.old_target == reference.previous_target
+            && self.new_target == reference.target
+            && self.operation == reference.operation
+            && self.reflog == reference.reflog
+            && self.authority == reference.authority
+            && self.created_at_millis == reference.updated_at_millis)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdempotencyRetentionV2 {
+    /// An operation remains replayable only while it is within this many ref
+    /// generations of the current branch head.
+    pub max_generations: u64,
+    /// The generation window is additionally capped by wall-clock age.
+    pub max_age_millis: u64,
+}
+
+impl Default for IdempotencyRetentionV2 {
+    fn default() -> Self {
+        Self {
+            max_generations: 1_000_000,
+            max_age_millis: 7 * 24 * 60 * 60 * 1_000,
+        }
+    }
+}
+
+impl IdempotencyRetentionV2 {
+    pub fn validate(self) -> Result<()> {
+        if self.max_generations == 0
+            || self.max_generations > 1_000_000
+            || self.max_age_millis < 60_000
+            || self.max_age_millis > 365 * 24 * 60 * 60 * 1_000
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "v2 idempotency retention is outside the supported production bounds",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn contains(
+        self,
+        current_generation: RefGeneration,
+        now_millis: u64,
+        operation_generation: RefGeneration,
+        created_at_millis: u64,
+    ) -> bool {
+        operation_generation.0 <= current_generation.0
+            && created_at_millis <= now_millis
+            && current_generation.0.saturating_sub(operation_generation.0) <= self.max_generations
+            && now_millis.saturating_sub(created_at_millis) <= self.max_age_millis
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexedOperationV2 {
+    pub operation: OperationId,
+    pub publication: PublicationEventIdV2,
+    pub target: CommitIdV2,
+    pub generation: RefGeneration,
+    pub created_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexSegmentV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub level: u8,
+    /// Strictly sorted by operation ID.
+    pub entries: Vec<IndexedOperationV2>,
+}
+
+impl OperationIndexSegmentV2 {
+    pub fn validate(&self) -> Result<()> {
+        crate::repository::validate_branch(&self.branch)?;
+        if self.entries.is_empty()
+            || self.entries.iter().any(|entry| entry.operation.is_nil())
+            || self
+                .entries
+                .windows(2)
+                .any(|pair| pair[0].operation >= pair[1].operation)
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 operation-index segment is empty or not strictly sorted",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn id(&self) -> Result<OperationIndexSegmentIdV2> {
+        self.validate()?;
+        let bytes = encode_canonical(self)?;
+        Ok(OperationIndexSegmentIdV2(domain_hash(
+            b"prolly-s3/operation-index-segment/v2",
+            &[&bytes],
+        )))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexSegmentRefV2 {
+    pub id: OperationIndexSegmentIdV2,
+    pub level: u8,
+    pub min_generation: RefGeneration,
+    pub max_generation: RefGeneration,
+    pub min_created_at_millis: u64,
+    pub max_created_at_millis: u64,
+    pub entries: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationIndexHeadV2 {
+    pub repository: RepositoryId,
+    pub branch: String,
+    pub checkpoint: PublicationEventIdV2,
+    pub checkpoint_generation: RefGeneration,
+    pub retention: IdempotencyRetentionV2,
+    /// Each level contains fewer than the configured merge fanout segments.
+    pub levels: Vec<Vec<OperationIndexSegmentRefV2>>,
+    pub generation: u64,
+    pub updated_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefValueV2 {
+    pub target: CommitIdV2,
+    pub previous_target: Option<CommitIdV2>,
+    pub generation: RefGeneration,
+    pub operation: OperationId,
+    pub reflog: ReflogEntryIdV2,
+    pub publication: PublicationEventIdV2,
+    pub inline_reflog: ReflogEntryV2,
+    pub authority: AuthorityStampV2,
+    pub updated_at_millis: u64,
+    pub tombstone: bool,
+}
+
+impl RefValueV2 {
+    pub fn validate(&self, repository: RepositoryId, branch: &str) -> Result<()> {
+        crate::repository::validate_branch(branch)?;
+        self.authority.validate(
+            repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )?;
+        if self.operation.is_nil()
+            || self.inline_reflog.branch != branch
+            || self.inline_reflog.old_target != self.previous_target
+            || self.inline_reflog.new_target != self.target
+            || self.inline_reflog.operation != self.operation
+            || self.inline_reflog.id()? != self.reflog
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 branch ref does not match its authority or inline reflog",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketCommitV2 {
+    pub state: BucketStateV1,
+    pub parents: Vec<CommitIdV2>,
+    pub generation: CommitGeneration,
+    pub delta: BucketDeltaV1,
+    pub node_pack: Option<NodePackRefV1>,
+    pub authority: AuthorityStampV2,
+    pub author: String,
+    pub message: Option<String>,
+    pub created_at_millis: u64,
+    pub metadata: BTreeMap<String, Vec<u8>>,
+}
+
+impl BucketCommitV2 {
+    pub fn id(&self) -> Result<CommitIdV2> {
+        let bytes = encode_canonical(self)?;
+        Ok(CommitIdV2(domain_hash(b"prolly-s3/commit/v2", &[&bytes])))
+    }
+
+    pub fn validate_authority(&self, repository: RepositoryId, branch: &str) -> Result<()> {
+        self.authority.validate(
+            repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )
+    }
+}
+
+const COMMIT_OBJECT_V2_MAGIC: &[u8; 8] = b"PLYCOM02";
+
+/// Physical immutable representation of an authority-stamped v2 commit and
+/// the Prolly nodes created by it. The v2 magic keeps the wire object
+/// unambiguously separate from `CommitObjectV1` while reusing the frozen v1
+/// node-pack format.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitObjectV2 {
+    pub commit: BucketCommitV2,
+    pub node_pack: Option<NodePackV1>,
+}
+
+impl CommitObjectV2 {
+    pub fn new(commit: BucketCommitV2, node_pack: Option<NodePackV1>) -> Result<Self> {
+        let object = Self { commit, node_pack };
+        object.validate()?;
+        Ok(object)
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match (&self.commit.node_pack, &self.node_pack) {
+            (None, None) => Ok(()),
+            (Some(expected), Some(pack)) if pack.reference()? == *expected => pack.validate(),
+            _ => Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 commit object node pack does not match its logical reference",
+            )),
+        }
+    }
+
+    pub fn encode_object(&self) -> Result<Vec<u8>> {
+        self.validate()?;
+        let commit = encode_canonical(&self.commit)?;
+        let pack = self
+            .node_pack
+            .as_ref()
+            .map(NodePackV1::encode_object)
+            .transpose()?
+            .unwrap_or_default();
+        let commit_len = u32::try_from(commit.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "v2 commit exceeds u32"))?;
+        let pack_len = u64::try_from(pack.len())
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "v2 node pack exceeds u64"))?;
+        let mut encoded = Vec::with_capacity(COMMIT_OBJECT_HEADER_LEN + commit.len() + pack.len());
+        encoded.extend_from_slice(COMMIT_OBJECT_V2_MAGIC);
+        encoded.extend_from_slice(&commit_len.to_be_bytes());
+        encoded.extend_from_slice(&pack_len.to_be_bytes());
+        encoded.extend_from_slice(&commit);
+        encoded.extend_from_slice(&pack);
+        Ok(encoded)
+    }
+
+    pub fn decode_object(encoded: &[u8]) -> Result<Self> {
+        let (commit_range, pack_range) = Self::ranges(encoded)?;
+        let commit = decode_canonical::<BucketCommitV2>(&encoded[commit_range])?;
+        let node_pack = if pack_range.is_empty() {
+            None
+        } else {
+            Some(NodePackV1::decode_object(&encoded[pack_range])?)
+        };
+        Self::new(commit, node_pack)
+    }
+
+    pub fn node_payload_offset(encoded: &[u8]) -> Result<Option<u64>> {
+        let (_, pack_range) = Self::ranges(encoded)?;
+        if pack_range.is_empty() {
+            return Ok(None);
+        }
+        let relative = NodePackV1::object_payload_offset(&encoded[pack_range.start..])?;
+        Ok(Some(pack_range.start as u64 + relative))
+    }
+
+    fn ranges(encoded: &[u8]) -> Result<(std::ops::Range<usize>, std::ops::Range<usize>)> {
+        if encoded.len() < COMMIT_OBJECT_HEADER_LEN || &encoded[..8] != COMMIT_OBJECT_V2_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 commit object has an invalid wire header",
+            ));
+        }
+        let commit_len =
+            u32::from_be_bytes(encoded[8..12].try_into().expect("fixed range")) as usize;
+        let pack_len = usize::try_from(u64::from_be_bytes(
+            encoded[12..20].try_into().expect("fixed range"),
+        ))
+        .map_err(|_| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 node-pack length exceeds usize",
+            )
+        })?;
+        let commit_start = COMMIT_OBJECT_HEADER_LEN;
+        let commit_end = commit_start
+            .checked_add(commit_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "v2 commit length overflow"))?;
+        let pack_end = commit_end
+            .checked_add(pack_len)
+            .filter(|end| *end == encoded.len())
+            .ok_or_else(|| {
+                Error::new(ErrorCode::CorruptCommit, "v2 commit object length mismatch")
+            })?;
+        Ok((commit_start..commit_end, commit_end..pack_end))
+    }
+}
+
+/// Identity stamped on every provider mutation in protocol v2. The scope is
+/// part of idempotency identity, so operation IDs may be safely segmented by
+/// writer shard.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalMutationIdentityV2 {
+    pub repository: RepositoryId,
+    pub operation: OperationId,
+    pub authority: AuthorityStampV2,
+}
+
+/// Protocol-v2 payload binding. The physical path is explicit because v2
+/// stores content under immutable derived keys instead of accumulating
+/// provider versions at the logical user key.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalObjectBindingV2 {
+    pub path: ObjectPath,
+    pub provider_version_id: Option<String>,
+    pub provider_etag: String,
+    pub checksum_sha256: [u8; 32],
+}
+
+impl PhysicalObjectBindingV2 {
+    pub fn validate(&self) -> Result<()> {
+        if self.provider_etag.is_empty() {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "v2 physical payload binding is malformed",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObjectVersionV2 {
+    pub id: ObjectVersionIdV2,
+    pub body: LogicalObjectVersionBodyV1,
+    /// Delete markers are logical-only and carry no physical binding.
+    pub binding: Option<PhysicalObjectBindingV2>,
+}
+
+impl ObjectVersionV2 {
+    pub fn derive(
+        repository: RepositoryId,
+        key: &[u8],
+        operation: OperationId,
+        body: LogicalObjectVersionBodyV1,
+        binding: Option<PhysicalObjectBindingV2>,
+    ) -> Result<Self> {
+        validate_physical_object_version_v2(&body, binding.as_ref())?;
+        let body_bytes = encode_canonical(&body)?;
+        Ok(Self {
+            id: ObjectVersionIdV2(domain_hash(
+                b"prolly-s3/object-version/v2",
+                &[
+                    repository.as_bytes(),
+                    key,
+                    operation.as_bytes(),
+                    &body_bytes,
+                ],
+            )),
+            body,
+            binding,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        validate_physical_object_version_v2(&self.body, self.binding.as_ref())
+    }
+}
+
+fn validate_physical_object_version_v2(
+    body: &LogicalObjectVersionBodyV1,
+    binding: Option<&PhysicalObjectBindingV2>,
+) -> Result<()> {
+    let valid = match (&body.kind, binding) {
+        (LogicalObjectVersionKindV1::Live { checksums, .. }, Some(binding)) => {
+            binding.validate().is_ok()
+                && checksums
+                    .sha256
+                    .is_some_and(|logical| logical == binding.checksum_sha256)
+        }
+        (LogicalObjectVersionKindV1::DeleteMarker, None) => true,
+        _ => false,
+    };
+    if !valid {
+        return Err(Error::new(
+            ErrorCode::CorruptCommit,
+            "v2 object version has an invalid immutable payload binding",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProviderPerKeyVersionLimitV2 {
+    Unlimited,
+    Finite(u64),
+    Unknown,
+}
+
+impl ProviderPerKeyVersionLimitV2 {
+    /// Immutable payload keys consume one version. Only bounded mutable
+    /// controls need per-key headroom; unknown limits fail closed.
+    pub fn validate_immutable_payload_profile(self, mutable_control_bound: usize) -> Result<()> {
+        let required = u64::try_from(mutable_control_bound)
+            .map_err(|_| Error::new(ErrorCode::InvalidLimit, "control bound exceeds u64"))?
+            .checked_add(2)
+            .ok_or_else(|| Error::new(ErrorCode::InvalidLimit, "control headroom overflow"))?;
+        match self {
+            Self::Unlimited => Ok(()),
+            Self::Finite(limit) if limit >= required => Ok(()),
+            Self::Finite(limit) => Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                format!(
+                    "provider per-key version limit {limit} is below required control headroom {required}"
+                ),
+            )),
+            Self::Unknown => Err(Error::new(
+                ErrorCode::ProviderNotQualified,
+                "provider per-key version limit is unknown",
+            )),
+        }
+    }
+}
+
+impl PhysicalMutationIdentityV2 {
+    pub fn validate(&self, branch: &str) -> Result<()> {
+        if self.operation.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "physical mutation operation ID is nil",
+            ));
+        }
+        self.authority.validate(
+            self.repository,
+            &AuthorityScopeV2::Branch {
+                name: branch.to_string(),
+            },
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalMultipartSessionV2 {
+    pub identity: PhysicalMutationIdentityV2,
+    pub branch: String,
+    pub key: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+    pub provider_upload_id: String,
+    pub created_at_millis: u64,
+    #[serde(default)]
+    pub discovered: bool,
+}
+
+impl PhysicalMultipartSessionV2 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        self.identity.validate(&self.branch)?;
+        if self.identity.repository != repository
+            || self.key.is_empty()
+            || self.provider_upload_id.is_empty()
+            || self.discovered
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 multipart session is malformed or cannot publish",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhysicalBatchV2 {
+    pub id: BatchId,
+    pub branch: String,
+    pub base_commit: CommitIdV2,
+    pub identity: PhysicalMutationIdentityV2,
+    pub message: String,
+    pub created_at_millis: u64,
+    pub expires_at_millis: u64,
+}
+
+impl PhysicalBatchV2 {
+    pub fn validate(&self, repository: RepositoryId) -> Result<()> {
+        self.identity.validate(&self.branch)?;
+        if self.identity.repository != repository
+            || self.message.trim().is_empty()
+            || self.expires_at_millis <= self.created_at_millis
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "v2 physical batch is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

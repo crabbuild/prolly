@@ -10,8 +10,8 @@ Your bucket and deployment must satisfy all of these conditions:
 
 - S3 bucket versioning is `Enabled`.
 - This client is the only writer for managed object keys.
-- One writer process holds the repository lease; other processes are read-only
-  until an explicit takeover.
+- One writer owns each branch authority scope. Separate processes may own and
+  publish separate branches concurrently; same-branch takeover is explicit.
 - Lifecycle rules do not expire current or noncurrent managed versions.
 - The IAM identity can read exact versions and conditionally update repository
   metadata under `.prolly/v1/`.
@@ -29,7 +29,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ## Create or open a repository
 
 Initialization qualifies the provider, creates format v1 under `.prolly/v1/`,
-creates the initial commit, and acquires the writer lease.
+creates the initial commit, and acquires the default branch authority.
 
 ```rust
 use std::{sync::Arc, time::Duration};
@@ -67,8 +67,9 @@ async fn create_client(
 ```
 
 Use `.open().await` instead of `.initialize().await` after the repository
-exists. Use `.read_only(true)` for reader processes; they do not acquire the
-writer lease.
+exists. A writable client acquires branch authority lazily on its first
+mutation. Use `.read_only(true)` for reader processes; they acquire no mutation
+authority.
 
 The HMAC byte vectors above are illustrative. Load independent, rotated key
 rings from a secret manager in production.
@@ -106,9 +107,10 @@ The default is bounded by both 100 files and the configured
 commit size. Use multipart upload for any single file larger than the staged
 byte limit.
 
-The checked-in RustFS gate measured 10K × 64 KiB files at 1.020 SDK calls/file
-and 1.083× uploaded-byte amplification. Treat those as local regression
-budgets, not AWS latency or durability claims.
+The current RustFS gate enforces 1.030 SDK calls/file for 10K × 64 KiB files;
+one authority point read is amortized across every 100-file commit. The prior
+pre-sharded run measured 1.083× uploaded-byte amplification. Treat these as
+local regression budgets, not AWS latency or durability claims.
 
 For interactive or independent writes, use the single-file API below.
 
@@ -217,7 +219,8 @@ let receipt = commit.publish().await?;
 println!("published commit: {}", receipt.id);
 ```
 
-For `N` staged keys, publication uses `N + 2` foreground S3 calls. Payload
+For `N` staged keys, publication uses `N + 3` foreground S3 calls. The extra
+point GET validates branch-scoped writer authority before payload mutation. Payload
 mutations are bounded and parallel. One commit envelope and one branch CAS make
 the entire batch visible. Prefer `ingest_objects` for homogeneous bulk puts;
 use a commit session when you need mixed puts and deletes or a custom message.
@@ -326,16 +329,21 @@ let client = Client::builder()
 
 // On a cold host, populate the cache before serving traversal-heavy reads.
 let snapshot = client.head_commit().await?;
-let warmed = client
-    .prewarm_node_cache(snapshot, b"", 1_000)
-    .await?;
-println!("warmed {} objects in {} pages", warmed.object_count, warmed.pages);
+let warmed = client.prewarm_internal_node_cache(snapshot).await?;
+println!(
+    "warmed {} roots and {} internal nodes; skipped {} leaves",
+    warmed.roots,
+    warmed.internal_nodes,
+    warmed.leaves_skipped,
+);
 ```
 
 Use one filesystem owner per cache directory. Drop clients before calling
 `node_cache.close().await?` during graceful shutdown. Reopen the same directory
 after restart to reuse persisted immutable nodes. A new host should run
-`prewarm_node_cache` before taking traversal-heavy traffic.
+`prewarm_internal_node_cache` before taking traversal-heavy traffic. It does
+not enumerate every object or warm leaf nodes, so cost grows with tree height
+and internal fanout rather than file count.
 
 ## Page through large histories and ref sets
 
