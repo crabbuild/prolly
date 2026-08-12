@@ -2354,6 +2354,46 @@ impl PhysicalBatchV2 {
     }
 }
 
+/// One payload-complete logical mutation ready for an atomic protocol-v2
+/// branch publication. Put payloads use immutable content-addressed bindings;
+/// delete markers do not create physical objects.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct StagedPutV2 {
+    pub(crate) key: Vec<u8>,
+    pub(crate) size: u64,
+    pub(crate) logical_etag: String,
+    pub(crate) checksums: Checksums,
+    pub(crate) headers: ObjectHeaders,
+    pub(crate) user_metadata: BTreeMap<String, String>,
+    pub(crate) binding: PhysicalObjectBindingV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum StagedMutationBodyV2 {
+    Put(Box<StagedPutV2>),
+    Delete { key: Vec<u8> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StagedMutationV2 {
+    pub(crate) body: StagedMutationBodyV2,
+}
+
+impl StagedMutationV2 {
+    pub fn delete(key: Vec<u8>) -> Self {
+        Self {
+            body: StagedMutationBodyV2::Delete { key },
+        }
+    }
+
+    pub fn key(&self) -> &[u8] {
+        match &self.body {
+            StagedMutationBodyV2::Put(staged) => &staged.key,
+            StagedMutationBodyV2::Delete { key } => key,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectData {
     pub key: Vec<u8>,
